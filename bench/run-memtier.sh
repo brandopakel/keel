@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# memtier_benchmark pass: randomised keys and payloads, which redis-benchmark
+# does not do. Fixed-size payloads and sequential keys can flatter an allocator
+# and a hash table; random sizes and access patterns are the more honest test.
+set -uo pipefail
+BIN="${BIN:?set BIN}"; OUT="${OUT:-bench/results/memtier.csv}"; REPS="${REPS:-3}"
+PORT=${PORT_BASE:-11000}
+echo "server,scenario,keypattern,datasize,pipeline,rep,ops_sec,p50_ms,p99_ms,p999_ms" > "$OUT"
+
+start() {
+  local kind=$1 p=$((++PORT))
+  if [ "$kind" = redis ]; then redis-server --port "$p" --save '' --appendonly no >/dev/null 2>&1 &
+  else "$BIN" -port "$p" -mode "$kind" >"/tmp/mt-$kind.log" 2>&1 & fi
+  for _ in $(seq 1 50); do redis-cli -p "$p" ping >/dev/null 2>&1 && break; perl -e 'select(undef,undef,undef,0.1)'; done
+  echo "$p"
+}
+stop() { pkill -f "$BIN" 2>/dev/null; pkill -f "redis-server --port 1" 2>/dev/null; perl -e 'select(undef,undef,undef,0.4)'; }
+
+# scenario: label | extra memtier args
+run() { # srv scenario kp ds pl port args...
+  local srv=$1 scen=$2 kp=$3 ds=$4 pl=$5 p=$6; shift 6
+  for rep in $(seq 1 "$REPS"); do
+    local j=/tmp/mt.json
+    memtier_benchmark -s 127.0.0.1 -p "$p" -P redis \
+      -t 4 -c 25 --test-time=6 --hide-histogram --json-out-file="$j" \
+      --pipeline="$pl" --key-pattern="$kp" "$@" >/dev/null 2>&1
+    python3 - "$j" "$srv" "$scen" "$kp" "$ds" "$pl" "$rep" "$OUT" <<'PY'
+import json,sys
+j,srv,scen,kp,ds,pl,rep,out = sys.argv[1:9]
+try: d=json.load(open(j))["ALL STATS"]["Totals"]
+except Exception: sys.exit()
+row=[srv,scen,kp,ds,pl,rep,f'{d.get("Ops/sec",0):.2f}',
+     f'{d.get("p50 Latency",0):.3f}',f'{d.get("p99 Latency",0):.3f}',f'{d.get("p99.9 Latency",0):.3f}']
+open(out,"a").write(",".join(map(str,row))+"\n")
+PY
+  done
+}
+
+for srv in ${SERVERS:-redis kqueue kqueue-wbuf net}; do
+  echo ">>> memtier $srv"
+  p=$(start "$srv")
+  # random keys, fixed small payload
+  run "$srv" uniform      "R:R" 32          1 "$p" --ratio=1:10 -d 32
+  # random keys, RANDOM payload sizes across three orders of magnitude
+  run "$srv" randomsize   "R:R" "8-16384"   1 "$p" --ratio=1:10 --data-size-range=8-16384 --data-size-pattern=R --random-data
+  # gaussian key access - models a hot subset, stresses the dict differently
+  run "$srv" gaussian     "G:G" 32          1 "$p" --ratio=1:10 -d 32 --key-stddev=100
+  # write-heavy
+  run "$srv" writeheavy   "R:R" 128         1 "$p" --ratio=10:1 -d 128
+  # pipelined mixed
+  run "$srv" pipelined    "R:R" 32         16 "$p" --ratio=1:10 -d 32
+  stop
+done
+echo "done -> $OUT"

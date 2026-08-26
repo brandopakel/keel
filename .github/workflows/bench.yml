@@ -1,0 +1,81 @@
+# Benchmarks the three I/O implementations on Linux, where the event loop runs
+# on epoll rather than kqueue.
+#
+# Everything measured locally for the upstream performance discussion ran on
+# darwin/arm64 and therefore exercised only kqueue. The issue is about epoll as
+# well, so no local conclusion transfers without a Linux run. This workflow is
+# that run. Results are uploaded as an artifact.
+#
+# Note on naming: -mode kqueue selects the hand-rolled event loop, which
+# io_multiplexing resolves to epoll on Linux via build tags. The mode name is
+# historical; on this runner it is measuring epoll.
+name: Benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ develop, experiment/** ]
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Install redis-server and redis-benchmark
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y redis-server redis-tools
+          redis-benchmark --version
+          redis-server --version
+
+      - name: Record environment
+        run: |
+          {
+            echo "## Environment"
+            echo "runner: $(uname -srm)"
+            echo "cpus:   $(nproc)"
+            echo "mem:    $(free -h | awk '/Mem:/{print $2}')"
+            echo "go:     $(go version)"
+            echo "kernel: $(uname -r)"
+            echo "epoll path: internal/core/io_multiplexing/epoll_linux.go"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Build
+        run: go build -o /tmp/memkv ./cmd
+
+      - name: Verify all three modes start and serve
+        run: |
+          set -e
+          port=7100
+          for m in kqueue kqueue-wbuf net; do
+            port=$((port+1))
+            /tmp/memkv -port $port -mode $m &
+            sleep 1
+            got=$(redis-cli -p $port ping)
+            [ "$got" = "PONG" ] || { echo "mode $m failed to respond"; exit 1; }
+            echo "mode $m: OK"
+            pkill -f "/tmp/memkv -port $port" || true
+            sleep 0.3
+          done
+
+      - name: Run matrix
+        run: |
+          chmod +x bench/run-matrix.sh
+          BIN=/tmp/memkv OUT=bench/results/matrix-linux.csv REPS=5 ./bench/run-matrix.sh
+
+      - name: Summarise medians
+        run: |
+          python3 bench/summarise.py bench/results/matrix-linux.csv | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-linux-epoll
+          path: bench/results/matrix-linux.csv

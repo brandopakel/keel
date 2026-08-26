@@ -212,8 +212,12 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 					atomic.SwapInt32(&eStatus, constant.EngineStatusWaiting)
 					continue
 				}
-				for _, cmd := range cmds {
-					responseRw(cmd, comm)
+				if WriteBuffered {
+					respondBuffered(comm.Fd, cmds)
+				} else {
+					for _, cmd := range cmds {
+						responseRw(cmd, comm)
+					}
 				}
 			}
 			atomic.SwapInt32(&eStatus, constant.EngineStatusWaiting)
