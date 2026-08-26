@@ -25,7 +25,7 @@ var mode string
 func init() {
 	flag.StringVar(&config.Host, "host", "0.0.0.0", "host")
 	flag.IntVar(&config.Port, "port", config.Port, "port")
-	flag.StringVar(&mode, "mode", "kqueue", "io mode: kqueue | kqueue-wbuf | net | net-nolock (diagnostic)")
+	flag.StringVar(&mode, "mode", "kqueue", "io mode: kqueue | kqueue-wbuf | net | net-small | net-direct | net-chan | net-nolock")
 	flag.Parse()
 }
 
@@ -43,6 +43,16 @@ func main() {
 		server.WriteBuffered = true
 		go server.RunAsyncTCPServer(&wg)
 	case "net":
+		server.ActiveNetVariant = server.NetVariantMutex
+		go server.RunNetTCPServer(&wg)
+	case "net-small":
+		server.ActiveNetVariant = server.NetVariantSmallBuf
+		go server.RunNetTCPServer(&wg)
+	case "net-direct":
+		server.ActiveNetVariant = server.NetVariantDirect
+		go server.RunNetTCPServer(&wg)
+	case "net-chan":
+		server.ActiveNetVariant = server.NetVariantChannel
 		go server.RunNetTCPServer(&wg)
 	case "net-nolock":
 		// diagnostic only: PING-safe, races on any command that touches a store

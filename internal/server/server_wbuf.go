@@ -19,6 +19,12 @@ import (
 // write policy and isolates the variable under test.
 var WriteBuffered bool
 
+// replyBuf collects replies so a batch can be sent as one write.
+type replyBuf struct{ b bytes.Buffer }
+
+func (r *replyBuf) Read([]byte) (int, error)    { return 0, io.EOF }
+func (r *replyBuf) Write(p []byte) (int, error) { return r.b.Write(p) }
+
 type bufComm struct{ buf *bytes.Buffer }
 
 func (b bufComm) Read([]byte) (int, error)    { return 0, io.EOF }

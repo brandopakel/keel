@@ -43,7 +43,7 @@ PY
   done
 }
 
-for srv in ${SERVERS:-redis kqueue kqueue-wbuf net}; do
+for srv in ${SERVERS:-redis kqueue kqueue-wbuf net net-small net-direct net-chan}; do
   echo ">>> memtier $srv"
   start "$srv"; p=$SRV_PORT
   # random keys, fixed small payload

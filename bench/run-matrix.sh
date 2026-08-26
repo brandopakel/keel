@@ -75,7 +75,7 @@ run_bench() {
   done
 }
 
-SERVERS="${SERVERS:-redis kqueue kqueue-wbuf net}"
+SERVERS="${SERVERS:-redis kqueue kqueue-wbuf net net-small net-direct net-chan}"
 
 for srv in $SERVERS; do
   echo ">>> $srv"

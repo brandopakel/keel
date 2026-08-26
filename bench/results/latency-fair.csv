@@ -1,0 +1,9 @@
+server,scenario,ops_sec,avg_ms,p50_ms,p99_ms,p999_ms
+redis,randomsize,186206,0.537,0.567,0.823,1.151
+redis,pipelined,1894135,0.843,0.855,1.199,1.807
+kqueue,randomsize,185461,0.539,0.439,1.751,2.303
+kqueue,pipelined,585441,2.732,2.415,5.183,7.903
+kqueue-wbuf,randomsize,171767,0.582,0.551,2.127,2.399
+kqueue-wbuf,pipelined,2181408,0.732,0.751,1.551,1.831
+net,randomsize,156483,0.638,0.615,1.375,1.759
+net,pipelined,2240903,0.711,0.591,2.575,3.407
