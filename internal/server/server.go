@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -27,13 +28,67 @@ func WaitForSignal(wg *sync.WaitGroup, signals chan os.Signal) {
 	os.Exit(0)
 }
 
-func readCommandFD(fd int) (*core.MemKVCmd, error) {
-	var buf = make([]byte, 512)
-	n, err := syscall.Read(fd, buf)
+// readChunkSize is how much we attempt to pull off a socket per syscall.
+const readChunkSize = 4096
+
+// pendingReads holds the bytes that have arrived on a connection but do not yet
+// form a complete command.
+//
+// A single syscall.Read gives us whatever the kernel happens to have buffered,
+// which is not necessarily one command: a large SET can be split across several
+// reads, and a pipelining client can pack many commands into one. Parsing the
+// raw result of a single read therefore fails in both directions - it truncates
+// big commands and it silently discards every command after the first. We keep a
+// per-connection buffer instead and only ever hand whole frames to the parser.
+//
+// Entries are removed by closeClient when the connection goes away.
+var pendingReads = make(map[int][]byte)
+
+// readCommandsFD reads once from fd and returns every complete command that is
+// now available, leaving any trailing partial command buffered for next time.
+func readCommandsFD(fd int) ([]*core.MemKVCmd, error) {
+	var chunk = make([]byte, readChunkSize)
+	n, err := syscall.Read(fd, chunk)
 	if err != nil {
 		return nil, err
 	}
-	return core.ParseCmd(buf[:n])
+	if n == 0 {
+		// The socket was reported readable but yielded nothing, which means the
+		// peer has closed its end.
+		return nil, io.EOF
+	}
+
+	buf := append(pendingReads[fd], chunk[:n]...)
+
+	var cmds []*core.MemKVCmd
+	for len(buf) > 0 {
+		cmd, consumed, err := core.ParseCmd(buf)
+		if errors.Is(err, core.ErrIncompleteFrame) {
+			// The rest of this command has not arrived yet. Keep what we have.
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		cmds = append(cmds, cmd)
+		buf = buf[consumed:]
+	}
+
+	if len(buf) == 0 {
+		delete(pendingReads, fd)
+	} else {
+		// Copy the remainder so we do not pin the whole read chunk in memory.
+		rest := make([]byte, len(buf))
+		copy(rest, buf)
+		pendingReads[fd] = rest
+	}
+	return cmds, nil
+}
+
+// closeClient tears down a client connection and drops any buffered bytes for it.
+func closeClient(fd int) {
+	delete(pendingReads, fd)
+	syscall.Close(fd)
 }
 
 func responseRw(cmd *core.MemKVCmd, rw io.ReadWriter) {
@@ -142,17 +197,24 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 					return err
 				}
 			} else {
-				// the Client FD is ready for reading, means an existing client is sending a command
+				// the Client FD is ready for reading, means an existing client is sending commands
 				comm := core.FDComm{Fd: int(events[i].Fd)}
-				cmd, err := readCommandFD(comm.Fd)
+				cmds, err := readCommandsFD(comm.Fd)
 				if err != nil {
-					syscall.Close(events[i].Fd)
+					// A malformed frame is the client's fault, so tell it what went
+					// wrong before hanging up. Either way only this connection dies.
+					if errors.Is(err, core.ErrProtocol) {
+						responseErrorRw(err, comm)
+					}
+					closeClient(events[i].Fd)
 					clientNumber--
 					log.Println("client quit")
 					atomic.SwapInt32(&eStatus, constant.EngineStatusWaiting)
 					continue
 				}
-				responseRw(cmd, comm)
+				for _, cmd := range cmds {
+					responseRw(cmd, comm)
+				}
 			}
 			atomic.SwapInt32(&eStatus, constant.EngineStatusWaiting)
 		}

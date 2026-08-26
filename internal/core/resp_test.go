@@ -1,10 +1,14 @@
 package core_test
 
 import (
+	"errors"
 	"fmt"
-	"github.com/stretchr/testify/assert"
-	"memkv/internal/core"
+	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"memkv/internal/core"
 )
 
 func TestSimpleStringDecode(t *testing.T) {
@@ -112,7 +116,7 @@ func TestParseCmd(t *testing.T) {
 			Args: []string{"hello", "world"},
 		}}
 	for k, v := range cases {
-		cmd, _ := core.ParseCmd([]byte(k))
+		cmd, _, _ := core.ParseCmd([]byte(k))
 		if cmd.Cmd != v.Cmd {
 			t.Fail()
 		}
@@ -125,4 +129,95 @@ func TestParseCmd(t *testing.T) {
 			}
 		}
 	}
+}
+
+// A command that has not fully arrived yet must be reported as incomplete so the
+// caller can wait for the rest, rather than being parsed out of bounds.
+func TestParseCmdIncompleteFrame(t *testing.T) {
+	full := "*3\r\n$3\r\nSET\r\n$5\r\nhello\r\n$5\r\nworld\r\n"
+	// Every strict prefix of a valid command is incomplete, never fatal.
+	for i := 1; i < len(full); i++ {
+		cmd, n, err := core.ParseCmd([]byte(full[:i]))
+		assert.Nil(t, cmd)
+		assert.Zero(t, n)
+		assert.True(t, errors.Is(err, core.ErrIncompleteFrame),
+			"prefix of length %d should be incomplete, got %v", i, err)
+	}
+
+	cmd, n, err := core.ParseCmd([]byte(full))
+	assert.NoError(t, err)
+	assert.EqualValues(t, len(full), n)
+	assert.EqualValues(t, "SET", cmd.Cmd)
+}
+
+// Input that can never become a command must be rejected as a protocol error
+// instead of panicking the server.
+func TestParseCmdProtocolError(t *testing.T) {
+	cases := []string{
+		"PING\r\n",        // inline command, not a RESP array
+		":1\r\n",          // an integer is not a command
+		"+OK\r\n",         // nor is a simple string
+		"*0\r\n",          // an empty array has no command name
+		"*1\r\n:1\r\n",    // arguments must be bulk strings
+		"%1\r\n",          // unknown type byte
+		"*1000000000\r\n", // absurd element count must not be allocated
+	}
+	for _, c := range cases {
+		cmd, n, err := core.ParseCmd([]byte(c))
+		assert.Nil(t, cmd, "input %q", c)
+		assert.Zero(t, n, "input %q", c)
+		assert.True(t, errors.Is(err, core.ErrProtocol),
+			"input %q should be a protocol error, got %v", c, err)
+	}
+}
+
+// Several commands can arrive in one read. Each call consumes exactly one, so a
+// caller can walk the buffer without losing the commands that follow.
+func TestParseCmdPipelined(t *testing.T) {
+	one := "*1\r\n$4\r\nPING\r\n"
+	two := "*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$1\r\nv\r\n"
+	buf := []byte(one + two + one)
+
+	var got []string
+	for len(buf) > 0 {
+		cmd, n, err := core.ParseCmd(buf)
+		assert.NoError(t, err)
+		got = append(got, cmd.Cmd)
+		buf = buf[n:]
+	}
+	assert.EqualValues(t, []string{"PING", "SET", "PING"}, got)
+}
+
+// Commands larger than one read buffer used to slice past the end of the data.
+func TestParseCmdLargeBulkString(t *testing.T) {
+	for _, size := range []int{484, 486, 1024, 65536} {
+		value := strings.Repeat("A", size)
+		raw := fmt.Sprintf("*3\r\n$3\r\nSET\r\n$3\r\nbig\r\n$%d\r\n%s\r\n", size, value)
+		cmd, n, err := core.ParseCmd([]byte(raw))
+		assert.NoError(t, err, "size %d", size)
+		assert.EqualValues(t, len(raw), n)
+		assert.EqualValues(t, "SET", cmd.Cmd)
+		assert.EqualValues(t, value, cmd.Args[1])
+	}
+}
+
+// The server encodes negative integers itself (see constant.TtlKeyNotExist), so
+// decoding has to round-trip them.
+func TestDecodeNegativeInt(t *testing.T) {
+	cases := map[string]int64{
+		":-1\r\n": -1,
+		":-2\r\n": -2,
+	}
+	for k, v := range cases {
+		value, err := core.Decode([]byte(k))
+		assert.NoError(t, err)
+		assert.EqualValues(t, v, value)
+	}
+}
+
+// $-1\r\n is the RESP null bulk string and must decode without consuming a payload.
+func TestDecodeNullBulkString(t *testing.T) {
+	value, err := core.Decode([]byte("$-1\r\n"))
+	assert.NoError(t, err)
+	assert.EqualValues(t, "", value)
 }
