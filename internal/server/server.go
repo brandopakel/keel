@@ -189,6 +189,21 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 					return err
 				}
 
+				// Disable Nagle's algorithm on the client socket.
+				//
+				// Without this, small replies are held back waiting for the peer to
+				// acknowledge the previous segment, and the peer's delayed-ACK timer
+				// sits on that acknowledgement. On Linux that pairing costs 40ms per
+				// round trip: a pipelined client is served at ~1220 batches/second
+				// regardless of how many commands are in each batch, because the
+				// batch rate is a latency floor rather than a throughput limit.
+				// Redis sets TCP_NODELAY on client sockets for exactly this reason,
+				// and Go's net package does it by default, which is why this only
+				// bites the hand-rolled socket path.
+				if err = syscall.SetsockoptInt(connFD, syscall.IPPROTO_TCP, syscall.TCP_NODELAY, 1); err != nil {
+					log.Println("TCP_NODELAY:", err)
+				}
+
 				// add this new connection to be monitored
 				if err = ioMultiplexer.Monitor(io_multiplexing.Event{
 					Fd: connFD,

@@ -27,6 +27,13 @@ import (
 // also make the comparison meaningless.
 var evalMu sync.Mutex
 
+// EvalUnlocked drops the mutex around command execution. This is a diagnostic
+// only, to separate the cost of the I/O mechanism from the cost of the
+// synchronisation that goroutine-per-connection forces on the shared stores.
+// It is only safe for commands that touch no store (PING), and must never be
+// used to serve real traffic.
+var EvalUnlocked bool
+
 // connWriter adapts a buffered writer to the io.ReadWriter that EvalAndResponse
 // expects. Reads never happen through it; the read side is handled by the loop.
 type connWriter struct{ w *bufio.Writer }
@@ -61,9 +68,13 @@ func handleConn(conn net.Conn) {
 				}
 				pending = pending[consumed:]
 
-				evalMu.Lock()
-				responseRw(cmd, out)
-				evalMu.Unlock()
+				if EvalUnlocked {
+					responseRw(cmd, out)
+				} else {
+					evalMu.Lock()
+					responseRw(cmd, out)
+					evalMu.Unlock()
+				}
 			}
 
 			// One flush per read, so a pipelined batch costs one write syscall

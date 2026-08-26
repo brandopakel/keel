@@ -25,7 +25,7 @@ var mode string
 func init() {
 	flag.StringVar(&config.Host, "host", "0.0.0.0", "host")
 	flag.IntVar(&config.Port, "port", config.Port, "port")
-	flag.StringVar(&mode, "mode", "kqueue", "io mode: kqueue | kqueue-wbuf | net")
+	flag.StringVar(&mode, "mode", "kqueue", "io mode: kqueue | kqueue-wbuf | net | net-nolock (diagnostic)")
 	flag.Parse()
 }
 
@@ -43,6 +43,10 @@ func main() {
 		server.WriteBuffered = true
 		go server.RunAsyncTCPServer(&wg)
 	case "net":
+		go server.RunNetTCPServer(&wg)
+	case "net-nolock":
+		// diagnostic only: PING-safe, races on any command that touches a store
+		server.EvalUnlocked = true
 		go server.RunNetTCPServer(&wg)
 	default:
 		log.Fatalf("unknown -mode %q (want kqueue, kqueue-wbuf or net)", mode)
