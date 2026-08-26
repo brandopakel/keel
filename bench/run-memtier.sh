@@ -7,14 +7,21 @@ BIN="${BIN:?set BIN}"; OUT="${OUT:-bench/results/memtier.csv}"; REPS="${REPS:-3}
 PORT=${PORT_BASE:-11000}
 echo "server,scenario,keypattern,datasize,pipeline,rep,ops_sec,p50_ms,p99_ms,p999_ms" > "$OUT"
 
-start() {
-  local kind=$1 p=$((++PORT))
+SRV_PORT=""
+start() {  # sets SRV_PORT; must NOT be called in a subshell
+  local kind=$1
+  PORT=$((PORT+1)); local p=$PORT; SRV_PORT=$p
   if [ "$kind" = redis ]; then redis-server --port "$p" --save '' --appendonly no >/dev/null 2>&1 &
   else "$BIN" -port "$p" -mode "$kind" >"/tmp/mt-$kind.log" 2>&1 & fi
   for _ in $(seq 1 50); do redis-cli -p "$p" ping >/dev/null 2>&1 && break; perl -e 'select(undef,undef,undef,0.1)'; done
-  echo "$p"
+  local owner comm
+  owner=$(lsof -ti:$p 2>/dev/null | head -1); comm=$(ps -o comm= -p "$owner" 2>/dev/null)
+  case "$kind" in
+    redis) echo "$comm" | grep -q redis-server || { echo "FATAL :$p owned by $comm" >&2; exit 1; } ;;
+    *)     echo "$comm" | grep -q "$(basename "$BIN")" || { echo "FATAL :$p owned by $comm" >&2; exit 1; } ;;
+  esac
 }
-stop() { pkill -f "$BIN" 2>/dev/null; pkill -f "redis-server --port 1" 2>/dev/null; perl -e 'select(undef,undef,undef,0.4)'; }
+stop() { pkill -f "$BIN" 2>/dev/null; pkill -f "redis-server" 2>/dev/null; perl -e 'select(undef,undef,undef,0.4)'; }
 
 # scenario: label | extra memtier args
 run() { # srv scenario kp ds pl port args...
@@ -38,7 +45,7 @@ PY
 
 for srv in ${SERVERS:-redis kqueue kqueue-wbuf net}; do
   echo ">>> memtier $srv"
-  p=$(start "$srv")
+  start "$srv"; p=$SRV_PORT
   # random keys, fixed small payload
   run "$srv" uniform      "R:R" 32          1 "$p" --ratio=1:10 -d 32
   # random keys, RANDOM payload sizes across three orders of magnitude
