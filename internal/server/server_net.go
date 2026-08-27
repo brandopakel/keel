@@ -67,12 +67,12 @@ func startExecutor() {
 	execCh = make(chan execReq, 1024)
 	go func() {
 		for req := range execCh {
-			var rb replyBuf
+			var rb replyBuffer
 			for _, cmd := range req.cmds {
 				responseRw(cmd, &rb)
 			}
-			out := make([]byte, rb.b.Len())
-			copy(out, rb.b.Bytes())
+			out := make([]byte, rb.buf.Len())
+			copy(out, rb.buf.Bytes())
 			req.done <- out
 		}
 	}()
