@@ -252,9 +252,18 @@ func (r *replyBuffer) Write(p []byte) (int, error) { return r.buf.Write(p) }
 
 // respondBatch evaluates every command and emits one write for the whole batch.
 func respondBatch(comm core.FDComm, cmds []*core.MemKVCmd) {
-	if len(cmds) == 0 {
+	switch len(cmds) {
+	case 0:
+		return
+	case 1:
+		// Nothing to coalesce. Buffering one reply copies it in full and then
+		// issues the same single write it would have issued anyway, so for a
+		// batch of one the buffer is pure cost - and a large value is nearly
+		// always a batch of one, since it fills a read on its own.
+		responseRw(cmds[0], comm)
 		return
 	}
+
 	var rb replyBuffer
 	for _, cmd := range cmds {
 		responseRw(cmd, &rb)

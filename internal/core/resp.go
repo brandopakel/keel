@@ -1,9 +1,8 @@
 package core
 
 import (
-	"bytes"
 	"errors"
-	"fmt"
+	"strconv"
 	"strings"
 
 	"memkv/internal/constant"
@@ -183,56 +182,102 @@ func Decode(data []byte) (interface{}, error) {
 	res, _, err := DecodeOne(data)
 	return res, err
 }
+
+// The append* helpers build RESP into a caller-supplied slice.
+//
+// The previous form was []byte(fmt.Sprintf("$%d\r\n%s\r\n", len(s), s)), which
+// copies the payload twice: once for the string Sprintf returns, and again for
+// the []byte conversion. On a GET that is two allocations and two copies the
+// size of the value before it reaches the reply buffer at all. Appending writes
+// it once.
+func appendBulkString(dst []byte, s string) []byte {
+	dst = append(dst, '$')
+	dst = strconv.AppendInt(dst, int64(len(s)), 10)
+	dst = append(dst, '\r', '\n')
+	dst = append(dst, s...)
+	return append(dst, '\r', '\n')
+}
+
+func appendArrayHeader(dst []byte, n int) []byte {
+	dst = append(dst, '*')
+	dst = strconv.AppendInt(dst, int64(n), 10)
+	return append(dst, '\r', '\n')
+}
+
 func encodeString(s string) []byte {
-	return []byte(fmt.Sprintf("$%d\r\n%s\r\n", len(s), s))
+	return appendBulkString(make([]byte, 0, len(s)+16), s)
 }
 
 func encodeStringArray(sa []string) []byte {
-	var b []byte
-	buf := bytes.NewBuffer(b)
+	size := 16
 	for _, s := range sa {
-		buf.Write(encodeString(s))
+		size += len(s) + 16
 	}
-	return []byte(fmt.Sprintf("*%d\r\n%s", len(sa), buf.Bytes()))
+	b := appendArrayHeader(make([]byte, 0, size), len(sa))
+	for _, s := range sa {
+		b = appendBulkString(b, s)
+	}
+	return b
 }
 
 func Encode(value interface{}, isSimpleString bool) []byte {
 	switch v := value.(type) {
 	case string:
 		if isSimpleString {
-			return []byte(fmt.Sprintf("+%s%s", v, CRLF))
+			b := make([]byte, 0, len(v)+3)
+			b = append(b, '+')
+			b = append(b, v...)
+			return append(b, '\r', '\n')
 		}
-		return []byte(fmt.Sprintf("$%d%s%s%s", len(v), CRLF, v, CRLF))
-	case int64, int32, int16, int8, int:
-		return []byte(fmt.Sprintf(":%d\r\n", v))
+		return encodeString(v)
+	case int64:
+		return appendInt(v)
+	case int32:
+		return appendInt(int64(v))
+	case int16:
+		return appendInt(int64(v))
+	case int8:
+		return appendInt(int64(v))
+	case int:
+		return appendInt(int64(v))
 	case error:
-		return []byte(fmt.Sprintf("-%s\r\n", v))
+		msg := v.Error()
+		b := make([]byte, 0, len(msg)+3)
+		b = append(b, '-')
+		b = append(b, msg...)
+		return append(b, '\r', '\n')
 	case []string:
-		return encodeStringArray(value.([]string))
+		return encodeStringArray(v)
 	case [][]string:
-		var b []byte
-		buf := bytes.NewBuffer(b)
-		for _, sa := range value.([][]string) {
-			buf.Write(encodeStringArray(sa))
+		b := appendArrayHeader(nil, len(v))
+		for _, sa := range v {
+			b = append(b, encodeStringArray(sa)...)
 		}
-		return []byte(fmt.Sprintf("*%d\r\n%s", len(value.([][]string)), buf.Bytes()))
+		return b
 	case []interface{}:
-		var b []byte
-		buf := bytes.NewBuffer(b)
-		for _, x := range value.([]interface{}) {
-			buf.Write(Encode(x, false))
+		b := appendArrayHeader(nil, len(v))
+		for _, x := range v {
+			b = append(b, Encode(x, false)...)
 		}
-		return []byte(fmt.Sprintf("*%d\r\n%s", len(value.([]interface{})), buf.Bytes()))
+		return b
 	case []int:
-		var b []byte
-		buf := bytes.NewBuffer(b)
-		for _, n := range value.([]int) {
-			buf.Write([]byte(fmt.Sprintf("%d|", n)))
+		b := make([]byte, 0, len(v)*4+1)
+		b = append(b, '@')
+		for _, n := range v {
+			b = strconv.AppendInt(b, int64(n), 10)
+			b = append(b, '|')
 		}
-		return []byte(fmt.Sprintf("@%s", buf.Bytes()))
+		return b
 	default:
 		return constant.RespNil
 	}
+}
+
+func appendInt(n int64) []byte {
+	b := make([]byte, 0, 24)
+	b = append(b, ':')
+	b = strconv.AppendInt(b, n, 10)
+	return append(b, '\r', '\n')
 }
 
 // ParseCmd decodes the first complete command in data and reports how many bytes
