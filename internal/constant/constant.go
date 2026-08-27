@@ -19,7 +19,3 @@ const (
 
 const ObjEncodingRaw uint8 = 0
 const ObjEncodingInt uint8 = 1
-
-const EngineStatusWaiting = 1
-const EngineStatusBusy = 2
-const EngineStatusShuttingDown = 3

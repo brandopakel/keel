@@ -8,26 +8,12 @@ import (
 	"log"
 	"memkv/internal/core/io_multiplexing"
 	"net"
-	"os"
 	"sync"
-	"sync/atomic"
 	"syscall"
 
 	"memkv/internal/config"
-	"memkv/internal/constant"
 	"memkv/internal/core"
 )
-
-var eStatus int32 = constant.EngineStatusWaiting
-
-func WaitForSignal(wg *sync.WaitGroup, signals chan os.Signal) {
-	defer wg.Done()
-	<-signals
-	for atomic.LoadInt32(&eStatus) == constant.EngineStatusBusy {
-	}
-	log.Println("Shutting down gracefully")
-	os.Exit(0)
-}
 
 // readChunkSize is how much we attempt to pull off a socket per syscall.
 const readChunkSize = 4096
@@ -276,19 +262,51 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 		return err
 	}
 
-	for atomic.LoadInt32(&eStatus) != constant.EngineStatusShuttingDown {
+	// A pipe whose read end is monitored alongside the client sockets.
+	//
+	// Check blocks with no timeout, so an idle server is parked in a syscall
+	// that no flag can interrupt. Writing one byte here makes the multiplexer
+	// return immediately. The byte also persists in the pipe, so a signal that
+	// arrives before the loop parks is not lost - it is reported on the next
+	// Check rather than missed.
+	var wakeupFDs [2]int
+	if err = syscall.Pipe(wakeupFDs[:]); err != nil {
+		return err
+	}
+	defer syscall.Close(wakeupFDs[0])
+	defer syscall.Close(wakeupFDs[1])
+	if err = ioMultiplexer.Monitor(io_multiplexing.Event{
+		Fd: wakeupFDs[0],
+		Op: io_multiplexing.OpRead,
+	}); err != nil {
+		return err
+	}
+	setWaker(func() { syscall.Write(wakeupFDs[1], []byte{0}) })
+
+	for !shuttingDown() {
 		// check if any FD is ready for an IO
 		events, err = ioMultiplexer.Check()
 		if err != nil {
+			if shuttingDown() {
+				break
+			}
+			if err == syscall.EINTR {
+				continue
+			}
+			log.Println("multiplexer:", err)
 			continue
 		}
 
-		if !atomic.CompareAndSwapInt32(&eStatus, constant.EngineStatusWaiting, constant.EngineStatusBusy) {
-			if eStatus == constant.EngineStatusShuttingDown {
-				return nil
-			}
-		}
+		// Set when the wakeup pipe fires. The batch in hand is served to
+		// completion first, so a client that is mid-request gets its reply
+		// rather than having the connection dropped underneath it.
+		stop := false
+
 		for i := 0; i < len(events); i++ {
+			if events[i].Fd == wakeupFDs[0] {
+				stop = true
+				continue
+			}
 			if events[i].Fd == serverFD {
 				// the Server FD is ready for reading, means we have a new client.
 				// accept the incoming connection from a client
@@ -350,7 +368,6 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 					closeClient(events[i].Fd)
 					clientNumber--
 					log.Println("client quit")
-					atomic.SwapInt32(&eStatus, constant.EngineStatusWaiting)
 					continue
 				}
 				if WriteUnbuffered {
@@ -361,9 +378,15 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 					respondBatch(comm, cmds)
 				}
 			}
-			atomic.SwapInt32(&eStatus, constant.EngineStatusWaiting)
+		}
+
+		if stop {
+			break
 		}
 	}
 
+	// Reached only on a requested stop, so the deferred Close calls run here
+	// rather than being skipped by an os.Exit.
+	log.Println("event loop stopped")
 	return nil
 }

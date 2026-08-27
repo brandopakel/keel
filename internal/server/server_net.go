@@ -176,9 +176,21 @@ func RunNetTCPServer(wg *sync.WaitGroup) error {
 	}
 	defer ln.Close()
 
+	// Accept blocks until a client arrives, so the only way to interrupt it is
+	// to close the listener out from under it.
+	setWaker(func() { ln.Close() })
+
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
+			if shuttingDown() {
+				log.Println("accept loop stopped")
+				return nil
+			}
+			// Not a shutdown, so this is one failed accept and the listener is
+			// still good. Previously this branch also caught a closed listener,
+			// where Accept fails immediately and forever - a `continue` there
+			// spins the loop at 100% CPU rather than ending it.
 			log.Println("accept:", err)
 			continue
 		}
