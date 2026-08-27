@@ -1,9 +1,9 @@
 server,scenario,ops_sec,avg_ms,p50_ms,p99_ms,p999_ms
 redis,randomsize,183627,0.544,0.575,0.831,1.255
 redis,pipelined,1868044,0.855,0.863,1.223,1.847
-kqueue,randomsize,178828,0.559,0.495,1.935,2.367
-kqueue,pipelined,1160480,1.377,1.391,2.575,3.855
-kqueue-wbuf,randomsize,179329,0.557,0.487,1.911,2.383
-kqueue-wbuf,pipelined,2126591,0.751,0.751,1.583,1.863
+kqueue-nobuf,randomsize,178828,0.559,0.495,1.935,2.367
+kqueue-nobuf,pipelined,1160480,1.377,1.391,2.575,3.855
+kqueue,randomsize,179329,0.557,0.487,1.911,2.383
+kqueue,pipelined,2126591,0.751,0.751,1.583,1.863
 net,randomsize,154081,0.648,0.631,1.367,1.719
 net,pipelined,2248108,0.709,0.591,2.511,3.295

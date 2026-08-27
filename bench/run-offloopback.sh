@@ -32,7 +32,7 @@ MISSING=""
 setup
 echo "server,command,conns,pipeline,datasize,rep,rps,p50_ms" > "$OUT"
 PORT=8300
-for srv in ${SERVERS:-redis kqueue kqueue-wbuf net net-small net-direct net-chan}; do
+for srv in ${SERVERS:-redis kqueue-nobuf kqueue net net-small net-direct net-chan}; do
   PORT=$((PORT+1))
   if [ "$srv" = redis ]; then
     # protected-mode refuses non-loopback clients without a password, which is

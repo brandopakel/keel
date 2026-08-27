@@ -15,8 +15,8 @@ package server
 // while upstream's event loop writes once per command. Comparing those two
 // directly would mostly measure the write policy rather than the I/O mechanism,
 // so the bench runs the event loop both ways and isolates the variable under
-// test. `-mode kqueue` selects this path and is the baseline representing
-// upstream's design in everything under bench/results.
+// test. `-mode kqueue-nobuf` selects this path and is the baseline
+// representing upstream's design in everything under bench/results.
 //
 // The buffering itself lives in respondBatch, which both paths reach through
 // FDComm.Write. This file previously carried its own copy - a bufComm sink and

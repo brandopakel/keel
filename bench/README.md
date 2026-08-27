@@ -16,8 +16,8 @@ One binary, selected with `-mode`:
 
 | mode | implementation |
 |---|---|
-| `kqueue` | the event loop, one write syscall per reply (upstream's design) |
-| `kqueue-wbuf` | the event loop, replies from one read coalesced into one write — **the binary's default** |
+| `kqueue` | the event loop, replies from one read coalesced into one write — **the default** |
+| `kqueue-nobuf` | the event loop, one write syscall per reply (upstream's design) |
 | `net` | `net.Listener`, goroutine per connection, 4KB `bufio` both ways, mutex |
 | `net-small` | as `net`, 512-byte buffers — how much per-connection memory is tunable |
 | `net-direct` | as `net`, without `bufio.Reader` (the read path already buffers) |
@@ -29,16 +29,35 @@ One binary, selected with `-mode`:
 On Linux the `kqueue` modes run on `epoll` — the name is historical, the
 `io_multiplexing` package resolves it by build tag.
 
-**`-mode` defaults to `kqueue-wbuf`.** Coalescing is a ceiling removed rather
-than a trade-off, so the fork serves buffered unless told otherwise and `-mode
-kqueue` is how you ask for the unbuffered path. The mode *names* deliberately
-did not move when the default did: every file under `results/` is keyed by them,
-and `kqueue` has meant "one write per reply" in all of them. A run recorded as
-`kqueue` is upstream's design whether it was produced before or after the
-default changed. Every script here passes `-mode` explicitly, so none of them
-depend on the default.
+**`-mode` defaults to `kqueue`.** Coalescing is a ceiling removed rather than a
+trade-off, so the fork serves buffered unless told otherwise, and `-mode
+kqueue-nobuf` is how you ask for one write per reply. Every script here passes
+`-mode` explicitly, so none of them depend on the default.
 
-**`kqueue-wbuf` vs `net*` is the comparison the issue asks for.** Same framing,
+### The 2026-08-27 relabelling
+
+The mode names were swapped when the default changed, and **everything under
+`results/` was rewritten in the same commit** so that a label means one thing
+across the whole directory:
+
+| meaning | name before | name now |
+|---|---|---|
+| event loop, one write per reply (A1, upstream's design) | `kqueue` | `kqueue-nobuf` |
+| event loop, replies coalesced per read (A2, the default) | `kqueue-wbuf` | `kqueue` |
+
+Nothing was re-measured. The CSV `server` column and the `hyperfine*/` filenames
+were renamed in place, row for row and file for file, and the numbers attached
+to each arm are the ones that arm originally produced.
+
+Two consequences worth knowing. Reading a `results/` file at a commit **before**
+that migration gives the old meaning, so `git show` output and the working tree
+disagree about what `kqueue` denotes — the migration commit is the boundary. And
+the [issue #2](https://github.com/quangh33/memkv/issues/2) comment was written
+under the old names; its `kqueue` is this directory's `kqueue-nobuf`. The A1/A2
+identities in `summarise.py` did not move and are the stable way to refer to the
+two arms across both.
+
+**`kqueue` vs `net*` is the comparison the issue asks for.** Same framing,
 same write policy, same execution semantics, all with `TCP_NODELAY`. The `net`
 variants serialise execution because `core/storage.go` holds unsynchronised
 package-level maps; sharding them would be faster and would measure a different

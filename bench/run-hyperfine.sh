@@ -34,7 +34,7 @@ drain_ports() {
 # runs_for <conns> -- keep total sockets well inside the ephemeral range
 runs_for() { case "$1" in 1|10) echo 10 ;; 50|200) echo 10 ;; *) echo 6 ;; esac; }
 
-for srv in ${SERVERS:-redis kqueue kqueue-wbuf net net-small net-direct net-chan}; do
+for srv in ${SERVERS:-redis kqueue-nobuf kqueue net net-small net-direct net-chan}; do
   for c in 1 50 1000; do
     f="$OUT/${srv}-c${c}.json"
     runs=$(runs_for "$c")

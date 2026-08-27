@@ -29,7 +29,7 @@ jobs:
         run: |
           set -e
           port=7100
-          for m in kqueue kqueue-wbuf net net-small net-direct net-chan; do
+          for m in kqueue-nobuf kqueue net net-small net-direct net-chan; do
             port=$((port+1)); /tmp/memkv -port $port -mode $m & sleep 1
             [ "$(redis-cli -p $port ping)" = "PONG" ] || { echo "$m failed"; exit 1; }
             echo "  $m OK"; pkill -f "/tmp/memkv -port $port" || true; sleep 0.3
@@ -62,7 +62,7 @@ jobs:
           d=defaultdict(dict)
           for r in csv.DictReader(open("bench/results/memory-linux.csv")):
               d[r["server"]][r["conns"]]=(int(r["rss_kb"]),float(r["goroutine_cost_kb_per_conn"]))
-          S=[s for s in ["redis","kqueue","kqueue-wbuf","net","net-small","net-direct","net-chan"] if s in d]
+          S=[s for s in ["redis","kqueue-nobuf","kqueue","net","net-small","net-direct","net-chan"] if s in d]
           print("## Memory on Linux\n")
           print("| conns | " + " | ".join(S) + " |"); print("|---|"+"---:|"*len(S))
           for n in ["0","100","500","1000","5000"]:

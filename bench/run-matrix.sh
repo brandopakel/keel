@@ -2,8 +2,8 @@
 # Four-way benchmark: redis-server vs the three MemKV I/O implementations.
 #
 #   redis        real redis-server, as a calibration reference
-#   kqueue       event loop, one write syscall per reply     (A1, current design)
-#   kqueue-wbuf  event loop, replies coalesced per read      (A2)
+#   kqueue-nobuf event loop, one write syscall per reply     (A1, upstream's design)
+#   kqueue       event loop, replies coalesced per read      (A2, the default)
 #   net          net.Listener, goroutine per connection      (B)
 #
 # A1 vs A2 isolates write buffering. A2 vs B isolates the I/O mechanism, which
@@ -75,7 +75,7 @@ run_bench() {
   done
 }
 
-SERVERS="${SERVERS:-redis kqueue kqueue-wbuf net net-small net-direct net-chan}"
+SERVERS="${SERVERS:-redis kqueue-nobuf kqueue net net-small net-direct net-chan}"
 
 for srv in $SERVERS; do
   echo ">>> $srv"

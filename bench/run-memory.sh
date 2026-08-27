@@ -6,7 +6,7 @@
 set -uo pipefail
 BIN="${BIN:?}"; OUT="${OUT:-bench/results/memory.csv}"; PORT=${PORT_BASE:-13000}
 echo "server,conns,rss_kb,goroutine_cost_kb_per_conn" > "$OUT"
-for srv in ${SERVERS:-redis kqueue kqueue-wbuf net net-small net-direct net-chan}; do
+for srv in ${SERVERS:-redis kqueue-nobuf kqueue net net-small net-direct net-chan}; do
   for n in 0 100 500 1000 5000; do
     p=$((++PORT))
     if [ "$srv" = redis ]; then redis-server --port $p --save '' --appendonly no >/dev/null 2>&1 &

@@ -13,8 +13,8 @@ rows = list(csv.DictReader(open(path)))
 if not rows:
     sys.exit("no rows")
 
-ORDER = ["redis", "kqueue", "kqueue-wbuf", "net"]
-LABEL = {"redis": "redis-server", "kqueue": "A1 loop", "kqueue-wbuf": "A2 loop+wbuf", "net": "B net.Conn"}
+ORDER = ["redis", "kqueue-nobuf", "kqueue", "net"]
+LABEL = {"redis": "redis-server", "kqueue-nobuf": "A1 loop", "kqueue": "A2 loop+wbuf", "net": "B net.Conn"}
 
 agg = defaultdict(list)
 for r in rows:
@@ -89,7 +89,7 @@ print("Same framing, same write policy, same execution semantics — differing o
 print("in whether I/O readiness comes from hand-rolled epoll/kqueue or the Go netpoller.\n")
 print("| scenario | A2 loop+wbuf | B net.Conn | B/A2 |")
 print("|---|---|---|---|")
-for k in sorted([k for k in agg if k[0] == "kqueue-wbuf"], key=lambda k: (k[1], float(k[3]), float(k[4]), float(k[5]))):
+for k in sorted([k for k in agg if k[0] == "kqueue"], key=lambda k: (k[1], float(k[3]), float(k[4]), float(k[5]))):
     bk = ("net",) + k[1:]
     a, b = med(k), med(bk)
     if a and b:
