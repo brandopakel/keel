@@ -126,3 +126,14 @@ func cmdINCR(args []string) []byte {
 
 	return Encode(i, false)
 }
+
+// cmdDBSIZE reports how many keys the main dictionary holds.
+//
+// Without it, eviction is invisible from a client: the only way to observe it
+// would be to guess which keys went away.
+func cmdDBSIZE(args []string) []byte {
+	if len(args) != 0 {
+		return Encode(errors.New("(error) ERR wrong number of arguments for 'DBSIZE' command"), false)
+	}
+	return Encode(int64(dictStore.Len()), false)
+}

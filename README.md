@@ -32,14 +32,21 @@ low-level design decisions underneath a real database.
     cardinality, within about 0.8% (`PFADD`, `PFCOUNT`, `PFMERGE`)
   - Cuckoo filter — set membership that supports deletion, which a Bloom filter
     cannot, in less space for the same accuracy (`CF.ADD`, `CF.EXISTS`, `CF.DEL`)
+- **Approximate LRU eviction.** A bounded keyspace: past `-maxkeys`, each new
+  key evicts an old one. Rather than ordering every key by access time, which
+  would cost a linked list and turn reads into writes, it samples a few at
+  random and evicts the oldest, keeping the best candidates between passes.
+  Measured over the wire: 83% of recently-used keys survive against 49% for
+  random eviction.
 - **Graceful shutdown.** SIGINT or SIGTERM unwinds the event loop so its deferred
   cleanup actually runs, rather than exiting the process from under it.
 
 ## Getting started
 
 ```sh
-go run ./cmd                 # replies are coalesced per read (the default)
-redis-cli -p 8081            # from another terminal
+go run ./cmd                             # replies are coalesced per read (the default)
+go run ./cmd -maxkeys 1000000            # bound the keyspace; evicts approximately-LRU
+redis-cli -p 8081                        # from another terminal
 ```
 
 Other I/O modes exist for benchmarking; `-mode` selects them and
@@ -80,6 +87,7 @@ darwin. Figures are medians of repeated runs. Method and raw data are in
 | :--- | :--- |
 | **General** | `PING` |
 | **String** | `SET`, `GET`, `DEL`, `TTL`, `EXPIRE`, `INCR` |
+| **Keyspace** | `DBSIZE` |
 | **Sorted Set**| `ZADD`, `ZRANK`, `ZREM`, `ZSCORE`, `ZCARD` |
 | **Set** | `SADD`, `SREM`, `SCARD`, `SMEMBERS`, `SISMEMBER`, `SRAND`, `SPOP` |
 | **Geospatial** | `GEOADD`, `GEODIST`, `GEOHASH`, `GEOSEARCH`, `GEOPOS` |
@@ -110,7 +118,11 @@ and deep pipelining.
       0.009–0.013% false positive rate, against 17.7 bits per item for a Bloom
       filter at a comparable rate — and unlike Bloom it can delete. Fixed
       capacity, so it refuses inserts when full rather than growing.
-- [ ] Approx LRU eviction
+- [x] Approx LRU eviction — five random samples per eviction, with a 16-entry
+      pool carried between passes. Measured hot-key retention: 83% against 49%
+      for random eviction, where true LRU would score 100%. The pool is worth
+      most of that: plain sampling scores 70% at five samples and needs 20 to
+      reach 87%. Bounded by key count rather than by memory.
 - [ ] Approx LFU eviction
 - [ ] Longest Common Subsequence
 - [ ] Threaded socket I/O, in the style of Redis `io-threads` — parallelise

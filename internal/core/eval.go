@@ -40,6 +40,8 @@ func EvalAndResponse(cmd *MemKVCmd, c io.ReadWriter) error {
 		res = cmdEXPIRE(cmd.Args)
 	case "INCR":
 		res = cmdINCR(cmd.Args)
+	case "DBSIZE":
+		res = cmdDBSIZE(cmd.Args)
 	// Set
 	case "SADD":
 		res = cmdSADD(cmd.Args)

@@ -24,13 +24,35 @@ import (
 // The default coalesces. One write per command is a throughput ceiling rather
 // than a trade-off, so serving unbuffered has to be asked for explicitly with
 // -mode kqueue-nobuf.
-var mode string
+var (
+	mode        string
+	evictPolicy string
+	maxKeys     int
+	lruSamples  int
+)
 
 func init() {
 	flag.StringVar(&config.Host, "host", "0.0.0.0", "host")
 	flag.IntVar(&config.Port, "port", config.Port, "port")
 	flag.StringVar(&mode, "mode", "kqueue", "io mode: kqueue (default) | kqueue-nobuf | net | net-small | net-direct | net-chan | net-nolock")
+	flag.IntVar(&maxKeys, "maxkeys", config.KeyNumberLimit,
+		"evict once the keyspace reaches this many keys")
+	flag.StringVar(&evictPolicy, "evict", "lru",
+		"eviction policy when -maxkeys is reached: lru | random")
+	flag.IntVar(&lruSamples, "lru-samples", config.LRUSamples,
+		"keys sampled per approximate-LRU eviction; more is more accurate and slower")
 	flag.Parse()
+
+	config.KeyNumberLimit = maxKeys
+	config.LRUSamples = lruSamples
+	switch evictPolicy {
+	case "lru":
+		config.EvictStrategy = config.LRU
+	case "random":
+		config.EvictStrategy = config.EvictFirst
+	default:
+		log.Fatalf("unknown -evict %q (want lru or random)", evictPolicy)
+	}
 }
 
 func main() {

@@ -12,4 +12,10 @@ const (
 )
 
 var EvictStrategy = EvictFirst
+
+// LRUSamples is how many random keys an approximate-LRU eviction looks at
+// before choosing one. Redis calls this maxmemory-samples and defaults to 5:
+// scanning every key to find the true least-recently-used one would make
+// eviction O(n) and is the whole reason the policy is approximate.
+var LRUSamples = 5
 var AOFFileName = "./memkv-master.aof"
