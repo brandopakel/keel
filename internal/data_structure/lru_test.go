@@ -15,22 +15,24 @@ import (
 func withEviction(t *testing.T, strategy, samples, limit int) {
 	t.Helper()
 	s, n, l := config.EvictStrategy, config.LRUSamples, config.KeyNumberLimit
+	lf, dp := config.LFULogFactor, config.LFUDecayPeriod
 	t.Cleanup(func() {
 		config.EvictStrategy, config.LRUSamples, config.KeyNumberLimit = s, n, l
+		config.LFULogFactor, config.LFUDecayPeriod = lf, dp
 	})
 	config.EvictStrategy, config.LRUSamples, config.KeyNumberLimit = strategy, samples, limit
 }
 
-func TestAccessUpdatesLastAccess(t *testing.T) {
+func TestAccessUpdatesRecency(t *testing.T) {
 	d := CreateDict()
 	d.Put("a", d.NewObj("v", 0, 0, 0))
 	d.Put("b", d.NewObj("v", 0, 0, 0))
 
-	first := d.dictStore["a"].LastAccess
-	assert.Greater(t, d.dictStore["b"].LastAccess, first, "a later write is more recent")
+	first := d.dictStore["a"].lruClock()
+	assert.Greater(t, d.dictStore["b"].lruClock(), first, "a later write is more recent")
 
 	d.Get("a")
-	assert.Greater(t, d.dictStore["a"].LastAccess, d.dictStore["b"].LastAccess,
+	assert.Greater(t, d.dictStore["a"].lruClock(), d.dictStore["b"].lruClock(),
 		"reading a key must make it the most recently used")
 }
 
@@ -145,7 +147,7 @@ func TestEvictionSkipsCandidatesReadSinceSampling(t *testing.T) {
 	// k0 is read last, so it is the newest key in the dict...
 	d.Get("k0")
 	// ...but the pool still holds the stale reading from when it was cold.
-	d.pool = []poolEntry{{key: "k0", lastAccess: 1}}
+	d.pool = []poolEntry{{key: "k0", score: 1}}
 
 	before := d.Len()
 	d.evictApproxLRU()
@@ -161,7 +163,7 @@ func TestEvictionSkipsCandidatesAlreadyDeleted(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		d.Put("k"+strconv.Itoa(i), d.NewObj("v", 0, 0, 0))
 	}
-	d.pool = []poolEntry{{key: "gone", lastAccess: 1}}
+	d.pool = []poolEntry{{key: "gone", score: 1}}
 
 	before := d.Len()
 	d.evictApproxLRU()
@@ -176,11 +178,11 @@ func TestPoolStaysSortedAndBounded(t *testing.T) {
 	}
 	assert.LessOrEqual(t, len(d.pool), evictionPoolSize, "the pool must stay bounded")
 	for i := 1; i < len(d.pool); i++ {
-		assert.LessOrEqual(t, d.pool[i-1].lastAccess, d.pool[i].lastAccess,
+		assert.LessOrEqual(t, d.pool[i-1].score, d.pool[i].score,
 			"the pool must stay ordered oldest first")
 	}
 	// It should be holding the oldest candidates it saw, not just any of them.
-	assert.Less(t, d.pool[len(d.pool)-1].lastAccess, uint64(evictionPoolSize+1))
+	assert.Less(t, d.pool[len(d.pool)-1].score, uint64(evictionPoolSize+1))
 }
 
 // TestPoolDoesNotHoldOneKeyTwice matters because a duplicated candidate makes
@@ -198,5 +200,5 @@ func TestPoolDoesNotHoldOneKeyTwice(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, count, "a key must appear in the pool at most once")
-	assert.Equal(t, uint64(9), d.pool[0].lastAccess, "the entry must carry the latest reading")
+	assert.Equal(t, uint64(9), d.pool[0].score, "the entry must carry the latest reading")
 }

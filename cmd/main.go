@@ -25,10 +25,12 @@ import (
 // than a trade-off, so serving unbuffered has to be asked for explicitly with
 // -mode kqueue-nobuf.
 var (
-	mode        string
-	evictPolicy string
-	maxKeys     int
-	lruSamples  int
+	mode           string
+	evictPolicy    string
+	maxKeys        int
+	lruSamples     int
+	lfuLogFactor   int
+	lfuDecayPeriod int
 )
 
 func init() {
@@ -38,20 +40,28 @@ func init() {
 	flag.IntVar(&maxKeys, "maxkeys", config.KeyNumberLimit,
 		"evict once the keyspace reaches this many keys")
 	flag.StringVar(&evictPolicy, "evict", "lru",
-		"eviction policy when -maxkeys is reached: lru | random")
+		"eviction policy when -maxkeys is reached: lru | lfu | random")
 	flag.IntVar(&lruSamples, "lru-samples", config.LRUSamples,
-		"keys sampled per approximate-LRU eviction; more is more accurate and slower")
+		"keys sampled per eviction; more is more accurate and slower")
+	flag.IntVar(&lfuLogFactor, "lfu-log-factor", config.LFULogFactor,
+		"how slowly the LFU access counter rises; higher spans more accesses in 8 bits")
+	flag.IntVar(&lfuDecayPeriod, "lfu-decay-period", config.LFUDecayPeriod,
+		"accesses before an idle LFU counter drops by one; 0 disables forgetting")
 	flag.Parse()
 
 	config.KeyNumberLimit = maxKeys
 	config.LRUSamples = lruSamples
+	config.LFULogFactor = lfuLogFactor
+	config.LFUDecayPeriod = lfuDecayPeriod
 	switch evictPolicy {
 	case "lru":
 		config.EvictStrategy = config.LRU
+	case "lfu":
+		config.EvictStrategy = config.LFU
 	case "random":
 		config.EvictStrategy = config.EvictFirst
 	default:
-		log.Fatalf("unknown -evict %q (want lru or random)", evictPolicy)
+		log.Fatalf("unknown -evict %q (want lru, lfu or random)", evictPolicy)
 	}
 }
 

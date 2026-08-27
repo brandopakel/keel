@@ -32,12 +32,14 @@ low-level design decisions underneath a real database.
     cardinality, within about 0.8% (`PFADD`, `PFCOUNT`, `PFMERGE`)
   - Cuckoo filter — set membership that supports deletion, which a Bloom filter
     cannot, in less space for the same accuracy (`CF.ADD`, `CF.EXISTS`, `CF.DEL`)
-- **Approximate LRU eviction.** A bounded keyspace: past `-maxkeys`, each new
-  key evicts an old one. Rather than ordering every key by access time, which
-  would cost a linked list and turn reads into writes, it samples a few at
-  random and evicts the oldest, keeping the best candidates between passes.
-  Measured over the wire: 83% of recently-used keys survive against 49% for
-  random eviction.
+- **Approximate LRU and LFU eviction.** A bounded keyspace: past `-maxkeys`,
+  each new key evicts an old one. Rather than ordering every key by access time
+  or frequency — which would cost a structure threaded through the keyspace and
+  turn reads into writes — both policies sample a few keys at random and evict
+  the worst, keeping the best candidates between passes. LRU retains 83% of
+  recently-used keys against 49% for random. LFU is the one to reach for when a
+  scan would otherwise flush the cache: streaming 2000 read-once keys past a
+  1000-key cache leaves LRU holding 1 of its 500 hot keys, and LFU holding 496.
 - **Graceful shutdown.** SIGINT or SIGTERM unwinds the event loop so its deferred
   cleanup actually runs, rather than exiting the process from under it.
 
@@ -46,6 +48,7 @@ low-level design decisions underneath a real database.
 ```sh
 go run ./cmd                             # replies are coalesced per read (the default)
 go run ./cmd -maxkeys 1000000            # bound the keyspace; evicts approximately-LRU
+go run ./cmd -maxkeys 1000000 -evict lfu # ...or by frequency, which resists scans
 redis-cli -p 8081                        # from another terminal
 ```
 
@@ -123,7 +126,13 @@ and deep pipelining.
       for random eviction, where true LRU would score 100%. The pool is worth
       most of that: plain sampling scores 70% at five samples and needs 20 to
       reach 87%. Bounded by key count rather than by memory.
-- [ ] Approx LFU eviction
+- [x] Approx LFU eviction — Redis's logarithmic counter, incremented with
+      probability 1/(base*factor+1) so eight bits span millions of accesses, and
+      decayed lazily so a key popular yesterday does not outrank one in use
+      today. Measured: 99% of a working set survives a 2x scan that leaves LRU
+      with 0%, while a working set that moves is still followed. Shares one
+      64-bit field with LRU rather than adding its own, which is 76MB at the
+      default key limit.
 - [ ] Longest Common Subsequence
 - [ ] Threaded socket I/O, in the style of Redis `io-threads` — parallelise
       reads, writes and parsing while command execution stays single-threaded.
