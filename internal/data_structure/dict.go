@@ -51,6 +51,11 @@ type Dict struct {
 	// pool carries the best eviction candidates between evictions. See lru.go.
 	pool []poolEntry
 
+	// memUsed is the estimated bytes held, maintained incrementally: totalling
+	// it on demand would be O(n) and eviction consults it constantly.
+	memUsed uint64
+	evicted uint64
+
 	// rngState drives the probabilistic counter increment under LFU. A
 	// per-dictionary xorshift rather than math/rand, so behaviour is
 	// reproducible and nothing touches a shared source.
@@ -133,14 +138,22 @@ func (d *Dict) Get(k string) *Obj {
 }
 
 func (d *Dict) Put(k string, obj *Obj) {
-	// Evict before inserting, and only when the key is genuinely new:
-	// overwriting an existing key does not grow the dictionary, so evicting for
-	// it would throw away a key for nothing.
-	if _, exists := d.dictStore[k]; !exists && len(d.dictStore) >= config.KeyNumberLimit {
-		d.evict()
+	// An overwrite replaces the old value's cost rather than adding to it, so
+	// its bytes are returned first. Under a key-count bound this is also why
+	// overwriting must not evict: the dictionary does not grow.
+	if old, exists := d.dictStore[k]; exists {
+		d.memUsed -= d.entryBytes(k, old)
 	}
+
 	d.touch(obj)
 	d.dictStore[k] = obj
+	d.memUsed += d.entryBytes(k, obj)
+
+	// Enforced after the insert rather than before, because what has to fit is
+	// known exactly only once it is in. The key just written is the most
+	// recently used and the most recently accessed, so no policy will choose it
+	// while anything else remains.
+	d.enforceLimits()
 }
 
 // Len reports how many keys are stored.
@@ -148,6 +161,7 @@ func (d *Dict) Len() int { return len(d.dictStore) }
 
 func (d *Dict) Del(k string) bool {
 	if obj, exist := d.dictStore[k]; exist {
+		d.memUsed -= d.entryBytes(k, obj)
 		delete(d.dictStore, k)
 		delete(d.expiredDictStore, obj)
 		return true
@@ -158,6 +172,7 @@ func (d *Dict) Del(k string) bool {
 func (d *Dict) evictFirst() {
 	for k := range d.dictStore {
 		d.Del(k)
+		d.evicted++
 		return
 	}
 }

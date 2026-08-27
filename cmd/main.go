@@ -6,6 +6,8 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -31,12 +33,15 @@ var (
 	lruSamples     int
 	lfuLogFactor   int
 	lfuDecayPeriod int
+	maxMemory      string
 )
 
 func init() {
 	flag.StringVar(&config.Host, "host", "0.0.0.0", "host")
 	flag.IntVar(&config.Port, "port", config.Port, "port")
 	flag.StringVar(&mode, "mode", "kqueue", "io mode: kqueue (default) | kqueue-nobuf | net | net-small | net-direct | net-chan | net-nolock")
+	flag.StringVar(&maxMemory, "maxmemory", "0",
+		"bound the keyspace in bytes, e.g. 512mb or 2gb; 0 is unbounded")
 	flag.IntVar(&maxKeys, "maxkeys", config.KeyNumberLimit,
 		"evict once the keyspace reaches this many keys")
 	flag.StringVar(&evictPolicy, "evict", "lru",
@@ -49,6 +54,11 @@ func init() {
 		"accesses before an idle LFU counter drops by one; 0 disables forgetting")
 	flag.Parse()
 
+	parsed, err := parseSize(maxMemory)
+	if err != nil {
+		log.Fatalf("bad -maxmemory %q: %v", maxMemory, err)
+	}
+	config.MaxMemory = parsed
 	config.KeyNumberLimit = maxKeys
 	config.LRUSamples = lruSamples
 	config.LFULogFactor = lfuLogFactor
@@ -63,6 +73,24 @@ func init() {
 	default:
 		log.Fatalf("unknown -evict %q (want lru, lfu or random)", evictPolicy)
 	}
+}
+
+// parseSize reads a byte count, accepting the k/m/g suffixes people actually
+// type rather than demanding a raw number of bytes.
+func parseSize(s string) (uint64, error) {
+	s = strings.TrimSpace(strings.ToLower(s))
+	mult := uint64(1)
+	for suffix, m := range map[string]uint64{"kb": 1 << 10, "mb": 1 << 20, "gb": 1 << 30} {
+		if strings.HasSuffix(s, suffix) {
+			s, mult = strings.TrimSuffix(s, suffix), m
+			break
+		}
+	}
+	n, err := strconv.ParseUint(strings.TrimSpace(s), 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return n * mult, nil
 }
 
 func main() {

@@ -5,6 +5,14 @@ var Port = 8081
 var MaxConnection = 20000
 var KeyNumberLimit = 5000000
 
+// MaxMemory bounds the dictionary in bytes. Zero means unbounded, and the key
+// count limit still applies either way.
+//
+// The figure is an estimate rather than a measurement - Go offers no way to ask
+// the allocator what a value cost - so it is a target, not a guarantee. See
+// entryBytes in data_structure/memory.go.
+var MaxMemory uint64 = 0
+
 const (
 	EvictFirst int = 0
 	LRU            = 1

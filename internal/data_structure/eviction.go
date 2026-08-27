@@ -59,6 +59,7 @@ func (d *Dict) evictBySampling(scoreOf func(*Obj) uint64) {
 		}
 
 		d.Del(candidate.key)
+		d.evicted++
 		return
 	}
 

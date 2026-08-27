@@ -32,6 +32,12 @@ low-level design decisions underneath a real database.
     cardinality, within about 0.8% (`PFADD`, `PFCOUNT`, `PFMERGE`)
   - Cuckoo filter — set membership that supports deletion, which a Bloom filter
     cannot, in less space for the same accuracy (`CF.ADD`, `CF.EXISTS`, `CF.DEL`)
+- **Bounded by memory, not just by key count.** `-maxmemory 512mb` holds the
+  keyspace to a byte budget, so the number of keys adapts to how big they are —
+  a 1MB budget holds 8966 keys of 8 bytes or 129 keys of 8KB. Go gives no way to
+  ask the allocator what a value cost, so the accounting is estimated and
+  calibrated against real heap growth; a test compares the two so it cannot
+  drift.
 - **Approximate LRU and LFU eviction.** A bounded keyspace: past `-maxkeys`,
   each new key evicts an old one. Rather than ordering every key by access time
   or frequency — which would cost a structure threaded through the keyspace and
@@ -49,6 +55,7 @@ low-level design decisions underneath a real database.
 go run ./cmd                             # replies are coalesced per read (the default)
 go run ./cmd -maxkeys 1000000            # bound the keyspace; evicts approximately-LRU
 go run ./cmd -maxkeys 1000000 -evict lfu # ...or by frequency, which resists scans
+go run ./cmd -maxmemory 512mb            # bound by bytes instead of key count
 redis-cli -p 8081                        # from another terminal
 ```
 
@@ -91,6 +98,7 @@ darwin. Figures are medians of repeated runs. Method and raw data are in
 | **General** | `PING` |
 | **String** | `SET`, `GET`, `DEL`, `TTL`, `EXPIRE`, `INCR` |
 | **Keyspace** | `DBSIZE` |
+| **Server** | `INFO`, `MEMORY USAGE` |
 | **Sorted Set**| `ZADD`, `ZRANK`, `ZREM`, `ZSCORE`, `ZCARD` |
 | **Set** | `SADD`, `SREM`, `SCARD`, `SMEMBERS`, `SISMEMBER`, `SRAND`, `SPOP` |
 | **Geospatial** | `GEOADD`, `GEODIST`, `GEOHASH`, `GEOSEARCH`, `GEOPOS` |
@@ -133,6 +141,10 @@ and deep pipelining.
       with 0%, while a working set that moves is still followed. Shares one
       64-bit field with LRU rather than adding its own, which is 76MB at the
       default key limit.
+- [x] Memory-based bounding — `-maxmemory`, with per-key accounting calibrated
+      against real heap growth to within 6%, reported through `INFO` and
+      `MEMORY USAGE`. Covers the main dictionary; the set, sorted-set, filter
+      and sketch keyspaces are not yet accounted.
 - [ ] Longest Common Subsequence
 - [ ] Threaded socket I/O, in the style of Redis `io-threads` — parallelise
       reads, writes and parsing while command execution stays single-threaded.
