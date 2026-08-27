@@ -32,24 +32,80 @@ func WaitForSignal(wg *sync.WaitGroup, signals chan os.Signal) {
 // readChunkSize is how much we attempt to pull off a socket per syscall.
 const readChunkSize = 4096
 
-// pendingReads holds the bytes that have arrived on a connection but do not yet
-// form a complete command.
+// maxQueryBuffer bounds the unparsed bytes held for one connection.
 //
-// A single syscall.Read gives us whatever the kernel happens to have buffered,
-// which is not necessarily one command: a large SET can be split across several
-// reads, and a pipelining client can pack many commands into one. Parsing the
-// raw result of a single read therefore fails in both directions - it truncates
-// big commands and it silently discards every command after the first. We keep a
-// per-connection buffer instead and only ever hand whole frames to the parser.
+// Without a bound, a client can open a frame it never finishes - send "*3\r\n"
+// and then trickle a byte an hour - and the server buffers for as long as the
+// client cares to keep the socket open. Redis bounds the same thing with
+// client-query-buffer-limit, and for the same reason sets it above
+// proto-max-bulk-len rather than below: the buffer has to be able to hold the
+// largest legal command, or valid traffic would be rejected mid-stream. Ours is
+// the Redis default and sits above the 512MB maxBulkLength in resp.go.
 //
-// Entries are removed by closeClient when the connection goes away.
-var pendingReads = make(map[int][]byte)
+// A var rather than a const so tests can lower it; nothing else assigns to it.
+var maxQueryBuffer = 1024 * 1024 * 1024
+
+// readScratch is the landing area for every socket read.
+//
+// The event loop is single-threaded and each read is fully dealt with - parsed,
+// or copied into a connBuffer - before the next one starts, so one shared array
+// is safe and saves an allocation per read. It also makes the common case
+// copy-free: a read holding only whole commands is parsed straight out of here.
+//
+// That is only sound because ParseCmd converts payloads with string(data[...]),
+// which allocates a copy. No command holds a reference back into this array. If
+// the parser ever starts returning []byte views, this has to become a per-read
+// allocation again.
+var readScratch = make([]byte, readChunkSize)
+
+// connBuffer holds the bytes of a command that arrived split across reads.
+//
+// Only a connection with an unfinished frame has one, and it is dropped as soon
+// as the frame completes, so idle connections hold nothing. That is deliberate:
+// per-connection memory is the event loop's main advantage over a goroutine per
+// connection, and a buffer retained per client would give it away.
+//
+// data[off:] is the unparsed remainder. Consuming a command moves off rather
+// than reallocating, and the remainder slides to the front only when the array
+// genuinely needs the room. The previous version allocated a fresh array and
+// copied the entire remainder after every read, so a value spanning k reads was
+// copied k times over - 8.5MB of copying to receive one 256KB value. Cost here
+// is linear in the size of the value.
+type connBuffer struct {
+	data []byte
+	off  int
+}
+
+func (b *connBuffer) unparsed() []byte { return b.data[b.off:] }
+func (b *connBuffer) size() int        { return len(b.data) - b.off }
+
+// add appends p, reclaiming the space held by already-parsed bytes first.
+func (b *connBuffer) add(p []byte) {
+	switch {
+	case b.off == len(b.data):
+		// Everything buffered so far was parsed: reuse the array from the top.
+		b.data = b.data[:0]
+		b.off = 0
+	case b.off > 0 && cap(b.data)-len(b.data) < len(p):
+		// No room at the tail. Slide the remainder down instead of letting
+		// append allocate a larger array and copy into it.
+		n := copy(b.data, b.data[b.off:])
+		b.data = b.data[:n]
+		b.off = 0
+	}
+	b.data = append(b.data, p...)
+}
+
+// pendingReads holds the partial-frame buffer for the connections that have one.
+//
+// Entries are created only when a read ends mid-command, removed as soon as the
+// command completes, and removed by closeClient when the connection goes away.
+var pendingReads = make(map[int]*connBuffer)
 
 // readCommandsFD reads once from fd and returns every complete command that is
 // now available, leaving any trailing partial command buffered for next time.
 func readCommandsFD(fd int) ([]*core.MemKVCmd, error) {
-	var chunk = make([]byte, readChunkSize)
-	n, err := syscall.Read(fd, chunk)
+	n, err := syscall.Read(fd, readScratch)
 	if err == syscall.EAGAIN || err == syscall.EINTR {
 		// The socket was reported readable but has nothing for us: a spurious
 		// wakeup, or another path drained it first. That is not a failure, and
@@ -65,29 +121,49 @@ func readCommandsFD(fd int) ([]*core.MemKVCmd, error) {
 		return nil, io.EOF
 	}
 
-	buf := append(pendingReads[fd], chunk[:n]...)
+	b := pendingReads[fd]
+	if b != nil && b.size() >= maxQueryBuffer {
+		// Wrap ErrProtocol so the caller replies before hanging up: the client
+		// learns why instead of seeing the connection vanish.
+		return nil, fmt.Errorf("%w: query buffer limit of %d bytes exceeded",
+			core.ErrProtocol, maxQueryBuffer)
+	}
+
+	// Parse out of the scratch buffer when nothing is left over from last time.
+	// Only a partial frame makes a copy necessary.
+	src := readScratch[:n]
+	if b != nil {
+		b.add(readScratch[:n])
+		src = b.unparsed()
+	}
 
 	var cmds []*core.MemKVCmd
-	for len(buf) > 0 {
-		cmd, consumed, err := core.ParseCmd(buf)
-		if errors.Is(err, core.ErrIncompleteFrame) {
+	used := 0
+	for used < len(src) {
+		cmd, consumed, perr := core.ParseCmd(src[used:])
+		if errors.Is(perr, core.ErrIncompleteFrame) {
 			// The rest of this command has not arrived yet. Keep what we have.
 			break
 		}
-		if err != nil {
-			return nil, err
+		if perr != nil {
+			return nil, perr
 		}
 		cmds = append(cmds, cmd)
-		buf = buf[consumed:]
+		used += consumed
 	}
 
-	if len(buf) == 0 {
+	switch {
+	case used == len(src):
+		// Nothing partial left over, so the connection goes back to holding no
+		// buffer at all.
 		delete(pendingReads, fd)
-	} else {
-		// Copy the remainder so we do not pin the whole read chunk in memory.
-		rest := make([]byte, len(buf))
-		copy(rest, buf)
-		pendingReads[fd] = rest
+	case b != nil:
+		b.off += used
+	default:
+		// First partial frame on this connection: start buffering the remainder.
+		nb := &connBuffer{}
+		nb.add(src[used:])
+		pendingReads[fd] = nb
 	}
 	return cmds, nil
 }
