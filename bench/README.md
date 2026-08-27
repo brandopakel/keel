@@ -17,7 +17,7 @@ One binary, selected with `-mode`:
 | mode | implementation |
 |---|---|
 | `kqueue` | the event loop, one write syscall per reply (upstream's design) |
-| `kqueue-wbuf` | the event loop, replies from one read coalesced into one write |
+| `kqueue-wbuf` | the event loop, replies from one read coalesced into one write — **the binary's default** |
 | `net` | `net.Listener`, goroutine per connection, 4KB `bufio` both ways, mutex |
 | `net-small` | as `net`, 512-byte buffers — how much per-connection memory is tunable |
 | `net-direct` | as `net`, without `bufio.Reader` (the read path already buffers) |
@@ -28,6 +28,15 @@ One binary, selected with `-mode`:
 
 On Linux the `kqueue` modes run on `epoll` — the name is historical, the
 `io_multiplexing` package resolves it by build tag.
+
+**`-mode` defaults to `kqueue-wbuf`.** Coalescing is a ceiling removed rather
+than a trade-off, so the fork serves buffered unless told otherwise and `-mode
+kqueue` is how you ask for the unbuffered path. The mode *names* deliberately
+did not move when the default did: every file under `results/` is keyed by them,
+and `kqueue` has meant "one write per reply" in all of them. A run recorded as
+`kqueue` is upstream's design whether it was produced before or after the
+default changed. Every script here passes `-mode` explicitly, so none of them
+depend on the default.
 
 **`kqueue-wbuf` vs `net*` is the comparison the issue asks for.** Same framing,
 same write policy, same execution semantics, all with `TCP_NODELAY`. The `net`

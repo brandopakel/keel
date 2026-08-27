@@ -17,15 +17,20 @@ import (
 // upstream performance issue can be benchmarked against each other from one
 // binary:
 //
-//	kqueue       event loop, one write syscall per reply   (current design)
-//	kqueue-wbuf  event loop, replies coalesced per read
+//	kqueue-wbuf  event loop, replies coalesced per read      (default)
+//	kqueue       event loop, one write syscall per reply      (upstream's design)
 //	net          net.Listener with one goroutine per connection
+//
+// The default coalesces. One write per command is a throughput ceiling rather
+// than a trade-off, so serving unbuffered has to be asked for explicitly with
+// -mode kqueue. That mode name is also the label the bench results use for
+// upstream's design, so it keeps its meaning here.
 var mode string
 
 func init() {
 	flag.StringVar(&config.Host, "host", "0.0.0.0", "host")
 	flag.IntVar(&config.Port, "port", config.Port, "port")
-	flag.StringVar(&mode, "mode", "kqueue", "io mode: kqueue | kqueue-wbuf | net | net-small | net-direct | net-chan | net-nolock")
+	flag.StringVar(&mode, "mode", "kqueue-wbuf", "io mode: kqueue-wbuf (default) | kqueue (unbuffered) | net | net-small | net-direct | net-chan | net-nolock")
 	flag.Parse()
 }
 
@@ -37,10 +42,10 @@ func main() {
 	wg.Add(2)
 
 	switch mode {
-	case "kqueue":
-		go server.RunAsyncTCPServer(&wg)
 	case "kqueue-wbuf":
-		server.WriteBuffered = true
+		go server.RunAsyncTCPServer(&wg)
+	case "kqueue":
+		server.WriteUnbuffered = true
 		go server.RunAsyncTCPServer(&wg)
 	case "net":
 		server.ActiveNetVariant = server.NetVariantMutex
@@ -59,7 +64,7 @@ func main() {
 		server.EvalUnlocked = true
 		go server.RunNetTCPServer(&wg)
 	default:
-		log.Fatalf("unknown -mode %q (want kqueue, kqueue-wbuf or net)", mode)
+		log.Fatalf("unknown -mode %q (want kqueue-wbuf, kqueue or net*)", mode)
 	}
 	go server.WaitForSignal(&wg, signals)
 
