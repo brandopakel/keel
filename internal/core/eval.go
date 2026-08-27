@@ -106,6 +106,23 @@ func EvalAndResponse(cmd *MemKVCmd, c io.ReadWriter) error {
 		res = cmdPFCOUNT(cmd.Args)
 	case "PFMERGE":
 		res = cmdPFMERGE(cmd.Args)
+	// Cuckoo filter
+	case "CF.RESERVE":
+		res = cmdCFRESERVE(cmd.Args)
+	case "CF.ADD":
+		res = cmdCFADD(cmd.Args)
+	case "CF.ADDNX":
+		res = cmdCFADDNX(cmd.Args)
+	case "CF.EXISTS":
+		res = cmdCFEXISTS(cmd.Args)
+	case "CF.MEXISTS":
+		res = cmdCFMEXISTS(cmd.Args)
+	case "CF.DEL":
+		res = cmdCFDEL(cmd.Args)
+	case "CF.COUNT":
+		res = cmdCFCOUNT(cmd.Args)
+	case "CF.INFO":
+		res = cmdCFINFO(cmd.Args)
 	default:
 		return errors.New(fmt.Sprintf("command not found: %s", cmd.Cmd))
 	}

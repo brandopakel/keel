@@ -30,6 +30,8 @@ low-level design decisions underneath a real database.
   - Count-Min sketch — frequency estimation over a stream (`CMS.INCRBY`, `CMS.QUERY`)
   - HyperLogLog — distinct-element counting in a fixed 12KB, whatever the
     cardinality, within about 0.8% (`PFADD`, `PFCOUNT`, `PFMERGE`)
+  - Cuckoo filter — set membership that supports deletion, which a Bloom filter
+    cannot, in less space for the same accuracy (`CF.ADD`, `CF.EXISTS`, `CF.DEL`)
 - **Graceful shutdown.** SIGINT or SIGTERM unwinds the event loop so its deferred
   cleanup actually runs, rather than exiting the process from under it.
 
@@ -84,6 +86,7 @@ darwin. Figures are medians of repeated runs. Method and raw data are in
 | **Bloom Filter**| `BF.RESERVE`, `BF.INFO`, `BF.MADD`, `BF.EXISTS`, `BF.MEXISTS` |
 | **Count-Min** | `CMS.INITBYDIM`, `CMS.INITBYPROB`, `CMS.INCRBY`, `CMS.QUERY` |
 | **HyperLogLog** | `PFADD`, `PFCOUNT`, `PFMERGE` |
+| **Cuckoo Filter** | `CF.RESERVE`, `CF.ADD`, `CF.ADDNX`, `CF.EXISTS`, `CF.MEXISTS`, `CF.DEL`, `CF.COUNT`, `CF.INFO` |
 
 ## Benchmarks
 
@@ -102,7 +105,11 @@ and deep pipelining.
       sparse encoding, which costs a few hundred bytes instead of 12KB for keys
       with few members, is not implemented.
 - [ ] Morris counter
-- [ ] Cuckoo filter
+- [x] Cuckoo filter — 16-bit fingerprints, four to a bucket, partial-key cuckoo
+      hashing. Measured: 96–98% load factor, 16.3–16.7 bits per item at a
+      0.009–0.013% false positive rate, against 17.7 bits per item for a Bloom
+      filter at a comparable rate — and unlike Bloom it can delete. Fixed
+      capacity, so it refuses inserts when full rather than growing.
 - [ ] Approx LRU eviction
 - [ ] Approx LFU eviction
 - [ ] Longest Common Subsequence
