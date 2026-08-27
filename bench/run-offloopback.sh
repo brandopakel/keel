@@ -28,22 +28,32 @@ setup() {
 }
 teardown() { sudo ip netns del $NS 2>/dev/null || true; sudo ip link del veth0 2>/dev/null || true; }
 
+MISSING=""
 setup
 echo "server,command,conns,pipeline,datasize,rep,rps,p50_ms" > "$OUT"
 PORT=8300
-for srv in ${SERVERS:-redis kqueue kqueue-wbuf net net-chan}; do
+for srv in ${SERVERS:-redis kqueue kqueue-wbuf net net-small net-direct net-chan}; do
   PORT=$((PORT+1))
   if [ "$srv" = redis ]; then
-    sudo ip netns exec $NS redis-server --port $PORT --bind $SRV_IP --save '' --appendonly no >/dev/null 2>&1 &
+    # protected-mode refuses non-loopback clients without a password, which is
+    # exactly what this test is: a client reaching the server across a veth pair.
+    sudo ip netns exec $NS redis-server --port $PORT --bind $SRV_IP \
+      --protected-mode no --save '' --appendonly no >/tmp/ol-redis.log 2>&1 &
   else
-    sudo ip netns exec $NS "$BIN" -host $SRV_IP -port $PORT -mode "$srv" >/dev/null 2>&1 &
+    sudo ip netns exec $NS "$BIN" -host $SRV_IP -port $PORT -mode "$srv" >/tmp/ol-$srv.log 2>&1 &
   fi
   ok=no
   for _ in $(seq 1 80); do
     [ "$(redis-cli -h $SRV_IP -p $PORT ping 2>/dev/null)" = "PONG" ] && { ok=yes; break; }
     sleep 0.15
   done
-  [ "$ok" != yes ] && { echo "  $srv: never bound"; continue; }
+  if [ "$ok" != yes ]; then
+    echo "  FAILED: $srv never bound on ${SRV_IP}:${PORT}"
+    echo "  --- server log ---"; sudo cat /tmp/ol-$srv.log 2>/dev/null | tail -20
+    echo "  --- namespace state ---"; sudo ip netns exec $NS ss -lntp 2>/dev/null | head
+    MISSING="$MISSING $srv"
+    continue
+  fi
   echo "  $srv on ${SRV_IP}:${PORT}"
   for spec in "PING 50 1 3 -t ping_mbulk" "PING 50 16 3 -t ping_mbulk" "SET 50 1 512 -t set -d 512" "SET 50 1 32768 -t set -d 32768"; do
     set -- $spec; label=$1; c=$2; pl=$3; d=$4; shift 4
@@ -57,4 +67,8 @@ for srv in ${SERVERS:-redis kqueue kqueue-wbuf net net-chan}; do
   sudo pkill -f "$BIN" 2>/dev/null; sudo pkill -f redis-server 2>/dev/null; sleep 1
 done
 teardown
-echo "done -> $OUT"
+if [ -n "$MISSING" ]; then
+  echo "INCOMPLETE: no data for:$MISSING"
+  exit 1
+fi
+echo "done -> $OUT (all servers measured)"
