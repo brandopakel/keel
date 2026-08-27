@@ -15,8 +15,22 @@ import (
 	"memkv/internal/core"
 )
 
-// readChunkSize is how much we attempt to pull off a socket per syscall.
-const readChunkSize = 4096
+// readChunkSize is how much we attempt to pull off a socket when we have no
+// better idea, which is any read that does not continue a frame already in
+// progress.
+//
+// 4096 was costing a syscall every 4KB: 64 of them to receive one 256KB value,
+// and syscalls rather than copying are what dominates the large-value path -
+// GET, which crosses the kernel boundary once, beats SET at every size despite
+// doing more copying. Raising it to 64KB measured 1.66x at d=65536 and 1.83x at
+// d=262144, and nothing either way below 4KB. It is close to free: readScratch
+// is one array for the whole server, not one per connection.
+const readChunkSize = 64 * 1024
+
+// maxDirectRead caps a single sized read so that a frame header claiming a huge
+// payload cannot turn into an equally huge allocation before any of that
+// payload has actually arrived.
+const maxDirectRead = 1 << 20
 
 // maxQueryBuffer bounds the unparsed bytes held for one connection.
 //
@@ -67,20 +81,36 @@ func (b *connBuffer) size() int        { return len(b.data) - b.off }
 
 // add appends p, reclaiming the space held by already-parsed bytes first.
 func (b *connBuffer) add(p []byte) {
-	switch {
-	case b.off == len(b.data):
-		// Everything buffered so far was parsed: reuse the array from the top.
-		b.data = b.data[:0]
-		b.off = 0
-	case b.off > 0 && cap(b.data)-len(b.data) < len(p):
-		// No room at the tail. Slide the remainder down instead of letting
-		// append allocate a larger array and copy into it.
-		n := copy(b.data, b.data[b.off:])
-		b.data = b.data[:n]
-		b.off = 0
-	}
+	b.reserve(len(p))
 	b.data = append(b.data, p...)
 }
+
+// reserve makes room for n more bytes without a further allocation.
+func (b *connBuffer) reserve(n int) {
+	if cap(b.data)-len(b.data) >= n {
+		return
+	}
+	if b.off > 0 {
+		// Parsed bytes at the front are dead weight: slide the remainder down
+		// rather than allocating a larger array to hold both.
+		m := copy(b.data, b.data[b.off:])
+		b.data = b.data[:m]
+		b.off = 0
+		if cap(b.data)-len(b.data) >= n {
+			return
+		}
+	}
+	grown := make([]byte, len(b.data), max(2*cap(b.data), len(b.data)+n))
+	copy(grown, b.data)
+	b.data = grown
+}
+
+// spare returns the n writable bytes at the tail, to be read into directly.
+// reserve(n) must have been called first.
+func (b *connBuffer) spare(n int) []byte { return b.data[len(b.data) : len(b.data)+n] }
+
+// commit accepts the n bytes just written into spare.
+func (b *connBuffer) commit(n int) { b.data = b.data[:len(b.data)+n] }
 
 // pendingReads holds the partial-frame buffer for the connections that have one.
 //
@@ -91,7 +121,46 @@ var pendingReads = make(map[int]*connBuffer)
 // readCommandsFD reads once from fd and returns every complete command that is
 // now available, leaving any trailing partial command buffered for next time.
 func readCommandsFD(fd int) ([]*core.MemKVCmd, error) {
-	n, err := syscall.Read(fd, readScratch)
+	b := pendingReads[fd]
+	if b != nil && b.size() >= maxQueryBuffer {
+		// Wrap ErrProtocol so the caller replies before hanging up: the client
+		// learns why instead of seeing the connection vanish.
+		return nil, fmt.Errorf("%w: query buffer limit of %d bytes exceeded",
+			core.ErrProtocol, maxQueryBuffer)
+	}
+
+	var (
+		n   int
+		err error
+	)
+	if b == nil {
+		// Nothing half-parsed, so land in the shared scratch: no per-connection
+		// memory, and no copy at all unless this read ends mid-frame.
+		n, err = syscall.Read(fd, readScratch)
+	} else {
+		// A frame is in progress. Read straight into the connection's own
+		// buffer - going via the scratch would only add a copy - and ask for
+		// exactly what the frame still needs rather than a fixed chunk.
+		want := core.FrameShortfall(b.unparsed())
+		if want <= 0 {
+			// Shortfall unknown: the missing bytes are a header whose digits
+			// have not all arrived, so how much follows it is not yet settled.
+			want = readChunkSize
+		}
+		// Never speculate further than the client has already backed up. A
+		// header claiming 512MB must not become a 512MB allocation before any
+		// of the payload shows up; growing with the data still reaches a large
+		// read size within a few doublings.
+		if limit := b.size() + readChunkSize; want > limit {
+			want = limit
+		}
+		if want > maxDirectRead {
+			want = maxDirectRead
+		}
+		b.reserve(want)
+		n, err = syscall.Read(fd, b.spare(want))
+	}
+
 	if err == syscall.EAGAIN || err == syscall.EINTR {
 		// The socket was reported readable but has nothing for us: a spurious
 		// wakeup, or another path drained it first. That is not a failure, and
@@ -107,20 +176,15 @@ func readCommandsFD(fd int) ([]*core.MemKVCmd, error) {
 		return nil, io.EOF
 	}
 
-	b := pendingReads[fd]
-	if b != nil && b.size() >= maxQueryBuffer {
-		// Wrap ErrProtocol so the caller replies before hanging up: the client
-		// learns why instead of seeing the connection vanish.
-		return nil, fmt.Errorf("%w: query buffer limit of %d bytes exceeded",
-			core.ErrProtocol, maxQueryBuffer)
-	}
-
-	// Parse out of the scratch buffer when nothing is left over from last time.
-	// Only a partial frame makes a copy necessary.
-	src := readScratch[:n]
+	// Only one of these is valid: n can exceed len(readScratch) when the read
+	// went into the connection's own buffer, so the scratch must not be
+	// resliced by it.
+	var src []byte
 	if b != nil {
-		b.add(readScratch[:n])
+		b.commit(n)
 		src = b.unparsed()
+	} else {
+		src = readScratch[:n]
 	}
 
 	var cmds []*core.MemKVCmd

@@ -221,3 +221,77 @@ func TestDecodeNullBulkString(t *testing.T) {
 	assert.NoError(t, err)
 	assert.EqualValues(t, "", value)
 }
+
+// TestFrameShortfall covers the sizing hint the reader uses to ask the kernel
+// for exactly the rest of a half-arrived command instead of a fixed chunk.
+func TestFrameShortfall(t *testing.T) {
+	cases := []struct {
+		name string
+		data string
+		want int
+	}{
+		{
+			name: "complete command needs nothing",
+			data: "*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$5\r\nhello\r\n",
+			want: 0,
+		},
+		{
+			name: "payload half arrived, shortfall is the rest plus CRLF",
+			data: "*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$10\r\nabc",
+			want: 9, // 7 payload bytes outstanding, then CRLF
+		},
+		{
+			name: "payload not started at all",
+			data: "*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$262144\r\n",
+			want: 262146,
+		},
+		{
+			name: "length header still arriving is not knowable",
+			data: "*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$2621",
+			want: 0,
+		},
+		{
+			name: "earlier argument incomplete",
+			data: "*3\r\n$3\r\nSE",
+			want: 3, // one payload byte outstanding, then CRLF
+		},
+		{
+			name: "not an array",
+			data: "+OK\r\n",
+			want: 0,
+		},
+		{
+			name: "empty",
+			data: "",
+			want: 0,
+		},
+		{
+			name: "array header alone is not knowable",
+			data: "*3\r\n",
+			want: 0,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, c.want, core.FrameShortfall([]byte(c.data)))
+		})
+	}
+}
+
+// TestFrameShortfallMatchesWhatDecodingNeeds ties the hint to the parser: after
+// supplying exactly the reported shortfall, the frame must decode.
+func TestFrameShortfallMatchesWhatDecodingNeeds(t *testing.T) {
+	full := []byte("*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$2048\r\n" + strings.Repeat("v", 2048) + "\r\n")
+	for _, cut := range []int{25, 30, 100, 1024, len(full) - 1} {
+		partial := full[:cut]
+		short := core.FrameShortfall(partial)
+		if short == 0 {
+			continue // not knowable at this cut, which is allowed
+		}
+		assert.Equal(t, len(full), cut+short,
+			"shortfall at cut %d must land exactly on the end of the frame", cut)
+
+		_, _, err := core.ParseCmd(full[:cut+short])
+		assert.NoError(t, err, "supplying the shortfall must complete the frame")
+	}
+}

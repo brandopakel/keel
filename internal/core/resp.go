@@ -265,3 +265,47 @@ func ParseCmd(data []byte) (*MemKVCmd, int, error) {
 	res := &MemKVCmd{Cmd: strings.ToUpper(tokens[0]), Args: tokens[1:]}
 	return res, n, nil
 }
+
+// FrameShortfall reports how many more bytes must arrive before the command at
+// the front of data can be decoded.
+//
+// A reader uses it to size its next read. Pulling a 256KB value 64KB at a time
+// is four syscalls and a growing buffer; knowing the exact shortfall lets the
+// caller ask for the remainder in one call, straight into the right-sized
+// destination. Redis does the same thing for what it calls big arguments.
+//
+// It returns 0 when the shortfall is not knowable and the caller should fall
+// back to a fixed-size read: the frame is already complete, it is malformed, or
+// the bytes still missing are a length header whose digits have not all
+// arrived, so how much follows it is not yet established.
+func FrameShortfall(data []byte) int {
+	if len(data) == 0 || data[0] != '*' {
+		return 0
+	}
+	count, pos, err := readLen(data)
+	if err != nil || count < 0 {
+		return 0
+	}
+	for i := 0; i < count; i++ {
+		if pos >= len(data) || data[pos] != '$' {
+			return 0
+		}
+		length, adv, err := readLen(data[pos:])
+		if err != nil {
+			// The header itself is still arriving; its payload length is
+			// unknown until the digits and their CRLF are all here.
+			return 0
+		}
+		pos += adv
+		if length < 0 {
+			continue // $-1\r\n carries no payload
+		}
+		// The payload is followed by CRLF, hence the +2.
+		if end := pos + length + 2; end > len(data) {
+			return end - len(data)
+		} else {
+			pos = end
+		}
+	}
+	return 0
+}

@@ -34,6 +34,22 @@ trade-off, so the fork serves buffered unless told otherwise, and `-mode
 kqueue-nobuf` is how you ask for one write per reply. Every script here passes
 `-mode` explicitly, so none of them depend on the default.
 
+### readChunkSize changed after these runs
+
+Everything under `results/` was measured with `readChunkSize = 4096`. It is now
+65536, which changes the large-value numbers substantially - measured on darwin,
+SET at d=262144 went from 8.5k to 14.4k ops/second on that change alone, and
+11.5x against the tree before any of the large-value work.
+
+It moves **both** arms of the comparison: the event loop reads it directly, and
+`bufSizeFor` in `server_net.go` hands it to the net variants as their `bufio`
+size, so `net-small` is still the only variant deliberately reading small. The
+event-loop-versus-netpoller ratio is therefore still measured like for like -
+but absolute large-value figures in `results/` are now historical, and the
+conclusions drawn from the size sweep specifically would need a re-run to be
+restated. The concurrency, pipeline and command-type sweeps are unaffected in
+kind, since they run at d=3.
+
 ### The 2026-08-27 relabelling
 
 The mode names were swapped when the default changed, and **everything under
