@@ -215,17 +215,22 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 		for i := 0; i < len(events); i++ {
 			if events[i].Fd == serverFD {
 				// the Server FD is ready for reading, means we have a new client.
-				clientNumber++
-				log.Printf("new client: id=%d\n", clientNumber)
 				// accept the incoming connection from a client
 				connFD, _, err := syscall.Accept(serverFD)
 				if err != nil {
-					log.Println("err", err)
+					log.Println("accept:", err)
 					continue
 				}
 
+				// Everything from here to Monitor configures this one socket.
+				// A failure is that connection's problem, not the server's, so
+				// it costs the client its connection and nothing else. These
+				// used to return, which unwound RunAsyncTCPServer and took every
+				// other connected client down over one bad descriptor.
 				if err = syscall.SetNonblock(connFD, true); err != nil {
-					return err
+					log.Println("set nonblock:", err)
+					syscall.Close(connFD)
+					continue
 				}
 
 				// Disable Nagle's algorithm on the client socket.
@@ -247,8 +252,15 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 					Fd: connFD,
 					Op: io_multiplexing.OpRead,
 				}); err != nil {
-					return err
+					log.Println("monitor:", err)
+					syscall.Close(connFD)
+					continue
 				}
+
+				// Counted only once the connection is fully set up, so the id
+				// in the log matches a client that actually exists.
+				clientNumber++
+				log.Printf("new client: id=%d\n", clientNumber)
 			} else {
 				// the Client FD is ready for reading, means an existing client is sending commands
 				comm := core.FDComm{Fd: int(events[i].Fd)}
