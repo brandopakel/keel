@@ -99,6 +99,13 @@ func EvalAndResponse(cmd *MemKVCmd, c io.ReadWriter) error {
 		res = cmdCMSINCRBY(cmd.Args)
 	case "CMS.QUERY":
 		res = cmdCMSQUERY(cmd.Args)
+	// HyperLogLog
+	case "PFADD":
+		res = cmdPFADD(cmd.Args)
+	case "PFCOUNT":
+		res = cmdPFCOUNT(cmd.Args)
+	case "PFMERGE":
+		res = cmdPFMERGE(cmd.Args)
 	default:
 		return errors.New(fmt.Sprintf("command not found: %s", cmd.Cmd))
 	}

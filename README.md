@@ -28,6 +28,8 @@ low-level design decisions underneath a real database.
 - **Probabilistic data structures:**
   - Scalable Bloom filter — set membership in little memory (`BF.ADD`, `BF.EXISTS`)
   - Count-Min sketch — frequency estimation over a stream (`CMS.INCRBY`, `CMS.QUERY`)
+  - HyperLogLog — distinct-element counting in a fixed 12KB, whatever the
+    cardinality, within about 0.8% (`PFADD`, `PFCOUNT`, `PFMERGE`)
 - **Graceful shutdown.** SIGINT or SIGTERM unwinds the event loop so its deferred
   cleanup actually runs, rather than exiting the process from under it.
 
@@ -81,6 +83,7 @@ darwin. Figures are medians of repeated runs. Method and raw data are in
 | **Geospatial** | `GEOADD`, `GEODIST`, `GEOHASH`, `GEOSEARCH`, `GEOPOS` |
 | **Bloom Filter**| `BF.RESERVE`, `BF.INFO`, `BF.MADD`, `BF.EXISTS`, `BF.MEXISTS` |
 | **Count-Min** | `CMS.INITBYDIM`, `CMS.INITBYPROB`, `CMS.INCRBY`, `CMS.QUERY` |
+| **HyperLogLog** | `PFADD`, `PFCOUNT`, `PFMERGE` |
 
 ## Benchmarks
 
@@ -94,7 +97,10 @@ and deep pipelining.
 
 ## Future work
 
-- [ ] Hyperloglog
+- [x] HyperLogLog — dense encoding, 16384 six-bit registers, Ertl's estimator.
+      Estimates track real Redis to within the error bound of both. Redis's
+      sparse encoding, which costs a few hundred bytes instead of 12KB for keys
+      with few members, is not implemented.
 - [ ] Morris counter
 - [ ] Cuckoo filter
 - [ ] Approx LRU eviction
