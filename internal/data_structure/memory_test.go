@@ -35,7 +35,7 @@ func TestEstimateTracksRealHeap(t *testing.T) {
 	withEviction(t, config.EvictFirst, 5, 100000000)
 
 	for _, valLen := range []int{8, 64, 512, 4096} {
-		d := CreateDict()
+		d := newTestDict(t)
 
 		before := heapBytes()
 		const n = 100000
@@ -65,7 +65,7 @@ func TestEstimateTracksRealHeap(t *testing.T) {
 
 func TestMemUsedRisesAndFallsWithTheKeyspace(t *testing.T) {
 	withEviction(t, config.EvictFirst, 5, 1000000)
-	d := CreateDict()
+	d := newTestDict(t)
 	assert.Equal(t, uint64(0), d.MemUsed(), "an empty dictionary holds nothing")
 
 	d.Put("k", d.NewObj(strings.Repeat("v", 1000), 0, 0, 0))
@@ -81,7 +81,7 @@ func TestMemUsedRisesAndFallsWithTheKeyspace(t *testing.T) {
 // the estimate climbs forever on a key that is merely being updated.
 func TestOverwritingReplacesCostRatherThanAddingIt(t *testing.T) {
 	withEviction(t, config.EvictFirst, 5, 1000000)
-	d := CreateDict()
+	d := newTestDict(t)
 
 	d.Put("k", d.NewObj(strings.Repeat("v", 1000), 0, 0, 0))
 	first := d.MemUsed()
@@ -105,14 +105,14 @@ func TestMemoryBoundHoldsRegardlessOfValueSize(t *testing.T) {
 		config.MaxMemory = 1 << 20 // 1 MB
 		t.Cleanup(func() { config.MaxMemory = 0 })
 
-		d := CreateDict()
+		d := newTestDict(t)
 		val := strings.Repeat("v", valLen)
 		for i := 0; i < 20000; i++ {
 			d.Put("key:"+strconv.Itoa(i), d.NewObj(val, 0, 0, 0))
 			assert.LessOrEqual(t, d.MemUsed(), uint64(1<<20)+uint64(valLen)+entryOverhead+16,
 				"valLen=%d: the dictionary must stay within its memory bound", valLen)
 		}
-		assert.Greater(t, d.Evicted(), uint64(0), "valLen=%d: eviction should have run", valLen)
+		assert.Greater(t, Evicted(), uint64(0), "valLen=%d: eviction should have run", valLen)
 		t.Logf("valLen=%-5d held %d keys in 1MB", valLen, d.Len())
 	}
 }
@@ -126,7 +126,7 @@ func TestKeyCountAdaptsToValueSize(t *testing.T) {
 		config.MaxMemory = 1 << 20
 		t.Cleanup(func() { config.MaxMemory = 0 })
 
-		d := CreateDict()
+		d := newTestDict(t)
 		val := strings.Repeat("v", valLen)
 		for i := 0; i < 20000; i++ {
 			d.Put("key:"+strconv.Itoa(i), d.NewObj(val, 0, 0, 0))
@@ -147,7 +147,7 @@ func TestAValueLargerThanTheBudgetDoesNotEmptyTheKeyspaceForever(t *testing.T) {
 	config.MaxMemory = 1024
 	t.Cleanup(func() { config.MaxMemory = 0 })
 
-	d := CreateDict()
+	d := newTestDict(t)
 	done := make(chan struct{})
 	go func() {
 		d.Put("huge", d.NewObj(strings.Repeat("v", 100000), 0, 0, 0))

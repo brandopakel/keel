@@ -1,9 +1,5 @@
 package data_structure
 
-import (
-	"memkv/internal/config"
-)
-
 // Memory accounting, so the keyspace can be bounded by bytes rather than by
 // key count.
 //
@@ -30,6 +26,30 @@ const entryOverhead = 100
 // expiryOverhead is the additional cost of a key with a TTL, which lives in a
 // second map keyed by object pointer.
 const expiryOverhead = 48
+
+// Per-member and per-structure costs for the collection types, measured the
+// same way - fill one with 200,000 members and read HeapAlloc either side:
+//
+//	map[string]struct{}    59 B per 20-byte member  ->  39 of overhead
+//	map[string]float64     59 B per 20-byte member  ->  39 of overhead
+//	ZSet (dict+skiplist)  155 B per 20-byte member  -> 135 of overhead
+//
+// The base figures are the empty structure: the struct itself, its map header
+// and, for a sorted set, the skiplist head node with its 32 levels.
+const (
+	setMemberOverhead  = 39
+	setBaseBytes       = 64
+	zsetMemberOverhead = 135
+	zsetBaseBytes      = 640
+	cmsBaseBytes       = 64
+	// A dense HyperLogLog's 12289-byte register array does not land on a size
+	// class, so the allocator rounds it up to 13568. Measured, 200 sketches
+	// cost 13616 bytes each, so the difference is charged here rather than
+	// leaving the estimate 9% light.
+	hllBaseBytes     = 1327
+	sbChainBaseBytes = 64
+	bloomBaseBytes   = 96
+)
 
 // entryBytes estimates what one key costs.
 //
@@ -65,12 +85,6 @@ func valueBytes(v interface{}) uint64 {
 	}
 }
 
-// MemUsed reports the estimated bytes held by the dictionary.
-func (d *Dict) MemUsed() uint64 { return d.memUsed }
-
-// Evicted reports how many keys eviction has removed.
-func (d *Dict) Evicted() uint64 { return d.evicted }
-
 // EntryBytes exposes the per-key estimate, for MEMORY USAGE.
 func (d *Dict) EntryBytes(key string) (uint64, bool) {
 	obj, exists := d.dictStore[key]
@@ -78,31 +92,4 @@ func (d *Dict) EntryBytes(key string) (uint64, bool) {
 		return 0, false
 	}
 	return d.entryBytes(key, obj), true
-}
-
-// overLimit reports whether either configured bound is exceeded.
-func (d *Dict) overLimit() bool {
-	if len(d.dictStore) > config.KeyNumberLimit {
-		return true
-	}
-	return config.MaxMemory > 0 && d.memUsed > config.MaxMemory
-}
-
-// enforceLimits evicts until the dictionary is back inside its bounds.
-//
-// Unlike a key-count bound, where one insert can only ever put the dictionary
-// one key over, a single large value can exceed a memory bound by any amount,
-// so this loops. It stops when the dictionary is empty: a value larger than the
-// whole budget would otherwise evict everything and still not fit, and throwing
-// away the entire keyspace to fail anyway helps nobody. The write is allowed to
-// stand, over budget, which is what Redis does under an allkeys policy.
-func (d *Dict) enforceLimits() {
-	for d.overLimit() && len(d.dictStore) > 0 {
-		before := len(d.dictStore)
-		d.evict()
-		if len(d.dictStore) == before {
-			// Eviction could not remove anything. Stop rather than spin.
-			return
-		}
-	}
 }

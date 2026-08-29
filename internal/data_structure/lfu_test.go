@@ -14,9 +14,9 @@ func TestLFUStateRoundTripsThroughOneField(t *testing.T) {
 	var o Obj
 	for _, decayAt := range []uint64{0, 1, 1 << 20, (1 << 56) - 1} {
 		for _, freq := range []uint8{0, 1, 5, 128, 255} {
-			o.setLFU(decayAt, freq)
-			assert.Equal(t, freq, o.lfuFreq(), "freq %d at decayAt %d", freq, decayAt)
-			assert.Equal(t, decayAt, o.lfuDecayAt(), "decayAt %d with freq %d", decayAt, freq)
+			o.Access = packLFU(decayAt, freq)
+			assert.Equal(t, freq, lfuFreqOf(o.Access), "freq %d at decayAt %d", freq, decayAt)
+			assert.Equal(t, decayAt, lfuDecayAtOf(o.Access), "decayAt %d with freq %d", decayAt, freq)
 		}
 	}
 }
@@ -31,9 +31,9 @@ func TestObjStaysOneWordPerPolicyField(t *testing.T) {
 
 func TestNewKeysStartWithCredit(t *testing.T) {
 	withEviction(t, config.LFU, 5, 100)
-	d := CreateDict()
+	d := newTestDict(t)
 	obj := d.NewObj("v", 0, 0, 0)
-	assert.Equal(t, uint8(lfuInitVal), obj.lfuFreq(),
+	assert.Equal(t, uint8(lfuInitVal), lfuFreqOf(obj.Access),
 		"a new key needs credit, or it is by definition the least frequently used thing present")
 }
 
@@ -42,15 +42,15 @@ func TestNewKeysStartWithCredit(t *testing.T) {
 func TestCounterRiseSlowsDown(t *testing.T) {
 	withEviction(t, config.LFU, 5, 1000000)
 	config.LFUDecayPeriod = 0 // isolate the increment from decay
-	d := CreateDict()
+	d := newTestDict(t)
 
 	obj := d.NewObj("v", 0, 0, 0)
-	start := obj.lfuFreq()
+	start := lfuFreqOf(obj.Access)
 
 	accessesFor := func(target uint8) int {
 		n := 0
-		for obj.lfuFreq() < target && n < 10000000 {
-			d.touchLFU(obj)
+		for lfuFreqOf(obj.Access) < target && n < 10000000 {
+			touchLFU(&obj.Access)
 			n++
 		}
 		return n
@@ -64,40 +64,39 @@ func TestCounterRiseSlowsDown(t *testing.T) {
 
 func TestCounterSaturatesRatherThanWrapping(t *testing.T) {
 	withEviction(t, config.LFU, 5, 100)
-	d := CreateDict()
 	var o Obj
-	o.setLFU(0, 255)
-	assert.Equal(t, uint8(255), d.lfuLogIncr(o.lfuFreq()),
+	o.Access = packLFU(0, 255)
+	assert.Equal(t, uint8(255), lfuLogIncr(lfuFreqOf(o.Access)),
 		"the counter must saturate; wrapping would turn the hottest key into the coldest")
 }
 
 func TestDecayLowersAnIdleCounter(t *testing.T) {
 	withEviction(t, config.LFU, 5, 1000000)
 	config.LFUDecayPeriod = 100
-	d := CreateDict()
+	d := newTestDict(t)
 
 	obj := d.NewObj("v", 0, 0, 0)
-	obj.setLFU(d.clock, 50)
+	obj.Access = packLFU(evictionClock, 50)
 
-	assert.Equal(t, uint8(50), d.lfuDecayedFreq(obj), "no time has passed")
+	assert.Equal(t, uint8(50), decayedFreq(obj.Access), "no time has passed")
 
-	d.clock += 100 * 10
-	assert.Equal(t, uint8(40), d.lfuDecayedFreq(obj), "ten periods should cost ten points")
+	evictionClock += 100 * 10
+	assert.Equal(t, uint8(40), decayedFreq(obj.Access), "ten periods should cost ten points")
 
-	d.clock += 100 * 1000
-	assert.Equal(t, uint8(0), d.lfuDecayedFreq(obj), "decay must floor at zero, not wrap")
+	evictionClock += 100 * 1000
+	assert.Equal(t, uint8(0), decayedFreq(obj.Access), "decay must floor at zero, not wrap")
 }
 
 func TestDecayIsLazyAndDoesNotMutate(t *testing.T) {
 	withEviction(t, config.LFU, 5, 1000000)
 	config.LFUDecayPeriod = 100
-	d := CreateDict()
+	d := newTestDict(t)
 	obj := d.NewObj("v", 0, 0, 0)
-	obj.setLFU(d.clock, 50)
+	obj.Access = packLFU(evictionClock, 50)
 	stored := obj.Access
 
-	d.clock += 100 * 10
-	_ = d.lfuDecayedFreq(obj)
+	evictionClock += 100 * 10
+	_ = decayedFreq(obj.Access)
 	assert.Equal(t, stored, obj.Access,
 		"reading the decayed value must not write; decay is applied when the key is touched")
 }
@@ -108,7 +107,7 @@ func scanResistance(t *testing.T, strategy, limit int) float64 {
 	t.Helper()
 	withEviction(t, strategy, 5, limit)
 
-	d := CreateDict()
+	d := newTestDict(t)
 	hot := limit / 2
 	for i := 0; i < limit; i++ {
 		d.Put("k"+strconv.Itoa(i), d.NewObj("v", 0, 0, 0))
@@ -149,7 +148,7 @@ func TestLFUSurvivesAScanThatDestroysLRU(t *testing.T) {
 // with history it will never serve again.
 func TestLFUFollowsAWorkingSetThatMoves(t *testing.T) {
 	withEviction(t, config.LFU, 5, 1000)
-	d := CreateDict()
+	d := newTestDict(t)
 
 	hammer := func(prefix string) {
 		for i := 0; i < 500; i++ {
@@ -182,7 +181,7 @@ func TestLFUFollowsAWorkingSetThatMoves(t *testing.T) {
 
 func TestLFUHoldsTheDictAtTheLimit(t *testing.T) {
 	withEviction(t, config.LFU, 5, 100)
-	d := CreateDict()
+	d := newTestDict(t)
 	for i := 0; i < 1000; i++ {
 		d.Put("k"+strconv.Itoa(i), d.NewObj("v", 0, 0, 0))
 		assert.LessOrEqual(t, d.Len(), 100)

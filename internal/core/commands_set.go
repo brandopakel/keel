@@ -11,11 +11,14 @@ func cmdSADD(args []string) []byte {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'SADD' command"), false)
 	}
 	key := args[0] // TODO: check key is used by other types or not
-	set, exist := setStore[key]
+	set, exist := setStore.Get(key)
 	if !exist {
 		set = data_structure.CreateSet(key)
-		setStore[key] = set
+		setStore.Put(key, set)
 	}
+	// Members change the set's size without going through Put, so the keyspace
+	// has to re-measure it or the memory budget keeps believing the old figure.
+	defer setStore.Resize(key)
 	count := set.Add(args[1:]...)
 	return Encode(count, false)
 }
@@ -25,11 +28,14 @@ func cmdSREM(args []string) []byte {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'SADD' command"), false)
 	}
 	key := args[0]
-	set, exist := setStore[key]
+	set, exist := setStore.Get(key)
 	if !exist {
 		set = data_structure.CreateSet(key)
-		setStore[key] = set
+		setStore.Put(key, set)
 	}
+	// Members change the set's size without going through Put, so the keyspace
+	// has to re-measure it or the memory budget keeps believing the old figure.
+	defer setStore.Resize(key)
 	count := set.Rem(args[1:]...)
 	return Encode(count, false)
 }
@@ -39,7 +45,7 @@ func cmdSCARD(args []string) []byte {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'SCARD' command"), false)
 	}
 	key := args[0]
-	set, exist := setStore[key]
+	set, exist := setStore.Get(key)
 	if !exist {
 		return Encode(0, false)
 	}
@@ -51,7 +57,7 @@ func cmdSMEMBERS(args []string) []byte {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'SMEMBERS' command"), false)
 	}
 	key := args[0]
-	set, exist := setStore[key]
+	set, exist := setStore.Get(key)
 	if !exist {
 		return Encode(make([]string, 0), false)
 	}
@@ -63,7 +69,7 @@ func cmdSISMEMBER(args []string) []byte {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'SISMEMBER' command"), false)
 	}
 	key := args[0]
-	set, exist := setStore[key]
+	set, exist := setStore.Get(key)
 	if !exist {
 		return Encode(0, false)
 	}
@@ -75,7 +81,7 @@ func cmdSMISMEMBER(args []string) []byte {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'SMISMEMBER' command"), false)
 	}
 	key := args[0]
-	set, exist := setStore[key]
+	set, exist := setStore.Get(key)
 	if !exist {
 		res := make([]int, len(args)-1)
 		return Encode(res, false)
@@ -98,13 +104,15 @@ func cmdSPOP(args []string) []byte {
 		count = int(n)
 	}
 
-	set, exist := setStore[key]
+	set, exist := setStore.Get(key)
 	if !exist {
 		if !hasCount {
 			return Encode(nil, false)
 		}
 		return Encode(make([]string, 0), false)
 	}
+	// SPOP removes members, so the set shrinks.
+	defer setStore.Resize(key)
 	if !hasCount {
 		return Encode(set.Pop(count)[0], false)
 	}
@@ -126,7 +134,7 @@ func cmdSRAND(args []string) []byte {
 		count = int(n)
 	}
 
-	set, exist := setStore[key]
+	set, exist := setStore.Get(key)
 	if !exist {
 		if !hasCount {
 			return Encode(nil, false)

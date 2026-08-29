@@ -34,11 +34,11 @@ func cmdBFRESERVE(args []string) []byte {
 			return Encode(errors.New(fmt.Sprintf("growthRate should be greater or equal to 1 %d", growthRate)), false)
 		}
 	}
-	_, exist := sbStore[key]
+	exist := sbStore.Exists(key)
 	if exist {
 		return Encode(errors.New(fmt.Sprintf("Bloom filter with key '%s' already exist", key)), false)
 	}
-	sbStore[key] = data_structure.CreateSBChain(capacity, errRate, growthRate)
+	sbStore.Put(key, data_structure.CreateSBChain(capacity, errRate, growthRate))
 	return constant.RespOk
 }
 
@@ -47,7 +47,7 @@ func cmdBFINFO(args []string) []byte {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'BF.INFO' command"), false)
 	}
 	key := args[0]
-	sb, exist := sbStore[key]
+	sb, exist := sbStore.Peek(key)
 	if !exist {
 		return Encode(errors.New(fmt.Sprintf("Bloom filter with key '%s' does not exist", key)), false)
 	}
@@ -66,14 +66,17 @@ func cmdBFMADD(args []string) []byte {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'BF.MADD' command"), false)
 	}
 	key := args[0]
-	sb, exist := sbStore[key]
+	sb, exist := sbStore.Get(key)
 	var err error
 	if !exist {
 		sb = data_structure.CreateSBChain(data_structure.BfDefaultInitCapacity,
 			data_structure.BfDefaultErrRate,
 			data_structure.BfDefaultExpansion)
-		sbStore[key] = sb
+		sbStore.Put(key, sb)
 	}
+	// A scalable Bloom filter grows by adding filters as it fills, so its size
+	// after this command is not the size the store recorded on Put.
+	defer sbStore.Resize(key)
 	var res []string
 	for i := 1; i < len(args); i++ {
 		item := args[i]
@@ -92,7 +95,7 @@ func cmdBFEXISTS(args []string) []byte {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'BF.EXISTS' command"), false)
 	}
 	key, item := args[0], args[1]
-	sb, exist := sbStore[key]
+	sb, exist := sbStore.Get(key)
 	if !exist {
 		return constant.RespZero
 	}
@@ -107,7 +110,7 @@ func cmdBFMEXISTS(args []string) []byte {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'BF.MEXISTS' command"), false)
 	}
 	key := args[0]
-	sb, exist := sbStore[key]
+	sb, exist := sbStore.Get(key)
 	var res []string
 	for i := 1; i < len(args); i++ {
 		if !exist {

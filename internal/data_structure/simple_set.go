@@ -6,6 +6,11 @@ import "math/rand"
 type simpleSet struct {
 	key  string
 	dict map[string]struct{}
+	// memberBytes is the total length of the members held, maintained as they
+	// come and go so MemUsage stays O(1). Summing on demand would make a
+	// memory-budget check proportional to the size of the set, and that check
+	// runs on every write.
+	memberBytes uint64
 }
 
 func newSimpleSet(key string) Set {
@@ -20,6 +25,7 @@ func (s *simpleSet) Add(members ...string) int {
 	for _, m := range members {
 		if _, exist := s.dict[m]; !exist {
 			s.dict[m] = struct{}{}
+			s.memberBytes += uint64(len(m))
 			added++
 		}
 	}
@@ -31,6 +37,7 @@ func (s *simpleSet) Rem(members ...string) int {
 	for _, m := range members {
 		if _, exist := s.dict[m]; exist {
 			delete(s.dict, m)
+			s.memberBytes -= uint64(len(m))
 			removed++
 		}
 	}
@@ -69,6 +76,7 @@ func (s *simpleSet) Pop(count int) []string {
 	randKeys := s.Rand(count)
 	for _, k := range randKeys {
 		delete(s.dict, k)
+		s.memberBytes -= uint64(len(k))
 	}
 	return randKeys
 }
@@ -93,4 +101,14 @@ func (s *simpleSet) Rand(count int) []string {
 		}
 	}
 	return res
+}
+
+// MemUsage estimates the bytes held, in O(1).
+//
+// Per-member overhead is measured rather than derived: adding 200,000 members
+// to a map[string]struct{} and reading HeapAlloc either side gives 59 bytes per
+// 20-byte member, so 39 bytes of map slot and string header on top of the
+// member itself.
+func (s *simpleSet) MemUsage() uint64 {
+	return setBaseBytes + uint64(len(s.dict))*setMemberOverhead + s.memberBytes
 }

@@ -29,19 +29,19 @@ func cmdCFRESERVE(args []string) []byte {
 	if capacity < 1 {
 		return Encode(errors.New("CF: capacity must be at least 1"), false)
 	}
-	if _, exist := cfStore[key]; exist {
+	if cfStore.Exists(key) {
 		return Encode(errors.New("CF: key already exists"), false)
 	}
-	cfStore[key] = data_structure.CreateCuckooFilter(capacity)
+	cfStore.Put(key, data_structure.CreateCuckooFilter(capacity))
 	return constant.RespOk
 }
 
 // cfFor returns the filter at key, creating a default-sized one if absent.
 func cfFor(key string) *data_structure.CuckooFilter {
-	cf, exist := cfStore[key]
+	cf, exist := cfStore.Get(key)
 	if !exist {
 		cf = data_structure.CreateCuckooFilter(data_structure.CfDefaultCapacity)
-		cfStore[key] = cf
+		cfStore.Put(key, cf)
 	}
 	return cf
 }
@@ -81,7 +81,7 @@ func cmdCFEXISTS(args []string) []byte {
 	if len(args) != 2 {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'CF.EXISTS' command"), false)
 	}
-	cf, exist := cfStore[args[0]]
+	cf, exist := cfStore.Get(args[0])
 	if !exist || !cf.Lookup(args[1]) {
 		return constant.RespZero
 	}
@@ -92,7 +92,7 @@ func cmdCFMEXISTS(args []string) []byte {
 	if len(args) < 2 {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'CF.MEXISTS' command"), false)
 	}
-	cf, exist := cfStore[args[0]]
+	cf, exist := cfStore.Get(args[0])
 	var res []string
 	for _, item := range args[1:] {
 		if exist && cf.Lookup(item) {
@@ -108,7 +108,7 @@ func cmdCFDEL(args []string) []byte {
 	if len(args) != 2 {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'CF.DEL' command"), false)
 	}
-	cf, exist := cfStore[args[0]]
+	cf, exist := cfStore.Get(args[0])
 	if !exist || !cf.Delete(args[1]) {
 		return constant.RespZero
 	}
@@ -119,7 +119,7 @@ func cmdCFCOUNT(args []string) []byte {
 	if len(args) != 2 {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'CF.COUNT' command"), false)
 	}
-	cf, exist := cfStore[args[0]]
+	cf, exist := cfStore.Get(args[0])
 	if !exist {
 		return constant.RespZero
 	}
@@ -131,7 +131,7 @@ func cmdCFINFO(args []string) []byte {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'CF.INFO' command"), false)
 	}
 	key := args[0]
-	cf, exist := cfStore[key]
+	cf, exist := cfStore.Peek(key)
 	if !exist {
 		return Encode(errors.New(fmt.Sprintf("Cuckoo filter with key '%s' does not exist", key)), false)
 	}

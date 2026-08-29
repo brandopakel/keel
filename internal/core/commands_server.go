@@ -7,6 +7,7 @@ import (
 
 	"memkv/internal/config"
 	"memkv/internal/constant"
+	"memkv/internal/data_structure"
 )
 
 // cmdMEMORY implements the MEMORY subcommands.
@@ -23,7 +24,7 @@ func cmdMEMORY(args []string) []byte {
 		if len(args) != 2 {
 			return Encode(errors.New("(error) ERR wrong number of arguments for 'MEMORY USAGE' command"), false)
 		}
-		bytes, exists := dictStore.EntryBytes(args[1])
+		bytes, exists := entryBytesAnywhere(args[1])
 		if !exists {
 			return constant.RespNil
 		}
@@ -31,6 +32,34 @@ func cmdMEMORY(args []string) []byte {
 	default:
 		return Encode(errors.New(fmt.Sprintf("ERR unknown MEMORY subcommand '%s'", args[0])), false)
 	}
+}
+
+// entryBytesAnywhere finds a key in whichever keyspace holds it.
+//
+// Keys live in a separate map per type here, so a name can be a string in one
+// and a sorted set in another; the first match wins, which is the same order
+// the command tables resolve in. Looking only in the string dictionary - as
+// this did at first - reported nil for every set, sketch and filter.
+func entryBytesAnywhere(key string) (uint64, bool) {
+	if n, ok := dictStore.EntryBytes(key); ok {
+		return n, true
+	}
+	if n, ok := zsetStore.EntryBytes(key); ok {
+		return n, true
+	}
+	if n, ok := setStore.EntryBytes(key); ok {
+		return n, true
+	}
+	if n, ok := sbStore.EntryBytes(key); ok {
+		return n, true
+	}
+	if n, ok := cmsStore.EntryBytes(key); ok {
+		return n, true
+	}
+	if n, ok := hllStore.EntryBytes(key); ok {
+		return n, true
+	}
+	return cfStore.EntryBytes(key)
 }
 
 // humanBytes renders a byte count the way redis-cli's INFO output does.
@@ -76,17 +105,17 @@ func cmdINFO(args []string) []byte {
 	want := func(name string) bool { return section == "" || section == name }
 
 	if want("memory") {
-		used := dictStore.MemUsed()
+		used := data_structure.TotalMemUsed()
 		fmt.Fprintf(&b, "# Memory\r\nused_memory:%d\r\nused_memory_human:%s\r\n",
 			used, humanBytes(used))
 		fmt.Fprintf(&b, "maxmemory:%d\r\nmaxmemory_human:%s\r\nmaxmemory_policy:%s\r\n\r\n",
 			config.MaxMemory, humanBytes(config.MaxMemory), evictionPolicyName())
 	}
 	if want("stats") {
-		fmt.Fprintf(&b, "# Stats\r\nevicted_keys:%d\r\n\r\n", dictStore.Evicted())
+		fmt.Fprintf(&b, "# Stats\r\nevicted_keys:%d\r\n\r\n", data_structure.Evicted())
 	}
 	if want("keyspace") {
-		fmt.Fprintf(&b, "# Keyspace\r\ndb0:keys=%d\r\n\r\n", dictStore.Len())
+		fmt.Fprintf(&b, "# Keyspace\r\ndb0:keys=%d\r\n\r\n", data_structure.TotalKeys())
 	}
 
 	return Encode(b.String(), false)

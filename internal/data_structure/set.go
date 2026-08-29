@@ -9,6 +9,9 @@ type Set interface {
 	Members() []string
 	Pop(count int) []string
 	Rand(count int) []string
+	// MemUsage estimates the bytes held, so a set can be weighed against every
+	// other kind of key under a memory budget.
+	MemUsage() uint64
 }
 
 type MultiSetOperator interface {

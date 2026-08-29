@@ -19,13 +19,13 @@ func cmdPFADD(args []string) []byte {
 	}
 
 	key := args[0]
-	hll, exist := hllStore[key]
+	hll, exist := hllStore.Get(key)
 	// Creating the key is itself a change, which is why PFADD with no elements
 	// still reports 1 the first time it is called.
 	changed := !exist
 	if !exist {
 		hll = data_structure.CreateHLL()
-		hllStore[key] = hll
+		hllStore.Put(key, hll)
 	}
 
 	for _, item := range args[1:] {
@@ -46,7 +46,7 @@ func cmdPFCOUNT(args []string) []byte {
 	}
 
 	if len(args) == 1 {
-		hll, exist := hllStore[args[0]]
+		hll, exist := hllStore.Get(args[0])
 		if !exist {
 			return constant.RespZero
 		}
@@ -58,7 +58,7 @@ func cmdPFCOUNT(args []string) []byte {
 	// read: the stored sketches must come out unchanged.
 	union := data_structure.CreateHLL()
 	for _, key := range args {
-		if hll, exist := hllStore[key]; exist {
+		if hll, exist := hllStore.Get(key); exist {
 			union.Merge(hll)
 		}
 	}
@@ -74,15 +74,15 @@ func cmdPFMERGE(args []string) []byte {
 	merged := data_structure.CreateHLL()
 	// The destination takes part in its own merge, so PFMERGE accumulates
 	// rather than replacing what is already there.
-	if existing, exist := hllStore[dest]; exist {
+	if existing, exist := hllStore.Get(dest); exist {
 		merged.Merge(existing)
 	}
 	for _, key := range args[1:] {
-		if hll, exist := hllStore[key]; exist {
+		if hll, exist := hllStore.Get(key); exist {
 			merged.Merge(hll)
 		}
 	}
 
-	hllStore[dest] = merged
+	hllStore.Put(dest, merged)
 	return constant.RespOk
 }

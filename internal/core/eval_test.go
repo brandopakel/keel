@@ -12,8 +12,16 @@ import (
 	"memkv/internal/data_structure"
 )
 
-func resetSetStore() {
-	setStore = make(map[string]data_structure.Set)
+func resetSetStore() { ResetStores() }
+
+// mustZSet fetches a sorted set the test expects to exist.
+func mustZSet(t *testing.T, key string) *data_structure.ZSet {
+	t.Helper()
+	zset, ok := zsetStore.Peek(key)
+	if !ok {
+		t.Fatalf("sorted set %q missing", key)
+	}
+	return zset
 }
 
 func TestCmdSADD(t *testing.T) {
@@ -111,7 +119,7 @@ func TestCmdSPOP(t *testing.T) {
 }
 
 func TestCmdGEOADD(t *testing.T) {
-	delete(zsetStore, "vn")
+	zsetStore.Delete("vn")
 	res, err := Decode(cmdGEOADD([]string{"vn", "10", "20", "p1"}))
 	assert.Nil(t, err)
 	assert.EqualValues(t, res, 1)
@@ -128,8 +136,7 @@ func TestCmdGEOADD(t *testing.T) {
 	assert.Nil(t, err)
 	assert.EqualValues(t, res, 2)
 
-	zset, exist := zsetStore["vn"]
-	assert.True(t, exist)
+	zset := mustZSet(t, "vn")
 	assert.EqualValues(t, 3, zset.Len())
 
 	res, err = Decode(cmdGEOADD([]string{"vn"}))
@@ -139,7 +146,7 @@ func TestCmdGEOADD(t *testing.T) {
 }
 
 func TestCmdGEODIST(t *testing.T) {
-	delete(zsetStore, "vn")
+	zsetStore.Delete("vn")
 	cmdGEOADD([]string{"vn", "20", "10", "p1"})
 	cmdGEOADD([]string{"vn", "40", "30", "p2"})
 	cmdGEOADD([]string{"vn", "10", "85", "p3"})
@@ -172,7 +179,7 @@ func TestCmdGEODIST(t *testing.T) {
 }
 
 func TestCmdGeoHash(t *testing.T) {
-	delete(zsetStore, "vn")
+	zsetStore.Delete("vn")
 	cmdGEOADD([]string{"vn", "13.361389", "38.115556", "p1"})
 	cmdGEOADD([]string{"vn", "15.087269", "37.502669", "p2"})
 	cmdGEOADD([]string{"vn", "100", "80", "p3"})
@@ -190,7 +197,7 @@ func TestCmdGeoHash(t *testing.T) {
 }
 
 func TestSimpleEvalGEOSEARCH(t *testing.T) {
-	delete(zsetStore, "nyc")
+	zsetStore.Delete("nyc")
 	cmdGEOADD([]string{"nyc", "-73.9733487", "40.7648057", "central park"})
 	cmdGEOADD([]string{"nyc", "-73.9903085", "40.7362513", "union square"})
 	cmdGEOADD([]string{"nyc", "-74.0131604", "40.7126674", "wtc one"})
@@ -213,7 +220,7 @@ func randFloat(min, max float64) float64 {
 }
 
 func TestRandomEvalGEOSEARCH(t *testing.T) {
-	delete(zsetStore, "nyc")
+	zsetStore.Delete("nyc")
 	targetLon := -73.9798091
 	targetLat := 40.7598464
 	for round := 0; round < 10; round++ {
@@ -244,7 +251,7 @@ func TestRandomEvalGEOSEARCH(t *testing.T) {
 }
 
 func TestCmdGEOPOS(t *testing.T) {
-	delete(zsetStore, "nyc")
+	zsetStore.Delete("nyc")
 	cmdGEOADD([]string{"nyc", "-73.9733487", "40.7648057", "central park"})
 	cmdGEOADD([]string{"nyc", "-73.9375699", "40.7498929", "q4"})
 	ret, err := Decode(cmdGEOPOS([]string{"nyc", "x"}))

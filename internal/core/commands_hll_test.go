@@ -5,13 +5,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	"memkv/internal/data_structure"
 )
 
-func resetHLLStore() {
-	hllStore = make(map[string]*data_structure.HLL)
-}
+func resetHLLStore() { ResetStores() }
 
 func TestCmdPFADD(t *testing.T) {
 	resetHLLStore()

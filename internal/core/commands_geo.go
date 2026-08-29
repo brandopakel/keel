@@ -60,7 +60,7 @@ func cmdGEODIST(args []string) []byte {
 		}
 	}
 
-	zset, exist := zsetStore[key]
+	zset, exist := zsetStore.Get(key)
 	if !exist {
 		return constant.RespNil
 	}
@@ -94,7 +94,7 @@ func cmdGEOHASH(args []string) []byte {
 		return constant.RespEmptyArray
 	}
 	key := args[0]
-	zset, exist := zsetStore[key]
+	zset, exist := zsetStore.Get(key)
 	if !exist {
 		return constant.RespNil
 	}
@@ -156,7 +156,7 @@ func cmdGEOSEARCH(args []string) []byte {
 	} else {
 		return Encode(errors.New("(error) 2nd param must be FROMMEMBER or FROMLONLAT"), false)
 	}
-	zset, exist := zsetStore[key]
+	zset, exist := zsetStore.Get(key)
 	if !exist {
 		return constant.RespEmptyArray
 	}
@@ -195,7 +195,7 @@ func cmdGEOPOS(args []string) []byte {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'GEOPOS' command"), false)
 	}
 	key := args[0]
-	zset, exist := zsetStore[key]
+	zset, exist := zsetStore.Get(key)
 	if !exist {
 		return constant.RespNil
 	}

@@ -204,3 +204,9 @@ func tau(x float64) float64 {
 		}
 	}
 }
+
+// MemUsage estimates the bytes held. A dense HyperLogLog is a fixed 12KB
+// whatever its cardinality, which is the whole point of it.
+func (h *HLL) MemUsage() uint64 {
+	return hllBaseBytes + uint64(len(h.regs))
+}

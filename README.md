@@ -33,11 +33,13 @@ low-level design decisions underneath a real database.
   - Cuckoo filter — set membership that supports deletion, which a Bloom filter
     cannot, in less space for the same accuracy (`CF.ADD`, `CF.EXISTS`, `CF.DEL`)
 - **Bounded by memory, not just by key count.** `-maxmemory 512mb` holds the
-  keyspace to a byte budget, so the number of keys adapts to how big they are —
-  a 1MB budget holds 8966 keys of 8 bytes or 129 keys of 8KB. Go gives no way to
-  ask the allocator what a value cost, so the accounting is estimated and
-  calibrated against real heap growth; a test compares the two so it cannot
-  drift.
+  keyspace to a byte budget, so the number of keys adapts to how big they are.
+  It covers **every** type, not only strings: one 1MB budget holds 1733 string
+  keys, or 2826 sets, or 76 HyperLogLogs, and eviction can free a sketch to make
+  room for a string. Go gives no way to ask the allocator what a value cost, so
+  the accounting is estimated and calibrated against real heap growth — within
+  6% for strings and 2.3% for the collection types — with tests comparing the
+  estimates against `HeapAlloc` so they cannot drift.
 - **Approximate LRU and LFU eviction.** A bounded keyspace: past `-maxkeys`,
   each new key evicts an old one. Rather than ordering every key by access time
   or frequency — which would cost a structure threaded through the keyspace and
@@ -142,9 +144,10 @@ and deep pipelining.
       64-bit field with LRU rather than adding its own, which is 76MB at the
       default key limit.
 - [x] Memory-based bounding — `-maxmemory`, with per-key accounting calibrated
-      against real heap growth to within 6%, reported through `INFO` and
-      `MEMORY USAGE`. Covers the main dictionary; the set, sorted-set, filter
-      and sketch keyspaces are not yet accounted.
+      against real heap growth, reported through `INFO` and `MEMORY USAGE`.
+      Covers every keyspace: strings, sets, sorted sets, Bloom and cuckoo
+      filters, Count-Min sketches and HyperLogLogs share one budget, and
+      eviction chooses between them on a common scale.
 - [ ] Longest Common Subsequence
 - [ ] Threaded socket I/O, in the style of Redis `io-threads` — parallelise
       reads, writes and parsing while command execution stays single-threaded.

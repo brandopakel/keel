@@ -1,8 +1,6 @@
 package data_structure
 
-import (
-	"reflect"
-)
+import ()
 
 // Implementation of Scalable Bloom Filter data structure
 // https://gsd.di.uminho.pt/members/cbm/ps/dbloom.pdf
@@ -97,10 +95,25 @@ func (sb *SBChain) GetFilterNumber() int {
 	return len(sb.filters)
 }
 
+// GetMemUsage estimates the bytes held by the whole chain.
+//
+// This previously returned reflect.TypeOf(*sb).Size(), which is the size of the
+// SBChain struct header - three words - and not the bit arrays hanging off it.
+// BF.INFO therefore reported about 40 bytes for a filter holding megabytes, and
+// a memory budget built on it would have been meaningless.
 func (sb *SBChain) GetMemUsage() uint64 {
-	return uint64(reflect.TypeOf(*sb).Size())
+	res := uint64(sbChainBaseBytes)
+	for i := range sb.filters {
+		res += bloomBaseBytes + sb.filters[i].bloom.bytes
+	}
+	return res
 }
 
 func (sb *SBChain) GetGrowthFactor() uint64 {
 	return sb.growthFactor
 }
+
+// MemUsage is GetMemUsage under the name the Sized interface expects, so a
+// scalable Bloom filter can be held in a Keyed keyspace alongside everything
+// else.
+func (sb *SBChain) MemUsage() uint64 { return sb.GetMemUsage() }

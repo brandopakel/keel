@@ -22,11 +22,11 @@ func cmdCMSINITBYDIM(args []string) []byte {
 	if err != nil {
 		return Encode(errors.New(fmt.Sprintf("height must be a integer number %s", args[1])), false)
 	}
-	_, exist := cmsStore[key]
+	exist := cmsStore.Exists(key)
 	if exist {
 		return Encode(errors.New("CMS: key already exists"), false)
 	}
-	cmsStore[key] = data_structure.CreateCMS(uint32(width), uint32(height))
+	cmsStore.Put(key, data_structure.CreateCMS(uint32(width), uint32(height)))
 	return constant.RespOk
 }
 
@@ -49,12 +49,12 @@ func cmdCMSINITBYPROB(args []string) []byte {
 	if probability >= 1 || probability <= 0 {
 		return Encode(errors.New("CMS: invalid prob value"), false)
 	}
-	_, exist := cmsStore[key]
+	exist := cmsStore.Exists(key)
 	if exist {
 		return Encode(errors.New("CMS: key already exists"), false)
 	}
 	w, h := data_structure.CalcCMSDim(errRate, probability)
-	cmsStore[key] = data_structure.CreateCMS(w, h)
+	cmsStore.Put(key, data_structure.CreateCMS(w, h))
 	return constant.RespOk
 }
 
@@ -63,7 +63,7 @@ func cmdCMSINCRBY(args []string) []byte {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'CMS.INCBY' command"), false)
 	}
 	key := args[0]
-	cms, exist := cmsStore[key]
+	cms, exist := cmsStore.Get(key)
 	if !exist {
 		return Encode(errors.New("CMS: key does not exist"), false)
 	}
@@ -89,7 +89,7 @@ func cmdCMSQUERY(args []string) []byte {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'CMS.QUERY' command"), false)
 	}
 	key := args[0]
-	cms, exist := cmsStore[key]
+	cms, exist := cmsStore.Get(key)
 	if !exist {
 		return Encode(errors.New("CMS: key does not exist"), false)
 	}

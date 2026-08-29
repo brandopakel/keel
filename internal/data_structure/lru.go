@@ -1,6 +1,6 @@
 package data_structure
 
-// Approximate LRU eviction.
+// Approximate LRU.
 //
 // True LRU wants every key ordered by access time, which means a linked list
 // threaded through the keyspace and pointer writes on every read: memory per
@@ -8,13 +8,7 @@ package data_structure
 // and evicts the one read longest ago, which is what Redis does and why
 // maxmemory-samples exists.
 //
-// The sampling and pooling live in eviction.go; all that is specific to LRU is
-// the score.
-
-// evictApproxLRU removes one key, approximately the least recently used.
-//
-// The score is the logical clock reading at the last access, so the lowest
-// score is the key read longest ago.
-func (d *Dict) evictApproxLRU() {
-	d.evictBySampling(func(obj *Obj) uint64 { return obj.lruClock() })
-}
+// Under LRU the access word is simply the logical clock reading at the last
+// access, so Score is the identity and the whole policy is the two lines in
+// Touch and Score in evictor.go. The sampling, the pool and the shared clock -
+// everything that is actually hard - is common with LFU.

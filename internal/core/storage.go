@@ -4,20 +4,44 @@ import (
 	"memkv/internal/data_structure"
 )
 
-var zsetStore map[string]*data_structure.ZSet
-var setStore map[string]data_structure.Set
-var dictStore *data_structure.Dict
-var sbStore map[string]*data_structure.SBChain
-var cmsStore map[string]*data_structure.CMS
-var hllStore map[string]*data_structure.HLL
-var cfStore map[string]*data_structure.CuckooFilter
+// The keyspaces.
+//
+// Each type has its own store, and every one of them is registered with the
+// evictor so that a memory budget spans the lot: before that, only strings were
+// accounted, and a keyspace full of 12KB HyperLogLogs could sail past
+// -maxmemory without anything noticing.
+var (
+	dictStore *data_structure.Dict
+	zsetStore *data_structure.Keyed[*data_structure.ZSet]
+	setStore  *data_structure.Keyed[data_structure.Set]
+	sbStore   *data_structure.Keyed[*data_structure.SBChain]
+	cmsStore  *data_structure.Keyed[*data_structure.CMS]
+	hllStore  *data_structure.Keyed[*data_structure.HLL]
+	cfStore   *data_structure.Keyed[*data_structure.CuckooFilter]
+)
 
 func init() {
-	zsetStore = make(map[string]*data_structure.ZSet)
-	setStore = make(map[string]data_structure.Set)
+	ResetStores()
+}
+
+// ResetStores rebuilds every keyspace and re-registers them. Called at startup,
+// and by tests that need to begin from empty.
+func ResetStores() {
+	data_structure.ResetKeyspaces()
+
 	dictStore = data_structure.CreateDict()
-	sbStore = make(map[string]*data_structure.SBChain)
-	cmsStore = make(map[string]*data_structure.CMS)
-	hllStore = make(map[string]*data_structure.HLL)
-	cfStore = make(map[string]*data_structure.CuckooFilter)
+	zsetStore = data_structure.NewKeyed[*data_structure.ZSet]("zset")
+	setStore = data_structure.NewKeyed[data_structure.Set]("set")
+	sbStore = data_structure.NewKeyed[*data_structure.SBChain]("bloom")
+	cmsStore = data_structure.NewKeyed[*data_structure.CMS]("cms")
+	hllStore = data_structure.NewKeyed[*data_structure.HLL]("hll")
+	cfStore = data_structure.NewKeyed[*data_structure.CuckooFilter]("cuckoo")
+
+	data_structure.RegisterKeyspace(dictStore)
+	data_structure.RegisterKeyspace(zsetStore)
+	data_structure.RegisterKeyspace(setStore)
+	data_structure.RegisterKeyspace(sbStore)
+	data_structure.RegisterKeyspace(cmsStore)
+	data_structure.RegisterKeyspace(hllStore)
+	data_structure.RegisterKeyspace(cfStore)
 }

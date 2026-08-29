@@ -5,13 +5,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	"memkv/internal/data_structure"
 )
 
-func resetCFStore() {
-	cfStore = make(map[string]*data_structure.CuckooFilter)
-}
+func resetCFStore() { ResetStores() }
 
 func TestCmdCFReserveAndAdd(t *testing.T) {
 	resetCFStore()
@@ -37,7 +33,7 @@ func TestCmdCFAddCreatesMissingKey(t *testing.T) {
 	resetCFStore()
 	res, _ := Decode(cmdCFADD([]string{"fresh", "x"}))
 	assert.EqualValues(t, 1, res)
-	assert.Contains(t, cfStore, "fresh")
+	assert.True(t, cfStore.Exists("fresh"))
 }
 
 // TestCmdCFAddAllowsDuplicates is the difference from CF.ADDNX, and what makes

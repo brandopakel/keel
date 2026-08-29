@@ -8,12 +8,9 @@ import (
 
 	"memkv/internal/config"
 	"memkv/internal/constant"
-	"memkv/internal/data_structure"
 )
 
-func resetDictStore() {
-	dictStore = data_structure.CreateDict()
-}
+func resetDictStore() { ResetStores() }
 
 func TestCmdMemoryUsage(t *testing.T) {
 	resetDictStore()

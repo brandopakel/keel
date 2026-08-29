@@ -9,6 +9,20 @@ import (
 	"memkv/internal/config"
 )
 
+// newTestDict builds a dictionary registered as the only keyspace.
+//
+// Eviction now spans every registered keyspace, so a dictionary that is not
+// registered is invisible to it - and one left registered would leak into the
+// next test, which builds its own.
+func newTestDict(t *testing.T) *Dict {
+	t.Helper()
+	ResetKeyspaces()
+	d := CreateDict()
+	RegisterKeyspace(d)
+	t.Cleanup(ResetKeyspaces)
+	return d
+}
+
 // withEviction sets the eviction knobs for one test and restores them after.
 // They are package-level configuration, so leaking a change would silently
 // change the behaviour of every test that ran later.
@@ -24,21 +38,21 @@ func withEviction(t *testing.T, strategy, samples, limit int) {
 }
 
 func TestAccessUpdatesRecency(t *testing.T) {
-	d := CreateDict()
+	d := newTestDict(t)
 	d.Put("a", d.NewObj("v", 0, 0, 0))
 	d.Put("b", d.NewObj("v", 0, 0, 0))
 
-	first := d.dictStore["a"].lruClock()
-	assert.Greater(t, d.dictStore["b"].lruClock(), first, "a later write is more recent")
+	first := d.dictStore["a"].Access
+	assert.Greater(t, d.dictStore["b"].Access, first, "a later write is more recent")
 
 	d.Get("a")
-	assert.Greater(t, d.dictStore["a"].lruClock(), d.dictStore["b"].lruClock(),
+	assert.Greater(t, d.dictStore["a"].Access, d.dictStore["b"].Access,
 		"reading a key must make it the most recently used")
 }
 
 func TestNoEvictionBelowTheLimit(t *testing.T) {
 	withEviction(t, config.LRU, 5, 100)
-	d := CreateDict()
+	d := newTestDict(t)
 	for i := 0; i < 100; i++ {
 		d.Put("k"+strconv.Itoa(i), d.NewObj("v", 0, 0, 0))
 	}
@@ -50,7 +64,7 @@ func TestNoEvictionBelowTheLimit(t *testing.T) {
 // throws a key away for nothing.
 func TestOverwritingAnExistingKeyDoesNotEvict(t *testing.T) {
 	withEviction(t, config.LRU, 5, 10)
-	d := CreateDict()
+	d := newTestDict(t)
 	for i := 0; i < 10; i++ {
 		d.Put("k"+strconv.Itoa(i), d.NewObj("v", 0, 0, 0))
 	}
@@ -67,7 +81,7 @@ func TestOverwritingAnExistingKeyDoesNotEvict(t *testing.T) {
 
 func TestEvictionHoldsTheDictAtTheLimit(t *testing.T) {
 	withEviction(t, config.LRU, 5, 100)
-	d := CreateDict()
+	d := newTestDict(t)
 	for i := 0; i < 1000; i++ {
 		d.Put("k"+strconv.Itoa(i), d.NewObj("v", 0, 0, 0))
 		assert.LessOrEqual(t, d.Len(), 100, "the dict must never exceed its limit")
@@ -82,7 +96,7 @@ func hotRetention(t *testing.T, strategy, samples, limit int) float64 {
 	t.Helper()
 	withEviction(t, strategy, samples, limit)
 
-	d := CreateDict()
+	d := newTestDict(t)
 	for i := 0; i < limit; i++ {
 		d.Put("k"+strconv.Itoa(i), d.NewObj("v", 0, 0, 0))
 	}
@@ -139,7 +153,7 @@ func TestMoreSamplesImproveRetention(t *testing.T) {
 // used key in the dictionary.
 func TestEvictionSkipsCandidatesReadSinceSampling(t *testing.T) {
 	withEviction(t, config.LRU, 5, 100)
-	d := CreateDict()
+	d := newTestDict(t)
 	for i := 0; i < 20; i++ {
 		d.Put("k"+strconv.Itoa(i), d.NewObj("v", 0, 0, 0))
 	}
@@ -147,10 +161,10 @@ func TestEvictionSkipsCandidatesReadSinceSampling(t *testing.T) {
 	// k0 is read last, so it is the newest key in the dict...
 	d.Get("k0")
 	// ...but the pool still holds the stale reading from when it was cold.
-	d.pool = []poolEntry{{key: "k0", score: 1}}
+	evictionPool = []Candidate{{Space: d, Key: "k0", Score: 1}}
 
 	before := d.Len()
-	d.evictApproxLRU()
+	evictOne()
 
 	assert.Equal(t, before-1, d.Len(), "an eviction must still remove exactly one key")
 	assert.Contains(t, d.dictStore, "k0",
@@ -159,46 +173,46 @@ func TestEvictionSkipsCandidatesReadSinceSampling(t *testing.T) {
 
 func TestEvictionSkipsCandidatesAlreadyDeleted(t *testing.T) {
 	withEviction(t, config.LRU, 5, 100)
-	d := CreateDict()
+	d := newTestDict(t)
 	for i := 0; i < 20; i++ {
 		d.Put("k"+strconv.Itoa(i), d.NewObj("v", 0, 0, 0))
 	}
-	d.pool = []poolEntry{{key: "gone", score: 1}}
+	evictionPool = []Candidate{{Space: d, Key: "gone", Score: 1}}
 
 	before := d.Len()
-	d.evictApproxLRU()
+	evictOne()
 	assert.Equal(t, before-1, d.Len(), "a stale candidate must not stop eviction making room")
 }
 
 func TestPoolStaysSortedAndBounded(t *testing.T) {
-	d := CreateDict()
+	d := newTestDict(t)
 	for i := 0; i < 100; i++ {
 		// insert in an order that is neither ascending nor descending
-		d.poolInsert("k"+strconv.Itoa(i), uint64((i*37)%100))
+		poolInsert(Candidate{Space: d, Key: "k" + strconv.Itoa(i), Score: uint64((i * 37) % 100)})
 	}
-	assert.LessOrEqual(t, len(d.pool), evictionPoolSize, "the pool must stay bounded")
-	for i := 1; i < len(d.pool); i++ {
-		assert.LessOrEqual(t, d.pool[i-1].score, d.pool[i].score,
+	assert.LessOrEqual(t, len(evictionPool), evictionPoolSize, "the pool must stay bounded")
+	for i := 1; i < len(evictionPool); i++ {
+		assert.LessOrEqual(t, evictionPool[i-1].Score, evictionPool[i].Score,
 			"the pool must stay ordered oldest first")
 	}
 	// It should be holding the oldest candidates it saw, not just any of them.
-	assert.Less(t, d.pool[len(d.pool)-1].score, uint64(evictionPoolSize+1))
+	assert.Less(t, evictionPool[len(evictionPool)-1].Score, uint64(evictionPoolSize+1))
 }
 
 // TestPoolDoesNotHoldOneKeyTwice matters because a duplicated candidate makes
 // the second attempt to evict it a guaranteed miss, wasting a pool slot.
 func TestPoolDoesNotHoldOneKeyTwice(t *testing.T) {
-	d := CreateDict()
-	d.poolInsert("dup", 5)
-	d.poolInsert("dup", 3)
-	d.poolInsert("dup", 9)
+	d := newTestDict(t)
+	poolInsert(Candidate{Space: d, Key: "dup", Score: 5})
+	poolInsert(Candidate{Space: d, Key: "dup", Score: 3})
+	poolInsert(Candidate{Space: d, Key: "dup", Score: 9})
 
 	count := 0
-	for _, e := range d.pool {
-		if e.key == "dup" {
+	for _, e := range evictionPool {
+		if e.Key == "dup" {
 			count++
 		}
 	}
 	assert.Equal(t, 1, count, "a key must appear in the pool at most once")
-	assert.Equal(t, uint64(9), d.pool[0].score, "the entry must carry the latest reading")
+	assert.Equal(t, uint64(9), evictionPool[0].Score, "the entry must carry the latest reading")
 }

@@ -36,11 +36,13 @@ func cmdZADD(args []string) []byte {
 		return Encode(errors.New(fmt.Sprintf("(error) Wrong number of (score, member) arg: %d", numScoreEleArgs)), false)
 	}
 
-	zset, exist := zsetStore[key]
+	zset, exist := zsetStore.Get(key)
 	if !exist {
 		zset = data_structure.CreateZSet()
-		zsetStore[key] = zset
+		zsetStore.Put(key, zset)
 	}
+	// Members change the sorted set's size without going through Put.
+	defer zsetStore.Resize(key)
 
 	count := 0
 	for i := scoreIndex; i < len(args); i += 2 {
@@ -65,7 +67,7 @@ func cmdZRANK(args []string) []byte {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'ZRANK' command"), false)
 	}
 	key, member := args[0], args[1]
-	zset, exist := zsetStore[key]
+	zset, exist := zsetStore.Get(key)
 	if !exist {
 		return constant.RespNil
 	}
@@ -78,10 +80,11 @@ func cmdZREM(args []string) []byte {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'ZREM' command"), false)
 	}
 	key := args[0]
-	zset, exist := zsetStore[key]
+	zset, exist := zsetStore.Get(key)
 	if !exist {
 		return constant.RespZero
 	}
+	defer zsetStore.Resize(key)
 	deleted := 0
 	for i := 1; i < len(args); i++ {
 		ret := zset.Del(args[i])
@@ -89,7 +92,7 @@ func cmdZREM(args []string) []byte {
 			deleted++
 		}
 		if zset.Len() == 0 {
-			delete(zsetStore, key)
+			zsetStore.Delete(key)
 			break
 		}
 	}
@@ -101,7 +104,7 @@ func cmdZSCORE(args []string) []byte {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'ZSCORE' command"), false)
 	}
 	key, member := args[0], args[1]
-	zset, exist := zsetStore[key]
+	zset, exist := zsetStore.Get(key)
 	if !exist {
 		return constant.RespNil
 	}
@@ -117,7 +120,7 @@ func cmdZCARD(args []string) []byte {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'ZCARD' command"), false)
 	}
 	key := args[0]
-	zset, exist := zsetStore[key]
+	zset, exist := zsetStore.Get(key)
 	if !exist {
 		return constant.RespZero
 	}

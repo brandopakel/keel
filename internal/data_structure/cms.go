@@ -75,3 +75,9 @@ func (c *CMS) Count(item string) uint32 {
 	}
 	return minCount
 }
+
+// MemUsage estimates the bytes held. The counter table is fixed at creation, so
+// this never changes for a given sketch.
+func (c *CMS) MemUsage() uint64 {
+	return cmsBaseBytes + uint64(len(c.counter))*4
+}
