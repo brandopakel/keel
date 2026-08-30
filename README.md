@@ -5,26 +5,29 @@ MemKV is an in-memory key-value database written from scratch in Go. It speaks
 **RESP**, the Redis serialization protocol, so `redis-cli` and ordinary Redis
 clients talk to it unmodified.
 
-It was built to explore how a high-performance network server actually works:
-event loops, socket handling, custom and probabilistic data structures, and the
-low-level design decisions underneath a real database.
+It exists to work out how a high-performance network server actually works:
+event loops, socket handling, custom and probabilistic data structures, memory
+accounting, eviction, and the low-level decisions underneath a real database.
 
-> **This is a fork of [quangh33/memkv](https://github.com/quangh33/memkv).**
-> Upstream is the original design and the origin of everything below the network
-> layer. This fork rewrote the I/O path — see [What this fork
-> changes](#what-this-fork-changes) — and carries a benchmark harness that
-> upstream does not. `main` tracks upstream unchanged; the work lives on
-> `develop`.
+Every claim below with a number attached was measured rather than assumed —
+by a test, or by the harness in [`bench/`](bench/README.md), which keeps the
+runs that turned out to be wrong alongside the ones that did not.
+
+The work lives on `develop`. `main` tracks the project this grew out of,
+unchanged — see [Relationship to upstream](#relationship-to-upstream).
 
 ## Key features
 
 - **RESP compliant.** Works with `redis-cli` and standard Redis clients.
-- **Single-threaded execution, on an event loop.** `epoll` on Linux, `kqueue` on
-  macOS, selected by build tag. One goroutine serves every connection by
-  default, so per-connection memory stays near zero. `-io-threads N` moves the
-  socket reads, parsing and writes onto more threads, but command execution
-  stays on one thread whatever the setting — which is why no store needs a
-  lock.
+- **Event loop, not a goroutine per connection.** `epoll` on Linux, `kqueue` on
+  macOS, selected by build tag. Per-connection memory stays near zero, which is
+  the property [`bench/`](bench/README.md) exists to compare against Go's
+  netpoller.
+- **Optional multi-threaded I/O.** `-io-threads N` reads sockets, parses RESP
+  and writes replies across N threads — worth **1.41x** on 256KB values.
+  Command execution deliberately stays on one thread whatever N is, which is
+  what lets every store be a plain map with no locking. Off by default, because
+  below 64KB the measurements do not justify it.
 - **Custom data structures**, implemented from scratch:
   - Skip list, for sorted sets (`ZADD`, `ZRANK`, …)
   - Geohash, for geospatial indexing (`GEOADD`, `GEODIST`, …)
@@ -79,11 +82,12 @@ go run ./cmd -io-threads 4               # read, parse and write on 4 threads
 Other I/O modes exist for benchmarking; `-mode` selects them and
 [`bench/README.md`](bench/README.md) explains what each one is for.
 
-## What this fork changes
+## Correctness and performance
 
-Upstream's event loop answered one command per read and treated every write as
-having succeeded. That is invisible against `redis-cli` typing one command at a
-time, and comes apart under pipelining or values larger than a single read.
+The event loop this inherited answered one command per read and treated every
+write as having succeeded. That is invisible against `redis-cli` typing one
+command at a time, and comes apart under pipelining or values larger than a
+single read. Rewriting that path is most of the work below.
 
 **Correctness**
 
@@ -94,7 +98,7 @@ time, and comes apart under pipelining or values larger than a single read.
 | Frame and buffer bounds | A length header is checked before it is trusted, and unparsed bytes per connection are bounded, so a client cannot open a frame it never finishes and make the server buffer without limit. |
 | Spurious readability | `EAGAIN` on a read no longer closes the connection. |
 | Per-connection failures | A socket that fails to configure costs that client its connection instead of unwinding the server and disconnecting everyone. |
-| Shutdown | The loop is woken and unwound so its deferred `Close` calls run. Previously `os.Exit` skipped them all — the "graceful shutdown" above was not true before this fork. |
+| Shutdown | The loop is woken and unwound so its deferred `Close` calls run. Previously `os.Exit` skipped them all — the "graceful shutdown" above was not true before this. |
 
 **Performance** — platform is noted per row, because it matters: the Nagle
 stall is a Linux delayed-ACK timer and does not reproduce the same way on
@@ -167,6 +171,24 @@ which asks whether the hand-rolled event loop should be replaced with Go's `net`
 package. The short answer measured here: the netpoller is 8–19% slower for small
 values and uses far more memory per connection, while winning at large payloads
 and deep pipelining.
+
+## Relationship to upstream
+
+MemKV began as a fork of [quangh33/memkv](https://github.com/quangh33/memkv),
+which is the origin of the server's shape and of the data structures beneath the
+network layer: the dictionary, the skip list, the geohash, the Bloom filter and
+the Count-Min sketch, and the command surface around them. That design is not
+restated here and the credit for it is theirs.
+
+What this fork added: the framing and reply-writing rewrite described in
+[Correctness and performance](#correctness-and-performance), approximate LRU and
+LFU eviction, memory-based bounding across every keyspace, HyperLogLog, the
+cuckoo filter, the Morris counter, `LCS`, optional I/O threading, and the
+benchmark harness in [`bench/`](bench/README.md).
+
+`main` tracks upstream unchanged, so a diff against it is exactly the work
+above. [quangh33/memkv#2](https://github.com/quangh33/memkv/issues/2) is the
+upstream discussion the benchmarks were written to answer.
 
 ## Future work
 
