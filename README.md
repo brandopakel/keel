@@ -62,6 +62,12 @@ unchanged — see [Relationship to upstream](#relationship-to-upstream).
   Hirschberg's algorithm recovers the same subsequence from two rows instead:
   two 10KB values measured 1.09MB against the 400MB the table alone would have
   been, which turns the limit from a memory one into a time budget you can set.
+- **Optional durability.** `-appendonly` logs every write to a file and replays
+  it at startup, with `always` / `everysec` / `no` fsync policies. The log
+  records what a command *did* rather than what it said: `SPOP` is written as
+  the `SREM` it turned out to be, `EXPIRE` as an absolute instant, and evicted
+  and expired keys as `DEL` — so a restart reconstructs the keyspace exactly,
+  down to identical estimates from the probabilistic types.
 - **Graceful shutdown.** SIGINT or SIGTERM unwinds the event loop so its deferred
   cleanup actually runs, rather than exiting the process from under it.
 
@@ -77,6 +83,8 @@ redis-cli -p 8081                        # from another terminal
 
 ```sh
 go run ./cmd -io-threads 4               # read, parse and write on 4 threads
+go run ./cmd -appendonly                 # survive a restart
+go run ./cmd -appendonly -appendfsync always   # ...and a power cut
 ```
 
 Other I/O modes exist for benchmarking; `-mode` selects them and
@@ -98,6 +106,8 @@ single read. Rewriting that path is most of the work below.
 | Frame and buffer bounds | A length header is checked before it is trusted, and unparsed bytes per connection are bounded, so a client cannot open a frame it never finishes and make the server buffer without limit. |
 | Spurious readability | `EAGAIN` on a read no longer closes the connection. |
 | Per-connection failures | A socket that fails to configure costs that client its connection instead of unwinding the server and disconnecting everyone. |
+| `SPOP` and `SRAND` | Both indexed the first of a zero-length result, so `SPOP key` with no count **panicked and took the server down**. Asking for more members than the set holds spun the event loop forever, and an empty set panicked a third way. The sampling is now a partial shuffle, which cannot do any of the three. |
+| `ZSCORE` | Returned nil for every member that existed and a score of zero for every member that did not — the success test was inverted, for the whole life of the command. |
 | Shutdown | The loop is woken and unwound so its deferred `Close` calls run. Previously `os.Exit` skipped them all — the "graceful shutdown" above was not true before this. |
 
 **Performance** — platform is noted per row, because it matters: the Nagle
@@ -118,7 +128,7 @@ darwin. Figures are medians of repeated runs. Method and raw data are in
 | Category | Commands |
 | :--- | :--- |
 | **General** | `PING` |
-| **String** | `SET`, `GET`, `DEL`, `TTL`, `EXPIRE`, `INCR`, `LCS` |
+| **String** | `SET`, `GET`, `DEL`, `TTL`, `EXPIRE`, `PEXPIREAT`, `INCR`, `LCS` |
 | **Keyspace** | `DBSIZE` |
 | **Server** | `INFO`, `MEMORY USAGE` |
 | **Sorted Set**| `ZADD`, `ZRANK`, `ZREM`, `ZSCORE`, `ZCARD` |
@@ -139,8 +149,13 @@ pipelines, and reads and writes strings, sets and TTLs, and an unsupported
 command comes back as an error without dropping the connection. The gaps below
 are the ones that decide whether it is usable for anything of yours.
 
-- **Nothing is persisted.** There is no AOF and no snapshot, so a restart is a
-  flush. `config.AOFFileName` exists and nothing reads it.
+- **Persistence is opt-in and the log is never rewritten.** `-appendonly` makes
+  a restart safe, but the file records every write forever, so it grows with
+  traffic rather than with the size of the data and startup gets slower for as
+  long as it runs. Redis solves this by periodically rewriting the log into the
+  shortest one producing the same state; that is not built yet, so treat the
+  file as something you will have to manage. Without the flag, a restart is
+  still a flush.
 - **There is no licence**, here or upstream. By default that means nobody has
   permission to use, copy or redistribute it, whatever the code can do. It is
   the first thing to fix if the answer to "can someone else use this" is meant
@@ -245,6 +260,29 @@ upstream discussion the benchmarks were written to answer.
       valid decomposition of that same subsequence and can differ, because
       Redis's positions come from walking the table backwards and there is no
       table here.
+- [x] Append-only persistence — `-appendonly`, replayed at startup, with
+      `always` / `everysec` / `no` fsync. The log is flushed and synced between
+      executing a cycle's commands and writing its replies, so under `always` a
+      client is told its write succeeded only once the record of it is on disk.
+
+      What a command *did* is recorded rather than what it said, because three
+      kinds of command do not replay to the same state: `SPOP` removes members
+      at random and is written as the `SREM` it turned out to be; `EXPIRE` is
+      relative, so it is written as an absolute `PEXPIREAT` — otherwise every
+      restart silently renews every TTL and nothing ever expires; and eviction
+      and expiry have no command behind them at all, so they are written as
+      `DEL`. Replay suspends eviction for the same reason: the log already says
+      which keys went, and a replay that also evicted would drop a different
+      set on top. A half-written command at the end of the file is the ordinary
+      shape of a crash and is dropped with a warning rather than refused.
+
+      Every structure replays to the *identical* state, estimates included,
+      because each seeds its randomness per structure from a constant.
+
+- [ ] Rewriting the append-only file. It currently grows with every write and
+      is never compacted, so startup time grows with the log rather than with
+      the data. The fix is Redis's: periodically write the shortest log that
+      produces the current state and swap it in.
 - [x] Threaded socket I/O, in the style of Redis `io-threads` — `-io-threads N`
       moves the read syscall, RESP parsing and the write syscall onto N threads
       while command execution stays on one, which is what keeps every store an

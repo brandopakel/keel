@@ -51,6 +51,24 @@ type Candidate struct {
 	Score uint64
 }
 
+// OnRemove is called when a key leaves a keyspace because the server decided
+// so, rather than because a client asked: a TTL falling due, or eviction making
+// room. Nothing here uses it; persistence does.
+//
+// A removal a client asked for needs no hook, because the command that asked is
+// itself what gets recorded. These two have no command behind them, and an
+// append-only log that does not record them replays into a keyspace holding
+// keys the original had already dropped - which under a memory bound then
+// evicts a different set again, so the divergence compounds rather than
+// settles.
+var OnRemove func(keyspace, key string)
+
+func noteRemoval(ks Keyspace, key string) {
+	if OnRemove != nil {
+		OnRemove(ks.KeyspaceName(), key)
+	}
+}
+
 // RegisterKeyspace adds a store to the set eviction may draw from.
 func RegisterKeyspace(ks Keyspace) { keyspaces = append(keyspaces, ks) }
 
@@ -129,6 +147,19 @@ func overLimit() bool {
 	return config.MaxMemory > 0 && TotalMemUsed() > config.MaxMemory
 }
 
+// SuspendEviction stops EnforceLimits from doing anything.
+//
+// Set while an append-only file is being replayed. The log already records
+// every eviction the original run performed, as a DEL, so replay has only to
+// apply those; letting it evict as well means two eviction passes over one
+// sequence of writes. Worse, the second pass chooses independently - the keys
+// it drops are not the keys the DELs then drop - so the keyspace loses roughly
+// twice as many keys as it should and the two runs diverge instead of matching.
+//
+// The bound is enforced once, at the end of the replay, so a log written under
+// a larger limit than the one now configured still lands inside it.
+var SuspendEviction bool
+
 // EnforceLimits evicts until the keyspace is back inside its bounds.
 //
 // A key-count bound can only ever be exceeded by one per insert, but a single
@@ -138,6 +169,9 @@ func overLimit() bool {
 // to fail anyway helps nobody. The write stands, over budget, as it does in
 // Redis under an allkeys policy.
 func EnforceLimits() {
+	if SuspendEviction {
+		return
+	}
 	for overLimit() {
 		if !evictOne() {
 			return
@@ -173,6 +207,7 @@ func evictOne() bool {
 		}
 		if candidate.Space.Delete(candidate.Key) {
 			evictedCount++
+			noteRemoval(candidate.Space, candidate.Key)
 			return true
 		}
 	}
@@ -232,6 +267,7 @@ func evictArbitrary() bool {
 			for _, c := range ks.SampleKeys(nil, 1) {
 				if ks.Delete(c.Key) {
 					evictedCount++
+					noteRemoval(ks, c.Key)
 					return true
 				}
 			}

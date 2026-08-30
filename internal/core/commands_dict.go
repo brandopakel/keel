@@ -26,6 +26,12 @@ func cmdSET(args []string) []byte {
 	}
 
 	dictStore.Put(key, dictStore.NewObj(value, ttlMs, oType, oEnc))
+	if ttlMs > 0 {
+		// The TTL arrived as a duration and has to be logged as an instant, so
+		// the value and its expiry are recorded as two commands.
+		aofRecord("SET", key, value)
+		aofExpireAt(key)
+	}
 	return constant.RespOk
 }
 
@@ -98,6 +104,38 @@ func cmdEXPIRE(args []string) []byte {
 	}
 
 	dictStore.SetExpiry(obj, ttlSec*1000)
+	aofExpireAt(key)
+	return constant.RespOne
+}
+
+// cmdPEXPIREAT sets a key's expiry to an absolute time in milliseconds.
+//
+// EXPIRE says "in ten seconds", which is a different instant every time it is
+// evaluated. That is fine from a client and wrong in a log: replaying it a day
+// later grants a fresh ten seconds, so every restart silently renews every TTL
+// in the keyspace and nothing with an expiry ever actually expires. The
+// append-only file therefore records this instead, which names an instant that
+// does not move. Redis rewrites EXPIRE the same way and for the same reason.
+func cmdPEXPIREAT(args []string) []byte {
+	if len(args) != 2 {
+		return Encode(errors.New("(error) ERR wrong number of arguments for 'PEXPIREAT' command"), false)
+	}
+	atMs, err := strconv.ParseInt(args[1], 10, 64)
+	if err != nil {
+		return Encode(errors.New("(error) ERR value is not an integer or out of range"), false)
+	}
+
+	obj := dictStore.Get(args[0])
+	if obj == nil {
+		return constant.RespZero
+	}
+	if atMs <= time.Now().UnixMilli() {
+		// Already in the past, so this is a delete. Saying so now beats
+		// storing an expiry that the next read would act on anyway.
+		dictStore.Del(args[0])
+		return constant.RespOne
+	}
+	dictStore.SetExpiryAt(obj, uint64(atMs))
 	return constant.RespOne
 }
 

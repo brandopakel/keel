@@ -78,4 +78,26 @@ var LCSMaxCells uint64 = 134217728
 // with no locking, and it is not worth trading for throughput.
 var IOThreads = 1
 
-var AOFFileName = "./memkv-master.aof"
+// The append-only file. Off by default, as it is in Redis: it costs a write
+// syscall per event-loop cycle and, under FsyncAlways, a disk flush before
+// every reply.
+var (
+	AOFEnabled  = false
+	AOFFileName = "./memkv-master.aof"
+	AOFFsync    = FsyncEverySec
+)
+
+// How often the log is flushed to disk.
+//
+//	FsyncAlways   before replying, so an acknowledged write is a durable one
+//	FsyncEverySec at most once a second; a crash loses up to a second
+//	FsyncNever    when the operating system feels like it
+//
+// EverySec is the default for the reason Redis chose it: Always turns every
+// cycle into a disk round trip, and on a single-threaded server that is a stall
+// every other connection shares.
+const (
+	FsyncAlways   = "always"
+	FsyncEverySec = "everysec"
+	FsyncNever    = "no"
+)

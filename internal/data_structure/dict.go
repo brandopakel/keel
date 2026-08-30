@@ -67,7 +67,25 @@ func (d *Dict) GetExpiry(obj *Obj) (uint64, bool) {
 }
 
 func (d *Dict) SetExpiry(obj *Obj, ttlMs int64) {
-	d.expiredDictStore[obj] = uint64(time.Now().UnixMilli()) + uint64(ttlMs)
+	d.SetExpiryAt(obj, uint64(time.Now().UnixMilli())+uint64(ttlMs))
+}
+
+// SetExpiryAt sets the expiry to an absolute time in milliseconds since the
+// epoch. Persistence needs this: a relative TTL written to a log becomes a new
+// TTL every time the log is replayed.
+func (d *Dict) SetExpiryAt(obj *Obj, atMs uint64) {
+	d.expiredDictStore[obj] = atMs
+}
+
+// ExpiryOf reports a key's absolute expiry, for a log that has to record when
+// rather than how much longer.
+func (d *Dict) ExpiryOf(k string) (uint64, bool) {
+	obj, ok := d.dictStore[k]
+	if !ok {
+		return 0, false
+	}
+	at, has := d.expiredDictStore[obj]
+	return at, has
 }
 
 func (d *Dict) Get(k string) *Obj {
@@ -75,6 +93,11 @@ func (d *Dict) Get(k string) *Obj {
 	if v != nil {
 		if d.HasExpired(v) {
 			d.Del(k)
+			// Reaping a key whose TTL has passed is a decision this server
+			// made at a moment a log has to be able to reproduce. Without it
+			// the key comes back on replay carrying an expiry that has already
+			// gone by, and lives until something next reads it.
+			noteRemoval(d, k)
 			return nil
 		}
 		Touch(&v.Access)

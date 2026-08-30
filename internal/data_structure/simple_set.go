@@ -81,26 +81,41 @@ func (s *simpleSet) Pop(count int) []string {
 	return randKeys
 }
 
-// TODO: optimize
+// Rand returns up to count members chosen uniformly at random, without
+// repeats. Fewer than count come back when the set is smaller than that, and
+// none at all when it is empty or count is not positive.
+//
+// It replaces a version that picked indexes at random and retried on a
+// collision, which had three ways to take the whole server down, all of them
+// reachable from a client:
+//
+//	count == 0        the caller indexed [0] into an empty result and panicked,
+//	                  which is what plain SPOP and SRAND both did
+//	count > Size()    no further index is ever new, so the retry loop spun
+//	                  forever - one command, and the event loop never returns
+//	Size() == 0       rand.Intn(0) panics
+//
+// A partial Fisher-Yates shuffle has none of those shapes. It draws each member
+// from what has not been drawn yet, so it terminates in exactly count steps
+// however close count is to the size of the set, where retrying grew without
+// bound as the two converged.
 func (s *simpleSet) Rand(count int) []string {
-	temp := make([]string, 0, s.Size())
-	for k := range s.dict {
-		temp = append(temp, k)
+	if count <= 0 || s.Size() == 0 {
+		return nil
+	}
+	if count > s.Size() {
+		count = s.Size()
 	}
 
-	res := make([]string, count)
-	r := make(map[int]struct{})
-	for i := 0; i < count; i++ {
-		for {
-			picked := rand.Intn(s.Size())
-			if _, ok := r[picked]; !ok {
-				res[i] = temp[picked]
-				r[picked] = struct{}{}
-				break
-			}
-		}
+	members := make([]string, 0, s.Size())
+	for k := range s.dict {
+		members = append(members, k)
 	}
-	return res
+	for i := 0; i < count; i++ {
+		j := i + rand.Intn(len(members)-i)
+		members[i], members[j] = members[j], members[i]
+	}
+	return members[:count]
 }
 
 // MemUsage estimates the bytes held, in O(1).

@@ -108,8 +108,12 @@ func cmdZSCORE(args []string) []byte {
 	if !exist {
 		return constant.RespNil
 	}
+	// GetScore reports 0 when the member is there and -1 when it is not, so the
+	// test has to be for the failure. Reversed, as it was, ZSCORE returned nil
+	// for every member that existed and a score of zero for every one that did
+	// not - exactly backwards, for the whole life of the command.
 	ret, score := zset.GetScore(member)
-	if ret == 0 {
+	if ret != 0 {
 		return constant.RespNil
 	}
 	return Encode(fmt.Sprintf("%f", score), false)

@@ -543,6 +543,20 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 			}
 		}
 
+		// The log is written and synced here, after every command has run and
+		// before a single reply goes out. Under appendfsync always that
+		// ordering is the whole guarantee: a client is told its write succeeded
+		// only once the record of it is on disk. Flushing after the replies
+		// would be faster and would be a lie.
+		if err := core.FlushAOF(); err != nil {
+			// Carrying on would keep acknowledging writes that are not being
+			// recorded, which is worse than stopping: the data looks safe and
+			// is not. Redis stops accepting writes here for the same reason.
+			log.Println("appendonly: write failed, stopping:", err)
+			requestShutdown()
+			stop = true
+		}
+
 		// Offsets into the arena become slices only now: until the last reply
 		// was appended, another append could have moved the array underneath
 		// any slice taken earlier.
@@ -564,7 +578,42 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 	}
 
 	// Reached only on a requested stop, so the deferred Close calls run here
-	// rather than being skipped by an os.Exit.
+	// rather than being skipped by an os.Exit. The log is closed with them,
+	// which flushes and syncs whatever the last cycle produced - without it a
+	// clean shutdown would lose acknowledged writes, the one kind of loss a
+	// client has no way to notice.
+	if err := core.CloseAOF(); err != nil {
+		log.Println("appendonly: close failed:", err)
+	}
 	log.Println("event loop stopped")
+	return nil
+}
+
+// StartAOF loads any existing append-only file and opens it for appending.
+//
+// Loading first and opening second is deliberate: opening installs the hook
+// that records evictions, and replaying a log with that hook live would append
+// what it is currently reading. A truncated final command is the ordinary shape
+// of a crash, so it is logged and the server starts anyway on the commands
+// before it; anything else is a refusal to start, because beginning from a
+// partially understood log means quietly serving a keyspace that is missing
+// whatever came after the part that failed.
+func StartAOF() error {
+	if !config.AOFEnabled {
+		return nil
+	}
+	applied, err := core.LoadAOF(config.AOFFileName)
+	switch {
+	case core.IsTruncatedAOF(err):
+		log.Printf("appendonly: %v - starting from what was intact", err)
+	case err != nil:
+		return err
+	case applied > 0:
+		log.Printf("appendonly: replayed %d commands from %s", applied, config.AOFFileName)
+	}
+	if err := core.OpenAOF(config.AOFFileName); err != nil {
+		return err
+	}
+	log.Printf("appendonly: on, %s, appendfsync %s", config.AOFFileName, config.AOFFsync)
 	return nil
 }

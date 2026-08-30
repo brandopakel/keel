@@ -25,6 +25,10 @@ func cmdPING(args []string) []byte {
 func EvalAndResponse(cmd *MemKVCmd, c io.ReadWriter) error {
 	var res []byte
 
+	// Anything a command wants written to the log instead of itself is staged
+	// while it runs, so the slate has to be clean before it starts.
+	aofBegin()
+
 	switch cmd.Cmd {
 	case "PING":
 		res = cmdPING(cmd.Args)
@@ -38,6 +42,8 @@ func EvalAndResponse(cmd *MemKVCmd, c io.ReadWriter) error {
 		res = cmdDEL(cmd.Args)
 	case "EXPIRE":
 		res = cmdEXPIRE(cmd.Args)
+	case "PEXPIREAT":
+		res = cmdPEXPIREAT(cmd.Args)
 	case "INCR":
 		res = cmdINCR(cmd.Args)
 	case "LCS":
@@ -145,6 +151,12 @@ func EvalAndResponse(cmd *MemKVCmd, c io.ReadWriter) error {
 	default:
 		return errors.New(fmt.Sprintf("command not found: %s", cmd.Cmd))
 	}
+
+	// Recorded before the reply is written. FlushAOF runs between execution and
+	// the write phase, so under appendfsync always the client hears "OK" only
+	// once the log holding that OK is on disk.
+	aofCommit(cmd, res)
+
 	_, err := c.Write(res)
 	return err
 }

@@ -2,8 +2,10 @@ package core
 
 import (
 	"errors"
-	"memkv/internal/data_structure"
 	"strconv"
+
+	"memkv/internal/constant"
+	"memkv/internal/data_structure"
 )
 
 func cmdSADD(args []string) []byte {
@@ -113,10 +115,29 @@ func cmdSPOP(args []string) []byte {
 	}
 	// SPOP removes members, so the set shrinks.
 	defer setStore.Resize(key)
+
+	// Without a count the command pops one member, not zero. Asking for zero
+	// and then reading the first of the nothing that came back is what made
+	// plain SPOP panic, and a panic here is the whole server rather than the
+	// connection that sent it.
+	want := count
 	if !hasCount {
-		return Encode(set.Pop(count)[0], false)
+		want = 1
 	}
-	return Encode(set.Pop(count), false)
+	popped := set.Pop(want)
+
+	// Replaying SPOP would pop different members, so the log records the
+	// removal that actually happened rather than the request that caused it.
+	if len(popped) > 0 {
+		aofRecord(append([]string{"SREM", key}, popped...)...)
+	}
+	if !hasCount {
+		if len(popped) == 0 {
+			return constant.RespNil
+		}
+		return Encode(popped[0], false)
+	}
+	return Encode(popped, false)
 }
 
 func cmdSRAND(args []string) []byte {
@@ -142,7 +163,12 @@ func cmdSRAND(args []string) []byte {
 		return Encode(make([]string, 0), false)
 	}
 	if !hasCount {
-		return Encode(set.Rand(count)[0], false)
+		// One member, for the same reason SPOP takes one.
+		picked := set.Rand(1)
+		if len(picked) == 0 {
+			return constant.RespNil
+		}
+		return Encode(picked[0], false)
 	}
 	return Encode(set.Rand(count), false)
 }

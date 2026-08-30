@@ -36,6 +36,9 @@ var (
 	maxMemory      string
 	lcsMaxCells    uint64
 	ioThreads      int
+	appendOnly     bool
+	appendFilename string
+	appendFsync    string
 )
 
 func init() {
@@ -56,6 +59,12 @@ func init() {
 		"accesses before an idle LFU counter drops by one; 0 disables forgetting")
 	flag.Uint64Var(&lcsMaxCells, "lcs-max-cells", config.LCSMaxCells,
 		"largest len(key1)*len(key2) LCS will attempt; 0 is unbounded")
+	flag.BoolVar(&appendOnly, "appendonly", config.AOFEnabled,
+		"log every write to an append-only file and replay it at startup")
+	flag.StringVar(&appendFilename, "appendfilename", config.AOFFileName,
+		"where that log lives")
+	flag.StringVar(&appendFsync, "appendfsync", config.AOFFsync,
+		"how often the log reaches disk: always | everysec | no")
 	flag.IntVar(&ioThreads, "io-threads", config.IOThreads,
 		"threads that read, parse and write sockets, including the event loop's own; "+
 			"command execution stays on one thread whatever this is")
@@ -75,6 +84,15 @@ func init() {
 		log.Fatalf("-io-threads must be at least 1, got %d", ioThreads)
 	}
 	config.IOThreads = ioThreads
+
+	switch appendFsync {
+	case config.FsyncAlways, config.FsyncEverySec, config.FsyncNever:
+	default:
+		log.Fatalf("unknown -appendfsync %q (want always, everysec or no)", appendFsync)
+	}
+	config.AOFEnabled = appendOnly
+	config.AOFFileName = appendFilename
+	config.AOFFsync = appendFsync
 	switch evictPolicy {
 	case "lru":
 		config.EvictStrategy = config.LRU
@@ -111,6 +129,13 @@ func main() {
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
 	var wg sync.WaitGroup
 	wg.Add(2)
+
+	// Loaded before any loop starts. Doing it inside the server goroutine would
+	// race the listener: a client could connect and be answered out of a
+	// keyspace that is still being replayed into.
+	if err := server.StartAOF(); err != nil {
+		log.Fatalf("appendonly: %v", err)
+	}
 
 	switch mode {
 	case "kqueue":
