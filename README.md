@@ -19,9 +19,12 @@ low-level design decisions underneath a real database.
 ## Key features
 
 - **RESP compliant.** Works with `redis-cli` and standard Redis clients.
-- **Single-threaded event loop.** `epoll` on Linux, `kqueue` on macOS, selected
-  by build tag. A single goroutine serves all connections, so per-connection
-  memory stays near zero and commands need no locking.
+- **Single-threaded execution, on an event loop.** `epoll` on Linux, `kqueue` on
+  macOS, selected by build tag. One goroutine serves every connection by
+  default, so per-connection memory stays near zero. `-io-threads N` moves the
+  socket reads, parsing and writes onto more threads, but command execution
+  stays on one thread whatever the setting — which is why no store needs a
+  lock.
 - **Custom data structures**, implemented from scratch:
   - Skip list, for sorted sets (`ZADD`, `ZRANK`, …)
   - Geohash, for geospatial indexing (`GEOADD`, `GEODIST`, …)
@@ -122,6 +125,38 @@ darwin. Figures are medians of repeated runs. Method and raw data are in
 | **Morris Counter** | `MORRIS.INITBYDIM`, `MORRIS.INITBYPROB`, `MORRIS.INCRBY`, `MORRIS.QUERY`, `MORRIS.INFO` |
 | **HyperLogLog** | `PFADD`, `PFCOUNT`, `PFMERGE` |
 | **Cuckoo Filter** | `CF.RESERVE`, `CF.ADD`, `CF.ADDNX`, `CF.EXISTS`, `CF.MEXISTS`, `CF.DEL`, `CF.COUNT`, `CF.INFO` |
+
+## Status
+
+memkv is a project for understanding how a database server works, and it is
+honest about being that rather than something to put real data in. What it does
+implement it implements properly: `go-redis` v9 connects to it unmodified,
+pipelines, and reads and writes strings, sets and TTLs, and an unsupported
+command comes back as an error without dropping the connection. The gaps below
+are the ones that decide whether it is usable for anything of yours.
+
+- **Nothing is persisted.** There is no AOF and no snapshot, so a restart is a
+  flush. `config.AOFFileName` exists and nothing reads it.
+- **There is no licence**, here or upstream. By default that means nobody has
+  permission to use, copy or redistribute it, whatever the code can do. It is
+  the first thing to fix if the answer to "can someone else use this" is meant
+  to be yes, and because upstream's work is most of what sits underneath, it is
+  not a decision this fork can make alone.
+- **It is not importable as a library.** The module is named `memkv` rather
+  than a fetchable path, so `go get` cannot resolve it, and every package lives
+  under `internal/`, which Go forbids anything outside this module from
+  importing. Both are consequences of it being a server you talk to over a
+  socket rather than a package you link against.
+- **Expiry is lazy only.** A key with a TTL goes away when something next looks
+  at it. Five hundred keys given a one-second TTL and then left alone still
+  count in `DBSIZE` and `used_memory` a minute later. Redis runs an active
+  expire cycle; this does not, so eviction is what eventually reclaims them,
+  and only once a bound is reached.
+- **About forty commands.** No hashes and no lists, and none of `EXISTS`,
+  `KEYS`, `SCAN`, `TYPE`, `MGET`, `MSET`, `FLUSHDB`, `MULTI` or pub/sub.
+- **One database, no authentication, no TLS, no replication.** `SELECT`, `AUTH`
+  and `CONFIG` are unimplemented, and it binds `0.0.0.0` by default. Keep it off
+  any interface you do not control.
 
 ## Benchmarks
 
