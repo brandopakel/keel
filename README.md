@@ -151,11 +151,11 @@ are the ones that decide whether it is usable for anything of yours.
 
 - **Persistence is opt-in and the log is never rewritten.** `-appendonly` makes
   a restart safe, but the file records every write forever, so it grows with
-  traffic rather than with the size of the data and startup gets slower for as
-  long as it runs. Redis solves this by periodically rewriting the log into the
-  shortest one producing the same state; that is not built yet, so treat the
-  file as something you will have to manage. Without the flag, a restart is
+  traffic rather than with the size of the data. Without the flag, a restart is
   still a flush.
+- **A key name is not unique across types.** `SET k v` and `SADD k m` can both
+  hold `k` at once, and `DEL k` removes only one of them. There is no
+  `WRONGTYPE`, so a client that reuses a name across types gets no warning.
 - **There is no licence**, here or upstream. By default that means nobody has
   permission to use, copy or redistribute it, whatever the code can do. It is
   the first thing to fix if the answer to "can someone else use this" is meant
@@ -205,118 +205,161 @@ benchmark harness in [`bench/`](bench/README.md).
 above. [quangh33/memkv#2](https://github.com/quangh33/memkv/issues/2) is the
 upstream discussion the benchmarks were written to answer.
 
-## Future work
+## Design log
 
-- [x] HyperLogLog — dense encoding, 16384 six-bit registers, Ertl's estimator.
-      Estimates track real Redis to within the error bound of both. Redis's
-      sparse encoding, which costs a few hundred bytes instead of 12KB for keys
-      with few members, is not implemented.
-- [x] Morris counter — approximate counting in one byte where an exact counter
-      needs four. The cell holds an exponent and raises it only with
-      probability (1+a)^-c, which makes the estimate ((1+a)^c - 1)/a unbiased
-      for any number of increments; a = 0.08 puts eight bits within 3% of the
-      range of a Count-Min sketch's 32-bit cell, for 20% relative error per
-      counter. Exposed as the cells of a hashed counting table, since that is
-      the only place the saving is real — one counter per key would be swamped
-      by the ~100 bytes a key costs anyway. Rows are combined by median, not
-      the minimum a Count-Min sketch takes: a minimum is right only for exact
-      cells, and over noisy ones it finds the unluckiest row rather than the
-      cleanest. Measured, the minimum reads 21% low at depth 5 and 26% low at
-      depth 9 — worse the more rows are added, which is backwards — while the
-      median stays within 2%.
-- [x] Cuckoo filter — 16-bit fingerprints, four to a bucket, partial-key cuckoo
-      hashing. Measured: 96–98% load factor, 16.3–16.7 bits per item at a
-      0.009–0.013% false positive rate, against 17.7 bits per item for a Bloom
-      filter at a comparable rate — and unlike Bloom it can delete. Fixed
-      capacity, so it refuses inserts when full rather than growing.
-- [x] Approx LRU eviction — five random samples per eviction, with a 16-entry
-      pool carried between passes. Measured hot-key retention: 83% against 49%
-      for random eviction, where true LRU would score 100%. The pool is worth
-      most of that: plain sampling scores 70% at five samples and needs 20 to
-      reach 87%. Bounded by key count rather than by memory.
-- [x] Approx LFU eviction — Redis's logarithmic counter, incremented with
-      probability 1/(base*factor+1) so eight bits span millions of accesses, and
-      decayed lazily so a key popular yesterday does not outrank one in use
-      today. Measured: 99% of a working set survives a 2x scan that leaves LRU
-      with 0%, while a working set that moves is still followed. Shares one
-      64-bit field with LRU rather than adding its own, which is 76MB at the
-      default key limit.
-- [x] Memory-based bounding — `-maxmemory`, with per-key accounting calibrated
-      against real heap growth, reported through `INFO` and `MEMORY USAGE`.
-      Covers every keyspace: strings, sets, sorted sets, Bloom and cuckoo
-      filters, Count-Min sketches and HyperLogLogs share one budget, and
-      eviction chooses between them on a common scale.
-- [x] Longest Common Subsequence — `LCS key1 key2 [LEN] [IDX] [MINMATCHLEN n]
-      [WITHMATCHLEN]`, by Hirschberg's algorithm rather than the table Redis
-      builds. Working memory is 16·min(n,m) bytes rather than 4nm: two
-      10,000-byte values measured 1.09MB of allocation against a 400MB table.
-      What bounds the command is therefore time, not space. It is the only
-      command here whose cost is the product of two keys, and on a
-      single-threaded server that makes it the only one a client can use to
-      stall every other client, so the budget is an operator setting —
-      `-lcs-max-cells`, defaulting to where Redis itself stops. Checked against
-      a real Redis 8.10.1 over 2008 pairs and again over the wire: the length
-      and the returned subsequence agree on every one. The `IDX` ranges are one
-      valid decomposition of that same subsequence and can differ, because
-      Redis's positions come from walking the table backwards and there is no
-      table here.
-- [x] Append-only persistence — `-appendonly`, replayed at startup, with
-      `always` / `everysec` / `no` fsync. The log is flushed and synced between
-      executing a cycle's commands and writing its replies, so under `always` a
-      client is told its write succeeded only once the record of it is on disk.
+What each piece does, what it trades away, and the measurement behind the
+choice. Read it as the reasoning rather than the changelog.
 
-      What a command *did* is recorded rather than what it said, because three
-      kinds of command do not replay to the same state: `SPOP` removes members
-      at random and is written as the `SREM` it turned out to be; `EXPIRE` is
-      relative, so it is written as an absolute `PEXPIREAT` — otherwise every
-      restart silently renews every TTL and nothing ever expires; and eviction
-      and expiry have no command behind them at all, so they are written as
-      `DEL`. Replay suspends eviction for the same reason: the log already says
-      which keys went, and a replay that also evicted would drop a different
-      set on top. A half-written command at the end of the file is the ordinary
-      shape of a crash and is dropped with a warning rather than refused.
+- **HyperLogLog** — dense encoding, 16384 six-bit registers, Ertl's estimator.
+  Estimates track real Redis to within the error bound of both. Redis's
+  sparse encoding, which costs a few hundred bytes instead of 12KB for keys
+  with few members, is not implemented.
+- **Morris counter** — approximate counting in one byte where an exact counter
+  needs four. The cell holds an exponent and raises it only with
+  probability (1+a)^-c, which makes the estimate ((1+a)^c - 1)/a unbiased
+  for any number of increments; a = 0.08 puts eight bits within 3% of the
+  range of a Count-Min sketch's 32-bit cell, for 20% relative error per
+  counter. Exposed as the cells of a hashed counting table, since that is
+  the only place the saving is real — one counter per key would be swamped
+  by the ~100 bytes a key costs anyway. Rows are combined by median, not
+  the minimum a Count-Min sketch takes: a minimum is right only for exact
+  cells, and over noisy ones it finds the unluckiest row rather than the
+  cleanest. Measured, the minimum reads 21% low at depth 5 and 26% low at
+  depth 9 — worse the more rows are added, which is backwards — while the
+  median stays within 2%.
+- **Cuckoo filter** — 16-bit fingerprints, four to a bucket, partial-key cuckoo
+  hashing. Measured: 96–98% load factor, 16.3–16.7 bits per item at a
+  0.009–0.013% false positive rate, against 17.7 bits per item for a Bloom
+  filter at a comparable rate — and unlike Bloom it can delete. Fixed
+  capacity, so it refuses inserts when full rather than growing.
+- **Approx LRU eviction** — five random samples per eviction, with a 16-entry
+  pool carried between passes. Measured hot-key retention: 83% against 49%
+  for random eviction, where true LRU would score 100%. The pool is worth
+  most of that: plain sampling scores 70% at five samples and needs 20 to
+  reach 87%. Bounded by key count rather than by memory.
+- **Approx LFU eviction** — Redis's logarithmic counter, incremented with
+  probability 1/(base*factor+1) so eight bits span millions of accesses, and
+  decayed lazily so a key popular yesterday does not outrank one in use
+  today. Measured: 99% of a working set survives a 2x scan that leaves LRU
+  with 0%, while a working set that moves is still followed. Shares one
+  64-bit field with LRU rather than adding its own, which is 76MB at the
+  default key limit.
+- **Memory-based bounding** — `-maxmemory`, with per-key accounting calibrated
+  against real heap growth, reported through `INFO` and `MEMORY USAGE`.
+  Covers every keyspace: strings, sets, sorted sets, Bloom and cuckoo
+  filters, Count-Min sketches and HyperLogLogs share one budget, and
+  eviction chooses between them on a common scale.
+- **Longest Common Subsequence** — `LCS key1 key2 [LEN] [IDX] [MINMATCHLEN n]
+  [WITHMATCHLEN]`, by Hirschberg's algorithm rather than the table Redis
+  builds. Working memory is 16·min(n,m) bytes rather than 4nm: two
+  10,000-byte values measured 1.09MB of allocation against a 400MB table.
+  What bounds the command is therefore time, not space. It is the only
+  command here whose cost is the product of two keys, and on a
+  single-threaded server that makes it the only one a client can use to
+  stall every other client, so the budget is an operator setting —
+  `-lcs-max-cells`, defaulting to where Redis itself stops. Checked against
+  a real Redis 8.10.1 over 2008 pairs and again over the wire: the length
+  and the returned subsequence agree on every one. The `IDX` ranges are one
+  valid decomposition of that same subsequence and can differ, because
+  Redis's positions come from walking the table backwards and there is no
+  table here.
+- **Append-only persistence** — `-appendonly`, replayed at startup, with
+  `always` / `everysec` / `no` fsync. The log is flushed and synced between
+  executing a cycle's commands and writing its replies, so under `always` a
+  client is told its write succeeded only once the record of it is on disk.
 
-      Every structure replays to the *identical* state, estimates included,
-      because each seeds its randomness per structure from a constant.
+  What a command *did* is recorded rather than what it said, because three
+  kinds of command do not replay to the same state: `SPOP` removes members
+  at random and is written as the `SREM` it turned out to be; `EXPIRE` is
+  relative, so it is written as an absolute `PEXPIREAT` — otherwise every
+  restart silently renews every TTL and nothing ever expires; and eviction
+  and expiry have no command behind them at all, so they are written as
+  `DEL`. Replay suspends eviction for the same reason: the log already says
+  which keys went, and a replay that also evicted would drop a different
+  set on top. A half-written command at the end of the file is the ordinary
+  shape of a crash and is dropped with a warning rather than refused.
 
-- [ ] Rewriting the append-only file. It currently grows with every write and
-      is never compacted, so startup time grows with the log rather than with
-      the data. The fix is Redis's: periodically write the shortest log that
-      produces the current state and swap it in.
-- [x] Threaded socket I/O, in the style of Redis `io-threads` — `-io-threads N`
-      moves the read syscall, RESP parsing and the write syscall onto N threads
-      while command execution stays on one, which is what keeps every store an
-      unsynchronised map with no locking. A cycle of the loop becomes three
-      phases with a barrier between each. Replies are staged in one arena for
-      the whole server rather than a buffer per connection, so the
-      near-zero per-connection memory that makes the event loop worth having
-      survives the change.
+  Every structure replays to the *identical* state, estimates included,
+  because each seeds its randomness per structure from a constant.
 
-      Measured on darwin/arm64, medians of five runs. Three results held
-      steady inside the noise floor: **1.41x** at 256KB `SET` (4194 → 5699
-      MB/s), saturating at four threads — which is exactly where the motivation
-      was, the large-value path one core had become the limit for; **11% down**
-      in a band around 8KB, for `GET` and `SET` alike; and no change at all on a
-      single connection, which is the threshold declining to split work that
-      cannot pay for the split. Small payloads at higher concurrency measured
-      1.05–1.25x but with 15–32% spread, so they are recorded rather than
-      claimed. Mixed enough to default to off, as Redis does.
+- **Threaded socket I/O, in the style of Redis `io-threads`** — `-io-threads N`
+  moves the read syscall, RESP parsing and the write syscall onto N threads
+  while command execution stays on one, which is what keeps every store an
+  unsynchronised map with no locking. A cycle of the loop becomes three
+  phases with a barrier between each. Replies are staged in one arena for
+  the whole server rather than a buffer per connection, so the
+  near-zero per-connection memory that makes the event loop worth having
+  survives the change.
 
-      Turning the loop into phases changed the default path too, since
-      `-io-threads 1` no longer runs the code every earlier benchmark was taken
-      against. That is checked rather than assumed: the commit before against
-      the commit after, arms alternating rep by rep so each pair of readings is
-      a second apart, came back between 0.967x and 1.085x across all eighteen
-      scenarios with spreads as wide as the deviations. Free, to the ~5% five
-      reps can resolve — including the 256KB rows, which is where a large value
-      being copied through the arena instead of kept by reference would have
-      shown up.
+  Measured on darwin/arm64, medians of five runs. Three results held
+  steady inside the noise floor: **1.41x** at 256KB `SET` (4194 → 5699
+  MB/s), saturating at four threads — which is exactly where the motivation
+  was, the large-value path one core had become the limit for; **11% down**
+  in a band around 8KB, for `GET` and `SET` alike; and no change at all on a
+  single connection, which is the threshold declining to split work that
+  cannot pay for the split. Small payloads at higher concurrency measured
+  1.05–1.25x but with 15–32% spread, so they are recorded rather than
+  claimed. Mixed enough to default to off, as Redis does.
 
-      The 8KB regression is not the handoff: a channel rendezvous measures
-      688ns, a fraction of a percent at these rates. Measuring the alternative
-      was the more interesting result. Redis busy-waits on an atomic there
-      rather than parking a thread; the same spin in Go measures **11.4µs**,
-      sixteen times worse than the channel, because goroutines are multiplexed
-      onto threads rather than pinned to cores, so a spinning one fights the
-      scheduler instead of sidestepping it. Translating that part of Redis's
-      design faithfully would have made this slower.
+  Turning the loop into phases changed the default path too, since
+  `-io-threads 1` no longer runs the code every earlier benchmark was taken
+  against. That is checked rather than assumed: the commit before against
+  the commit after, arms alternating rep by rep so each pair of readings is
+  a second apart, came back between 0.967x and 1.085x across all eighteen
+  scenarios with spreads as wide as the deviations. Free, to the ~5% five
+  reps can resolve — including the 256KB rows, which is where a large value
+  being copied through the arena instead of kept by reference would have
+  shown up.
+
+  The 8KB regression is not the handoff: a channel rendezvous measures
+  688ns, a fraction of a percent at these rates. Measuring the alternative
+  was the more interesting result. Redis busy-waits on an atomic there
+  rather than parking a thread; the same spin in Go measures **11.4µs**,
+  sixteen times worse than the channel, because goroutines are multiplexed
+  onto threads rather than pinned to cores, so a spinning one fights the
+  scheduler instead of sidestepping it. Translating that part of Redis's
+  design faithfully would have made this slower.
+
+## What's next
+
+Roughly in the order the gaps matter.
+
+**Two data bugs, both found by probing rather than by a test.**
+
+- One key name can hold several types at once. `SET k v` followed by `SADD k m`
+  both succeed, `GET k` and `SMEMBERS k` both answer, and `DEL k` removes only
+  the string — the set survives under the same name. Every type keeps its own
+  map and nothing arbitrates between them, so there is no `WRONGTYPE` and no
+  reliable way to delete a key. The fix is a directory of names shared across
+  the keyspaces, which `MEMORY USAGE` already has to walk by hand.
+- `SET` never reads the `EX`/`PX` keyword, only the number after it. `SET k v PX
+  100` sets a hundred *seconds*, a thousandfold longer than asked, and `SET k v
+  ZZ 100` is accepted rather than refused.
+
+**Durability.** The append-only file is never rewritten, so it grows with
+traffic rather than with the data and startup slows for as long as the server
+runs. The fix is Redis's: periodically write the shortest log producing the
+current state, then swap it in. That machinery is also what a snapshot format
+would be built from.
+
+**Memory.** Expiry is lazy only — a key with a TTL is reclaimed when something
+next looks at it, so five hundred keys given a one-second TTL and then left
+alone still count in `DBSIZE` and `used_memory` a minute later. Redis runs an
+active expire cycle, sampling keys with TTLs and reaping what has fallen due.
+
+**Command surface.** No hashes and no lists, and none of `EXISTS`, `KEYS`,
+`SCAN`, `TYPE`, `MGET`, `MSET`, `FLUSHDB`, `MULTI` or pub/sub. `EXISTS` and
+`TYPE` in particular are what most client libraries reach for first.
+
+**Operations.** No `AUTH`, no TLS, one database, no replication, and it binds
+`0.0.0.0` by default. Anything past a trusted network needs at least the first
+two.
+
+**Licence.** There is none, here or upstream, so nobody yet has permission to
+use this — see [Status](#status).
+
+**Measurement.** Two numbers are still owed. The small-payload I/O-thread rows
+were measured over loopback with the benchmark client sharing twelve cores, and
+want a run through `bench/run-offloopback.sh` on Linux before the 7–10% there is
+called a property of the design. And the cost of `-appendonly` itself has not
+been measured at all — `bench/run-ab.sh` is the right shape for it.
