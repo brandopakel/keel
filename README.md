@@ -69,6 +69,10 @@ go run ./cmd -maxmemory 512mb            # bound by bytes instead of key count
 redis-cli -p 8081                        # from another terminal
 ```
 
+```sh
+go run ./cmd -io-threads 4               # read, parse and write on 4 threads
+```
+
 Other I/O modes exist for benchmarking; `-mode` selects them and
 [`bench/README.md`](bench/README.md) explains what each one is for.
 
@@ -100,6 +104,7 @@ darwin. Figures are medians of repeated runs. Method and raw data are in
 | Reply coalescing *(Linux)* | Replies from one read are sent as one write instead of one write per command: **4.1x / 8.1x / 13.9x** at pipeline depth 8 / 16 / 64, and 3.0x at P=64 on darwin. Now the default. |
 | Large values *(darwin)* | The read path re-copied its buffer on every read, quadratic in value size. Removing that, sizing each read to what the frame still needs, and reading straight into the destination: **11.5x** at 256KB values, 336 → 3866 MB/s. |
 | Reply encoding *(darwin)* | Replies were built with `fmt.Sprintf` and then converted, copying every payload twice. Appending instead: **2.7–3.4x** faster encoding, allocations per reply down from 8–9 to 2. |
+| I/O threads *(darwin)* | Reads, parsing and writes move off the loop thread with `-io-threads N`, execution staying on one. **1.41x** at 256KB `SET`, saturating at four threads; 11% down in a band around 8KB, and unchanged on a single connection. Off by default. |
 
 ## Supported commands
 
@@ -183,7 +188,30 @@ and deep pipelining.
       valid decomposition of that same subsequence and can differ, because
       Redis's positions come from walking the table backwards and there is no
       table here.
-- [ ] Threaded socket I/O, in the style of Redis `io-threads` — parallelise
-      reads, writes and parsing while command execution stays single-threaded.
-      The large-value path is now within range of what one core can copy, which
-      is the wall that motivated the same change in Redis 6.
+- [x] Threaded socket I/O, in the style of Redis `io-threads` — `-io-threads N`
+      moves the read syscall, RESP parsing and the write syscall onto N threads
+      while command execution stays on one, which is what keeps every store an
+      unsynchronised map with no locking. A cycle of the loop becomes three
+      phases with a barrier between each. Replies are staged in one arena for
+      the whole server rather than a buffer per connection, so the
+      near-zero per-connection memory that makes the event loop worth having
+      survives the change.
+
+      Measured on darwin/arm64, medians of five runs. Three results held
+      steady inside the noise floor: **1.41x** at 256KB `SET` (4194 → 5699
+      MB/s), saturating at four threads — which is exactly where the motivation
+      was, the large-value path one core had become the limit for; **11% down**
+      in a band around 8KB, for `GET` and `SET` alike; and no change at all on a
+      single connection, which is the threshold declining to split work that
+      cannot pay for the split. Small payloads at higher concurrency measured
+      1.05–1.25x but with 15–32% spread, so they are recorded rather than
+      claimed. Mixed enough to default to off, as Redis does.
+
+      The 8KB regression is not the handoff: a channel rendezvous measures
+      688ns, a fraction of a percent at these rates. Measuring the alternative
+      was the more interesting result. Redis busy-waits on an atomic there
+      rather than parking a thread; the same spin in Go measures **11.4µs**,
+      sixteen times worse than the channel, because goroutines are multiplexed
+      onto threads rather than pinned to cores, so a spinning one fights the
+      scheduler instead of sidestepping it. Translating that part of Redis's
+      design faithfully would have made this slower.

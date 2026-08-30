@@ -69,4 +69,13 @@ var LFUDecayPeriod = 10000
 // matters more than accepting every input Redis accepts.
 var LCSMaxCells uint64 = 134217728
 
+// IOThreads is how many threads read, parse and write sockets, counting the
+// event loop's own thread as one of them. 1 keeps everything on the loop, which
+// is the default and what Redis defaults to as well.
+//
+// Command execution is never threaded whatever this is set to. That is the
+// whole design: one thread touching the stores is what lets them be plain maps
+// with no locking, and it is not worth trading for throughput.
+var IOThreads = 1
+
 var AOFFileName = "./memkv-master.aof"

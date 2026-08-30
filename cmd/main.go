@@ -35,6 +35,7 @@ var (
 	lfuDecayPeriod int
 	maxMemory      string
 	lcsMaxCells    uint64
+	ioThreads      int
 )
 
 func init() {
@@ -55,6 +56,9 @@ func init() {
 		"accesses before an idle LFU counter drops by one; 0 disables forgetting")
 	flag.Uint64Var(&lcsMaxCells, "lcs-max-cells", config.LCSMaxCells,
 		"largest len(key1)*len(key2) LCS will attempt; 0 is unbounded")
+	flag.IntVar(&ioThreads, "io-threads", config.IOThreads,
+		"threads that read, parse and write sockets, including the event loop's own; "+
+			"command execution stays on one thread whatever this is")
 	flag.Parse()
 
 	parsed, err := parseSize(maxMemory)
@@ -67,6 +71,10 @@ func init() {
 	config.LFULogFactor = lfuLogFactor
 	config.LFUDecayPeriod = lfuDecayPeriod
 	config.LCSMaxCells = lcsMaxCells
+	if ioThreads < 1 {
+		log.Fatalf("-io-threads must be at least 1, got %d", ioThreads)
+	}
+	config.IOThreads = ioThreads
 	switch evictPolicy {
 	case "lru":
 		config.EvictStrategy = config.LRU

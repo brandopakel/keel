@@ -14,7 +14,7 @@ import (
 )
 
 // socketPair returns a connected pair and guarantees the read side is clean of
-// buffered state afterwards. pendingReads is keyed by fd and the OS reuses fd
+// buffered state afterwards. clients is keyed by fd and the OS reuses fd
 // numbers aggressively, so a test that left an entry behind would corrupt the
 // next one.
 func socketPair(t *testing.T) (r, w int) {
@@ -24,11 +24,36 @@ func socketPair(t *testing.T) (r, w int) {
 		t.Skipf("socketpair unavailable: %v", err)
 	}
 	t.Cleanup(func() {
-		delete(pendingReads, fds[0])
+		delete(clients, fds[0])
 		syscall.Close(fds[0])
 		syscall.Close(fds[1])
 	})
 	return fds[0], fds[1]
+}
+
+// testScratch stands in for the per-thread read scratch the pool hands out. It
+// is one array reused by every call, deliberately: several of these tests exist
+// to prove that a command parsed out of it is not invalidated by the next read.
+var testScratch = make([]byte, readChunkSize)
+
+// readCommandsFD reads one batch from fd through the connection state the event
+// loop would be keeping for it.
+func readCommandsFD(fd int) ([]*core.MemKVCmd, error) {
+	c := clients[fd]
+	if c == nil {
+		c = &client{fd: fd}
+		clients[fd] = c
+	}
+	return c.readCommands(testScratch)
+}
+
+// buffered returns the partial-frame buffer held for fd, or nil if there is
+// none. A connection sending whole commands must hold nothing between them.
+func buffered(fd int) *connBuffer {
+	if c := clients[fd]; c != nil {
+		return c.buf
+	}
+	return nil
 }
 
 // encodeCmd builds a RESP array of bulk strings, the wire form of a command.
@@ -85,7 +110,7 @@ func TestReadCommandsFDReassemblesSplitCommand(t *testing.T) {
 	assert.Len(t, cmds, 1)
 	assert.Equal(t, "SET", cmds[0].Cmd)
 	assert.Equal(t, []string{"k", value}, cmds[0].Args, "the 128KB value must survive reassembly intact")
-	assert.NotContains(t, pendingReads, r, "a completed frame must leave no buffer behind")
+	assert.Nil(t, buffered(r), "a completed frame must leave no buffer behind")
 }
 
 // TestReadCommandsFDParsesPipelinedBatch covers the other direction: many whole
@@ -106,7 +131,7 @@ func TestReadCommandsFDParsesPipelinedBatch(t *testing.T) {
 	for _, c := range cmds {
 		assert.Equal(t, "PING", c.Cmd)
 	}
-	assert.NotContains(t, pendingReads, r, "a batch of whole commands must leave no buffer behind")
+	assert.Nil(t, buffered(r), "a batch of whole commands must leave no buffer behind")
 }
 
 // TestReadCommandsFDLeavesNoBufferBetweenCommands pins the memory property that
@@ -123,7 +148,7 @@ func TestReadCommandsFDLeavesNoBufferBetweenCommands(t *testing.T) {
 	if _, err := readCommandsFD(r); err != nil {
 		t.Fatalf("readCommandsFD: %v", err)
 	}
-	assert.Contains(t, pendingReads, r, "an unfinished frame has to be held somewhere")
+	assert.NotNil(t, buffered(r), "an unfinished frame has to be held somewhere")
 
 	// ...and the buffer must be released the moment the frame completes.
 	if _, err := syscall.Write(w, partial[len(partial)-4:]); err != nil {
@@ -131,13 +156,15 @@ func TestReadCommandsFDLeavesNoBufferBetweenCommands(t *testing.T) {
 	}
 	cmds := drain(t, r, 1)
 	assert.Len(t, cmds, 1)
-	assert.NotContains(t, pendingReads, r, "the buffer must be dropped once the frame completes")
+	assert.Nil(t, buffered(r), "the buffer must be dropped once the frame completes")
 }
 
 // TestReadCommandsFDDoesNotAliasScratchBuffer guards the assumption that makes
-// the shared read buffer safe. Commands are parsed straight out of readScratch,
-// so if ParseCmd ever returned []byte views instead of copying into strings, an
-// earlier command's arguments would be silently rewritten by a later read.
+// a reused read buffer safe. Commands are parsed straight out of the thread's
+// scratch, so if ParseCmd ever returned []byte views instead of copying into
+// strings, an earlier command's arguments would be silently rewritten by a
+// later read - and with I/O threads the scratch is now reused across several
+// connections in a row, not just across reads of one.
 func TestReadCommandsFDDoesNotAliasScratchBuffer(t *testing.T) {
 	r, w := socketPair(t)
 
@@ -202,7 +229,7 @@ func TestReadCommandsFDDoesNotPreallocateForClaimedSize(t *testing.T) {
 		t.Fatalf("readCommandsFD: %v", err)
 	}
 
-	b := pendingReads[r]
+	b := buffered(r)
 	if b == nil {
 		t.Fatal("an unfinished frame should be buffered")
 	}
@@ -214,7 +241,7 @@ func TestReadCommandsFDDoesNotPreallocateForClaimedSize(t *testing.T) {
 		t.Fatalf("readCommandsFD: %v", err)
 	}
 
-	assert.Less(t, cap(pendingReads[r].data), 4*readChunkSize,
+	assert.Less(t, cap(buffered(r).data), 4*readChunkSize,
 		"buffer must grow with bytes actually received, not with the size the client claimed")
 }
 
@@ -241,7 +268,7 @@ func TestReadCommandsFDReassemblesValueLargerThanOneRead(t *testing.T) {
 	assert.Len(t, cmds, 1)
 	assert.Equal(t, "SET", cmds[0].Cmd)
 	assert.Equal(t, value, cmds[0].Args[1], "a 1MB value must survive reassembly byte for byte")
-	assert.NotContains(t, pendingReads, r, "the buffer must be released once the frame completes")
+	assert.Nil(t, buffered(r), "the buffer must be released once the frame completes")
 }
 
 // TestReadCommandsFDHandlesReadLargerThanScratch is a regression test for a
@@ -292,7 +319,7 @@ func TestReadCommandsFDHandlesReadLargerThanScratch(t *testing.T) {
 			t.Fatalf("readCommandsFD: %v", err)
 		}
 		cmds = append(cmds, got...)
-		if b := pendingReads[r]; b != nil {
+		if b := buffered(r); b != nil {
 			if jump := len(b.data) - prev; jump > biggest {
 				biggest = jump
 			}

@@ -86,11 +86,91 @@ program.
 | `run-matrix.sh` | throughput: concurrency, pipeline depth, value size, command type |
 | `run-memtier.sh` | randomised keys and payload sizes, latency percentiles |
 | `run-hyperfine.sh` | per-configuration noise floors |
+| `run-iothreads.sh` | throughput against `-io-threads`: concurrency, value size, pipeline depth |
 | `run-memory.sh` | RSS against connection count |
 | `run-offloopback.sh` | the same, across a veth pair between network namespaces (Linux) |
 | `summarise.py` | reduces a matrix CSV to medians and comparison tables |
+| `summarise-iothreads.py` | the same for an `-io-threads` sweep, with ratios against 1 thread |
 
 `SERVERS=`, `BIN=`, `OUT=`, `REPS=`, `PORT_BASE=` are all overridable.
+
+## I/O threads
+
+`run-iothreads.sh` sweeps `-io-threads`, which moves the read syscall, RESP
+parsing and the write syscall onto more than one thread while command execution
+stays on the loop's own. Every arm is the same `-mode kqueue` server; only the
+thread count differs, and `-io-threads 1` is the configuration every other
+result in this directory was measured under. `summarise-iothreads.py` prints the
+full table from `results/iothreads-darwin.csv`; the cells worth drawing
+conclusions from are these.
+
+darwin/arm64, medians of five runs, against `-io-threads 1`. Only rows whose
+spread stayed inside the noise floor at every thread count are listed, which is
+why the small-payload concurrency rows are not here:
+
+| workload | 2 | 4 | 8 |
+|---|---|---|---|
+| `SET` d=262144 | 1.32x | **1.41x** | 1.40x |
+| `SET` d=65536 | 1.08x | 1.04x | 1.06x |
+| `SET` d=8192 | 0.90x | **0.89x** | 0.91x |
+| `GET` d=8192 | 0.90x | **0.88x** | 0.88x |
+| `GET` d=65536 | 0.96x | 0.94x | 0.97x |
+| `GET` d=262144 | 0.98x | 0.96x | 0.97x |
+| `PING` c=1 | 0.96x | 0.99x | 1.01x |
+| `PING` c=10 | 0.95x | 1.10x | 1.12x |
+
+Three things are solid. The large-value `SET` path gains **1.41x** and saturates
+at four threads. A band around 8KB *loses* 10–12%, consistently and for both
+`GET` and `SET`. And a single connection is unchanged, which is the threshold
+working: one ready connection is never worth distributing, so it never is.
+
+Everything with small payloads at c=50 and above measured 1.05x–1.25x, but with
+spreads of 15–32% around it. That is above the noise floor, so those cells are
+recorded and not relied on. If the gain there is real it is the interesting one,
+and it wants a quieter machine than this to establish.
+
+`GET` at large sizes not moving while `SET` does is the asymmetry worth naming:
+at d=262144 the one-thread server is already pushing 8.1 GB/s to a client on the
+same box, against 4.2 GB/s for `SET`. That is the cell most likely to be
+measuring `redis-benchmark` rather than memkv.
+
+### The barrier is not what costs, and Redis's answer is worse here
+
+The 8KB regression looked like barrier overhead, so the barrier was measured on
+its own. A channel-and-WaitGroup rendezvous costs **688ns** for three workers and
+2.5µs for seven — at these rates a fraction of a percent, nowhere near 11%.
+
+Worth recording is what the alternative measured. Redis does not use a channel
+here: its I/O threads busy-wait on an atomic, because in C a spin beats parking
+a thread. The same spin in Go measured **11.4µs**, sixteen times worse than the
+channel, because goroutines are multiplexed onto threads rather than pinned to
+cores, so one that spins fights the scheduler instead of sidestepping it.
+Translating that part of Redis's design faithfully would have made this slower.
+
+What is left as the likely cost at 8KB is moving each connection's bytes between
+cores for a phase that is over in a microsecond — 50 connections times 8KB is
+past what a core keeps close, while at 256KB the copying is large enough to be
+worth splitting anyway. That is a reading the numbers are consistent with rather
+than one they establish.
+
+**These are loopback numbers and the client shares the machine.** There are 12
+cores between `redis-benchmark` and the server, so an arm that takes eight
+threads is not measured against an idle client. `run-offloopback.sh` exists for
+this and is Linux-only; the small-payload rows deserve a run there before
+anything about them is called a property of the design.
+
+### A three-rep pass got this backwards
+
+The first sweep here used three reps and reported `-io-threads 4` at 0.74x–0.90x
+across half the size sweep — a clear, consistent-looking regression. Five reps
+over the same configurations returned the table above, in which the same
+workloads are flat or ahead. Nothing about the server changed between the two.
+
+The second run had a fault of its own: it shared the machine with a `go test`
+loop being used to wait for it. Both runs were discarded and the recorded CSV is
+from a third, with nothing else running. The lesson already in this file was the
+right one, and it is not enough on its own — reps fix sampling noise, and only
+an otherwise idle machine fixes the rest.
 
 ## Four ways this harness produced confident, wrong numbers
 
@@ -116,6 +196,13 @@ wrong server.
 enough that startup dominates — it reported 1.45M where a longer run reported
 5.4M. Always at least 5 reps, always compare medians, always check the run is
 long enough to measure anything.
+
+This one recurred while measuring I/O threads: a
+three-rep sweep put `-io-threads 4` between 0.74x and 0.90x across half the
+value sizes, which read as a clear and consistent regression. Five reps and
+medians over the same configurations returned 0.91–1.08x. The regression was
+noise, and the rule above was written down precisely so that it would not be
+believed a second time.
 
 **Noise floors are not uniform.** At c=50 the event loop needs a 10.6% delta to
 be significant while `net.Conn` needs 0.8%. A single global figure would have
@@ -143,6 +230,7 @@ auditable. Read them in this order:
 | `results/matrix-fair.csv` | **authoritative.** darwin/kqueue, corrected harness, all servers with `TCP_NODELAY` |
 | `results/memory-fair.csv`, `results/latency-fair.csv` | **authoritative.** darwin memory and latency percentiles |
 | `results/hyperfine3/` | **authoritative.** per-config noise floors, 12/12 cells, drained between configs |
+| `results/iothreads-darwin.csv` | **authoritative.** darwin, `-io-threads` 1/2/4/8, 5 reps. Loopback, so see the caveat above |
 | `results/linux3/` | superseded. Linux post-`TCP_NODELAY`, 4 servers only |
 | `results/linux2/` | superseded. Linux pre-`TCP_NODELAY` — the run where the Nagle stall was found |
 | `results/matrix.csv`, `results/memory.csv`, `results/memtier.csv` | superseded. Corrected harness, but before `TCP_NODELAY`, so unfair to the event loop |

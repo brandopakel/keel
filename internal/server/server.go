@@ -23,8 +23,8 @@ import (
 // and syscalls rather than copying are what dominates the large-value path -
 // GET, which crosses the kernel boundary once, beats SET at every size despite
 // doing more copying. Raising it to 64KB measured 1.66x at d=65536 and 1.83x at
-// d=262144, and nothing either way below 4KB. It is close to free: readScratch
-// is one array for the whole server, not one per connection.
+// d=262144, and nothing either way below 4KB. It is close to free: the scratch
+// is one array per I/O thread, not one per connection.
 const readChunkSize = 64 * 1024
 
 // maxDirectRead caps a single sized read so that a frame header claiming a huge
@@ -45,18 +45,18 @@ const maxDirectRead = 1 << 20
 // A var rather than a const so tests can lower it; nothing else assigns to it.
 var maxQueryBuffer = 1024 * 1024 * 1024
 
-// readScratch is the landing area for every socket read.
+// A read lands in a scratch array rather than one allocated per read.
 //
-// The event loop is single-threaded and each read is fully dealt with - parsed,
-// or copied into a connBuffer - before the next one starts, so one shared array
-// is safe and saves an allocation per read. It also makes the common case
-// copy-free: a read holding only whole commands is parsed straight out of here.
+// Each read is fully dealt with - parsed, or copied into a connBuffer - before
+// the same thread starts another, so the array can be reused, and a read
+// holding only whole commands is parsed straight out of it without any copy at
+// all. There is one per I/O thread rather than one for the whole server, which
+// still leaves it well short of one per connection; ioPool owns them.
 //
 // That is only sound because ParseCmd converts payloads with string(data[...]),
-// which allocates a copy. No command holds a reference back into this array. If
-// the parser ever starts returning []byte views, this has to become a per-read
-// allocation again.
-var readScratch = make([]byte, readChunkSize)
+// which allocates a copy. No command holds a reference back into the scratch.
+// If the parser ever starts returning []byte views, this has to become a
+// per-read allocation again.
 
 // connBuffer holds the bytes of a command that arrived split across reads.
 //
@@ -112,16 +112,53 @@ func (b *connBuffer) spare(n int) []byte { return b.data[len(b.data) : len(b.dat
 // commit accepts the n bytes just written into spare.
 func (b *connBuffer) commit(n int) { b.data = b.data[:len(b.data)+n] }
 
-// pendingReads holds the partial-frame buffer for the connections that have one.
+// client is the per-connection state one cycle of the loop carries.
 //
-// Entries are created only when a read ends mid-command, removed as soon as the
-// command completes, and removed by closeClient when the connection goes away.
-var pendingReads = make(map[int]*connBuffer)
+// The loop used to read, execute and reply for one connection before looking at
+// the next, so none of this had to outlive a local variable. I/O threading
+// splits those steps into phases across all ready connections at once, so what
+// was local becomes per-connection.
+//
+// It is kept deliberately thin, because per-connection memory is the event
+// loop's main advantage over a goroutine per connection and this is exactly
+// where that advantage would be given away. buf is nil unless a frame is
+// half-arrived, out is a window into one shared arena rather than a buffer of
+// its own, and both are dropped at the end of the cycle. An idle connection
+// holds the struct and nothing else.
+type client struct {
+	fd int
 
-// readCommandsFD reads once from fd and returns every complete command that is
-// now available, leaving any trailing partial command buffered for next time.
-func readCommandsFD(fd int) ([]*core.MemKVCmd, error) {
-	b := pendingReads[fd]
+	// buf holds the bytes of a command that arrived split across reads, and is
+	// nil the rest of the time.
+	buf *connBuffer
+
+	// cmds and err are what the read phase produced, for the execute phase.
+	cmds []*core.MemKVCmd
+	err  error
+
+	// out is the reply to send in the write phase. When inArena it is a window
+	// into the cycle's arena, recorded as offsets because appending to the
+	// arena can move it, and resolved to a slice once the cycle stops growing.
+	out              []byte
+	inArena          bool
+	outStart, outEnd int
+}
+
+// clients is every connected socket, keyed by descriptor.
+//
+// Only the loop thread ever adds to or removes from it, and only between
+// phases. I/O threads are handed pointers to the values and never touch the map
+// itself, which is what keeps it safe without a lock.
+var clients = make(map[int]*client)
+
+// readCommands reads once from the socket and returns every complete command
+// that is now available, leaving any trailing partial command buffered for next
+// time.
+//
+// scratch belongs to whichever thread is calling, and nothing that survives the
+// call points into it.
+func (c *client) readCommands(scratch []byte) ([]*core.MemKVCmd, error) {
+	b := c.buf
 	if b != nil && b.size() >= maxQueryBuffer {
 		// Wrap ErrProtocol so the caller replies before hanging up: the client
 		// learns why instead of seeing the connection vanish.
@@ -134,9 +171,10 @@ func readCommandsFD(fd int) ([]*core.MemKVCmd, error) {
 		err error
 	)
 	if b == nil {
-		// Nothing half-parsed, so land in the shared scratch: no per-connection
-		// memory, and no copy at all unless this read ends mid-frame.
-		n, err = syscall.Read(fd, readScratch)
+		// Nothing half-parsed, so land in the thread's scratch: no
+		// per-connection memory, and no copy at all unless this read ends
+		// mid-frame.
+		n, err = syscall.Read(c.fd, scratch)
 	} else {
 		// A frame is in progress. Read straight into the connection's own
 		// buffer - going via the scratch would only add a copy - and ask for
@@ -158,7 +196,7 @@ func readCommandsFD(fd int) ([]*core.MemKVCmd, error) {
 			want = maxDirectRead
 		}
 		b.reserve(want)
-		n, err = syscall.Read(fd, b.spare(want))
+		n, err = syscall.Read(c.fd, b.spare(want))
 	}
 
 	if err == syscall.EAGAIN || err == syscall.EINTR {
@@ -176,15 +214,15 @@ func readCommandsFD(fd int) ([]*core.MemKVCmd, error) {
 		return nil, io.EOF
 	}
 
-	// Only one of these is valid: n can exceed len(readScratch) when the read
-	// went into the connection's own buffer, so the scratch must not be
-	// resliced by it.
+	// Only one of these is valid: n can exceed len(scratch) when the read went
+	// into the connection's own buffer, so the scratch must not be resliced by
+	// it.
 	var src []byte
 	if b != nil {
 		b.commit(n)
 		src = b.unparsed()
 	} else {
-		src = readScratch[:n]
+		src = scratch[:n]
 	}
 
 	var cmds []*core.MemKVCmd
@@ -206,22 +244,24 @@ func readCommandsFD(fd int) ([]*core.MemKVCmd, error) {
 	case used == len(src):
 		// Nothing partial left over, so the connection goes back to holding no
 		// buffer at all.
-		delete(pendingReads, fd)
+		c.buf = nil
 	case b != nil:
 		b.off += used
 	default:
 		// First partial frame on this connection: start buffering the remainder.
 		nb := &connBuffer{}
 		nb.add(src[used:])
-		pendingReads[fd] = nb
+		c.buf = nb
 	}
 	return cmds, nil
 }
 
-// closeClient tears down a client connection and drops any buffered bytes for it.
-func closeClient(fd int) {
-	delete(pendingReads, fd)
-	syscall.Close(fd)
+// closeClient tears down a connection and drops everything held for it.
+func closeClient(c *client) {
+	delete(clients, c.fd)
+	c.buf = nil
+	c.out = nil
+	syscall.Close(c.fd)
 }
 
 func responseRw(cmd *core.MemKVCmd, rw io.ReadWriter) {
@@ -250,29 +290,43 @@ type replyBuffer struct{ buf bytes.Buffer }
 func (r *replyBuffer) Read([]byte) (int, error)    { return 0, io.EOF }
 func (r *replyBuffer) Write(p []byte) (int, error) { return r.buf.Write(p) }
 
-// respondBatch evaluates every command and emits one write for the whole batch.
-func respondBatch(comm core.FDComm, cmds []*core.MemKVCmd) {
-	switch len(cmds) {
-	case 0:
-		return
-	case 1:
-		// Nothing to coalesce. Buffering one reply copies it in full and then
-		// issues the same single write it would have issued anyway, so for a
-		// batch of one the buffer is pure cost - and a large value is nearly
-		// always a batch of one, since it fills a read on its own.
-		responseRw(cmds[0], comm)
-		return
-	}
+// executeRun runs a connection's parsed commands and stages the reply for the
+// write phase, reporting whether there is anything to send.
+//
+// The reply is staged rather than sent because the write may happen on another
+// thread, later in the cycle. Where it is staged depends on how many commands
+// there were, and both cases matter:
+//
+// A batch of several is appended to the cycle's shared arena, so the whole
+// batch leaves as one write. One write per command caps a pipelined client at
+// the rate the machine can issue syscalls - measured on Linux, a flat ~124k
+// ops/second however deep the pipeline - and coalescing was worth 4.1x at P=8,
+// 8.1x at P=16 and 13.9x at P=64.
+//
+// A batch of one is captured by reference instead. There is nothing to
+// coalesce, and copying the reply into the arena would buy nothing and cost a
+// copy of the whole value - which matters because a large value is nearly
+// always a batch of one, since it fills a read on its own.
+func executeRun(c *client, arena *replyArena) bool {
+	c.out, c.inArena = nil, false
+	defer func() { c.cmds = nil }()
 
-	var rb replyBuffer
-	for _, cmd := range cmds {
-		responseRw(cmd, &rb)
-	}
-	if rb.buf.Len() == 0 {
-		return
-	}
-	if _, err := comm.Write(rb.buf.Bytes()); err != nil {
-		log.Println("failed to send reply batch:", err)
+	switch len(c.cmds) {
+	case 0:
+		return false
+	case 1:
+		var w captureWriter
+		responseRw(c.cmds[0], &w)
+		c.out = w.p
+		return len(c.out) > 0
+	default:
+		c.outStart = len(arena.buf)
+		for _, cmd := range c.cmds {
+			responseRw(cmd, arenaWriter{arena})
+		}
+		c.outEnd = len(arena.buf)
+		c.inArena = c.outEnd > c.outStart
+		return c.inArena
 	}
 }
 
@@ -282,6 +336,18 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 
 	var events = make([]io_multiplexing.Event, config.MaxConnection)
 	clientNumber := 0
+
+	// The connections taking part in each phase of the current cycle, and the
+	// arena their replies are staged in. Kept across cycles and truncated
+	// rather than reallocated, so a busy loop does no allocation of its own.
+	var (
+		readable []*client
+		writable []*client
+		arena    replyArena
+	)
+
+	pool := newIOPool(ioThreadCount())
+	defer pool.stop()
 
 	// Create a server socket. A socket is an endpoint for communication between client and server
 	serverFD, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
@@ -374,6 +440,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 		// completion first, so a client that is mid-request gets its reply
 		// rather than having the connection dropped underneath it.
 		stop := false
+		readable = readable[:0]
 
 		for i := 0; i < len(events); i++ {
 			if events[i].Fd == wakeupFDs[0] {
@@ -426,31 +493,69 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 
 				// Counted only once the connection is fully set up, so the id
 				// in the log matches a client that actually exists.
+				clients[connFD] = &client{fd: connFD}
 				clientNumber++
 				log.Printf("new client: id=%d\n", clientNumber)
 			} else {
-				// the Client FD is ready for reading, means an existing client is sending commands
-				comm := core.FDComm{Fd: int(events[i].Fd)}
-				cmds, err := readCommandsFD(comm.Fd)
-				if err != nil {
-					// A malformed frame is the client's fault, so tell it what went
-					// wrong before hanging up. Either way only this connection dies.
-					if errors.Is(err, core.ErrProtocol) {
-						responseErrorRw(err, comm)
-					}
-					closeClient(events[i].Fd)
-					clientNumber--
-					log.Println("client quit")
-					continue
-				}
-				if WriteUnbuffered {
-					for _, cmd := range cmds {
-						responseRw(cmd, comm)
-					}
-				} else {
-					respondBatch(comm, cmds)
+				// An existing client is sending commands. Nothing is read yet:
+				// the whole ready set is collected first so the read phase can
+				// be handed out across threads in one go.
+				if c := clients[int(events[i].Fd)]; c != nil {
+					readable = append(readable, c)
 				}
 			}
+		}
+
+		// Phase one: read and parse, in parallel when there is enough of it.
+		pool.run(readable, false)
+
+		// Phase two: execute. On this thread only, and in the order the
+		// multiplexer reported the connections, so the stores stay unsynchronised
+		// and a client's commands still run in the order it sent them.
+		arena.reset()
+		writable = writable[:0]
+		for _, c := range readable {
+			if c.err != nil {
+				// A malformed frame is the client's fault, so tell it what went
+				// wrong before hanging up. Either way only this connection dies.
+				if errors.Is(c.err, core.ErrProtocol) {
+					responseErrorRw(c.err, core.FDComm{Fd: c.fd})
+				}
+				closeClient(c)
+				clientNumber--
+				log.Println("client quit")
+				continue
+			}
+			if WriteUnbuffered {
+				// One write syscall per reply, issued here rather than in the
+				// write phase, because the point of this mode is to measure
+				// what not coalescing costs. Reads are still threaded, which is
+				// what makes it a fair baseline for the read side alone.
+				comm := core.FDComm{Fd: c.fd}
+				for _, cmd := range c.cmds {
+					responseRw(cmd, comm)
+				}
+				c.cmds = nil
+				continue
+			}
+			if executeRun(c, &arena) {
+				writable = append(writable, c)
+			}
+		}
+
+		// Offsets into the arena become slices only now: until the last reply
+		// was appended, another append could have moved the array underneath
+		// any slice taken earlier.
+		for _, c := range writable {
+			if c.inArena {
+				c.out = arena.buf[c.outStart:c.outEnd]
+			}
+		}
+
+		// Phase three: write.
+		pool.run(writable, true)
+		for _, c := range writable {
+			c.out, c.inArena = nil, false
 		}
 
 		if stop {
