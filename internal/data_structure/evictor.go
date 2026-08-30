@@ -37,6 +37,8 @@ type Keyspace interface {
 	KeyspaceName() string
 	Len() int
 	MemUsed() uint64
+	// Has reports whether the key is present, without counting as a use of it.
+	Has(key string) bool
 	// SampleKeys appends up to n randomly chosen candidates.
 	SampleKeys(dst []Candidate, n int) []Candidate
 	// ScoreOf reports a key's current score and whether it is still present.
@@ -79,6 +81,38 @@ func ResetKeyspaces() {
 	evictionPool = nil
 	evictionClock = 0
 	evictedCount = 0
+}
+
+// OwnerOf reports which keyspace holds a key.
+//
+// Each type has its own map, so a name was only ever unique within a type: SET
+// k v and SADD k m both succeeded, both answered, and DEL k removed the string
+// and left the set behind. Nothing arbitrated between the stores because
+// nothing knew about all of them at once. This does.
+//
+// It asks each keyspace in turn rather than keeping a directory of names, and
+// the reason is memory. A map from name to owner is a second map entry and a
+// second copy of every key - measured at roughly 55 bytes plus the key on top
+// of the 100 a key already costs, which showed up immediately as the memory
+// estimate falling to 70% of real heap. Per-key memory is the thing this server
+// is built around; spending that much of it to answer a question eight map
+// lookups can answer would be the wrong trade. The stores are consulted
+// strings-first, since most keys are strings and the scan stops at the owner.
+func OwnerOf(key string) (Keyspace, bool) {
+	for _, ks := range keyspaces {
+		if ks.Has(key) {
+			return ks, true
+		}
+	}
+	return nil, false
+}
+
+// DeleteAnywhere removes a key from whichever keyspace holds it.
+func DeleteAnywhere(key string) bool {
+	if ks, ok := OwnerOf(key); ok {
+		return ks.Delete(key)
+	}
+	return false
 }
 
 // TotalMemUsed is the estimated bytes held across every registered keyspace.

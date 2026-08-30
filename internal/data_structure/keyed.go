@@ -66,6 +66,9 @@ func (k *Keyed[T]) Exists(key string) bool {
 	return ok
 }
 
+// Has is Exists under the name the Keyspace interface uses.
+func (k *Keyed[T]) Has(key string) bool { return k.Exists(key) }
+
 // Put stores a value, replacing whatever was there.
 func (k *Keyed[T]) Put(key string, value T) {
 	if old, ok := k.items[key]; ok {

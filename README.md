@@ -48,6 +48,11 @@ unchanged — see [Relationship to upstream](#relationship-to-upstream).
   the accounting is estimated and calibrated against real heap growth — within
   6% for strings and 2.3% for the collection types — with tests comparing the
   estimates against `HeapAlloc` so they cannot drift.
+- **One name means one thing.** A key held by one type is refused to every
+  other with `WRONGTYPE`, and `DEL` removes whichever type holds it. Resolved by
+  asking each keyspace rather than by keeping a directory of names — a directory
+  costs a second map entry and a second copy of every key, which measured as the
+  memory estimate falling to 70% of real heap.
 - **Approximate LRU and LFU eviction.** A bounded keyspace: past `-maxkeys`,
   each new key evicts an old one. Rather than ordering every key by access time
   or frequency — which would cost a structure threaded through the keyspace and
@@ -106,6 +111,8 @@ single read. Rewriting that path is most of the work below.
 | Frame and buffer bounds | A length header is checked before it is trusted, and unparsed bytes per connection are bounded, so a client cannot open a frame it never finishes and make the server buffer without limit. |
 | Spurious readability | `EAGAIN` on a read no longer closes the connection. |
 | Per-connection failures | A socket that fails to configure costs that client its connection instead of unwinding the server and disconnecting everyone. |
+| One name, one type | Each type kept its own map, so `SET k v` and `SADD k m` both held `k` at once, both answered, and `DEL k` removed the string and left the set. Every command now resolves a name against all the keyspaces first and answers `WRONGTYPE`, and `DEL` removes whichever type holds the name rather than only a string. |
+| `SET` expiry keyword | `SET` read the number after `EX`/`PX` and never the keyword itself, so `PX` set seconds — a thousandfold longer than asked, and silently, since the reply was still `OK`. A keyword that meant nothing at all was accepted just as readily. |
 | `SPOP` and `SRAND` | Both indexed the first of a zero-length result, so `SPOP key` with no count **panicked and took the server down**. Asking for more members than the set holds spun the event loop forever, and an empty set panicked a third way. The sampling is now a partial shuffle, which cannot do any of the three. |
 | `ZSCORE` | Returned nil for every member that existed and a score of zero for every member that did not — the success test was inverted, for the whole life of the command. |
 | Shutdown | The loop is woken and unwound so its deferred `Close` calls run. Previously `os.Exit` skipped them all — the "graceful shutdown" above was not true before this. |
@@ -153,9 +160,9 @@ are the ones that decide whether it is usable for anything of yours.
   a restart safe, but the file records every write forever, so it grows with
   traffic rather than with the size of the data. Without the flag, a restart is
   still a flush.
-- **A key name is not unique across types.** `SET k v` and `SADD k m` can both
-  hold `k` at once, and `DEL k` removes only one of them. There is no
-  `WRONGTYPE`, so a client that reuses a name across types gets no warning.
+- **`LCS` does not type-check its keys.** Every other command answers
+  `WRONGTYPE` for a name held by another type; `LCS` treats such a key as an
+  empty string, the same way it treats a missing one.
 - **There is no licence**, here or upstream. By default that means nobody has
   permission to use, copy or redistribute it, whatever the code can do. It is
   the first thing to fix if the answer to "can someone else use this" is meant
@@ -303,13 +310,13 @@ choice. Read it as the reasoning rather than the changelog.
 
   Turning the loop into phases changed the default path too, since
   `-io-threads 1` no longer runs the code every earlier benchmark was taken
-  against. That is checked rather than assumed: the commit before against
-  the commit after, arms alternating rep by rep so each pair of readings is
-  a second apart, came back between 0.967x and 1.085x across all eighteen
-  scenarios with spreads as wide as the deviations. Free, to the ~5% five
-  reps can resolve — including the 256KB rows, which is where a large value
-  being copied through the arena instead of kept by reference would have
-  shown up.
+  against. Measured rather than assumed, arms alternating rep by rep so each
+  pair of readings is a second apart: flat on small values and **10–13%
+  faster** at 256KB, which is where reading every ready connection before
+  executing any of them has the most to batch. The 256KB rows are also what
+  confirms the single-reply bypass survived the rewrite — a large value copied
+  through the arena rather than kept by reference would show there, and as a
+  loss.
 
   The 8KB regression is not the handoff: a channel rendezvous measures
   688ns, a fraction of a percent at these rates. Measuring the alternative
@@ -323,18 +330,6 @@ choice. Read it as the reasoning rather than the changelog.
 ## What's next
 
 Roughly in the order the gaps matter.
-
-**Two data bugs, both found by probing rather than by a test.**
-
-- One key name can hold several types at once. `SET k v` followed by `SADD k m`
-  both succeed, `GET k` and `SMEMBERS k` both answer, and `DEL k` removes only
-  the string — the set survives under the same name. Every type keeps its own
-  map and nothing arbitrates between them, so there is no `WRONGTYPE` and no
-  reliable way to delete a key. The fix is a directory of names shared across
-  the keyspaces, which `MEMORY USAGE` already has to walk by hand.
-- `SET` never reads the `EX`/`PX` keyword, only the number after it. `SET k v PX
-  100` sets a hundred *seconds*, a thousandfold longer than asked, and `SET k v
-  ZZ 100` is accepted rather than refused.
 
 **Durability.** The append-only file is never rewritten, so it grows with
 traffic rather than with the data and startup slows for as long as the server

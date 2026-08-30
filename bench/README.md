@@ -173,38 +173,62 @@ arena shared by the whole server rather than a buffer allocated per batch. And a
 batch of one keeps its reply by reference, which is the large-value bypass the
 old `respondBatch` had and which had to be rebuilt rather than inherited.
 
-`run-ab.sh` measures it directly: the binary at the commit before phases against
-the binary after, both `-mode kqueue`, the candidate pinned to `-io-threads 1`.
-Both servers run at once and the arms alternate rep by rep, so each pair of
-readings is a second apart rather than half an hour, and `summarise-ab.py`
-divides them before taking a median. Comparing two medians taken thirty minutes
-apart would mostly measure the thirty minutes.
+`run-ab.sh` measures it: the tree at the commit before phases against the
+current tree, both at their defaults. Both servers run at once and the arms
+alternate rep by rep, so each pair of readings is a second apart rather than
+half an hour, and `summarise-ab.py` divides them before taking a median.
+Comparing two medians taken thirty minutes apart would mostly measure the
+thirty minutes.
 
-Paired ratios, phased over inline, darwin/arm64, five reps
-(`results/phases-vs-inline-darwin.csv`):
+Paired ratios, current over pre-phases, darwin/arm64, five reps
+(`results/phases-vs-inline-darwin.csv`). Only the cells whose spread stayed
+under 6% are listed; the rest disagreed rep to rep by more than they differed:
 
 | scenario | paired | spread |
 |---|---|---|
-| `PING` c=1 | 0.996x | ±3% |
-| `PING` c=50 P=1 | 0.981x | ±3% |
-| `PING` c=50 P=64 | 1.031x | ±9% |
-| `PING` c=200 | 1.064x | ±7% |
-| `SET` d=65536 | 1.015x | ±5% |
-| `SET` d=262144 | 0.983x | ±4% |
-| `GET` d=65536 | 0.990x | ±4% |
-| `GET` d=262144 | 0.997x | ±3% |
+| `PING` c=1 | 1.000x | ±2% |
+| `PING` c=200 | 1.007x | ±5% |
+| `SET` d=65536 | 1.005x | ±4% |
+| `GET` d=65536 | 1.037x | ±6% |
+| `SET` d=262144 | **1.100x** | ±5% |
+| `GET` d=262144 | **1.129x** | ±3% |
 
-Every one of the eighteen scenarios landed between 0.967x and 1.085x, and in
-each case the spread is as large as the distance from 1.00. **Nothing here is
-distinguishable from noise.** Five reps at these spreads resolve about 5%, so
-what this rules out is a regression larger than that — not one smaller.
+Not a cost. Flat on small values and 10–13% *faster* at 256KB, which is where
+reading every ready connection before executing any of them has the most to
+batch. The 256KB rows are also the check that the single-reply bypass survived
+the rewrite: a large value copied through the arena rather than kept by
+reference would show there and nowhere else, and as a loss rather than a gain.
 
-Two cells are worth reading specifically rather than as part of the average. The
-256KB rows are flat at ±3–4%, which is the check that the single-reply bypass
-really was preserved: if a large value were being copied through the arena
-instead of kept by reference, it would show there and nowhere else. And P=64,
-which is the arena's heaviest use, is 1.031x — one shared array reused every
-cycle is, if anything, cheaper than a fresh buffer per batch.
+The B arm is the current tree, so it carries everything added since the phases,
+not the phases alone. What that amounts to is one thing — cross-keyspace type
+checking, measured separately below at roughly 1–2% — and the append-only file,
+which is off by default and does nothing when it is. So the phases themselves
+account for the gain and a little more.
+
+### What does cross-keyspace type checking cost?
+
+Every command now resolves its key against all the keyspaces before running, so
+a name means one thing and `DEL` deletes it. That is a lookup per keyspace on
+the way into every command, and the alternative — a directory mapping names to
+owners — was rejected on memory: a second map entry and a second copy of every
+key, which showed up immediately as the accounting estimate falling to 70% of
+real heap.
+
+Paired ratios, checking over not checking (`results/typecheck-darwin.csv`),
+cells with spread under 6%:
+
+| scenario | paired | spread |
+|---|---|---|
+| `PING` c=1 | 0.998x | ±4% |
+| `pipe` `PING` P=1 | 1.011x | ±5% |
+| `GET` d=65536 | 1.000x | ±4% |
+| `GET` d=262144 | 0.989x | ±4% |
+| `SET` d=8192 | 1.014x | ±3% |
+| `SET` d=65536 | 0.975x | ±3% |
+| `SET` d=262144 | 0.986x | ±4% |
+
+Between 0.975x and 1.014x, so on the order of one to two percent, at the edge of
+what five reps resolve. That is the price of a name meaning one thing.
 
 ### A three-rep pass got this backwards
 
@@ -219,7 +243,7 @@ from a third, with nothing else running. The lesson already in this file was the
 right one, and it is not enough on its own — reps fix sampling noise, and only
 an otherwise idle machine fixes the rest.
 
-## Four ways this harness produced confident, wrong numbers
+## Ways this harness produced confident, wrong numbers
 
 Recorded because each one looked like a result at the time.
 
@@ -236,6 +260,26 @@ implementations agreeing to within 2% on every row, which read as a finding
 rather than as a fault. `start_server` now asserts via `lsof` that the process
 owning the port is the one it just launched, and exits rather than measuring the
 wrong server.
+
+**A subshell ate the port counter, twice.** The A/B script
+assigned ports with `PORT_A=$(start_one ...)`. Command substitution runs in a
+subshell, so `PORT=$((PORT+1))` advanced a copy and the parent's counter never
+moved: both arms were handed the same port, the second server failed to bind,
+and every one of its readings was zero. This is the *first* failure in this
+list, written down in this very file, reproduced verbatim in a new script
+written after reading it.
+
+What made it worse than a repeat is that the guard did not catch it. The
+ownership assertion compared process names by substring, so `memkv` matched a
+running `memkv-base` and the arm that had failed to bind was reported as
+verified. The run completed, exited zero, and produced a full table of paired
+ratios between 0.967x and 1.085x — a reassuringly null result, because it was
+one binary compared against itself. It was published as evidence that the
+read/execute/write phases cost nothing when threading is off, and that claim was
+withdrawn and re-measured.
+
+The guard now asserts that the pid owning the port is the pid just launched. A
+name can be coincidentally right; a pid cannot.
 
 **Single samples lie.** A one-shot comparison of the framing fix showed a 14.5%
 *regression*; five reps per side reversed the sign, with a spread of
@@ -262,7 +306,7 @@ Back-to-back suites exhaust it, `redis-benchmark` fails with "Cannot assign
 requested address", and hyperfine writes an empty file and moves on. The scripts
 now drain before each configuration and scale run counts to the socket budget.
 
-A fifth, in `run-offloopback.sh`: a server that failed to bind was skipped with a
+One more, in `run-offloopback.sh`: a server that failed to bind was skipped with a
 message while the script still exited zero, so CI reported success with a hole in
 the results. Missing servers now fail the run.
 
@@ -278,7 +322,8 @@ auditable. Read them in this order:
 | `results/memory-fair.csv`, `results/latency-fair.csv` | **authoritative.** darwin memory and latency percentiles |
 | `results/hyperfine3/` | **authoritative.** per-config noise floors, 12/12 cells, drained between configs |
 | `results/iothreads-darwin.csv` | **authoritative.** darwin, `-io-threads` 1/2/4/8, 5 reps. Loopback, so see the caveat above |
-| `results/phases-vs-inline-darwin.csv` | **authoritative.** darwin, the loop before and after phases, interleaved arms, 5 reps |
+| `results/phases-vs-inline-darwin.csv` | **authoritative.** darwin, the loop before and after phases, interleaved arms, 5 reps. Re-measured after the port bug above invalidated the first run |
+| `results/typecheck-darwin.csv` | **authoritative.** darwin, cross-keyspace type checking on and off, interleaved arms, 5 reps |
 | `results/linux3/` | superseded. Linux post-`TCP_NODELAY`, 4 servers only |
 | `results/linux2/` | superseded. Linux pre-`TCP_NODELAY` — the run where the Nagle stall was found |
 | `results/matrix.csv`, `results/memory.csv`, `results/memtier.csv` | superseded. Corrected harness, but before `TCP_NODELAY`, so unfair to the event loop |

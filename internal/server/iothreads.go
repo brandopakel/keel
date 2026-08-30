@@ -38,10 +38,10 @@ import (
 //
 // The phases replaced the loop for everyone, not only for a server that asks
 // for threads, so the default path is not the code any earlier measurement was
-// taken against. That is checked rather than assumed: bench/run-ab.sh runs the
-// commit before this one against the commit after with the arms alternating rep
-// by rep, and all eighteen scenarios came back between 0.967x and 1.085x with
-// spreads as wide as the deviations. Free, to the ~5% those runs can resolve.
+// taken against. That is measured rather than assumed: bench/run-ab.sh runs the
+// tree before the phases against the tree after, arms alternating rep by rep.
+// Flat on small values and 10-13% faster at 256KB, which is where reading every
+// ready connection before executing any of them has the most to batch.
 //
 // It is off by default because the measurements are mixed. On darwin/arm64,
 // medians of five runs, the results that held steady inside the noise floor:

@@ -26,8 +26,21 @@ func EvalAndResponse(cmd *MemKVCmd, c io.ReadWriter) error {
 	var res []byte
 
 	// Anything a command wants written to the log instead of itself is staged
-	// while it runs, so the slate has to be clean before it starts.
+	// while it runs, so the slate has to be clean before it starts. This comes
+	// first because the type check below reads keys, and reading a key whose
+	// expiry has passed reaps it - a removal that has to reach the log even
+	// though the command it happened under went on to be refused.
 	aofBegin()
+
+	// A name may only mean one thing at a time, and the stores cannot enforce
+	// that individually because none of them knows about the others. Checked
+	// before execution, so a refused command has not half-run.
+	if err := checkKeyTypes(cmd); err != nil {
+		res = Encode(err, false)
+		aofCommit(cmd, res)
+		_, werr := c.Write(res)
+		return werr
+	}
 
 	switch cmd.Cmd {
 	case "PING":

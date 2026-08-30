@@ -2,11 +2,23 @@ package core
 
 import (
 	"errors"
-	"memkv/internal/constant"
 	"strconv"
+	"strings"
 	"time"
+
+	"memkv/internal/constant"
+	"memkv/internal/data_structure"
 )
 
+// cmdSET implements SET key value [EX seconds | PX milliseconds].
+//
+// The expiry keyword used to be skipped over entirely: whatever sat in args[2]
+// was ignored and args[3] was read as a number of seconds. So PX asked for
+// milliseconds and got seconds, a thousand times longer than the caller wanted
+// and silently - the reply was still OK - and a keyword that meant nothing at
+// all was accepted just as readily. Anything past EX and PX is refused rather
+// than guessed at, which is the difference between a command this server does
+// not implement and a command it appears to implement and does not.
 func cmdSET(args []string) []byte {
 	if len(args) < 2 || len(args) == 3 || len(args) > 4 {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'SET' command"), false)
@@ -18,11 +30,24 @@ func cmdSET(args []string) []byte {
 	key, value = args[0], args[1]
 	oType, oEnc := deduceTypeString(value)
 	if len(args) > 2 {
-		ttlSec, err := strconv.ParseInt(args[3], 10, 64)
+		amount, err := strconv.ParseInt(args[3], 10, 64)
 		if err != nil {
 			return Encode(errors.New("(error) ERR value is not an integer or out of range"), false)
 		}
-		ttlMs = ttlSec * 1000
+		switch strings.ToUpper(args[2]) {
+		case "EX":
+			ttlMs = amount * 1000
+		case "PX":
+			ttlMs = amount
+		default:
+			return Encode(errors.New("(error) ERR syntax error"), false)
+		}
+		if amount <= 0 {
+			// Redis's wording. A TTL already in the past is a delete dressed up
+			// as a write, and answering OK to it would be the wrong answer to
+			// two different questions at once.
+			return Encode(errors.New("(error) ERR invalid expire time in 'set' command"), false)
+		}
 	}
 
 	dictStore.Put(key, dictStore.NewObj(value, ttlMs, oType, oEnc))
@@ -76,15 +101,20 @@ func cmdTTL(args []string) []byte {
 	return Encode(int64(remainMs/1000), false)
 }
 
+// cmdDEL removes keys from whichever keyspace holds them.
+//
+// It used to look only in the string dictionary, so DEL on a set, a sorted set,
+// a filter or a sketch reported nothing deleted and deleted nothing - and where
+// a name was held by two types at once it removed the string and left the rest.
+// A delete that cannot delete is worse than a missing command, because it
+// answers.
 func cmdDEL(args []string) []byte {
 	delCount := 0
-
 	for _, key := range args {
-		if ok := dictStore.Del(key); ok {
+		if data_structure.DeleteAnywhere(key) {
 			delCount++
 		}
 	}
-
 	return Encode(delCount, false)
 }
 

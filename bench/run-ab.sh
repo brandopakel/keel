@@ -27,27 +27,45 @@ PORT=${PORT_BASE:-17000}
 
 echo "server,suite,command,conns,pipeline,datasize,rep,rps,p50_ms" > "$OUT"
 
-start_one() { # $1=binary $2=args $3=label ; echoes the port
+SRV_PIDS=""
+SRV_PORT=""
+
+# start_one sets SRV_PORT rather than echoing it.
+#
+# It echoed it once, and the caller read it with p=$(start_one ...). Command
+# substitution runs in a subshell, so PORT=$((PORT+1)) advanced a copy and the
+# parent's counter never moved: both arms were handed the same port, the second
+# server failed to bind, and every one of its readings came back zero. The exit
+# 1 below could not help either, because it exited the subshell and left the
+# script running. This is the first failure documented in README.md, reproduced
+# in a new script twelve years of hindsight later - which is why the ownership
+# assertion is worth keeping even when the port logic looks obviously fine.
+start_one() { # $1=binary $2=args $3=label ; sets SRV_PORT
   local bin=$1 args=$2 label=$3
   PORT=$((PORT+1))
   local p=$PORT
+  SRV_PORT=$p
   # shellcheck disable=SC2086
   "$bin" -port "$p" $args >"/tmp/ab-$label.log" 2>&1 &
+  local pid=$!
+  SRV_PIDS="$SRV_PIDS $pid"
   local ready=no
   for _ in $(seq 1 80); do
     if [ "$(redis-cli -h 127.0.0.1 -p "$p" ping 2>/dev/null)" = "PONG" ]; then ready=yes; break; fi
     perl -e 'select(undef,undef,undef,0.1)'
   done
   [ "$ready" = yes ] || { echo "FATAL: $label never bound :$p" >&2; exit 1; }
-  # The process answering must be the one just started. A failed bind leaves the
-  # process alive with no listener, which is how this harness once measured one
-  # server four times under four different labels.
+  # The process answering on this port must be exactly the one just launched.
+  #
+  # Comparing process names was not enough. It compared them by substring, so
+  # "memkv" matched a running "memkv-base" and an arm that had failed to bind
+  # was accepted as verified - which is how a whole A/B run came to measure one
+  # binary against itself and report the reassuring answer. The pid is the thing
+  # that cannot be coincidentally right.
   local owner; owner=$(lsof -ti:"$p" 2>/dev/null | head -1)
-  local comm;  comm=$(ps -o comm= -p "$owner" 2>/dev/null)
-  echo "$comm" | grep -q "$(basename "$bin")" \
-    || { echo "FATAL: :$p owned by $comm, expected $(basename "$bin")" >&2; exit 1; }
+  [ "$owner" = "$pid" ] \
+    || { echo "FATAL: :$p owned by pid $owner, expected the $label just started (pid $pid)" >&2; exit 1; }
   echo "    [$label on :$p pid=$owner verified]" >&2
-  echo "$p"
 }
 
 bench_once() { # $1=port ; args...
@@ -72,9 +90,11 @@ pair() {
   done
 }
 
-PORT_A=$(start_one "$BIN_A" "$ARGS_A" "$LABEL_A")
-PORT_B=$(start_one "$BIN_B" "$ARGS_B" "$LABEL_B")
-trap 'kill %1 %2 2>/dev/null' EXIT
+start_one "$BIN_A" "$ARGS_A" "$LABEL_A"; PORT_A=$SRV_PORT
+start_one "$BIN_B" "$ARGS_B" "$LABEL_B"; PORT_B=$SRV_PORT
+[ "$PORT_A" != "$PORT_B" ] || { echo "FATAL: both arms on :$PORT_A" >&2; exit 1; }
+# shellcheck disable=SC2064
+trap "kill $SRV_PIDS 2>/dev/null" EXIT
 
 # Concurrency: the phased loop reads every ready connection before executing any
 # of them, where the old one finished each connection before looking at the

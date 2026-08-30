@@ -124,6 +124,24 @@ func (d *Dict) Put(k string, obj *Obj) {
 	EnforceLimits()
 }
 
+// Has reports whether a live key is present.
+//
+// A key whose expiry has passed is reaped here rather than reported, because
+// the caller is asking who owns the name and a dead key owns nothing - leaving
+// it would mean refusing to let another type take a name that is in truth free.
+func (d *Dict) Has(k string) bool {
+	obj, ok := d.dictStore[k]
+	if !ok {
+		return false
+	}
+	if d.HasExpired(obj) {
+		d.Del(k)
+		noteRemoval(d, k)
+		return false
+	}
+	return true
+}
+
 // Len reports how many keys are stored.
 func (d *Dict) Len() int { return len(d.dictStore) }
 
