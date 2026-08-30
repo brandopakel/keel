@@ -105,6 +105,17 @@ func EvalAndResponse(cmd *MemKVCmd, c io.ReadWriter) error {
 		res = cmdCMSINCRBY(cmd.Args)
 	case "CMS.QUERY":
 		res = cmdCMSQUERY(cmd.Args)
+	// Morris counter
+	case "MORRIS.INITBYDIM":
+		res = cmdMORRISINITBYDIM(cmd.Args)
+	case "MORRIS.INITBYPROB":
+		res = cmdMORRISINITBYPROB(cmd.Args)
+	case "MORRIS.INCRBY":
+		res = cmdMORRISINCRBY(cmd.Args)
+	case "MORRIS.QUERY":
+		res = cmdMORRISQUERY(cmd.Args)
+	case "MORRIS.INFO":
+		res = cmdMORRISINFO(cmd.Args)
 	// HyperLogLog
 	case "PFADD":
 		res = cmdPFADD(cmd.Args)

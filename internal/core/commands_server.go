@@ -56,6 +56,9 @@ func entryBytesAnywhere(key string) (uint64, bool) {
 	if n, ok := cmsStore.EntryBytes(key); ok {
 		return n, true
 	}
+	if n, ok := morrisStore.EntryBytes(key); ok {
+		return n, true
+	}
 	if n, ok := hllStore.EntryBytes(key); ok {
 		return n, true
 	}

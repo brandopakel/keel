@@ -78,6 +78,11 @@ func (c *CMS) Count(item string) uint32 {
 
 // MemUsage estimates the bytes held. The counter table is fixed at creation, so
 // this never changes for a given sketch.
-func (c *CMS) MemUsage() uint64 {
-	return cmsBaseBytes + uint64(len(c.counter))*4
+func (c *CMS) MemUsage() uint64 { return CMSMemUsageFor(c.width, c.depth) }
+
+// CMSMemUsageFor reports what a sketch of these dimensions would cost without
+// building one, so that MORRIS.INFO can quote the comparison it is making
+// without allocating the megabytes it is quoting.
+func CMSMemUsageFor(w uint32, d uint32) uint64 {
+	return cmsBaseBytes + uint64(w)*uint64(d)*4
 }

@@ -11,13 +11,14 @@ import (
 // accounted, and a keyspace full of 12KB HyperLogLogs could sail past
 // -maxmemory without anything noticing.
 var (
-	dictStore *data_structure.Dict
-	zsetStore *data_structure.Keyed[*data_structure.ZSet]
-	setStore  *data_structure.Keyed[data_structure.Set]
-	sbStore   *data_structure.Keyed[*data_structure.SBChain]
-	cmsStore  *data_structure.Keyed[*data_structure.CMS]
-	hllStore  *data_structure.Keyed[*data_structure.HLL]
-	cfStore   *data_structure.Keyed[*data_structure.CuckooFilter]
+	dictStore   *data_structure.Dict
+	zsetStore   *data_structure.Keyed[*data_structure.ZSet]
+	setStore    *data_structure.Keyed[data_structure.Set]
+	sbStore     *data_structure.Keyed[*data_structure.SBChain]
+	cmsStore    *data_structure.Keyed[*data_structure.CMS]
+	morrisStore *data_structure.Keyed[*data_structure.Morris]
+	hllStore    *data_structure.Keyed[*data_structure.HLL]
+	cfStore     *data_structure.Keyed[*data_structure.CuckooFilter]
 )
 
 func init() {
@@ -34,6 +35,7 @@ func ResetStores() {
 	setStore = data_structure.NewKeyed[data_structure.Set]("set")
 	sbStore = data_structure.NewKeyed[*data_structure.SBChain]("bloom")
 	cmsStore = data_structure.NewKeyed[*data_structure.CMS]("cms")
+	morrisStore = data_structure.NewKeyed[*data_structure.Morris]("morris")
 	hllStore = data_structure.NewKeyed[*data_structure.HLL]("hll")
 	cfStore = data_structure.NewKeyed[*data_structure.CuckooFilter]("cuckoo")
 
@@ -42,6 +44,7 @@ func ResetStores() {
 	data_structure.RegisterKeyspace(setStore)
 	data_structure.RegisterKeyspace(sbStore)
 	data_structure.RegisterKeyspace(cmsStore)
+	data_structure.RegisterKeyspace(morrisStore)
 	data_structure.RegisterKeyspace(hllStore)
 	data_structure.RegisterKeyspace(cfStore)
 }

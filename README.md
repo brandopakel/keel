@@ -26,12 +26,14 @@ low-level design decisions underneath a real database.
   - Skip list, for sorted sets (`ZADD`, `ZRANK`, …)
   - Geohash, for geospatial indexing (`GEOADD`, `GEODIST`, …)
 - **Probabilistic data structures:**
-  - Scalable Bloom filter — set membership in little memory (`BF.ADD`, `BF.EXISTS`)
+  - Scalable Bloom filter — set membership in little memory (`BF.MADD`, `BF.EXISTS`)
   - Count-Min sketch — frequency estimation over a stream (`CMS.INCRBY`, `CMS.QUERY`)
   - HyperLogLog — distinct-element counting in a fixed 12KB, whatever the
     cardinality, within about 0.8% (`PFADD`, `PFCOUNT`, `PFMERGE`)
   - Cuckoo filter — set membership that supports deletion, which a Bloom filter
     cannot, in less space for the same accuracy (`CF.ADD`, `CF.EXISTS`, `CF.DEL`)
+  - Morris counter — counting to four billion in a single byte rather than
+    four, within 20% (`MORRIS.INCRBY`, `MORRIS.QUERY`)
 - **Bounded by memory, not just by key count.** `-maxmemory 512mb` holds the
   keyspace to a byte budget, so the number of keys adapts to how big they are.
   It covers **every** type, not only strings: one 1MB budget holds 1733 string
@@ -102,10 +104,11 @@ darwin. Figures are medians of repeated runs. Method and raw data are in
 | **Keyspace** | `DBSIZE` |
 | **Server** | `INFO`, `MEMORY USAGE` |
 | **Sorted Set**| `ZADD`, `ZRANK`, `ZREM`, `ZSCORE`, `ZCARD` |
-| **Set** | `SADD`, `SREM`, `SCARD`, `SMEMBERS`, `SISMEMBER`, `SRAND`, `SPOP` |
+| **Set** | `SADD`, `SREM`, `SCARD`, `SMEMBERS`, `SISMEMBER`, `SMISMEMBER`, `SRAND`, `SPOP` |
 | **Geospatial** | `GEOADD`, `GEODIST`, `GEOHASH`, `GEOSEARCH`, `GEOPOS` |
 | **Bloom Filter**| `BF.RESERVE`, `BF.INFO`, `BF.MADD`, `BF.EXISTS`, `BF.MEXISTS` |
 | **Count-Min** | `CMS.INITBYDIM`, `CMS.INITBYPROB`, `CMS.INCRBY`, `CMS.QUERY` |
+| **Morris Counter** | `MORRIS.INITBYDIM`, `MORRIS.INITBYPROB`, `MORRIS.INCRBY`, `MORRIS.QUERY`, `MORRIS.INFO` |
 | **HyperLogLog** | `PFADD`, `PFCOUNT`, `PFMERGE` |
 | **Cuckoo Filter** | `CF.RESERVE`, `CF.ADD`, `CF.ADDNX`, `CF.EXISTS`, `CF.MEXISTS`, `CF.DEL`, `CF.COUNT`, `CF.INFO` |
 
@@ -125,7 +128,19 @@ and deep pipelining.
       Estimates track real Redis to within the error bound of both. Redis's
       sparse encoding, which costs a few hundred bytes instead of 12KB for keys
       with few members, is not implemented.
-- [ ] Morris counter
+- [x] Morris counter — approximate counting in one byte where an exact counter
+      needs four. The cell holds an exponent and raises it only with
+      probability (1+a)^-c, which makes the estimate ((1+a)^c - 1)/a unbiased
+      for any number of increments; a = 0.08 puts eight bits within 3% of the
+      range of a Count-Min sketch's 32-bit cell, for 20% relative error per
+      counter. Exposed as the cells of a hashed counting table, since that is
+      the only place the saving is real — one counter per key would be swamped
+      by the ~100 bytes a key costs anyway. Rows are combined by median, not
+      the minimum a Count-Min sketch takes: a minimum is right only for exact
+      cells, and over noisy ones it finds the unluckiest row rather than the
+      cleanest. Measured, the minimum reads 21% low at depth 5 and 26% low at
+      depth 9 — worse the more rows are added, which is backwards — while the
+      median stays within 2%.
 - [x] Cuckoo filter — 16-bit fingerprints, four to a bucket, partial-key cuckoo
       hashing. Measured: 96–98% load factor, 16.3–16.7 bits per item at a
       0.009–0.013% false positive rate, against 17.7 bits per item for a Bloom
