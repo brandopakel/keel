@@ -117,9 +117,39 @@ func cmdINFO(args []string) []byte {
 	if want("stats") {
 		fmt.Fprintf(&b, "# Stats\r\nevicted_keys:%d\r\n\r\n", data_structure.Evicted())
 	}
+	if want("persistence") {
+		base, current, rewrites, keys := AOFStats()
+		enabled := 0
+		if AOFEnabled() {
+			enabled = 1
+		}
+		fmt.Fprintf(&b, "# Persistence\r\naof_enabled:%d\r\naof_base_size:%d\r\naof_current_size:%d\r\n",
+			enabled, base, current)
+		fmt.Fprintf(&b, "aof_rewrites:%d\r\naof_keys_at_last_rewrite:%d\r\n\r\n", rewrites, keys)
+	}
 	if want("keyspace") {
 		fmt.Fprintf(&b, "# Keyspace\r\ndb0:keys=%d\r\n\r\n", data_structure.TotalKeys())
 	}
 
 	return Encode(b.String(), false)
+}
+
+// cmdBGREWRITEAOF rewrites the append-only file.
+//
+// The name is Redis's, and so is what it does, but not how: Redis forks a child
+// and keeps serving, and this cannot - a Go runtime does not survive a bare
+// fork. So the "BG" is currently a promise the implementation does not keep,
+// and the reply says so rather than leaving a caller to discover it from a
+// latency graph. Keeping the name is still right: it is what every client,
+// script and runbook already calls, and a server that answered only to
+// REWRITEAOF would be harder to operate for no gain in honesty that this reply
+// does not already provide.
+func cmdBGREWRITEAOF(args []string) []byte {
+	if len(args) != 0 {
+		return Encode(errors.New("(error) ERR wrong number of arguments for 'BGREWRITEAOF' command"), false)
+	}
+	if err := RewriteAOF(); err != nil {
+		return Encode(fmt.Errorf("ERR %w", err), false)
+	}
+	return Encode("Background append only file rewriting started (synchronously: this server does not fork)", true)
 }

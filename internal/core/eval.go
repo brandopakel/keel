@@ -67,6 +67,12 @@ func EvalAndResponse(cmd *MemKVCmd, c io.ReadWriter) error {
 		res = cmdMEMORY(cmd.Args)
 	case "INFO":
 		res = cmdINFO(cmd.Args)
+	case "BGREWRITEAOF":
+		res = cmdBGREWRITEAOF(cmd.Args)
+	case "MEMKV.DUMP":
+		res = cmdMEMKVDUMP(cmd.Args)
+	case "MEMKV.RESTORE":
+		res = cmdMEMKVRESTORE(cmd.Args)
 	// Set
 	case "SADD":
 		res = cmdSADD(cmd.Args)

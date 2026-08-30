@@ -87,6 +87,23 @@ var (
 	AOFFsync    = FsyncEverySec
 )
 
+// When the log is rewritten automatically.
+//
+// The percentage is measured against the size the log was after the last
+// rewrite, which is roughly the size the data needs. Growth past that is
+// history: commands superseded by later ones, and keys since deleted. 100 means
+// rewrite once the log has doubled, which is Redis's default and the same
+// reasoning - half the file being dead weight is worth one pass to be rid of.
+//
+// The minimum stops a small server rewriting constantly. A 64MB log takes a
+// moment to replay and costs nothing to keep, so doubling from 1KB to 2KB is
+// not worth a rewrite even though it is 100% growth. Zero percentage turns
+// automatic rewriting off; BGREWRITEAOF still works.
+var (
+	AOFAutoRewritePercentage = 100
+	AOFAutoRewriteMinSize    = int64(64 * 1024 * 1024)
+)
+
 // How often the log is flushed to disk.
 //
 //	FsyncAlways   before replying, so an acknowledged write is a durable one

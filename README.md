@@ -73,6 +73,11 @@ unchanged — see [Relationship to upstream](#relationship-to-upstream).
   the `SREM` it turned out to be, `EXPIRE` as an absolute instant, and evicted
   and expired keys as `DEL` — so a restart reconstructs the keyspace exactly,
   down to identical estimates from the probabilistic types.
+- **The log is rewritten before it runs away.** `BGREWRITEAOF`, or automatically
+  once the file has doubled, replaces the history with the shortest log that
+  produces the current state — measured, 649KB of traffic down to 17KB. The
+  filters and sketches have no command that rebuilds them, so they are written
+  as bytes; everything else is one command per key.
 - **Graceful shutdown.** SIGINT or SIGTERM unwinds the event loop so its deferred
   cleanup actually runs, rather than exiting the process from under it.
 
@@ -137,7 +142,7 @@ darwin. Figures are medians of repeated runs. Method and raw data are in
 | **General** | `PING` |
 | **String** | `SET`, `GET`, `DEL`, `TTL`, `EXPIRE`, `PEXPIREAT`, `INCR`, `LCS` |
 | **Keyspace** | `DBSIZE` |
-| **Server** | `INFO`, `MEMORY USAGE` |
+| **Server** | `INFO`, `MEMORY USAGE`, `BGREWRITEAOF`, `MEMKV.DUMP`, `MEMKV.RESTORE` |
 | **Sorted Set**| `ZADD`, `ZRANK`, `ZREM`, `ZSCORE`, `ZCARD` |
 | **Set** | `SADD`, `SREM`, `SCARD`, `SMEMBERS`, `SISMEMBER`, `SMISMEMBER`, `SRAND`, `SPOP` |
 | **Geospatial** | `GEOADD`, `GEODIST`, `GEOHASH`, `GEOSEARCH`, `GEOPOS` |
@@ -156,10 +161,10 @@ pipelines, and reads and writes strings, sets and TTLs, and an unsupported
 command comes back as an error without dropping the connection. The gaps below
 are the ones that decide whether it is usable for anything of yours.
 
-- **Persistence is opt-in and the log is never rewritten.** `-appendonly` makes
-  a restart safe, but the file records every write forever, so it grows with
-  traffic rather than with the size of the data. Without the flag, a restart is
-  still a flush.
+- **Persistence is opt-in, and rewriting it stops the server.** `-appendonly`
+  makes a restart safe and the log no longer grows without bound, but a rewrite
+  runs on the thread that serves clients — 186ms of silence per million keys,
+  measured. Without the flag, a restart is still a flush.
 - **`LCS` does not type-check its keys.** Every other command answers
   `WRONGTYPE` for a name held by another type; `LCS` treats such a key as an
   empty string, the same way it treats a missing one.
@@ -270,6 +275,27 @@ choice. Read it as the reasoning rather than the changelog.
   valid decomposition of that same subsequence and can differ, because
   Redis's positions come from walking the table backwards and there is no
   table here.
+- **Rewriting the log** — `BGREWRITEAOF`, and automatically once the file has
+  grown past `-auto-aof-rewrite-percentage` of its size after the last one.
+  Without it the log records every write ever made, so it grows with traffic
+  rather than with data and startup slows for as long as the server runs. A
+  rewrite writes the shortest log producing the current state: one command per
+  key, built beside the old file and renamed over it, so a crash leaves one
+  whole log or the other and never a half-written one. Measured, 5000 writes to
+  one key go from 158,890 bytes to 32.
+
+  Five types have no command that rebuilds them. A HyperLogLog is 12KB of
+  registers arrived at by hashing items it deliberately never stored, and the
+  same is true of both filters and both sketches — their state is bounded and
+  their history is not, so a rewrite unable to write the state would have to
+  keep the history for exactly the keys where it grows fastest. They are written
+  as bytes through `MEMKV.RESTORE`, which is what that command is for.
+
+  It blocks, where Redis forks: measured at 10ms for ten thousand keys, 186ms
+  for a million, of which about 10ms is the fsync. A Go runtime does not survive
+  a bare fork, so the choice was between this and hand-building the buffering a
+  fork gives for free. Hence the automatic trigger not firing below 64MB.
+
 - **Append-only persistence** — `-appendonly`, replayed at startup, with
   `always` / `everysec` / `no` fsync. The log is flushed and synced between
   executing a cycle's commands and writing its replies, so under `always` a
@@ -331,11 +357,11 @@ choice. Read it as the reasoning rather than the changelog.
 
 Roughly in the order the gaps matter.
 
-**Durability.** The append-only file is never rewritten, so it grows with
-traffic rather than with the data and startup slows for as long as the server
-runs. The fix is Redis's: periodically write the shortest log producing the
-current state, then swap it in. That machinery is also what a snapshot format
-would be built from.
+**Durability.** A rewrite blocks the event loop for as long as it takes to walk
+the keyspace — 186ms per million keys — because Redis's answer is to fork and a
+Go runtime does not survive one. The fix without forking is to buffer the writes
+that arrive during a rewrite and apply them at the end, which is most of the
+machinery a snapshot format would need anyway.
 
 **Memory.** Expiry is lazy only — a key with a TTL is reclaimed when something
 next looks at it, so five hundred keys given a one-second TTL and then left

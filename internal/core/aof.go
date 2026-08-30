@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"strconv"
 	"time"
@@ -52,6 +53,15 @@ import (
 // Redis arrives at all five of these rules, by the same route.
 type aofState struct {
 	file *os.File
+	// path is the file the descriptor above was opened on.
+	//
+	// Kept here rather than read from config when needed. A rewrite that took
+	// the path from config would write the new log wherever the setting
+	// currently points, which is not necessarily the file being appended to -
+	// so a caller that opened one path would have its rewrite land in another,
+	// leaving the first to grow forever and the second to be overwritten by
+	// something that never belonged to it.
+	path string
 	// buf holds what this cycle produced. Writes go to the file once per loop
 	// cycle rather than once per command: a command is a handful of bytes and a
 	// write syscall each would put the log in the same position the reply path
@@ -71,6 +81,16 @@ type aofState struct {
 	// into itself.
 	replaying bool
 	lastSync  time.Time
+
+	// baseSize is the file's size after the last rewrite, and written what has
+	// been appended since. Their ratio is what the automatic rewrite triggers
+	// on: what matters is how much of the file is superseded, not how big it
+	// is, and only a comparison against the size the data actually needs can
+	// tell those apart.
+	baseSize int64
+	written  int64
+	rewrites int
+	lastKeys int
 }
 
 var aof aofState
@@ -92,6 +112,7 @@ var writeCommands = map[string]bool{
 	"MORRIS.INITBYDIM": true, "MORRIS.INITBYPROB": true, "MORRIS.INCRBY": true,
 	"PFADD": true, "PFMERGE": true,
 	"CF.RESERVE": true, "CF.ADD": true, "CF.ADDNX": true, "CF.DEL": true,
+	"MEMKV.RESTORE": true,
 }
 
 // AOFEnabled reports whether the log is on.
@@ -105,7 +126,20 @@ func OpenAOF(path string) error {
 		return err
 	}
 	aof.file = f
+	aof.path = path
 	aof.lastSync = time.Now()
+	// Counters describe this open file, not whatever the last one did, so they
+	// start again with it. Carrying them over would make a fresh log report
+	// rewrites it has never had.
+	aof.rewrites = 0
+	aof.lastKeys = 0
+	// Whatever is already on disk is the base the growth trigger measures
+	// against, so a server restarted onto an existing log does not immediately
+	// decide the log has grown infinitely.
+	if info, err := f.Stat(); err == nil {
+		aof.baseSize = info.Size()
+	}
+	aof.written = 0
 	data_structure.OnRemove = func(keyspace, key string) {
 		if aof.file != nil && !aof.replaying {
 			aof.extra = append(aof.extra, []string{"DEL", key})
@@ -126,8 +160,14 @@ func CloseAOF() error {
 		err = cerr
 	}
 	aof.file = nil
+	aof.path = ""
 	data_structure.OnRemove = nil
 	return err
+}
+
+// aofLog reports something about the log that a client did not ask for.
+func aofLog(format string, args ...interface{}) {
+	log.Printf("appendonly: "+format, args...)
 }
 
 // aofRecord stages one command to be written for the command being executed.
@@ -194,14 +234,26 @@ func appendCommand(dst []byte, parts ...string) []byte {
 // ordering that makes appendfsync always mean what it says: a client is told
 // its write succeeded only once the write is on disk. Doing it after the
 // replies would be faster and would be lying.
-func FlushAOF() error { return flushAOF(false) }
+func FlushAOF() error {
+	if err := flushAOF(false); err != nil {
+		return err
+	}
+	// Checked here rather than per command: it is a comparison of two numbers,
+	// but the rewrite it can start is a pass over the whole keyspace, and doing
+	// that between two commands of one pipelined batch would stall a client
+	// mid-batch for no reason.
+	maybeRewrite()
+	return nil
+}
 
 func flushAOF(closing bool) error {
 	if aof.file == nil || (len(aof.buf) == 0 && !closing) {
 		return nil
 	}
 	if len(aof.buf) > 0 {
-		if _, err := aof.file.Write(aof.buf); err != nil {
+		n, err := aof.file.Write(aof.buf)
+		aof.written += int64(n)
+		if err != nil {
 			return err
 		}
 		aof.buf = aof.buf[:0]

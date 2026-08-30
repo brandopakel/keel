@@ -142,6 +142,27 @@ func (d *Dict) Has(k string) bool {
 	return true
 }
 
+// Keys lists every key held, expired ones included: a rewrite reads each one
+// through Peek, which is where the expiry is noticed.
+func (d *Dict) Keys() []string {
+	keys := make([]string, 0, len(d.dictStore))
+	for k := range d.dictStore {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// Peek returns the object at a key without recording an access and without
+// reaping it, for a caller that is reading the keyspace rather than using it.
+// An expired key reads as absent, so a rewrite does not carry it forward.
+func (d *Dict) Peek(k string) *Obj {
+	obj, ok := d.dictStore[k]
+	if !ok || d.HasExpired(obj) {
+		return nil
+	}
+	return obj
+}
+
 // Len reports how many keys are stored.
 func (d *Dict) Len() int { return len(d.dictStore) }
 

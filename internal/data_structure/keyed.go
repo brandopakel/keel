@@ -66,6 +66,18 @@ func (k *Keyed[T]) Exists(key string) bool {
 	return ok
 }
 
+// Keys lists every key held, for a rewrite that has to walk the whole store.
+// The order is a map's, which is to say arbitrary and different every time -
+// which is fine, because a log is replayed as a whole and the keys in it do not
+// interact.
+func (k *Keyed[T]) Keys() []string {
+	keys := make([]string, 0, len(k.items))
+	for key := range k.items {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
 // Has is Exists under the name the Keyspace interface uses.
 func (k *Keyed[T]) Has(key string) bool { return k.Exists(key) }
 

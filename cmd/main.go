@@ -39,6 +39,8 @@ var (
 	appendOnly     bool
 	appendFilename string
 	appendFsync    string
+	aofRewritePct  int
+	aofRewriteMin  string
 )
 
 func init() {
@@ -65,6 +67,11 @@ func init() {
 		"where that log lives")
 	flag.StringVar(&appendFsync, "appendfsync", config.AOFFsync,
 		"how often the log reaches disk: always | everysec | no")
+	flag.IntVar(&aofRewritePct, "auto-aof-rewrite-percentage", config.AOFAutoRewritePercentage,
+		"rewrite the log once it has grown this much past its size after the last "+
+			"rewrite; 0 disables automatic rewriting")
+	flag.StringVar(&aofRewriteMin, "auto-aof-rewrite-min-size", "64mb",
+		"never rewrite automatically below this size")
 	flag.IntVar(&ioThreads, "io-threads", config.IOThreads,
 		"threads that read, parse and write sockets, including the event loop's own; "+
 			"command execution stays on one thread whatever this is")
@@ -93,6 +100,16 @@ func init() {
 	config.AOFEnabled = appendOnly
 	config.AOFFileName = appendFilename
 	config.AOFFsync = appendFsync
+
+	rewriteMin, err := parseSize(aofRewriteMin)
+	if err != nil {
+		log.Fatalf("bad -auto-aof-rewrite-min-size %q: %v", aofRewriteMin, err)
+	}
+	if aofRewritePct < 0 {
+		log.Fatalf("-auto-aof-rewrite-percentage must not be negative, got %d", aofRewritePct)
+	}
+	config.AOFAutoRewritePercentage = aofRewritePct
+	config.AOFAutoRewriteMinSize = int64(rewriteMin)
 	switch evictPolicy {
 	case "lru":
 		config.EvictStrategy = config.LRU
