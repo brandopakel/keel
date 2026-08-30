@@ -34,6 +34,7 @@ var (
 	lfuLogFactor   int
 	lfuDecayPeriod int
 	maxMemory      string
+	lcsMaxCells    uint64
 )
 
 func init() {
@@ -52,6 +53,8 @@ func init() {
 		"how slowly the LFU access counter rises; higher spans more accesses in 8 bits")
 	flag.IntVar(&lfuDecayPeriod, "lfu-decay-period", config.LFUDecayPeriod,
 		"accesses before an idle LFU counter drops by one; 0 disables forgetting")
+	flag.Uint64Var(&lcsMaxCells, "lcs-max-cells", config.LCSMaxCells,
+		"largest len(key1)*len(key2) LCS will attempt; 0 is unbounded")
 	flag.Parse()
 
 	parsed, err := parseSize(maxMemory)
@@ -63,6 +66,7 @@ func init() {
 	config.LRUSamples = lruSamples
 	config.LFULogFactor = lfuLogFactor
 	config.LFUDecayPeriod = lfuDecayPeriod
+	config.LCSMaxCells = lcsMaxCells
 	switch evictPolicy {
 	case "lru":
 		config.EvictStrategy = config.LRU

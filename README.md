@@ -50,6 +50,12 @@ low-level design decisions underneath a real database.
   recently-used keys against 49% for random. LFU is the one to reach for when a
   scan would otherwise flush the cache: streaming 2000 read-once keys past a
   1000-key cache leaves LRU holding 1 of its 500 hot keys, and LFU holding 496.
+- **Longest common subsequence in linear memory.** `LCS` compares two values the
+  way `diff` does. Redis fills an (n+1)(m+1) table to do it, which is 512MB of
+  transient allocation for two 11KB values and exactly where Redis gives up.
+  Hirschberg's algorithm recovers the same subsequence from two rows instead:
+  two 10KB values measured 1.09MB against the 400MB the table alone would have
+  been, which turns the limit from a memory one into a time budget you can set.
 - **Graceful shutdown.** SIGINT or SIGTERM unwinds the event loop so its deferred
   cleanup actually runs, rather than exiting the process from under it.
 
@@ -100,7 +106,7 @@ darwin. Figures are medians of repeated runs. Method and raw data are in
 | Category | Commands |
 | :--- | :--- |
 | **General** | `PING` |
-| **String** | `SET`, `GET`, `DEL`, `TTL`, `EXPIRE`, `INCR` |
+| **String** | `SET`, `GET`, `DEL`, `TTL`, `EXPIRE`, `INCR`, `LCS` |
 | **Keyspace** | `DBSIZE` |
 | **Server** | `INFO`, `MEMORY USAGE` |
 | **Sorted Set**| `ZADD`, `ZRANK`, `ZREM`, `ZSCORE`, `ZCARD` |
@@ -163,7 +169,20 @@ and deep pipelining.
       Covers every keyspace: strings, sets, sorted sets, Bloom and cuckoo
       filters, Count-Min sketches and HyperLogLogs share one budget, and
       eviction chooses between them on a common scale.
-- [ ] Longest Common Subsequence
+- [x] Longest Common Subsequence — `LCS key1 key2 [LEN] [IDX] [MINMATCHLEN n]
+      [WITHMATCHLEN]`, by Hirschberg's algorithm rather than the table Redis
+      builds. Working memory is 16·min(n,m) bytes rather than 4nm: two
+      10,000-byte values measured 1.09MB of allocation against a 400MB table.
+      What bounds the command is therefore time, not space. It is the only
+      command here whose cost is the product of two keys, and on a
+      single-threaded server that makes it the only one a client can use to
+      stall every other client, so the budget is an operator setting —
+      `-lcs-max-cells`, defaulting to where Redis itself stops. Checked against
+      a real Redis 8.10.1 over 2008 pairs and again over the wire: the length
+      and the returned subsequence agree on every one. The `IDX` ranges are one
+      valid decomposition of that same subsequence and can differ, because
+      Redis's positions come from walking the table backwards and there is no
+      table here.
 - [ ] Threaded socket I/O, in the style of Redis `io-threads` — parallelise
       reads, writes and parsing while command execution stays single-threaded.
       The large-value path is now within range of what one core can copy, which

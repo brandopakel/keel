@@ -53,4 +53,20 @@ var LFULogFactor = 10
 // Too short and frequency never accumulates, leaving LFU no better than LRU;
 // too long and the cache fills with keys that were popular once.
 var LFUDecayPeriod = 10000
+
+// LCSMaxCells bounds len(key1)*len(key2) for the LCS command, which is the
+// number of cell comparisons it performs. Zero removes the bound.
+//
+// The default is 134217728, which is where Redis stops: its LCS builds an
+// (n+1)(m+1) table of uint32 and refuses once that allocation would exceed
+// proto-max-bulk-len, 512MB by default. memkv does not build the table, so the
+// same figure is reached for an entirely different reason - it is a time
+// budget. Commands run on one thread, so an LCS does not merely take a while,
+// it takes the server away from every other client for the duration. Measured
+// at 410 million cells per second on darwin/arm64, the default is about 330ms
+// of stall in the worst case, which is a lot; it is set here to match what
+// Redis will answer rather than to be comfortable. Lower it if tail latency
+// matters more than accepting every input Redis accepts.
+var LCSMaxCells uint64 = 134217728
+
 var AOFFileName = "./memkv-master.aof"
