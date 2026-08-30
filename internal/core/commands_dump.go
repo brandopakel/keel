@@ -38,7 +38,11 @@ const (
 
 // dumpKey serialises whatever holds the key.
 func dumpKey(key string) ([]byte, bool) {
-	if obj := dictStore.Get(key); obj != nil && !dictStore.HasExpired(obj) {
+	// Peek, not Get. Get records an access and reaps an expired key, and this
+	// is called for every key of a rewrite: reading the keyspace would mark all
+	// of it recently used and leave eviction with no idea which keys anyone
+	// actually wanted. Dumping a key is not using it.
+	if obj := dictStore.Peek(key); obj != nil {
 		if s, ok := obj.Value.(string); ok {
 			return append([]byte{dumpTagString}, s...), true
 		}

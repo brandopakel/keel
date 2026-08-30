@@ -73,11 +73,12 @@ unchanged — see [Relationship to upstream](#relationship-to-upstream).
   the `SREM` it turned out to be, `EXPIRE` as an absolute instant, and evicted
   and expired keys as `DEL` — so a restart reconstructs the keyspace exactly,
   down to identical estimates from the probabilistic types.
-- **The log is rewritten before it runs away.** `BGREWRITEAOF`, or automatically
-  once the file has doubled, replaces the history with the shortest log that
-  produces the current state — measured, 649KB of traffic down to 17KB. The
-  filters and sketches have no command that rebuilds them, so they are written
-  as bytes; everything else is one command per key.
+- **The log is rewritten before it runs away, without stopping.**
+  `BGREWRITEAOF`, or automatically once the file has doubled, replaces the
+  history with the shortest log producing the current state — measured, 649KB
+  of traffic down to 17KB. The walk runs a slice per event-loop cycle rather
+  than all at once: rewriting 400,000 keys, the worst any other client waited
+  went from 103.8ms to **9.4ms**.
 - **Graceful shutdown.** SIGINT or SIGTERM unwinds the event loop so its deferred
   cleanup actually runs, rather than exiting the process from under it.
 
@@ -161,10 +162,8 @@ pipelines, and reads and writes strings, sets and TTLs, and an unsupported
 command comes back as an error without dropping the connection. The gaps below
 are the ones that decide whether it is usable for anything of yours.
 
-- **Persistence is opt-in, and rewriting it stops the server.** `-appendonly`
-  makes a restart safe and the log no longer grows without bound, but a rewrite
-  runs on the thread that serves clients — 186ms of silence per million keys,
-  measured. Without the flag, a restart is still a flush.
+- **Persistence is opt-in.** `-appendonly` makes a restart safe, and the log is
+  rewritten before it runs away. Without the flag, a restart is still a flush.
 - **`LCS` does not type-check its keys.** Every other command answers
   `WRONGTYPE` for a name held by another type; `LCS` treats such a key as an
   empty string, the same way it treats a missing one.
@@ -291,10 +290,26 @@ choice. Read it as the reasoning rather than the changelog.
   keep the history for exactly the keys where it grows fastest. They are written
   as bytes through `MEMKV.RESTORE`, which is what that command is for.
 
-  It blocks, where Redis forks: measured at 10ms for ten thousand keys, 186ms
-  for a million, of which about 10ms is the fsync. A Go runtime does not survive
-  a bare fork, so the choice was between this and hand-building the buffering a
-  fork gives for free. Hence the automatic trigger not firing below 64MB.
+  It does not block, and getting there is the interesting part. Redis forks, so
+  its child walks a still snapshot while the parent serves; a Go runtime does
+  not survive a bare fork. Walking a slice per event-loop cycle instead means
+  the keyspace moves underneath the walk — keys written after it passed them,
+  created after it would have reached them, deleted before it got there.
+
+  No consistent snapshot is needed to fix that, which is the part worth stating
+  plainly. Every key written during a rewrite is remembered, and once the walk
+  finishes each is written again from its current state, preceded by a `DEL` so
+  the later record replaces the earlier rather than merging with it. Whatever
+  the walk saw for those keys is overwritten by what is true at the end, and
+  keys nobody touched cannot be stale. The cost is one pass over what changed
+  rather than a copy of the keyspace.
+
+  Measured over a million keys: 9ms to collect the names, 488 slices with a
+  median of 0.5ms, then 10ms to write what changed and sync. The same work as
+  doing it in one go and slightly more of it, with the longest pause down from
+  186ms to about 10ms. Over the wire on 400,000 keys, with a second connection
+  sending `PING` throughout, the worst it waited fell from 103.8ms to 9.4ms
+  while the rewrite itself took a quarter longer.
 
 - **Append-only persistence** — `-appendonly`, replayed at startup, with
   `always` / `everysec` / `no` fsync. The log is flushed and synced between
@@ -357,11 +372,10 @@ choice. Read it as the reasoning rather than the changelog.
 
 Roughly in the order the gaps matter.
 
-**Durability.** A rewrite blocks the event loop for as long as it takes to walk
-the keyspace — 186ms per million keys — because Redis's answer is to fork and a
-Go runtime does not survive one. The fix without forking is to buffer the writes
-that arrive during a rewrite and apply them at the end, which is most of the
-machinery a snapshot format would need anyway.
+**Durability.** A rewrite no longer blocks, but its two ends still do: 8ms to
+collect the key names before the walk and 13ms to finish it, per million keys.
+Both are one pass over something, and both could be sliced the way the walk now
+is. Neither was worth it while the walk was 186ms.
 
 **Memory.** Expiry is lazy only — a key with a TTL is reclaimed when something
 next looks at it, so five hundred keys given a one-second TTL and then left

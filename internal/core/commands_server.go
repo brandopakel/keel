@@ -134,22 +134,22 @@ func cmdINFO(args []string) []byte {
 	return Encode(b.String(), false)
 }
 
-// cmdBGREWRITEAOF rewrites the append-only file.
+// cmdBGREWRITEAOF starts rewriting the append-only file and returns at once.
 //
-// The name is Redis's, and so is what it does, but not how: Redis forks a child
-// and keeps serving, and this cannot - a Go runtime does not survive a bare
-// fork. So the "BG" is currently a promise the implementation does not keep,
-// and the reply says so rather than leaving a caller to discover it from a
-// latency graph. Keeping the name is still right: it is what every client,
-// script and runbook already calls, and a server that answered only to
-// REWRITEAOF would be harder to operate for no gain in honesty that this reply
-// does not already provide.
+// It only starts it. The walk then advances a slice per event-loop cycle, so
+// the reply arrives long before the work is finished and the server keeps
+// answering throughout - which is what the "BG" in the name has always meant to
+// every client and runbook that calls it.
+//
+// Redis gets that by forking; a Go runtime does not survive a bare fork, so
+// here it comes from slicing the walk instead. INFO persistence reports
+// aof_rewrites, which is how a caller waits for one to finish.
 func cmdBGREWRITEAOF(args []string) []byte {
 	if len(args) != 0 {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'BGREWRITEAOF' command"), false)
 	}
-	if err := RewriteAOF(); err != nil {
+	if err := StartRewrite(); err != nil {
 		return Encode(fmt.Errorf("ERR %w", err), false)
 	}
-	return Encode("Background append only file rewriting started (synchronously: this server does not fork)", true)
+	return Encode("Background append only file rewriting started", true)
 }

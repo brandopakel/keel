@@ -141,9 +141,14 @@ func OpenAOF(path string) error {
 	}
 	aof.written = 0
 	data_structure.OnRemove = func(keyspace, key string) {
-		if aof.file != nil && !aof.replaying {
-			aof.extra = append(aof.extra, []string{"DEL", key})
+		if aof.file == nil || aof.replaying {
+			return
 		}
+		aof.extra = append(aof.extra, []string{"DEL", key})
+		// Eviction and expiry remove keys no command named, so a rewrite has to
+		// hear about them here or it would carry a key forward that the server
+		// had already dropped.
+		noteRewriteDirty(key)
 	}
 	return nil
 }
@@ -188,6 +193,18 @@ func aofBegin() {
 func aofCommit(cmd *MemKVCmd, reply []byte) {
 	if aof.file == nil || aof.replaying {
 		return
+	}
+
+	// A key written while a rewrite is walking may already have been recorded
+	// at an older value, or not yet reached. Either way the rewrite will write
+	// it again at the end from whatever it holds then, so it only has to know
+	// which keys those are. Recorded whether or not the log itself takes the
+	// command, because a rewrite is a separate question from durability: a read
+	// that reaps an expired key changes the keyspace without being logged.
+	if rewrite.active {
+		for _, key := range writtenKeys(cmd) {
+			noteRewriteDirty(key)
+		}
 	}
 
 	switch {
@@ -238,10 +255,14 @@ func FlushAOF() error {
 	if err := flushAOF(false); err != nil {
 		return err
 	}
-	// Checked here rather than per command: it is a comparison of two numbers,
-	// but the rewrite it can start is a pass over the whole keyspace, and doing
-	// that between two commands of one pipelined batch would stall a client
-	// mid-batch for no reason.
+
+	// A rewrite in progress gets one slice per cycle, which is what keeps it
+	// from being a stall. This is the right place for it because it is already
+	// the once-a-cycle hook: doing it per command would slice a pipelined batch
+	// in the middle for no reason.
+	if rewrite.active {
+		return AdvanceRewrite()
+	}
 	maybeRewrite()
 	return nil
 }

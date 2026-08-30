@@ -444,7 +444,25 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 
 		for i := 0; i < len(events); i++ {
 			if events[i].Fd == wakeupFDs[0] {
-				stop = true
+				// The pipe carries two different meanings now: stop, and keep
+				// turning because a rewrite has slices left. A byte cannot say
+				// which, so the flag does - and it is set before the wake, so a
+				// stop is never read as a poke.
+				//
+				// Reading it as a stop unconditionally is what the first
+				// version did, and the first thing that poked the loop shut the
+				// server down.
+				if shuttingDown() {
+					stop = true
+					continue
+				}
+				// Drained, because it stays readable until it is emptied. A
+				// stop only ever needs one byte and then the loop ends; a poke
+				// happens every cycle of every rewrite, and an undrained pipe
+				// would leave the loop spinning on it for the rest of the
+				// server's life.
+				var drain [64]byte
+				syscall.Read(wakeupFDs[0], drain[:])
 				continue
 			}
 			if events[i].Fd == serverFD {
@@ -555,6 +573,16 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 			log.Println("appendonly: write failed, stopping:", err)
 			requestShutdown()
 			stop = true
+		}
+
+		// A rewrite advances one slice per cycle, inside the flush above, and
+		// cycles only happen when the multiplexer returns. A server that goes
+		// quiet the moment a rewrite starts would leave it part-finished until
+		// the next client turned up, so the loop wakes itself until it is done.
+		// Not deferred: a defer inside this loop would fire once the loop had
+		// ended, which is exactly too late to be of use.
+		if core.RewriteActive() {
+			wake()
 		}
 
 		// Offsets into the arena become slices only now: until the last reply

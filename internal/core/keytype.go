@@ -58,6 +58,35 @@ var multiKeyCommands = map[string]bool{
 // Redis handles it here.
 var errWrongType = errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
 
+// writtenKeys returns the keys a command changes, for the rewrite that has to
+// know which of its findings went stale.
+//
+// It reads the same table the type check uses, which is the point: one list of
+// which argument is a key, consulted by everything that needs to know, rather
+// than a second list to be kept in step with the first.
+func writtenKeys(cmd *MemKVCmd) []string {
+	if len(cmd.Args) == 0 {
+		return nil
+	}
+	switch cmd.Cmd {
+	case "DEL":
+		// DEL names any number of keys and constrains none of them to a type,
+		// so it is absent from the table below and handled here.
+		return cmd.Args
+	case "PFMERGE":
+		// The destination is written and the sources are only read, but a
+		// source recorded as dirty costs one redundant re-emit and a source
+		// missed would be a bug, so all of them count.
+		return cmd.Args
+	case "MEMKV.RESTORE":
+		return cmd.Args[:1]
+	}
+	if _, known := commandKeyspace[cmd.Cmd]; known {
+		return cmd.Args[:1]
+	}
+	return nil
+}
+
 // checkKeyTypes reports an error if any key the command names is already held
 // by a different kind of store.
 //

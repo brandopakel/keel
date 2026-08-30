@@ -10,176 +10,269 @@ import (
 	"memkv/internal/data_structure"
 )
 
-// Rewriting the append-only file.
+// Rewriting the append-only file, a slice at a time.
 //
 // The log records commands, so it grows with traffic rather than with data. A
-// key written a million times is a million lines that one line would reproduce,
-// and startup replays every one of them - so an untouched server gets slower to
-// start for as long as it runs, and eventually the log is larger than the
-// machine. Redis calls the fix BGREWRITEAOF: write the shortest log producing
-// the current state, then swap it in.
+// key written a million times is a million lines that one line reproduces, and
+// startup replays every one of them - so an untouched server gets slower to
+// start for as long as it runs. A rewrite writes the shortest log producing the
+// current state, then swaps it in.
 //
-// Shortest here means one command per key. A string is a SET, a set is one SADD
-// of its members, a sorted set one ZADD. The five types whose state no command
-// can rebuild - the two filters, the two sketches and the HyperLogLog - are
-// written with MEMKV.RESTORE, which is what that command exists for.
+// # Doing it without stopping
 //
-// # This one blocks, and Redis's does not
+// Redis forks. The child walks a copy-on-write snapshot while the parent keeps
+// serving, and the writes that arrive meanwhile are buffered and appended when
+// the child finishes. A Go program cannot fork that way, and the first version
+// of this did the whole walk in one go instead: 186ms of silence per million
+// keys, on the thread that serves every client.
 //
-// Redis forks. The child writes the snapshot from a copy-on-write view while
-// the parent keeps serving, and the writes that arrive meanwhile are buffered
-// and appended when the child finishes. A Go program cannot fork that way - the
-// runtime's threads do not survive it - so the choice here is between blocking
-// the loop and building the buffering and hand-off by hand.
+// The walk is now spread across event-loop cycles, a few thousand keys at a
+// time. That alone would be wrong, because the keyspace moves underneath a walk
+// that takes many cycles: a key written after the walk passed it is recorded at
+// its old value, and one created afterwards is not recorded at all.
 //
-// This blocks. The cost is one pass over the keyspace plus one write and one
-// fsync, on the thread that also serves every client, so it is a stall
-// proportional to the data rather than to the log. That is the same shape of
-// problem as LCS and is bounded the same way: by knowing the number and saying
-// it. Measured by BenchmarkRewrite on darwin/arm64: 10ms for ten thousand
-// string keys, 20ms for a hundred thousand, 186ms for a million - a floor of
-// about 10ms that is the fsync, and 5.4 million keys a second above it.
+// The fix does not need a consistent snapshot, which is the part worth stating
+// plainly. Every key written during a rewrite is remembered, and once the walk
+// finishes each of those keys is written again from its current state, preceded
+// by a DEL so the later record replaces the earlier rather than merging with
+// it. Whatever the walk saw for those keys - stale, half-built, or nothing at
+// all - is overwritten by what is true at the end. Keys nobody touched cannot
+// be stale, because nothing touched them.
 //
-// A tenth of a second of silence every time the log doubles is a real cost and
-// the reason the automatic trigger defaults to only firing past 64MB. Doing it
-// without the stall means buffering the writes that arrive during the rewrite
-// and applying them at the end, which is the next piece of work rather than
-// this one.
+// So the walk may see a moving keyspace and still produce an exact log, and
+// what it costs is one pass over the keys written during the rewrite rather
+// than a copy of the keyspace.
+//
+// Measured over a million string keys, by TestRewriteStallProfile: collecting
+// the names 9ms, then 488 slices with a median of 0.5ms, then a final 10ms to
+// write the keys that changed and sync the file. The work is the same as doing
+// it in one go and slightly more of it, and the longest a client waits has gone
+// from 186ms to about 10ms.
+//
+// Two stalls are left and both are the ends rather than the middle. Collecting
+// the key names is one pass over the keyspace, and the final slice is one pass
+// over what changed during the walk plus the fsync. Slicing those as well is
+// possible and was not worth it at 8ms and 13ms; the 186ms was.
+//
+// Over the wire, which is the measurement that counts: 400,000 keys, a second
+// connection sending PING throughout, the two versions under one harness.
+//
+//	                  rewrite takes    worst PING elsewhere
+//	all at once             104ms                  103.8ms
+//	a slice at a time       131ms                    9.4ms
+//
+// A client's worst wait falls elevenfold and the rewrite takes a quarter longer,
+// which is the per-slice overhead. That is the trade, and it is the right way
+// round: nobody is waiting on the rewrite, and everybody is waiting on the loop.
 
-// rewriteInProgress guards against re-entering the rewrite from inside itself,
-// which would otherwise be possible through the eviction that writing can
-// trigger.
-var rewriteInProgress bool
-
-// RewriteAOF writes the shortest log that reproduces the current keyspace and
-// puts it in place of the current one.
+// rewriteChunk is how many keys one cycle of the walk emits.
 //
-// The new log is built beside the old and renamed over it. Rename is atomic
-// within a directory, so a crash at any point leaves either the whole old log
-// or the whole new one - never a half-written file that replay would read as a
-// truncated tail and silently accept.
-func RewriteAOF() error {
+// It buys stall against duration: smaller means the loop returns to its clients
+// sooner and the rewrite takes more cycles to finish. 2048 is about a
+// millisecond at the measured rate, which is under the latency of the disk
+// write that a client's own command may be waiting on anyway.
+const rewriteChunk = 2048
+
+// rewrite is the state of the walk in progress, if there is one.
+var rewrite struct {
+	active  bool
+	path    string
+	tmpPath string
+	file    *os.File
+	written int64
+
+	// keys is every name that existed when the rewrite started. A Go map
+	// cannot be iterated across cycles - there is no resumable iterator - so
+	// the names are collected up front and walked as a list.
+	keys []string
+	pos  int
+
+	// dirty is every key written since the rewrite started. These are the keys
+	// the walk may have recorded wrongly, and they are all rewritten at the end
+	// from whatever they hold then.
+	dirty map[string]struct{}
+}
+
+// RewriteActive reports whether a rewrite is part-way through.
+func RewriteActive() bool { return rewrite.active }
+
+// StartRewrite begins one, collecting the key names it will walk.
+func StartRewrite() error {
 	if aof.file == nil {
 		return fmt.Errorf("appendonly is off")
 	}
-	if rewriteInProgress {
+	if rewrite.active {
 		return fmt.Errorf("a rewrite is already running")
 	}
-	rewriteInProgress = true
-	defer func() { rewriteInProgress = false }()
 
-	// Anything still buffered belongs to the state about to be written out, and
-	// writing it afterwards would apply it twice.
-	if err := FlushAOF(); err != nil {
-		return err
-	}
-
-	body, keys, err := marshalKeyspace()
-	if err != nil {
+	// Anything still buffered belongs to the state about to be walked, so it
+	// goes to the old log now rather than after the swap, where it would be
+	// applied to a log that already contains its effect.
+	if err := flushAOF(false); err != nil {
 		return err
 	}
 
 	path := aof.path
-	tmp := path + ".rewrite"
-	if err := writeAndSync(tmp, body); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	// The directory entry itself has to reach disk, or a crash can leave the
-	// rename unrecorded and the old file back in place. This is the step that
-	// is easy to leave out and impossible to notice until it matters.
-	if err := syncDir(filepath.Dir(path)); err != nil {
+	tmpPath := path + ".rewrite"
+	f, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
 		return err
 	}
 
-	// Appending must continue into the file that is now there, not the one the
-	// old descriptor still points at - which, having been renamed over, no
-	// longer has a name at all.
-	if err := aof.file.Close(); err != nil {
-		return err
-	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		aof.file = nil
-		return err
-	}
-	aof.file = f
-	aof.baseSize = int64(len(body))
-	aof.written = 0
-	aof.rewrites++
-	aof.lastKeys = keys
+	rewrite.active = true
+	rewrite.path = path
+	rewrite.tmpPath = tmpPath
+	rewrite.file = f
+	rewrite.written = 0
+	rewrite.pos = 0
+	rewrite.dirty = make(map[string]struct{})
+	rewrite.keys = allKeyNames()
 	return nil
 }
 
-// marshalKeyspace renders every key as the command that recreates it.
-func marshalKeyspace() ([]byte, int, error) {
-	var out []byte
-	keys := 0
-
-	// Strings carry an expiry, and it is written as an instant for the same
-	// reason EXPIRE is: a duration in a file means something different every
-	// time the file is read.
-	for _, key := range dictStore.Keys() {
-		obj := dictStore.Peek(key)
-		if obj == nil {
-			continue
-		}
-		value, ok := obj.Value.(string)
-		if !ok {
-			continue
-		}
-		out = appendCommand(out, "SET", key, value)
-		if at, has := dictStore.ExpiryOf(key); has {
-			out = appendCommand(out, "PEXPIREAT", key, strconv.FormatUint(at, 10))
-		}
-		keys++
+// AdvanceRewrite emits the next slice of the walk, and finishes if that was the
+// last of it. The event loop calls it once a cycle while a rewrite is active.
+func AdvanceRewrite() error {
+	if !rewrite.active {
+		return nil
 	}
 
-	// A set and a sorted set are one command each, however many members they
-	// hold. A very large one therefore becomes a very large command - bounded
-	// by the same maxBulkLength the parser enforces on the way back in.
-	for _, key := range setStore.Keys() {
-		set, ok := setStore.Peek(key)
-		if !ok {
-			continue
-		}
-		out = appendCommand(out, append([]string{"SADD", key}, set.Members()...)...)
-		keys++
-	}
-	for _, key := range zsetStore.Keys() {
-		zset, ok := zsetStore.Peek(key)
-		if !ok {
-			continue
-		}
-		members, scores := zset.Entries()
-		parts := make([]string, 0, 2+2*len(members))
-		parts = append(parts, "ZADD", key)
-		for i, m := range members {
-			parts = append(parts, formatScore(scores[i]), m)
-		}
-		out = appendCommand(out, parts...)
-		keys++
+	end := rewrite.pos + rewriteChunk
+	if end > len(rewrite.keys) {
+		end = len(rewrite.keys)
 	}
 
-	// Everything else goes out as bytes, because nothing else can reproduce it.
-	for _, key := range opaqueKeys() {
-		payload, ok := dumpKey(key)
-		if !ok {
+	var body []byte
+	for _, key := range rewrite.keys[rewrite.pos:end] {
+		// Skipped here rather than at the end: a key written during the rewrite
+		// is going to be written again from its current state anyway, so
+		// recording the version the walk can see is wasted bytes.
+		if _, touched := rewrite.dirty[key]; touched {
 			continue
 		}
-		out = appendCommand(out, "MEMKV.RESTORE", key, string(payload))
-		keys++
+		body = emitKey(body, key)
 	}
-	return out, keys, nil
+	rewrite.pos = end
+
+	if err := rewriteWrite(body); err != nil {
+		abortRewrite(err)
+		return err
+	}
+	if rewrite.pos < len(rewrite.keys) {
+		return nil
+	}
+	return finishRewrite()
 }
 
-// opaqueKeys lists the keys whose state only MEMKV.RESTORE can carry.
-func opaqueKeys() []string {
-	var keys []string
+// noteRewriteDirty records that a key was written while a rewrite is walking.
+func noteRewriteDirty(key string) {
+	if rewrite.active {
+		rewrite.dirty[key] = struct{}{}
+	}
+}
+
+// finishRewrite writes the keys that changed during the walk, then swaps the
+// new log in.
+func finishRewrite() error {
+	var body []byte
+	for key := range rewrite.dirty {
+		// DEL first, unconditionally. The walk may have recorded an older
+		// version of this key, and for a set or a sorted set a second record
+		// would merge with the first rather than replace it - leaving members
+		// that were removed during the rewrite alive again. It also covers the
+		// key having changed type, and the key having gone entirely.
+		body = appendCommand(body, "DEL", key)
+		body = emitKey(body, key)
+	}
+	if err := rewriteWrite(body); err != nil {
+		abortRewrite(err)
+		return err
+	}
+
+	if err := rewrite.file.Sync(); err != nil {
+		abortRewrite(err)
+		return err
+	}
+	if err := rewrite.file.Close(); err != nil {
+		abortRewrite(err)
+		return err
+	}
+	rewrite.file = nil
+
+	// Rename is atomic within a directory, so a crash at any point leaves
+	// either the whole old log or the whole new one, never a half-written file
+	// that replay would read as a truncated tail and quietly accept.
+	if err := os.Rename(rewrite.tmpPath, rewrite.path); err != nil {
+		abortRewrite(err)
+		return err
+	}
+	// The directory entry has to reach disk too, or a crash can leave the
+	// rename unrecorded and the old file back in place.
+	syncDir(filepath.Dir(rewrite.path))
+
+	// Appending must continue into the file that is now there, not the one the
+	// old descriptor still points at - which, having been renamed over, no
+	// longer has a name at all, so its contents vanish at the next restart.
+	if err := aof.file.Close(); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(rewrite.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		aof.file = nil
+		rewrite.active = false
+		return err
+	}
+	aof.file = f
+	aof.baseSize = rewrite.written
+	aof.written = 0
+	aof.rewrites++
+	aof.lastKeys = len(rewrite.keys)
+
+	rewrite.active = false
+	rewrite.keys = nil
+	rewrite.dirty = nil
+	return nil
+}
+
+// abortRewrite gives up on a rewrite without touching the log in use. The old
+// file has had every write appended to it throughout, so abandoning the new one
+// loses nothing.
+func abortRewrite(cause error) {
+	if rewrite.file != nil {
+		rewrite.file.Close()
+	}
+	os.Remove(rewrite.tmpPath)
+	rewrite.active = false
+	rewrite.keys = nil
+	rewrite.dirty = nil
+	rewrite.file = nil
+	if cause != nil {
+		aofLog("rewrite abandoned: %v", cause)
+	}
+}
+
+// CancelRewrite abandons a rewrite in progress, for a server shutting down.
+func CancelRewrite() {
+	if rewrite.active {
+		abortRewrite(nil)
+	}
+}
+
+func rewriteWrite(body []byte) error {
+	if len(body) == 0 {
+		return nil
+	}
+	n, err := rewrite.file.Write(body)
+	rewrite.written += int64(n)
+	return err
+}
+
+// allKeyNames collects every key in every keyspace.
+func allKeyNames() []string {
+	keys := make([]string, 0, data_structure.TotalKeys())
+	keys = append(keys, dictStore.Keys()...)
+	keys = append(keys, setStore.Keys()...)
+	keys = append(keys, zsetStore.Keys()...)
 	keys = append(keys, sbStore.Keys()...)
 	keys = append(keys, cmsStore.Keys()...)
 	keys = append(keys, morrisStore.Keys()...)
@@ -188,23 +281,61 @@ func opaqueKeys() []string {
 	return keys
 }
 
-func writeAndSync(path string, body []byte) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
-	if err != nil {
-		return err
+// emitKey appends the commands that recreate one key, or nothing if no
+// keyspace holds it any more.
+//
+// Strings, sets and sorted sets are written as the commands a client would
+// send, so the log stays something a person can read. The rest have no command
+// that rebuilds them and go out as bytes.
+func emitKey(dst []byte, key string) []byte {
+	if obj := dictStore.Peek(key); obj != nil {
+		value, ok := obj.Value.(string)
+		if !ok {
+			return dst
+		}
+		dst = appendCommand(dst, "SET", key, value)
+		if at, has := dictStore.ExpiryOf(key); has {
+			// Written as the instant it falls due. A duration would mean
+			// something different every time the log was read.
+			dst = appendCommand(dst, "PEXPIREAT", key, strconv.FormatUint(at, 10))
+		}
+		return dst
 	}
-	if _, err := f.Write(body); err != nil {
-		f.Close()
-		return err
+	if set, ok := setStore.Peek(key); ok {
+		return appendCommand(dst, append([]string{"SADD", key}, set.Members()...)...)
 	}
-	if err := f.Sync(); err != nil {
-		f.Close()
-		return err
+	if zset, ok := zsetStore.Peek(key); ok {
+		members, scores := zset.Entries()
+		parts := make([]string, 0, 2+2*len(members))
+		parts = append(parts, "ZADD", key)
+		for i, m := range members {
+			parts = append(parts, formatScore(scores[i]), m)
+		}
+		return appendCommand(dst, parts...)
 	}
-	return f.Close()
+	if payload, ok := dumpKey(key); ok {
+		return appendCommand(dst, "MEMKV.RESTORE", key, string(payload))
+	}
+	return dst
 }
 
-// syncDir flushes a directory entry, so a rename survives a crash.
+// RewriteAOF runs a rewrite to completion without returning to the event loop.
+//
+// Used by tests, and by nothing that serves clients. A server driving the
+// loop should start one and let AdvanceRewrite carry it, which is what keeps
+// the stall to a slice at a time.
+func RewriteAOF() error {
+	if err := StartRewrite(); err != nil {
+		return err
+	}
+	for rewrite.active {
+		if err := AdvanceRewrite(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func syncDir(dir string) error {
 	d, err := os.Open(dir)
 	if err != nil {
@@ -212,8 +343,7 @@ func syncDir(dir string) error {
 	}
 	defer d.Close()
 	// Some filesystems refuse to sync a directory. That is not a reason to fail
-	// a rewrite that has otherwise succeeded, so it is reported by returning
-	// nil here rather than undoing the swap.
+	// a rewrite that has otherwise succeeded.
 	_ = d.Sync()
 	return nil
 }
@@ -227,7 +357,7 @@ func syncDir(dir string) error {
 // nothing to gain from being rewritten, and a 100MB log for 1MB of data is
 // almost entirely history.
 func maybeRewrite() {
-	if aof.file == nil || rewriteInProgress || config.AOFAutoRewritePercentage <= 0 {
+	if aof.file == nil || rewrite.active || config.AOFAutoRewritePercentage <= 0 {
 		return
 	}
 	size := aof.baseSize + aof.written
@@ -240,8 +370,8 @@ func maybeRewrite() {
 			return
 		}
 	}
-	if err := RewriteAOF(); err != nil {
-		aofLog("automatic rewrite failed: %v", err)
+	if err := StartRewrite(); err != nil {
+		aofLog("automatic rewrite failed to start: %v", err)
 	}
 }
 
@@ -252,5 +382,3 @@ func AOFStats() (baseSize, currentSize int64, rewrites int, keys int) {
 	}
 	return aof.baseSize, aof.baseSize + aof.written, aof.rewrites, aof.lastKeys
 }
-
-var _ = data_structure.TotalKeys

@@ -83,3 +83,30 @@ func TestWakeWithoutWakerIsSafe(t *testing.T) {
 	setWaker(nil)
 	assert.NotPanics(t, wake)
 }
+
+// TestWakeDoesNotStopALoopThatIsNotShuttingDown.
+//
+// The wakeup pipe carries two meanings: stop, and keep turning because a
+// rewrite has slices left. A byte cannot say which, so the loop reads the
+// shutdown flag instead - and the flag is set before the wake, so a stop can
+// never be mistaken for a poke.
+//
+// Reading the pipe as a stop unconditionally is what the loop used to do, and
+// the first thing that ever poked it shut the server down mid-rewrite.
+func TestWakeDoesNotStopALoopThatIsNotShuttingDown(t *testing.T) {
+	withFreshShutdownState(t)
+
+	woken := 0
+	setWaker(func() { woken++ })
+	defer setWaker(nil)
+
+	// A poke while nothing has asked to stop.
+	wake()
+	assert.Equal(t, 1, woken, "the waker must fire")
+	assert.False(t, shuttingDown(), "a poke must not look like a stop")
+
+	// And a real stop still reads as one.
+	requestShutdown()
+	wake()
+	assert.True(t, shuttingDown())
+}

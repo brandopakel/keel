@@ -18,7 +18,9 @@ func TestCmdSetReadsTheExpiryKeyword(t *testing.T) {
 	ResetStores()
 
 	assert.EqualValues(t, "OK", mustDecode(t, cmdSET([]string{"s", "v", "EX", "100"})))
-	assert.EqualValues(t, 100, mustDecode(t, cmdTTL([]string{"s"})))
+	// Within one second, not exactly 100: TTL reports whole seconds and rounds
+	// down, so a millisecond spent between the two commands shows as 99.
+	assert.InDelta(t, 100, mustDecode(t, cmdTTL([]string{"s"})), 1)
 
 	// 100 milliseconds is under a second, so TTL in whole seconds is 0 - not
 	// the 100 it reported when PX was read as EX.
