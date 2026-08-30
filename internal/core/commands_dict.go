@@ -50,8 +50,10 @@ func cmdSET(args []string) []byte {
 		}
 	}
 
-	dictStore.Put(key, dictStore.NewObj(value, ttlMs, oType, oEnc))
+	dictStore.Put(key, dictStore.NewObj(value, oType, oEnc))
 	if ttlMs > 0 {
+		// After the Put, which clears whatever expiry the key had before.
+		dictStore.SetExpiry(key, ttlMs)
 		// The TTL arrived as a duration and has to be logged as an instant, so
 		// the value and its expiry are recorded as two commands.
 		aofRecord("SET", key, value)
@@ -71,7 +73,7 @@ func cmdGET(args []string) []byte {
 		return constant.RespNil
 	}
 
-	if dictStore.HasExpired(obj) {
+	if dictStore.HasExpired(key) {
 		return constant.RespNil
 	}
 
@@ -88,7 +90,7 @@ func cmdTTL(args []string) []byte {
 		return constant.TtlKeyNotExist
 	}
 
-	exp, isExpirySet := dictStore.GetExpiry(obj)
+	exp, isExpirySet := dictStore.GetExpiry(key)
 	if !isExpirySet {
 		return constant.TtlKeyExistNoExpire
 	}
@@ -133,7 +135,7 @@ func cmdEXPIRE(args []string) []byte {
 		return constant.RespZero
 	}
 
-	dictStore.SetExpiry(obj, ttlSec*1000)
+	dictStore.SetExpiry(key, ttlSec*1000)
 	aofExpireAt(key)
 	return constant.RespOne
 }
@@ -165,7 +167,7 @@ func cmdPEXPIREAT(args []string) []byte {
 		dictStore.Del(args[0])
 		return constant.RespOne
 	}
-	dictStore.SetExpiryAt(obj, uint64(atMs))
+	dictStore.SetExpiryAt(args[0], uint64(atMs))
 	return constant.RespOne
 }
 
@@ -176,7 +178,7 @@ func cmdINCR(args []string) []byte {
 	key := args[0]
 	obj := dictStore.Get(key)
 	if obj == nil {
-		obj = dictStore.NewObj("0", constant.NoExpire, constant.ObjTypeString, constant.ObjEncodingInt)
+		obj = dictStore.NewObj("0", constant.ObjTypeString, constant.ObjEncodingInt)
 		dictStore.Put(key, obj)
 	}
 

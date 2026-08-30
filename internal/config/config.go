@@ -87,6 +87,31 @@ var (
 	AOFFsync    = FsyncEverySec
 )
 
+// Active expiry: how hard the server looks for keys whose TTL has passed
+// rather than waiting for something to read them.
+//
+// The sampling is Redis's. Twenty keys with a TTL are examined; if more than a
+// quarter had fallen due, the keyspace probably holds many more and another
+// round is drawn. Rounds are capped so one pass cannot become a long stall on a
+// keyspace that is mostly expired - what is left over is found on the next
+// pass, a tenth of a second later.
+//
+// Zero samples turns it off, leaving expiry lazy as it was.
+var (
+	ActiveExpireSamples = 20
+	ActiveExpirePercent = 25
+	ActiveExpireRounds  = 16
+)
+
+// CronIntervalMs is how often the event loop is woken to do work that is due
+// because of the clock rather than because a client asked.
+//
+// The loop blocks in epoll or kqueue with no timeout, so without a poke an idle
+// server never runs anything time-based at all - which is precisely the server
+// on which unread expired keys pile up. Redis calls its equivalent serverCron
+// and runs it at 10Hz by default; this is the same rate for the same reason.
+var CronIntervalMs = 100
+
 // When the log is rewritten automatically.
 //
 // The percentage is measured against the size the log was after the last

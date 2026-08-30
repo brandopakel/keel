@@ -45,7 +45,7 @@ func TestEstimateTracksRealHeap(t *testing.T) {
 			// strings are immutable and share backing storage - which the real
 			// server never does, since every value is a fresh string built by
 			// the parser from the wire.
-			d.Put("key:"+strconv.Itoa(i), d.NewObj(fmt.Sprintf("%0*d", valLen, i), 0, 0, 0))
+			d.Put("key:"+strconv.Itoa(i), d.NewObj(fmt.Sprintf("%0*d", valLen, i), 0, 0))
 		}
 		actual := heapBytes() - before
 		runtime.KeepAlive(d)
@@ -68,7 +68,7 @@ func TestMemUsedRisesAndFallsWithTheKeyspace(t *testing.T) {
 	d := newTestDict(t)
 	assert.Equal(t, uint64(0), d.MemUsed(), "an empty dictionary holds nothing")
 
-	d.Put("k", d.NewObj(strings.Repeat("v", 1000), 0, 0, 0))
+	d.Put("k", d.NewObj(strings.Repeat("v", 1000), 0, 0))
 	withValue := d.MemUsed()
 	assert.Greater(t, withValue, uint64(1000), "the value's bytes must be counted")
 
@@ -83,16 +83,16 @@ func TestOverwritingReplacesCostRatherThanAddingIt(t *testing.T) {
 	withEviction(t, config.EvictFirst, 5, 1000000)
 	d := newTestDict(t)
 
-	d.Put("k", d.NewObj(strings.Repeat("v", 1000), 0, 0, 0))
+	d.Put("k", d.NewObj(strings.Repeat("v", 1000), 0, 0))
 	first := d.MemUsed()
 	for i := 0; i < 100; i++ {
-		d.Put("k", d.NewObj(strings.Repeat("v", 1000), 0, 0, 0))
+		d.Put("k", d.NewObj(strings.Repeat("v", 1000), 0, 0))
 	}
 	assert.Equal(t, first, d.MemUsed(), "rewriting one key must not accumulate cost")
 
-	d.Put("k", d.NewObj(strings.Repeat("v", 5000), 0, 0, 0))
+	d.Put("k", d.NewObj(strings.Repeat("v", 5000), 0, 0))
 	assert.Greater(t, d.MemUsed(), first, "a larger value must cost more")
-	d.Put("k", d.NewObj("v", 0, 0, 0))
+	d.Put("k", d.NewObj("v", 0, 0))
 	assert.Less(t, d.MemUsed(), first, "a smaller value must cost less")
 }
 
@@ -108,7 +108,7 @@ func TestMemoryBoundHoldsRegardlessOfValueSize(t *testing.T) {
 		d := newTestDict(t)
 		val := strings.Repeat("v", valLen)
 		for i := 0; i < 20000; i++ {
-			d.Put("key:"+strconv.Itoa(i), d.NewObj(val, 0, 0, 0))
+			d.Put("key:"+strconv.Itoa(i), d.NewObj(val, 0, 0))
 			assert.LessOrEqual(t, d.MemUsed(), uint64(1<<20)+uint64(valLen)+entryOverhead+16,
 				"valLen=%d: the dictionary must stay within its memory bound", valLen)
 		}
@@ -129,7 +129,7 @@ func TestKeyCountAdaptsToValueSize(t *testing.T) {
 		d := newTestDict(t)
 		val := strings.Repeat("v", valLen)
 		for i := 0; i < 20000; i++ {
-			d.Put("key:"+strconv.Itoa(i), d.NewObj(val, 0, 0, 0))
+			d.Put("key:"+strconv.Itoa(i), d.NewObj(val, 0, 0))
 		}
 		held[valLen] = d.Len()
 	}
@@ -150,8 +150,8 @@ func TestAValueLargerThanTheBudgetDoesNotEmptyTheKeyspaceForever(t *testing.T) {
 	d := newTestDict(t)
 	done := make(chan struct{})
 	go func() {
-		d.Put("huge", d.NewObj(strings.Repeat("v", 100000), 0, 0, 0))
-		d.Put("small", d.NewObj("v", 0, 0, 0))
+		d.Put("huge", d.NewObj(strings.Repeat("v", 100000), 0, 0))
+		d.Put("small", d.NewObj("v", 0, 0))
 		close(done)
 	}()
 	select {
@@ -160,4 +160,58 @@ func TestAValueLargerThanTheBudgetDoesNotEmptyTheKeyspaceForever(t *testing.T) {
 		t.Fatal("enforceLimits did not terminate on a value larger than the budget")
 	}
 	assert.Contains(t, d.dictStore, "small", "the dictionary must still work afterwards")
+}
+
+// TestOverwritingAKeyWithATTLLeaksNothing.
+//
+// The expiry table used to be keyed by object pointer rather than by key name,
+// and Put replaced the object without removing the old one's entry. So every
+// overwrite of a key that had a TTL left an entry behind, holding the old
+// object alive with it - a leak proportional to how often such keys are
+// written, and invisible to both DBSIZE and the memory accounting.
+func TestOverwritingAKeyWithATTLLeaksNothing(t *testing.T) {
+	d := CreateDict()
+	for i := 0; i < 10000; i++ {
+		d.Put("hot", d.NewObj("value", 0, 0))
+		d.SetExpiry("hot", 60000)
+	}
+	assert.Equal(t, 1, d.Len(), "one key was written, however many times")
+	assert.Equal(t, 1, d.ExpiryCount(),
+		"and it must hold one expiry, not one per write")
+}
+
+// TestExpiryAccountingBalances.
+//
+// Every byte charged for a key has to be given back when the key goes. The
+// counter is unsigned, so an imbalance in the giving-back direction does not
+// show up as a small error: it wraps, used_memory reads as exabytes, and a
+// maxmemory bound compared against it evicts the whole keyspace on the next
+// write.
+func TestExpiryAccountingBalances(t *testing.T) {
+	d := CreateDict()
+	empty := d.MemUsed()
+
+	for i := 0; i < 1000; i++ {
+		key := "k" + strconv.Itoa(i)
+		d.Put(key, d.NewObj("value", 0, 0))
+		d.SetExpiry(key, 60000)
+	}
+	withKeys := d.MemUsed()
+	assert.Greater(t, withKeys, empty)
+
+	for i := 0; i < 1000; i++ {
+		assert.True(t, d.Del("k"+strconv.Itoa(i)))
+	}
+	assert.Equal(t, empty, d.MemUsed(),
+		"deleting every key must return the accounting to where it started")
+
+	// The same, through the paths a client actually takes: a key given a TTL,
+	// then given another, then overwritten without one.
+	d.Put("x", d.NewObj("v", 0, 0))
+	d.SetExpiry("x", 1000)
+	d.SetExpiry("x", 2000)
+	d.Put("x", d.NewObj("v", 0, 0))
+	assert.Equal(t, 0, d.ExpiryCount(), "an overwrite clears the expiry")
+	assert.True(t, d.Del("x"))
+	assert.Equal(t, empty, d.MemUsed(), "and the accounting still balances")
 }

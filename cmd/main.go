@@ -41,6 +41,8 @@ var (
 	appendFsync    string
 	aofRewritePct  int
 	aofRewriteMin  string
+	expireSamples  int
+	cronIntervalMs int
 )
 
 func init() {
@@ -72,6 +74,10 @@ func init() {
 			"rewrite; 0 disables automatic rewriting")
 	flag.StringVar(&aofRewriteMin, "auto-aof-rewrite-min-size", "64mb",
 		"never rewrite automatically below this size")
+	flag.IntVar(&expireSamples, "active-expire-samples", config.ActiveExpireSamples,
+		"keys with a TTL sampled per expiry cycle; 0 leaves expiry lazy")
+	flag.IntVar(&cronIntervalMs, "cron-interval-ms", config.CronIntervalMs,
+		"how often the loop is woken for work that is due by the clock")
 	flag.IntVar(&ioThreads, "io-threads", config.IOThreads,
 		"threads that read, parse and write sockets, including the event loop's own; "+
 			"command execution stays on one thread whatever this is")
@@ -110,6 +116,15 @@ func init() {
 	}
 	config.AOFAutoRewritePercentage = aofRewritePct
 	config.AOFAutoRewriteMinSize = int64(rewriteMin)
+
+	if expireSamples < 0 {
+		log.Fatalf("-active-expire-samples must not be negative, got %d", expireSamples)
+	}
+	if cronIntervalMs < 1 {
+		log.Fatalf("-cron-interval-ms must be at least 1, got %d", cronIntervalMs)
+	}
+	config.ActiveExpireSamples = expireSamples
+	config.CronIntervalMs = cronIntervalMs
 	switch evictPolicy {
 	case "lru":
 		config.EvictStrategy = config.LRU

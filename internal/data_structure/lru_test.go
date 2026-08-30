@@ -39,8 +39,8 @@ func withEviction(t *testing.T, strategy, samples, limit int) {
 
 func TestAccessUpdatesRecency(t *testing.T) {
 	d := newTestDict(t)
-	d.Put("a", d.NewObj("v", 0, 0, 0))
-	d.Put("b", d.NewObj("v", 0, 0, 0))
+	d.Put("a", d.NewObj("v", 0, 0))
+	d.Put("b", d.NewObj("v", 0, 0))
 
 	first := d.dictStore["a"].Access
 	assert.Greater(t, d.dictStore["b"].Access, first, "a later write is more recent")
@@ -54,7 +54,7 @@ func TestNoEvictionBelowTheLimit(t *testing.T) {
 	withEviction(t, config.LRU, 5, 100)
 	d := newTestDict(t)
 	for i := 0; i < 100; i++ {
-		d.Put("k"+strconv.Itoa(i), d.NewObj("v", 0, 0, 0))
+		d.Put("k"+strconv.Itoa(i), d.NewObj("v", 0, 0))
 	}
 	assert.Equal(t, 100, d.Len(), "nothing should be evicted until the limit is reached")
 }
@@ -66,12 +66,12 @@ func TestOverwritingAnExistingKeyDoesNotEvict(t *testing.T) {
 	withEviction(t, config.LRU, 5, 10)
 	d := newTestDict(t)
 	for i := 0; i < 10; i++ {
-		d.Put("k"+strconv.Itoa(i), d.NewObj("v", 0, 0, 0))
+		d.Put("k"+strconv.Itoa(i), d.NewObj("v", 0, 0))
 	}
 	assert.Equal(t, 10, d.Len())
 
 	for i := 0; i < 50; i++ {
-		d.Put("k3", d.NewObj("updated", 0, 0, 0))
+		d.Put("k3", d.NewObj("updated", 0, 0))
 	}
 	assert.Equal(t, 10, d.Len(), "overwriting must not evict")
 	for i := 0; i < 10; i++ {
@@ -83,7 +83,7 @@ func TestEvictionHoldsTheDictAtTheLimit(t *testing.T) {
 	withEviction(t, config.LRU, 5, 100)
 	d := newTestDict(t)
 	for i := 0; i < 1000; i++ {
-		d.Put("k"+strconv.Itoa(i), d.NewObj("v", 0, 0, 0))
+		d.Put("k"+strconv.Itoa(i), d.NewObj("v", 0, 0))
 		assert.LessOrEqual(t, d.Len(), 100, "the dict must never exceed its limit")
 	}
 	assert.Equal(t, 100, d.Len())
@@ -98,14 +98,14 @@ func hotRetention(t *testing.T, strategy, samples, limit int) float64 {
 
 	d := newTestDict(t)
 	for i := 0; i < limit; i++ {
-		d.Put("k"+strconv.Itoa(i), d.NewObj("v", 0, 0, 0))
+		d.Put("k"+strconv.Itoa(i), d.NewObj("v", 0, 0))
 	}
 	hot := limit / 2
 	for i := 0; i < hot; i++ {
 		d.Get("k" + strconv.Itoa(i))
 	}
 	for i := 0; i < hot; i++ {
-		d.Put("new"+strconv.Itoa(i), d.NewObj("v", 0, 0, 0))
+		d.Put("new"+strconv.Itoa(i), d.NewObj("v", 0, 0))
 	}
 
 	survived := 0
@@ -155,7 +155,7 @@ func TestEvictionSkipsCandidatesReadSinceSampling(t *testing.T) {
 	withEviction(t, config.LRU, 5, 100)
 	d := newTestDict(t)
 	for i := 0; i < 20; i++ {
-		d.Put("k"+strconv.Itoa(i), d.NewObj("v", 0, 0, 0))
+		d.Put("k"+strconv.Itoa(i), d.NewObj("v", 0, 0))
 	}
 
 	// k0 is read last, so it is the newest key in the dict...
@@ -175,7 +175,7 @@ func TestEvictionSkipsCandidatesAlreadyDeleted(t *testing.T) {
 	withEviction(t, config.LRU, 5, 100)
 	d := newTestDict(t)
 	for i := 0; i < 20; i++ {
-		d.Put("k"+strconv.Itoa(i), d.NewObj("v", 0, 0, 0))
+		d.Put("k"+strconv.Itoa(i), d.NewObj("v", 0, 0))
 	}
 	evictionPool = []Candidate{{Space: d, Key: "gone", Score: 1}}
 

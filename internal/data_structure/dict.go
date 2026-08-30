@@ -26,8 +26,18 @@ type Obj struct {
 }
 
 type Dict struct {
-	dictStore        map[string]*Obj
-	expiredDictStore map[*Obj]uint64
+	dictStore map[string]*Obj
+
+	// expiredDictStore holds the instant each key with a TTL falls due, keyed
+	// by the key's own name.
+	//
+	// It used to be keyed by the object pointer, which had two costs. Put
+	// replaced an object without removing the old one's entry, so every
+	// overwrite of a key with a TTL leaked an entry and kept the dead object
+	// alive with it. And nothing could get from an expiry back to the name it
+	// belonged to, which is exactly what a cycle sampling for expired keys
+	// needs in order to delete one.
+	expiredDictStore map[string]uint64
 
 	// memUsed is the estimated bytes held, maintained incrementally: totalling
 	// it on demand would be O(n) and a budget check runs on every write.
@@ -37,61 +47,79 @@ type Dict struct {
 func CreateDict() *Dict {
 	return &Dict{
 		dictStore:        make(map[string]*Obj),
-		expiredDictStore: make(map[*Obj]uint64),
+		expiredDictStore: make(map[string]uint64),
 	}
 }
 
-func (d *Dict) NewObj(value interface{}, ttlMs int64, oType uint8, oEnc uint8) *Obj {
+// NewObj builds a value for the dictionary.
+//
+// It no longer takes a TTL. Expiry is recorded against the key, and an object
+// does not know its own name until it is put somewhere - so a caller that wants
+// one sets it after the Put, which is also the order that makes SET clear a
+// previous expiry and then apply the new one.
+func (d *Dict) NewObj(value interface{}, oType uint8, oEnc uint8) *Obj {
 	obj := &Obj{
 		Value:        value,
 		TypeEncoding: oType | oEnc,
 	}
 	obj.Access = NewAccess()
-	if ttlMs > 0 {
-		d.SetExpiry(obj, ttlMs)
-	}
 	return obj
 }
 
-func (d *Dict) HasExpired(obj *Obj) bool {
-	exp, exist := d.expiredDictStore[obj]
+func (d *Dict) HasExpired(k string) bool {
+	exp, exist := d.expiredDictStore[k]
 	if !exist {
 		return false
 	}
 	return exp <= uint64(time.Now().UnixMilli())
 }
 
-func (d *Dict) GetExpiry(obj *Obj) (uint64, bool) {
-	exp, exist := d.expiredDictStore[obj]
+func (d *Dict) GetExpiry(k string) (uint64, bool) {
+	exp, exist := d.expiredDictStore[k]
 	return exp, exist
 }
 
-func (d *Dict) SetExpiry(obj *Obj, ttlMs int64) {
-	d.SetExpiryAt(obj, uint64(time.Now().UnixMilli())+uint64(ttlMs))
+func (d *Dict) SetExpiry(k string, ttlMs int64) {
+	d.SetExpiryAt(k, uint64(time.Now().UnixMilli())+uint64(ttlMs))
 }
 
 // SetExpiryAt sets the expiry to an absolute time in milliseconds since the
 // epoch. Persistence needs this: a relative TTL written to a log becomes a new
 // TTL every time the log is replayed.
-func (d *Dict) SetExpiryAt(obj *Obj, atMs uint64) {
-	d.expiredDictStore[obj] = atMs
+func (d *Dict) SetExpiryAt(k string, atMs uint64) {
+	// Giving a key an expiry costs a second map entry, and entryBytes charges
+	// for it - so the charge has to be made here, when the entry appears.
+	//
+	// It used to arrive with the object, before the Put that accounted for it,
+	// and moving expiry onto the key moved it after. The delete side still
+	// subtracted the overhead, so memUsed came out lower than it went in, and
+	// on an unsigned counter that is not a small error: used_memory read 18
+	// exabytes, and a maxmemory bound compared against it would have evicted
+	// the entire keyspace on the next write.
+	if _, existed := d.expiredDictStore[k]; !existed {
+		d.memUsed += expiryOverhead
+	}
+	d.expiredDictStore[k] = atMs
 }
 
 // ExpiryOf reports a key's absolute expiry, for a log that has to record when
 // rather than how much longer.
 func (d *Dict) ExpiryOf(k string) (uint64, bool) {
-	obj, ok := d.dictStore[k]
-	if !ok {
+	if _, ok := d.dictStore[k]; !ok {
 		return 0, false
 	}
-	at, has := d.expiredDictStore[obj]
+	at, has := d.expiredDictStore[k]
 	return at, has
 }
+
+// ExpiryCount is how many keys carry a TTL, so a test can check the table does
+// not accumulate entries for keys that have gone.
+func (d *Dict) ExpiryCount() int { return len(d.expiredDictStore) }
 
 func (d *Dict) Get(k string) *Obj {
 	v := d.dictStore[k]
 	if v != nil {
-		if d.HasExpired(v) {
+		if d.HasExpired(k) {
 			d.Del(k)
 			// Reaping a key whose TTL has passed is a decision this server
 			// made at a moment a log has to be able to reproduce. Without it
@@ -112,6 +140,10 @@ func (d *Dict) Put(k string, obj *Obj) {
 	if old, exists := d.dictStore[k]; exists {
 		d.memUsed -= d.entryBytes(k, old)
 	}
+	// A write replaces the value and, with it, any expiry the key had. That is
+	// Redis's rule for SET without KEEPTTL, and it is also what stops the
+	// expiry table growing an entry per overwrite.
+	delete(d.expiredDictStore, k)
 
 	Touch(&obj.Access)
 	d.dictStore[k] = obj
@@ -130,11 +162,10 @@ func (d *Dict) Put(k string, obj *Obj) {
 // the caller is asking who owns the name and a dead key owns nothing - leaving
 // it would mean refusing to let another type take a name that is in truth free.
 func (d *Dict) Has(k string) bool {
-	obj, ok := d.dictStore[k]
-	if !ok {
+	if _, ok := d.dictStore[k]; !ok {
 		return false
 	}
-	if d.HasExpired(obj) {
+	if d.HasExpired(k) {
 		d.Del(k)
 		noteRemoval(d, k)
 		return false
@@ -157,7 +188,7 @@ func (d *Dict) Keys() []string {
 // An expired key reads as absent, so a rewrite does not carry it forward.
 func (d *Dict) Peek(k string) *Obj {
 	obj, ok := d.dictStore[k]
-	if !ok || d.HasExpired(obj) {
+	if !ok || d.HasExpired(k) {
 		return nil
 	}
 	return obj
@@ -170,7 +201,7 @@ func (d *Dict) Del(k string) bool {
 	if obj, exist := d.dictStore[k]; exist {
 		d.memUsed -= d.entryBytes(k, obj)
 		delete(d.dictStore, k)
-		delete(d.expiredDictStore, obj)
+		delete(d.expiredDictStore, k)
 		return true
 	}
 	return false

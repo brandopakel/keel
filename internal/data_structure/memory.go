@@ -67,7 +67,7 @@ const (
 // quietly go out of date.
 func (d *Dict) entryBytes(key string, obj *Obj) uint64 {
 	n := uint64(entryOverhead) + uint64(len(key)) + valueBytes(obj.Value)
-	if _, hasTTL := d.expiredDictStore[obj]; hasTTL {
+	if _, hasTTL := d.expiredDictStore[key]; hasTTL {
 		n += expiryOverhead
 	}
 	return n

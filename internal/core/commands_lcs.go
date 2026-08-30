@@ -126,7 +126,7 @@ func lcsValue(key string) (string, error) {
 	if obj == nil {
 		return "", nil
 	}
-	if dictStore.HasExpired(obj) {
+	if dictStore.HasExpired(key) {
 		return "", nil
 	}
 	if err := assertType(obj.TypeEncoding, constant.ObjTypeString); err != nil {

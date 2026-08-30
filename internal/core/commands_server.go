@@ -115,7 +115,8 @@ func cmdINFO(args []string) []byte {
 			config.MaxMemory, humanBytes(config.MaxMemory), evictionPolicyName())
 	}
 	if want("stats") {
-		fmt.Fprintf(&b, "# Stats\r\nevicted_keys:%d\r\n\r\n", data_structure.Evicted())
+		fmt.Fprintf(&b, "# Stats\r\nevicted_keys:%d\r\nexpired_keys:%d\r\n\r\n",
+			data_structure.Evicted(), ExpiredKeys())
 	}
 	if want("persistence") {
 		base, current, rewrites, keys := AOFStats()
@@ -128,7 +129,8 @@ func cmdINFO(args []string) []byte {
 		fmt.Fprintf(&b, "aof_rewrites:%d\r\naof_keys_at_last_rewrite:%d\r\n\r\n", rewrites, keys)
 	}
 	if want("keyspace") {
-		fmt.Fprintf(&b, "# Keyspace\r\ndb0:keys=%d\r\n\r\n", data_structure.TotalKeys())
+		fmt.Fprintf(&b, "# Keyspace\r\ndb0:keys=%d,expires=%d\r\n\r\n",
+			data_structure.TotalKeys(), KeysWithExpiry())
 	}
 
 	return Encode(b.String(), false)

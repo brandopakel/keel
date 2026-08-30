@@ -10,6 +10,7 @@ import (
 	"net"
 	"sync"
 	"syscall"
+	"time"
 
 	"memkv/internal/config"
 	"memkv/internal/core"
@@ -422,6 +423,34 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 	}
 	setWaker(func() { syscall.Write(wakeupFDs[1], []byte{0}) })
 
+	// A heartbeat, so work that is due because of the clock happens on a server
+	// nobody is talking to.
+	//
+	// Check blocks with no timeout, so an idle loop is parked until a client
+	// does something - and an idle server is exactly the one where expired keys
+	// pile up unread. Poking the wakeup pipe at a fixed rate gives the loop a
+	// turn to run the expiry cycle in. Redis calls its equivalent serverCron
+	// and runs it at 10Hz; this is the same rate for the same reason.
+	// Its own stop signal rather than the shared shutdown channel. Watching
+	// that would mean this goroutine reading a package-level variable that
+	// something else may replace, which is a data race whether or not it ever
+	// bites - and closing a channel owned here stops the ticker at exactly the
+	// moment this loop returns, which is what it should be tied to anyway.
+	cronStop := make(chan struct{})
+	defer close(cronStop)
+	go func() {
+		tick := time.NewTicker(time.Duration(config.CronIntervalMs) * time.Millisecond)
+		defer tick.Stop()
+		for {
+			select {
+			case <-cronStop:
+				return
+			case <-tick.C:
+				wake()
+			}
+		}
+	}()
+
 	for !shuttingDown() {
 		// check if any FD is ready for an IO
 		events, err = ioMultiplexer.Check()
@@ -574,6 +603,10 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 			requestShutdown()
 			stop = true
 		}
+
+		// Keys whose TTL has passed are reaped here rather than waiting for
+		// someone to read them. Almost every turn this is one length check.
+		core.ExpireCycle()
 
 		// A rewrite advances one slice per cycle, inside the flush above, and
 		// cycles only happen when the multiplexer returns. A server that goes

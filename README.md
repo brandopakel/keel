@@ -53,6 +53,12 @@ unchanged — see [Relationship to upstream](#relationship-to-upstream).
   asking each keyspace rather than by keeping a directory of names — a directory
   costs a second map entry and a second copy of every key, which measured as the
   memory estimate falling to 70% of real heap.
+- **Active expiry.** A key with a TTL goes away when it falls due, not when
+  something next happens to read it. Twenty keys with a TTL are sampled per turn
+  of the loop and another round is drawn while the sample keeps coming up
+  expired — the same argument the eviction pool makes. Measured: 500 keys given
+  a one-second TTL and then left completely alone go from 500 keys and 79,890
+  bytes to zero of both, on a server nobody is talking to.
 - **Approximate LRU and LFU eviction.** A bounded keyspace: past `-maxkeys`,
   each new key evicts an old one. Rather than ordering every key by access time
   or frequency — which would cost a structure threaded through the keyspace and
@@ -117,6 +123,8 @@ single read. Rewriting that path is most of the work below.
 | Frame and buffer bounds | A length header is checked before it is trusted, and unparsed bytes per connection are bounded, so a client cannot open a frame it never finishes and make the server buffer without limit. |
 | Spurious readability | `EAGAIN` on a read no longer closes the connection. |
 | Per-connection failures | A socket that fails to configure costs that client its connection instead of unwinding the server and disconnecting everyone. |
+| Expiry accounting | Giving a key a TTL charges a second map entry, and the charge was made when the object was created — which stopped being before the write that accounted for it. The delete side still gave it back, so `used_memory` counted down past zero and wrapped to 18 exabytes, against which a `-maxmemory` bound would have evicted the entire keyspace on the next write. |
+| Expiry table leak | It was keyed by object pointer, and `Put` replaced the object without removing the old one's entry — so every overwrite of a key with a TTL left an entry behind, holding the dead object alive with it. |
 | One name, one type | Each type kept its own map, so `SET k v` and `SADD k m` both held `k` at once, both answered, and `DEL k` removed the string and left the set. Every command now resolves a name against all the keyspaces first and answers `WRONGTYPE`, and `DEL` removes whichever type holds the name rather than only a string. |
 | `SET` expiry keyword | `SET` read the number after `EX`/`PX` and never the keyword itself, so `PX` set seconds — a thousandfold longer than asked, and silently, since the reply was still `OK`. A keyword that meant nothing at all was accepted just as readily. |
 | `SPOP` and `SRAND` | Both indexed the first of a zero-length result, so `SPOP key` with no count **panicked and took the server down**. Asking for more members than the set holds spun the event loop forever, and an empty set panicked a third way. The sampling is now a partial shuffle, which cannot do any of the three. |
@@ -177,11 +185,9 @@ are the ones that decide whether it is usable for anything of yours.
   under `internal/`, which Go forbids anything outside this module from
   importing. Both are consequences of it being a server you talk to over a
   socket rather than a package you link against.
-- **Expiry is lazy only.** A key with a TTL goes away when something next looks
-  at it. Five hundred keys given a one-second TTL and then left alone still
-  count in `DBSIZE` and `used_memory` a minute later. Redis runs an active
-  expire cycle; this does not, so eviction is what eventually reclaims them,
-  and only once a bound is reached.
+- **`LCS` does not type-check its keys.** Every other command answers
+  `WRONGTYPE` for a name held by another type; `LCS` treats such a key as an
+  empty string, the same way it treats a missing one.
 - **About forty commands.** No hashes and no lists, and none of `EXISTS`,
   `KEYS`, `SCAN`, `TYPE`, `MGET`, `MSET`, `FLUSHDB`, `MULTI` or pub/sub.
 - **One database, no authentication, no TLS, no replication.** `SELECT`, `AUTH`
@@ -274,6 +280,25 @@ choice. Read it as the reasoning rather than the changelog.
   valid decomposition of that same subsequence and can differ, because
   Redis's positions come from walking the table backwards and there is no
   table here.
+- **Active expiry** — twenty keys with a TTL sampled per turn of the event
+  loop, with another round drawn while more than a quarter of a sample comes
+  back expired. Before it, expiry happened only when something read a key, so a
+  key written once with an hour's TTL and never read again held its bytes until
+  eviction got round to it — which under no memory pressure is never.
+
+  The sample is drawn from the expiry table rather than the keyspace, so a
+  server whose keys never expire pays one length check per turn, measured at 2ns.
+  The loop is woken at 10Hz to run it, because an idle server is precisely the
+  one where unread expired keys pile up and the loop otherwise parks in `epoll`
+  until a client turns up.
+
+  Two bugs came out of building it, both from the expiry table having been keyed
+  by object pointer rather than by key name. `Put` replaced an object without
+  removing the old one's entry, so every overwrite of a key with a TTL leaked an
+  entry and kept the dead object alive with it. And nothing could get from an
+  expiry back to the name it belonged to, which is exactly what a cycle sampling
+  for expired keys needs in order to delete one.
+
 - **Rewriting the log** — `BGREWRITEAOF`, and automatically once the file has
   grown past `-auto-aof-rewrite-percentage` of its size after the last one.
   Without it the log records every write ever made, so it grows with traffic
@@ -376,11 +401,6 @@ Roughly in the order the gaps matter.
 collect the key names before the walk and 13ms to finish it, per million keys.
 Both are one pass over something, and both could be sliced the way the walk now
 is. Neither was worth it while the walk was 186ms.
-
-**Memory.** Expiry is lazy only — a key with a TTL is reclaimed when something
-next looks at it, so five hundred keys given a one-second TTL and then left
-alone still count in `DBSIZE` and `used_memory` a minute later. Redis runs an
-active expire cycle, sampling keys with TTLs and reaping what has fallen due.
 
 **Command surface.** No hashes and no lists, and none of `EXISTS`, `KEYS`,
 `SCAN`, `TYPE`, `MGET`, `MSET`, `FLUSHDB`, `MULTI` or pub/sub. `EXISTS` and

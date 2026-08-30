@@ -95,7 +95,7 @@ func restoreKey(key string, payload []byte) error {
 	switch payload[0] {
 	case dumpTagString:
 		oType, oEnc := deduceTypeString(string(body))
-		dictStore.Put(key, dictStore.NewObj(string(body), constant.NoExpire, oType, oEnc))
+		dictStore.Put(key, dictStore.NewObj(string(body), oType, oEnc))
 	case dumpTagSet:
 		members, err := decodeParts(body)
 		if err != nil {

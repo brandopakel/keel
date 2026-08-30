@@ -226,11 +226,25 @@ func aofCommit(cmd *MemKVCmd, reply []byte) {
 	// After the command, because a key evicted to make room for a write has to
 	// be dropped after that write, not before it - and under a policy that can
 	// choose any key, the one evicted is occasionally the one just written.
+	aofCommitExtras()
+	aof.staged = aof.staged[:0]
+}
+
+// aofCommitExtras writes the removals the server decided on by itself.
+//
+// Separate from aofCommit because active expiry runs between commands rather
+// than inside one: the keys it reaps are recorded by the same hook, and without
+// this nothing would ever write them out - and worse, the next command's
+// aofBegin would clear them, so a restart would bring back keys the server had
+// already expired.
+func aofCommitExtras() {
+	if aof.file == nil || aof.replaying {
+		aof.extra = aof.extra[:0]
+		return
+	}
 	for _, parts := range aof.extra {
 		aof.buf = appendCommand(aof.buf, parts...)
 	}
-
-	aof.staged = aof.staged[:0]
 	aof.extra = aof.extra[:0]
 }
 
