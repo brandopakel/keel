@@ -36,6 +36,13 @@ import (
 // threads ever touch the same connection, and the map they live in is only
 // mutated by the loop thread between phases.
 //
+// The phases replaced the loop for everyone, not only for a server that asks
+// for threads, so the default path is not the code any earlier measurement was
+// taken against. That is checked rather than assumed: bench/run-ab.sh runs the
+// commit before this one against the commit after with the arms alternating rep
+// by rep, and all eighteen scenarios came back between 0.967x and 1.085x with
+// spreads as wide as the deviations. Free, to the ~5% those runs can resolve.
+//
 // It is off by default because the measurements are mixed. On darwin/arm64,
 // medians of five runs, the results that held steady inside the noise floor:
 // 1.41x at 256KB SET, saturating at four threads, which is where the

@@ -207,6 +207,16 @@ and deep pipelining.
       1.05–1.25x but with 15–32% spread, so they are recorded rather than
       claimed. Mixed enough to default to off, as Redis does.
 
+      Turning the loop into phases changed the default path too, since
+      `-io-threads 1` no longer runs the code every earlier benchmark was taken
+      against. That is checked rather than assumed: the commit before against
+      the commit after, arms alternating rep by rep so each pair of readings is
+      a second apart, came back between 0.967x and 1.085x across all eighteen
+      scenarios with spreads as wide as the deviations. Free, to the ~5% five
+      reps can resolve — including the 256KB rows, which is where a large value
+      being copied through the arena instead of kept by reference would have
+      shown up.
+
       The 8KB regression is not the handoff: a channel rendezvous measures
       688ns, a fraction of a percent at these rates. Measuring the alternative
       was the more interesting result. Redis busy-waits on an atomic there

@@ -91,6 +91,8 @@ program.
 | `run-offloopback.sh` | the same, across a veth pair between network namespaces (Linux) |
 | `summarise.py` | reduces a matrix CSV to medians and comparison tables |
 | `summarise-iothreads.py` | the same for an `-io-threads` sweep, with ratios against 1 thread |
+| `run-ab.sh` | two binaries over the same suites, arms alternating rep by rep |
+| `summarise-ab.py` | paired per-rep ratios from an A/B run |
 
 `SERVERS=`, `BIN=`, `OUT=`, `REPS=`, `PORT_BASE=` are all overridable.
 
@@ -158,6 +160,51 @@ cores between `redis-benchmark` and the server, so an arm that takes eight
 threads is not measured against an idle client. `run-offloopback.sh` exists for
 this and is Linux-only; the small-payload rows deserve a run there before
 anything about them is called a property of the design.
+
+### Does the restructuring cost anything when threading is off?
+
+Phases were introduced so that I/O threads could exist, but they replaced the
+loop for everyone: `-io-threads 1` is the default and no longer runs the code
+that every other result in this directory was measured against. Three things
+changed for a server that never sets the flag. Every ready connection is now
+read before any of them executes, where the old loop finished one connection
+before looking at the next. A batch of several commands is coalesced into one
+arena shared by the whole server rather than a buffer allocated per batch. And a
+batch of one keeps its reply by reference, which is the large-value bypass the
+old `respondBatch` had and which had to be rebuilt rather than inherited.
+
+`run-ab.sh` measures it directly: the binary at the commit before phases against
+the binary after, both `-mode kqueue`, the candidate pinned to `-io-threads 1`.
+Both servers run at once and the arms alternate rep by rep, so each pair of
+readings is a second apart rather than half an hour, and `summarise-ab.py`
+divides them before taking a median. Comparing two medians taken thirty minutes
+apart would mostly measure the thirty minutes.
+
+Paired ratios, phased over inline, darwin/arm64, five reps
+(`results/phases-vs-inline-darwin.csv`):
+
+| scenario | paired | spread |
+|---|---|---|
+| `PING` c=1 | 0.996x | ±3% |
+| `PING` c=50 P=1 | 0.981x | ±3% |
+| `PING` c=50 P=64 | 1.031x | ±9% |
+| `PING` c=200 | 1.064x | ±7% |
+| `SET` d=65536 | 1.015x | ±5% |
+| `SET` d=262144 | 0.983x | ±4% |
+| `GET` d=65536 | 0.990x | ±4% |
+| `GET` d=262144 | 0.997x | ±3% |
+
+Every one of the eighteen scenarios landed between 0.967x and 1.085x, and in
+each case the spread is as large as the distance from 1.00. **Nothing here is
+distinguishable from noise.** Five reps at these spreads resolve about 5%, so
+what this rules out is a regression larger than that — not one smaller.
+
+Two cells are worth reading specifically rather than as part of the average. The
+256KB rows are flat at ±3–4%, which is the check that the single-reply bypass
+really was preserved: if a large value were being copied through the arena
+instead of kept by reference, it would show there and nowhere else. And P=64,
+which is the arena's heaviest use, is 1.031x — one shared array reused every
+cycle is, if anything, cheaper than a fresh buffer per batch.
 
 ### A three-rep pass got this backwards
 
@@ -231,6 +278,7 @@ auditable. Read them in this order:
 | `results/memory-fair.csv`, `results/latency-fair.csv` | **authoritative.** darwin memory and latency percentiles |
 | `results/hyperfine3/` | **authoritative.** per-config noise floors, 12/12 cells, drained between configs |
 | `results/iothreads-darwin.csv` | **authoritative.** darwin, `-io-threads` 1/2/4/8, 5 reps. Loopback, so see the caveat above |
+| `results/phases-vs-inline-darwin.csv` | **authoritative.** darwin, the loop before and after phases, interleaved arms, 5 reps |
 | `results/linux3/` | superseded. Linux post-`TCP_NODELAY`, 4 servers only |
 | `results/linux2/` | superseded. Linux pre-`TCP_NODELAY` — the run where the Nagle stall was found |
 | `results/matrix.csv`, `results/memory.csv`, `results/memtier.csv` | superseded. Corrected harness, but before `TCP_NODELAY`, so unfair to the event loop |
