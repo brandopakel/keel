@@ -11,6 +11,10 @@ tone_instructions: >-
 
 reviews:
   profile: assertive
+  # No codegen instructions addressed to AI agents in the review output. The
+  # reviews are read by people here, and a block written for a machine is noise
+  # in a thread that is trying to explain a bug to a human.
+  enable_prompt_for_ai_agents: false
   request_changes_workflow: false
   high_level_summary: true
   poem: false
