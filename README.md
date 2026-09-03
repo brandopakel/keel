@@ -34,6 +34,12 @@ unchanged — see [Where this came from](#where-this-came-from).
   Command execution deliberately stays on one thread whatever N is, which is
   what lets every store be a plain map with no locking. Off by default, because
   below 64KB the measurements do not justify it.
+- **Lists are a ring buffer, not a linked list.** Push and pop at either end in
+  O(1), `LINDEX` in O(1), and `LRANGE` proportional to the range rather than to
+  the list. Redis uses a quicklist, which wins when a list is enormous; one slot
+  in a shared array costs less per element than one allocation per node, and
+  per-element memory is what this server is built around. A list that grew and
+  shrank gives its buffer back rather than holding the high-water mark.
 - **Custom data structures**, implemented from scratch:
   - Skip list, for sorted sets (`ZADD`, `ZRANK`, …)
   - Geohash, for geospatial indexing (`GEOADD`, `GEODIST`, …)
@@ -174,6 +180,7 @@ darwin. Figures are medians of repeated runs. Method and raw data are in
 | **Keyspace** | `EXISTS`, `TYPE`, `KEYS`, `DBSIZE`, `FLUSHDB` |
 | **Server** | `INFO`, `MEMORY USAGE`, `BGREWRITEAOF`, `KEEL.DUMP`, `KEEL.RESTORE` |
 | **Hash** | `HSET`, `HSETNX`, `HGET`, `HMGET`, `HDEL`, `HEXISTS`, `HLEN`, `HKEYS`, `HVALS`, `HGETALL`, `HINCRBY` |
+| **List** | `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LLEN`, `LINDEX`, `LSET`, `LRANGE` |
 | **Sorted Set**| `ZADD`, `ZRANK`, `ZREM`, `ZSCORE`, `ZCARD` |
 | **Set** | `SADD`, `SREM`, `SCARD`, `SMEMBERS`, `SISMEMBER`, `SMISMEMBER`, `SRAND`, `SPOP` |
 | **Geospatial** | `GEOADD`, `GEODIST`, `GEOHASH`, `GEOSEARCH`, `GEOPOS` |
@@ -211,10 +218,11 @@ are the ones that decide whether it is usable for anything of yours.
 - **`LCS` does not type-check its keys.** Every other command answers
   `WRONGTYPE` for a name held by another type; `LCS` treats such a key as an
   empty string, the same way it treats a missing one.
-- **Seventy-four commands.** No lists, and none of `SCAN`, `MULTI` or pub/sub.
-  Hashes are implemented, as are the keyspace commands a client library reaches
-  for first — `EXISTS`, `TYPE`, `KEYS`, `MGET`, `MSET`, `FLUSHDB` — which answer
-  across every keyspace rather than only strings.
+- **Eighty-two commands.** Hashes and lists are implemented, as are the
+  keyspace commands a client library reaches for first — `EXISTS`, `TYPE`,
+  `KEYS`, `MGET`, `MSET`, `FLUSHDB` — which answer across every keyspace rather
+  than only strings. Still missing: `SCAN`, `MULTI`, pub/sub, and the blocking
+  and trimming list commands (`BLPOP`, `LTRIM`, `LREM`, `LINSERT`).
 - **One database, no authentication, no TLS, no replication.** `SELECT`, `AUTH`
   and `CONFIG` are unimplemented, and it binds `0.0.0.0` by default. Keep it off
   any interface you do not control.
@@ -432,10 +440,12 @@ collect the key names before the walk and 13ms to finish it, per million keys.
 Both are one pass over something, and both could be sliced the way the walk now
 is. Neither was worth it while the walk was 186ms.
 
-**Command surface.** Lists are the gap now. A list is a new type rather than a
-new command — a store, an entry in the type table, memory accounting calibrated
-the way the others were, a way for the rewrite to emit it, and a share of the
-eviction budget — which is what hashes just cost.
+**Command surface.** The gaps left are commands rather than types: `LTRIM`,
+`LREM` and `LINSERT` on lists, `SCAN`, `MULTI` and pub/sub. `BLPOP` and the
+other blocking forms are a different shape again — this server runs every
+command on one thread, so a command that waits has to become a client parked on
+a key rather than a call that blocks, which is the event loop's problem more
+than the list's.
 
 `SCAN` is absent for a reason worth stating rather than leaving as an oversight.
 Its guarantee — every key present for the whole iteration is returned at least
