@@ -1,28 +1,71 @@
-# This workflow will build a golang project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
-
+# Build, vet and test on every push to the working branch and every pull
+# request into it.
+#
+# This previously ran only on `main`, which tracks upstream unchanged, so none
+# of the work on `develop` was ever built or tested here.
+#
+# The matrix runs the floor go.mod declares as well as current Go, because the
+# floor is a claim: the memory accounting in internal/data_structure/memory.go
+# is calibrated against real heap growth and only holds from 1.22. Testing only
+# the newest Go would let that floor rot without anyone noticing.
 name: Go
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ develop, main ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ develop ]
+
+permissions:
+  contents: read
 
 jobs:
-
   build:
+    name: go ${{ matrix.go }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go: [ '1.22', 'stable' ]
+    steps:
+      # Actions are pinned to commit SHAs rather than tags: a tag is mutable and
+      # can be repointed at code this workflow never reviewed. Dependabot bumps
+      # them, since a pin nobody updates is an old action rather than a safe one.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+
+      - run: go version
+
+      - name: Build
+        run: go build -v ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -v ./...
+
+  race:
+    name: race detector
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.20'
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
 
-    - name: Build
-      run: go build -v ./...
-
-    - name: Test
-      run: go test -v ./...
+      # Tests that assert on wall-clock latency skip themselves here: the
+      # detector inflates the durations they measure about fourfold, so running
+      # them under -race measures the instrumentation.
+      - name: Test with the race detector
+        run: go test -race -v ./...
