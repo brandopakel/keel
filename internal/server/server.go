@@ -6,14 +6,15 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"memkv/internal/core/io_multiplexing"
 	"net"
+	"os"
 	"sync"
 	"syscall"
 	"time"
 
-	"memkv/internal/config"
-	"memkv/internal/core"
+	"github.com/brandopakel/keel/internal/config"
+	"github.com/brandopakel/keel/internal/core"
+	"github.com/brandopakel/keel/internal/core/io_multiplexing"
 )
 
 // readChunkSize is how much we attempt to pull off a socket when we have no
@@ -134,7 +135,7 @@ type client struct {
 	buf *connBuffer
 
 	// cmds and err are what the read phase produced, for the execute phase.
-	cmds []*core.MemKVCmd
+	cmds []*core.Command
 	err  error
 
 	// out is the reply to send in the write phase. When inArena it is a window
@@ -158,7 +159,7 @@ var clients = make(map[int]*client)
 //
 // scratch belongs to whichever thread is calling, and nothing that survives the
 // call points into it.
-func (c *client) readCommands(scratch []byte) ([]*core.MemKVCmd, error) {
+func (c *client) readCommands(scratch []byte) ([]*core.Command, error) {
 	b := c.buf
 	if b != nil && b.size() >= maxQueryBuffer {
 		// Wrap ErrProtocol so the caller replies before hanging up: the client
@@ -226,7 +227,7 @@ func (c *client) readCommands(scratch []byte) ([]*core.MemKVCmd, error) {
 		src = scratch[:n]
 	}
 
-	var cmds []*core.MemKVCmd
+	var cmds []*core.Command
 	used := 0
 	for used < len(src) {
 		cmd, consumed, perr := core.ParseCmd(src[used:])
@@ -265,7 +266,7 @@ func closeClient(c *client) {
 	syscall.Close(c.fd)
 }
 
-func responseRw(cmd *core.MemKVCmd, rw io.ReadWriter) {
+func responseRw(cmd *core.Command, rw io.ReadWriter) {
 	err := core.EvalAndResponse(cmd, rw)
 	if err != nil {
 		responseErrorRw(err, rw)
@@ -663,18 +664,68 @@ func StartAOF() error {
 	if !config.AOFEnabled {
 		return nil
 	}
-	applied, err := core.LoadAOF(config.AOFFileName)
+	readFrom := aofReadPath(config.AOFFileName, config.LegacyAOFFileName)
+	if readFrom != config.AOFFileName {
+		log.Printf("appendonly: reading %s, written before the rename; "+
+			"new records go to %s", readFrom, config.AOFFileName)
+	}
+
+	applied, err := core.LoadAOF(readFrom)
 	switch {
 	case core.IsTruncatedAOF(err):
 		log.Printf("appendonly: %v - starting from what was intact", err)
 	case err != nil:
 		return err
 	case applied > 0:
-		log.Printf("appendonly: replayed %d commands from %s", applied, config.AOFFileName)
+		log.Printf("appendonly: replayed %d commands from %s", applied, readFrom)
 	}
 	if err := core.OpenAOF(config.AOFFileName); err != nil {
 		return err
 	}
+
+	// Having replayed the old file, write the whole keyspace into the new one
+	// before anything else appends to it.
+	//
+	// Without this the fallback loses the data it exists to save, one restart
+	// later rather than immediately. The first start reads memkv-master.aof and
+	// opens an empty keel-master.aof; the second start sees keel-master.aof
+	// present, prefers it, and replays only what was written after the
+	// migration. Everything that lived solely in the old log is gone, and the
+	// old log is still sitting there looking like a backup.
+	//
+	// A rewrite is exactly the right thing here: the shortest log producing the
+	// current state. It runs to completion before the server serves anyone,
+	// which at startup costs one pass over a keyspace that was just built by
+	// one pass over the same data.
+	if readFrom != config.AOFFileName {
+		if err := core.RewriteAOF(); err != nil {
+			return fmt.Errorf("migrating %s to %s: %w", readFrom, config.AOFFileName, err)
+		}
+		log.Printf("appendonly: wrote the replayed keyspace to %s; %s is no longer read",
+			config.AOFFileName, readFrom)
+	}
+
 	log.Printf("appendonly: on, %s, appendfsync %s", config.AOFFileName, config.AOFFsync)
 	return nil
+}
+
+// aofReadPath chooses which log to replay at startup.
+//
+// The default log was ./memkv-master.aof before the server was renamed and is
+// ./keel-master.aof now. Without this, the first restart after the rename finds
+// nothing at the new name, replays nothing, and serves an empty keyspace
+// beside a perfectly good log it never opened - no error and no warning, which
+// is the worst shape a data loss can take.
+//
+// The old name is a fallback and not a merge: if both files are there, the
+// current one is the live log and the old one is whatever was left behind. Only
+// the current name is ever written.
+func aofReadPath(current, legacy string) string {
+	if _, err := os.Stat(current); err == nil {
+		return current
+	}
+	if _, err := os.Stat(legacy); err == nil {
+		return legacy
+	}
+	return current
 }

@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"memkv/internal/config"
+	"github.com/brandopakel/keel/internal/config"
 )
 
 func TestLFUStateRoundTripsThroughOneField(t *testing.T) {

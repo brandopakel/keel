@@ -1,9 +1,15 @@
-![img.png](memkv.png)
-# MemKV — a Redis-inspired in-memory database in Go
+![keel](keel.png)
+# keel — a Redis-inspired in-memory database in Go
 
-MemKV is an in-memory key-value database written from scratch in Go. It speaks
+keel is an in-memory key-value database written from scratch in Go. It speaks
 **RESP**, the Redis serialization protocol, so `redis-cli` and ordinary Redis
 clients talk to it unmodified.
+
+It was called memkv until 2026-09-03. The wire commands `MEMKV.DUMP` and
+`MEMKV.RESTORE` are still accepted under their old names, because every
+append-only file written before the rename records one — but only `KEEL.*` is
+written, and the default log is `./keel-master.aof` with the old name read as a
+fallback.
 
 It exists to work out how a high-performance network server actually works:
 event loops, socket handling, custom and probabilistic data structures, memory
@@ -14,7 +20,7 @@ by a test, or by the harness in [`bench/`](bench/README.md), which keeps the
 runs that turned out to be wrong alongside the ones that did not.
 
 The work lives on `develop`. `main` tracks the project this grew out of,
-unchanged — see [Relationship to upstream](#relationship-to-upstream).
+unchanged — see [Where this came from](#where-this-came-from).
 
 ## Key features
 
@@ -101,17 +107,22 @@ unchanged — see [Relationship to upstream](#relationship-to-upstream).
 ## Getting started
 
 ```sh
-go run ./cmd                             # replies are coalesced per read (the default)
-go run ./cmd -maxkeys 1000000            # bound the keyspace; evicts approximately-LRU
-go run ./cmd -maxkeys 1000000 -evict lfu # ...or by frequency, which resists scans
-go run ./cmd -maxmemory 512mb            # bound by bytes instead of key count
-redis-cli -p 8081                        # from another terminal
+go install github.com/brandopakel/keel/cmd/keel@latest # or run from source, below
+keel                                                   # listens on 8081
 ```
 
 ```sh
-go run ./cmd -io-threads 4               # read, parse and write on 4 threads
-go run ./cmd -appendonly                 # survive a restart
-go run ./cmd -appendonly -appendfsync always   # ...and a power cut
+go run ./cmd/keel                             # replies are coalesced per read (the default)
+go run ./cmd/keel -maxkeys 1000000            # bound the keyspace; evicts approximately-LRU
+go run ./cmd/keel -maxkeys 1000000 -evict lfu # ...or by frequency, which resists scans
+go run ./cmd/keel -maxmemory 512mb            # bound by bytes instead of key count
+redis-cli -p 8081                             # from another terminal
+```
+
+```sh
+go run ./cmd/keel -io-threads 4                   # read, parse and write on 4 threads
+go run ./cmd/keel -appendonly                     # survive a restart
+go run ./cmd/keel -appendonly -appendfsync always # ...and a power cut
 ```
 
 Other I/O modes exist for benchmarking; `-mode` selects them and
@@ -161,7 +172,7 @@ darwin. Figures are medians of repeated runs. Method and raw data are in
 | **General** | `PING` |
 | **String** | `SET`, `GET`, `MSET`, `MGET`, `DEL`, `TTL`, `EXPIRE`, `PEXPIREAT`, `INCR`, `LCS` |
 | **Keyspace** | `EXISTS`, `TYPE`, `KEYS`, `DBSIZE`, `FLUSHDB` |
-| **Server** | `INFO`, `MEMORY USAGE`, `BGREWRITEAOF`, `MEMKV.DUMP`, `MEMKV.RESTORE` |
+| **Server** | `INFO`, `MEMORY USAGE`, `BGREWRITEAOF`, `KEEL.DUMP`, `KEEL.RESTORE` |
 | **Sorted Set**| `ZADD`, `ZRANK`, `ZREM`, `ZSCORE`, `ZCARD` |
 | **Set** | `SADD`, `SREM`, `SCARD`, `SMEMBERS`, `SISMEMBER`, `SMISMEMBER`, `SRAND`, `SPOP` |
 | **Geospatial** | `GEOADD`, `GEODIST`, `GEOHASH`, `GEOSEARCH`, `GEOPOS` |
@@ -173,7 +184,7 @@ darwin. Figures are medians of repeated runs. Method and raw data are in
 
 ## Status
 
-memkv is a project for understanding how a database server works, and it is
+keel is a project for understanding how a database server works, and it is
 honest about being that rather than something to put real data in. What it does
 implement it implements properly: `go-redis` v9 connects to it unmodified,
 pipelines, and reads and writes strings, sets and TTLs, and an unsupported
@@ -190,11 +201,12 @@ are the ones that decide whether it is usable for anything of yours.
   the first thing to fix if the answer to "can someone else use this" is meant
   to be yes, and because upstream's work is most of what sits underneath, it is
   not a decision this fork can make alone.
-- **It is not importable as a library.** The module is named `memkv` rather
-  than a fetchable path, so `go get` cannot resolve it, and every package lives
+- **It is not importable as a library.** `go install
+  github.com/brandopakel/keel/cmd/keel@latest` works, but every package lives
   under `internal/`, which Go forbids anything outside this module from
-  importing. Both are consequences of it being a server you talk to over a
-  socket rather than a package you link against.
+  importing. That is a consequence of it being a server you talk to over a
+  socket rather than a package you link against; nothing here is a stable API
+  yet, and `internal/` says so rather than implying otherwise.
 - **`LCS` does not type-check its keys.** Every other command answers
   `WRONGTYPE` for a name held by another type; `LCS` treats such a key as an
   empty string, the same way it treats a missing one.
@@ -216,15 +228,15 @@ package. The short answer measured here: the netpoller is 8–19% slower for sma
 values and uses far more memory per connection, while winning at large payloads
 and deep pipelining.
 
-## Relationship to upstream
+## Where this came from
 
-MemKV began as a fork of [quangh33/memkv](https://github.com/quangh33/memkv),
+keel began as a fork of [quangh33/memkv](https://github.com/quangh33/memkv),
 which is the origin of the server's shape and of the data structures beneath the
 network layer: the dictionary, the skip list, the geohash, the Bloom filter and
 the Count-Min sketch, and the command surface around them. That design is not
 restated here and the credit for it is theirs.
 
-What this fork added: the framing and reply-writing rewrite described in
+What was added here: the framing and reply-writing rewrite described in
 [Correctness and performance](#correctness-and-performance), approximate LRU and
 LFU eviction, memory-based bounding across every keyspace, HyperLogLog, the
 cuckoo filter, the Morris counter, `LCS`, optional I/O threading, and the
@@ -233,6 +245,11 @@ benchmark harness in [`bench/`](bench/README.md).
 `main` tracks upstream unchanged, so a diff against it is exactly the work
 above. [quangh33/memkv#2](https://github.com/quangh33/memkv/issues/2) is the
 upstream discussion the benchmarks were written to answer.
+
+This repository is no longer a GitHub fork of that one — it was detached so it
+could stand as its own project. That changes nothing about where the code came
+from, and nothing about the licence question in [Status](#status): the work
+underneath is still quangh33's, and it is still unlicensed.
 
 ## Design log
 

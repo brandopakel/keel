@@ -1,8 +1,9 @@
 package data_structure
 
 import (
-	"github.com/spaolacci/murmur3"
 	"math"
+
+	"github.com/spaolacci/murmur3"
 )
 
 // Implementation of Count-Min Sketch data structure

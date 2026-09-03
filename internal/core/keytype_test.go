@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"memkv/internal/data_structure"
+	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // TestOneNameHoldsOneType is the bug this exists for.

@@ -11,8 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"memkv/internal/config"
-	"memkv/internal/core"
+	"github.com/brandopakel/keel/internal/config"
+	"github.com/brandopakel/keel/internal/core"
 )
 
 // pairedClients builds n connected socket pairs and a client for each, with the
@@ -219,13 +219,13 @@ func TestExecuteRunCoalescesABatchButNotASingleReply(t *testing.T) {
 	var arena replyArena
 	arena.reset()
 
-	one := &client{fd: -1, cmds: []*core.MemKVCmd{{Cmd: "PING"}}}
+	one := &client{fd: -1, cmds: []*core.Command{{Cmd: "PING"}}}
 	assert.True(t, executeRun(one, &arena))
 	assert.False(t, one.inArena, "a batch of one must not be copied into the arena")
 	assert.Equal(t, "+PONG\r\n", string(one.out))
 	assert.Empty(t, arena.buf)
 
-	many := &client{fd: -1, cmds: []*core.MemKVCmd{{Cmd: "PING"}, {Cmd: "PING"}, {Cmd: "PING"}}}
+	many := &client{fd: -1, cmds: []*core.Command{{Cmd: "PING"}, {Cmd: "PING"}, {Cmd: "PING"}}}
 	assert.True(t, executeRun(many, &arena))
 	assert.True(t, many.inArena, "a batch of several must be coalesced into one write")
 	many.out = arena.buf[many.outStart:many.outEnd]

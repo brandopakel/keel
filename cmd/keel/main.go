@@ -11,8 +11,8 @@ import (
 	"sync"
 	"syscall"
 
-	"memkv/internal/config"
-	"memkv/internal/server"
+	"github.com/brandopakel/keel/internal/config"
+	"github.com/brandopakel/keel/internal/server"
 )
 
 // mode selects the I/O implementation, so the alternatives discussed in the
@@ -156,7 +156,7 @@ func parseSize(s string) (uint64, error) {
 }
 
 func main() {
-	fmt.Println("starting memkv database ...")
+	fmt.Println("starting keel ...")
 	var signals = make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
 	var wg sync.WaitGroup

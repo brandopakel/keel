@@ -5,9 +5,9 @@ import (
 	"syscall"
 	"testing"
 
-	"memkv/internal/core"
-
 	"github.com/stretchr/testify/assert"
+
+	"github.com/brandopakel/keel/internal/core"
 )
 
 // TestFDCommWriteCompletesLargePayload drives a reply that cannot fit in the

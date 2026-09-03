@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"time"
 
-	"memkv/internal/config"
-	"memkv/internal/data_structure"
+	"github.com/brandopakel/keel/internal/config"
+	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // The append-only file.
@@ -113,7 +113,21 @@ var writeCommands = map[string]bool{
 	"MORRIS.INITBYDIM": true, "MORRIS.INITBYPROB": true, "MORRIS.INCRBY": true,
 	"PFADD": true, "PFMERGE": true,
 	"CF.RESERVE": true, "CF.ADD": true, "CF.ADDNX": true, "CF.DEL": true,
-	"MEMKV.RESTORE": true,
+	"KEEL.RESTORE": true, "MEMKV.RESTORE": true,
+}
+
+// persistedName is the name a command is recorded under, which is not always
+// the name it arrived under.
+//
+// MEMKV.RESTORE is accepted so that logs written before the rename replay, but
+// a command is appended to the log as it was received - so a client sending the
+// old name would write the old name into a brand new file, and the log would
+// carry the alias forward forever. Read both, write one.
+func persistedName(cmd string) string {
+	if cmd == "MEMKV.RESTORE" {
+		return "KEEL.RESTORE"
+	}
+	return cmd
 }
 
 // AOFEnabled reports whether the log is on.
@@ -191,7 +205,7 @@ func aofBegin() {
 }
 
 // aofCommit records what the command that just ran actually did.
-func aofCommit(cmd *MemKVCmd, reply []byte) {
+func aofCommit(cmd *Command, reply []byte) {
 	if aof.file == nil || aof.replaying {
 		return
 	}
@@ -221,7 +235,7 @@ func aofCommit(cmd *MemKVCmd, reply []byte) {
 	case len(reply) > 0 && reply[0] == '-':
 		// Failed, so by the heuristic in the file comment it changed nothing.
 	default:
-		aof.buf = appendCommand(aof.buf, append([]string{cmd.Cmd}, cmd.Args...)...)
+		aof.buf = appendCommand(aof.buf, append([]string{persistedName(cmd.Cmd)}, cmd.Args...)...)
 	}
 
 	// After the command, because a key evicted to make room for a write has to

@@ -22,7 +22,7 @@ func cmdPING(args []string) []byte {
 	return buf
 }
 
-func EvalAndResponse(cmd *MemKVCmd, c io.ReadWriter) error {
+func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	var res []byte
 
 	// Anything a command wants written to the log instead of itself is staged
@@ -81,10 +81,10 @@ func EvalAndResponse(cmd *MemKVCmd, c io.ReadWriter) error {
 		res = cmdINFO(cmd.Args)
 	case "BGREWRITEAOF":
 		res = cmdBGREWRITEAOF(cmd.Args)
-	case "MEMKV.DUMP":
-		res = cmdMEMKVDUMP(cmd.Args)
-	case "MEMKV.RESTORE":
-		res = cmdMEMKVRESTORE(cmd.Args)
+	case "KEEL.DUMP", "MEMKV.DUMP":
+		res = cmdDUMP(cmd.Args)
+	case "KEEL.RESTORE", "MEMKV.RESTORE":
+		res = cmdRESTORE(cmd.Args)
 	// Set
 	case "SADD":
 		res = cmdSADD(cmd.Args)

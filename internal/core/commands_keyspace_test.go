@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"memkv/internal/data_structure"
+	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // toStrings flattens the array reply KEYS and friends answer with.

@@ -3,10 +3,11 @@ package core
 import (
 	"errors"
 	"fmt"
-	"memkv/internal/constant"
-	"memkv/internal/data_structure"
 	"strconv"
 	"strings"
+
+	"github.com/brandopakel/keel/internal/constant"
+	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 func cmdZADD(args []string) []byte {

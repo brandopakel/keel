@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strconv"
 
-	"memkv/internal/constant"
-	"memkv/internal/data_structure"
+	"github.com/brandopakel/keel/internal/constant"
+	"github.com/brandopakel/keel/internal/data_structure"
 )
 
-// MEMKV.DUMP and MEMKV.RESTORE move a key's whole state as bytes.
+// KEEL.DUMP and KEEL.RESTORE move a key's whole state as bytes.
 //
 // They exist because rewriting the append-only file needs a way to write a
 // HyperLogLog, a filter or a sketch, and there is no command that rebuilds one:
@@ -17,10 +17,16 @@ import (
 // can be written back as SADD of its members and a string as SET; these five
 // have to be written as themselves.
 //
-// Named MEMKV.* rather than DUMP and RESTORE because the payload is not Redis's
+// Named KEEL.* rather than DUMP and RESTORE because the payload is not Redis's
 // format - no version footer, no CRC64 - and taking those names would promise a
 // compatibility that is not there. A Redis payload will not load here and a
 // payload from here will not load there.
+//
+// MEMKV.DUMP and MEMKV.RESTORE are still accepted, because the server was
+// called memkv until it was called keel and every append-only file written
+// before the rename records MEMKV.RESTORE. Dropping the old name would turn
+// those logs into a startup error, or worse into a silently shorter keyspace.
+// Only the new name is ever written.
 //
 // The format is a type tag and the type's own bytes. It is written and read by
 // one process on one machine, so it carries no version and no checksum; making
@@ -159,9 +165,9 @@ func restoreKey(key string, payload []byte) error {
 	return nil
 }
 
-func cmdMEMKVDUMP(args []string) []byte {
+func cmdDUMP(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'MEMKV.DUMP' command"), false)
+		return Encode(errors.New("(error) ERR wrong number of arguments for 'KEEL.DUMP' command"), false)
 	}
 	payload, ok := dumpKey(args[0])
 	if !ok {
@@ -170,9 +176,9 @@ func cmdMEMKVDUMP(args []string) []byte {
 	return Encode(string(payload), false)
 }
 
-func cmdMEMKVRESTORE(args []string) []byte {
+func cmdRESTORE(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'MEMKV.RESTORE' command"), false)
+		return Encode(errors.New("(error) ERR wrong number of arguments for 'KEEL.RESTORE' command"), false)
 	}
 	if err := restoreKey(args[0], []byte(args[1])); err != nil {
 		return Encode(err, false)

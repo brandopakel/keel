@@ -1,8 +1,9 @@
 package data_structure
 
 import (
-	"github.com/spaolacci/murmur3"
 	"math"
+
+	"github.com/spaolacci/murmur3"
 )
 
 const Ln2 float64 = 0.693147180559945

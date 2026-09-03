@@ -1,8 +1,9 @@
 package data_structure
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestBloom_Exist(t *testing.T) {

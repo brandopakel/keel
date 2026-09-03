@@ -1,8 +1,9 @@
 package core
 
 import (
-	"memkv/internal/constant"
 	"strconv"
+
+	"github.com/brandopakel/keel/internal/constant"
 )
 
 func deduceTypeString(v string) (uint8, uint8) {

@@ -1,4 +1,4 @@
-module memkv
+module github.com/brandopakel/keel
 
 go 1.22
 

@@ -8,8 +8,8 @@ import (
 	"net"
 	"sync"
 
-	"memkv/internal/config"
-	"memkv/internal/core"
+	"github.com/brandopakel/keel/internal/config"
+	"github.com/brandopakel/keel/internal/core"
 )
 
 // Alternative implementations of the server on net.Listener and Go's runtime
@@ -57,7 +57,7 @@ func (c connWriter) Write(p []byte) (int, error) { return c.w.Write(p) }
 // --- single-executor plumbing for NetVariantChannel ---
 
 type execReq struct {
-	cmds []*core.MemKVCmd
+	cmds []*core.Command
 	done chan []byte
 }
 
@@ -109,7 +109,7 @@ func handleConn(conn net.Conn, variant NetVariant) {
 		if n > 0 {
 			pending = append(pending, chunk[:n]...)
 
-			var batch []*core.MemKVCmd
+			var batch []*core.Command
 			bad := false
 			for len(pending) > 0 {
 				cmd, consumed, perr := core.ParseCmd(pending)

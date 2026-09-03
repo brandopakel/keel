@@ -10,9 +10,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"memkv/internal/config"
-	"memkv/internal/constant"
-	"memkv/internal/data_structure"
+	"github.com/brandopakel/keel/internal/config"
+	"github.com/brandopakel/keel/internal/constant"
+	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // fillOneOfEverything writes a key of every type, so a rewrite has to carry all
@@ -362,7 +362,7 @@ func BenchmarkRewrite(b *testing.B) {
 			defer CloseAOF()
 			var w replyWriter
 			for i := 0; i < keys; i++ {
-				EvalAndResponse(&MemKVCmd{Cmd: "SET",
+				EvalAndResponse(&Command{Cmd: "SET",
 					Args: []string{"key:" + strconv.Itoa(i), "value-of-some-length"}}, &w)
 				w.b = w.b[:0]
 			}

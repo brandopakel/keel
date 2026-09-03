@@ -3,11 +3,12 @@ package core
 import (
 	"errors"
 	"fmt"
-	"memkv/internal/constant"
-	"memkv/internal/data_structure"
-	"memkv/internal/util"
 	"strconv"
 	"strings"
+
+	"github.com/brandopakel/keel/internal/constant"
+	"github.com/brandopakel/keel/internal/data_structure"
+	"github.com/brandopakel/keel/internal/util"
 )
 
 func cmdGEOADD(args []string) []byte {

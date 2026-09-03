@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"memkv/internal/config"
-	"memkv/internal/data_structure"
+	"github.com/brandopakel/keel/internal/config"
+	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // Rewriting the append-only file, a slice at a time.
@@ -314,7 +314,7 @@ func emitKey(dst []byte, key string) []byte {
 		return appendCommand(dst, parts...)
 	}
 	if payload, ok := dumpKey(key); ok {
-		return appendCommand(dst, "MEMKV.RESTORE", key, string(payload))
+		return appendCommand(dst, "KEEL.RESTORE", key, string(payload))
 	}
 	return dst
 }

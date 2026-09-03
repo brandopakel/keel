@@ -1,11 +1,13 @@
 package data_structure_test
 
 import (
-	"github.com/stretchr/testify/assert"
 	"math"
-	"memkv/internal/data_structure"
-	"memkv/internal/util"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/brandopakel/keel/internal/data_structure"
+	"github.com/brandopakel/keel/internal/util"
 )
 
 func TestGeohashEncode(t *testing.T) {

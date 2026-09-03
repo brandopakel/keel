@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"memkv/internal/core"
+	"github.com/brandopakel/keel/internal/core"
 )
 
 func TestSimpleStringDecode(t *testing.T) {
@@ -110,8 +110,8 @@ func TestEncodeInterfaceArray(t *testing.T) {
 }
 
 func TestParseCmd(t *testing.T) {
-	cases := map[string]core.MemKVCmd{
-		"*3\r\n$3\r\nput\r\n$5\r\nhello\r\n$5\r\nworld\r\n": core.MemKVCmd{
+	cases := map[string]core.Command{
+		"*3\r\n$3\r\nput\r\n$5\r\nhello\r\n$5\r\nworld\r\n": core.Command{
 			Cmd:  "PUT",
 			Args: []string{"hello", "world"},
 		}}
