@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"memkv/internal/config"
-	"memkv/internal/constant"
+	"github.com/brandopakel/keel/internal/config"
+	"github.com/brandopakel/keel/internal/constant"
 )
 
 func setString(key, value string) {
@@ -155,7 +155,7 @@ func TestCmdLCSGoesThroughEval(t *testing.T) {
 	setString("key2", "mynewtext")
 
 	var out strings.Builder
-	err := EvalAndResponse(&MemKVCmd{Cmd: "LCS", Args: []string{"key1", "key2", "LEN"}}, &writerOnly{&out})
+	err := EvalAndResponse(&Command{Cmd: "LCS", Args: []string{"key1", "key2", "LEN"}}, &writerOnly{&out})
 	assert.Nil(t, err)
 	assert.Equal(t, ":6\r\n", out.String())
 }

@@ -3,8 +3,8 @@ package core
 import (
 	"errors"
 
-	"memkv/internal/constant"
-	"memkv/internal/data_structure"
+	"github.com/brandopakel/keel/internal/constant"
+	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // HyperLogLog commands, following Redis semantics.

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"memkv/internal/config"
-	"memkv/internal/constant"
-	"memkv/internal/data_structure"
+	"github.com/brandopakel/keel/internal/config"
+	"github.com/brandopakel/keel/internal/constant"
+	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // cmdMEMORY implements the MEMORY subcommands.

@@ -4,8 +4,9 @@ package io_multiplexing
 
 import (
 	"log"
-	"memkv/internal/config"
 	"syscall"
+
+	"github.com/brandopakel/keel/internal/config"
 )
 
 type KQueue struct {

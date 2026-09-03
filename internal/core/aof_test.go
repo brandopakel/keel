@@ -11,9 +11,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"memkv/internal/config"
-	"memkv/internal/constant"
-	"memkv/internal/data_structure"
+	"github.com/brandopakel/keel/internal/config"
+	"github.com/brandopakel/keel/internal/constant"
+	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // replyWriter captures what a command replied, so a test can both drive the
@@ -36,7 +36,7 @@ func (w *replyWriter) Write(p []byte) (int, error) {
 func run(t *testing.T, name string, args ...string) interface{} {
 	t.Helper()
 	var w replyWriter
-	if err := EvalAndResponse(&MemKVCmd{Cmd: name, Args: args}, &w); err != nil {
+	if err := EvalAndResponse(&Command{Cmd: name, Args: args}, &w); err != nil {
 		return err.Error()
 	}
 	res, _ := Decode(w.b)
@@ -47,7 +47,7 @@ func run(t *testing.T, name string, args ...string) interface{} {
 func rawReply(t *testing.T, name string, args ...string) []byte {
 	t.Helper()
 	var w replyWriter
-	if err := EvalAndResponse(&MemKVCmd{Cmd: name, Args: args}, &w); err != nil {
+	if err := EvalAndResponse(&Command{Cmd: name, Args: args}, &w); err != nil {
 		t.Fatalf("%s: %v", name, err)
 	}
 	return w.b

@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-go@v5
         with: { go-version: '1.21' }
       - run: sudo apt-get update && sudo apt-get install -y redis-server redis-tools
-      - run: go build -o /tmp/memkv ./cmd
+      - run: go build -o /tmp/keel ./cmd/keel
       - name: environment
         run: |
           { echo "runner: $(uname -srm)  cpus: $(nproc)  mem: $(free -h|awk '/Mem:/{print $2}')"
@@ -30,11 +30,11 @@ jobs:
           set -e
           port=7100
           for m in kqueue-nobuf kqueue net net-small net-direct net-chan; do
-            port=$((port+1)); /tmp/memkv -port $port -mode $m & sleep 1
+            port=$((port+1)); /tmp/keel -port $port -mode $m & sleep 1
             [ "$(redis-cli -p $port ping)" = "PONG" ] || { echo "$m failed"; exit 1; }
-            echo "  $m OK"; pkill -f "/tmp/memkv -port $port" || true; sleep 0.3
+            echo "  $m OK"; pkill -f "/tmp/keel -port $port" || true; sleep 0.3
           done
-      - run: BIN=/tmp/memkv OUT=bench/results/matrix-linux.csv REPS=5 ./bench/run-matrix.sh
+      - run: BIN=/tmp/keel OUT=bench/results/matrix-linux.csv REPS=5 ./bench/run-matrix.sh
       - run: python3 bench/summarise.py bench/results/matrix-linux.csv | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with: { name: linux-matrix, path: bench/results/matrix-linux.csv }
@@ -51,11 +51,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y redis-server redis-tools lsof
           sudo apt-get install -y memtier-benchmark || echo "memtier unavailable, latency step will skip"
-      - run: go build -o /tmp/memkv ./cmd
+      - run: go build -o /tmp/keel ./cmd/keel
       - name: memory vs connection count
         run: |
           ulimit -n 65535
-          BIN=/tmp/memkv OUT=bench/results/memory-linux.csv ./bench/run-memory.sh
+          BIN=/tmp/keel OUT=bench/results/memory-linux.csv ./bench/run-memory.sh
           python3 - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
           import csv
           from collections import defaultdict
@@ -75,7 +75,7 @@ jobs:
       - name: latency percentiles
         run: |
           command -v memtier_benchmark >/dev/null || { echo "memtier not installed, skipping"; exit 0; }
-          BIN=/tmp/memkv OUT=bench/results/memtier-linux.csv REPS=3 ./bench/run-memtier.sh || true
+          BIN=/tmp/keel OUT=bench/results/memtier-linux.csv REPS=3 ./bench/run-memtier.sh || true
       - uses: actions/upload-artifact@v4
         with:
           name: linux-memory-latency
@@ -90,10 +90,10 @@ jobs:
       - uses: actions/setup-go@v5
         with: { go-version: '1.21' }
       - run: sudo apt-get update && sudo apt-get install -y redis-server redis-tools iproute2
-      - run: go build -o /tmp/memkv ./cmd
+      - run: go build -o /tmp/keel ./cmd/keel
       - name: run across a veth pair
         run: |
-          BIN=/tmp/memkv OUT=bench/results/offloopback-linux.csv ./bench/run-offloopback.sh
+          BIN=/tmp/keel OUT=bench/results/offloopback-linux.csv ./bench/run-offloopback.sh
           python3 - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
           import csv,statistics as st
           from collections import defaultdict

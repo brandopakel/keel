@@ -83,9 +83,19 @@ var IOThreads = 1
 // every reply.
 var (
 	AOFEnabled  = false
-	AOFFileName = "./memkv-master.aof"
+	AOFFileName = "./keel-master.aof"
 	AOFFsync    = FsyncEverySec
 )
+
+// LegacyAOFFileName is what the default log was called while the server was
+// called memkv.
+//
+// It is still looked for, because the alternative is the worst failure this
+// file has: a server started after the rename finds no log at the new default,
+// replays nothing, and comes up empty next to a perfectly good log it did not
+// look at. Nothing errors and nothing warns - the keyspace is just gone. The
+// old name is read if it is there and the new one is not; it is never written.
+const LegacyAOFFileName = "./memkv-master.aof"
 
 // Active expiry: how hard the server looks for keys whose TTL has passed
 // rather than waiting for something to read them.

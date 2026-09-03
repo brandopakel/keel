@@ -2,7 +2,7 @@ package core
 
 import "syscall"
 
-type MemKVCmd struct {
+type Command struct {
 	Cmd  string
 	Args []string
 }

@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"memkv/internal/config"
-	"memkv/internal/constant"
+	"github.com/brandopakel/keel/internal/config"
+	"github.com/brandopakel/keel/internal/constant"
 )
 
 func resetDictStore() { ResetStores() }

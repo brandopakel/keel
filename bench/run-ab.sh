@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A/B two memkv binaries over the same suites.
+# A/B two keel binaries over the same suites.
 #
 # Written to answer one question: the event loop was restructured into read /
 # execute / write phases so that I/O threads could exist, and that restructuring

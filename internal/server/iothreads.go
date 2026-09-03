@@ -5,8 +5,8 @@ import (
 	"log"
 	"sync"
 
-	"memkv/internal/config"
-	"memkv/internal/core"
+	"github.com/brandopakel/keel/internal/config"
+	"github.com/brandopakel/keel/internal/core"
 )
 
 // Threaded socket I/O, in the style of Redis's io-threads.

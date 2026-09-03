@@ -1,7 +1,7 @@
 package data_structure
 
 import (
-	"memkv/internal/config"
+	"github.com/brandopakel/keel/internal/config"
 )
 
 // Longest common subsequence.

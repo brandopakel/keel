@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"memkv/internal/constant"
-	"memkv/internal/core"
-
 	"github.com/stretchr/testify/assert"
+
+	"github.com/brandopakel/keel/internal/constant"
+	"github.com/brandopakel/keel/internal/core"
 )
 
 // encodeOld is the fmt.Sprintf-based encoder that Encode replaced, reproduced

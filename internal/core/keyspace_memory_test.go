@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"memkv/internal/config"
-	"memkv/internal/data_structure"
+	"github.com/brandopakel/keel/internal/config"
+	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // withBudget puts every keyspace under a byte budget for one test.

@@ -4,9 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"memkv/internal/constant"
-	"memkv/internal/data_structure"
 	"strconv"
+
+	"github.com/brandopakel/keel/internal/constant"
+	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 func cmdCMSINITBYDIM(args []string) []byte {

@@ -14,7 +14,7 @@
 # copying?) and the pipeline sweep (does coalescing already do the job?).
 set -uo pipefail
 
-BIN="${BIN:?set BIN to the memkv binary}"
+BIN="${BIN:?set BIN to the keel binary}"
 OUT="${OUT:-bench/results/iothreads.csv}"
 REPS="${REPS:-5}"
 PORT=${PORT_BASE:-13000}

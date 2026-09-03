@@ -3,7 +3,7 @@ package data_structure
 import (
 	"math"
 
-	"memkv/internal/config"
+	"github.com/brandopakel/keel/internal/config"
 )
 
 // Approximate LFU.

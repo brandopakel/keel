@@ -1,7 +1,7 @@
 package core
 
 import (
-	"memkv/internal/data_structure"
+	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // The keyspaces.

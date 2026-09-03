@@ -10,7 +10,7 @@
 # is the comparison the upstream issue actually asks for.
 set -uo pipefail
 
-BIN="${BIN:?set BIN to the memkv binary}"
+BIN="${BIN:?set BIN to the keel binary}"
 OUT="${OUT:-bench/results/matrix.csv}"
 REPS="${REPS:-5}"
 PORT=${PORT_BASE:-10000}

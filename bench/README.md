@@ -1,4 +1,4 @@
-# MemKV benchmarks
+# keel benchmarks
 
 Working notes for the upstream discussion in
 [quangh33/memkv#2](https://github.com/quangh33/memkv/issues/2) — whether the
@@ -134,7 +134,7 @@ and it wants a quieter machine than this to establish.
 `GET` at large sizes not moving while `SET` does is the asymmetry worth naming:
 at d=262144 the one-thread server is already pushing 8.1 GB/s to a client on the
 same box, against 4.2 GB/s for `SET`. That is the cell most likely to be
-measuring `redis-benchmark` rather than memkv.
+measuring `redis-benchmark` rather than keel.
 
 ### The barrier is not what costs, and Redis's answer is worse here
 
@@ -250,7 +250,7 @@ Recorded because each one looked like a result at the time.
 **Ports were never advancing.** `p=$(next_port)` runs in a subshell, so the
 parent's counter never moved and every server tried to bind the same port. The
 redis teardown compounded it: `pkill -f "redis-server --port 1"` never matched,
-because redis rewrites its process title to `redis-server *:PORT`. Each memkv
+because redis rewrites its process title to `redis-server *:PORT`. Each keel
 server then failed to bind and — because a failed bind returns from
 `RunAsyncTCPServer` while `main` stays blocked on `wg.Wait()` — stayed alive with
 no listener. The readiness probe passed anyway, because redis was still

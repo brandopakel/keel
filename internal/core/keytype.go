@@ -3,7 +3,7 @@ package core
 import (
 	"errors"
 
-	"memkv/internal/data_structure"
+	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // Type checking across the keyspaces.
@@ -79,7 +79,7 @@ var strideKeyCommands = map[string]int{
 // the rewrite's dirty tracking have to agree about which arguments are keys,
 // and the way they stop agreeing is one of them being taught about a new
 // command and the other not.
-func commandKeys(cmd *MemKVCmd) []string {
+func commandKeys(cmd *Command) []string {
 	if len(cmd.Args) == 0 {
 		return nil
 	}
@@ -106,7 +106,7 @@ var errWrongType = errors.New("WRONGTYPE Operation against a key holding the wro
 // It reads the same table the type check uses, which is the point: one list of
 // which argument is a key, consulted by everything that needs to know, rather
 // than a second list to be kept in step with the first.
-func writtenKeys(cmd *MemKVCmd) []string {
+func writtenKeys(cmd *Command) []string {
 	if len(cmd.Args) == 0 {
 		return nil
 	}
@@ -120,7 +120,7 @@ func writtenKeys(cmd *MemKVCmd) []string {
 		// source recorded as dirty costs one redundant re-emit and a source
 		// missed would be a bug, so all of them count.
 		return cmd.Args
-	case "MEMKV.RESTORE":
+	case "KEEL.RESTORE", "MEMKV.RESTORE":
 		return cmd.Args[:1]
 	}
 	if _, known := commandKeyspace[cmd.Cmd]; known {
@@ -135,7 +135,7 @@ func writtenKeys(cmd *MemKVCmd) []string {
 // LCS is deliberately absent from the table: it reads two keys and treats a
 // missing one as empty, which is what it should also do for a key of another
 // type - see the comment on lcsValue.
-func checkKeyTypes(cmd *MemKVCmd) error {
+func checkKeyTypes(cmd *Command) error {
 	space, checked := commandKeyspace[cmd.Cmd]
 	if !checked || len(cmd.Args) == 0 {
 		return nil

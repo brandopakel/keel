@@ -3,9 +3,10 @@ package core
 import (
 	"errors"
 	"fmt"
-	"memkv/internal/constant"
-	"memkv/internal/data_structure"
 	"strconv"
+
+	"github.com/brandopakel/keel/internal/constant"
+	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 func cmdBFRESERVE(args []string) []byte {

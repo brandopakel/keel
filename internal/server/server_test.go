@@ -8,9 +8,9 @@ import (
 	"syscall"
 	"testing"
 
-	"memkv/internal/core"
-
 	"github.com/stretchr/testify/assert"
+
+	"github.com/brandopakel/keel/internal/core"
 )
 
 // socketPair returns a connected pair and guarantees the read side is clean of
@@ -38,7 +38,7 @@ var testScratch = make([]byte, readChunkSize)
 
 // readCommandsFD reads one batch from fd through the connection state the event
 // loop would be keeping for it.
-func readCommandsFD(fd int) ([]*core.MemKVCmd, error) {
+func readCommandsFD(fd int) ([]*core.Command, error) {
 	c := clients[fd]
 	if c == nil {
 		c = &client{fd: fd}
@@ -68,9 +68,9 @@ func encodeCmd(parts ...string) []byte {
 
 // drain calls readCommandsFD until it has collected want commands, so a test
 // does not depend on how many reads the kernel splits a payload into.
-func drain(t *testing.T, fd, want int) []*core.MemKVCmd {
+func drain(t *testing.T, fd, want int) []*core.Command {
 	t.Helper()
-	var got []*core.MemKVCmd
+	var got []*core.Command
 	for i := 0; len(got) < want && i < 4096; i++ {
 		cmds, err := readCommandsFD(fd)
 		if err != nil {
@@ -307,7 +307,7 @@ func TestReadCommandsFDHandlesReadLargerThanScratch(t *testing.T) {
 	}()
 
 	var (
-		cmds     []*core.MemKVCmd
+		cmds     []*core.Command
 		prev     int
 		biggest  int
 		attempts int

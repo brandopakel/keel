@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"memkv/internal/config"
+	"github.com/brandopakel/keel/internal/config"
 )
 
 // newTestDict builds a dictionary registered as the only keyspace.

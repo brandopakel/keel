@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"memkv/internal/constant"
+	"github.com/brandopakel/keel/internal/constant"
 )
 
 const CRLF string = "\r\n"
@@ -284,7 +284,7 @@ func appendInt(n int64) []byte {
 // it consumed, so that a caller holding several pipelined commands can advance to
 // the next one. It returns ErrIncompleteFrame if data does not yet hold a whole
 // command, and ErrProtocol if the input is not a well-formed command at all.
-func ParseCmd(data []byte) (*MemKVCmd, int, error) {
+func ParseCmd(data []byte) (*Command, int, error) {
 	value, n, err := DecodeOne(data)
 	if err != nil {
 		return nil, 0, err
@@ -307,7 +307,7 @@ func ParseCmd(data []byte) (*MemKVCmd, int, error) {
 		tokens[i] = token
 	}
 
-	res := &MemKVCmd{Cmd: strings.ToUpper(tokens[0]), Args: tokens[1:]}
+	res := &Command{Cmd: strings.ToUpper(tokens[0]), Args: tokens[1:]}
 	return res, n, nil
 }
 

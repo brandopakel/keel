@@ -1,8 +1,8 @@
 package core
 
 import (
-	"memkv/internal/config"
-	"memkv/internal/data_structure"
+	"github.com/brandopakel/keel/internal/config"
+	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // ExpireCycle removes keys whose TTL has passed, without waiting for anyone to
