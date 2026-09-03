@@ -682,6 +682,29 @@ func StartAOF() error {
 	if err := core.OpenAOF(config.AOFFileName); err != nil {
 		return err
 	}
+
+	// Having replayed the old file, write the whole keyspace into the new one
+	// before anything else appends to it.
+	//
+	// Without this the fallback loses the data it exists to save, one restart
+	// later rather than immediately. The first start reads memkv-master.aof and
+	// opens an empty keel-master.aof; the second start sees keel-master.aof
+	// present, prefers it, and replays only what was written after the
+	// migration. Everything that lived solely in the old log is gone, and the
+	// old log is still sitting there looking like a backup.
+	//
+	// A rewrite is exactly the right thing here: the shortest log producing the
+	// current state. It runs to completion before the server serves anyone,
+	// which at startup costs one pass over a keyspace that was just built by
+	// one pass over the same data.
+	if readFrom != config.AOFFileName {
+		if err := core.RewriteAOF(); err != nil {
+			return fmt.Errorf("migrating %s to %s: %w", readFrom, config.AOFFileName, err)
+		}
+		log.Printf("appendonly: wrote the replayed keyspace to %s; %s is no longer read",
+			config.AOFFileName, readFrom)
+	}
+
 	log.Printf("appendonly: on, %s, appendfsync %s", config.AOFFileName, config.AOFFsync)
 	return nil
 }

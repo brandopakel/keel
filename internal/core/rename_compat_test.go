@@ -34,6 +34,8 @@ func TestNewAndOldDumpNamesAreTheSameCommand(t *testing.T) {
 	ResetStores()
 	run(t, "PFADD", "h", "x", "y")
 
+	before := run(t, "PFCOUNT", "h")
+
 	viaNew, _ := run(t, "KEEL.DUMP", "h").(string)
 	viaOld, _ := run(t, "MEMKV.DUMP", "h").(string)
 	assert.Equal(t, viaOld, viaNew, "one command, two names")
@@ -41,6 +43,11 @@ func TestNewAndOldDumpNamesAreTheSameCommand(t *testing.T) {
 	ResetStores()
 	assert.Equal(t, "OK", run(t, "KEEL.RESTORE", "h", viaOld),
 		"a payload dumped under either name loads under either name")
+	// OK on its own would pass for a restore that returned success and stored
+	// nothing, which is the failure worth catching here.
+	assert.Equal(t, before, run(t, "PFCOUNT", "h"),
+		"and the restored structure estimates what it did before")
+	assert.Equal(t, "hll", run(t, "TYPE", "h"))
 }
 
 // TestRewriteWritesTheNewNameOnly: the old name is read, never written, so a
@@ -81,4 +88,31 @@ func TestALogWrittenUnderTheOldNameStillReplays(t *testing.T) {
 	assert.Equal(t, "value", run(t, "GET", "plain"))
 	assert.Equal(t, expected, run(t, "PFCOUNT", "h"),
 		"a HyperLogLog restored from a legacy log estimates what it did before")
+}
+
+// TestALiveLegacyRestoreIsRecordedUnderTheNewName.
+//
+// The alias is for reading, not for writing. A command is appended to the log
+// as it arrived, so a client sending MEMKV.RESTORE would put the old name into
+// a file created after the rename - and every rewrite of that file would carry
+// it forward, so the alias could never be retired.
+func TestALiveLegacyRestoreIsRecordedUnderTheNewName(t *testing.T) {
+	ResetStores()
+	run(t, "PFADD", "h", "a", "b", "c")
+	payload, _ := run(t, "KEEL.DUMP", "h").(string)
+	expected := run(t, "PFCOUNT", "h")
+
+	path := withAOF(t, func() {
+		assert.Equal(t, "OK", run(t, "MEMKV.RESTORE", "h", payload))
+	})
+
+	body, err := os.ReadFile(path)
+	assert.NoError(t, err)
+	assert.Contains(t, string(body), "KEEL.RESTORE",
+		"the log records the current name")
+	assert.NotContains(t, string(body), "MEMKV.RESTORE",
+		"a log written after the rename must not carry the old name forward")
+
+	restart(t, path)
+	assert.Equal(t, expected, run(t, "PFCOUNT", "h"), "and it still replays")
 }
