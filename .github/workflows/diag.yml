@@ -1,0 +1,22 @@
+# TEMPORARY. Isolates whether the memory-estimate failure is the Go version or
+# linux/amd64, by running the same test across Go versions on one platform.
+name: diag
+on: [workflow_dispatch]
+jobs:
+  heap:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ['1.21.13', '1.22.12', '1.23.12', '1.24.9', '1.26.6']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '${{ matrix.go }}' }
+      - run: go version
+      - name: heap estimate
+        continue-on-error: true
+        run: go test -v -run TestEstimateTracksRealHeap ./internal/data_structure/ 2>&1 | grep -E "ratio=|--- (PASS|FAIL)"
+      - name: stall profile (no race)
+        continue-on-error: true
+        run: go test -v -run TestRewriteStallProfile ./internal/core/ 2>&1 | grep -E "walk slices|--- (PASS|FAIL)"
