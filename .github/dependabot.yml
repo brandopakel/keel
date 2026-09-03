@@ -1,0 +1,19 @@
+# Pinned action SHAs do not update themselves, and a pin nobody bumps is an old
+# action rather than a safe one. This is the other half of pinning.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: ci
+
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: deps

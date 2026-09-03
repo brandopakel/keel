@@ -1,7 +1,9 @@
 # TEMPORARY. Isolates whether the memory-estimate failure is the Go version or
 # linux/amd64, by running the same test across Go versions on one platform.
 name: diag
-on: [workflow_dispatch]
+on:
+  push:
+    branches: [ chore/ci-and-review ]
 jobs:
   heap:
     runs-on: ubuntu-latest
