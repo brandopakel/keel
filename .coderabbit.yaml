@@ -1,0 +1,73 @@
+# CodeRabbit review configuration.
+# Reference: https://docs.coderabbit.ai/reference/configuration
+#
+# Reviews run on pull requests, so work reaches `develop` through a branch and a
+# PR rather than a direct push — see CONTRIBUTING notes in the README.
+
+language: en-US
+tone_instructions: >-
+  Be direct and specific. Prefer a concrete failing case over a general
+  observation, and say nothing rather than restate what the diff already shows.
+
+reviews:
+  profile: assertive
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  collapse_walkthrough: true
+
+  auto_review:
+    enabled: true
+    base_branches:
+      - develop
+      - "experiment/.*"
+    drafts: false
+
+  # Recorded benchmark data and the vendored image are inputs to review, not
+  # subjects of it.
+  path_filters:
+    - "!bench/results/**"
+    - "!**/*.png"
+
+  path_instructions:
+    - path: "internal/core/**/*.go"
+      instructions: >-
+        This is the event loop and the RESP framing path, single-threaded for
+        command execution by design. Flag anything that assumes one read equals
+        one message, that treats a write as having fully succeeded without
+        checking the returned count, that trusts a length header before bounding
+        it, or that closes a connection on EAGAIN. Command execution must stay on
+        one thread: flag shared mutable state reached from the I/O threads.
+    - path: "internal/data_structure/**/*.go"
+      instructions: >-
+        Probabilistic structures whose state must replay identically from the
+        append-only log. Flag any randomness not seeded per structure from a
+        constant, and any change to the encoding that would break MEMKV.RESTORE
+        of a file written by an earlier build.
+    - path: "internal/server/**/*.go"
+      instructions: >-
+        Memory accounting must be symmetric: every charge on write needs the
+        matching credit on delete, and used_memory is unsigned, so an unbalanced
+        credit wraps rather than going negative. Flag asymmetric accounting.
+    - path: "**/*_test.go"
+      instructions: >-
+        Flag tests that assert on a measured duration or throughput without a
+        wide tolerance, and tests that would pass if the code under test were
+        deleted.
+    - path: "bench/**/*.sh"
+      instructions: >-
+        Flag ports that could collide between concurrent runs, and any run that
+        reports a single reading where the surrounding harness takes medians.
+
+  tools:
+    golangci-lint:
+      enabled: true
+    gitleaks:
+      enabled: true
+    shellcheck:
+      enabled: true
+    actionlint:
+      enabled: true
+
+chat:
+  auto_reply: true
