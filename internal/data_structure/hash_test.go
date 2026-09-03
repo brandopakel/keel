@@ -100,8 +100,15 @@ func TestHashMemUsageTracksRealHeap(t *testing.T) {
 		t.Logf("field=%-3d value=%-3d estimated=%-11d actual=%-11d ratio=%.3f",
 			size.field, size.value, h.MemUsage(), actual, ratio)
 
-		// A band, because the allocator rounds every field and value up to a
-		// size class and no O(1) estimate can follow that.
+		// The band is tolerance, not the measurement. Observed here is 0.992 to
+		// 1.035; the bound is 0.90 to 1.10 because the allocator rounds every
+		// field and value up to a size class, which no O(1) estimate can
+		// follow, and because the ratio moves with the toolchain - the string
+		// accounting shifted by nearly 40% between Go 1.21 and 1.22, which is
+		// what forced the floor in go.mod. A band tight enough to match today's
+		// reading would fail on a Go release rather than on a real drift.
+		// Wide enough to survive that, narrow enough to catch a wrong constant:
+		// 64 off by 20 reads 0.81 at the smallest sizes.
 		assert.Greater(t, ratio, 0.90,
 			"field=%d value=%d: estimate is %.0f%% of real heap, too far below to bound anything",
 			size.field, size.value, ratio*100)
