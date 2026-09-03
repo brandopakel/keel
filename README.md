@@ -56,6 +56,13 @@ unchanged — see [Relationship to upstream](#relationship-to-upstream).
   asking each keyspace rather than by keeping a directory of names — a directory
   costs a second map entry and a second copy of every key, which measured as the
   memory estimate falling to 70% of real heap.
+- **The keyspace commands answer about every type.** `EXISTS`, `TYPE`, `KEYS`,
+  `DBSIZE` and `FLUSHDB` ask the same registry that arbitrates names, so a set
+  and a HyperLogLog are as much keys as a string is. `DBSIZE` counted only
+  strings until these were added, and answered zero for a keyspace full of sets.
+  `KEYS` takes Redis's glob patterns, checked case by case against a real Redis
+  8.10.1 — including the two places it is not the shell: `[]]` matches nothing,
+  and the `-` in `[a-]` is a range end rather than a literal.
 - **Active expiry.** A key with a TTL goes away when it falls due, not when
   something next happens to read it. Twenty keys with a TTL are sampled per turn
   of the loop and another round is drawn while the sample keeps coming up
@@ -152,8 +159,8 @@ darwin. Figures are medians of repeated runs. Method and raw data are in
 | Category | Commands |
 | :--- | :--- |
 | **General** | `PING` |
-| **String** | `SET`, `GET`, `DEL`, `TTL`, `EXPIRE`, `PEXPIREAT`, `INCR`, `LCS` |
-| **Keyspace** | `DBSIZE` |
+| **String** | `SET`, `GET`, `MSET`, `MGET`, `DEL`, `TTL`, `EXPIRE`, `PEXPIREAT`, `INCR`, `LCS` |
+| **Keyspace** | `EXISTS`, `TYPE`, `KEYS`, `DBSIZE`, `FLUSHDB` |
 | **Server** | `INFO`, `MEMORY USAGE`, `BGREWRITEAOF`, `MEMKV.DUMP`, `MEMKV.RESTORE` |
 | **Sorted Set**| `ZADD`, `ZRANK`, `ZREM`, `ZSCORE`, `ZCARD` |
 | **Set** | `SADD`, `SREM`, `SCARD`, `SMEMBERS`, `SISMEMBER`, `SMISMEMBER`, `SRAND`, `SPOP` |
@@ -191,8 +198,10 @@ are the ones that decide whether it is usable for anything of yours.
 - **`LCS` does not type-check its keys.** Every other command answers
   `WRONGTYPE` for a name held by another type; `LCS` treats such a key as an
   empty string, the same way it treats a missing one.
-- **About forty commands.** No hashes and no lists, and none of `EXISTS`,
-  `KEYS`, `SCAN`, `TYPE`, `MGET`, `MSET`, `FLUSHDB`, `MULTI` or pub/sub.
+- **Sixty-three commands.** No hashes and no lists, and none of `SCAN`,
+  `MULTI` or pub/sub. The keyspace commands a client library reaches for first
+  — `EXISTS`, `TYPE`, `KEYS`, `MGET`, `MSET`, `FLUSHDB` — are implemented, and
+  answer across every keyspace rather than only strings.
 - **One database, no authentication, no TLS, no replication.** `SELECT`, `AUTH`
   and `CONFIG` are unimplemented, and it binds `0.0.0.0` by default. Keep it off
   any interface you do not control.
@@ -405,9 +414,21 @@ collect the key names before the walk and 13ms to finish it, per million keys.
 Both are one pass over something, and both could be sliced the way the walk now
 is. Neither was worth it while the walk was 186ms.
 
-**Command surface.** No hashes and no lists, and none of `EXISTS`, `KEYS`,
-`SCAN`, `TYPE`, `MGET`, `MSET`, `FLUSHDB`, `MULTI` or pub/sub. `EXISTS` and
-`TYPE` in particular are what most client libraries reach for first.
+**Command surface.** Hashes and lists are the gap now. Each is a new type
+rather than a new command: a store, an entry in the type table, memory
+accounting calibrated the way the others were, a way for the rewrite to emit it,
+and a share of the eviction budget. That is a different size of job from the
+keyspace commands, which mostly asked questions the type registry could already
+answer.
+
+`SCAN` is absent for a reason worth stating rather than leaving as an oversight.
+Its guarantee — every key present for the whole iteration is returned at least
+once — rests on a cursor over hash buckets that survives resizing. Go's map
+gives no such cursor and randomises its iteration order per iteration, so the
+only ways to implement `SCAN` here are to snapshot the whole keyspace per cursor,
+which costs exactly the per-key memory this server is built to save, or to keep a
+second index, which costs it permanently. `KEYS` is implemented and, as in Redis,
+walks everything and blocks while it does.
 
 **Operations.** No `AUTH`, no TLS, one database, no replication, and it binds
 `0.0.0.0` by default. Anything past a trusted network needs at least the first

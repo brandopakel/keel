@@ -20,7 +20,13 @@ import (
 // bug this is fixing.
 var commandKeyspace = map[string]string{
 	"SET": "string", "GET": "string", "TTL": "string", "EXPIRE": "string",
-	"PEXPIREAT": "string", "INCR": "string",
+	"PEXPIREAT": "string", "INCR": "string", "MSET": "string",
+
+	// EXISTS, TYPE, KEYS, DEL and FLUSHDB are deliberately absent: they answer
+	// about a name whatever type holds it, so constraining them to a keyspace
+	// would make them refuse exactly the keys they exist to report on. MGET is
+	// absent for a different reason - it answers nil for a key of another type,
+	// which is Redis's rule and is explained where it is implemented.
 
 	"SADD": "set", "SREM": "set", "SCARD": "set", "SMEMBERS": "set",
 	"SISMEMBER": "set", "SMISMEMBER": "set", "SRAND": "set", "SPOP": "set",
@@ -54,6 +60,42 @@ var multiKeyCommands = map[string]bool{
 	"PFCOUNT": true, "PFMERGE": true,
 }
 
+// strideKeyCommands take a key every n arguments, starting at the first. MSET
+// is key value key value, so only the even positions name anything.
+//
+// Kept apart from multiKeyCommands rather than folded in as a stride of one,
+// because the mistake to guard against is a command being added to the wrong
+// one of these. A stride of two that should have been one checks half the keys
+// it should; a list that says "all arguments" for MSET would type-check the
+// values as though they were names, and refuse a perfectly good write the first
+// time somebody stored a string whose contents happened to match a set's name.
+var strideKeyCommands = map[string]int{
+	"MSET": 2,
+}
+
+// commandKeys returns the arguments of cmd that name keys.
+//
+// One function rather than a rule repeated in each caller. The type check and
+// the rewrite's dirty tracking have to agree about which arguments are keys,
+// and the way they stop agreeing is one of them being taught about a new
+// command and the other not.
+func commandKeys(cmd *MemKVCmd) []string {
+	if len(cmd.Args) == 0 {
+		return nil
+	}
+	if stride, ok := strideKeyCommands[cmd.Cmd]; ok {
+		keys := make([]string, 0, (len(cmd.Args)+stride-1)/stride)
+		for i := 0; i < len(cmd.Args); i += stride {
+			keys = append(keys, cmd.Args[i])
+		}
+		return keys
+	}
+	if multiKeyCommands[cmd.Cmd] {
+		return cmd.Args
+	}
+	return cmd.Args[:1]
+}
+
 // errWrongType is Redis's wording, so a client that already handles it from
 // Redis handles it here.
 var errWrongType = errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
@@ -82,7 +124,7 @@ func writtenKeys(cmd *MemKVCmd) []string {
 		return cmd.Args[:1]
 	}
 	if _, known := commandKeyspace[cmd.Cmd]; known {
-		return cmd.Args[:1]
+		return commandKeys(cmd)
 	}
 	return nil
 }
@@ -99,11 +141,7 @@ func checkKeyTypes(cmd *MemKVCmd) error {
 		return nil
 	}
 
-	keys := cmd.Args[:1]
-	if multiKeyCommands[cmd.Cmd] {
-		keys = cmd.Args
-	}
-	for _, key := range keys {
+	for _, key := range commandKeys(cmd) {
 		if owner, held := data_structure.OwnerOf(key); held && owner.KeyspaceName() != space {
 			return errWrongType
 		}

@@ -39,6 +39,9 @@ type Keyspace interface {
 	MemUsed() uint64
 	// Has reports whether the key is present, without counting as a use of it.
 	Has(key string) bool
+	// Keys lists every key held. Expired keys may be included, so a caller
+	// showing them to a client has to filter through Has.
+	Keys() []string
 	// SampleKeys appends up to n randomly chosen candidates.
 	SampleKeys(dst []Candidate, n int) []Candidate
 	// ScoreOf reports a key's current score and whether it is still present.
@@ -122,6 +125,19 @@ func TotalMemUsed() uint64 {
 		total += ks.MemUsed()
 	}
 	return total
+}
+
+// EachKeyspace calls fn for every registered keyspace, in registration order -
+// strings first, which is the order OwnerOf relies on and the order a caller
+// listing keys will report them in.
+//
+// The registry itself stays unexported. Handing out the slice would let a
+// caller hold it across a ResetStores and go on writing to keyspaces the server
+// has thrown away.
+func EachKeyspace(fn func(Keyspace)) {
+	for _, ks := range keyspaces {
+		fn(ks)
+	}
 }
 
 // TotalKeys counts keys across every registered keyspace.

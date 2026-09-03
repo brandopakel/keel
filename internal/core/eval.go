@@ -61,6 +61,18 @@ func EvalAndResponse(cmd *MemKVCmd, c io.ReadWriter) error {
 		res = cmdINCR(cmd.Args)
 	case "LCS":
 		res = cmdLCS(cmd.Args)
+	case "EXISTS":
+		res = cmdEXISTS(cmd.Args)
+	case "TYPE":
+		res = cmdTYPE(cmd.Args)
+	case "KEYS":
+		res = cmdKEYS(cmd.Args)
+	case "MGET":
+		res = cmdMGET(cmd.Args)
+	case "MSET":
+		res = cmdMSET(cmd.Args)
+	case "FLUSHDB":
+		res = cmdFLUSHDB(cmd.Args)
 	case "DBSIZE":
 		res = cmdDBSIZE(cmd.Args)
 	case "MEMORY":
