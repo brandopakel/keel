@@ -86,6 +86,29 @@ func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	case "KEEL.RESTORE", "MEMKV.RESTORE":
 		res = cmdRESTORE(cmd.Args)
 	// Set
+	case "HSET":
+		res = cmdHSET(cmd.Args)
+	case "HSETNX":
+		res = cmdHSETNX(cmd.Args)
+	case "HGET":
+		res = cmdHGET(cmd.Args)
+	case "HMGET":
+		res = cmdHMGET(cmd.Args)
+	case "HDEL":
+		res = cmdHDEL(cmd.Args)
+	case "HEXISTS":
+		res = cmdHEXISTS(cmd.Args)
+	case "HLEN":
+		res = cmdHLEN(cmd.Args)
+	case "HKEYS":
+		res = cmdHKEYS(cmd.Args)
+	case "HVALS":
+		res = cmdHVALS(cmd.Args)
+	case "HGETALL":
+		res = cmdHGETALL(cmd.Args)
+	case "HINCRBY":
+		res = cmdHINCRBY(cmd.Args)
+
 	case "SADD":
 		res = cmdSADD(cmd.Args)
 	case "SREM":

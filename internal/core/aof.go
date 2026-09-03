@@ -105,6 +105,7 @@ var aof aofState
 var writeCommands = map[string]bool{
 	"SET": true, "MSET": true, "DEL": true, "FLUSHDB": true,
 	"EXPIRE": true, "PEXPIREAT": true, "INCR": true,
+	"HSET": true, "HSETNX": true, "HDEL": true, "HINCRBY": true,
 	"SADD": true, "SREM": true, "SPOP": true,
 	"ZADD": true, "ZREM": true,
 	"GEOADD":     true,
