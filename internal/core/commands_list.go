@@ -87,6 +87,18 @@ func pop(args []string, front bool, name string) []byte {
 		return constant.RespNil
 	}
 
+	// Clamped to the list before anything is allocated. count arrives from the
+	// client, and this line is a make() with it as the capacity: LPOP l
+	// 2147483647 asks for 34GB and takes the process out, from one command, on
+	// a connection that needs no authentication because there is none.
+	//
+	// The same shape as the SPOP bug this server already fixed once, where
+	// asking for more members than the set held spun the event loop forever.
+	// Reaching for a count larger than the collection is what a client does;
+	// the collection is the only bound that means anything.
+	if count > l.Len() {
+		count = l.Len()
+	}
 	popped := make([]string, 0, count)
 	for i := 0; i < count; i++ {
 		var v string

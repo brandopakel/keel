@@ -1,6 +1,8 @@
 package core
 
 import (
+	"math"
+	"runtime"
 	"strconv"
 	"testing"
 
@@ -181,4 +183,81 @@ func TestARewrittenLogRebuildsTheListInOrder(t *testing.T) {
 	assert.Len(t, got, 50)
 	assert.Equal(t, "50", got[0], "150 commands collapse to one RPUSH holding the answer")
 	assert.Equal(t, "99", got[49])
+}
+
+// TestAHugePopCountAllocatesOnlyWhatTheListHolds.
+//
+// count arrives from the client and was the capacity of a make(), so LPOP l
+// 2147483647 asked for 34GB and took the process out - one command, on a
+// connection needing no authentication because there is none. Measured for the
+// commit that fixed it: the allocation follows the requested count, not the
+// list, at 16 bytes per requested slot.
+//
+// The same shape as the SPOP bug this server already fixed once, where asking
+// for more members than the set held spun the event loop forever.
+func TestAHugePopCountAllocatesOnlyWhatTheListHolds(t *testing.T) {
+	ResetStores()
+	run(t, "RPUSH", "l", "a", "b")
+
+	// TotalAlloc, which is cumulative and never decreases, rather than
+	// HeapAlloc. The allocation this is about is transient: the slice is
+	// unreachable the moment the command returns, so a HeapAlloc reading taken
+	// afterwards has already had it collected and shows nothing. That version
+	// of this test passed with the clamp removed, which is the only reason this
+	// note exists.
+	var before runtime.MemStats
+	runtime.ReadMemStats(&before)
+
+	got := toStrings(run(t, "LPOP", "l", strconv.Itoa(math.MaxInt32)))
+
+	var after runtime.MemStats
+	runtime.ReadMemStats(&after)
+
+	assert.Equal(t, []string{"a", "b"}, got, "and it still answers what is there")
+	assert.Equal(t, int64(0), run(t, "EXISTS", "l"))
+
+	allocated := after.TotalAlloc - before.TotalAlloc
+	assert.Less(t, allocated, uint64(1<<20),
+		"popping two elements allocated %d bytes; the count is the client's, so "+
+			"the list has to be the bound", allocated)
+}
+
+func TestAHugePopCountOnEveryEnd(t *testing.T) {
+	ResetStores()
+	run(t, "RPUSH", "l", "a")
+	assert.Equal(t, []string{"a"}, toStrings(run(t, "RPOP", "l", strconv.Itoa(math.MaxInt32))))
+
+	ResetStores()
+	run(t, "RPUSH", "l", "a")
+	assert.Equal(t, []string{"a"}, toStrings(run(t, "LPOP", "l", strconv.Itoa(math.MaxInt64))),
+		"a count that overflows int32 is still just a count")
+}
+
+// TestARewriteRebuildsAListWhoseHeadHasWrapped.
+//
+// The ring's head moves with every pop, so a list that has been pushed and
+// popped enough wraps past the end of its buffer. All() walks modulo the
+// capacity, and a rewrite reads it - so an off-by-one there would write the
+// list back in the wrong order, which no test with an unwrapped head can see.
+func TestARewriteRebuildsAListWhoseHeadHasWrapped(t *testing.T) {
+	path := withAOF(t, func() {
+		for i := 0; i < 100; i++ {
+			run(t, "RPUSH", "l", strconv.Itoa(i))
+		}
+		// Rotate far enough that the head is past the end of the buffer several
+		// times over, leaving the elements physically split across it.
+		for round := 0; round < 350; round++ {
+			v := run(t, "LPOP", "l")
+			run(t, "RPUSH", "l", v.(string))
+		}
+		assert.NoError(t, RewriteAOF())
+	})
+
+	before := toStrings(run(t, "LRANGE", "l", "0", "-1"))
+	restart(t, path)
+
+	assert.Equal(t, before, toStrings(run(t, "LRANGE", "l", "0", "-1")),
+		"a wrapped list rebuilds in the order it was actually in")
+	assert.Equal(t, "50", run(t, "LINDEX", "l", "0"),
+		"350 rotations of a hundred elements leaves 50 at the head")
 }
