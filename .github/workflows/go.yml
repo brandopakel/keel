@@ -29,5 +29,15 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # TEMPORARY diagnostic: is the CI failure Linux, or the race detector?
+      # Both arms run so one push answers it. Removed once answered.
+      - name: Measurement tests WITHOUT race
+        continue-on-error: true
+        run: go test -v -run 'TestEstimateTracksRealHeap|TestRewriteStallProfile' ./internal/core/... ./internal/data_structure/...
+
+      - name: Measurement tests WITH race
+        continue-on-error: true
+        run: go test -v -race -run 'TestEstimateTracksRealHeap|TestRewriteStallProfile' ./internal/core/... ./internal/data_structure/...
+
       - name: Test
         run: go test -race -v ./...
