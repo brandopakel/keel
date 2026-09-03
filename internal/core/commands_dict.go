@@ -201,9 +201,17 @@ func cmdINCR(args []string) []byte {
 //
 // Without it, eviction is invisible from a client: the only way to observe it
 // would be to guess which keys went away.
+// cmdDBSIZE counts the keys in every keyspace, not only the strings.
+//
+// It used to answer dictStore.Len(), which is the same bug the type checking
+// fixed and this command was left out of: each type has its own store, and a
+// command that knows about one of them reports on one of them. So SADD s m
+// followed by DBSIZE answered 0 while the key was plainly there, and adding
+// EXISTS and KEYS made the contradiction visible - KEYS * listing three keys
+// next to a DBSIZE of zero.
 func cmdDBSIZE(args []string) []byte {
 	if len(args) != 0 {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'DBSIZE' command"), false)
 	}
-	return Encode(int64(dictStore.Len()), false)
+	return Encode(int64(data_structure.TotalKeys()), false)
 }

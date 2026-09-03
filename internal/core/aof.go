@@ -103,7 +103,8 @@ var aof aofState
 // the next restart, while a read listed by accident only makes the file bigger.
 // An explicit list is the one that can be read against eval.go and checked.
 var writeCommands = map[string]bool{
-	"SET": true, "DEL": true, "EXPIRE": true, "PEXPIREAT": true, "INCR": true,
+	"SET": true, "MSET": true, "DEL": true, "FLUSHDB": true,
+	"EXPIRE": true, "PEXPIREAT": true, "INCR": true,
 	"SADD": true, "SREM": true, "SPOP": true,
 	"ZADD": true, "ZREM": true,
 	"GEOADD":     true,
