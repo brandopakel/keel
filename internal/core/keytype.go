@@ -28,6 +28,10 @@ var commandKeyspace = map[string]string{
 	// absent for a different reason - it answers nil for a key of another type,
 	// which is Redis's rule and is explained where it is implemented.
 
+	"HSET": "hash", "HSETNX": "hash", "HGET": "hash", "HMGET": "hash",
+	"HDEL": "hash", "HEXISTS": "hash", "HLEN": "hash", "HKEYS": "hash",
+	"HVALS": "hash", "HGETALL": "hash", "HINCRBY": "hash",
+
 	"SADD": "set", "SREM": "set", "SCARD": "set", "SMEMBERS": "set",
 	"SISMEMBER": "set", "SMISMEMBER": "set", "SRAND": "set", "SPOP": "set",
 

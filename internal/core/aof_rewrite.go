@@ -268,16 +268,19 @@ func rewriteWrite(body []byte) error {
 }
 
 // allKeyNames collects every key in every keyspace.
+// allKeyNames collects every key the rewrite has to consider.
+//
+// Asked of the keyspace registry rather than of each store by name. The list of
+// stores written out by hand was one entry short the first time a type was
+// added after it - hashes - and the walk silently wrote nothing for them, so a
+// rewrite dropped every hash in the keyspace. That is the same shape as DBSIZE
+// counting only strings: a list of the stores that has to be kept in step with
+// the stores, in a file that has no reason to notice when it is not.
 func allKeyNames() []string {
 	keys := make([]string, 0, data_structure.TotalKeys())
-	keys = append(keys, dictStore.Keys()...)
-	keys = append(keys, setStore.Keys()...)
-	keys = append(keys, zsetStore.Keys()...)
-	keys = append(keys, sbStore.Keys()...)
-	keys = append(keys, cmsStore.Keys()...)
-	keys = append(keys, morrisStore.Keys()...)
-	keys = append(keys, hllStore.Keys()...)
-	keys = append(keys, cfStore.Keys()...)
+	data_structure.EachKeyspace(func(ks data_structure.Keyspace) {
+		keys = append(keys, ks.Keys()...)
+	})
 	return keys
 }
 
@@ -303,6 +306,15 @@ func emitKey(dst []byte, key string) []byte {
 	}
 	if set, ok := setStore.Peek(key); ok {
 		return appendCommand(dst, append([]string{"SADD", key}, set.Members()...)...)
+	}
+	if h, ok := hashStore.Peek(key); ok {
+		fields, values := h.Entries()
+		parts := make([]string, 0, 2+2*len(fields))
+		parts = append(parts, "HSET", key)
+		for i, f := range fields {
+			parts = append(parts, f, values[i])
+		}
+		return appendCommand(dst, parts...)
 	}
 	if zset, ok := zsetStore.Peek(key); ok {
 		members, scores := zset.Entries()

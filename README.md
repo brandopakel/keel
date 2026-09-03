@@ -173,6 +173,7 @@ darwin. Figures are medians of repeated runs. Method and raw data are in
 | **String** | `SET`, `GET`, `MSET`, `MGET`, `DEL`, `TTL`, `EXPIRE`, `PEXPIREAT`, `INCR`, `LCS` |
 | **Keyspace** | `EXISTS`, `TYPE`, `KEYS`, `DBSIZE`, `FLUSHDB` |
 | **Server** | `INFO`, `MEMORY USAGE`, `BGREWRITEAOF`, `KEEL.DUMP`, `KEEL.RESTORE` |
+| **Hash** | `HSET`, `HSETNX`, `HGET`, `HMGET`, `HDEL`, `HEXISTS`, `HLEN`, `HKEYS`, `HVALS`, `HGETALL`, `HINCRBY` |
 | **Sorted Set**| `ZADD`, `ZRANK`, `ZREM`, `ZSCORE`, `ZCARD` |
 | **Set** | `SADD`, `SREM`, `SCARD`, `SMEMBERS`, `SISMEMBER`, `SMISMEMBER`, `SRAND`, `SPOP` |
 | **Geospatial** | `GEOADD`, `GEODIST`, `GEOHASH`, `GEOSEARCH`, `GEOPOS` |
@@ -210,10 +211,10 @@ are the ones that decide whether it is usable for anything of yours.
 - **`LCS` does not type-check its keys.** Every other command answers
   `WRONGTYPE` for a name held by another type; `LCS` treats such a key as an
   empty string, the same way it treats a missing one.
-- **Sixty-three commands.** No hashes and no lists, and none of `SCAN`,
-  `MULTI` or pub/sub. The keyspace commands a client library reaches for first
-  — `EXISTS`, `TYPE`, `KEYS`, `MGET`, `MSET`, `FLUSHDB` — are implemented, and
-  answer across every keyspace rather than only strings.
+- **Seventy-four commands.** No lists, and none of `SCAN`, `MULTI` or pub/sub.
+  Hashes are implemented, as are the keyspace commands a client library reaches
+  for first — `EXISTS`, `TYPE`, `KEYS`, `MGET`, `MSET`, `FLUSHDB` — which answer
+  across every keyspace rather than only strings.
 - **One database, no authentication, no TLS, no replication.** `SELECT`, `AUTH`
   and `CONFIG` are unimplemented, and it binds `0.0.0.0` by default. Keep it off
   any interface you do not control.
@@ -431,12 +432,10 @@ collect the key names before the walk and 13ms to finish it, per million keys.
 Both are one pass over something, and both could be sliced the way the walk now
 is. Neither was worth it while the walk was 186ms.
 
-**Command surface.** Hashes and lists are the gap now. Each is a new type
-rather than a new command: a store, an entry in the type table, memory
-accounting calibrated the way the others were, a way for the rewrite to emit it,
-and a share of the eviction budget. That is a different size of job from the
-keyspace commands, which mostly asked questions the type registry could already
-answer.
+**Command surface.** Lists are the gap now. A list is a new type rather than a
+new command — a store, an entry in the type table, memory accounting calibrated
+the way the others were, a way for the rewrite to emit it, and a share of the
+eviction budget — which is what hashes just cost.
 
 `SCAN` is absent for a reason worth stating rather than leaving as an oversight.
 Its guarantee — every key present for the whole iteration is returned at least

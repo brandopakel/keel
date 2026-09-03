@@ -51,11 +51,26 @@ const expiryOverhead = 48
 //	map[string]float64     59 B per 20-byte member  ->  39 of overhead
 //	ZSet (dict+skiplist)  155 B per 20-byte member  -> 135 of overhead
 //
+// A hash is map[string]string, which carries a second string header per entry.
+// Measured the same way over 200,000 fields, as bytes per field minus the field
+// and the value themselves:
+//
+//	           value=10   value=20   value=40
+//	field=10       64.7       62.5       66.5
+//	field=20       62.5       60.5       64.5
+//	field=40       66.5       64.5       68.5
+//
+// 64 is the middle of that. The spread is the allocator rounding each field and
+// value up to a size class, which is the part an estimate cannot follow, and
+// the reason the test asserts a band rather than a number.
+//
 // The base figures are the empty structure: the struct itself, its map header
 // and, for a sorted set, the skiplist head node with its 32 levels.
 const (
 	setMemberOverhead  = 39
 	setBaseBytes       = 64
+	hashFieldOverhead  = 64
+	hashBaseBytes      = 64
 	zsetMemberOverhead = 135
 	zsetBaseBytes      = 640
 	cmsBaseBytes       = 64

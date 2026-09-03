@@ -14,6 +14,7 @@ var (
 	dictStore   *data_structure.Dict
 	zsetStore   *data_structure.Keyed[*data_structure.ZSet]
 	setStore    *data_structure.Keyed[data_structure.Set]
+	hashStore   *data_structure.Keyed[*data_structure.Hash]
 	sbStore     *data_structure.Keyed[*data_structure.SBChain]
 	cmsStore    *data_structure.Keyed[*data_structure.CMS]
 	morrisStore *data_structure.Keyed[*data_structure.Morris]
@@ -35,6 +36,7 @@ func ResetStores() {
 	dictStore = data_structure.CreateDict()
 	zsetStore = data_structure.NewKeyed[*data_structure.ZSet]("zset")
 	setStore = data_structure.NewKeyed[data_structure.Set]("set")
+	hashStore = data_structure.NewKeyed[*data_structure.Hash]("hash")
 	sbStore = data_structure.NewKeyed[*data_structure.SBChain]("bloom")
 	cmsStore = data_structure.NewKeyed[*data_structure.CMS]("cms")
 	morrisStore = data_structure.NewKeyed[*data_structure.Morris]("morris")
@@ -44,6 +46,7 @@ func ResetStores() {
 	data_structure.RegisterKeyspace(dictStore)
 	data_structure.RegisterKeyspace(zsetStore)
 	data_structure.RegisterKeyspace(setStore)
+	data_structure.RegisterKeyspace(hashStore)
 	data_structure.RegisterKeyspace(sbStore)
 	data_structure.RegisterKeyspace(cmsStore)
 	data_structure.RegisterKeyspace(morrisStore)
