@@ -21,6 +21,23 @@ package data_structure
 // Key and value bytes are charged one for one, and everything else - the map
 // bucket slot, the string headers, the Obj, the pointer - comes to a constant
 // just under 100 bytes.
+//
+// The constant holds from Go 1.22 onwards, which is why go.mod requires it. On
+// Go 1.21 the same workload holds substantially more heap, and since the
+// overhead is per entry the error is worst where the value is smallest.
+// Measured on linux/amd64 by TestEstimateTracksRealHeap, as estimate/actual:
+//
+//	Go        val=8    val=64   val=512   val=4096
+//	1.21.13   0.611     0.723     0.904      0.984
+//	1.22.12   0.977     1.031     1.008      1.001
+//	1.23.12   0.978     1.032     1.009      1.001
+//	1.24.9    1.017     1.061     1.016      1.002
+//	1.26.6    1.017     1.061     1.016      1.002
+//
+// Under-counting by 39% is not a cosmetic drift: -maxmemory is enforced against
+// this number, so a budget set on Go 1.21 admits far more than it was asked to
+// and the bound stops bounding. Requiring 1.22 is the fix rather than widening
+// the test, because the accounting either describes the heap or it does not.
 const entryOverhead = 100
 
 // expiryOverhead is the additional cost of a key with a TTL, which lives in a

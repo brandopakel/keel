@@ -283,6 +283,13 @@ func TestRewriteStallProfile(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a million keys")
 	}
+	if raceEnabled {
+		// Measured on Linux: the median slice goes from 793µs to 3.58ms under
+		// -race, which fails the 2ms bound below. That is the detector's
+		// instrumentation, not the walk, so running it here measures the wrong
+		// thing rather than measuring this one badly.
+		t.Skip("measures wall-clock latency, which -race inflates about fourfold")
+	}
 	path := filepath.Join(t.TempDir(), "profile.aof")
 	ResetStores()
 	assert.NoError(t, OpenAOF(path))

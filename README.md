@@ -47,7 +47,10 @@ unchanged — see [Relationship to upstream](#relationship-to-upstream).
   room for a string. Go gives no way to ask the allocator what a value cost, so
   the accounting is estimated and calibrated against real heap growth — within
   6% for strings and 2.3% for the collection types — with tests comparing the
-  estimates against `HeapAlloc` so they cannot drift.
+  estimates against `HeapAlloc` so they cannot drift. The calibration holds
+  from **Go 1.22**, which is what `go.mod` requires: on 1.21 the same keys
+  hold enough more heap that the estimate falls to 61% of it at small
+  values, and a bound enforced against that number stops bounding.
 - **One name means one thing.** A key held by one type is refused to every
   other with `WRONGTYPE`, and `DEL` removes whichever type holds it. Resolved by
   asking each keyspace rather than by keeping a directory of names — a directory
