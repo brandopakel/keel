@@ -121,7 +121,7 @@ func decodeRestorePayload(key string, tag byte, body []byte) (store func(), err 
 		if err != nil {
 			return nil, err
 		}
-		set := data_structure.CreateSet(key)
+		set := data_structure.NewSet()
 		if len(members) > 0 {
 			set.Add(members...)
 		}

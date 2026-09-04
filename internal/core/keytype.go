@@ -36,7 +36,8 @@ var commandKeyspace = map[string]string{
 	"LLEN": "list", "LINDEX": "list", "LSET": "list", "LRANGE": "list",
 
 	"SADD": "set", "SREM": "set", "SCARD": "set", "SMEMBERS": "set",
-	"SISMEMBER": "set", "SMISMEMBER": "set", "SRAND": "set", "SPOP": "set",
+	"SISMEMBER": "set", "SMISMEMBER": "set", "SRANDMEMBER": "set", "SRAND": "set",
+	"SPOP": "set",
 
 	"ZADD": "zset", "ZRANK": "zset", "ZREM": "zset", "ZSCORE": "zset",
 	"ZCARD": "zset",
@@ -46,7 +47,7 @@ var commandKeyspace = map[string]string{
 	"GEOADD": "zset", "GEODIST": "zset", "GEOHASH": "zset",
 	"GEOSEARCH": "zset", "GEOPOS": "zset",
 
-	"BF.RESERVE": "bloom", "BF.INFO": "bloom", "BF.MADD": "bloom",
+	"BF.RESERVE": "bloom", "BF.INFO": "bloom", "BF.ADD": "bloom", "BF.MADD": "bloom",
 	"BF.EXISTS": "bloom", "BF.MEXISTS": "bloom",
 
 	"CMS.INITBYDIM": "cms", "CMS.INITBYPROB": "cms", "CMS.INCRBY": "cms",

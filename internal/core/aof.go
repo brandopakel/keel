@@ -110,7 +110,7 @@ var writeCommands = map[string]bool{
 	"SADD": true, "SREM": true, "SPOP": true,
 	"ZADD": true, "ZREM": true,
 	"GEOADD":     true,
-	"BF.RESERVE": true, "BF.MADD": true,
+	"BF.RESERVE": true, "BF.ADD": true, "BF.MADD": true,
 	"CMS.INITBYDIM": true, "CMS.INITBYPROB": true, "CMS.INCRBY": true,
 	"MORRIS.INITBYDIM": true, "MORRIS.INITBYPROB": true, "MORRIS.INCRBY": true,
 	"PFADD": true, "PFMERGE": true,

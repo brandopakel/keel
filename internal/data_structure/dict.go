@@ -1,14 +1,16 @@
 package data_structure
 
-import (
-	"time"
-)
+import "time"
 
+// Obj is a value in the main dictionary: the string itself, and a byte saying
+// how it is typed and encoded.
 type Obj struct {
-	Value        interface{}
+	Value interface{}
+
+	// TypeEncoding packs the object's type into the high four bits and its
+	// encoding into the low four - whether a string holds an integer, for
+	// instance, which is what lets INCR skip a parse it knows would fail.
 	TypeEncoding uint8
-	// type    | encoding
-	// [][][][]|[][][][]
 
 	// Access carries whatever bookkeeping the eviction policy needs, and what
 	// it means depends on the policy in force:
@@ -25,6 +27,8 @@ type Obj struct {
 	Access uint64
 }
 
+// Dict is the string keyspace: the values, and the expiry of each key that has
+// one.
 type Dict struct {
 	dictStore map[string]*Obj
 
@@ -46,8 +50,8 @@ type Dict struct {
 
 func CreateDict() *Dict {
 	return &Dict{
-		dictStore:        make(map[string]*Obj),
-		expiredDictStore: make(map[string]uint64),
+		dictStore:        map[string]*Obj{},
+		expiredDictStore: map[string]uint64{},
 	}
 }
 
@@ -58,29 +62,31 @@ func CreateDict() *Dict {
 // one sets it after the Put, which is also the order that makes SET clear a
 // previous expiry and then apply the new one.
 func (d *Dict) NewObj(value interface{}, oType uint8, oEnc uint8) *Obj {
-	obj := &Obj{
+	return &Obj{
 		Value:        value,
 		TypeEncoding: oType | oEnc,
+		Access:       NewAccess(),
 	}
-	obj.Access = NewAccess()
-	return obj
 }
 
+// nowMs is the clock every expiry is compared against.
+func nowMs() uint64 { return uint64(time.Now().UnixMilli()) }
+
+// HasExpired reports whether a key has a TTL that has already passed.
 func (d *Dict) HasExpired(k string) bool {
-	exp, exist := d.expiredDictStore[k]
-	if !exist {
-		return false
-	}
-	return exp <= uint64(time.Now().UnixMilli())
+	at, has := d.expiredDictStore[k]
+	return has && at <= nowMs()
 }
 
+// GetExpiry returns when a key falls due, and whether it has a TTL at all.
 func (d *Dict) GetExpiry(k string) (uint64, bool) {
-	exp, exist := d.expiredDictStore[k]
-	return exp, exist
+	at, has := d.expiredDictStore[k]
+	return at, has
 }
 
+// SetExpiry gives a key ttlMs more milliseconds to live.
 func (d *Dict) SetExpiry(k string, ttlMs int64) {
-	d.SetExpiryAt(k, uint64(time.Now().UnixMilli())+uint64(ttlMs))
+	d.SetExpiryAt(k, nowMs()+uint64(ttlMs))
 }
 
 // SetExpiryAt sets the expiry to an absolute time in milliseconds since the
@@ -116,23 +122,27 @@ func (d *Dict) ExpiryOf(k string) (uint64, bool) {
 // not accumulate entries for keys that have gone.
 func (d *Dict) ExpiryCount() int { return len(d.expiredDictStore) }
 
+// Get returns the live object at a key and records the access. A key whose
+// TTL has passed is reaped on the way and reads as absent.
 func (d *Dict) Get(k string) *Obj {
-	v := d.dictStore[k]
-	if v != nil {
-		if d.HasExpired(k) {
-			d.Del(k)
-			// Reaping a key whose TTL has passed is a decision this server
-			// made at a moment a log has to be able to reproduce. Without it
-			// the key comes back on replay carrying an expiry that has already
-			// gone by, and lives until something next reads it.
-			noteRemoval(d, k)
-			return nil
-		}
-		Touch(&v.Access)
+	obj, ok := d.dictStore[k]
+	if !ok {
+		return nil
 	}
-	return v
+	if d.HasExpired(k) {
+		d.Del(k)
+		// Reaping a key whose TTL has passed is a decision this server
+		// made at a moment a log has to be able to reproduce. Without it
+		// the key comes back on replay carrying an expiry that has already
+		// gone by, and lives until something next reads it.
+		noteRemoval(d, k)
+		return nil
+	}
+	Touch(&obj.Access)
+	return obj
 }
 
+// Put stores obj at k, replacing whatever was there along with its expiry.
 func (d *Dict) Put(k string, obj *Obj) {
 	// An overwrite replaces the old value's cost rather than adding to it, so
 	// its bytes are returned first. Under a key-count bound this is also why
@@ -197,14 +207,17 @@ func (d *Dict) Peek(k string) *Obj {
 // Len reports how many keys are stored.
 func (d *Dict) Len() int { return len(d.dictStore) }
 
+// Del removes a key, its expiry and its charge against the budget, and reports
+// whether there was anything to remove.
 func (d *Dict) Del(k string) bool {
-	if obj, exist := d.dictStore[k]; exist {
-		d.memUsed -= d.entryBytes(k, obj)
-		delete(d.dictStore, k)
-		delete(d.expiredDictStore, k)
-		return true
+	obj, ok := d.dictStore[k]
+	if !ok {
+		return false
 	}
-	return false
+	d.memUsed -= d.entryBytes(k, obj)
+	delete(d.dictStore, k)
+	delete(d.expiredDictStore, k)
+	return true
 }
 
 // Dict is a Keyspace, so eviction can weigh a string key against a set or a

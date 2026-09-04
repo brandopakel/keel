@@ -92,11 +92,11 @@ func TestSerialiseRoundTripsExactly(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, len(sb.filters), len(back.filters))
 		for i := 0; i < 2000; i++ {
-			assert.True(t, back.Exist("item:"+strconv.Itoa(i)), "item %d must still be present", i)
+			assert.True(t, back.Exists("item:"+strconv.Itoa(i)), "item %d must still be present", i)
 		}
 		// And it must still be usable, not merely readable.
 		back.Add("added-after-restore")
-		assert.True(t, back.Exist("added-after-restore"))
+		assert.True(t, back.Exists("added-after-restore"))
 	})
 }
 

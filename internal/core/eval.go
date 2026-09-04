@@ -138,8 +138,8 @@ func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 		res = cmdSISMEMBER(cmd.Args)
 	case "SMISMEMBER":
 		res = cmdSMISMEMBER(cmd.Args)
-	case "SRAND":
-		res = cmdSRAND(cmd.Args)
+	case "SRANDMEMBER", "SRAND":
+		res = cmdSRANDMEMBER(cmd.Args)
 	case "SPOP":
 		res = cmdSPOP(cmd.Args)
 	// Sorted set
@@ -169,6 +169,8 @@ func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 		res = cmdBFRESERVE(cmd.Args)
 	case "BF.INFO":
 		res = cmdBFINFO(cmd.Args)
+	case "BF.ADD":
+		res = cmdBFADD(cmd.Args)
 	case "BF.MADD":
 		res = cmdBFMADD(cmd.Args)
 	case "BF.EXISTS":
