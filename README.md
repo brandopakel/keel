@@ -115,6 +115,21 @@ unchanged — see [Where this came from](#where-this-came-from).
 ```sh
 go install github.com/brandopakel/keel/cmd/keel@latest # or run from source, below
 keel                                                   # listens on 8081
+keel -version
+```
+
+Or from a release, which carries binaries for linux and darwin on amd64 and
+arm64 — the four platforms that build, since the event loop is `epoll` or
+`kqueue` and there is no Windows implementation:
+
+```sh
+tar -xzf keel_<version>_<os>_<arch>.tar.gz && ./keel
+```
+
+Or in a container, where the log lives in the mounted volume:
+
+```sh
+docker build -t keel . && docker run -p 8081:8081 -v "$PWD/data:/data" keel -appendonly
 ```
 
 ```sh
@@ -210,11 +225,15 @@ are the ones that decide whether it is usable for anything of yours.
   to be yes, and because upstream's work is most of what sits underneath, it is
   not a decision this fork can make alone.
 - **It is not importable as a library.** `go install
-  github.com/brandopakel/keel/cmd/keel@latest` works, but every package lives
-  under `internal/`, which Go forbids anything outside this module from
-  importing. That is a consequence of it being a server you talk to over a
-  socket rather than a package you link against; nothing here is a stable API
-  yet, and `internal/` says so rather than implying otherwise.
+  github.com/brandopakel/keel/cmd/keel@latest` works, and so do the release
+  binaries and the container image, but every package lives under `internal/`,
+  which Go forbids anything outside this module from importing. That is a
+  consequence of it being a server you talk to over a socket rather than a
+  package you link against; nothing here is a stable API yet, and `internal/`
+  says so rather than implying otherwise.
+- **There is no tagged release yet.** `@latest` resolves to a pseudo-version
+  naming the commit on `develop`, which installs and runs but pins nothing.
+  Tagging is what the release workflow is waiting for.
 - **`LCS` does not type-check its keys.** Every other command answers
   `WRONGTYPE` for a name held by another type; `LCS` treats such a key as an
   empty string, the same way it treats a missing one.

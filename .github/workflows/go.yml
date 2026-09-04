@@ -51,6 +51,36 @@ jobs:
       - name: Test
         run: go test -v ./...
 
+  docker:
+    name: docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      # Built on every PR rather than only on release, because a Dockerfile
+      # nothing exercises is a Dockerfile that has stopped working and has not
+      # said so. The image is not pushed anywhere from here.
+      - name: Build the image
+        run: docker build -t keel:ci --build-arg VERSION=ci .
+
+      - name: Serve from it
+        run: |
+          docker run -d --name keel-ci -p 8081:8081 keel:ci
+          for i in $(seq 1 30); do
+            if docker run --rm --network host redis:8-alpine redis-cli -p 8081 ping 2>/dev/null | grep -q PONG; then
+              echo "responded"; break
+            fi
+            sleep 1
+          done
+          docker run --rm --network host redis:8-alpine redis-cli -p 8081 ping | grep -q PONG
+          docker run --rm --network host redis:8-alpine redis-cli -p 8081 rpush l a b c
+          docker run --rm --network host redis:8-alpine redis-cli -p 8081 hset h f v
+          test "$(docker run --rm --network host redis:8-alpine redis-cli -p 8081 dbsize)" = 2
+          docker logs keel-ci
+          docker rm -f keel-ci
+
   race:
     name: race detector
     runs-on: ubuntu-latest
