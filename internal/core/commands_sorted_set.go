@@ -66,6 +66,20 @@ func parseZScore(s string) (float64, error) {
 	return f, nil
 }
 
+// formatZScore writes a score the way Redis replies with one: the fewest
+// digits that read back to the same float64, and the infinities by name. A
+// fixed number of decimals would print 0.0000001 as 0.000000 and a geohash
+// score with six zeros it never had.
+func formatZScore(score float64) string {
+	switch {
+	case math.IsInf(score, 1):
+		return "inf"
+	case math.IsInf(score, -1):
+		return "-inf"
+	}
+	return strconv.FormatFloat(score, 'f', -1, 64)
+}
+
 // zaddApply adds every score/member pair to the set at key under flags, and
 // reports how many members were new and how many were new or rescored.
 //
@@ -180,7 +194,7 @@ func cmdZSCORE(args []string) []byte {
 	if !ok {
 		return constant.RespNil
 	}
-	return Encode(strconv.FormatFloat(score, 'f', 6, 64), false)
+	return Encode(formatZScore(score), false)
 }
 
 func cmdZCARD(args []string) []byte {

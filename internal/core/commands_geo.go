@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -40,12 +41,14 @@ var errGeoUnit = errors.New("ERR unsupported unit provided. please use M, KM, FT
 // cannot hold. The error carries the pair, as Redis's does, because a swapped
 // latitude and longitude is the usual way to arrive here.
 func parseLongLat(longS, latS string) (longitude, latitude float64, err error) {
+	// NaN is refused by name: it parses, and every range comparison below is
+	// false for it, so it would otherwise walk straight through.
 	longitude, err = strconv.ParseFloat(longS, 64)
-	if err != nil {
+	if err != nil || math.IsNaN(longitude) {
 		return 0, 0, errNotAFloat
 	}
 	latitude, err = strconv.ParseFloat(latS, 64)
-	if err != nil {
+	if err != nil || math.IsNaN(latitude) {
 		return 0, 0, errNotAFloat
 	}
 	if longitude < data_structure.GeoLongMin || longitude > data_structure.GeoLongMax ||
@@ -404,7 +407,7 @@ func parseGeoSearch(args []string) (*geoSearch, error) {
 // parseGeoDistance reads a radius, width or height.
 func parseGeoDistance(s, notNumeric, negative string) (float64, error) {
 	d, err := strconv.ParseFloat(s, 64)
-	if err != nil {
+	if err != nil || math.IsNaN(d) {
 		return 0, errors.New(notNumeric)
 	}
 	if d < 0 {

@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 
 	"github.com/brandopakel/keel/internal/constant"
@@ -194,7 +195,9 @@ func formatScore(f float64) string { return strconv.FormatFloat(f, 'g', -1, 64) 
 
 func parseScore(s string) (float64, error) {
 	f, err := strconv.ParseFloat(s, 64)
-	if err != nil {
+	// NaN parses, and is not a score: a member restored under it could never
+	// be found in the skip list again.
+	if err != nil || math.IsNaN(f) {
 		return 0, fmt.Errorf("MEMKV: bad score %q", s)
 	}
 	return f, nil

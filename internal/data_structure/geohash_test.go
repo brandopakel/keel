@@ -256,10 +256,7 @@ func TestGeoMembersOfAllNeighborsAgreesWithBruteForce(t *testing.T) {
 			// Distances are measured from the stored position, which is the
 			// centre of the point's box, not from the exact input.
 			score, _ := GeoScore(p.long, p.lat)
-			sLong, sLat, _ := GeoDecodeScore(float64(score))
 			if _, _, _, ok := geoWithinShape(shape, float64(score)); ok {
-				_ = sLong
-				_ = sLat
 				want = append(want, name)
 			}
 		}
@@ -269,7 +266,10 @@ func TestGeoMembersOfAllNeighborsAgreesWithBruteForce(t *testing.T) {
 		var got []string
 		for _, f := range found {
 			got = append(got, f.Member)
-			assert.Equal(t, points[f.Member].long, points[f.Member].long)
+			// The point comes back at its stored position, which is within
+			// the index's resolution of where it went in.
+			assert.InDelta(t, points[f.Member].long, f.Longitude, 1e-4, "member %s longitude", f.Member)
+			assert.InDelta(t, points[f.Member].lat, f.Latitude, 1e-4, "member %s latitude", f.Member)
 		}
 		assert.ElementsMatch(t, want, got, "round %d", round)
 

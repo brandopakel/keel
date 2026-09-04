@@ -1,5 +1,7 @@
 package data_structure
 
+import "math"
+
 // ZSet is a sorted set: each member carries a float score, and the members are
 // ordered by score, then by member for equal scores.
 //
@@ -41,9 +43,16 @@ func CreateZSet() *ZSet {
 }
 
 // Add puts member in the set at score, subject to flags, and reports what
-// happened. The score must not be NaN: it has no place in an ordering, and the
-// caller is expected to have refused it.
+// happened.
+//
+// NaN is not a score: it compares false against everything, so a member
+// stored under it could never be found again by the skip list, and the next
+// rescore would fail an assertion there. Callers refuse it with an error of
+// their own; this is the guard behind them, answering that nothing was done.
 func (zs *ZSet) Add(score float64, member string, flags int) ZAddResult {
+	if math.IsNaN(score) {
+		return ZAddNop
+	}
 	current, present := zs.dict[member]
 	if present {
 		if flags&ZAddNX != 0 || current == score {
