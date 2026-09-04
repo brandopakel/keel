@@ -70,7 +70,12 @@ jobs:
           # -appendonly on purpose: it writes into /data as an unprivileged
           # user, which is the part of the image most likely to be wrong and
           # the thing the README tells people to run.
-          docker run -d --name keel-ci -p 127.0.0.1:8081:8081 keel:ci -appendonly
+          # A named volume, which is what the README recommends and what a
+          # bind mount is not: Docker gives a named volume the image's
+          # ownership, and creates a missing bind-mount directory as root,
+          # which an unprivileged container cannot write into.
+          docker run -d --name keel-ci -p 127.0.0.1:8081:8081 \
+            -v keel-ci-data:/data keel:ci -appendonly
           for _ in $(seq 1 30); do
             if docker run --rm --network host redis:8-alpine redis-cli -p 8081 ping 2>/dev/null | grep -q PONG; then
               echo "responded"; break
@@ -86,6 +91,20 @@ jobs:
           docker logs keel-ci
           docker logs keel-ci 2>&1 | grep -q "appendonly: on"
           docker rm -f keel-ci
+
+          # And the bind-mount form the README documents, made by hand first.
+          mkdir -p /tmp/keel-bind && sudo chown 65534:65534 /tmp/keel-bind
+          docker run -d --name keel-bind -p 127.0.0.1:8082:8081 \
+            -v /tmp/keel-bind:/data keel:ci -appendonly
+          for _ in $(seq 1 30); do
+            docker logs keel-bind 2>&1 | grep -q "appendonly: on" && break
+            sleep 1
+          done
+          docker logs keel-bind 2>&1 | grep -q "appendonly: on"
+          docker run --rm --network host redis:8-alpine redis-cli -p 8082 set k v
+          sudo test -f /tmp/keel-bind/keel-master.aof
+          docker rm -f keel-bind
+          docker volume rm keel-ci-data
 
   race:
     name: race detector

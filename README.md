@@ -132,6 +132,17 @@ would put an unauthenticated database on every interface the host has:
 
 ```sh
 docker build -t keel .
+docker run -p 127.0.0.1:8081:8081 -v keel-data:/data keel -appendonly
+```
+
+A named volume rather than a bind mount, because the container runs
+unprivileged. Docker creates a named volume with the image's ownership, and
+creates a missing bind-mount directory as root — which the server then cannot
+write its log into. Bind-mounting a host directory works if you make it
+yourself first:
+
+```sh
+mkdir -p data && sudo chown 65534:65534 data
 docker run -p 127.0.0.1:8081:8081 -v "$PWD/data:/data" keel -appendonly
 ```
 
