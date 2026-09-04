@@ -64,6 +64,16 @@ const expiryOverhead = 48
 // value up to a size class, which is the part an estimate cannot follow, and
 // the reason the test asserts a band rather than a number.
 //
+// A list is charged in two parts rather than one, because two different things
+// scale differently. Its buffer is a []string, so every slot is exactly a
+// 16-byte string header whether or not an element is in it - that is charged at
+// capacity, since a list that grew and shrank still owns the slots. The
+// allocator's rounding of the element strings themselves scales with the number
+// of elements instead, and measures at about 5 bytes each over the mixed sizes
+// below. Folding both into one per-slot constant fits a full list and
+// over-counts a list that has shrunk by a quarter, which is the direction a
+// memory bound should not be wrong in.
+//
 // The base figures are the empty structure: the struct itself, its map header
 // and, for a sorted set, the skiplist head node with its 32 levels.
 const (
@@ -71,6 +81,9 @@ const (
 	setBaseBytes       = 64
 	hashFieldOverhead  = 64
 	hashBaseBytes      = 64
+	listSlotOverhead   = 16
+	listElemOverhead   = 5
+	listBaseBytes      = 64
 	zsetMemberOverhead = 135
 	zsetBaseBytes      = 640
 	cmsBaseBytes       = 64

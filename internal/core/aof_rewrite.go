@@ -316,6 +316,10 @@ func emitKey(dst []byte, key string) []byte {
 		}
 		return appendCommand(dst, parts...)
 	}
+	if l, ok := listStore.Peek(key); ok {
+		// RPUSH in order, so the list rebuilds left to right exactly as it is.
+		return appendCommand(dst, append([]string{"RPUSH", key}, l.All()...)...)
+	}
 	if zset, ok := zsetStore.Peek(key); ok {
 		members, scores := zset.Entries()
 		parts := make([]string, 0, 2+2*len(members))

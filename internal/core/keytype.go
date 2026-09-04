@@ -32,6 +32,9 @@ var commandKeyspace = map[string]string{
 	"HDEL": "hash", "HEXISTS": "hash", "HLEN": "hash", "HKEYS": "hash",
 	"HVALS": "hash", "HGETALL": "hash", "HINCRBY": "hash",
 
+	"LPUSH": "list", "RPUSH": "list", "LPOP": "list", "RPOP": "list",
+	"LLEN": "list", "LINDEX": "list", "LSET": "list", "LRANGE": "list",
+
 	"SADD": "set", "SREM": "set", "SCARD": "set", "SMEMBERS": "set",
 	"SISMEMBER": "set", "SMISMEMBER": "set", "SRAND": "set", "SPOP": "set",
 

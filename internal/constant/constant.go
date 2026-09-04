@@ -1,6 +1,12 @@
 package constant
 
 var RespNil = []byte("$-1\r\n")
+
+// RespNilArray is the null array, which is a different reply from the null
+// bulk string above. A command that answers an array has to answer this when it
+// has no array to give - a client decoding LPOP key count into a list gets a
+// type error from $-1, because that is the absence of a string.
+var RespNilArray = []byte("*-1\r\n")
 var RespOk = []byte("+OK\r\n")
 var RespZero = []byte(":0\r\n")
 var RespOne = []byte(":1\r\n")

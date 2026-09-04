@@ -109,6 +109,23 @@ func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	case "HINCRBY":
 		res = cmdHINCRBY(cmd.Args)
 
+	case "LPUSH":
+		res = cmdLPUSH(cmd.Args)
+	case "RPUSH":
+		res = cmdRPUSH(cmd.Args)
+	case "LPOP":
+		res = cmdLPOP(cmd.Args)
+	case "RPOP":
+		res = cmdRPOP(cmd.Args)
+	case "LLEN":
+		res = cmdLLEN(cmd.Args)
+	case "LINDEX":
+		res = cmdLINDEX(cmd.Args)
+	case "LSET":
+		res = cmdLSET(cmd.Args)
+	case "LRANGE":
+		res = cmdLRANGE(cmd.Args)
+
 	case "SADD":
 		res = cmdSADD(cmd.Args)
 	case "SREM":
