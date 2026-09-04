@@ -36,6 +36,11 @@ FROM scratch
 COPY --from=build /out/keel /keel
 COPY --from=build --chown=65534:65534 /out/data /data
 
+# The notices for the code translated from Redis travel with every binary, as
+# their licence asks; there is no package manager here to put them anywhere
+# more conventional than the root.
+COPY --from=build /src/THIRD_PARTY_NOTICES.md /THIRD_PARTY_NOTICES.md
+
 # Unprivileged. The number is used rather than a name because scratch has no
 # /etc/passwd to resolve one.
 USER 65534:65534

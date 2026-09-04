@@ -20,8 +20,8 @@ func TestCmdZScoreReportsTheScoreOfAMemberThatExists(t *testing.T) {
 	assert.EqualValues(t, 2, mustDecode(t, cmdZADD([]string{"z", "10", "alice", "20.5", "bob"})))
 	assert.EqualValues(t, 2, mustDecode(t, cmdZCARD([]string{"z"})))
 
-	assert.EqualValues(t, "10.000000", mustDecode(t, cmdZSCORE([]string{"z", "alice"})))
-	assert.EqualValues(t, "20.500000", mustDecode(t, cmdZSCORE([]string{"z", "bob"})))
+	assert.EqualValues(t, "10", mustDecode(t, cmdZSCORE([]string{"z", "alice"})))
+	assert.EqualValues(t, "20.5", mustDecode(t, cmdZSCORE([]string{"z", "bob"})))
 
 	// A member that was never added has no score, and must not be given one.
 	assert.Equal(t, constant.RespNil, cmdZSCORE([]string{"z", "nobody"}),
@@ -32,7 +32,7 @@ func TestCmdZScoreReportsTheScoreOfAMemberThatExists(t *testing.T) {
 func TestCmdZScoreAfterZRem(t *testing.T) {
 	ResetStores()
 	assert.EqualValues(t, 1, mustDecode(t, cmdZADD([]string{"z", "1", "gone"})))
-	assert.EqualValues(t, "1.000000", mustDecode(t, cmdZSCORE([]string{"z", "gone"})))
+	assert.EqualValues(t, "1", mustDecode(t, cmdZSCORE([]string{"z", "gone"})))
 
 	assert.EqualValues(t, 1, mustDecode(t, cmdZREM([]string{"z", "gone"})))
 	assert.Equal(t, constant.RespNil, cmdZSCORE([]string{"z", "gone"}),

@@ -1,164 +1,127 @@
 package data_structure
 
 import (
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestZSet_Add_NoOps(t *testing.T) {
+func TestZSetAddReportsWhatItDid(t *testing.T) {
 	zs := CreateZSet()
-	ret, flagOut := zs.Add(10.0, "k1", ZAddInXX)
-	assert.EqualValues(t, 1, ret)
-	assert.EqualValues(t, ZAddOutNop, flagOut)
+	assert.Equal(t, ZAddAdded, zs.Add(1, "a", 0))
+	assert.Equal(t, ZAddNop, zs.Add(1, "a", 0), "same score is no change")
+	assert.Equal(t, ZAddUpdated, zs.Add(2, "a", 0))
+	assert.Equal(t, 1, zs.Len())
 
-	ret, flagOut = zs.Add(10.0, "k1", 0)
-	assert.EqualValues(t, 1, ret)
-	assert.EqualValues(t, ZAddOutAdded, flagOut)
-
-	ret, flagOut = zs.Add(20.0, "k1", ZAddInNX)
-	assert.EqualValues(t, 1, ret)
-	assert.EqualValues(t, ZAddOutNop, flagOut)
-
-	ret, flagOut = zs.Add(100.0, "", ZAddInNX)
-	assert.EqualValues(t, 0, ret)
-	assert.EqualValues(t, ZAddOutNop, flagOut)
+	score, ok := zs.Score("a")
+	assert.True(t, ok)
+	assert.Equal(t, 2.0, score)
+	_, ok = zs.Score("missing")
+	assert.False(t, ok)
 }
 
-func TestZSet_Add_AddNew(t *testing.T) {
+func TestZSetAddFlags(t *testing.T) {
 	zs := CreateZSet()
-	ret, flagOut := zs.Add(10.0, "k1", 0)
-	assert.EqualValues(t, 1, ret)
-	assert.EqualValues(t, ZAddOutAdded, flagOut)
-	v, ok := zs.dict["k1"]
-	assert.True(t, ok)
-	assert.EqualValues(t, 10.0, v)
-	assert.EqualValues(t, "k1", zs.zskiplist.head.levels[0].forward.ele)
-	assert.EqualValues(t, 10, zs.zskiplist.head.levels[0].forward.score)
-	assert.EqualValues(t, 1, zs.zskiplist.length)
+	zs.Add(1, "a", 0)
 
-	ret, flagOut = zs.Add(20.0, "k2", 0)
-	v, ok = zs.dict["k2"]
-	assert.EqualValues(t, 1, ret)
-	assert.True(t, ok)
-	assert.EqualValues(t, 20, v)
-	assert.EqualValues(t, "k2", zs.zskiplist.tail.ele)
-	assert.EqualValues(t, 20, zs.zskiplist.tail.score)
-	assert.EqualValues(t, 2, zs.zskiplist.length)
+	assert.Equal(t, ZAddNop, zs.Add(5, "a", ZAddNX), "NX leaves an existing member alone")
+	assert.Equal(t, ZAddAdded, zs.Add(5, "b", ZAddNX), "NX still adds a new one")
+
+	assert.Equal(t, ZAddNop, zs.Add(7, "c", ZAddXX), "XX does not add")
+	assert.Equal(t, ZAddUpdated, zs.Add(7, "a", ZAddXX), "XX does rescore")
+	assert.Equal(t, 2, zs.Len())
+
+	score, _ := zs.Score("a")
+	assert.Equal(t, 7.0, score)
 }
 
-func TestZSet_Add_UpdateExist(t *testing.T) {
+func TestZSetRankFollowsScoreOrder(t *testing.T) {
 	zs := CreateZSet()
-	ret, flagOut := zs.Add(10.0, "k1", 0)
-	assert.EqualValues(t, 1, ret)
-	assert.EqualValues(t, ZAddOutAdded, flagOut)
-	v, ok := zs.dict["k1"]
-	assert.True(t, ok)
-	assert.EqualValues(t, 10.0, v)
-	assert.EqualValues(t, "k1", zs.zskiplist.head.levels[0].forward.ele)
-	assert.EqualValues(t, 10, zs.zskiplist.head.levels[0].forward.score)
-	assert.EqualValues(t, 1, zs.zskiplist.length)
+	zs.Add(30, "c", 0)
+	zs.Add(10, "a", 0)
+	zs.Add(20, "b", 0)
+	zs.Add(20, "bb", 0) // same score as b, sorts after it by name
 
-	ret, flagOut = zs.Add(5.0, "k1", 0)
-	v, ok = zs.dict["k1"]
-	assert.EqualValues(t, 1, ret)
-	assert.EqualValues(t, ZAddOutUpdated, flagOut)
-	assert.True(t, ok)
-	assert.EqualValues(t, 5, v)
-	assert.EqualValues(t, "k1", zs.zskiplist.head.levels[0].forward.ele)
-	assert.EqualValues(t, 5, zs.zskiplist.head.levels[0].forward.score)
-	assert.EqualValues(t, 1, zs.zskiplist.length)
-}
+	for i, m := range []string{"a", "b", "bb", "c"} {
+		rank, ok := zs.Rank(m, false)
+		assert.True(t, ok)
+		assert.EqualValues(t, i, rank, "%s forward", m)
+		rank, ok = zs.Rank(m, true)
+		assert.True(t, ok)
+		assert.EqualValues(t, 3-i, rank, "%s reverse", m)
+	}
+	_, ok := zs.Rank("nobody", false)
+	assert.False(t, ok)
 
-func TestZSet_Add_AddDuplicateEleAndScore(t *testing.T) {
-	zs := CreateZSet()
-	ret, flagOut := zs.Add(10.0, "k1", 0)
-	assert.EqualValues(t, 1, ret)
-	assert.EqualValues(t, ZAddOutAdded, flagOut)
-	v, ok := zs.dict["k1"]
-	assert.True(t, ok)
-	assert.EqualValues(t, 10.0, v)
-	assert.EqualValues(t, "k1", zs.zskiplist.head.levels[0].forward.ele)
-	assert.EqualValues(t, 10, zs.zskiplist.head.levels[0].forward.score)
-	assert.EqualValues(t, 1, zs.zskiplist.length)
-
-	ret, flagOut = zs.Add(10.0, "k1", 0)
-	v, ok = zs.dict["k1"]
-	assert.EqualValues(t, 1, ret)
-	assert.EqualValues(t, ZAddOutNop, flagOut)
-	assert.True(t, ok)
-}
-
-func TestZSet_Del(t *testing.T) {
-	zs := CreateZSet()
-	ret, flagOut := zs.Add(20.0, "k2", 0)
-	assert.EqualValues(t, 1, ret)
-	assert.EqualValues(t, ZAddOutAdded, flagOut)
-	ret, flagOut = zs.Add(10.0, "k1", 0)
-	assert.EqualValues(t, 1, ret)
-	assert.EqualValues(t, ZAddOutAdded, flagOut)
-	ret, flagOut = zs.Add(30.0, "k3", 0)
-	assert.EqualValues(t, 1, ret)
-	assert.EqualValues(t, ZAddOutAdded, flagOut)
-
-	assert.EqualValues(t, 3, zs.zskiplist.length)
-	zs.Del("k1")
-	assert.EqualValues(t, 2, zs.zskiplist.length)
-	assert.EqualValues(t, 20.0, zs.zskiplist.head.levels[0].forward.score)
-	assert.EqualValues(t, "k2", zs.zskiplist.head.levels[0].forward.ele)
-	zs.Del("k3")
-	assert.EqualValues(t, 1, zs.zskiplist.length)
-	assert.EqualValues(t, 20.0, zs.zskiplist.head.levels[0].forward.score)
-	assert.EqualValues(t, "k2", zs.zskiplist.head.levels[0].forward.ele)
-	zs.Del("k2")
-	assert.EqualValues(t, 0, zs.zskiplist.length)
-	assert.Nil(t, zs.zskiplist.head.levels[0].forward)
-	assert.Nil(t, zs.zskiplist.tail)
-}
-
-func TestZSet_GetRank(t *testing.T) {
-	zs := CreateZSet()
-	_, flagOut := zs.Add(20.0, "k2", 0)
-	assert.EqualValues(t, ZAddOutAdded, flagOut)
-	_, flagOut = zs.Add(40.0, "k4", 0)
-	assert.EqualValues(t, ZAddOutAdded, flagOut)
-	_, flagOut = zs.Add(10.0, "k1", 0)
-	assert.EqualValues(t, ZAddOutAdded, flagOut)
-	_, flagOut = zs.Add(15.0, "k2", 0)
-	assert.EqualValues(t, ZAddOutUpdated, flagOut)
-	_, flagOut = zs.Add(30.0, "k3", 0)
-	assert.EqualValues(t, ZAddOutAdded, flagOut)
-
-	/* { (k1, 10), (k2, 15), (k3, 30), (k4, 40) } */
-	rank, score := zs.GetRank("k1", false)
+	// Rescoring moves a member and every rank follows.
+	zs.Add(5, "c", 0)
+	rank, _ := zs.Rank("c", false)
 	assert.EqualValues(t, 0, rank)
-	assert.EqualValues(t, 10.0, score)
-
-	rank, score = zs.GetRank("k2", false)
+	rank, _ = zs.Rank("a", false)
 	assert.EqualValues(t, 1, rank)
-	assert.EqualValues(t, 15.0, score)
+}
 
-	rank, score = zs.GetRank("k3", false)
-	assert.EqualValues(t, 2, rank)
-	assert.EqualValues(t, 30.0, score)
+func TestZSetRemove(t *testing.T) {
+	zs := CreateZSet()
+	zs.Add(1, "a", 0)
+	zs.Add(2, "b", 0)
 
-	rank, score = zs.GetRank("k4", false)
-	assert.EqualValues(t, 3, rank)
-	assert.EqualValues(t, 40.0, score)
+	assert.True(t, zs.Remove("a"))
+	assert.False(t, zs.Remove("a"), "a second removal finds nothing")
+	assert.False(t, zs.Remove("never"))
+	assert.Equal(t, 1, zs.Len())
 
-	rank, score = zs.GetRank("k1", true)
-	assert.EqualValues(t, 3, rank)
-	assert.EqualValues(t, 10.0, score)
+	rank, ok := zs.Rank("b", false)
+	assert.True(t, ok)
+	assert.EqualValues(t, 0, rank, "b moves up once a is gone")
+}
 
-	rank, score = zs.GetRank("k2", true)
-	assert.EqualValues(t, 2, rank)
-	assert.EqualValues(t, 15.0, score)
+func TestZSetEntriesPairMembersWithScores(t *testing.T) {
+	zs := CreateZSet()
+	want := map[string]float64{"x": 1.5, "y": -2, "z": 0}
+	for m, s := range want {
+		zs.Add(s, m, 0)
+	}
+	members, scores := zs.Entries()
+	assert.Len(t, members, 3)
+	got := map[string]float64{}
+	for i, m := range members {
+		got[m] = scores[i]
+	}
+	assert.Equal(t, want, got)
+}
 
-	rank, score = zs.GetRank("k3", true)
-	assert.EqualValues(t, 1, rank)
-	assert.EqualValues(t, 30.0, score)
+func TestZSetMemUsageFollowsMembers(t *testing.T) {
+	zs := CreateZSet()
+	empty := zs.MemUsage()
+	zs.Add(1, "twenty-byte-member!!", 0)
+	one := zs.MemUsage()
+	assert.Greater(t, one, empty)
+	assert.Equal(t, empty+zsetMemberOverhead+20, one)
 
-	rank, score = zs.GetRank("k4", true)
-	assert.EqualValues(t, 0, rank)
-	assert.EqualValues(t, 40.0, score)
+	zs.Add(2, "twenty-byte-member!!", 0)
+	assert.Equal(t, one, zs.MemUsage(), "rescoring costs nothing")
+	zs.Remove("twenty-byte-member!!")
+	assert.Equal(t, empty, zs.MemUsage(), "what was charged is credited back")
+}
+
+func TestZSetOrderMatchesSortOfEntries(t *testing.T) {
+	zs := CreateZSet()
+	in := []scored{{3, "c"}, {1, "a"}, {2, "b"}, {2, "aa"}, {-1, "neg"}}
+	for _, e := range in {
+		zs.Add(e.score, e.ele, 0)
+	}
+	want := sortedEntries(in)
+	sort.Slice(want, func(i, j int) bool {
+		if want[i].score != want[j].score {
+			return want[i].score < want[j].score
+		}
+		return want[i].ele < want[j].ele
+	})
+	for i, e := range want {
+		rank, ok := zs.Rank(e.ele, false)
+		assert.True(t, ok)
+		assert.EqualValues(t, i, rank)
+	}
 }
