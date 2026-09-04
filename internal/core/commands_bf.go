@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"math"
 	"strconv"
 	"strings"
 
@@ -48,7 +49,9 @@ func cmdBFRESERVE(args []string) []byte {
 	if err != nil {
 		return Encode(errors.New("ERR bad error rate"), false)
 	}
-	if errorRate <= 0 || errorRate >= 1 {
+	// NaN parses, and compares false against both bounds, so it is refused by
+	// name.
+	if math.IsNaN(errorRate) || errorRate <= 0 || errorRate >= 1 {
 		return Encode(errBFErrorRate, false)
 	}
 	capacity, err := strconv.ParseUint(args[2], 10, 64)

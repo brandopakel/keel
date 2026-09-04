@@ -34,6 +34,8 @@ func TestCMSINITBYPROB(t *testing.T) {
 	assert.Contains(t, run(t, "CMS.INITBYPROB", "c", "0.001", "0.01"), "key already exists")
 	assert.Contains(t, run(t, "CMS.INITBYPROB", "d", "1", "0.01"), "invalid overestimation value")
 	assert.Contains(t, run(t, "CMS.INITBYPROB", "d", "x", "0.01"), "invalid overestimation value")
+	assert.Contains(t, run(t, "CMS.INITBYPROB", "d", "nan", "0.01"), "invalid overestimation value")
+	assert.Contains(t, run(t, "CMS.INITBYPROB", "d", "0.01", "NaN"), "invalid prob value")
 	assert.Contains(t, run(t, "CMS.INITBYPROB", "d", "0.01", "0"), "invalid prob value")
 	assert.Contains(t, run(t, "CMS.INITBYPROB", "d", "0.01", "1.5"), "invalid prob value")
 	assert.Contains(t, run(t, "CMS.INITBYPROB", "d", "0.01"), "wrong number of arguments")

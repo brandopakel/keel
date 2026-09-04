@@ -60,7 +60,9 @@ var ErrFilterTooLarge = errors.New("ERR the filter cannot grow: its next filter 
 // two, the third would grow a filter of no capacity the first time the chain
 // filled, and the fourth is an allocation nothing should make.
 func CreateSBChain(capacity uint64, errorRate float64, expansion uint64) *SBChain {
-	if capacity == 0 || errorRate <= 0 || errorRate >= 1 || expansion == 0 {
+	// NaN is refused by name: it compares false against everything, so the
+	// range check alone would let it through into the sizing arithmetic.
+	if capacity == 0 || math.IsNaN(errorRate) || errorRate <= 0 || errorRate >= 1 || expansion == 0 {
 		return nil
 	}
 	if BloomBytesFor(capacity, errorRate) > MaxStructureBytes {

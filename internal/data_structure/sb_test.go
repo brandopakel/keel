@@ -29,6 +29,7 @@ func TestSBChainStartsWithOneFilter(t *testing.T) {
 	assert.Nil(t, CreateSBChain(0, 0.01, 2), "no filter can be sized for nothing")
 	assert.Nil(t, CreateSBChain(10, 0, 2))
 	assert.Nil(t, CreateSBChain(10, 1, 2))
+	assert.Nil(t, CreateSBChain(10, math.NaN(), 2), "NaN is not a rate, and compares false against the bounds")
 	assert.Nil(t, CreateSBChain(10, 0.01, 0), "a chain that grew by nothing would grow an empty filter")
 	assert.Nil(t, CreateSBChain(1<<40, 0.01, 2), "a first filter past the per-key cap is refused")
 	assert.NotNil(t, CreateSBChain(100000000, 0.01, 2), "a hundred million items at one percent fits under it")
@@ -156,6 +157,11 @@ func TestSBChainFalsePositivesStayBounded(t *testing.T) {
 	sb := CreateSBChain(100, 0.01, 2)
 	for i := 0; i < 20000; i++ {
 		add(sb, fmt.Sprintf("in-%d", i))
+	}
+	// Everything added is still there, or a rate of zero below would mean an
+	// empty filter rather than a good one.
+	for i := 0; i < 20000; i++ {
+		assert.True(t, sb.Exists(fmt.Sprintf("in-%d", i)))
 	}
 	hits := 0
 	const probes = 50000

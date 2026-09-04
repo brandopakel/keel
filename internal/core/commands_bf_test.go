@@ -34,6 +34,7 @@ func TestBFRESERVERefusesBadSizing(t *testing.T) {
 	assert.Contains(t, run(t, "BF.RESERVE", "bf", "1", "100"), "0 < error rate range < 1")
 	assert.Contains(t, run(t, "BF.RESERVE", "bf", "0", "100"), "0 < error rate range < 1")
 	assert.Contains(t, run(t, "BF.RESERVE", "bf", "abc", "100"), "bad error rate")
+	assert.Contains(t, run(t, "BF.RESERVE", "bf", "nan", "100"), "0 < error rate range < 1", "NaN parses and is not a rate")
 	assert.Contains(t, run(t, "BF.RESERVE", "bf", "0.01", "0"), "capacity should be larger than 0")
 	assert.Contains(t, run(t, "BF.RESERVE", "bf", "0.01", "-5"), "bad capacity")
 	assert.Contains(t, run(t, "BF.RESERVE", "bf", "0.01", "100", "EXPANSION", "0"), "expansion should be greater or equal to 1")

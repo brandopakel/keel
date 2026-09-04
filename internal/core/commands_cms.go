@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"math"
 	"strconv"
 
 	"github.com/brandopakel/keel/internal/constant"
@@ -76,12 +77,14 @@ func cmdCMSINITBYPROB(args []string) []byte {
 	if len(args) != 3 {
 		return Encode(errors.New("ERR wrong number of arguments for 'CMS.INITBYPROB' command"), false)
 	}
+	// NaN parses and compares false against both bounds, so both rates refuse
+	// it by name.
 	errRate, err := strconv.ParseFloat(args[1], 64)
-	if err != nil || errRate <= 0 || errRate >= 1 {
+	if err != nil || math.IsNaN(errRate) || errRate <= 0 || errRate >= 1 {
 		return Encode(errCMSErrRate, false)
 	}
 	prob, err := strconv.ParseFloat(args[2], 64)
-	if err != nil || prob <= 0 || prob >= 1 {
+	if err != nil || math.IsNaN(prob) || prob <= 0 || prob >= 1 {
 		return Encode(errCMSProb, false)
 	}
 	width, depth := data_structure.CalcCMSDim(errRate, prob)
