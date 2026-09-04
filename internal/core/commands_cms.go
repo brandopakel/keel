@@ -37,6 +37,12 @@ func cmsCreate(key string, width, depth uint32) []byte {
 	if depth == 0 {
 		return Encode(errCMSDepth, false)
 	}
+	// The cell count is checked before the byte count: two 32-bit dimensions
+	// multiply to a number of cells that fits in 64 bits, but four bytes each
+	// can wrap, and a wrapped size would look small.
+	if uint64(width)*uint64(depth) > maxStructureBytes/4 {
+		return Encode(errTooLargeForOneKey, false)
+	}
 	if err := affordable(data_structure.CMSMemUsageFor(width, depth)); err != nil {
 		return Encode(err, false)
 	}

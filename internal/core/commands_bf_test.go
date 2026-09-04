@@ -60,6 +60,28 @@ func TestBFRESERVESizeIsCheckedBeforeAllocating(t *testing.T) {
 	assert.Equal(t, "OK", run(t, "BF.RESERVE", "fits", "0.01", "10000"))
 }
 
+// TestBFGrowthIsSizedBeforeItIsAllocated: a filter reserved with a huge
+// expansion turned its second distinct item into a multi-gigabyte allocation on
+// the command thread. The growth is refused, the item is not added, and the
+// filter is otherwise as it was.
+func TestBFGrowthIsSizedBeforeItIsAllocated(t *testing.T) {
+	ResetStores()
+	assert.Equal(t, "OK", run(t, "BF.RESERVE", "g", "0.01", "1", "EXPANSION", "4294967295"))
+	assert.EqualValues(t, 1, run(t, "BF.ADD", "g", "first"))
+	assert.Contains(t, run(t, "BF.ADD", "g", "second"), "cannot grow")
+	assert.EqualValues(t, 0, run(t, "BF.EXISTS", "g", "second"))
+	assert.EqualValues(t, 1, run(t, "BF.EXISTS", "g", "first"))
+
+	res := run(t, "BF.MADD", "g", "third", "first", "fourth").([]interface{})
+	assert.Contains(t, res[0], "cannot grow")
+	assert.Equal(t, int64(0), res[1], "an item already present is answered, not refused")
+	assert.Contains(t, res[2], "cannot grow")
+
+	info := run(t, "BF.INFO", "g").([]interface{})
+	assert.Equal(t, int64(1), info[5], "still one filter")
+	assert.Equal(t, int64(1), info[7], "still one item")
+}
+
 // TestBFRESERVEWithAnErrorRateNextToOne: such a rate asks for a fraction of a
 // bit per item, which used to size an array of no bits and divide by it on the
 // first add.

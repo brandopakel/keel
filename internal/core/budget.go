@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/brandopakel/keel/internal/config"
+	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // Sizes that arrive from a client.
@@ -14,12 +15,9 @@ import (
 // size is a way to take the server down with one command, and the check has to
 // happen here, on the number, before anything is made.
 
-// maxStructureBytes is the most one reserve or init may allocate for one key.
-// A Bloom filter for a hundred million items at one percent, or a sketch of
-// sixty million counters, fit under it; nothing a filter or sketch is for
-// needs more, and nothing above it should be one allocation on a server that
-// executes commands on one thread.
-const maxStructureBytes = 256 << 20
+// maxStructureBytes is the most one reserve or init may allocate for one key;
+// the structures enforce the same figure on their own growth.
+const maxStructureBytes = data_structure.MaxStructureBytes
 
 var (
 	errTooLargeForOneKey = errors.New("ERR the requested size is more than this server will allocate for one key")

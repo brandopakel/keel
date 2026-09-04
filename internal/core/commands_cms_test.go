@@ -21,6 +21,9 @@ func TestCMSINITBYDIM(t *testing.T) {
 	assert.Contains(t, run(t, "CMS.INITBYDIM", "d", "4000000000", "4000000000"), "more than this server will allocate for one key")
 	assert.Contains(t, run(t, "CMS.INITBYPROB", "d", "0.00000001", "0.001"), "more than this server will allocate for one key",
 		"a probability sizing is checked the same way")
+	assert.Contains(t, run(t, "CMS.INITBYDIM", "d", "2147483648", "2147483648"), "more than this server will allocate for one key",
+		"a product whose byte count would wrap to zero is caught on its cell count")
+	assert.Contains(t, run(t, "CMS.INITBYDIM", "d", "4294967295", "4294967295"), "more than this server will allocate for one key")
 	assert.Contains(t, run(t, "CMS.INITBYDIM", "d", "100"), "wrong number of arguments")
 	assert.EqualValues(t, 0, run(t, "EXISTS", "d"), "a refused init creates nothing")
 }

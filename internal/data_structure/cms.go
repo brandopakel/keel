@@ -105,5 +105,12 @@ func (c *CMS) MemUsage() uint64 { return CMSMemUsageFor(c.width, c.depth) }
 // building one, so that MORRIS.INFO can quote the comparison it is making
 // without allocating the megabytes it is quoting.
 func CMSMemUsageFor(w uint32, d uint32) uint64 {
-	return cmsBaseBytes + uint64(w)*uint64(d)*4
+	// Two 32-bit dimensions multiply to at most 2^64 - 2^33 + 1 cells, which
+	// fits, but four bytes each does not; a product that would wrap is
+	// reported as the largest value, which every caller's check refuses.
+	cells := uint64(w) * uint64(d)
+	if cells > (math.MaxUint64-cmsBaseBytes)/4 {
+		return math.MaxUint64
+	}
+	return cmsBaseBytes + cells*4
 }

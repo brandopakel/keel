@@ -72,17 +72,32 @@ func bitsPerEntry(errorRate float64) float64 {
 // to divide a hash by.
 func bloomSizing(entries uint64, errorRate float64) (bytes uint64, hashes int, bpe float64) {
 	bpe = bitsPerEntry(errorRate)
-	wanted := uint64(float64(entries) * bpe)
-	words := (wanted + 63) / 64
-	if words == 0 {
-		words = 1
-	}
 	hashes = int(math.Ceil(math.Ln2 * bpe))
 	if hashes < 1 {
 		hashes = 1
 	}
+	// Past 2^62 bits the size is not a size anyone can allocate, and converting
+	// a float that large to an integer is not defined; it is reported as the
+	// largest value instead, which every caller's check refuses.
+	wantedBits := float64(entries) * bpe
+	if wantedBits >= float64(uint64(1)<<62) {
+		return math.MaxUint64, hashes, bpe
+	}
+	wanted := uint64(wantedBits)
+	words := (wanted + 63) / 64
+	if words == 0 {
+		words = 1
+	}
 	return words * 8, hashes, bpe
 }
+
+// MaxStructureBytes is the most one filter or sketch may allocate: 256 MiB. A
+// Bloom filter for a hundred million items at one percent, or a sketch of
+// sixty million counters, fit under it; nothing a filter or sketch is for
+// needs more, and nothing above it should be one allocation on a server that
+// executes commands on one thread. The command layer refuses a reserve that
+// would exceed it, and the structures refuse to grow past it on their own.
+const MaxStructureBytes = 256 << 20
 
 // BloomBytesFor is what a filter's bit array would cost, so a command can
 // refuse a size before allocating it.

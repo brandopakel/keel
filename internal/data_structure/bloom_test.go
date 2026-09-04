@@ -87,6 +87,10 @@ func TestBloomDegenerateSizingStillWorks(t *testing.T) {
 	assert.True(t, b.Exists("x"))
 	assert.EqualValues(t, 8, BloomBytesFor(1, 0.9999999999999999))
 	assert.Equal(t, uint64(len(CreateBloomFilter(1000, 0.01).bf)), BloomBytesFor(1000, 0.01))
+	assert.EqualValues(t, uint64(math.MaxUint64), BloomBytesFor(1<<63, 0.01),
+		"a size past anything allocatable is reported as the largest value, not converted from a float")
+	assert.Greater(t, BloomBytesFor(100000000, 0.01), uint64(100<<20), "a hundred million items at 1%% is about 120MB")
+	assert.Less(t, BloomBytesFor(100000000, 0.01), uint64(MaxStructureBytes))
 }
 
 func TestBloomPositionsStayInsideTheArray(t *testing.T) {

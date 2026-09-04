@@ -1,5 +1,10 @@
 package data_structure
 
+import (
+	"errors"
+	"math"
+)
+
 // A scalable Bloom filter, after Almeida, Baquero, Preguiça and Hutchison,
 // "Scalable Bloom Filters" (2007).
 //
@@ -43,13 +48,22 @@ type SBChain struct {
 	growthFactor uint64
 }
 
+// ErrFilterTooLarge is answered by Add when the filter would have to grow and
+// the next filter in the chain would be larger than MaxStructureBytes. The
+// item is not added; everything already in the chain is still there.
+var ErrFilterTooLarge = errors.New("ERR the filter cannot grow: its next filter would be larger than this server allocates for one key")
+
 // CreateSBChain starts a chain with one filter of the given capacity and error
 // rate, growing by expansion each time it fills. It returns nil for a capacity
-// of zero, an error rate outside (0, 1), or an expansion below one: no filter
-// can be sized for the first two, and the third would grow a filter of no
-// capacity the first time the chain filled.
+// of zero, an error rate outside (0, 1), an expansion below one, or a first
+// filter larger than MaxStructureBytes: no filter can be sized for the first
+// two, the third would grow a filter of no capacity the first time the chain
+// filled, and the fourth is an allocation nothing should make.
 func CreateSBChain(capacity uint64, errorRate float64, expansion uint64) *SBChain {
 	if capacity == 0 || errorRate <= 0 || errorRate >= 1 || expansion == 0 {
+		return nil
+	}
+	if BloomBytesFor(capacity, errorRate) > MaxStructureBytes {
 		return nil
 	}
 	sb := &SBChain{growthFactor: expansion}
@@ -76,23 +90,47 @@ func (sb *SBChain) hasHash(h bloomHash) bool {
 	return false
 }
 
+// nextFilter is the capacity and error rate the chain would grow to next. The
+// capacity saturates rather than wrapping: an expansion large enough to
+// overflow is an allocation that must be refused, not a small one by accident.
+func (sb *SBChain) nextFilter() (capacity uint64, errorRate float64) {
+	current := sb.newest()
+	capacity = current.bloom.Entries
+	if capacity > math.MaxUint64/sb.growthFactor {
+		capacity = math.MaxUint64
+	} else {
+		capacity *= sb.growthFactor
+	}
+	return capacity, current.bloom.Error * ErrorTighteningRatio
+}
+
 // Add records an item and reports whether it was new to the chain. False
 // means the item was probably added before; like any Bloom filter answer, that
 // can be a false positive.
-func (sb *SBChain) Add(item string) bool {
+//
+// A new item that arrives when the newest filter is full makes the chain grow,
+// and the growth is sized before it is made: a filter larger than
+// MaxStructureBytes is refused with ErrFilterTooLarge and the item is not
+// added. Without that, an expansion of a few billion turned the second item
+// into a multi-gigabyte allocation on the command thread.
+func (sb *SBChain) Add(item string) (added bool, err error) {
 	h := hashItem(item)
 	if sb.hasHash(h) {
-		return false
+		return false, nil
 	}
 	current := sb.newest()
 	if current.size >= current.bloom.Entries {
-		sb.grow(current.bloom.Entries*sb.growthFactor, current.bloom.Error*ErrorTighteningRatio)
+		capacity, errorRate := sb.nextFilter()
+		if BloomBytesFor(capacity, errorRate) > MaxStructureBytes {
+			return false, ErrFilterTooLarge
+		}
+		sb.grow(capacity, errorRate)
 		current = sb.newest()
 	}
 	current.bloom.addHash(h)
 	current.size++
 	sb.size++
-	return true
+	return true, nil
 }
 
 // Exists reports whether an item may have been added.

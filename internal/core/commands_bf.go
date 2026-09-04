@@ -91,10 +91,13 @@ func cmdBFADD(args []string) []byte {
 	}
 	key := args[0]
 	sb := bloomForWrite(key)
-	added := sb.Add(args[1])
+	added, err := sb.Add(args[1])
 	// A scalable Bloom filter grows by adding filters as it fills, so its size
 	// after this command is not the size the store recorded on Put.
 	sbStore.Resize(key)
+	if err != nil {
+		return Encode(err, false)
+	}
 	if added {
 		return constant.RespOne
 	}
@@ -111,9 +114,17 @@ func cmdBFMADD(args []string) []byte {
 	sb := bloomForWrite(key)
 	out := make([]interface{}, 0, len(args)-1)
 	for _, item := range args[1:] {
-		if sb.Add(item) {
+		added, err := sb.Add(item)
+		switch {
+		case err != nil:
+			// The filter could not grow to take this item. The error stands in
+			// its position, as RedisBloom answers a filter that cannot take
+			// more, and the items after it are tried in turn: one that is
+			// already present still answers 0.
+			out = append(out, err)
+		case added:
 			out = append(out, int64(1))
-		} else {
+		default:
 			out = append(out, int64(0))
 		}
 	}
