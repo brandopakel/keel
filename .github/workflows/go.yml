@@ -51,6 +51,76 @@ jobs:
       - name: Test
         run: go test -v ./...
 
+  docker:
+    name: docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      # Built on every PR rather than only on release, because a Dockerfile
+      # nothing exercises is a Dockerfile that has stopped working and has not
+      # said so. The image is not pushed anywhere from here.
+      - name: Build the image
+        run: docker build -t keel:ci --build-arg VERSION=ci .
+
+      - name: Serve from it
+        run: |
+          # Readiness is the listener answering, not a line in the log: the
+          # server opens its append-only file before it binds the socket, so
+          # waiting for "appendonly: on" and then connecting is a race.
+          wait_ready() {
+            for _ in $(seq 1 30); do
+              if docker run --rm --network host redis:8-alpine \
+                   redis-cli -p "$1" ping 2>/dev/null | grep -q PONG; then
+                echo "responding on $1"; return 0
+              fi
+              sleep 1
+            done
+            echo "nothing answered on $1" >&2; return 1
+          }
+
+          # -appendonly on purpose: it writes into /data as an unprivileged
+          # user, which is the part of the image most likely to be wrong and
+          # the thing the README tells people to run.
+          # A named volume, which is what the README recommends and what a
+          # bind mount is not: Docker gives a named volume the image's
+          # ownership, and creates a missing bind-mount directory as root,
+          # which an unprivileged container cannot write into.
+          docker run -d --name keel-ci -p 127.0.0.1:8081:8081 \
+            -v keel-ci-data:/data keel:ci -appendonly
+          wait_ready 8081
+          docker run --rm --network host redis:8-alpine redis-cli -p 8081 rpush l a b c
+          docker run --rm --network host redis:8-alpine redis-cli -p 8081 hset h f v
+          test "$(docker run --rm --network host redis:8-alpine redis-cli -p 8081 dbsize)" = 2
+          # The log has to actually exist, or -appendonly failed quietly.
+          docker exec keel-ci /keel -version
+          docker logs keel-ci
+          docker logs keel-ci 2>&1 | grep -q "appendonly: on"
+          docker rm -f keel-ci
+
+          # The volume has to outlive the container, which is the only reason
+          # to mount one. Recreating against it and finding the keys is the
+          # test; stopping a container and trusting the bytes is not.
+          docker run -d --name keel-again -p 127.0.0.1:8081:8081 \
+            -v keel-ci-data:/data keel:ci -appendonly
+          wait_ready 8081
+          test "$(docker run --rm --network host redis:8-alpine redis-cli -p 8081 dbsize)" = 2
+          test "$(docker run --rm --network host redis:8-alpine redis-cli -p 8081 lrange l 0 -1 | tr '\n' ',')" = "a,b,c,"
+          docker rm -f keel-again
+
+          # And the bind-mount form the README documents, made by hand first.
+          mkdir -p /tmp/keel-bind && sudo chown 65534:65534 /tmp/keel-bind
+          docker run -d --name keel-bind -p 127.0.0.1:8082:8081 \
+            -v /tmp/keel-bind:/data keel:ci -appendonly
+          wait_ready 8082
+          docker logs keel-bind 2>&1 | grep -q "appendonly: on"
+          docker run --rm --network host redis:8-alpine redis-cli -p 8082 set k v
+          sudo test -f /tmp/keel-bind/keel-master.aof
+          docker rm -f keel-bind
+          docker volume rm keel-ci-data
+
   race:
     name: race detector
     runs-on: ubuntu-latest

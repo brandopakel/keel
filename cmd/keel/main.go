@@ -43,9 +43,11 @@ var (
 	aofRewriteMin  string
 	expireSamples  int
 	cronIntervalMs int
+	showVersion    bool
 )
 
 func init() {
+	flag.BoolVar(&showVersion, "version", false, "print the version and exit")
 	flag.StringVar(&config.Host, "host", "0.0.0.0", "host")
 	flag.IntVar(&config.Port, "port", config.Port, "port")
 	flag.StringVar(&mode, "mode", "kqueue", "io mode: kqueue (default) | kqueue-nobuf | net | net-small | net-direct | net-chan | net-nolock")
@@ -156,7 +158,12 @@ func parseSize(s string) (uint64, error) {
 }
 
 func main() {
-	fmt.Println("starting keel ...")
+	if showVersion {
+		fmt.Println(versionLine())
+		return
+	}
+
+	fmt.Printf("starting keel %s ...\n", config.BuildVersion())
 	var signals = make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
 	var wg sync.WaitGroup
@@ -202,4 +209,15 @@ func main() {
 	go server.WaitForSignal(&wg, signals)
 
 	wg.Wait()
+}
+
+// versionLine is what -version prints: the version, and the commit when the
+// toolchain recorded one. A pseudo-version already names the commit, so the
+// revision is only added when it says something the version does not.
+func versionLine() string {
+	version := config.BuildVersion()
+	if rev := config.BuildRevision(); rev != "" && !strings.Contains(version, rev) {
+		return fmt.Sprintf("keel %s (%s)", version, rev)
+	}
+	return "keel " + version
 }

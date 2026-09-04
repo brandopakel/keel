@@ -115,7 +115,39 @@ unchanged — see [Where this came from](#where-this-came-from).
 ```sh
 go install github.com/brandopakel/keel/cmd/keel@latest # or run from source, below
 keel                                                   # listens on 8081
+keel -version
 ```
+
+Or from a release, which carries binaries for linux and darwin on amd64 and
+arm64 — the four platforms that build, since the event loop is `epoll` or
+`kqueue` and there is no Windows implementation:
+
+```sh
+tar -xzf keel_<version>_<os>_<arch>.tar.gz && ./keel
+```
+
+Or in a container, where the log lives in the mounted volume. The port is
+published to loopback, because keel has no authentication and `-p 8081:8081`
+would put an unauthenticated database on every interface the host has:
+
+```sh
+docker build -t keel .
+docker run -p 127.0.0.1:8081:8081 -v keel-data:/data keel -appendonly
+```
+
+A named volume rather than a bind mount, because the container runs
+unprivileged. Docker creates a named volume with the image's ownership, and
+creates a missing bind-mount directory as root — which the server then cannot
+write its log into. Bind-mounting a host directory works if you make it
+yourself first:
+
+```sh
+mkdir -p data && sudo chown 65534:65534 data
+docker run -p 127.0.0.1:8081:8081 -v "$PWD/data:/data" keel -appendonly
+```
+
+Reaching it from another machine means dropping the `127.0.0.1:`, and is worth
+doing only on a network you control — see [Status](#status).
 
 ```sh
 go run ./cmd/keel                             # replies are coalesced per read (the default)
@@ -210,11 +242,17 @@ are the ones that decide whether it is usable for anything of yours.
   to be yes, and because upstream's work is most of what sits underneath, it is
   not a decision this fork can make alone.
 - **It is not importable as a library.** `go install
-  github.com/brandopakel/keel/cmd/keel@latest` works, but every package lives
-  under `internal/`, which Go forbids anything outside this module from
-  importing. That is a consequence of it being a server you talk to over a
-  socket rather than a package you link against; nothing here is a stable API
-  yet, and `internal/` says so rather than implying otherwise.
+  github.com/brandopakel/keel/cmd/keel@latest` works, and so do the release
+  binaries and the container image, but `cmd/keel` is a command rather than a
+  library: every implementation package lives under `internal/`, which Go
+  forbids anything outside this module from importing. That is a consequence of
+  it being a server you talk to over a socket rather than a package you link
+  against; nothing here is a stable API yet, and `internal/` says so rather than
+  implying otherwise.
+- **There is no tagged release yet.** `@latest` resolves to a pseudo-version,
+  which does name an exact commit and timestamp — but it moves as `develop`
+  moves, so there is no stable version to ask for or to report in a bug.
+  Tagging is what the release workflow is waiting for.
 - **`LCS` does not type-check its keys.** Every other command answers
   `WRONGTYPE` for a name held by another type; `LCS` treats such a key as an
   empty string, the same way it treats a missing one.
