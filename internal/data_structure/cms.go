@@ -6,76 +6,93 @@ import (
 	"github.com/spaolacci/murmur3"
 )
 
-// Implementation of Count-Min Sketch data structure
-// https://quanghoang.substack.com/p/count-min-sketch
-
-const Log10PointFive = -0.30102999566
-
+// CMS is a count-min sketch (Cormode and Muthukrishnan, 2005): a fixed table
+// of counters that estimates how often each item has been seen, in memory that
+// does not grow with the number of distinct items.
+//
+// The table has depth rows of width counters. Each row has its own hash
+// function; incrementing an item adds to one counter in every row, and its
+// estimate is the smallest of those counters. Collisions can only push a
+// counter up, so the estimate never falls below the truth, and with width
+// counters per row the amount it overshoots by is bounded: with probability
+// 1-δ it is within ε of the total count, for
+//
+//	width = ceil(2/ε)    depth = ceil(log2(1/δ))
 type CMS struct {
 	width      uint32
 	depth      uint32
 	totalCount uint64
-	counter    []uint32
+	// counter holds the rows one after another: row r, column c is at
+	// r*width + c.
+	counter []uint32
 }
 
-func CreateCMS(w uint32, d uint32) *CMS {
-	cms := &CMS{
-		width:      w,
-		depth:      d,
-		totalCount: 0,
+// CreateCMS makes a sketch of the given dimensions, both of which must be
+// positive.
+func CreateCMS(width, depth uint32) *CMS {
+	return &CMS{
+		width:   width,
+		depth:   depth,
+		counter: make([]uint32, uint64(width)*uint64(depth)),
 	}
-	cms.counter = make([]uint32, d*w)
-	return cms
 }
 
-// CalcCMSDim calculates the dimension of CMS when we want the error is at most errRate,
-// with certainty of (1-errProb)
-func CalcCMSDim(errRate float64, errProb float64) (uint32, uint32) {
-	w := uint32(math.Ceil(2.0 / errRate))
-	d := uint32(math.Ceil(math.Log10(errProb) / Log10PointFive))
-	return w, d
+// CalcCMSDim is the width and depth that keep every estimate within errRate
+// of the total count with probability 1 - errProb.
+func CalcCMSDim(errRate float64, errProb float64) (width, depth uint32) {
+	width = uint32(math.Ceil(2.0 / errRate))
+	depth = uint32(math.Ceil(math.Log2(1.0 / errProb)))
+	return width, depth
 }
 
-func (c *CMS) calcHash(item string, seed uint32) uint32 {
-	hasher := murmur3.New32WithSeed(seed)
-	hasher.Write([]byte(item))
-	return hasher.Sum32()
+// cell is the counter an item lands in on one row. Each row hashes with its
+// own seed; the seeds are the row numbers, which is what a sketch written by
+// an earlier build hashed with, so it reads back meaning the same thing.
+func (c *CMS) cell(item string, row uint32) uint64 {
+	// The streaming form rather than Sum32WithSeed: the one-shot function in
+	// this version of the library does pointer arithmetic that the race
+	// detector's checkptr rejects on some input lengths.
+	h := murmur3.New32WithSeed(row)
+	h.Write([]byte(item))
+	return uint64(row)*uint64(c.width) + uint64(h.Sum32()%c.width)
 }
 
+// IncrBy adds value to an item's count and returns its new estimate. A counter
+// that would overflow saturates at the maximum instead of wrapping, and the
+// estimate then reads as the maximum.
 func (c *CMS) IncrBy(item string, value uint32) uint32 {
-	var i, id, hash uint32
-	var minCount uint32 = math.MaxUint32
-
-	for i = 0; i < c.depth; i++ {
-		hash = c.calcHash(item, i)
-		id = (hash % c.width) + i*c.width
-		if math.MaxUint32-c.counter[id] < value {
-			c.counter[id] = math.MaxUint32
+	estimate := uint32(math.MaxUint32)
+	for row := uint32(0); row < c.depth; row++ {
+		at := c.cell(item, row)
+		if math.MaxUint32-c.counter[at] < value {
+			c.counter[at] = math.MaxUint32
 		} else {
-			c.counter[id] += value
+			c.counter[at] += value
 		}
-
-		if c.counter[id] < minCount {
-			minCount = c.counter[id]
+		if c.counter[at] < estimate {
+			estimate = c.counter[at]
 		}
 	}
 	c.totalCount += uint64(value)
-	return minCount
+	return estimate
 }
 
+// Count estimates how often an item has been seen: never less than the truth,
+// and rarely much more.
 func (c *CMS) Count(item string) uint32 {
-	var minCount uint32 = math.MaxUint32
-	var i, id, hash uint32
-
-	for i = 0; i < c.depth; i++ {
-		hash = c.calcHash(item, i)
-		id = (hash % c.width) + i*c.width
-		if c.counter[id] < minCount {
-			minCount = c.counter[id]
+	estimate := uint32(math.MaxUint32)
+	for row := uint32(0); row < c.depth; row++ {
+		if v := c.counter[c.cell(item, row)]; v < estimate {
+			estimate = v
 		}
 	}
-	return minCount
+	return estimate
 }
+
+// Width, Depth and TotalCount describe the sketch.
+func (c *CMS) Width() uint32      { return c.width }
+func (c *CMS) Depth() uint32      { return c.depth }
+func (c *CMS) TotalCount() uint64 { return c.totalCount }
 
 // MemUsage estimates the bytes held. The counter table is fixed at creation, so
 // this never changes for a given sketch.

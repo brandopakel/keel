@@ -2,105 +2,128 @@ package core
 
 import (
 	"errors"
-	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/brandopakel/keel/internal/constant"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
+// Bloom filter commands, with the names and replies of RedisBloom's BF.*
+// family so a client written for that module works here.
+
+var (
+	errBFExists    = errors.New("ERR item exists")
+	errBFNotFound  = errors.New("ERR not found")
+	errBFErrorRate = errors.New("ERR (0 < error rate range < 1)")
+	errBFCapacity  = errors.New("ERR (capacity should be larger than 0)")
+	errBFExpansion = errors.New("ERR (expansion should be greater or equal to 1)")
+)
+
+func bloomFor(key string) (*data_structure.SBChain, bool) {
+	return sbStore.Get(key)
+}
+
+// bloomForWrite returns the filter at key, creating one with the default sizing
+// if there is none: adding to a filter that was never reserved is how most
+// filters come to exist.
+func bloomForWrite(key string) *data_structure.SBChain {
+	sb, ok := sbStore.Get(key)
+	if !ok {
+		sb = data_structure.CreateSBChain(data_structure.BfDefaultInitCapacity,
+			data_structure.BfDefaultErrRate, data_structure.BfDefaultExpansion)
+		sbStore.Put(key, sb)
+	}
+	return sb
+}
+
+// cmdBFRESERVE implements BF.RESERVE key error_rate capacity [EXPANSION n].
 func cmdBFRESERVE(args []string) []byte {
-	if !(len(args) == 3 || len(args) == 5) {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'BF.RESERVE' command"), false)
+	if len(args) != 3 && len(args) != 5 {
+		return Encode(errors.New("ERR wrong number of arguments for 'BF.RESERVE' command"), false)
 	}
 	key := args[0]
-	errRate, err := strconv.ParseFloat(args[1], 64)
+
+	errorRate, err := strconv.ParseFloat(args[1], 64)
 	if err != nil {
-		return Encode(errors.New(fmt.Sprintf("error rate must be a floating point number %s", args[1])), false)
+		return Encode(errors.New("ERR bad error rate"), false)
+	}
+	if errorRate <= 0 || errorRate >= 1 {
+		return Encode(errBFErrorRate, false)
 	}
 	capacity, err := strconv.ParseUint(args[2], 10, 64)
 	if err != nil {
-		return Encode(errors.New(fmt.Sprintf("capacity must be an integer number %s", args[2])), false)
+		return Encode(errors.New("ERR bad capacity"), false)
 	}
-	var growthRate uint64 = data_structure.BfDefaultExpansion
+	if capacity == 0 {
+		return Encode(errBFCapacity, false)
+	}
+
+	expansion := uint64(data_structure.BfDefaultExpansion)
 	if len(args) == 5 {
-		if args[3] != "EXPANSION" {
-			return Encode(errors.New("(error) 4th param must be EXPANSION for 'BF.RESERVE' command"), false)
+		if !strings.EqualFold(args[3], "EXPANSION") {
+			return Encode(errSyntax, false)
 		}
-		growthRate, err = strconv.ParseUint(args[2], 10, 32)
+		expansion, err = strconv.ParseUint(args[4], 10, 32)
 		if err != nil {
-			return Encode(errors.New(fmt.Sprintf("growthRate must be an integer number %s", args[2])), false)
+			return Encode(errors.New("ERR bad expansion"), false)
 		}
-		if growthRate < 1 {
-			return Encode(errors.New(fmt.Sprintf("growthRate should be greater or equal to 1 %d", growthRate)), false)
+		if expansion < 1 {
+			return Encode(errBFExpansion, false)
 		}
 	}
-	exist := sbStore.Exists(key)
-	if exist {
-		return Encode(errors.New(fmt.Sprintf("Bloom filter with key '%s' already exist", key)), false)
+
+	if sbStore.Exists(key) {
+		return Encode(errBFExists, false)
 	}
-	sbStore.Put(key, data_structure.CreateSBChain(capacity, errRate, growthRate))
+	sbStore.Put(key, data_structure.CreateSBChain(capacity, errorRate, expansion))
 	return constant.RespOk
 }
 
-func cmdBFINFO(args []string) []byte {
-	if len(args) != 1 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'BF.INFO' command"), false)
+// cmdBFADD implements BF.ADD key item: 1 if the item was new, 0 if it may have
+// been there already.
+func cmdBFADD(args []string) []byte {
+	if len(args) != 2 {
+		return Encode(errors.New("ERR wrong number of arguments for 'BF.ADD' command"), false)
 	}
 	key := args[0]
-	sb, exist := sbStore.Peek(key)
-	if !exist {
-		return Encode(errors.New(fmt.Sprintf("Bloom filter with key '%s' does not exist", key)), false)
-	}
-	var res []string
-	res = append(res, "Capacity", fmt.Sprintf("%d", sb.GetCapacity()),
-		"Size", fmt.Sprintf("%d", sb.GetMemUsage()),
-		"Number of filters", fmt.Sprintf("%d", sb.GetFilterNumber()),
-		"Number of items inserted", fmt.Sprintf("%d", sb.GetSize()),
-		"Expansion rate", fmt.Sprintf("%d", sb.GetGrowthFactor()))
-
-	return Encode(res, false)
-}
-
-func cmdBFMADD(args []string) []byte {
-	if len(args) < 2 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'BF.MADD' command"), false)
-	}
-	key := args[0]
-	sb, exist := sbStore.Get(key)
-	var err error
-	if !exist {
-		sb = data_structure.CreateSBChain(data_structure.BfDefaultInitCapacity,
-			data_structure.BfDefaultErrRate,
-			data_structure.BfDefaultExpansion)
-		sbStore.Put(key, sb)
-	}
+	sb := bloomForWrite(key)
+	added := sb.Add(args[1])
 	// A scalable Bloom filter grows by adding filters as it fills, so its size
 	// after this command is not the size the store recorded on Put.
-	defer sbStore.Resize(key)
-	var res []string
-	for i := 1; i < len(args); i++ {
-		item := args[i]
-		err = sb.Add(item)
-		if err != nil {
-			res = append(res, "ERR problem inserting into filter")
+	sbStore.Resize(key)
+	if added {
+		return constant.RespOne
+	}
+	return constant.RespZero
+}
+
+// cmdBFMADD implements BF.MADD key item [item ...]: one integer per item, as
+// BF.ADD would have answered for it.
+func cmdBFMADD(args []string) []byte {
+	if len(args) < 2 {
+		return Encode(errors.New("ERR wrong number of arguments for 'BF.MADD' command"), false)
+	}
+	key := args[0]
+	sb := bloomForWrite(key)
+	out := make([]interface{}, 0, len(args)-1)
+	for _, item := range args[1:] {
+		if sb.Add(item) {
+			out = append(out, int64(1))
 		} else {
-			res = append(res, "1")
+			out = append(out, int64(0))
 		}
 	}
-	return Encode(res, false)
+	sbStore.Resize(key)
+	return Encode(out, false)
 }
 
 func cmdBFEXISTS(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'BF.EXISTS' command"), false)
+		return Encode(errors.New("ERR wrong number of arguments for 'BF.EXISTS' command"), false)
 	}
-	key, item := args[0], args[1]
-	sb, exist := sbStore.Get(key)
-	if !exist {
-		return constant.RespZero
-	}
-	if !sb.Exist(item) {
+	sb, ok := bloomFor(args[0])
+	if !ok || !sb.Exists(args[1]) {
 		return constant.RespZero
 	}
 	return constant.RespOne
@@ -108,22 +131,35 @@ func cmdBFEXISTS(args []string) []byte {
 
 func cmdBFMEXISTS(args []string) []byte {
 	if len(args) < 2 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'BF.MEXISTS' command"), false)
+		return Encode(errors.New("ERR wrong number of arguments for 'BF.MEXISTS' command"), false)
 	}
-	key := args[0]
-	sb, exist := sbStore.Get(key)
-	var res []string
-	for i := 1; i < len(args); i++ {
-		if !exist {
-			res = append(res, "0")
-			continue
+	sb, ok := bloomFor(args[0])
+	out := make([]interface{}, 0, len(args)-1)
+	for _, item := range args[1:] {
+		if ok && sb.Exists(item) {
+			out = append(out, int64(1))
+		} else {
+			out = append(out, int64(0))
 		}
-		item := args[i]
-		if !sb.Exist(item) {
-			res = append(res, "0")
-			continue
-		}
-		res = append(res, "1")
 	}
-	return Encode(res, false)
+	return Encode(out, false)
+}
+
+// cmdBFINFO implements BF.INFO key: name and value pairs describing the filter.
+func cmdBFINFO(args []string) []byte {
+	if len(args) != 1 {
+		return Encode(errors.New("ERR wrong number of arguments for 'BF.INFO' command"), false)
+	}
+	// Peek rather than Get: reporting on a key is not using it.
+	sb, ok := sbStore.Peek(args[0])
+	if !ok {
+		return Encode(errBFNotFound, false)
+	}
+	return Encode([]interface{}{
+		"Capacity", int64(sb.Capacity()),
+		"Size", int64(sb.MemUsage()),
+		"Number of filters", int64(sb.Filters()),
+		"Number of items inserted", int64(sb.Count()),
+		"Expansion rate", int64(sb.Expansion()),
+	}, false)
 }

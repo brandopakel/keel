@@ -13,7 +13,7 @@ import (
 var (
 	dictStore   *data_structure.Dict
 	zsetStore   *data_structure.Keyed[*data_structure.ZSet]
-	setStore    *data_structure.Keyed[data_structure.Set]
+	setStore    *data_structure.Keyed[*data_structure.Set]
 	hashStore   *data_structure.Keyed[*data_structure.Hash]
 	listStore   *data_structure.Keyed[*data_structure.List]
 	sbStore     *data_structure.Keyed[*data_structure.SBChain]
@@ -36,7 +36,7 @@ func ResetStores() {
 
 	dictStore = data_structure.CreateDict()
 	zsetStore = data_structure.NewKeyed[*data_structure.ZSet]("zset")
-	setStore = data_structure.NewKeyed[data_structure.Set]("set")
+	setStore = data_structure.NewKeyed[*data_structure.Set]("set")
 	hashStore = data_structure.NewKeyed[*data_structure.Hash]("hash")
 	listStore = data_structure.NewKeyed[*data_structure.List]("list")
 	sbStore = data_structure.NewKeyed[*data_structure.SBChain]("bloom")
