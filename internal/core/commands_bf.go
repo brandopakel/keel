@@ -73,6 +73,9 @@ func cmdBFRESERVE(args []string) []byte {
 		}
 	}
 
+	if err := affordable(data_structure.BloomBytesFor(capacity, errorRate)); err != nil {
+		return Encode(err, false)
+	}
 	if sbStore.Exists(key) {
 		return Encode(errBFExists, false)
 	}

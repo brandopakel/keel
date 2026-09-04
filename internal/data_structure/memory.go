@@ -47,7 +47,9 @@ const expiryOverhead = 48
 // Per-member and per-structure costs for the collection types, measured the
 // same way - fill one with 200,000 members and read HeapAlloc either side:
 //
-//	map[string]struct{}    59 B per 20-byte member  ->  39 of overhead
+//	Set (map[string]int + []string)
+//	                       78 B per 20-byte member  ->  58 of overhead;
+//	                       60 and 62 at 10 and 40 bytes, so 60 is used
 //	map[string]float64     59 B per 20-byte member  ->  39 of overhead
 //	ZSet (dict+skiplist)  155 B per 20-byte member  -> 135 of overhead
 //
@@ -77,8 +79,8 @@ const expiryOverhead = 48
 // The base figures are the empty structure: the struct itself, its map header
 // and, for a sorted set, the skiplist head node with its 32 levels.
 const (
-	setMemberOverhead  = 39
-	setBaseBytes       = 64
+	setMemberOverhead  = 60
+	setBaseBytes       = 96
 	hashFieldOverhead  = 64
 	hashBaseBytes      = 64
 	listSlotOverhead   = 16

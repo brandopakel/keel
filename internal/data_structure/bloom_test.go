@@ -60,10 +60,12 @@ func TestBloomSizing(t *testing.T) {
 
 func TestBloomHashIsStable(t *testing.T) {
 	// Filters written by earlier builds were hashed with these exact values,
-	// so they are pinned: a change here would make a restored filter answer
+	// so the outputs are pinned, not merely compared with themselves: a
+	// change to the function or its seed would make a restored filter answer
 	// differently about the items it holds.
 	h := hashItem("abcdef")
-	assert.Equal(t, hashItem("abcdef"), h)
+	assert.Equal(t, bloomHash{a: 0x7a1d661fd425b00b, b: 0xcf7c5a4c028d5ba4}, h)
+	assert.Equal(t, bloomHash{a: 0x392b208a1daabbb3, b: 0x93b0608fe302957a}, hashItem(""))
 	assert.NotEqual(t, hashItem("abcdeg"), h)
 	assert.EqualValues(t, 0x9747b28c, ABigSeed)
 
@@ -71,6 +73,20 @@ func TestBloomHashIsStable(t *testing.T) {
 	b.addHash(h)
 	assert.True(t, b.hasHash(h))
 	assert.True(t, b.Exists("abcdef"), "adding by hash and asking by item agree")
+}
+
+// TestBloomDegenerateSizingStillWorks: an error rate close enough to one asks
+// for a fraction of a bit per item, which rounded to an array of no bits and a
+// division by zero on the first add. The floor is one word and one hash.
+func TestBloomDegenerateSizingStillWorks(t *testing.T) {
+	b := CreateBloomFilter(1, 0.9999999999999999)
+	assert.EqualValues(t, 64, b.bits)
+	assert.EqualValues(t, 8, len(b.bf))
+	assert.GreaterOrEqual(t, b.Hashes, 1)
+	b.Add("x")
+	assert.True(t, b.Exists("x"))
+	assert.EqualValues(t, 8, BloomBytesFor(1, 0.9999999999999999))
+	assert.Equal(t, uint64(len(CreateBloomFilter(1000, 0.01).bf)), BloomBytesFor(1000, 0.01))
 }
 
 func TestBloomPositionsStayInsideTheArray(t *testing.T) {

@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/brandopakel/keel/internal/config"
 )
 
 func TestBFRESERVE(t *testing.T) {
@@ -39,6 +41,33 @@ func TestBFRESERVERefusesBadSizing(t *testing.T) {
 	assert.Contains(t, run(t, "BF.RESERVE", "bf", "0.01", "100", "GROWTH", "2"), "syntax error")
 	assert.Contains(t, run(t, "BF.RESERVE", "bf", "0.01"), "wrong number of arguments")
 	assert.EqualValues(t, 0, run(t, "EXISTS", "bf"), "a refused reserve creates nothing")
+}
+
+// TestBFRESERVESizeIsCheckedBeforeAllocating: a capacity is a request for
+// memory, allocated in full before the budget sees the key, so it is checked
+// on the number first - against what one key may take, and against the whole
+// budget when there is one.
+func TestBFRESERVESizeIsCheckedBeforeAllocating(t *testing.T) {
+	ResetStores()
+	assert.Contains(t, run(t, "BF.RESERVE", "huge", "0.01", "1000000000"), "more than this server will allocate for one key",
+		"a billion items at 1%% is 1.2GB of bits")
+	assert.EqualValues(t, 0, run(t, "EXISTS", "huge"))
+
+	withBudget(t, 1<<20, config.LRU)
+	assert.Contains(t, run(t, "BF.RESERVE", "big", "0.01", "10000000"), "does not fit in maxmemory",
+		"12MB of bits against a 1MB budget")
+	assert.EqualValues(t, 0, run(t, "EXISTS", "big"))
+	assert.Equal(t, "OK", run(t, "BF.RESERVE", "fits", "0.01", "10000"))
+}
+
+// TestBFRESERVEWithAnErrorRateNextToOne: such a rate asks for a fraction of a
+// bit per item, which used to size an array of no bits and divide by it on the
+// first add.
+func TestBFRESERVEWithAnErrorRateNextToOne(t *testing.T) {
+	ResetStores()
+	assert.Equal(t, "OK", run(t, "BF.RESERVE", "thin", "0.9999999999999999", "1"))
+	assert.EqualValues(t, 1, run(t, "BF.ADD", "thin", "x"))
+	assert.EqualValues(t, 1, run(t, "BF.EXISTS", "thin", "x"))
 }
 
 func TestBFADDAndMADDReportNewItems(t *testing.T) {

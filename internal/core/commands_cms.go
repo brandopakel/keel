@@ -2,7 +2,6 @@ package core
 
 import (
 	"errors"
-	"math"
 	"strconv"
 
 	"github.com/brandopakel/keel/internal/constant"
@@ -12,18 +11,11 @@ import (
 // Count-min sketch commands, with the names and replies of RedisBloom's CMS.*
 // family.
 
-// cmsMaxCells bounds width times depth. The dimensions arrive from a client
-// and are multiplied into an allocation, and two 32-bit numbers multiply to
-// far more memory than any server has; this caps a sketch at a gigabyte of
-// counters, which is already far beyond what a sketch is for.
-const cmsMaxCells = 1 << 28
-
 var (
 	errCMSExists   = errors.New("CMS: key already exists")
 	errCMSMissing  = errors.New("CMS: key does not exist")
 	errCMSWidth    = errors.New("CMS: invalid width")
 	errCMSDepth    = errors.New("CMS: invalid depth")
-	errCMSTooLarge = errors.New("CMS: width and depth multiply to more than can be allocated")
 	errCMSErrRate  = errors.New("CMS: invalid overestimation value")
 	errCMSProb     = errors.New("CMS: invalid prob value")
 	errCMSNumber   = errors.New("CMS: Cannot parse number")
@@ -35,7 +27,9 @@ func cmsFor(key string) (*data_structure.CMS, bool) {
 }
 
 // cmsCreate stores a fresh sketch at key, refusing dimensions that are zero or
-// that would not fit, and a key already taken.
+// that would not fit, and a key already taken. The dimensions arrive from a
+// client and multiply into an allocation, so their product is checked against
+// what the server will allocate before anything is made.
 func cmsCreate(key string, width, depth uint32) []byte {
 	if width == 0 {
 		return Encode(errCMSWidth, false)
@@ -43,8 +37,8 @@ func cmsCreate(key string, width, depth uint32) []byte {
 	if depth == 0 {
 		return Encode(errCMSDepth, false)
 	}
-	if uint64(width)*uint64(depth) > cmsMaxCells {
-		return Encode(errCMSTooLarge, false)
+	if err := affordable(data_structure.CMSMemUsageFor(width, depth)); err != nil {
+		return Encode(err, false)
 	}
 	if cmsStore.Exists(key) {
 		return Encode(errCMSExists, false)
@@ -113,8 +107,8 @@ func cmdCMSINCRBY(args []string) []byte {
 
 	out := make([]interface{}, 0, len(increments))
 	for i, inc := range increments {
-		estimate := cms.IncrBy(pairs[2*i], inc)
-		if estimate == math.MaxUint32 {
+		estimate, saturated := cms.IncrBy(pairs[2*i], inc)
+		if saturated {
 			out = append(out, errCMSOverflow)
 			continue
 		}

@@ -65,18 +65,39 @@ func bitsPerEntry(errorRate float64) float64 {
 	return -math.Log(errorRate) / (math.Ln2 * math.Ln2)
 }
 
+// bloomSizing works out the shape of a filter for entries items at errorRate:
+// the bytes of its bit array, rounded up to whole words, and how many hash
+// functions it uses. Both are at least one, because a rate close enough to 1
+// asks for a fraction of a bit per item, and a filter with no bits has nothing
+// to divide a hash by.
+func bloomSizing(entries uint64, errorRate float64) (bytes uint64, hashes int, bpe float64) {
+	bpe = bitsPerEntry(errorRate)
+	wanted := uint64(float64(entries) * bpe)
+	words := (wanted + 63) / 64
+	if words == 0 {
+		words = 1
+	}
+	hashes = int(math.Ceil(math.Ln2 * bpe))
+	if hashes < 1 {
+		hashes = 1
+	}
+	return words * 8, hashes, bpe
+}
+
+// BloomBytesFor is what a filter's bit array would cost, so a command can
+// refuse a size before allocating it.
+func BloomBytesFor(entries uint64, errorRate float64) uint64 {
+	bytes, _, _ := bloomSizing(entries, errorRate)
+	return bytes
+}
+
 // CreateBloomFilter sizes a filter for entries items at errorRate false
 // positives. The rate must lie strictly between 0 and 1 and entries must be
 // positive; callers check that, since the right complaint depends on who asked.
 func CreateBloomFilter(entries uint64, errorRate float64) *Bloom {
 	b := &Bloom{Entries: entries, Error: errorRate}
-	b.bitPerEntry = bitsPerEntry(errorRate)
-
-	wanted := uint64(float64(entries) * b.bitPerEntry)
-	words := (wanted + 63) / 64
-	b.bytes = words * 8
+	b.bytes, b.Hashes, b.bitPerEntry = bloomSizing(entries, errorRate)
 	b.bits = b.bytes * 8
-	b.Hashes = int(math.Ceil(math.Ln2 * b.bitPerEntry))
 	b.bf = make([]uint8, b.bytes)
 	return b
 }

@@ -102,6 +102,10 @@ func TestSRANDMEMBER(t *testing.T) {
 
 	assert.Equal(t, []interface{}{}, run(t, "SRANDMEMBER", "s", "0"))
 	assert.Contains(t, run(t, "SRANDMEMBER", "s", "x"), "not an integer")
+	// A negative count sizes the reply before it is written, so one no client
+	// could consume is refused rather than allocated.
+	assert.Contains(t, run(t, "SRANDMEMBER", "s", "-100000000000"), "out of range")
+	assert.Len(t, run(t, "SRANDMEMBER", "s", "100000000000").([]interface{}), 3, "a positive count is only ever the set")
 	assert.Contains(t, run(t, "SRANDMEMBER", "s", "1", "2"), "wrong number of arguments")
 }
 

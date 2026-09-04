@@ -1,6 +1,7 @@
 package data_structure
 
 import (
+	"encoding/hex"
 	"fmt"
 	"math"
 	"math/rand"
@@ -31,11 +32,16 @@ func TestCalcCMSDim(t *testing.T) {
 	assert.EqualValues(t, 1, d)
 }
 
+func incr(c *CMS, item string, n uint32) uint32 {
+	estimate, _ := c.IncrBy(item, n)
+	return estimate
+}
+
 func TestCMSCountsExactlyWhenThereAreNoCollisions(t *testing.T) {
 	c := CreateCMS(1000, 5)
-	assert.EqualValues(t, 10, c.IncrBy("a", 10))
-	assert.EqualValues(t, 20, c.IncrBy("a", 10))
-	assert.EqualValues(t, 30, c.IncrBy("b", 30))
+	assert.EqualValues(t, 10, incr(c, "a", 10))
+	assert.EqualValues(t, 20, incr(c, "a", 10))
+	assert.EqualValues(t, 30, incr(c, "b", 30))
 	assert.EqualValues(t, 20, c.Count("a"))
 	assert.EqualValues(t, 30, c.Count("b"))
 	assert.EqualValues(t, 0, c.Count("never"))
@@ -76,10 +82,44 @@ func TestCMSNeverUnderestimates(t *testing.T) {
 
 func TestCMSSaturatesInsteadOfWrapping(t *testing.T) {
 	c := CreateCMS(16, 2)
-	c.IncrBy("x", math.MaxUint32-5)
-	assert.EqualValues(t, math.MaxUint32, c.IncrBy("x", 10), "an overflowing counter pins to the maximum")
+	estimate, saturated := c.IncrBy("x", math.MaxUint32-5)
+	assert.EqualValues(t, math.MaxUint32-5, estimate)
+	assert.False(t, saturated)
+
+	estimate, saturated = c.IncrBy("x", 5)
+	assert.EqualValues(t, math.MaxUint32, estimate)
+	assert.False(t, saturated, "reaching the maximum exactly is not an overflow")
+
+	estimate, saturated = c.IncrBy("x", 0)
+	assert.EqualValues(t, math.MaxUint32, estimate)
+	assert.False(t, saturated, "nor is adding nothing to it")
+
+	estimate, saturated = c.IncrBy("x", 10)
+	assert.EqualValues(t, math.MaxUint32, estimate, "an overflowing counter pins to the maximum")
+	assert.True(t, saturated, "and says so")
 	assert.EqualValues(t, math.MaxUint32, c.Count("x"))
-	assert.EqualValues(t, uint64(math.MaxUint32)+5, c.TotalCount(), "the total keeps counting in 64 bits")
+	assert.EqualValues(t, uint64(math.MaxUint32)+10, c.TotalCount(), "the total keeps counting in 64 bits")
+}
+
+// TestCMSReadsAPriorBuildsState decodes a sketch marshalled by the build before
+// this one: the counters have to land in the same cells under the current
+// hashing, or a restored sketch would answer about the wrong items.
+func TestCMSReadsAPriorBuildsState(t *testing.T) {
+	const fixture = "10000000030000000800000000000000000000000000000000000000000000000000000000000000000000000000000000000000050000000000000000000000000000000300000000000000000000000000000000000000000000000300000000000000000000000000000000000000050000000000000000000000000000000000000000000000000000000000000000000000030000000500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+	raw, err := hex.DecodeString(fixture)
+	assert.NoError(t, err)
+	c, err := UnmarshalCMS(raw)
+	assert.NoError(t, err)
+	assert.EqualValues(t, 16, c.Width())
+	assert.EqualValues(t, 3, c.Depth())
+	assert.EqualValues(t, 8, c.TotalCount())
+	assert.EqualValues(t, 3, c.Count("alpha"))
+	assert.EqualValues(t, 5, c.Count("beta"))
+	assert.EqualValues(t, 0, c.Count("gamma"))
+
+	// The cells themselves, pinned: these are where the fixture's counters sit.
+	assert.Equal(t, []uint64{13, 19, 33}, []uint64{c.cell("alpha", 0), c.cell("alpha", 1), c.cell("alpha", 2)})
+	assert.Equal(t, []uint64{9, 24, 34}, []uint64{c.cell("beta", 0), c.cell("beta", 1), c.cell("beta", 2)})
 }
 
 func TestCMSCellsStayInsideTheirRow(t *testing.T) {

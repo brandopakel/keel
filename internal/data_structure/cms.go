@@ -57,15 +57,18 @@ func (c *CMS) cell(item string, row uint32) uint64 {
 	return uint64(row)*uint64(c.width) + uint64(h.Sum32()%c.width)
 }
 
-// IncrBy adds value to an item's count and returns its new estimate. A counter
-// that would overflow saturates at the maximum instead of wrapping, and the
-// estimate then reads as the maximum.
-func (c *CMS) IncrBy(item string, value uint32) uint32 {
-	estimate := uint32(math.MaxUint32)
+// IncrBy adds value to an item's count and returns its new estimate, and
+// whether any of the item's counters had to stop at the maximum to take it. A
+// counter that would overflow saturates there rather than wrapping; the
+// estimate is then the maximum, but so is the estimate of an item that was
+// incremented to exactly that, which is why the second result exists.
+func (c *CMS) IncrBy(item string, value uint32) (estimate uint32, saturated bool) {
+	estimate = math.MaxUint32
 	for row := uint32(0); row < c.depth; row++ {
 		at := c.cell(item, row)
 		if math.MaxUint32-c.counter[at] < value {
 			c.counter[at] = math.MaxUint32
+			saturated = true
 		} else {
 			c.counter[at] += value
 		}
@@ -74,7 +77,7 @@ func (c *CMS) IncrBy(item string, value uint32) uint32 {
 		}
 	}
 	c.totalCount += uint64(value)
-	return estimate
+	return estimate, saturated
 }
 
 // Count estimates how often an item has been seen: never less than the truth,

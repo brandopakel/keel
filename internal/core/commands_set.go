@@ -33,6 +33,13 @@ var (
 	errCountNegative     = errors.New("ERR value is out of range, must be positive")
 )
 
+// maxRandomMemberCount bounds what SRANDMEMBER may be asked for with a negative
+// count. A positive count is capped by the size of the set, but a negative one
+// asks for exactly that many with repeats, and the reply is built before it is
+// written - so the count sizes an allocation, and a client could ask for one
+// no server could make. Sixteen million members is past any use of the command.
+const maxRandomMemberCount = 1 << 24
+
 func cmdSADD(args []string) []byte {
 	if len(args) < 2 {
 		return Encode(errors.New("ERR wrong number of arguments for 'SADD' command"), false)
@@ -206,7 +213,13 @@ func cmdSRANDMEMBER(args []string) []byte {
 		return Encode(picked[0], false)
 	}
 	if count < 0 {
+		if -count > maxRandomMemberCount {
+			return Encode(errIntegerOutOfRange, false)
+		}
 		return Encode(s.RandomMembersWithRepeats(int(-count)), false)
+	}
+	if count > maxRandomMemberCount {
+		count = maxRandomMemberCount
 	}
 	return Encode(s.RandomMembers(int(count)), false)
 }

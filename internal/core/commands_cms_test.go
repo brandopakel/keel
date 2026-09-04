@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/brandopakel/keel/internal/config"
 )
 
 func TestCMSINITBYDIM(t *testing.T) {
@@ -16,7 +18,9 @@ func TestCMSINITBYDIM(t *testing.T) {
 	assert.Contains(t, run(t, "CMS.INITBYDIM", "d", "x", "5"), "invalid width")
 	assert.Contains(t, run(t, "CMS.INITBYDIM", "d", "100", "0"), "invalid depth")
 	assert.Contains(t, run(t, "CMS.INITBYDIM", "d", "100", "-1"), "invalid depth")
-	assert.Contains(t, run(t, "CMS.INITBYDIM", "d", "4000000000", "4000000000"), "more than can be allocated")
+	assert.Contains(t, run(t, "CMS.INITBYDIM", "d", "4000000000", "4000000000"), "more than this server will allocate for one key")
+	assert.Contains(t, run(t, "CMS.INITBYPROB", "d", "0.00000001", "0.001"), "more than this server will allocate for one key",
+		"a probability sizing is checked the same way")
 	assert.Contains(t, run(t, "CMS.INITBYDIM", "d", "100"), "wrong number of arguments")
 	assert.EqualValues(t, 0, run(t, "EXISTS", "d"), "a refused init creates nothing")
 }
@@ -55,6 +59,16 @@ func TestCMSINCRBYAndQUERY(t *testing.T) {
 	assert.Contains(t, run(t, "CMS.INCRBY", "c", "a"), "wrong number of arguments")
 	assert.Contains(t, run(t, "CMS.INCRBY", "c"), "wrong number of arguments")
 	assert.Contains(t, run(t, "CMS.QUERY", "c"), "wrong number of arguments")
+}
+
+// TestCMSSizeIsCheckedAgainstTheBudgetBeforeAllocating: the memory budget is
+// enforced after a Put, and the counters are allocated before it, so a sketch
+// larger than the whole budget has to be refused on its dimensions alone.
+func TestCMSSizeIsCheckedAgainstTheBudgetBeforeAllocating(t *testing.T) {
+	withBudget(t, 1<<20, config.LRU)
+	assert.Contains(t, run(t, "CMS.INITBYDIM", "c", "100000", "10"), "does not fit in maxmemory", "4MB of counters against a 1MB budget")
+	assert.EqualValues(t, 0, run(t, "EXISTS", "c"))
+	assert.Equal(t, "OK", run(t, "CMS.INITBYDIM", "small", "1000", "5"), "one that fits is fine")
 }
 
 func TestCMSINCRBYReportsOverflowInPlace(t *testing.T) {

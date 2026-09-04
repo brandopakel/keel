@@ -45,9 +45,11 @@ type SBChain struct {
 
 // CreateSBChain starts a chain with one filter of the given capacity and error
 // rate, growing by expansion each time it fills. It returns nil for a capacity
-// of zero or an error rate outside (0, 1), which no filter can be sized for.
+// of zero, an error rate outside (0, 1), or an expansion below one: no filter
+// can be sized for the first two, and the third would grow a filter of no
+// capacity the first time the chain filled.
 func CreateSBChain(capacity uint64, errorRate float64, expansion uint64) *SBChain {
-	if capacity == 0 || errorRate <= 0 || errorRate >= 1 {
+	if capacity == 0 || errorRate <= 0 || errorRate >= 1 || expansion == 0 {
 		return nil
 	}
 	sb := &SBChain{growthFactor: expansion}
