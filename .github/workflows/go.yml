@@ -67,8 +67,11 @@ jobs:
 
       - name: Serve from it
         run: |
-          docker run -d --name keel-ci -p 8081:8081 keel:ci
-          for i in $(seq 1 30); do
+          # -appendonly on purpose: it writes into /data as an unprivileged
+          # user, which is the part of the image most likely to be wrong and
+          # the thing the README tells people to run.
+          docker run -d --name keel-ci -p 8081:8081 keel:ci -appendonly
+          for _ in $(seq 1 30); do
             if docker run --rm --network host redis:8-alpine redis-cli -p 8081 ping 2>/dev/null | grep -q PONG; then
               echo "responded"; break
             fi
@@ -78,7 +81,10 @@ jobs:
           docker run --rm --network host redis:8-alpine redis-cli -p 8081 rpush l a b c
           docker run --rm --network host redis:8-alpine redis-cli -p 8081 hset h f v
           test "$(docker run --rm --network host redis:8-alpine redis-cli -p 8081 dbsize)" = 2
+          # The log has to actually exist, or -appendonly failed quietly.
+          docker exec keel-ci /keel -version
           docker logs keel-ci
+          docker logs keel-ci 2>&1 | grep -q "appendonly: on"
           docker rm -f keel-ci
 
   race:

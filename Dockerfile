@@ -20,6 +20,12 @@ RUN CGO_ENABLED=0 go build \
       -ldflags "-s -w -X github.com/brandopakel/keel/internal/config.Version=${VERSION}" \
       -o /out/keel ./cmd/keel
 
+# The data directory is made here, owned by the user that will run, because
+# scratch has no shell to make it later and a WORKDIR Docker creates implicitly
+# belongs to root. Getting this wrong costs nothing until someone passes
+# -appendonly, at which point the server cannot open its own log.
+RUN mkdir -p /out/data && chown 65534:65534 /out/data
+
 # Run.
 #
 # Static binary, so the image needs nothing else. scratch rather than alpine:
@@ -28,6 +34,7 @@ RUN CGO_ENABLED=0 go build \
 FROM scratch
 
 COPY --from=build /out/keel /keel
+COPY --from=build --chown=65534:65534 /out/data /data
 
 # Unprivileged. The number is used rather than a name because scratch has no
 # /etc/passwd to resolve one.
@@ -36,7 +43,8 @@ USER 65534:65534
 EXPOSE 8081
 
 # The append-only log is written relative to the working directory, so a volume
-# mounted here is what survives the container.
+# mounted here is what survives the container. Created above rather than left
+# to WORKDIR, so it belongs to the user that has to write into it.
 WORKDIR /data
 VOLUME ["/data"]
 

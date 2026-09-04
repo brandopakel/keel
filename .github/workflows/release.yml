@@ -69,6 +69,19 @@ jobs:
           merge-multiple: true
           path: dist
 
+      # Pushing a tag does not create a release, and `gh release upload` will
+      # not create one either - it fails on a tag that has no release, which
+      # would have been the first time this workflow ever ran.
+      - name: Create the release if the tag has none
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1 \
+            || gh release create "${GITHUB_REF_NAME}" \
+                 --repo "${GITHUB_REPOSITORY}" \
+                 --title "${GITHUB_REF_NAME}" \
+                 --generate-notes
+
       - name: Upload
         env:
           GH_TOKEN: ${{ github.token }}
