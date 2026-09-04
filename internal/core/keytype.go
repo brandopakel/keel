@@ -19,8 +19,8 @@ import (
 // added is the one that forgets it, and what it silently does instead is the
 // bug this is fixing.
 var commandKeyspace = map[string]string{
-	"SET": "string", "GET": "string", "TTL": "string", "EXPIRE": "string",
-	"PEXPIREAT": "string", "INCR": "string", "MSET": "string",
+	"SET": "string", "GET": "string", "TTL": "string", "PTTL": "string",
+	"EXPIRE": "string", "PEXPIREAT": "string", "INCR": "string", "MSET": "string",
 
 	// EXISTS, TYPE, KEYS, DEL and FLUSHDB are deliberately absent: they answer
 	// about a name whatever type holds it, so constraining them to a keyspace

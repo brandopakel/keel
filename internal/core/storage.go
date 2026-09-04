@@ -23,9 +23,7 @@ var (
 	cfStore     *data_structure.Keyed[*data_structure.CuckooFilter]
 )
 
-func init() {
-	ResetStores()
-}
+func init() { ResetStores() }
 
 // ResetStores rebuilds every keyspace and re-registers them. Called at startup,
 // and by tests that need to begin from empty.

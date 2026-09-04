@@ -2,12 +2,22 @@ package core
 
 import (
 	"errors"
+	"math"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/brandopakel/keel/internal/constant"
 	"github.com/brandopakel/keel/internal/data_structure"
+)
+
+// String commands, and the expiry commands, which apply to strings here: a TTL
+// lives in the string dictionary, and the other types have none.
+
+var (
+	errSetExpire    = errors.New("ERR invalid expire time in 'set' command")
+	errExpireExpire = errors.New("ERR invalid expire time in 'expire' command")
+	errIncrOverflow = errors.New("ERR increment or decrement would overflow")
 )
 
 // cmdSET implements SET key value [EX seconds | PX milliseconds].
@@ -20,36 +30,41 @@ import (
 // than guessed at, which is the difference between a command this server does
 // not implement and a command it appears to implement and does not.
 func cmdSET(args []string) []byte {
-	if len(args) < 2 || len(args) == 3 || len(args) > 4 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'SET' command"), false)
+	if len(args) < 2 {
+		return Encode(errors.New("ERR wrong number of arguments for 'SET' command"), false)
 	}
+	key, value := args[0], args[1]
 
-	var key, value string
-	var ttlMs int64 = -1
-
-	key, value = args[0], args[1]
-	oType, oEnc := deduceTypeString(value)
-	if len(args) > 2 {
+	var ttlMs int64
+	switch len(args) {
+	case 2:
+	case 4:
 		amount, err := strconv.ParseInt(args[3], 10, 64)
 		if err != nil {
-			return Encode(errors.New("(error) ERR value is not an integer or out of range"), false)
+			return Encode(errNotAnInteger, false)
 		}
 		switch strings.ToUpper(args[2]) {
 		case "EX":
+			if amount > math.MaxInt64/1000 {
+				return Encode(errSetExpire, false)
+			}
 			ttlMs = amount * 1000
 		case "PX":
 			ttlMs = amount
 		default:
-			return Encode(errors.New("(error) ERR syntax error"), false)
+			return Encode(errSyntax, false)
 		}
 		if amount <= 0 {
 			// Redis's wording. A TTL already in the past is a delete dressed up
 			// as a write, and answering OK to it would be the wrong answer to
 			// two different questions at once.
-			return Encode(errors.New("(error) ERR invalid expire time in 'set' command"), false)
+			return Encode(errSetExpire, false)
 		}
+	default:
+		return Encode(errSyntax, false)
 	}
 
+	oType, oEnc := deduceTypeString(value)
 	dictStore.Put(key, dictStore.NewObj(value, oType, oEnc))
 	if ttlMs > 0 {
 		// After the Put, which clears whatever expiry the key had before.
@@ -64,43 +79,53 @@ func cmdSET(args []string) []byte {
 
 func cmdGET(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'GET' command"), false)
+		return Encode(errors.New("ERR wrong number of arguments for 'GET' command"), false)
 	}
-
-	key := args[0]
-	obj := dictStore.Get(key)
+	// Get reaps a key whose TTL has passed, so what comes back is live.
+	obj := dictStore.Get(args[0])
 	if obj == nil {
 		return constant.RespNil
 	}
-
-	if dictStore.HasExpired(key) {
-		return constant.RespNil
-	}
-
 	return Encode(obj.Value, false)
 }
 
+// remainingTTL is how long a key has left, in milliseconds. The two negative
+// answers are Redis's: -2 for a key that is not there, -1 for one with no
+// expiry.
+func remainingTTL(key string) int64 {
+	if dictStore.Get(key) == nil {
+		return -2
+	}
+	at, has := dictStore.GetExpiry(key)
+	if !has {
+		return -1
+	}
+	left := int64(at) - time.Now().UnixMilli()
+	if left < 0 {
+		return 0
+	}
+	return left
+}
+
+// cmdTTL answers a key's time to live in whole seconds, rounded to the nearest
+// as Redis rounds it.
 func cmdTTL(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'TTL' command"), false)
+		return Encode(errors.New("ERR wrong number of arguments for 'TTL' command"), false)
 	}
-	key := args[0]
-	obj := dictStore.Get(key)
-	if obj == nil {
-		return constant.TtlKeyNotExist
+	left := remainingTTL(args[0])
+	if left < 0 {
+		return Encode(left, false)
 	}
+	return Encode((left+500)/1000, false)
+}
 
-	exp, isExpirySet := dictStore.GetExpiry(key)
-	if !isExpirySet {
-		return constant.TtlKeyExistNoExpire
+// cmdPTTL is TTL in milliseconds.
+func cmdPTTL(args []string) []byte {
+	if len(args) != 1 {
+		return Encode(errors.New("ERR wrong number of arguments for 'PTTL' command"), false)
 	}
-
-	remainMs := exp - uint64(time.Now().UnixMilli())
-	if remainMs < 0 {
-		return constant.TtlKeyNotExist
-	}
-
-	return Encode(int64(remainMs/1000), false)
+	return Encode(remainingTTL(args[0]), false)
 }
 
 // cmdDEL removes keys from whichever keyspace holds them.
@@ -111,31 +136,42 @@ func cmdTTL(args []string) []byte {
 // A delete that cannot delete is worse than a missing command, because it
 // answers.
 func cmdDEL(args []string) []byte {
-	delCount := 0
+	if len(args) == 0 {
+		return Encode(errors.New("ERR wrong number of arguments for 'DEL' command"), false)
+	}
+	deleted := 0
 	for _, key := range args {
 		if data_structure.DeleteAnywhere(key) {
-			delCount++
+			deleted++
 		}
 	}
-	return Encode(delCount, false)
+	return Encode(deleted, false)
 }
 
+// cmdEXPIRE implements EXPIRE key seconds. A time already passed - zero or
+// negative - deletes the key, as it does in Redis, and is logged as the DEL
+// it amounts to.
 func cmdEXPIRE(args []string) []byte {
-	if len(args) < 2 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'EXPIRE' command"), false)
+	if len(args) != 2 {
+		return Encode(errors.New("ERR wrong number of arguments for 'EXPIRE' command"), false)
 	}
 	key := args[0]
-	ttlSec, err := strconv.ParseInt(args[1], 10, 64)
+	seconds, err := strconv.ParseInt(args[1], 10, 64)
 	if err != nil {
-		return Encode(errors.New("(error) ERR value is not an integer or out of range"), false)
+		return Encode(errNotAnInteger, false)
 	}
-
-	obj := dictStore.Get(key)
-	if obj == nil {
+	if dictStore.Get(key) == nil {
 		return constant.RespZero
 	}
-
-	dictStore.SetExpiry(key, ttlSec*1000)
+	if seconds <= 0 {
+		dictStore.Del(key)
+		aofRecord("DEL", key)
+		return constant.RespOne
+	}
+	if seconds > (math.MaxInt64-time.Now().UnixMilli())/1000 {
+		return Encode(errExpireExpire, false)
+	}
+	dictStore.SetExpiry(key, seconds*1000)
 	aofExpireAt(key)
 	return constant.RespOne
 }
@@ -150,11 +186,11 @@ func cmdEXPIRE(args []string) []byte {
 // does not move. Redis rewrites EXPIRE the same way and for the same reason.
 func cmdPEXPIREAT(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'PEXPIREAT' command"), false)
+		return Encode(errors.New("ERR wrong number of arguments for 'PEXPIREAT' command"), false)
 	}
 	atMs, err := strconv.ParseInt(args[1], 10, 64)
 	if err != nil {
-		return Encode(errors.New("(error) ERR value is not an integer or out of range"), false)
+		return Encode(errNotAnInteger, false)
 	}
 
 	obj := dictStore.Get(args[0])
@@ -171,9 +207,13 @@ func cmdPEXPIREAT(args []string) []byte {
 	return constant.RespOne
 }
 
+// cmdINCR adds one to the integer a key holds, treating a missing key as zero.
+// The value is changed in place, so a TTL on the key survives, as it does in
+// Redis. A value that is not a canonical integer is refused, and so is one
+// that would overflow, rather than wrapping to a number nobody asked for.
 func cmdINCR(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'INCR' command"), false)
+		return Encode(errors.New("ERR wrong number of arguments for 'INCR' command"), false)
 	}
 	key := args[0]
 	obj := dictStore.Get(key)
@@ -181,26 +221,25 @@ func cmdINCR(args []string) []byte {
 		obj = dictStore.NewObj("0", constant.ObjTypeString, constant.ObjEncodingInt)
 		dictStore.Put(key, obj)
 	}
-
 	if err := assertType(obj.TypeEncoding, constant.ObjTypeString); err != nil {
 		return Encode(err, false)
 	}
-
 	if err := assertEncoding(obj.TypeEncoding, constant.ObjEncodingInt); err != nil {
 		return Encode(err, false)
 	}
 
-	i, _ := strconv.ParseInt(obj.Value.(string), 10, 64)
-	i++
-	obj.Value = strconv.FormatInt(i, 10)
-
-	return Encode(i, false)
+	current, err := strconv.ParseInt(obj.Value.(string), 10, 64)
+	if err != nil {
+		return Encode(errNotAnInteger, false)
+	}
+	if current == math.MaxInt64 {
+		return Encode(errIncrOverflow, false)
+	}
+	current++
+	obj.Value = strconv.FormatInt(current, 10)
+	return Encode(current, false)
 }
 
-// cmdDBSIZE reports how many keys the main dictionary holds.
-//
-// Without it, eviction is invisible from a client: the only way to observe it
-// would be to guess which keys went away.
 // cmdDBSIZE counts the keys in every keyspace, not only the strings.
 //
 // It used to answer dictStore.Len(), which is the same bug the type checking
@@ -211,7 +250,7 @@ func cmdINCR(args []string) []byte {
 // next to a DBSIZE of zero.
 func cmdDBSIZE(args []string) []byte {
 	if len(args) != 0 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'DBSIZE' command"), false)
+		return Encode(errors.New("ERR wrong number of arguments for 'DBSIZE' command"), false)
 	}
 	return Encode(int64(data_structure.TotalKeys()), false)
 }

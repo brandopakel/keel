@@ -6,25 +6,83 @@ import (
 	"io"
 )
 
-func cmdPING(args []string) []byte {
-	var buf []byte
+// Command dispatch.
+//
+// One table from name to handler. A command is registered here, in the type
+// table in keytype.go so a name held by another type is refused, and - if it
+// changes anything - in the log's writeCommands; each of those is a list that
+// can be read against the others.
+var commandTable = map[string]func([]string) []byte{
+	"PING": cmdPING,
 
-	if len(args) > 1 {
-		return Encode(errors.New("ERR wrong number of arguments for 'PING' command"), false)
-	}
+	// Strings
+	"SET": cmdSET, "GET": cmdGET, "INCR": cmdINCR, "MGET": cmdMGET, "MSET": cmdMSET,
+	"LCS": cmdLCS,
 
-	if len(args) == 0 {
-		buf = Encode("PONG", true)
-	} else {
-		buf = Encode(args[0], false)
-	}
+	// Keys and expiry
+	"DEL": cmdDEL, "EXISTS": cmdEXISTS, "TYPE": cmdTYPE, "KEYS": cmdKEYS,
+	"TTL": cmdTTL, "PTTL": cmdPTTL, "EXPIRE": cmdEXPIRE, "PEXPIREAT": cmdPEXPIREAT,
 
-	return buf
+	// Server
+	"DBSIZE": cmdDBSIZE, "FLUSHDB": cmdFLUSHDB, "MEMORY": cmdMEMORY, "INFO": cmdINFO,
+	"BGREWRITEAOF": cmdBGREWRITEAOF,
+	"KEEL.DUMP":    cmdDUMP, "KEEL.RESTORE": cmdRESTORE,
+	// The names from before the server was renamed, so a log written then
+	// still replays; a command is written to the log under its current name.
+	"MEMKV.DUMP": cmdDUMP, "MEMKV.RESTORE": cmdRESTORE,
+
+	// Hashes
+	"HSET": cmdHSET, "HSETNX": cmdHSETNX, "HGET": cmdHGET, "HMGET": cmdHMGET,
+	"HDEL": cmdHDEL, "HEXISTS": cmdHEXISTS, "HLEN": cmdHLEN, "HKEYS": cmdHKEYS,
+	"HVALS": cmdHVALS, "HGETALL": cmdHGETALL, "HINCRBY": cmdHINCRBY,
+
+	// Lists
+	"LPUSH": cmdLPUSH, "RPUSH": cmdRPUSH, "LPOP": cmdLPOP, "RPOP": cmdRPOP,
+	"LLEN": cmdLLEN, "LINDEX": cmdLINDEX, "LSET": cmdLSET, "LRANGE": cmdLRANGE,
+
+	// Sets
+	"SADD": cmdSADD, "SREM": cmdSREM, "SCARD": cmdSCARD, "SMEMBERS": cmdSMEMBERS,
+	"SISMEMBER": cmdSISMEMBER, "SMISMEMBER": cmdSMISMEMBER, "SPOP": cmdSPOP,
+	"SRANDMEMBER": cmdSRANDMEMBER,
+	// SRAND is what this server called SRANDMEMBER before it took the Redis name.
+	"SRAND": cmdSRANDMEMBER,
+
+	// Sorted sets, and the geospatial index built on them
+	"ZADD": cmdZADD, "ZRANK": cmdZRANK, "ZREM": cmdZREM, "ZSCORE": cmdZSCORE, "ZCARD": cmdZCARD,
+	"GEOADD": cmdGEOADD, "GEODIST": cmdGEODIST, "GEOHASH": cmdGEOHASH,
+	"GEOSEARCH": cmdGEOSEARCH, "GEOPOS": cmdGEOPOS,
+
+	// Probabilistic structures
+	"BF.RESERVE": cmdBFRESERVE, "BF.INFO": cmdBFINFO, "BF.ADD": cmdBFADD,
+	"BF.MADD": cmdBFMADD, "BF.EXISTS": cmdBFEXISTS, "BF.MEXISTS": cmdBFMEXISTS,
+	"CMS.INITBYDIM": cmdCMSINITBYDIM, "CMS.INITBYPROB": cmdCMSINITBYPROB,
+	"CMS.INCRBY": cmdCMSINCRBY, "CMS.QUERY": cmdCMSQUERY,
+	"MORRIS.INITBYDIM": cmdMORRISINITBYDIM, "MORRIS.INITBYPROB": cmdMORRISINITBYPROB,
+	"MORRIS.INCRBY": cmdMORRISINCRBY, "MORRIS.QUERY": cmdMORRISQUERY, "MORRIS.INFO": cmdMORRISINFO,
+	"PFADD": cmdPFADD, "PFCOUNT": cmdPFCOUNT, "PFMERGE": cmdPFMERGE,
+	"CF.RESERVE": cmdCFRESERVE, "CF.ADD": cmdCFADD, "CF.ADDNX": cmdCFADDNX,
+	"CF.EXISTS": cmdCFEXISTS, "CF.MEXISTS": cmdCFMEXISTS, "CF.DEL": cmdCFDEL,
+	"CF.COUNT": cmdCFCOUNT, "CF.INFO": cmdCFINFO,
 }
 
-func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
-	var res []byte
+// cmdPING answers PONG, or echoes the one argument it is given.
+func cmdPING(args []string) []byte {
+	switch len(args) {
+	case 0:
+		return Encode("PONG", true)
+	case 1:
+		return Encode(args[0], false)
+	}
+	return Encode(errors.New("ERR wrong number of arguments for 'PING' command"), false)
+}
 
+// EvalAndResponse runs one command and writes its reply to c.
+//
+// The error it returns is the connection's, not the command's: a command that
+// fails answers with a RESP error and returns nil here. The one exception is a
+// command this server does not have, which is returned as an error so that a
+// log replay stops on it rather than skipping past a command it cannot run.
+func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	// Anything a command wants written to the log instead of itself is staged
 	// while it runs, so the slate has to be clean before it starts. This comes
 	// first because the type check below reads keys, and reading a key whose
@@ -36,194 +94,20 @@ func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	// that individually because none of them knows about the others. Checked
 	// before execution, so a refused command has not half-run.
 	if err := checkKeyTypes(cmd); err != nil {
-		res = Encode(err, false)
+		res := Encode(err, false)
 		aofCommit(cmd, res)
 		_, werr := c.Write(res)
 		return werr
 	}
 
-	switch cmd.Cmd {
-	case "PING":
-		res = cmdPING(cmd.Args)
-	case "SET":
-		res = cmdSET(cmd.Args)
-	case "GET":
-		res = cmdGET(cmd.Args)
-	case "TTL":
-		res = cmdTTL(cmd.Args)
-	case "DEL":
-		res = cmdDEL(cmd.Args)
-	case "EXPIRE":
-		res = cmdEXPIRE(cmd.Args)
-	case "PEXPIREAT":
-		res = cmdPEXPIREAT(cmd.Args)
-	case "INCR":
-		res = cmdINCR(cmd.Args)
-	case "LCS":
-		res = cmdLCS(cmd.Args)
-	case "EXISTS":
-		res = cmdEXISTS(cmd.Args)
-	case "TYPE":
-		res = cmdTYPE(cmd.Args)
-	case "KEYS":
-		res = cmdKEYS(cmd.Args)
-	case "MGET":
-		res = cmdMGET(cmd.Args)
-	case "MSET":
-		res = cmdMSET(cmd.Args)
-	case "FLUSHDB":
-		res = cmdFLUSHDB(cmd.Args)
-	case "DBSIZE":
-		res = cmdDBSIZE(cmd.Args)
-	case "MEMORY":
-		res = cmdMEMORY(cmd.Args)
-	case "INFO":
-		res = cmdINFO(cmd.Args)
-	case "BGREWRITEAOF":
-		res = cmdBGREWRITEAOF(cmd.Args)
-	case "KEEL.DUMP", "MEMKV.DUMP":
-		res = cmdDUMP(cmd.Args)
-	case "KEEL.RESTORE", "MEMKV.RESTORE":
-		res = cmdRESTORE(cmd.Args)
-	// Set
-	case "HSET":
-		res = cmdHSET(cmd.Args)
-	case "HSETNX":
-		res = cmdHSETNX(cmd.Args)
-	case "HGET":
-		res = cmdHGET(cmd.Args)
-	case "HMGET":
-		res = cmdHMGET(cmd.Args)
-	case "HDEL":
-		res = cmdHDEL(cmd.Args)
-	case "HEXISTS":
-		res = cmdHEXISTS(cmd.Args)
-	case "HLEN":
-		res = cmdHLEN(cmd.Args)
-	case "HKEYS":
-		res = cmdHKEYS(cmd.Args)
-	case "HVALS":
-		res = cmdHVALS(cmd.Args)
-	case "HGETALL":
-		res = cmdHGETALL(cmd.Args)
-	case "HINCRBY":
-		res = cmdHINCRBY(cmd.Args)
-
-	case "LPUSH":
-		res = cmdLPUSH(cmd.Args)
-	case "RPUSH":
-		res = cmdRPUSH(cmd.Args)
-	case "LPOP":
-		res = cmdLPOP(cmd.Args)
-	case "RPOP":
-		res = cmdRPOP(cmd.Args)
-	case "LLEN":
-		res = cmdLLEN(cmd.Args)
-	case "LINDEX":
-		res = cmdLINDEX(cmd.Args)
-	case "LSET":
-		res = cmdLSET(cmd.Args)
-	case "LRANGE":
-		res = cmdLRANGE(cmd.Args)
-
-	case "SADD":
-		res = cmdSADD(cmd.Args)
-	case "SREM":
-		res = cmdSREM(cmd.Args)
-	case "SCARD":
-		res = cmdSCARD(cmd.Args)
-	case "SMEMBERS":
-		res = cmdSMEMBERS(cmd.Args)
-	case "SISMEMBER":
-		res = cmdSISMEMBER(cmd.Args)
-	case "SMISMEMBER":
-		res = cmdSMISMEMBER(cmd.Args)
-	case "SRANDMEMBER", "SRAND":
-		res = cmdSRANDMEMBER(cmd.Args)
-	case "SPOP":
-		res = cmdSPOP(cmd.Args)
-	// Sorted set
-	case "ZADD":
-		res = cmdZADD(cmd.Args)
-	case "ZRANK":
-		res = cmdZRANK(cmd.Args)
-	case "ZREM":
-		res = cmdZREM(cmd.Args)
-	case "ZSCORE":
-		res = cmdZSCORE(cmd.Args)
-	case "ZCARD":
-		res = cmdZCARD(cmd.Args)
-	// Geo Hash
-	case "GEOADD":
-		res = cmdGEOADD(cmd.Args)
-	case "GEODIST":
-		res = cmdGEODIST(cmd.Args)
-	case "GEOHASH":
-		res = cmdGEOHASH(cmd.Args)
-	case "GEOSEARCH":
-		res = cmdGEOSEARCH(cmd.Args)
-	case "GEOPOS":
-		res = cmdGEOPOS(cmd.Args)
-	// Bloom filter
-	case "BF.RESERVE":
-		res = cmdBFRESERVE(cmd.Args)
-	case "BF.INFO":
-		res = cmdBFINFO(cmd.Args)
-	case "BF.ADD":
-		res = cmdBFADD(cmd.Args)
-	case "BF.MADD":
-		res = cmdBFMADD(cmd.Args)
-	case "BF.EXISTS":
-		res = cmdBFEXISTS(cmd.Args)
-	case "BF.MEXISTS":
-		res = cmdBFMEXISTS(cmd.Args)
-	// Count-Min Sketch
-	case "CMS.INITBYDIM":
-		res = cmdCMSINITBYDIM(cmd.Args)
-	case "CMS.INITBYPROB":
-		res = cmdCMSINITBYPROB(cmd.Args)
-	case "CMS.INCRBY":
-		res = cmdCMSINCRBY(cmd.Args)
-	case "CMS.QUERY":
-		res = cmdCMSQUERY(cmd.Args)
-	// Morris counter
-	case "MORRIS.INITBYDIM":
-		res = cmdMORRISINITBYDIM(cmd.Args)
-	case "MORRIS.INITBYPROB":
-		res = cmdMORRISINITBYPROB(cmd.Args)
-	case "MORRIS.INCRBY":
-		res = cmdMORRISINCRBY(cmd.Args)
-	case "MORRIS.QUERY":
-		res = cmdMORRISQUERY(cmd.Args)
-	case "MORRIS.INFO":
-		res = cmdMORRISINFO(cmd.Args)
-	// HyperLogLog
-	case "PFADD":
-		res = cmdPFADD(cmd.Args)
-	case "PFCOUNT":
-		res = cmdPFCOUNT(cmd.Args)
-	case "PFMERGE":
-		res = cmdPFMERGE(cmd.Args)
-	// Cuckoo filter
-	case "CF.RESERVE":
-		res = cmdCFRESERVE(cmd.Args)
-	case "CF.ADD":
-		res = cmdCFADD(cmd.Args)
-	case "CF.ADDNX":
-		res = cmdCFADDNX(cmd.Args)
-	case "CF.EXISTS":
-		res = cmdCFEXISTS(cmd.Args)
-	case "CF.MEXISTS":
-		res = cmdCFMEXISTS(cmd.Args)
-	case "CF.DEL":
-		res = cmdCFDEL(cmd.Args)
-	case "CF.COUNT":
-		res = cmdCFCOUNT(cmd.Args)
-	case "CF.INFO":
-		res = cmdCFINFO(cmd.Args)
-	default:
-		return errors.New(fmt.Sprintf("command not found: %s", cmd.Cmd))
+	handler, known := commandTable[cmd.Cmd]
+	if !known {
+		// Nothing ran, but the type check may still have reaped an expired
+		// key, and that removal has to be recorded.
+		aofCommit(cmd, nil)
+		return fmt.Errorf("ERR unknown command '%s'", cmd.Cmd)
 	}
+	res := handler(cmd.Args)
 
 	// Recorded before the reply is written. FlushAOF runs between execution and
 	// the write phase, so under appendfsync always the client hears "OK" only

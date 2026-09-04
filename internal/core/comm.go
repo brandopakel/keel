@@ -2,17 +2,20 @@ package core
 
 import "syscall"
 
+// Command is one parsed request: the name, upper-cased, and its arguments.
 type Command struct {
 	Cmd  string
 	Args []string
 }
 
+// FDComm reads and writes a raw socket descriptor, for the event loop, which
+// holds descriptors rather than net.Conns.
 type FDComm struct {
 	Fd int
 }
 
-func (f FDComm) Read(data []byte) (int, error) {
-	return syscall.Read(f.Fd, data)
+func (f FDComm) Read(p []byte) (int, error) {
+	return syscall.Read(f.Fd, p)
 }
 
 // Write sends all of data, or reports why it could not.
