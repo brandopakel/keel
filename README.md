@@ -1,4 +1,3 @@
-![keel](keel.png)
 # keel — a Redis-inspired in-memory database in Go
 
 keel is an in-memory key-value database written from scratch in Go. It speaks

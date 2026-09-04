@@ -1,8 +1,22 @@
+// Package config holds the server's settings: defaults here, overridden by the
+// flags in cmd/keel before anything reads them.
 package config
 
-var Host = "0.0.0.0"
-var Port = 8081
-var MaxConnection = 20000
+// Where the server listens, and how many connections it will hold.
+var (
+	// Host is the interface to bind. The event loop binds IPv4 only, so this
+	// has to be an IPv4 address; 0.0.0.0 is every interface, which is the
+	// Redis default and, like Redis, a reason to keep the server behind a
+	// firewall.
+	Host = "0.0.0.0"
+	Port = 8081
+	// MaxConnection is the listen backlog, and the most descriptors one turn
+	// of the event loop can be handed at once.
+	MaxConnection = 20000
+)
+
+// KeyNumberLimit bounds the keyspace by count: once it is reached, a write
+// evicts before it lands. MaxMemory below bounds it by bytes.
 var KeyNumberLimit = 5000000
 
 // MaxMemory bounds the dictionary in bytes. Zero means unbounded, and the key
@@ -13,12 +27,15 @@ var KeyNumberLimit = 5000000
 // entryBytes in data_structure/memory.go.
 var MaxMemory uint64 = 0
 
+// The eviction policies, chosen with -evict. EvictFirst takes whichever key a
+// sample turns up first, which is to say a random one.
 const (
-	EvictFirst int = 0
-	LRU            = 1
-	LFU            = 2
+	EvictFirst int = iota
+	LRU
+	LFU
 )
 
+// EvictStrategy is the policy in force.
 var EvictStrategy = EvictFirst
 
 // LRUSamples is how many random keys an approximate-LRU eviction looks at

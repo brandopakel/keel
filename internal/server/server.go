@@ -266,17 +266,116 @@ func closeClient(c *client) {
 	syscall.Close(c.fd)
 }
 
+// responseRw runs one command and writes its reply. The one thing a command
+// cannot answer for itself is being unknown, which comes back as an error and
+// is answered here.
 func responseRw(cmd *core.Command, rw io.ReadWriter) {
-	err := core.EvalAndResponse(cmd, rw)
-	if err != nil {
+	if err := core.EvalAndResponse(cmd, rw); err != nil {
 		responseErrorRw(err, rw)
 	}
 }
 
+// responseErrorRw writes err to the client as a RESP error.
 func responseErrorRw(err error, rw io.ReadWriter) {
-	if _, werr := rw.Write([]byte(fmt.Sprintf("-%s%s", err, core.CRLF))); werr != nil {
+	if _, werr := rw.Write(core.Encode(err, false)); werr != nil {
 		log.Println("failed to send error reply:", werr)
 	}
+}
+
+// listenTCP opens a non-blocking listening socket on host:port.
+//
+// Non-blocking from the start, because the loop must never park inside an
+// accept or a read on one descriptor while others are ready; it parks only in
+// the multiplexer, which watches them all. SO_REUSEADDR lets a restart bind
+// the port at once rather than waiting out the previous process's connections
+// in TIME_WAIT, which is what Redis and Go's own net package both do.
+func listenTCP(host string, port, backlog int) (int, error) {
+	addr, err := ipv4Address(host, port)
+	if err != nil {
+		return -1, err
+	}
+	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		return -1, fmt.Errorf("socket: %w", err)
+	}
+	for _, step := range []struct {
+		what string
+		do   func() error
+	}{
+		{"set non-blocking on", func() error { return syscall.SetNonblock(fd, true) }},
+		{"set SO_REUSEADDR on", func() error {
+			return syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
+		}},
+		{"bind", func() error { return syscall.Bind(fd, addr) }},
+		{"listen on", func() error { return syscall.Listen(fd, backlog) }},
+	} {
+		if err := step.do(); err != nil {
+			syscall.Close(fd)
+			return -1, fmt.Errorf("%s %s:%d: %w", step.what, host, port, err)
+		}
+	}
+	return fd, nil
+}
+
+// ipv4Address turns the configured host into a socket address.
+//
+// net.ParseIP returns every address in its 16-byte form, so the first four
+// bytes of an IPv4 address are zero. Copying those into the socket address
+// bound 0.0.0.0 whatever -host said, silently; To4 gives the four bytes that
+// were meant. Only IPv4 is bound, because the event loop's socket is AF_INET.
+func ipv4Address(host string, port int) (*syscall.SockaddrInet4, error) {
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return nil, fmt.Errorf("-host %q is not an IP address", host)
+	}
+	ip4 := ip.To4()
+	if ip4 == nil {
+		return nil, fmt.Errorf("-host %q is not an IPv4 address, and the event loop binds IPv4 only", host)
+	}
+	addr := &syscall.SockaddrInet4{Port: port}
+	copy(addr.Addr[:], ip4)
+	return addr, nil
+}
+
+// acceptClient takes one waiting connection off the listening socket, sets it
+// up and registers it with the multiplexer.
+//
+// Everything here configures this one socket. A failure is that connection's
+// problem, not the server's, so it costs the client its connection and nothing
+// else. These used to return from the loop, which unwound RunAsyncTCPServer
+// and took every other connected client down over one bad descriptor.
+func acceptClient(serverFD int, mux io_multiplexing.IOMultiplexer) (*client, bool) {
+	connFD, _, err := syscall.Accept(serverFD)
+	if err != nil {
+		log.Println("accept:", err)
+		return nil, false
+	}
+	if err := syscall.SetNonblock(connFD, true); err != nil {
+		log.Println("set nonblock:", err)
+		syscall.Close(connFD)
+		return nil, false
+	}
+
+	// Disable Nagle's algorithm on the client socket.
+	//
+	// Nagle holds a small reply back until the peer acknowledges the
+	// previous segment, and the peer's delayed-ACK timer sits on that
+	// acknowledgement. Writing one reply per command means every reply is
+	// its own small segment, so a pipelined client pays the timer on every
+	// batch: measured on Linux, the server served ~1220 batches/second at
+	// P=8, P=16 and P=64 alike, which is 41ms per batch per connection
+	// against a 40ms delayed-ACK timer. Redis sets TCP_NODELAY on client
+	// sockets for this reason; Go's net package sets it by default.
+	if err := syscall.SetsockoptInt(connFD, syscall.IPPROTO_TCP, syscall.TCP_NODELAY, 1); err != nil {
+		log.Println("TCP_NODELAY:", err)
+	}
+
+	if err := mux.Monitor(io_multiplexing.Event{Fd: connFD, Op: io_multiplexing.OpRead}); err != nil {
+		log.Println("monitor:", err)
+		syscall.Close(connFD)
+		return nil, false
+	}
+	return &client{fd: connFD}, true
 }
 
 // replyBuffer collects the replies produced from one read so they can be sent
@@ -336,7 +435,6 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 	defer wg.Done()
 	log.Println("starting an asynchronous TCP server on", config.Host, config.Port)
 
-	var events = make([]io_multiplexing.Event, config.MaxConnection)
 	clientNumber := 0
 
 	// The connections taking part in each phase of the current cycle, and the
@@ -351,55 +449,22 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 	pool := newIOPool(ioThreadCount())
 	defer pool.stop()
 
-	// Create a server socket. A socket is an endpoint for communication between client and server
-	serverFD, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
+	serverFD, err := listenTCP(config.Host, config.Port, config.MaxConnection)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
 	defer syscall.Close(serverFD)
 
-	// Set the Socket operate in a non-blocking mode
-	// Default mode is blocking mode: when you read from a FD, control isn't returned
-	// until at least one byte of data is read.
-	// Non-blocking mode: if the read buffer is empty, it will return immediately.
-	// We want non-blocking mode because we will use epoll to monitor and then read from
-	// multiple FD, so we want to ensure that none of them cause the program to "lock up."
-	if err = syscall.SetNonblock(serverFD, true); err != nil {
-		log.Println(err)
-		return err
-	}
-
-	// Bind the IP and the port to the server socket FD.
-	ip4 := net.ParseIP(config.Host)
-	if err = syscall.Bind(serverFD, &syscall.SockaddrInet4{
-		Port: config.Port,
-		Addr: [4]byte{ip4[0], ip4[1], ip4[2], ip4[3]},
-	}); err != nil {
-		log.Println(err)
-		return err
-	}
-
-	// Start listening
-	if err = syscall.Listen(serverFD, config.MaxConnection); err != nil {
-		log.Println(err)
-		return err
-	}
-
-	// ioMultiplexer is an object that can monitor multiple file descriptor (FD) at the same time.
-	// When one or more monitored FD(s) are ready for IO, it will notify our server.
-	// Here, we use ioMultiplexer to monitor Server FD and Clients FD.
+	// The multiplexer is what the loop parks in: it watches the listening
+	// socket, every client socket and the wakeup pipe below, and returns
+	// whichever of them are ready.
 	ioMultiplexer, err := io_multiplexing.CreateIOMultiplexer()
 	if err != nil {
 		return err
 	}
 	defer ioMultiplexer.Close()
-
-	// Monitor "read" events on the Server FD
-	if err = ioMultiplexer.Monitor(io_multiplexing.Event{
-		Fd: serverFD,
-		Op: io_multiplexing.OpRead,
-	}); err != nil {
+	if err = ioMultiplexer.Monitor(io_multiplexing.Event{Fd: serverFD, Op: io_multiplexing.OpRead}); err != nil {
 		return err
 	}
 
@@ -453,8 +518,9 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 	}()
 
 	for !shuttingDown() {
-		// check if any FD is ready for an IO
-		events, err = ioMultiplexer.Check()
+		// Park until something is ready. Every other syscall in this loop is
+		// non-blocking, so this is the only place it waits.
+		events, err := ioMultiplexer.Check()
 		if err != nil {
 			if shuttingDown() {
 				break
@@ -472,8 +538,9 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 		stop := false
 		readable = readable[:0]
 
-		for i := 0; i < len(events); i++ {
-			if events[i].Fd == wakeupFDs[0] {
+		for _, ev := range events {
+			switch ev.Fd {
+			case wakeupFDs[0]:
 				// The pipe carries two different meanings now: stop, and keep
 				// turning because a rewrite has slices left. A byte cannot say
 				// which, so the flag does - and it is set before the wake, so a
@@ -493,62 +560,20 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 				// server's life.
 				var drain [64]byte
 				syscall.Read(wakeupFDs[0], drain[:])
-				continue
-			}
-			if events[i].Fd == serverFD {
-				// the Server FD is ready for reading, means we have a new client.
-				// accept the incoming connection from a client
-				connFD, _, err := syscall.Accept(serverFD)
-				if err != nil {
-					log.Println("accept:", err)
-					continue
+			case serverFD:
+				// The listening socket is readable: a client is waiting to be
+				// accepted. Counted only once the connection is fully set up,
+				// so the id in the log matches a client that actually exists.
+				if c, ok := acceptClient(serverFD, ioMultiplexer); ok {
+					clients[c.fd] = c
+					clientNumber++
+					log.Printf("new client: id=%d\n", clientNumber)
 				}
-
-				// Everything from here to Monitor configures this one socket.
-				// A failure is that connection's problem, not the server's, so
-				// it costs the client its connection and nothing else. These
-				// used to return, which unwound RunAsyncTCPServer and took every
-				// other connected client down over one bad descriptor.
-				if err = syscall.SetNonblock(connFD, true); err != nil {
-					log.Println("set nonblock:", err)
-					syscall.Close(connFD)
-					continue
-				}
-
-				// Disable Nagle's algorithm on the client socket.
-				//
-				// Nagle holds a small reply back until the peer acknowledges the
-				// previous segment, and the peer's delayed-ACK timer sits on that
-				// acknowledgement. Writing one reply per command means every reply is
-				// its own small segment, so a pipelined client pays the timer on every
-				// batch: measured on Linux, the server served ~1220 batches/second at
-				// P=8, P=16 and P=64 alike, which is 41ms per batch per connection
-				// against a 40ms delayed-ACK timer. Redis sets TCP_NODELAY on client
-				// sockets for this reason; Go's net package sets it by default.
-				if err = syscall.SetsockoptInt(connFD, syscall.IPPROTO_TCP, syscall.TCP_NODELAY, 1); err != nil {
-					log.Println("TCP_NODELAY:", err)
-				}
-
-				// add this new connection to be monitored
-				if err = ioMultiplexer.Monitor(io_multiplexing.Event{
-					Fd: connFD,
-					Op: io_multiplexing.OpRead,
-				}); err != nil {
-					log.Println("monitor:", err)
-					syscall.Close(connFD)
-					continue
-				}
-
-				// Counted only once the connection is fully set up, so the id
-				// in the log matches a client that actually exists.
-				clients[connFD] = &client{fd: connFD}
-				clientNumber++
-				log.Printf("new client: id=%d\n", clientNumber)
-			} else {
+			default:
 				// An existing client is sending commands. Nothing is read yet:
 				// the whole ready set is collected first so the read phase can
 				// be handed out across threads in one go.
-				if c := clients[int(events[i].Fd)]; c != nil {
+				if c := clients[ev.Fd]; c != nil {
 					readable = append(readable, c)
 				}
 			}

@@ -46,10 +46,14 @@ var (
 	showVersion    bool
 )
 
-func init() {
+// parseFlags reads the command line into config. It runs before anything
+// starts, from main rather than from an init, so that nothing else in the
+// process can observe a setting before the flag that changes it has been read.
+func parseFlags() {
 	flag.BoolVar(&showVersion, "version", false, "print the version and exit")
-	flag.StringVar(&config.Host, "host", "0.0.0.0", "host")
-	flag.IntVar(&config.Port, "port", config.Port, "port")
+	flag.StringVar(&config.Host, "host", config.Host,
+		"IPv4 address to listen on; 0.0.0.0 is every interface")
+	flag.IntVar(&config.Port, "port", config.Port, "TCP port to listen on")
 	flag.StringVar(&mode, "mode", "kqueue", "io mode: kqueue (default) | kqueue-nobuf | net | net-small | net-direct | net-chan | net-nolock")
 	flag.StringVar(&maxMemory, "maxmemory", "0",
 		"bound the keyspace in bytes, e.g. 512mb or 2gb; 0 is unbounded")
@@ -158,16 +162,20 @@ func parseSize(s string) (uint64, error) {
 }
 
 func main() {
+	parseFlags()
 	if showVersion {
 		fmt.Println(versionLine())
 		return
 	}
 
 	fmt.Printf("starting keel %s ...\n", config.BuildVersion())
-	var signals = make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
-	var wg sync.WaitGroup
-	wg.Add(2)
+
+	// Two goroutines to wait for: the server loop, and the one that turns
+	// SIGTERM or SIGINT into a request for it to stop.
+	stopSignals := make(chan os.Signal, 1)
+	signal.Notify(stopSignals, syscall.SIGTERM, syscall.SIGINT)
+	var running sync.WaitGroup
+	running.Add(2)
 
 	// Loaded before any loop starts. Doing it inside the server goroutine would
 	// race the listener: a client could connect and be answered out of a
@@ -178,26 +186,26 @@ func main() {
 
 	switch mode {
 	case "kqueue":
-		go server.RunAsyncTCPServer(&wg)
+		go server.RunAsyncTCPServer(&running)
 	case "kqueue-nobuf":
 		server.WriteUnbuffered = true
-		go server.RunAsyncTCPServer(&wg)
+		go server.RunAsyncTCPServer(&running)
 	case "net":
 		server.ActiveNetVariant = server.NetVariantMutex
-		go server.RunNetTCPServer(&wg)
+		go server.RunNetTCPServer(&running)
 	case "net-small":
 		server.ActiveNetVariant = server.NetVariantSmallBuf
-		go server.RunNetTCPServer(&wg)
+		go server.RunNetTCPServer(&running)
 	case "net-direct":
 		server.ActiveNetVariant = server.NetVariantDirect
-		go server.RunNetTCPServer(&wg)
+		go server.RunNetTCPServer(&running)
 	case "net-chan":
 		server.ActiveNetVariant = server.NetVariantChannel
-		go server.RunNetTCPServer(&wg)
+		go server.RunNetTCPServer(&running)
 	case "net-nolock":
 		// diagnostic only: PING-safe, races on any command that touches a store
 		server.EvalUnlocked = true
-		go server.RunNetTCPServer(&wg)
+		go server.RunNetTCPServer(&running)
 	case "kqueue-wbuf":
 		// Retired 2026-08-27. Kept as a named case so a stale command line says
 		// what happened instead of just failing to match.
@@ -206,9 +214,8 @@ func main() {
 	default:
 		log.Fatalf("unknown -mode %q (want kqueue, kqueue-nobuf or net*)", mode)
 	}
-	go server.WaitForSignal(&wg, signals)
-
-	wg.Wait()
+	go server.WaitForSignal(&running, stopSignals)
+	running.Wait()
 }
 
 // versionLine is what -version prints: the version, and the commit when the
