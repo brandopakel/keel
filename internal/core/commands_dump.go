@@ -89,81 +89,92 @@ func dumpKey(key string) ([]byte, bool) {
 }
 
 // restoreKey rebuilds a key from a payload, replacing whatever was there.
+//
+// The payload is decoded in full before anything is touched, so a payload that
+// turns out to be malformed leaves the key exactly as it was. Deleting first
+// and decoding second lost the old value on every bad payload.
 func restoreKey(key string, payload []byte) error {
 	if len(payload) == 0 {
 		return errors.New("MEMKV: empty payload")
 	}
-	body := payload[1:]
-
+	store, err := decodeRestorePayload(key, payload[0], payload[1:])
+	if err != nil {
+		return err
+	}
 	// Whatever type used to hold this name gives it up, or restoring a set over
 	// a string would leave both - the bug the keyspace check exists to prevent.
 	data_structure.DeleteAnywhere(key)
+	store()
+	return nil
+}
 
-	switch payload[0] {
+// decodeRestorePayload turns a payload into the value it describes and returns
+// the step that puts that value in its keyspace, having changed nothing yet.
+func decodeRestorePayload(key string, tag byte, body []byte) (store func(), err error) {
+	switch tag {
 	case dumpTagString:
-		oType, oEnc := deduceTypeString(string(body))
-		dictStore.Put(key, dictStore.NewObj(string(body), oType, oEnc))
+		value := string(body)
+		oType, oEnc := deduceTypeString(value)
+		return func() { dictStore.Put(key, dictStore.NewObj(value, oType, oEnc)) }, nil
 	case dumpTagSet:
 		members, err := decodeParts(body)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		set := data_structure.CreateSet(key)
 		if len(members) > 0 {
 			set.Add(members...)
 		}
-		setStore.Put(key, set)
+		return func() { setStore.Put(key, set) }, nil
 	case dumpTagZSet:
 		parts, err := decodeParts(body)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if len(parts)%2 != 0 {
-			return errors.New("MEMKV: sorted set payload is not score/member pairs")
+			return nil, errors.New("MEMKV: sorted set payload is not score/member pairs")
 		}
 		zset := data_structure.CreateZSet()
 		for i := 0; i < len(parts); i += 2 {
 			score, perr := parseScore(parts[i])
 			if perr != nil {
-				return perr
+				return nil, perr
 			}
 			zset.Add(score, parts[i+1], 0)
 		}
-		zsetStore.Put(key, zset)
+		return func() { zsetStore.Put(key, zset) }, nil
 	case dumpTagBloom:
 		sb, err := data_structure.UnmarshalSBChain(body)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		sbStore.Put(key, sb)
+		return func() { sbStore.Put(key, sb) }, nil
 	case dumpTagCMS:
 		cms, err := data_structure.UnmarshalCMS(body)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		cmsStore.Put(key, cms)
+		return func() { cmsStore.Put(key, cms) }, nil
 	case dumpTagMorris:
 		m, err := data_structure.UnmarshalMorris(body)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		morrisStore.Put(key, m)
+		return func() { morrisStore.Put(key, m) }, nil
 	case dumpTagHLL:
 		h, err := data_structure.UnmarshalHLL(body)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		hllStore.Put(key, h)
+		return func() { hllStore.Put(key, h) }, nil
 	case dumpTagCuckoo:
 		cf, err := data_structure.UnmarshalCuckoo(body)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		cfStore.Put(key, cf)
-	default:
-		return fmt.Errorf("MEMKV: unknown payload type %d", payload[0])
+		return func() { cfStore.Put(key, cf) }, nil
 	}
-	return nil
+	return nil, fmt.Errorf("MEMKV: unknown payload type %d", tag)
 }
 
 func cmdDUMP(args []string) []byte {

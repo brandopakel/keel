@@ -66,18 +66,94 @@ func parseZScore(s string) (float64, error) {
 	return f, nil
 }
 
-// formatZScore writes a score the way Redis replies with one: the fewest
-// digits that read back to the same float64, and the infinities by name. A
-// fixed number of decimals would print 0.0000001 as 0.000000 and a geohash
-// score with six zeros it never had.
+// formatZScore writes a score the way Redis 7.2 replies with one, which is
+// its d2string: the infinities by name, zero with its sign, an integral value
+// within 2^62 as an integer, and anything else with the fewest digits that
+// read back to the same float, laid out by the rules of its fpconv_dtoa - a
+// point for numbers near one, an exponent for numbers far from it. A fixed
+// number of decimals would print 0.0000001 as 0.000000 and give a geohash
+// score six zeros it never had.
 func formatZScore(score float64) string {
 	switch {
 	case math.IsInf(score, 1):
 		return "inf"
 	case math.IsInf(score, -1):
 		return "-inf"
+	case score == 0:
+		if math.Signbit(score) {
+			return "-0"
+		}
+		return "0"
 	}
-	return strconv.FormatFloat(score, 'f', -1, 64)
+	// Redis prints an integral value as an integer when it is safely one:
+	// within half the range of a 64-bit integer, and unchanged by the round
+	// trip through one.
+	const safeInteger = float64(math.MaxInt64 / 2)
+	if score >= -safeInteger && score <= safeInteger {
+		if n := int64(score); float64(n) == score {
+			return strconv.FormatInt(n, 10)
+		}
+	}
+	return shortestDouble(score)
+}
+
+// shortestDouble lays out the shortest round-tripping digits of a float the
+// way fpconv_dtoa does. With the digits D (n of them) and the value D x 10^K:
+//
+//	K >= 0 and the exponent below n+7      the digits, then K zeros
+//	K < 0, and K > -7 or the exponent < 4  a decimal point, with leading
+//	                                       zeros for a value below one
+//	otherwise                              d.ddde<sign><exponent>, the
+//	                                       exponent without padding
+//
+// where the exponent is that of scientific notation, taken absolute.
+func shortestDouble(v float64) string {
+	var b strings.Builder
+	if v < 0 {
+		b.WriteByte('-')
+		v = -v
+	}
+	// Go's 'e' form with -1 precision is the shortest digit string that reads
+	// back to the same float, which is what Grisu2 finds in all but rare cases.
+	mantissa, expText, _ := strings.Cut(strconv.FormatFloat(v, 'e', -1, 64), "e")
+	digits := strings.Replace(mantissa, ".", "", 1)
+	sciExp, _ := strconv.Atoi(expText)
+	n := len(digits)
+	k := sciExp - (n - 1)
+	exp := sciExp
+	if exp < 0 {
+		exp = -exp
+	}
+
+	switch {
+	case k >= 0 && exp < n+7:
+		b.WriteString(digits)
+		b.WriteString(strings.Repeat("0", k))
+	case k < 0 && (k > -7 || exp < 4):
+		if offset := n + k; offset <= 0 {
+			b.WriteString("0.")
+			b.WriteString(strings.Repeat("0", -offset))
+			b.WriteString(digits)
+		} else {
+			b.WriteString(digits[:offset])
+			b.WriteByte('.')
+			b.WriteString(digits[offset:])
+		}
+	default:
+		b.WriteByte(digits[0])
+		if n > 1 {
+			b.WriteByte('.')
+			b.WriteString(digits[1:])
+		}
+		b.WriteByte('e')
+		if sciExp < 0 {
+			b.WriteByte('-')
+		} else {
+			b.WriteByte('+')
+		}
+		b.WriteString(strconv.Itoa(exp))
+	}
+	return b.String()
 }
 
 // zaddApply adds every score/member pair to the set at key under flags, and

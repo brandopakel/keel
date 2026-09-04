@@ -1,6 +1,7 @@
 package core
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -76,14 +77,76 @@ func TestZREMDropsAnEmptiedKey(t *testing.T) {
 	assert.Contains(t, run(t, "ZREM", "z"), "wrong number of arguments")
 }
 
-func TestZSCOREPrintsTheScoreItHolds(t *testing.T) {
+// TestZSCOREPrintsScoresAsRedisDoes pins the layout to Redis 7.2's d2string
+// and fpconv_dtoa, whose rules the cases below were worked from.
+func TestZSCOREPrintsScoresAsRedisDoes(t *testing.T) {
 	ResetStores()
-	run(t, "ZADD", "z", "0.0000001", "tiny", "inf", "top", "-inf", "bottom", "3479099956230698", "geo", "20.5", "half")
-	assert.Equal(t, "0.0000001", run(t, "ZSCORE", "z", "tiny"), "a fixed number of decimals would print zero")
-	assert.Equal(t, "inf", run(t, "ZSCORE", "z", "top"), "infinities by name, as Redis prints them")
-	assert.Equal(t, "-inf", run(t, "ZSCORE", "z", "bottom"))
-	assert.Equal(t, "3479099956230698", run(t, "ZSCORE", "z", "geo"), "an integral score has no decimals")
-	assert.Equal(t, "20.5", run(t, "ZSCORE", "z", "half"))
+	cases := map[string]string{
+		"20.5":                 "20.5",
+		"1234.5678":            "1234.5678",
+		"0.1":                  "0.1",
+		"-0.5":                 "-0.5",
+		"0.000001":             "0.000001",
+		"0.0000001":            "1e-7",
+		"1e-8":                 "1e-8",
+		"1e100":                "1e+100",
+		"1.5e300":              "1.5e+300",
+		"-1.5e-300":            "-1.5e-300",
+		"0.30000000000000004":  "0.30000000000000004",
+		"3479099956230698":     "3479099956230698",
+		"10000000000000000":    "10000000000000000",
+		"-42":                  "-42",
+		"1e19":                 "1e+19",
+		"12345678901234567890": "12345678901234567000",
+		"inf":                  "inf",
+		"-inf":                 "-inf",
+		"0":                    "0",
+		"-0":                   "-0",
+	}
+	i := 0
+	for score, want := range cases {
+		member := "m" + strconv.Itoa(i)
+		i++
+		run(t, "ZADD", "z", score, member)
+		assert.Equal(t, want, run(t, "ZSCORE", "z", member), "score %s", score)
+	}
+	assert.Equal(t, "1e-7", formatZScore(1e-7))
+	// Variables rather than constants: Go folds 0.1+0.2 exactly to 0.3 at
+	// compile time, and the point is the float64 sum.
+	tenth, fifth := 0.1, 0.2
+	assert.Equal(t, "0.30000000000000004", formatZScore(tenth+fifth))
+}
+
+// packParts builds the body of a set or sorted set dump payload.
+func packParts(parts ...string) []byte {
+	w := &respParts{}
+	for _, p := range parts {
+		w.add(p)
+	}
+	return w.encode()
+}
+
+// TestRestoreLeavesTheOldValueWhenThePayloadIsBad. The restore path decodes
+// the whole payload before it touches the key; before it did, a payload that
+// failed halfway had already deleted what was there.
+func TestRestoreLeavesTheOldValueWhenThePayloadIsBad(t *testing.T) {
+	ResetStores()
+	run(t, "ZADD", "z", "1", "keep")
+	run(t, "SET", "s", "value")
+
+	bad := append([]byte{dumpTagZSet}, packParts("nan", "m")...)
+	assert.Contains(t, run(t, "KEEL.RESTORE", "z", string(bad)), "bad score")
+	assert.Equal(t, "1", run(t, "ZSCORE", "z", "keep"), "the sorted set is as it was")
+
+	assert.Contains(t, run(t, "KEEL.RESTORE", "s", string(bad)), "bad score")
+	assert.Equal(t, "value", run(t, "GET", "s"), "a key of another type is as it was too")
+
+	odd := append([]byte{dumpTagZSet}, packParts("1", "m", "2")...)
+	assert.Contains(t, run(t, "KEEL.RESTORE", "z", string(odd)), "score/member pairs")
+	assert.Equal(t, "1", run(t, "ZSCORE", "z", "keep"))
+
+	assert.Contains(t, run(t, "KEEL.RESTORE", "z", string([]byte{200})), "unknown payload type")
+	assert.Equal(t, "1", run(t, "ZSCORE", "z", "keep"))
 }
 
 // TestNaNIsRefusedEverywhereAScoreCanEnter. NaN parses as a float and compares
