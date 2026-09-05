@@ -8,5 +8,7 @@ COPY bench/ /opt/keel/bench/
 ARG HARNESS_REVISION
 ENV KEEL_HARNESS_REVISION=$HARNESS_REVISION
 ENV PATH="/opt/keel/bin:${PATH}"
+# go version -m is self-contained, but the trimmed Go launcher needs an existing root.
+ENV GOROOT=/opt/keel GOTOOLCHAIN=local
 WORKDIR /opt/keel
 ENTRYPOINT ["python3", "/opt/keel/bench/external/bencher_job.py"]
