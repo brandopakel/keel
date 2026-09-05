@@ -60,28 +60,45 @@ func cmdSET(args []string) []byte {
 			// two different questions at once.
 			return Encode(errSetExpire, false)
 		}
-		// The expiry is stored as an instant, so the duration is bounded by
-		// how far the clock can go: a TTL that would carry the instant past
-		// the largest signed 64-bit value wraps when it is read back, and
-		// a key that never expires is the wrong way to fail.
-		if ttlMs > math.MaxInt64-time.Now().UnixMilli() {
-			return Encode(errSetExpire, false)
-		}
 	default:
 		return Encode(errSyntax, false)
+	}
+
+	// The expiry is stored as an instant, so the duration is bounded by how
+	// far the clock can go: a TTL that would carry the instant past the
+	// largest signed 64-bit value wraps when it is read back, and a key that
+	// never expires is the wrong way to fail. The instant is computed once and
+	// the same one is stored, so the bound checked is the bound kept.
+	var expireAt int64
+	if ttlMs > 0 {
+		var ok bool
+		if expireAt, ok = expiryInstant(ttlMs); !ok {
+			return Encode(errSetExpire, false)
+		}
 	}
 
 	oType, oEnc := deduceTypeString(value)
 	dictStore.Put(key, dictStore.NewObj(value, oType, oEnc))
 	if ttlMs > 0 {
 		// After the Put, which clears whatever expiry the key had before.
-		dictStore.SetExpiry(key, ttlMs)
+		dictStore.SetExpiryAt(key, uint64(expireAt))
 		// The TTL arrived as a duration and has to be logged as an instant, so
 		// the value and its expiry are recorded as two commands.
 		aofRecord("SET", key, value)
 		aofExpireAt(key)
 	}
 	return constant.RespOk
+}
+
+// expiryInstant turns a positive duration in milliseconds into the instant it
+// ends, reading the clock once, and reports false when that instant does not
+// fit in the signed 64 bits it is kept and compared in.
+func expiryInstant(ttlMs int64) (int64, bool) {
+	now := time.Now().UnixMilli()
+	if ttlMs > math.MaxInt64-now {
+		return 0, false
+	}
+	return now + ttlMs, true
 }
 
 func cmdGET(args []string) []byte {
@@ -175,10 +192,14 @@ func cmdEXPIRE(args []string) []byte {
 		aofRecord("DEL", key)
 		return constant.RespOne
 	}
-	if seconds > (math.MaxInt64-time.Now().UnixMilli())/1000 {
+	if seconds > math.MaxInt64/1000 {
 		return Encode(errExpireExpire, false)
 	}
-	dictStore.SetExpiry(key, seconds*1000)
+	expireAt, ok := expiryInstant(seconds * 1000)
+	if !ok {
+		return Encode(errExpireExpire, false)
+	}
+	dictStore.SetExpiryAt(key, uint64(expireAt))
 	aofExpireAt(key)
 	return constant.RespOne
 }
