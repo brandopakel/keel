@@ -50,7 +50,7 @@ func TestEveryRegisteredCommandIsTypeCheckedOrDeliberatelyNot(t *testing.T) {
 		"PING": true, "DEL": true, "EXISTS": true, "TYPE": true, "KEYS": true, "MGET": true,
 		"FLUSHDB": true, "DBSIZE": true, "MEMORY": true, "INFO": true, "BGREWRITEAOF": true,
 		"KEEL.DUMP": true, "KEEL.RESTORE": true, "MEMKV.DUMP": true, "MEMKV.RESTORE": true,
-		"LCS": true, "MORRIS.INFO": true,
+		"TTL": true, "PTTL": true, "EXPIRE": true, "PEXPIRE": true, "EXPIREAT": true, "PEXPIREAT": true, "PERSIST": true, "MORRIS.INFO": true,
 	}
 	for name := range commandTable {
 		if exempt[name] {

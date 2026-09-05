@@ -12,9 +12,10 @@ type Sized interface{ MemUsage() uint64 }
 // stores were bare maps, invisible to both the memory budget and to eviction,
 // so a keyspace full of 12KB sketches could run past maxmemory unchecked.
 type Keyed[T Sized] struct {
-	name    string
-	items   map[string]*keyedEntry[T]
-	memUsed uint64
+	name     string
+	items    map[string]*keyedEntry[T]
+	memUsed  uint64
+	expiries map[string]uint64
 }
 
 type keyedEntry[T Sized] struct {
@@ -27,7 +28,7 @@ type keyedEntry[T Sized] struct {
 }
 
 func NewKeyed[T Sized](name string) *Keyed[T] {
-	return &Keyed[T]{name: name, items: make(map[string]*keyedEntry[T])}
+	return &Keyed[T]{name: name, items: make(map[string]*keyedEntry[T]), expiries: make(map[string]uint64)}
 }
 
 // entryBytes charges the value, the key, and the same per-entry overhead the
@@ -41,6 +42,11 @@ func (k *Keyed[T]) entryBytes(key string, value T) uint64 {
 // Get returns the value at key and records the access.
 func (k *Keyed[T]) Get(key string) (T, bool) {
 	e, ok := k.items[key]
+	if ok && k.expired(key) {
+		k.Delete(key)
+		noteRemoval(k, key)
+		ok = false
+	}
 	if !ok {
 		var zero T
 		return zero, false
@@ -53,7 +59,7 @@ func (k *Keyed[T]) Get(key string) (T, bool) {
 // count as use - reporting on a key is not using it.
 func (k *Keyed[T]) Peek(key string) (T, bool) {
 	e, ok := k.items[key]
-	if !ok {
+	if !ok || k.expired(key) {
 		var zero T
 		return zero, false
 	}
@@ -63,6 +69,11 @@ func (k *Keyed[T]) Peek(key string) (T, bool) {
 // Exists reports whether a key is present, without recording an access.
 func (k *Keyed[T]) Exists(key string) bool {
 	_, ok := k.items[key]
+	if ok && k.expired(key) {
+		k.Delete(key)
+		noteRemoval(k, key)
+		return false
+	}
 	return ok
 }
 
@@ -89,6 +100,7 @@ func (k *Keyed[T]) Put(key string, value T) {
 		k.memUsed -= old.bytes
 	}
 
+	delete(k.expiries, key)
 	e := &keyedEntry[T]{value: value, access: NewAccess()}
 	e.bytes = k.entryBytes(key, value)
 	k.items[key] = e
@@ -111,6 +123,9 @@ func (k *Keyed[T]) Resize(key string) {
 	}
 	k.memUsed -= e.bytes
 	e.bytes = k.entryBytes(key, e.value)
+	if _, ok := k.expiries[key]; ok {
+		e.bytes += expiryOverhead
+	}
 	k.memUsed += e.bytes
 
 	Touch(&e.access)
@@ -159,5 +174,49 @@ func (k *Keyed[T]) Delete(key string) bool {
 	}
 	k.memUsed -= e.bytes
 	delete(k.items, key)
+	delete(k.expiries, key)
 	return true
+}
+
+func (k *Keyed[T]) expired(key string) bool             { at, ok := k.expiries[key]; return ok && at <= nowMs() }
+func (k *Keyed[T]) GetExpiry(key string) (uint64, bool) { at, ok := k.expiries[key]; return at, ok }
+func (k *Keyed[T]) SetExpiryAt(key string, at uint64) {
+	e, ok := k.items[key]
+	if !ok {
+		return
+	}
+	if _, exists := k.expiries[key]; !exists {
+		e.bytes += expiryOverhead
+		k.memUsed += expiryOverhead
+	}
+	k.expiries[key] = at
+	EnforceLimits()
+}
+func (k *Keyed[T]) ClearExpiry(key string) bool {
+	if _, ok := k.expiries[key]; !ok {
+		return false
+	}
+	delete(k.expiries, key)
+	k.items[key].bytes -= expiryOverhead
+	k.memUsed -= expiryOverhead
+	return true
+}
+func (k *Keyed[T]) KeysWithExpiry() int { return len(k.expiries) }
+func (k *Keyed[T]) ActiveExpire(samples int) (examined, expired int) {
+	if samples <= 0 {
+		return
+	}
+	now := nowMs()
+	for key, at := range k.expiries {
+		examined++
+		if at <= now {
+			k.Delete(key)
+			noteRemoval(k, key)
+			expired++
+		}
+		if examined >= samples {
+			break
+		}
+	}
+	return
 }

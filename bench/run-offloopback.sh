@@ -11,23 +11,24 @@
 # Linux only, requires root for the namespace setup.
 set -uo pipefail
 BIN="${BIN:?set BIN}"; OUT="${OUT:-bench/results/offloopback.csv}"
-NS=benchsrv; SRV_IP=10.200.0.2; CLI_IP=10.200.0.1
+NS=keelbench-$$; SRV_IP=10.200.0.2; CLI_IP=10.200.0.1
 
 setup() {
   sudo ip netns del $NS 2>/dev/null || true
-  sudo ip link del veth0 2>/dev/null || true
+  sudo ip link del kb$$ 2>/dev/null || true
   sudo ip netns add $NS
-  sudo ip link add veth0 type veth peer name veth1
-  sudo ip link set veth1 netns $NS
-  sudo ip addr add ${CLI_IP}/24 dev veth0
-  sudo ip link set veth0 up
-  sudo ip netns exec $NS ip addr add ${SRV_IP}/24 dev veth1
-  sudo ip netns exec $NS ip link set veth1 up
+  sudo ip link add kb$$ type veth peer name kp$$
+  sudo ip link set kp$$ netns $NS
+  sudo ip addr add ${CLI_IP}/24 dev kb$$
+  sudo ip link set kb$$ up
+  sudo ip netns exec $NS ip addr add ${SRV_IP}/24 dev kp$$
+  sudo ip netns exec $NS ip link set kp$$ up
   sudo ip netns exec $NS ip link set lo up
-  echo "  veth pair up: client ${CLI_IP} <-> server ${SRV_IP} (MTU $(cat /sys/class/net/veth0/mtu))"
+  echo "  veth pair up: client ${CLI_IP} <-> server ${SRV_IP} (MTU $(cat /sys/class/net/kb$$/mtu))"
 }
-teardown() { sudo ip netns del $NS 2>/dev/null || true; sudo ip link del veth0 2>/dev/null || true; }
+teardown() { for pid in $(sudo ip netns pids "$NS" 2>/dev/null); do sudo kill "$pid" 2>/dev/null || true; done; sudo ip netns del $NS 2>/dev/null || true; sudo ip link del kb$$ 2>/dev/null || true; }
 
+trap teardown EXIT
 MISSING=""
 setup
 echo "server,command,conns,pipeline,datasize,rep,rps,p50_ms" > "$OUT"
@@ -42,6 +43,7 @@ for srv in ${SERVERS:-redis kqueue-nobuf kqueue net net-small net-direct net-cha
   else
     sudo ip netns exec $NS "$BIN" -host $SRV_IP -port $PORT -mode "$srv" >/tmp/ol-$srv.log 2>&1 &
   fi
+  SRV_PID=$!
   ok=no
   for _ in $(seq 1 80); do
     [ "$(redis-cli -h $SRV_IP -p $PORT ping 2>/dev/null)" = "PONG" ] && { ok=yes; break; }
@@ -64,7 +66,8 @@ for srv in ${SERVERS:-redis kqueue-nobuf kqueue net net-small net-direct net-cha
       echo "$srv,$label,$c,$pl,$d,$rep,$rps,$p50" >> "$OUT"
     done
   done
-  sudo pkill -f "$BIN" 2>/dev/null; sudo pkill -f redis-server 2>/dev/null; sleep 1
+  for pid in $(sudo ip netns pids "$NS"); do sudo kill "$pid"; done
+  wait "$SRV_PID" || true
 done
 teardown
 if [ -n "$MISSING" ]; then

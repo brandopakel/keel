@@ -40,6 +40,7 @@ COPY --from=build --chown=65534:65534 /out/data /data
 # their licence asks; there is no package manager here to put them anywhere
 # more conventional than the root.
 COPY --from=build /src/THIRD_PARTY_NOTICES.md /THIRD_PARTY_NOTICES.md
+COPY --from=build /src/LICENSE /LICENSE
 
 # Unprivileged. The number is used rather than a name because scratch has no
 # /etc/passwd to resolve one.

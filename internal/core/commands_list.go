@@ -208,3 +208,31 @@ func cmdLRANGE(args []string) []byte {
 	}
 	return Encode(values, false)
 }
+
+func cmdLTRIM(args []string) []byte {
+	if len(args) != 3 {
+		return Encode(errSyntax, false)
+	}
+	start, e1 := strconv.Atoi(args[1])
+	stop, e2 := strconv.Atoi(args[2])
+	if e1 != nil || e2 != nil {
+		return Encode(errNotAnInteger, false)
+	}
+	l, ok := listFor(args[0])
+	if !ok {
+		return constant.RespOk
+	}
+	values := l.Range(start, stop)
+	if len(values) == 0 {
+		listStore.Delete(args[0])
+		return constant.RespOk
+	}
+	ttl, expires := listStore.GetExpiry(args[0])
+	replacement := data_structure.NewList()
+	replacement.PushBack(values...)
+	listStore.Put(args[0], replacement)
+	if expires {
+		listStore.SetExpiryAt(args[0], ttl)
+	}
+	return constant.RespOk
+}

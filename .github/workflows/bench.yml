@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-        with: { go-version: '1.21' }
+        with: { go-version-file: go.mod }
       - run: sudo apt-get update && sudo apt-get install -y redis-server redis-tools
       - run: go build -o /tmp/keel ./cmd/keel
       - name: environment
@@ -46,7 +46,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-        with: { go-version: '1.21' }
+        with: { go-version-file: go.mod }
       - run: |
           sudo apt-get update
           sudo apt-get install -y redis-server redis-tools lsof
@@ -88,7 +88,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-        with: { go-version: '1.21' }
+        with: { go-version-file: go.mod }
       - run: sudo apt-get update && sudo apt-get install -y redis-server redis-tools iproute2
       - run: go build -o /tmp/keel ./cmd/keel
       - name: run across a veth pair

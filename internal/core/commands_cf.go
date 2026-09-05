@@ -32,6 +32,13 @@ func cmdCFRESERVE(args []string) []byte {
 	if cfStore.Exists(key) {
 		return Encode(errors.New("CF: key already exists"), false)
 	}
+	if capacity > maxStructureBytes/4 {
+		return Encode(errTooLargeForOneKey, false)
+	}
+	cfBytes := data_structure.CuckooBytesFor(capacity)
+	if err := affordable(cfBytes); err != nil {
+		return Encode(err, false)
+	}
 	cfStore.Put(key, data_structure.CreateCuckooFilter(capacity))
 	return constant.RespOk
 }

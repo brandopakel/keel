@@ -12,7 +12,7 @@ import (
 
 // cmdMEMORY implements the MEMORY subcommands.
 //
-// Only USAGE is supported. It reports what the accounting believes one key
+// USAGE reports one key and STATS reports estimated memory by type. It reports what the accounting believes one key
 // costs, which is an estimate - see entryBytes - so it is useful for comparing
 // keys against each other and for understanding why eviction chose what it did.
 func cmdMEMORY(args []string) []byte {
@@ -20,6 +20,13 @@ func cmdMEMORY(args []string) []byte {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'MEMORY' command"), false)
 	}
 	switch strings.ToUpper(args[0]) {
+	case "STATS":
+		if len(args) != 1 {
+			return Encode(errSyntax, false)
+		}
+		out := []interface{}{"keyspace.bytes", int64(data_structure.TotalMemUsed()), "keys.count", int64(data_structure.TotalKeys()), "keys.expires", int64(KeysWithExpiry())}
+		data_structure.EachKeyspace(func(ks data_structure.Keyspace) { out = append(out, ks.KeyspaceName()+".bytes", int64(ks.MemUsed())) })
+		return Encode(out, false)
 	case "USAGE":
 		if len(args) != 2 {
 			return Encode(errors.New("(error) ERR wrong number of arguments for 'MEMORY USAGE' command"), false)
@@ -41,28 +48,10 @@ func cmdMEMORY(args []string) []byte {
 // the command tables resolve in. Looking only in the string dictionary - as
 // this did at first - reported nil for every set, sketch and filter.
 func entryBytesAnywhere(key string) (uint64, bool) {
-	if n, ok := dictStore.EntryBytes(key); ok {
-		return n, true
+	if owner, ok := data_structure.OwnerOf(key); ok {
+		return owner.EntryBytes(key)
 	}
-	if n, ok := zsetStore.EntryBytes(key); ok {
-		return n, true
-	}
-	if n, ok := setStore.EntryBytes(key); ok {
-		return n, true
-	}
-	if n, ok := sbStore.EntryBytes(key); ok {
-		return n, true
-	}
-	if n, ok := cmsStore.EntryBytes(key); ok {
-		return n, true
-	}
-	if n, ok := morrisStore.EntryBytes(key); ok {
-		return n, true
-	}
-	if n, ok := hllStore.EntryBytes(key); ok {
-		return n, true
-	}
-	return cfStore.EntryBytes(key)
+	return 0, false
 }
 
 // humanBytes renders a byte count the way redis-cli's INFO output does.
@@ -107,6 +96,9 @@ func cmdINFO(args []string) []byte {
 	var b strings.Builder
 	want := func(name string) bool { return section == "" || section == name }
 
+	if want("server") {
+		fmt.Fprintf(&b, "# Server\r\nkeel_version:%s\r\nresp_version:2\r\n\r\n", config.BuildVersion())
+	}
 	if want("memory") {
 		used := data_structure.TotalMemUsed()
 		fmt.Fprintf(&b, "# Memory\r\nused_memory:%d\r\nused_memory_human:%s\r\n",
@@ -126,6 +118,15 @@ func cmdINFO(args []string) []byte {
 		}
 		fmt.Fprintf(&b, "# Persistence\r\naof_enabled:%d\r\naof_base_size:%d\r\naof_current_size:%d\r\n",
 			enabled, base, current)
+		active := 0
+		if RewriteActive() {
+			active = 1
+		}
+		status := "ok"
+		if aof.failed != nil {
+			status = "err"
+		}
+		fmt.Fprintf(&b, "aof_rewrite_in_progress:%d\r\naof_last_write_status:%s\r\naof_buffer_length:%d\r\n", active, status, len(aof.buf))
 		fmt.Fprintf(&b, "aof_rewrites:%d\r\naof_keys_at_last_rewrite:%d\r\n\r\n", rewrites, keys)
 	}
 	if want("keyspace") {

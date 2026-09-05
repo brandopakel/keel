@@ -21,8 +21,8 @@ for r in rows:
     try:
         v = float(r["rps"])
     except ValueError:
-        continue
-    if v > 0:
+        sys.exit("invalid throughput row; refusing a partial summary")
+    if v >= 0:
         agg[(r["server"], r["suite"], r["command"], r["conns"], r["pipeline"], r["datasize"])].append(v)
 
 def med(k):
@@ -80,7 +80,7 @@ if cmdkeys:
         cells = []
         for s in servers:
             match = [k for k in cmdkeys if k[0] == s and k[2] == c]
-            cells.append(f"{med(match[0]):,.0f}" if match and med(match[0]) else "—")
+            cells.append(f"{med(match[0]):,.0f}" if match and med(match[0]) is not None else "—")
         print(f"| {c} | " + " | ".join(cells) + " |")
 
 # the headline comparison the issue asks for

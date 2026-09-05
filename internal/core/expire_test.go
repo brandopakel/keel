@@ -87,8 +87,10 @@ func TestExpireCycleCostsNothingWhenNothingExpires(t *testing.T) {
 	perCycle := time.Since(start) / 10000
 	t.Logf("no keys with a TTL: %v per cycle", perCycle)
 	assert.Equal(t, before, data_structure.TotalKeys())
-	assert.Less(t, perCycle, 500*time.Nanosecond,
-		"a keyspace with no expiries must not be walked")
+	if !raceEnabled {
+		assert.Less(t, perCycle, 500*time.Nanosecond,
+			"a keyspace with no expiries must not be walked")
+	} // The race detector instruments the registry reads; timing measures that overhead.
 }
 
 // TestExpireCycleIsBoundedPerTurn. A keyspace where everything has fallen due

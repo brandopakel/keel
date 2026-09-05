@@ -14,7 +14,24 @@ permissions:
   contents: write
 
 jobs:
+  validate:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: stable
+      - run: go test ./...
+      - run: go test -race ./...
+      - run: go vet ./...
+
   binaries:
+    needs: validate
     name: ${{ matrix.goos }}/${{ matrix.goarch }}
     runs-on: ubuntu-latest
     strategy:
@@ -32,7 +49,7 @@ jobs:
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          go-version-file: go.mod
+          go-version: stable
           cache: true
 
       - name: Build
@@ -49,8 +66,9 @@ jobs:
             -o "dist/keel" ./cmd/keel
           # The notices for the code translated from Redis travel with the
           # binary, as their licence asks.
-          cp THIRD_PARTY_NOTICES.md dist/
-          tar -C dist -czf "keel_${version}_${GOOS}_${GOARCH}.tar.gz" keel THIRD_PARTY_NOTICES.md
+          cp LICENSE THIRD_PARTY_NOTICES.md README.md dist/
+          cp -R docs examples dist/
+          tar -C dist -czf "keel_${version}_${GOOS}_${GOARCH}.tar.gz" keel LICENSE THIRD_PARTY_NOTICES.md README.md docs examples
           sha256sum "keel_${version}_${GOOS}_${GOARCH}.tar.gz" \
             > "keel_${version}_${GOOS}_${GOARCH}.tar.gz.sha256"
 
@@ -83,7 +101,7 @@ jobs:
             || gh release create "${GITHUB_REF_NAME}" \
                  --repo "${GITHUB_REPOSITORY}" \
                  --title "${GITHUB_REF_NAME}" \
-                 --generate-notes
+                 --generate-notes --prerelease
 
       - name: Upload
         env:

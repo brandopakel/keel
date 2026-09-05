@@ -117,3 +117,40 @@ func (zs *ZSet) Len() int { return len(zs.dict) }
 func (zs *ZSet) MemUsage() uint64 {
 	return zsetBaseBytes + uint64(len(zs.dict))*zsetMemberOverhead + zs.memberBytes
 }
+
+// RangeByRank returns a bounded window in O(log(n)+returned elements).
+func (zs *ZSet) RangeByRank(start, stop int, reverse bool) ([]string, []float64) {
+	n := zs.Len()
+	if start < 0 {
+		start += n
+	}
+	if stop < 0 {
+		stop += n
+	}
+	if start < 0 {
+		start = 0
+	}
+	if stop >= n {
+		stop = n - 1
+	}
+	if start > stop || start >= n {
+		return nil, nil
+	}
+	rank := start + 1
+	if reverse {
+		rank = n - start
+	}
+	node := zs.sl.nodeAtRank(uint64(rank))
+	members := make([]string, 0, stop-start+1)
+	scores := make([]float64, 0, stop-start+1)
+	for i := start; i <= stop && node != nil; i++ {
+		members = append(members, node.ele)
+		scores = append(scores, node.score)
+		if reverse {
+			node = node.backward
+		} else {
+			node = node.level[0].forward
+		}
+	}
+	return members, scores
+}

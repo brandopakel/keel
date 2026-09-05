@@ -32,7 +32,7 @@ func affordable(bytes uint64) error {
 	if bytes > maxStructureBytes {
 		return errTooLargeForOneKey
 	}
-	if config.MaxMemory > 0 && bytes > config.MaxMemory {
+	if !aof.replaying && config.MaxMemory > 0 && bytes > config.MaxMemory {
 		return errTooLargeForBudget
 	}
 	return nil

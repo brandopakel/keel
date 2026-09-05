@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 
 	"github.com/brandopakel/keel/internal/constant"
@@ -36,6 +37,9 @@ func cmdMORRISINITBYDIM(args []string) []byte {
 	if morrisStore.Exists(key) {
 		return Encode(errors.New("MORRIS: key already exists"), false)
 	}
+	if err := affordable(64 + width*depth); err != nil {
+		return Encode(err, false)
+	}
 	morrisStore.Put(key, data_structure.CreateMorris(uint32(width), uint32(depth)))
 	return constant.RespOk
 }
@@ -49,14 +53,14 @@ func cmdMORRISINITBYPROB(args []string) []byte {
 	if err != nil {
 		return Encode(errors.New(fmt.Sprintf("errRate must be a floating point number %s", args[1])), false)
 	}
-	if errRate >= 1 || errRate <= 0 {
+	if math.IsNaN(errRate) || errRate >= 1 || errRate <= 0 {
 		return Encode(errors.New("MORRIS: invalid overestimation value"), false)
 	}
 	probability, err := strconv.ParseFloat(args[2], 64)
 	if err != nil {
 		return Encode(errors.New(fmt.Sprintf("probability must be a floating point number %s", args[2])), false)
 	}
-	if probability >= 1 || probability <= 0 {
+	if math.IsNaN(probability) || probability >= 1 || probability <= 0 {
 		return Encode(errors.New("MORRIS: invalid prob value"), false)
 	}
 	if morrisStore.Exists(key) {
@@ -67,6 +71,12 @@ func cmdMORRISINITBYPROB(args []string) []byte {
 	// their own on top, which no table dimension can reduce - MORRIS.INFO
 	// reports it so the two are not confused for each other.
 	w, d := data_structure.CalcMorrisDim(errRate, probability)
+	if w == 0 || d == 0 {
+		return Encode(errTooLargeForOneKey, false)
+	}
+	if err := affordable(64 + uint64(w)*uint64(d)); err != nil {
+		return Encode(err, false)
+	}
 	morrisStore.Put(key, data_structure.CreateMorris(w, d))
 	return constant.RespOk
 }
@@ -81,14 +91,17 @@ func cmdMORRISINCRBY(args []string) []byte {
 		return Encode(errors.New("MORRIS: key does not exist"), false)
 	}
 
-	var res []string
-	for i := 1; i < len(args); i += 2 {
-		item := args[i]
-		value, err := strconv.ParseUint(args[i+1], 10, 64)
+	increments := make([]uint64, 0, len(args)/2)
+	for i := 2; i < len(args); i += 2 {
+		value, err := strconv.ParseUint(args[i], 10, 64)
 		if err != nil {
-			return Encode(errors.New(fmt.Sprintf("increment must be a non negative integer number %s", args[i+1])), false)
+			return Encode(errors.New("ERR increment must be a non negative integer"), false)
 		}
-		res = append(res, fmt.Sprintf("%d", m.IncrBy(item, value)))
+		increments = append(increments, value)
+	}
+	var res []string
+	for i, value := range increments {
+		res = append(res, strconv.FormatUint(m.IncrBy(args[1+2*i], value), 10))
 	}
 	// The table is a fixed size, so unlike a set or a sorted set this cannot
 	// change what the key costs - and Resize is deliberately not called, since

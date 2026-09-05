@@ -161,6 +161,7 @@ func (c *CuckooFilter) Insert(item string) bool {
 	// Both candidates are full, so make room by evicting. Each step displaces
 	// one fingerprint and tries to rehome it in its own alternate bucket, which
 	// may in turn displace another.
+	savedRNG := c.rngState
 	i := i1
 	if c.nextRand()&1 == 1 {
 		i = i2
@@ -194,6 +195,7 @@ func (c *CuckooFilter) Insert(item string) bool {
 		idx := chain[k].bucket*CuckooBucketSize + chain[k].slot
 		fp, c.buckets[idx] = c.buckets[idx], fp
 	}
+	c.rngState = savedRNG
 	return false
 }
 
@@ -262,3 +264,12 @@ func (c *CuckooFilter) Deleted() uint64    { return c.deleted }
 func (c *CuckooFilter) Capacity() uint64   { return c.capacity }
 func (c *CuckooFilter) NumBuckets() uint64 { return c.numBuckets }
 func (c *CuckooFilter) MemUsage() uint64   { return uint64(len(c.buckets)) * 2 }
+
+// CuckooBytesFor checks sizing before a client-controlled allocation.
+func CuckooBytesFor(capacity uint64) uint64 {
+	if capacity > MaxStructureBytes/4 {
+		return ^uint64(0)
+	}
+	needed := uint64(float64(capacity)/(CuckooBucketSize*cuckooLoadFactor)) + 1
+	return nextPowerOfTwo(needed) * CuckooBucketSize * 2
+}

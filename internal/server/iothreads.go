@@ -1,12 +1,14 @@
 package server
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"sync"
+	"syscall"
+	"time"
 
 	"github.com/brandopakel/keel/internal/config"
-	"github.com/brandopakel/keel/internal/core"
 )
 
 // Threaded socket I/O, in the style of Redis's io-threads.
@@ -134,11 +136,32 @@ func (p *ioPool) stop() {
 
 func (p *ioPool) serve(c *client, write bool, scratch []byte) {
 	if write {
-		if _, err := (core.FDComm{Fd: c.fd}).Write(c.out); err != nil {
-			log.Println("failed to send reply batch:", err)
+		c.err = nil
+		if len(c.out) > maxOutputBuffer {
+			c.err = fmt.Errorf("output buffer limit exceeded")
+			return
+		}
+		part := c.out
+		if len(c.frames) > 0 {
+			part = part[:c.frames[0]]
+		}
+		n, err := syscall.Write(c.fd, part)
+		if n > 0 {
+			c.out = c.out[n:]
+			if len(c.frames) > 0 {
+				c.frames[0] -= n
+				if c.frames[0] == 0 {
+					c.frames = c.frames[1:]
+				}
+			}
+			c.lastProgress = time.Now()
+		}
+		if err != nil && err != syscall.EAGAIN && err != syscall.EINTR {
+			c.err = err
 		}
 		return
 	}
+
 	c.cmds, c.err = c.readCommands(scratch)
 }
 

@@ -1,12 +1,15 @@
 package core
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/brandopakel/keel/internal/config"
@@ -79,8 +82,12 @@ type aofState struct {
 	extra [][]string
 	// replaying suppresses recording, so loading a log does not write it back
 	// into itself.
+	recovered []string
 	replaying bool
 	lastSync  time.Time
+	dirty     bool
+	failed    error
+	skip      bool
 
 	// baseSize is the file's size after the last rewrite, and written what has
 	// been appended since. Their ratio is what the automatic rewrite triggers
@@ -104,9 +111,9 @@ var aof aofState
 // An explicit list is the one that can be read against eval.go and checked.
 var writeCommands = map[string]bool{
 	"SET": true, "MSET": true, "DEL": true, "FLUSHDB": true,
-	"EXPIRE": true, "PEXPIREAT": true, "INCR": true,
+	"EXPIRE": true, "PEXPIREAT": true, "PEXPIRE": true, "EXPIREAT": true, "PERSIST": true, "INCR": true, "INCRBY": true, "DECR": true, "DECRBY": true,
 	"HSET": true, "HSETNX": true, "HDEL": true, "HINCRBY": true,
-	"LPUSH": true, "RPUSH": true, "LPOP": true, "RPOP": true, "LSET": true,
+	"LPUSH": true, "RPUSH": true, "LPOP": true, "RPOP": true, "LTRIM": true, "LSET": true,
 	"SADD": true, "SREM": true, "SPOP": true,
 	"ZADD": true, "ZREM": true,
 	"GEOADD":     true,
@@ -142,13 +149,21 @@ func OpenAOF(path string) error {
 	if err != nil {
 		return err
 	}
+	if err := syncDir(filepath.Dir(path)); err != nil {
+		f.Close()
+		return err
+	}
+
 	aof.file = f
 	aof.path = path
 	aof.lastSync = time.Now()
+	aof.dirty = false
+	aof.failed = nil
 	// Counters describe this open file, not whatever the last one did, so they
 	// start again with it. Carrying them over would make a fresh log report
 	// rewrites it has never had.
 	aof.rewrites = 0
+	nextAutoRewrite = time.Time{}
 	aof.lastKeys = 0
 	// Whatever is already on disk is the base the growth trigger measures
 	// against, so a server restarted onto an existing log does not immediately
@@ -157,6 +172,10 @@ func OpenAOF(path string) error {
 		aof.baseSize = info.Size()
 	}
 	aof.written = 0
+	for _, key := range aof.recovered {
+		aof.buf = appendCommand(aof.buf, "DEL", key)
+	}
+	aof.recovered = nil
 	data_structure.OnRemove = func(keyspace, key string) {
 		if aof.file == nil || aof.replaying {
 			return
@@ -202,6 +221,7 @@ func aofRecord(parts ...string) {
 
 // aofBegin resets the staging areas before a command runs.
 func aofBegin() {
+	aof.skip = false
 	aof.staged = aof.staged[:0]
 	aof.extra = aof.extra[:0]
 }
@@ -225,6 +245,7 @@ func aofCommit(cmd *Command, reply []byte) {
 	}
 
 	switch {
+	case aof.skip:
 	case len(aof.staged) > 0:
 		// Staged because the command as it arrived would not replay to the
 		// same state, so the replacement is what goes in the log.
@@ -298,31 +319,41 @@ func FlushAOF() error {
 	return nil
 }
 
+// aofSync is injectable so tests can exercise disk failures without relying on hardware.
+var aofSync = func(f *os.File) error { return f.Sync() }
+
 func flushAOF(closing bool) error {
-	if aof.file == nil || (len(aof.buf) == 0 && !closing) {
+	if aof.file == nil {
 		return nil
+	}
+	if aof.failed != nil {
+		return aof.failed
 	}
 	if len(aof.buf) > 0 {
 		n, err := aof.file.Write(aof.buf)
 		aof.written += int64(n)
+		if n > 0 {
+			aof.dirty = true
+		}
+		if err == nil && n != len(aof.buf) {
+			err = io.ErrShortWrite
+		}
 		if err != nil {
+			aof.buf = aof.buf[n:]
+			aof.failed = err
 			return err
 		}
 		aof.buf = aof.buf[:0]
 	}
-
-	switch config.AOFFsync {
-	case config.FsyncAlways:
-		return aof.file.Sync()
-	case config.FsyncEverySec:
-		if closing || time.Since(aof.lastSync) >= time.Second {
-			aof.lastSync = time.Now()
-			return aof.file.Sync()
+	syncDue := closing || config.AOFFsync == config.FsyncAlways ||
+		(config.AOFFsync == config.FsyncEverySec && time.Since(aof.lastSync) >= time.Second)
+	if aof.dirty && syncDue {
+		if err := aofSync(aof.file); err != nil {
+			aof.failed = err
+			return err
 		}
-	case config.FsyncNever:
-		if closing {
-			return aof.file.Sync()
-		}
+		aof.lastSync = time.Now()
+		aof.dirty = false
 	}
 	return nil
 }
@@ -336,45 +367,157 @@ func flushAOF(closing bool) error {
 // good. Anything malformed earlier in the file is a real error and is reported
 // as one.
 func LoadAOF(path string) (int, error) {
-	data, err := os.ReadFile(path)
+	aof.recovered = nil
+	f, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return 0, nil
 	}
 	if err != nil {
 		return 0, err
 	}
-
+	defer f.Close()
 	aof.replaying = true
-	// Eviction is the log's business, not the replay's: every key the original
-	// run evicted is in here as a DEL, and a replay that also evicted would
-	// drop those keys twice over and a different set besides. The bound is
-	// applied once at the end instead, so a log written under a larger limit
-	// than the one configured now still ends up inside it.
 	data_structure.SuspendEviction = true
+	data_structure.SuspendExpiry = true
 	defer func() {
+		priorRemovalHook := data_structure.OnRemove
+		data_structure.OnRemove = func(_, key string) { aof.recovered = append(aof.recovered, key) }
+		defer func() { data_structure.OnRemove = priorRemovalHook }()
+		data_structure.SuspendExpiry = false
+		data_structure.EachKeyspace(func(ks data_structure.Keyspace) { ks.ActiveExpire(ks.KeysWithExpiry()) })
 		aof.replaying = false
 		data_structure.SuspendEviction = false
 		data_structure.EnforceLimits()
 	}()
-
-	var sink discardWriter
-	applied, used := 0, 0
-	for used < len(data) {
-		cmd, consumed, perr := ParseCmd(data[used:])
-		if errors.Is(perr, ErrIncompleteFrame) {
-			return applied, fmt.Errorf("truncated command %d bytes into %s, %d commands loaded: %w",
-				used, path, applied, errTruncatedAOF)
+	reader := bufio.NewReaderSize(f, 64*1024)
+	applied, used := 0, int64(0)
+	for {
+		cmd, n, err := readAOFCommand(reader)
+		if err == io.EOF && n == 0 {
+			return applied, nil
 		}
-		if perr != nil {
-			return applied, fmt.Errorf("malformed command %d bytes into %s: %w", used, path, perr)
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			return applied, &truncatedAOF{path, used}
 		}
+		if err != nil {
+			return applied, fmt.Errorf("malformed command at byte %d: %w", used, err)
+		}
+		sink := &replayWriter{}
 		if err := EvalAndResponse(cmd, sink); err != nil {
 			return applied, fmt.Errorf("replaying %s at byte %d: %w", cmd.Cmd, used, err)
 		}
-		used += consumed
+		if sink.err != nil {
+			return applied, fmt.Errorf("replaying %s at byte %d: %w", cmd.Cmd, used, sink.err)
+		}
 		applied++
+		used += n
 	}
-	return applied, nil
+}
+
+// Read one canonical AOF frame; memory is proportional to one command, not the log.
+func readAOFCommand(r *bufio.Reader) (*Command, int64, error) {
+	var consumed int64
+	length := func(prefix byte) (int64, error) {
+		line, err := r.ReadSlice('\n')
+		consumed += int64(len(line))
+		if err != nil {
+			return 0, err
+		}
+		if len(line) < 4 || line[0] != prefix || line[len(line)-2] != '\r' {
+			return 0, ErrProtocol
+		}
+		n, ok := parseDecimal(line[1 : len(line)-2])
+		if !ok || n < 0 {
+			return 0, ErrProtocol
+		}
+		return n, nil
+	}
+	count, err := length('*')
+	if err != nil {
+		return nil, consumed, err
+	}
+	if count == 0 || count > maxMultiBulkLength {
+		return nil, consumed, ErrProtocol
+	}
+	parts := make([]string, 0, min(int(count), 16))
+	for i := int64(0); i < count; i++ {
+		size, err := length('$')
+		if err != nil {
+			return nil, consumed, err
+		}
+		if size > maxBulkLength {
+			return nil, consumed, ErrProtocol
+		}
+		b := make([]byte, size+2)
+		n, err := io.ReadFull(r, b)
+		consumed += int64(n)
+		if err != nil {
+			return nil, consumed, err
+		}
+		if b[size] != '\r' || b[size+1] != '\n' {
+			return nil, consumed, ErrProtocol
+		}
+		parts = append(parts, string(b[:size]))
+	}
+	return &Command{Cmd: strings.ToUpper(parts[0]), Args: parts[1:]}, consumed, nil
+}
+
+type replayWriter struct{ err error }
+
+func (w *replayWriter) Read([]byte) (int, error) { return 0, io.EOF }
+func (w *replayWriter) Write(p []byte) (int, error) {
+	if len(p) > 0 && p[0] == '-' {
+		w.err = errors.New(strings.TrimSpace(string(p)))
+	}
+	return len(p), nil
+}
+
+type truncatedAOF struct {
+	path   string
+	offset int64
+}
+
+func (e *truncatedAOF) Error() string {
+	return fmt.Sprintf("truncated final command in %s at byte %d", e.path, e.offset)
+}
+func (e *truncatedAOF) Unwrap() error { return errTruncatedAOF }
+
+// RepairAOFTail preserves the torn suffix before truncating to the last complete command.
+func RepairAOFTail(cause error) error {
+	var tail *truncatedAOF
+	if !errors.As(cause, &tail) {
+		return cause
+	}
+	f, err := os.OpenFile(tail.path, os.O_RDWR, 0)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	backup, err := os.CreateTemp(filepath.Dir(tail.path), ".keel-torn-tail-*")
+	if err != nil {
+		return err
+	}
+	_, err = f.Seek(tail.offset, io.SeekStart)
+	if err == nil {
+		_, err = io.Copy(backup, f)
+	}
+	if err == nil {
+		err = backup.Sync()
+	}
+	closeErr := backup.Close()
+	if err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	if err := syncDir(filepath.Dir(tail.path)); err != nil {
+		return err
+	}
+	if err := f.Truncate(tail.offset); err != nil {
+		return err
+	}
+	return f.Sync()
 }
 
 // errTruncatedAOF marks the one failure that is not a failure: a log whose last
@@ -398,7 +541,11 @@ func aofExpireAt(key string) {
 	if aof.file == nil || aof.replaying {
 		return
 	}
-	at, has := dictStore.ExpiryOf(key)
+	owner, ok := data_structure.OwnerOf(key)
+	if !ok {
+		return
+	}
+	at, has := owner.GetExpiry(key)
 	if !has {
 		return
 	}

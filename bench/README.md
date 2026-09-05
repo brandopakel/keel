@@ -1,3 +1,13 @@
+> Historical results below predate the reliability changes. Re-run against the
+> exact candidate binary before using a performance claim. The corrected
+> `run-memory.py` holds all counted clients open during RSS sampling, verifies the
+> listener PID, reports baseline RSS and repetitions, and records binary metadata.
+> `rss_delta_kb_per_conn` includes all RSS growth; it is not a goroutine-only cost.
+> Local matrix/memtier/I/O-thread/hyperfine scripts now own their child processes
+> and fail on missing results. Off-loopback measurements still require Linux.
+>
+> Example: `BIN=/path/to/keel REPS=3 bash bench/run-memory.sh`
+
 # keel benchmarks
 
 Working notes for the upstream discussion in

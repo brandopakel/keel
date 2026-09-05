@@ -40,8 +40,13 @@ func CreateCMS(width, depth uint32) *CMS {
 // CalcCMSDim is the width and depth that keep every estimate within errRate
 // of the total count with probability 1 - errProb.
 func CalcCMSDim(errRate float64, errProb float64) (width, depth uint32) {
-	width = uint32(math.Ceil(2.0 / errRate))
-	depth = uint32(math.Ceil(math.Log2(1.0 / errProb)))
+	w := math.Ceil(2.0 / errRate)
+	d := math.Ceil(math.Log2(1.0 / errProb))
+	if math.IsNaN(w) || math.IsNaN(d) || w < 1 || d < 1 || w > math.MaxUint32 || d > math.MaxUint32 {
+		return 0, 0
+	}
+	width = uint32(w)
+	depth = uint32(d)
 	return width, depth
 }
 

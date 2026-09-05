@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"github.com/brandopakel/keel/internal/data_structure"
 	"io"
 )
 
@@ -16,12 +17,13 @@ var commandTable = map[string]func([]string) []byte{
 	"PING": cmdPING,
 
 	// Strings
-	"SET": cmdSET, "GET": cmdGET, "INCR": cmdINCR, "MGET": cmdMGET, "MSET": cmdMSET,
+	"SET": cmdSET, "GET": cmdGET, "INCR": cmdINCR, "INCRBY": cmdINCRBY, "DECR": cmdDECR, "DECRBY": cmdDECRBY, "MGET": cmdMGET, "MSET": cmdMSET,
 	"LCS": cmdLCS,
 
 	// Keys and expiry
 	"DEL": cmdDEL, "EXISTS": cmdEXISTS, "TYPE": cmdTYPE, "KEYS": cmdKEYS,
 	"TTL": cmdTTL, "PTTL": cmdPTTL, "EXPIRE": cmdEXPIRE, "PEXPIREAT": cmdPEXPIREAT,
+	"PEXPIRE": cmdPEXPIRE, "EXPIREAT": cmdEXPIREAT, "PERSIST": cmdPERSIST,
 
 	// Server
 	"DBSIZE": cmdDBSIZE, "FLUSHDB": cmdFLUSHDB, "MEMORY": cmdMEMORY, "INFO": cmdINFO,
@@ -38,7 +40,7 @@ var commandTable = map[string]func([]string) []byte{
 
 	// Lists
 	"LPUSH": cmdLPUSH, "RPUSH": cmdRPUSH, "LPOP": cmdLPOP, "RPOP": cmdRPOP,
-	"LLEN": cmdLLEN, "LINDEX": cmdLINDEX, "LSET": cmdLSET, "LRANGE": cmdLRANGE,
+	"LTRIM": cmdLTRIM, "LLEN": cmdLLEN, "LINDEX": cmdLINDEX, "LSET": cmdLSET, "LRANGE": cmdLRANGE,
 
 	// Sets
 	"SADD": cmdSADD, "SREM": cmdSREM, "SCARD": cmdSCARD, "SMEMBERS": cmdSMEMBERS,
@@ -48,7 +50,7 @@ var commandTable = map[string]func([]string) []byte{
 	"SRAND": cmdSRANDMEMBER,
 
 	// Sorted sets, and the geospatial index built on them
-	"ZADD": cmdZADD, "ZRANK": cmdZRANK, "ZREM": cmdZREM, "ZSCORE": cmdZSCORE, "ZCARD": cmdZCARD,
+	"ZRANGE": cmdZRANGE, "ZADD": cmdZADD, "ZRANK": cmdZRANK, "ZREM": cmdZREM, "ZSCORE": cmdZSCORE, "ZCARD": cmdZCARD,
 	"GEOADD": cmdGEOADD, "GEODIST": cmdGEODIST, "GEOHASH": cmdGEOHASH,
 	"GEOSEARCH": cmdGEOSEARCH, "GEOPOS": cmdGEOPOS,
 
@@ -107,7 +109,14 @@ func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 		aofCommit(cmd, nil)
 		return fmt.Errorf("ERR unknown command '%s'", cmd.Cmd)
 	}
+	suspended := data_structure.SuspendEviction
+	data_structure.SuspendEviction = true
 	res := handler(cmd.Args)
+	// With eviction suspended, removals so far are lazy expiry. They precede
+	// this command: recording them after INCR/HSET would delete the recreated key.
+	aofCommitExtras()
+	data_structure.SuspendEviction = suspended
+	data_structure.EnforceLimits()
 
 	// Recorded before the reply is written. FlushAOF runs between execution and
 	// the write phase, so under appendfsync always the client hears "OK" only
