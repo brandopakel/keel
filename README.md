@@ -104,7 +104,7 @@ without progress for 30 seconds is closed (checked approximately once a second).
 also share a 256 MiB limit; excess clients are closed. These are resource limits, not an RSS guarantee;
 a reply can allocate before the output limit is checked.
 
-Rewrites advance in slices of at most 2048 keys, targeting 1 MiB or 2 ms between
+Rewrites advance in slices of at most 2048 keys, targeting 1 MiB or 1 ms between
 keys. Dirty keys are also processed in slices. A rewrite is abandoned if it exceeds
 30 seconds or 100,000 dirty keys; the original log remains authoritative. Snapshot
 creation refuses more than one million keys. Snapshot enumeration, individual large

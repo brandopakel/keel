@@ -2,7 +2,7 @@
 # Build reviewable candidate archives. This script does not tag or publish.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-version=${1:-v0.1.0-alpha.1-dev}
+version=${1:-v0.1.0-alpha.2-dev}
 case "$version" in *[!a-zA-Z0-9.+-]*|'') echo 'invalid version' >&2; exit 1;; esac
 mkdir -p dist
 for os in linux darwin; do

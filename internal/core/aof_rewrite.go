@@ -45,7 +45,7 @@ import (
 // what it costs is one pass over the keys written during the rewrite rather
 // than a copy of the keyspace.
 //
-// Slices stop between keys after 2048 keys, 1 MiB or 2 ms. Dirty-key
+// Slices stop between keys after 2048 keys, 1 MiB or 1 ms. Dirty-key
 // reconciliation uses the same budgets. Snapshot enumeration, a single key,
 // filesystem writes and the final sync can exceed the time target. Admission
 // and duration limits prevent an unbounded snapshot or endlessly growing walk.
@@ -133,7 +133,7 @@ func AdvanceRewrite() error {
 		abortRewrite(fmt.Errorf("rewrite exceeded duration or dirty-key budget"))
 		return nil // the original log continues to contain every write
 	}
-	deadline := time.Now().Add(2 * time.Millisecond)
+	deadline := time.Now().Add(time.Millisecond)
 	var body []byte
 	count := 0
 	for rewrite.pos < len(rewrite.keys) && count < rewriteChunk {
