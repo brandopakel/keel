@@ -18,14 +18,16 @@ Two optional experiments are added:
   data loss on primary failure, not automatic failover or a zero-loss protocol.
 
 Archives include runnable Bencher, k6 and AWS DLT adapters. Their local/native CI
-smokes validate integration; paid provider runs and real application pilots remain
-pending account/target setup. Existing latency smoke results establish no speedup.
+smokes validate integration, and matched GitHub measurements are published to the
+Keel Bencher project. Paid provider execution and real application pilots remain
+pending host/workload setup. Matched results establish no worker-append speedup.
 See [replication-alpha.md](replication-alpha.md) and the README for exact limits.
 
 The [candidate validation record](pr15-validation-2026-09-05.md) tracks the Linux
 race-job correction, benchmark review, native checks and archive verification.
 The [release closeout](alpha3-closeout.md) adds native archive installation,
-alpha.2 upgrade/rollback gates, matched benchmarks and operational fault/soak tests.
+24 alpha.2 upgrade/rollback cases across all four native targets, matched benchmarks
+and a 15-minute operational soak with crash recovery and disk-full tests.
 Tag-built artifacts require their own checksum verification before publication.
 
 ---

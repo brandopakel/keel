@@ -1,9 +1,19 @@
 # Alpha.3 release closeout and further validation
 
-The owner authorized review closure, upgrade checks, merge/publication and further
-benchmark/operational evidence on September 5, 2026. The earlier
+Release validation on September 5, 2026 covers upgrade/rollback, native installation,
+matched benchmarks and bounded operational failures. The earlier
 [candidate record](pr15-validation-2026-09-05.md) identifies the original validation
-and its limitations. This follow-up adds repeatable release gates.
+and its limitations. This follow-up adds repeatable release gates and their results.
+
+## Review and source provenance
+
+All 17 PR #15 review threads were assessed and resolved against fixes or the
+documented alpha contracts. CodeRabbit's latest green status says **Review rate
+limited**; it does not represent a fresh automated review of the closeout scripts.
+Those scripts and workflow changes were manually inspected and exercised below.
+The expanded validation ran at `764a43ff475b8b22b032c9d5c230cbff4f666230`;
+subsequent closeout commits change documentation and evidence only. Tag publication
+repeats tests, builds and native installation against the final tagged revision.
 
 ## Upgrade and rollback
 
@@ -24,6 +34,12 @@ verifies both archives, executes their binaries natively, runs these six upgrade
 cases and the documented Python client against the installed candidate. Targets:
 Linux amd64/ARM64 and macOS Intel/ARM64. Runner labels follow the
 [GitHub runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+
+The [release rehearsal](https://github.com/brandopakel/keel/actions/runs/33992676418)
+passed all four native targets, **24 upgrade/restart/backup-rollback cases**, and
+four documented client installations. Linux and macOS full tests, race tests and
+vet also passed. [Machine-readable closeout evidence](alpha3-closeout-evidence.json)
+retains native platforms and backup hashes. Publication was skipped for this run.
 
 For an application rollout, stop/fence the previous writer before copying its AOF.
 Retain the previous executable, configuration and a checksum-verified backup outside
@@ -59,6 +75,31 @@ RSS samples are in KiB. GC tracing and 0.5-second process sampling are enabled f
 all arms. This controls toolchain, workload, placement and order without establishing
 performance on dedicated separate-host hardware or an application deployment.
 
+The [completed matched run](https://github.com/brandopakel/keel/actions/runs/33992676513)
+contains **45 runs, 4,176,594 attempts, zero request errors and zero dropped probes**
+on Linux amd64/ext4. Both source revisions used Go 1.27.1. The
+[summary and raw-file hashes](../bench/results/alpha3-paired-summary.json) retain
+all 90 load/probe measurements, RSS peaks and GC pause summaries. Median load
+throughput across five repetitions is:
+
+| AOF policy | Alpha.2 sync (ops/s) | Candidate sync (ops/s) | Candidate worker (ops/s) |
+| --- | ---: | ---: | ---: |
+| off (AOF disabled) | 6,901 | 6,853 | 6,882 |
+| everysec | 6,867 | 6,741 | 6,334 |
+| always | 4,821 | 4,785 | 4,607 |
+
+The median of within-repetition worker/sync throughput ratios is 0.940 for
+`everysec` and 0.964 for `always`. Probe tails vary, including between identical
+AOF-disabled configurations. These results establish no worker-append speedup;
+the option remains experimental and disabled by default.
+
+The existing [Keel Bencher project](https://bencher.dev/perf/keel) now contains
+separate alpha.2 and candidate reports, with their exact source hashes and 540
+exported measurements. Report IDs and the shared GitHub runner testbed are retained
+in the closeout evidence. The reports import the above GitHub measurements;
+they do not represent execution on a Bencher/KVM runner. Publishing uses a local
+credential store, with no project credential in the repository or GitHub secrets.
+
 Large-list setup now batches RPUSH requests in groups of 256. Setup failures retain
 an explicit failure row. The CSV `error` column remains error text, with only an empty
 string meaning success; it is not a boolean flag.
@@ -77,6 +118,14 @@ also exhausts an isolated 16 MiB tmpfs to test real ENOSPC, refuses success repl
 then verifies previously acknowledged data through two restarts. Separate repeated
 race tests cover injected sync errors and descriptor/reply barriers.
 
+The [completed Linux job](https://github.com/brandopakel/keel/actions/runs/33992676513)
+verified **315,676 acknowledged writes**, 29 rewrite checkpoints, four primary
+crash recoveries, ten replica crash recoveries and a clean manual promotion over
+901.6 seconds. Both append modes passed file-size-limit and real ENOSPC tests,
+including recovery through two restarts. The separate race fault suite passed
+20 repetitions. The normal persistence filesystem was ext4; ENOSPC used a private
+16 MiB tmpfs. Local APFS upgrade and shorter operational checks also passed.
+
 ```sh
 python3 scripts/soak.py --bin /path/to/keel --seconds 900 --out /path/to/new/evidence
 ```
@@ -94,11 +143,11 @@ compatibility and loss/recovery acceptance criteria. No real application pilot o
 outside outreach is implied by synthetic integration tests. Use [pilot-plan.md](pilot-plan.md)
 for the intake and matched application comparison.
 
-Bencher/KVM, AWS and Grafana execution require the chosen existing account/host,
-target, credentials through their normal secret store and a spending limit. The
-portable adapters and provider packages are available; no account is provisioned
-or spend incurred by these local/GitHub checks. Separate-host/deployment testing
-will use the same evidence rules once those inputs are available.
+Bencher report ingestion is connected. Bencher/KVM execution, AWS and Grafana
+execution still require chosen hosts/targets and a spending limit; AWS and Grafana
+also need account access. The portable adapters and provider packages are available.
+No paid benchmark host has been provisioned. Separate-host/deployment testing will
+use the same evidence rules once those inputs are available.
 
 Automatic failover, stronger acknowledgement protocols, concurrent execution during
 appends, embedding and partitioning remain explicitly deferred engineering scope.

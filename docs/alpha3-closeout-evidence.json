@@ -1,0 +1,256 @@
+{
+  "validated_revision": "764a43ff475b8b22b032c9d5c230cbff4f666230",
+  "release_rehearsal_url": "https://github.com/brandopakel/keel/actions/runs/33992676418",
+  "benchmark_operational_url": "https://github.com/brandopakel/keel/actions/runs/33992676513",
+  "native": [
+    {
+      "artifact": "native-evidence-linux-amd64",
+      "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+      "baseline_version": "keel v0.1.0-alpha.2 (3596d92d192d)",
+      "candidate_version": "keel 764a43f (764a43ff475b)",
+      "cases": [
+        {
+          "name": "no-worker-False",
+          "passed": true,
+          "backup_sha256": "4ceb789e60004a7f400ce89521fd3d8d73fb9e6e2b0b95d41994defbb6d19c4d"
+        },
+        {
+          "name": "no-worker-True",
+          "passed": true,
+          "backup_sha256": "4e911d4456555140024e787d257187743dc8b98965b9b2aebaed7ce1798b9838"
+        },
+        {
+          "name": "everysec-worker-False",
+          "passed": true,
+          "backup_sha256": "4405986f116b62fd1ee01eb56ca17c4db8320ba8b2b163c7bca195a5c7462baf"
+        },
+        {
+          "name": "everysec-worker-True",
+          "passed": true,
+          "backup_sha256": "a45175d9a55162941916433b3e292c39aa881bfcaa389dc468eb458c9b3ee3c8"
+        },
+        {
+          "name": "always-worker-False",
+          "passed": true,
+          "backup_sha256": "a0547f3460fda64e3421d48337570683fafbe56148160279ac000c4b5ed81b26"
+        },
+        {
+          "name": "always-worker-True",
+          "passed": true,
+          "backup_sha256": "db9b960ce2f84343c8eb2469d087d99d5e08688e85adc9ace4d924e11be14e1c"
+        }
+      ]
+    },
+    {
+      "artifact": "native-evidence-darwin-arm64",
+      "platform": "macOS-15.7.9-arm64-arm-64bit-Mach-O",
+      "baseline_version": "keel v0.1.0-alpha.2 (3596d92d192d)",
+      "candidate_version": "keel 764a43f (764a43ff475b)",
+      "cases": [
+        {
+          "name": "no-worker-False",
+          "passed": true,
+          "backup_sha256": "9362544fc24fe63945b1fe808d919c48bebd614f21f0d978f74bb3245740ef1d"
+        },
+        {
+          "name": "no-worker-True",
+          "passed": true,
+          "backup_sha256": "9981b169932b5c02c24add3c2a565fd6460c11794c8fe2628b66b15d6f3760c7"
+        },
+        {
+          "name": "everysec-worker-False",
+          "passed": true,
+          "backup_sha256": "bc9b0270949cf905a415b282c99868bb9c17d4f4fbc37521a620f18ce7db6058"
+        },
+        {
+          "name": "everysec-worker-True",
+          "passed": true,
+          "backup_sha256": "73e1d5a2942f88576c818f823d5d01a10adfc57999229ec911f4d4273dfdc257"
+        },
+        {
+          "name": "always-worker-False",
+          "passed": true,
+          "backup_sha256": "63e488881f16d324473a1ebc72be461aa7cf31dfe8fc104533774da2410193c1"
+        },
+        {
+          "name": "always-worker-True",
+          "passed": true,
+          "backup_sha256": "2544e9007e7974395101167d69d613aa822e9eb18e26793e111d7afd29ebc36b"
+        }
+      ]
+    },
+    {
+      "artifact": "native-evidence-linux-arm64",
+      "platform": "Linux-6.17.0-1022-azure-aarch64-with-glibc2.39",
+      "baseline_version": "keel v0.1.0-alpha.2 (3596d92d192d)",
+      "candidate_version": "keel 764a43f (764a43ff475b)",
+      "cases": [
+        {
+          "name": "no-worker-False",
+          "passed": true,
+          "backup_sha256": "4bdd6626a13bc7d1c16c2f10a32e63cfc76fad5d63dba4e69c09907e6026ee2c"
+        },
+        {
+          "name": "no-worker-True",
+          "passed": true,
+          "backup_sha256": "cc9a855a9d6542837bea25e9bad250163ca544a087bb854c298604a98fa7710e"
+        },
+        {
+          "name": "everysec-worker-False",
+          "passed": true,
+          "backup_sha256": "9c18622b3aa20066c2a29b71c7bb8d265f549eff406d9e60448d2398458aa9b5"
+        },
+        {
+          "name": "everysec-worker-True",
+          "passed": true,
+          "backup_sha256": "2a3c873705a8124fddd980f16dae1d8d1e3643f99be7e2cd28bdac679f52ddab"
+        },
+        {
+          "name": "always-worker-False",
+          "passed": true,
+          "backup_sha256": "232e6af5a6e18d2bd2cbffa8578455b97b32737fa5857b167dd4ad083d0868ad"
+        },
+        {
+          "name": "always-worker-True",
+          "passed": true,
+          "backup_sha256": "3126ff47b4927e5efc45c621e028b1ef764185b0a7c3c44aead1570794b33639"
+        }
+      ]
+    },
+    {
+      "artifact": "native-evidence-darwin-amd64",
+      "platform": "macOS-15.7.9-x86_64-i386-64bit-Mach-O",
+      "baseline_version": "keel v0.1.0-alpha.2 (3596d92d192d)",
+      "candidate_version": "keel 764a43f (764a43ff475b)",
+      "cases": [
+        {
+          "name": "no-worker-False",
+          "passed": true,
+          "backup_sha256": "ac88b1a314df59a0d577615c033068c6534a9acdcaefaadf961ac9337c193731"
+        },
+        {
+          "name": "no-worker-True",
+          "passed": true,
+          "backup_sha256": "318abfd061c1527267e0ac62a1d62a95e76da993e2575d4341c650f4ea356817"
+        },
+        {
+          "name": "everysec-worker-False",
+          "passed": true,
+          "backup_sha256": "d361625cc4c03229bc3946caefbdda2ddc32ba419f690988a0f98d18d87d8ae6"
+        },
+        {
+          "name": "everysec-worker-True",
+          "passed": true,
+          "backup_sha256": "5d6787044d7cae921d702d159622ab993545dea2bb118148869016a3e9a364b5"
+        },
+        {
+          "name": "always-worker-False",
+          "passed": true,
+          "backup_sha256": "78ac0aa36d79599f7f5ed06e5cc9c125e3c3642433bbbc0ae347f7c6ed64cb46"
+        },
+        {
+          "name": "always-worker-True",
+          "passed": true,
+          "backup_sha256": "f6ac778a8bd96f9e27396f45cef39eb1e8f7e6d65673ee51fa94bdc8ab945b14"
+        }
+      ]
+    }
+  ],
+  "operational": {
+    "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+    "binary_sha256": "6dbfa6130a41d197db7d4e6fa9a51eb45bab7daa224a977b6f0a6ccdd27ea2c9",
+    "acknowledged_writes": 315676,
+    "primary_crash_recoveries": 4,
+    "replica_crash_recoveries": 10,
+    "faults": [
+      {
+        "worker": false,
+        "fault": "RLIMIT_FSIZE",
+        "passed": true
+      },
+      {
+        "worker": true,
+        "fault": "RLIMIT_FSIZE",
+        "passed": true
+      }
+    ],
+    "passed": true,
+    "manual_promotion": true,
+    "elapsed_seconds": 901.5824707969999
+  },
+  "rewrite_checkpoints": 29,
+  "normal_filesystem": "ext4",
+  "enospc_filesystem": "private 16 MiB tmpfs",
+  "enospc": {
+    "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+    "binary_sha256": "6dbfa6130a41d197db7d4e6fa9a51eb45bab7daa224a977b6f0a6ccdd27ea2c9",
+    "acknowledged_writes": 0,
+    "primary_crash_recoveries": 0,
+    "replica_crash_recoveries": 0,
+    "checkpoints": [],
+    "faults": [
+      {
+        "worker": false,
+        "fault": "ENOSPC",
+        "passed": true
+      },
+      {
+        "worker": true,
+        "fault": "ENOSPC",
+        "passed": true
+      }
+    ],
+    "passed": true
+  },
+  "race_fault_repetitions": 20,
+  "bencher": {
+    "project_uuid": "01a0737d-de1a-71b3-80d7-e5589eb351fc",
+    "project_url": "https://bencher.dev/perf/keel",
+    "reports": [
+      {
+        "arm": "baseline",
+        "hash": "3596d92d192dd1f7bfceba77303212b514c84b7d",
+        "metrics": 180,
+        "report_uuid": "01a07385-0cf7-7961-aac1-e5e31aaf232b",
+        "testbed_uuid": "01a07385-0cf7-7961-aac1-e5c05f523bfa",
+        "testbed_name": "github-ubuntu24-amd64-shared-loopback-gc",
+        "branch": "v0.1.0-alpha.2",
+        "counts": {
+          "results": [
+            {
+              "benchmarks": 180,
+              "measures": 2
+            }
+          ],
+          "alerts": {
+            "total": 0,
+            "active": 0
+          }
+        },
+        "bmf_sha256": "81d548affb4f0309cfe428454a0e9599f7e59b61cc4ba0610ebadf12be1f588e"
+      },
+      {
+        "arm": "candidate",
+        "hash": "764a43ff475b8b22b032c9d5c230cbff4f666230",
+        "metrics": 360,
+        "report_uuid": "01a07385-10a6-7933-a7fc-5f60a19d00d4",
+        "testbed_uuid": "01a07385-0cf7-7961-aac1-e5c05f523bfa",
+        "testbed_name": "github-ubuntu24-amd64-shared-loopback-gc",
+        "branch": "feat/async-replication-benchmark-adapters",
+        "counts": {
+          "results": [
+            {
+              "benchmarks": 360,
+              "measures": 2
+            }
+          ],
+          "alerts": {
+            "total": 0,
+            "active": 0
+          }
+        },
+        "bmf_sha256": "67bea001324566a028c33570b94d20412cacabda6729187a6cb0183ab0d84db5"
+      }
+    ]
+  }
+}
