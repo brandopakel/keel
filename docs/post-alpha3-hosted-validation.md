@@ -93,20 +93,43 @@ mismatches, traversal paths, links, special files, duplicate envelopes and
 oversized member lists before extraction. Credentials remain in the local secret
 store and temporary registry configuration; none is stored in GitHub or the image.
 
+The code at `c911739` passed the [Linux/macOS Go 1.22 and stable matrix, race
+detector and Docker checks](https://github.com/brandopakel/keel/actions/runs/33997105395),
+plus [RESP framing, seven Python tests, authenticated k6/Locust smokes and AWS
+package validation](https://github.com/brandopakel/keel/actions/runs/33997105380).
+A local CLI check also confirmed that duplicate policies are rejected before
+creating output files. That guard prevents an accidental repeated policy from
+overwriting its earlier raw CSV. The benchmark image remains identified by the
+earlier, recorded harness revision above.
+
 ## Longer local recovery testing
 
-A one-hour APFS soak of the published macOS ARM64 alpha.3 executable is running.
-Its final recovery and fault results are pending. The primary, replica and
-synthetic load share the local Apple M4 Pro workstation. This supplements the
-completed 15-minute Linux ext4 run; it is not a deployment-filesystem or multi-day
-soak. The published executable SHA-256 is
+A one-hour APFS soak of the published macOS ARM64 alpha.3 executable **passed**
+over 3,601.0 seconds. It verified **463,751 acknowledged writes**, **19 primary
+crash recoveries**, **38 replica crash recoveries**, **115 rewrite checkpoints**,
+stale-read rejection, expiry, canonical readback and a fenced manual promotion.
+The promoted instance also passed restart/readback. Both synchronous and worker
+append modes passed `RLIMIT_FSIZE` write-failure checks and preserved prior
+acknowledgements through two restarts.
+
+The [operational evidence](post-alpha3-operational-evidence.json) retains host
+details, checkpoint results, raw-file hashes and the local evidence-archive hash.
+Maximum combined primary/replica RSS sampled at the 30-second checkpoints was
+53,920 KiB; this is not a continuous peak-memory measurement. The main soak uses
+`always` fsync and worker appends on both instances. The file-size-limit checks
+exercise write errors; they do not establish APFS disk-full or power-loss behavior.
+
+The primary, replica and synthetic load share the local Apple M4 Pro workstation.
+This supplements the completed 15-minute Linux ext4 run; it is not a
+deployment-filesystem or multi-day soak. The published executable SHA-256 is
 `4c65f65d1ade25cc29e670788884d3b2d0fe3e9d4f27d9c86f28516f69267088`.
 
 ## Grafana compatibility and remaining targets
 
 The authenticated k6 adapter passed its local smoke using xk6-tcp v0.2.0, the
 extension version listed for Grafana Cloud when checked on September 5, 2026.
-The run completed 11 batches over two seconds with zero dropped iterations.
+The run completed 11 batches / 44 requests over two seconds with zero request
+errors, connection errors or dropped iterations.
 This verifies compatibility with the supported extension API. It is not a
 Grafana Cloud execution. [Supported extensions](https://grafana.com/docs/grafana-cloud/observe-and-act/testing/k6/author-run/use-k6-extensions/).
 
