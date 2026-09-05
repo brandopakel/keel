@@ -71,8 +71,14 @@ The `hosted` suite in `.github/workflows/bench.yml` builds the exact alpha.2 and
 alpha.3 source revisions with Go 1.27.1, packages both binaries and the Python
 harness, and exercises the image with external networking disabled. Its artifact
 contains the Docker image tar, checksums, build information and smoke evidence.
-The build context contains only those binaries and scripts; provider credentials
-are supplied locally when uploading the image and starting a job.
+The build pins the Python base digest, a dated Debian snapshot, and direct package
+versions. It also compares every installed package/version with
+`bencher-packages.lock`, which records the package set used by the measured image.
+An intentional package update requires updating that lock and validating a new
+image. APT still verifies archive signatures; only snapshot expiration checks are
+disabled. [Debian snapshot instructions](https://snapshot.debian.org/#usage).
+The build context contains only those binaries, scripts and package configuration;
+provider credentials are supplied locally when uploading the image and starting a job.
 
 Upload the verified image to the project's Bencher OCI registry using a temporary
 credential store. Select its immutable digest in the command below. Do not place a

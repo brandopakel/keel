@@ -26,6 +26,7 @@ jobs:
           cp "$(command -v go)" image-context/bin/go
           cp bench/run-tail.py bench/run-paired-tail.py image-context/bench/
           cp bench/external/bencher_job.py image-context/bench/external/
+          cp bench/external/bencher.sources bench/external/bencher-packages.lock image-context/
           go version -m image-context/bin/keel-alpha2 image-context/bin/keel-alpha3 > evidence/binary-buildinfo.txt
           sha256sum image-context/bin/* > evidence/binary-checksums.txt
       - name: Build and exercise the image without external networking
