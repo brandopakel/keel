@@ -28,7 +28,7 @@ Implemented:
 - Connection count, 16 MiB incomplete input, 64 MiB output, and 256 MiB aggregate retained-buffer limits.
 - Close stalled partial requests/replies after 30 seconds without progress; maintenance runs about once per second.
 - At most 128 ready descriptors per cycle; one bounded read per ready connection.
-- Rewrite slices target 2048 keys, 1 MiB, or 2 ms, including dirty-key reconciliation.
+- Rewrite slices target 2048 keys, 1 MiB, or 1 ms, including dirty-key reconciliation.
 - Rewrite admission at one million keys, abandonment at 30 seconds or 100,000 dirty keys, retry cooldown.
 - Wakeup-based shutdown, connection cleanup, AOF close error propagation, and a five-second process backstop.
 

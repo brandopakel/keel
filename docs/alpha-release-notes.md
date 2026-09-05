@@ -1,4 +1,4 @@
-# v0.1.0-alpha.1 candidate
+# v0.1.0-alpha.2
 
 Keel now offers cross-type expiry, conditional SET options, complete per-key memory reporting,
 and a tested authenticated cache/analytics integration. Recovery and socket handling have been
@@ -20,3 +20,7 @@ embedding API are absent. Synchronous persistence, individual large keys and exp
 can still cause latency spikes. See the README for the complete integration contract.
 
 Local candidate archives carry a `-dev` suffix until built from a published release revision.
+
+The alpha.1 candidate was withheld after the release latency gate found that a
+2 ms CPU slice left no room for its filesystem write. Alpha.2 uses a 1 ms CPU
+slice while retaining the existing 2 ms median-slice validation threshold.
