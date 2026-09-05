@@ -1,0 +1,3833 @@
+{
+  "project_url": "https://bencher.dev/perf/keel",
+  "image": "registry.bencher.dev/keel@sha256:b5b9d94d26431a4469e92d98a53d0d7210b99c975f82ad4e2b0314c2fd0ae71d",
+  "image_build_url": "https://github.com/brandopakel/keel/actions/runs/33995869890",
+  "harness_revision": "ddedb29c68259b9c2e8891d3190c52708f4eeb13",
+  "duration_per_arm_seconds": 5,
+  "repetitions_per_policy": 5,
+  "successful_jobs": 15,
+  "runs": 45,
+  "attempts": 1416217,
+  "errors": 0,
+  "drops": 0,
+  "bmf_measurements": 630,
+  "binaries": {
+    "baseline-sync": {
+      "sha256": "c8354ae52c903753175a790e01cfe8498b08210d6333d5a657ce5498ff7f69e3",
+      "buildinfo": "/opt/keel/bin/keel-alpha2: go1.27.1\n\tpath\tgithub.com/brandopakel/keel/cmd/keel\n\tmod\tgithub.com/brandopakel/keel\tv0.1.0-alpha.2\t\n\tdep\tgithub.com/spaolacci/murmur3\tv1.1.0\th1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tDefaultGODEBUG=containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,httpcookiemaxnum=0,httpservecontentkeepheaders=1,multipathtcp=0,randseednop=0,rsa1024min=0,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,tracebacklabels=0,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,winreadlinkvolume=0,winsymlink=0,x509negativeserial=1,x509rsacrt=0,x509sha256skid=0,x509sslcertoverrideplatform=0,x509usepolicies=0\n\tbuild\tCGO_ENABLED=0\n\tbuild\tGOARCH=amd64\n\tbuild\tGOOS=linux\n\tbuild\tGOAMD64=v1\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=3596d92d192dd1f7bfceba77303212b514c84b7d\n\tbuild\tvcs.time=2026-09-05T06:53:11Z\n\tbuild\tvcs.modified=false\n"
+    },
+    "candidate-sync": {
+      "sha256": "da3ee08123df44f5208696572964c6851882ec98feef99dd405da1d78b6ba383",
+      "buildinfo": "/opt/keel/bin/keel-alpha3: go1.27.1\n\tpath\tgithub.com/brandopakel/keel/cmd/keel\n\tmod\tgithub.com/brandopakel/keel\tv0.1.0-alpha.3\t\n\tdep\tgithub.com/spaolacci/murmur3\tv1.1.0\th1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tDefaultGODEBUG=containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,httpcookiemaxnum=0,httpservecontentkeepheaders=1,multipathtcp=0,randseednop=0,rsa1024min=0,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,tracebacklabels=0,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,winreadlinkvolume=0,winsymlink=0,x509negativeserial=1,x509rsacrt=0,x509sha256skid=0,x509sslcertoverrideplatform=0,x509usepolicies=0\n\tbuild\tCGO_ENABLED=0\n\tbuild\tGOARCH=amd64\n\tbuild\tGOOS=linux\n\tbuild\tGOAMD64=v1\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=a9de9156aeb4d3ef18c06cff8784350f05867045\n\tbuild\tvcs.time=2026-09-05T21:50:47Z\n\tbuild\tvcs.modified=false\n"
+    },
+    "candidate-worker": {
+      "sha256": "da3ee08123df44f5208696572964c6851882ec98feef99dd405da1d78b6ba383",
+      "buildinfo": "/opt/keel/bin/keel-alpha3: go1.27.1\n\tpath\tgithub.com/brandopakel/keel/cmd/keel\n\tmod\tgithub.com/brandopakel/keel\tv0.1.0-alpha.3\t\n\tdep\tgithub.com/spaolacci/murmur3\tv1.1.0\th1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tDefaultGODEBUG=containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,httpcookiemaxnum=0,httpservecontentkeepheaders=1,multipathtcp=0,randseednop=0,rsa1024min=0,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,tracebacklabels=0,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,winreadlinkvolume=0,winsymlink=0,x509negativeserial=1,x509rsacrt=0,x509sha256skid=0,x509sslcertoverrideplatform=0,x509usepolicies=0\n\tbuild\tCGO_ENABLED=0\n\tbuild\tGOARCH=amd64\n\tbuild\tGOOS=linux\n\tbuild\tGOAMD64=v1\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=a9de9156aeb4d3ef18c06cff8784350f05867045\n\tbuild\tvcs.time=2026-09-05T21:50:47Z\n\tbuild\tvcs.modified=false\n"
+    }
+  },
+  "jobs": [
+    {
+      "policy": "off",
+      "rep": 0,
+      "report": "01a073b4-d8e8-7b41-b480-c61d630a7537",
+      "job": "01a073b4-d8e8-7b41-b480-c620c01c2c87",
+      "runner": "997069de-45de-45c7-bd9c-21045e5607f0",
+      "status": "processed",
+      "started": "2026-09-05T22:33:47Z",
+      "completed": "2026-09-05T22:34:22Z",
+      "archive_sha256": "c6ac277d72334dbc6e1ca0009e7be0acbcfea1bf3c0d12c9ac6b3ef99d953c20",
+      "archive_bytes": 1961317,
+      "order": [
+        "baseline-sync",
+        "candidate-sync",
+        "candidate-worker"
+      ]
+    },
+    {
+      "policy": "everysec",
+      "rep": 0,
+      "report": "01a073b6-ba95-79d1-9f46-32927ae2df4a",
+      "job": "01a073b6-ba95-79d1-9f46-32ac5a754e99",
+      "runner": "997069de-45de-45c7-bd9c-21045e5607f0",
+      "status": "processed",
+      "started": "2026-09-05T22:35:51Z",
+      "completed": "2026-09-05T22:36:26Z",
+      "archive_sha256": "3bd1c3d358a14988b87c7713f35c4e2760f456d0b9b6eeaa22909cc9d901abdb",
+      "archive_bytes": 1960412,
+      "order": [
+        "baseline-sync",
+        "candidate-sync",
+        "candidate-worker"
+      ]
+    },
+    {
+      "policy": "always",
+      "rep": 0,
+      "report": "01a073b7-50a3-7823-a8af-b0063f7c5af9",
+      "job": "01a073b7-50a3-7823-a8af-b017701939eb",
+      "runner": "997069de-45de-45c7-bd9c-21045e5607f0",
+      "status": "processed",
+      "started": "2026-09-05T22:36:29Z",
+      "completed": "2026-09-05T22:37:03Z",
+      "archive_sha256": "5d2cfc4f182fb492793fc24d6c2d08837a8e8336c2940518b24e7906c5aea369",
+      "archive_bytes": 1576299,
+      "order": [
+        "baseline-sync",
+        "candidate-sync",
+        "candidate-worker"
+      ]
+    },
+    {
+      "policy": "off",
+      "rep": 1,
+      "report": "01a073b7-e5f7-7422-a3f6-24280857c882",
+      "job": "01a073b7-e5f7-7422-a3f6-243265914d06",
+      "runner": "997069de-45de-45c7-bd9c-21045e5607f0",
+      "status": "processed",
+      "started": "2026-09-05T22:37:07Z",
+      "completed": "2026-09-05T22:37:41Z",
+      "archive_sha256": "877ce759bcd02d3d6eca06461b6e4de18f3c91e61f17d92c8138ec51b9042596",
+      "archive_bytes": 1958016,
+      "order": [
+        "baseline-sync",
+        "candidate-worker",
+        "candidate-sync"
+      ]
+    },
+    {
+      "policy": "everysec",
+      "rep": 1,
+      "report": "01a073b8-7c43-7bd3-a705-cd087f5c1c1d",
+      "job": "01a073b8-7c43-7bd3-a705-cd113cef0345",
+      "runner": "997069de-45de-45c7-bd9c-21045e5607f0",
+      "status": "processed",
+      "started": "2026-09-05T22:37:46Z",
+      "completed": "2026-09-05T22:38:18Z",
+      "archive_sha256": "d57a6ba407b099f66f88675e940d6ee2d8cbcff7d6ec02a91b14caf7242e1308",
+      "archive_bytes": 1962432,
+      "order": [
+        "baseline-sync",
+        "candidate-worker",
+        "candidate-sync"
+      ]
+    },
+    {
+      "policy": "always",
+      "rep": 1,
+      "report": "01a073b9-1027-7e30-99ca-9b5207f2fcb8",
+      "job": "01a073b9-1027-7e30-99ca-9b6a17516bde",
+      "runner": "997069de-45de-45c7-bd9c-21045e5607f0",
+      "status": "processed",
+      "started": "2026-09-05T22:38:23Z",
+      "completed": "2026-09-05T22:38:56Z",
+      "archive_sha256": "eb3e47109a36eb07c7ceb2850b75d6694ac10ce19d1f4214106dda0d489afd73",
+      "archive_bytes": 1570800,
+      "order": [
+        "baseline-sync",
+        "candidate-worker",
+        "candidate-sync"
+      ]
+    },
+    {
+      "policy": "off",
+      "rep": 2,
+      "report": "01a073b9-a4e7-7072-a1c6-4d58283fdfa2",
+      "job": "01a073b9-a4e7-7072-a1c6-4d60331c2427",
+      "runner": "997069de-45de-45c7-bd9c-21045e5607f0",
+      "status": "processed",
+      "started": "2026-09-05T22:39:02Z",
+      "completed": "2026-09-05T22:39:36Z",
+      "archive_sha256": "dedc6797c03d89ccec2fc3945771f3e227e5e5f11821a76751a9fa6dffbf3e14",
+      "archive_bytes": 1950491,
+      "order": [
+        "candidate-worker",
+        "baseline-sync",
+        "candidate-sync"
+      ]
+    },
+    {
+      "policy": "everysec",
+      "rep": 2,
+      "report": "01a073ba-39b4-7871-beb4-32afce481103",
+      "job": "01a073ba-39b4-7871-beb4-32b325bd516c",
+      "runner": "997069de-45de-45c7-bd9c-21045e5607f0",
+      "status": "processed",
+      "started": "2026-09-05T22:39:39Z",
+      "completed": "2026-09-05T22:40:13Z",
+      "archive_sha256": "b50d7894344adbeff7a23e5e7ab20a4fd36e9209ded0710be58f65c0161b8821",
+      "archive_bytes": 1955879,
+      "order": [
+        "candidate-worker",
+        "baseline-sync",
+        "candidate-sync"
+      ]
+    },
+    {
+      "policy": "always",
+      "rep": 2,
+      "report": "01a073ba-d00c-77e0-8060-9e63ca83a8ac",
+      "job": "01a073ba-d00d-7061-a285-41aaa4025603",
+      "runner": "997069de-45de-45c7-bd9c-21045e5607f0",
+      "status": "processed",
+      "started": "2026-09-05T22:40:18Z",
+      "completed": "2026-09-05T22:40:52Z",
+      "archive_sha256": "2952c876515427a06b97fd814f9c456ac8704cefe0101ea035eb0a96069e4b8d",
+      "archive_bytes": 1564616,
+      "order": [
+        "candidate-worker",
+        "baseline-sync",
+        "candidate-sync"
+      ]
+    },
+    {
+      "policy": "off",
+      "rep": 3,
+      "report": "01a073bd-9266-7632-a04f-e91b76e2d137",
+      "job": "01a073bd-9266-7632-a04f-e92ffd36dcd2",
+      "runner": "997069de-45de-45c7-bd9c-21045e5607f0",
+      "status": "processed",
+      "started": "2026-09-05T22:43:19Z",
+      "completed": "2026-09-05T22:43:54Z",
+      "archive_sha256": "3cf4928b675952abc6cc655f6571666ba5fc34f8655e1ab722eb29c54d87b361",
+      "archive_bytes": 1952729,
+      "order": [
+        "candidate-worker",
+        "candidate-sync",
+        "baseline-sync"
+      ]
+    },
+    {
+      "policy": "everysec",
+      "rep": 3,
+      "report": "01a073be-29ea-7162-bff1-58b3bbb81f04",
+      "job": "01a073be-29eb-7280-b998-158158ff0fc8",
+      "runner": "997069de-45de-45c7-bd9c-21045e5607f0",
+      "status": "processed",
+      "started": "2026-09-05T22:43:57Z",
+      "completed": "2026-09-05T22:44:31Z",
+      "archive_sha256": "6d5c60af0020955d7cfd06440eb5c740749d3e9b24aa5d804b45d85b480f415a",
+      "archive_bytes": 1955676,
+      "order": [
+        "candidate-worker",
+        "candidate-sync",
+        "baseline-sync"
+      ]
+    },
+    {
+      "policy": "always",
+      "rep": 3,
+      "report": "01a073be-c13a-71e1-8c9f-6403f6447d98",
+      "job": "01a073be-c13b-74b0-8a4f-4bca984c22f8",
+      "runner": "997069de-45de-45c7-bd9c-21045e5607f0",
+      "status": "processed",
+      "started": "2026-09-05T22:44:36Z",
+      "completed": "2026-09-05T22:45:09Z",
+      "archive_sha256": "7f8eafc3e85f4a7fdb4297601c741b26db6682bbe760d6585eaab97bbaa1286a",
+      "archive_bytes": 1568607,
+      "order": [
+        "candidate-worker",
+        "candidate-sync",
+        "baseline-sync"
+      ]
+    },
+    {
+      "policy": "off",
+      "rep": 4,
+      "report": "01a073bf-57c7-7c43-9dda-d7b0a7c21588",
+      "job": "01a073bf-57c7-7c43-9dda-d7caa31acd78",
+      "runner": "997069de-45de-45c7-bd9c-21045e5607f0",
+      "status": "processed",
+      "started": "2026-09-05T22:45:14Z",
+      "completed": "2026-09-05T22:45:49Z",
+      "archive_sha256": "ec6d2329e5422e67a3f474f128ba8ff517bdcaf841aff4e9b0602df443c7a98c",
+      "archive_bytes": 1947877,
+      "order": [
+        "candidate-sync",
+        "candidate-worker",
+        "baseline-sync"
+      ]
+    },
+    {
+      "policy": "everysec",
+      "rep": 4,
+      "report": "01a073bf-edf0-73a2-82ea-ea73d95621e8",
+      "job": "01a073bf-edf1-7782-beac-7b1496af2ad0",
+      "runner": "997069de-45de-45c7-bd9c-21045e5607f0",
+      "status": "processed",
+      "started": "2026-09-05T22:45:53Z",
+      "completed": "2026-09-05T22:46:26Z",
+      "archive_sha256": "2b8acbb43f00d4fd53b801625db23e6f361dd5d2e4e2d9f7b3666f8b4f08c799",
+      "archive_bytes": 1958538,
+      "order": [
+        "candidate-sync",
+        "candidate-worker",
+        "baseline-sync"
+      ]
+    },
+    {
+      "policy": "always",
+      "rep": 4,
+      "report": "01a073c0-83cc-73f3-9e0a-256f1b1f93dd",
+      "job": "01a073c0-83cc-73f3-9e0a-25733cb69c73",
+      "runner": "997069de-45de-45c7-bd9c-21045e5607f0",
+      "status": "processed",
+      "started": "2026-09-05T22:46:32Z",
+      "completed": "2026-09-05T22:47:05Z",
+      "archive_sha256": "ab666c1b0ab343baccc273bc52d76ff59d843bc2debde2766d6d2002b77a1e65",
+      "archive_bytes": 1566316,
+      "order": [
+        "candidate-sync",
+        "candidate-worker",
+        "baseline-sync"
+      ]
+    }
+  ],
+  "hosts": [
+    {
+      "job": "01a073b4-d8e8-7b41-b480-c620c01c2c87",
+      "host": {
+        "platform": "Linux-6.1.177-x86_64-with-glibc2.36",
+        "python": "3.12.14",
+        "cpu_count": 4,
+        "arguments": {
+          "baseline": "/opt/keel/bin/keel-alpha2",
+          "candidate": "/opt/keel/bin/keel-alpha3",
+          "policy": "off",
+          "rep": 0,
+          "seconds": 5.0,
+          "enable_loopback": true
+        },
+        "harness_revision": "ddedb29c68259b9c2e8891d3190c52708f4eeb13",
+        "loopback": {
+          "before": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK"
+              ],
+              "mtu": 65536,
+              "qdisc": "noop",
+              "operstate": "DOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ],
+          "after": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK",
+                "UP",
+                "LOWER_UP"
+              ],
+              "mtu": 65536,
+              "qdisc": "noqueue",
+              "operstate": "UNKNOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ]
+        },
+        "placement": "server and load generator share one execution environment over loopback TCP; provider job metadata identifies the sandbox",
+        "job_script_sha256": "a5fe487d6e0ebfb7a8b9991eda6d53544dd4aaaf3126e1a420dc3e61d10e297b",
+        "filesystem": "Filesystem     Type 1K-blocks   Used Available Use% Mounted on\n/dev/root      ext4 131001348 170928 130814036   1% /\n"
+      },
+      "cpu_model": "Intel(R) Xeon(R) Processor @ 3.20GHz",
+      "spec": {
+        "uuid": "eaf61c35-a989-4097-bdd0-ef1dc30a7009",
+        "name": "Intel v1",
+        "slug": "intel-v1",
+        "os": "linux",
+        "architecture": "x86_64",
+        "sandbox": "firecracker",
+        "cpu": 4,
+        "memory": 51539607552,
+        "disk": 137438953472,
+        "network": false,
+        "fallback": "2026-03-10T05:29:05Z",
+        "created": "2026-03-10T05:29:05Z",
+        "modified": "2026-03-10T05:29:05Z",
+        "archived": null
+      }
+    },
+    {
+      "job": "01a073b6-ba95-79d1-9f46-32ac5a754e99",
+      "host": {
+        "platform": "Linux-6.1.177-x86_64-with-glibc2.36",
+        "python": "3.12.14",
+        "cpu_count": 4,
+        "arguments": {
+          "baseline": "/opt/keel/bin/keel-alpha2",
+          "candidate": "/opt/keel/bin/keel-alpha3",
+          "policy": "everysec",
+          "rep": 0,
+          "seconds": 5.0,
+          "enable_loopback": true
+        },
+        "harness_revision": "ddedb29c68259b9c2e8891d3190c52708f4eeb13",
+        "loopback": {
+          "before": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK"
+              ],
+              "mtu": 65536,
+              "qdisc": "noop",
+              "operstate": "DOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ],
+          "after": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK",
+                "UP",
+                "LOWER_UP"
+              ],
+              "mtu": 65536,
+              "qdisc": "noqueue",
+              "operstate": "UNKNOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ]
+        },
+        "placement": "server and load generator share one execution environment over loopback TCP; provider job metadata identifies the sandbox",
+        "job_script_sha256": "a5fe487d6e0ebfb7a8b9991eda6d53544dd4aaaf3126e1a420dc3e61d10e297b",
+        "filesystem": "Filesystem     Type 1K-blocks   Used Available Use% Mounted on\n/dev/root      ext4 131001348 170928 130814036   1% /\n"
+      },
+      "cpu_model": "Intel(R) Xeon(R) Processor @ 3.20GHz",
+      "spec": {
+        "uuid": "eaf61c35-a989-4097-bdd0-ef1dc30a7009",
+        "name": "Intel v1",
+        "slug": "intel-v1",
+        "os": "linux",
+        "architecture": "x86_64",
+        "sandbox": "firecracker",
+        "cpu": 4,
+        "memory": 51539607552,
+        "disk": 137438953472,
+        "network": false,
+        "fallback": "2026-03-10T05:29:05Z",
+        "created": "2026-03-10T05:29:05Z",
+        "modified": "2026-03-10T05:29:05Z",
+        "archived": null
+      }
+    },
+    {
+      "job": "01a073b7-50a3-7823-a8af-b017701939eb",
+      "host": {
+        "platform": "Linux-6.1.177-x86_64-with-glibc2.36",
+        "python": "3.12.14",
+        "cpu_count": 4,
+        "arguments": {
+          "baseline": "/opt/keel/bin/keel-alpha2",
+          "candidate": "/opt/keel/bin/keel-alpha3",
+          "policy": "always",
+          "rep": 0,
+          "seconds": 5.0,
+          "enable_loopback": true
+        },
+        "harness_revision": "ddedb29c68259b9c2e8891d3190c52708f4eeb13",
+        "loopback": {
+          "before": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK"
+              ],
+              "mtu": 65536,
+              "qdisc": "noop",
+              "operstate": "DOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ],
+          "after": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK",
+                "UP",
+                "LOWER_UP"
+              ],
+              "mtu": 65536,
+              "qdisc": "noqueue",
+              "operstate": "UNKNOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ]
+        },
+        "placement": "server and load generator share one execution environment over loopback TCP; provider job metadata identifies the sandbox",
+        "job_script_sha256": "a5fe487d6e0ebfb7a8b9991eda6d53544dd4aaaf3126e1a420dc3e61d10e297b",
+        "filesystem": "Filesystem     Type 1K-blocks   Used Available Use% Mounted on\n/dev/root      ext4 131001348 170928 130814036   1% /\n"
+      },
+      "cpu_model": "Intel(R) Xeon(R) Processor @ 3.20GHz",
+      "spec": {
+        "uuid": "eaf61c35-a989-4097-bdd0-ef1dc30a7009",
+        "name": "Intel v1",
+        "slug": "intel-v1",
+        "os": "linux",
+        "architecture": "x86_64",
+        "sandbox": "firecracker",
+        "cpu": 4,
+        "memory": 51539607552,
+        "disk": 137438953472,
+        "network": false,
+        "fallback": "2026-03-10T05:29:05Z",
+        "created": "2026-03-10T05:29:05Z",
+        "modified": "2026-03-10T05:29:05Z",
+        "archived": null
+      }
+    },
+    {
+      "job": "01a073b7-e5f7-7422-a3f6-243265914d06",
+      "host": {
+        "platform": "Linux-6.1.177-x86_64-with-glibc2.36",
+        "python": "3.12.14",
+        "cpu_count": 4,
+        "arguments": {
+          "baseline": "/opt/keel/bin/keel-alpha2",
+          "candidate": "/opt/keel/bin/keel-alpha3",
+          "policy": "off",
+          "rep": 1,
+          "seconds": 5.0,
+          "enable_loopback": true
+        },
+        "harness_revision": "ddedb29c68259b9c2e8891d3190c52708f4eeb13",
+        "loopback": {
+          "before": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK"
+              ],
+              "mtu": 65536,
+              "qdisc": "noop",
+              "operstate": "DOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ],
+          "after": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK",
+                "UP",
+                "LOWER_UP"
+              ],
+              "mtu": 65536,
+              "qdisc": "noqueue",
+              "operstate": "UNKNOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ]
+        },
+        "placement": "server and load generator share one execution environment over loopback TCP; provider job metadata identifies the sandbox",
+        "job_script_sha256": "a5fe487d6e0ebfb7a8b9991eda6d53544dd4aaaf3126e1a420dc3e61d10e297b",
+        "filesystem": "Filesystem     Type 1K-blocks   Used Available Use% Mounted on\n/dev/root      ext4 131001348 170928 130814036   1% /\n"
+      },
+      "cpu_model": "Intel(R) Xeon(R) Processor @ 3.20GHz",
+      "spec": {
+        "uuid": "eaf61c35-a989-4097-bdd0-ef1dc30a7009",
+        "name": "Intel v1",
+        "slug": "intel-v1",
+        "os": "linux",
+        "architecture": "x86_64",
+        "sandbox": "firecracker",
+        "cpu": 4,
+        "memory": 51539607552,
+        "disk": 137438953472,
+        "network": false,
+        "fallback": "2026-03-10T05:29:05Z",
+        "created": "2026-03-10T05:29:05Z",
+        "modified": "2026-03-10T05:29:05Z",
+        "archived": null
+      }
+    },
+    {
+      "job": "01a073b8-7c43-7bd3-a705-cd113cef0345",
+      "host": {
+        "platform": "Linux-6.1.177-x86_64-with-glibc2.36",
+        "python": "3.12.14",
+        "cpu_count": 4,
+        "arguments": {
+          "baseline": "/opt/keel/bin/keel-alpha2",
+          "candidate": "/opt/keel/bin/keel-alpha3",
+          "policy": "everysec",
+          "rep": 1,
+          "seconds": 5.0,
+          "enable_loopback": true
+        },
+        "harness_revision": "ddedb29c68259b9c2e8891d3190c52708f4eeb13",
+        "loopback": {
+          "before": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK"
+              ],
+              "mtu": 65536,
+              "qdisc": "noop",
+              "operstate": "DOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ],
+          "after": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK",
+                "UP",
+                "LOWER_UP"
+              ],
+              "mtu": 65536,
+              "qdisc": "noqueue",
+              "operstate": "UNKNOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ]
+        },
+        "placement": "server and load generator share one execution environment over loopback TCP; provider job metadata identifies the sandbox",
+        "job_script_sha256": "a5fe487d6e0ebfb7a8b9991eda6d53544dd4aaaf3126e1a420dc3e61d10e297b",
+        "filesystem": "Filesystem     Type 1K-blocks   Used Available Use% Mounted on\n/dev/root      ext4 131001348 170928 130814036   1% /\n"
+      },
+      "cpu_model": "Intel(R) Xeon(R) Processor @ 3.20GHz",
+      "spec": {
+        "uuid": "eaf61c35-a989-4097-bdd0-ef1dc30a7009",
+        "name": "Intel v1",
+        "slug": "intel-v1",
+        "os": "linux",
+        "architecture": "x86_64",
+        "sandbox": "firecracker",
+        "cpu": 4,
+        "memory": 51539607552,
+        "disk": 137438953472,
+        "network": false,
+        "fallback": "2026-03-10T05:29:05Z",
+        "created": "2026-03-10T05:29:05Z",
+        "modified": "2026-03-10T05:29:05Z",
+        "archived": null
+      }
+    },
+    {
+      "job": "01a073b9-1027-7e30-99ca-9b6a17516bde",
+      "host": {
+        "platform": "Linux-6.1.177-x86_64-with-glibc2.36",
+        "python": "3.12.14",
+        "cpu_count": 4,
+        "arguments": {
+          "baseline": "/opt/keel/bin/keel-alpha2",
+          "candidate": "/opt/keel/bin/keel-alpha3",
+          "policy": "always",
+          "rep": 1,
+          "seconds": 5.0,
+          "enable_loopback": true
+        },
+        "harness_revision": "ddedb29c68259b9c2e8891d3190c52708f4eeb13",
+        "loopback": {
+          "before": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK"
+              ],
+              "mtu": 65536,
+              "qdisc": "noop",
+              "operstate": "DOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ],
+          "after": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK",
+                "UP",
+                "LOWER_UP"
+              ],
+              "mtu": 65536,
+              "qdisc": "noqueue",
+              "operstate": "UNKNOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ]
+        },
+        "placement": "server and load generator share one execution environment over loopback TCP; provider job metadata identifies the sandbox",
+        "job_script_sha256": "a5fe487d6e0ebfb7a8b9991eda6d53544dd4aaaf3126e1a420dc3e61d10e297b",
+        "filesystem": "Filesystem     Type 1K-blocks   Used Available Use% Mounted on\n/dev/root      ext4 131001348 170928 130814036   1% /\n"
+      },
+      "cpu_model": "Intel(R) Xeon(R) Processor @ 3.20GHz",
+      "spec": {
+        "uuid": "eaf61c35-a989-4097-bdd0-ef1dc30a7009",
+        "name": "Intel v1",
+        "slug": "intel-v1",
+        "os": "linux",
+        "architecture": "x86_64",
+        "sandbox": "firecracker",
+        "cpu": 4,
+        "memory": 51539607552,
+        "disk": 137438953472,
+        "network": false,
+        "fallback": "2026-03-10T05:29:05Z",
+        "created": "2026-03-10T05:29:05Z",
+        "modified": "2026-03-10T05:29:05Z",
+        "archived": null
+      }
+    },
+    {
+      "job": "01a073b9-a4e7-7072-a1c6-4d60331c2427",
+      "host": {
+        "platform": "Linux-6.1.177-x86_64-with-glibc2.36",
+        "python": "3.12.14",
+        "cpu_count": 4,
+        "arguments": {
+          "baseline": "/opt/keel/bin/keel-alpha2",
+          "candidate": "/opt/keel/bin/keel-alpha3",
+          "policy": "off",
+          "rep": 2,
+          "seconds": 5.0,
+          "enable_loopback": true
+        },
+        "harness_revision": "ddedb29c68259b9c2e8891d3190c52708f4eeb13",
+        "loopback": {
+          "before": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK"
+              ],
+              "mtu": 65536,
+              "qdisc": "noop",
+              "operstate": "DOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ],
+          "after": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK",
+                "UP",
+                "LOWER_UP"
+              ],
+              "mtu": 65536,
+              "qdisc": "noqueue",
+              "operstate": "UNKNOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ]
+        },
+        "placement": "server and load generator share one execution environment over loopback TCP; provider job metadata identifies the sandbox",
+        "job_script_sha256": "a5fe487d6e0ebfb7a8b9991eda6d53544dd4aaaf3126e1a420dc3e61d10e297b",
+        "filesystem": "Filesystem     Type 1K-blocks   Used Available Use% Mounted on\n/dev/root      ext4 131001348 170928 130814036   1% /\n"
+      },
+      "cpu_model": "Intel(R) Xeon(R) Processor @ 3.20GHz",
+      "spec": {
+        "uuid": "eaf61c35-a989-4097-bdd0-ef1dc30a7009",
+        "name": "Intel v1",
+        "slug": "intel-v1",
+        "os": "linux",
+        "architecture": "x86_64",
+        "sandbox": "firecracker",
+        "cpu": 4,
+        "memory": 51539607552,
+        "disk": 137438953472,
+        "network": false,
+        "fallback": "2026-03-10T05:29:05Z",
+        "created": "2026-03-10T05:29:05Z",
+        "modified": "2026-03-10T05:29:05Z",
+        "archived": null
+      }
+    },
+    {
+      "job": "01a073ba-39b4-7871-beb4-32b325bd516c",
+      "host": {
+        "platform": "Linux-6.1.177-x86_64-with-glibc2.36",
+        "python": "3.12.14",
+        "cpu_count": 4,
+        "arguments": {
+          "baseline": "/opt/keel/bin/keel-alpha2",
+          "candidate": "/opt/keel/bin/keel-alpha3",
+          "policy": "everysec",
+          "rep": 2,
+          "seconds": 5.0,
+          "enable_loopback": true
+        },
+        "harness_revision": "ddedb29c68259b9c2e8891d3190c52708f4eeb13",
+        "loopback": {
+          "before": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK"
+              ],
+              "mtu": 65536,
+              "qdisc": "noop",
+              "operstate": "DOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ],
+          "after": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK",
+                "UP",
+                "LOWER_UP"
+              ],
+              "mtu": 65536,
+              "qdisc": "noqueue",
+              "operstate": "UNKNOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ]
+        },
+        "placement": "server and load generator share one execution environment over loopback TCP; provider job metadata identifies the sandbox",
+        "job_script_sha256": "a5fe487d6e0ebfb7a8b9991eda6d53544dd4aaaf3126e1a420dc3e61d10e297b",
+        "filesystem": "Filesystem     Type 1K-blocks   Used Available Use% Mounted on\n/dev/root      ext4 131001348 170928 130814036   1% /\n"
+      },
+      "cpu_model": "Intel(R) Xeon(R) Processor @ 3.20GHz",
+      "spec": {
+        "uuid": "eaf61c35-a989-4097-bdd0-ef1dc30a7009",
+        "name": "Intel v1",
+        "slug": "intel-v1",
+        "os": "linux",
+        "architecture": "x86_64",
+        "sandbox": "firecracker",
+        "cpu": 4,
+        "memory": 51539607552,
+        "disk": 137438953472,
+        "network": false,
+        "fallback": "2026-03-10T05:29:05Z",
+        "created": "2026-03-10T05:29:05Z",
+        "modified": "2026-03-10T05:29:05Z",
+        "archived": null
+      }
+    },
+    {
+      "job": "01a073ba-d00d-7061-a285-41aaa4025603",
+      "host": {
+        "platform": "Linux-6.1.177-x86_64-with-glibc2.36",
+        "python": "3.12.14",
+        "cpu_count": 4,
+        "arguments": {
+          "baseline": "/opt/keel/bin/keel-alpha2",
+          "candidate": "/opt/keel/bin/keel-alpha3",
+          "policy": "always",
+          "rep": 2,
+          "seconds": 5.0,
+          "enable_loopback": true
+        },
+        "harness_revision": "ddedb29c68259b9c2e8891d3190c52708f4eeb13",
+        "loopback": {
+          "before": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK"
+              ],
+              "mtu": 65536,
+              "qdisc": "noop",
+              "operstate": "DOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ],
+          "after": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK",
+                "UP",
+                "LOWER_UP"
+              ],
+              "mtu": 65536,
+              "qdisc": "noqueue",
+              "operstate": "UNKNOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ]
+        },
+        "placement": "server and load generator share one execution environment over loopback TCP; provider job metadata identifies the sandbox",
+        "job_script_sha256": "a5fe487d6e0ebfb7a8b9991eda6d53544dd4aaaf3126e1a420dc3e61d10e297b",
+        "filesystem": "Filesystem     Type 1K-blocks   Used Available Use% Mounted on\n/dev/root      ext4 131001348 170928 130814036   1% /\n"
+      },
+      "cpu_model": "Intel(R) Xeon(R) Processor @ 3.20GHz",
+      "spec": {
+        "uuid": "eaf61c35-a989-4097-bdd0-ef1dc30a7009",
+        "name": "Intel v1",
+        "slug": "intel-v1",
+        "os": "linux",
+        "architecture": "x86_64",
+        "sandbox": "firecracker",
+        "cpu": 4,
+        "memory": 51539607552,
+        "disk": 137438953472,
+        "network": false,
+        "fallback": "2026-03-10T05:29:05Z",
+        "created": "2026-03-10T05:29:05Z",
+        "modified": "2026-03-10T05:29:05Z",
+        "archived": null
+      }
+    },
+    {
+      "job": "01a073bd-9266-7632-a04f-e92ffd36dcd2",
+      "host": {
+        "platform": "Linux-6.1.177-x86_64-with-glibc2.36",
+        "python": "3.12.14",
+        "cpu_count": 4,
+        "arguments": {
+          "baseline": "/opt/keel/bin/keel-alpha2",
+          "candidate": "/opt/keel/bin/keel-alpha3",
+          "policy": "off",
+          "rep": 3,
+          "seconds": 5.0,
+          "enable_loopback": true
+        },
+        "harness_revision": "ddedb29c68259b9c2e8891d3190c52708f4eeb13",
+        "loopback": {
+          "before": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK"
+              ],
+              "mtu": 65536,
+              "qdisc": "noop",
+              "operstate": "DOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ],
+          "after": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK",
+                "UP",
+                "LOWER_UP"
+              ],
+              "mtu": 65536,
+              "qdisc": "noqueue",
+              "operstate": "UNKNOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ]
+        },
+        "placement": "server and load generator share one execution environment over loopback TCP; provider job metadata identifies the sandbox",
+        "job_script_sha256": "a5fe487d6e0ebfb7a8b9991eda6d53544dd4aaaf3126e1a420dc3e61d10e297b",
+        "filesystem": "Filesystem     Type 1K-blocks   Used Available Use% Mounted on\n/dev/root      ext4 131001348 170928 130814036   1% /\n"
+      },
+      "cpu_model": "Intel(R) Xeon(R) Processor @ 3.20GHz",
+      "spec": {
+        "uuid": "eaf61c35-a989-4097-bdd0-ef1dc30a7009",
+        "name": "Intel v1",
+        "slug": "intel-v1",
+        "os": "linux",
+        "architecture": "x86_64",
+        "sandbox": "firecracker",
+        "cpu": 4,
+        "memory": 51539607552,
+        "disk": 137438953472,
+        "network": false,
+        "fallback": "2026-03-10T05:29:05Z",
+        "created": "2026-03-10T05:29:05Z",
+        "modified": "2026-03-10T05:29:05Z",
+        "archived": null
+      }
+    },
+    {
+      "job": "01a073be-29eb-7280-b998-158158ff0fc8",
+      "host": {
+        "platform": "Linux-6.1.177-x86_64-with-glibc2.36",
+        "python": "3.12.14",
+        "cpu_count": 4,
+        "arguments": {
+          "baseline": "/opt/keel/bin/keel-alpha2",
+          "candidate": "/opt/keel/bin/keel-alpha3",
+          "policy": "everysec",
+          "rep": 3,
+          "seconds": 5.0,
+          "enable_loopback": true
+        },
+        "harness_revision": "ddedb29c68259b9c2e8891d3190c52708f4eeb13",
+        "loopback": {
+          "before": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK"
+              ],
+              "mtu": 65536,
+              "qdisc": "noop",
+              "operstate": "DOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ],
+          "after": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK",
+                "UP",
+                "LOWER_UP"
+              ],
+              "mtu": 65536,
+              "qdisc": "noqueue",
+              "operstate": "UNKNOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ]
+        },
+        "placement": "server and load generator share one execution environment over loopback TCP; provider job metadata identifies the sandbox",
+        "job_script_sha256": "a5fe487d6e0ebfb7a8b9991eda6d53544dd4aaaf3126e1a420dc3e61d10e297b",
+        "filesystem": "Filesystem     Type 1K-blocks   Used Available Use% Mounted on\n/dev/root      ext4 131001348 170928 130814036   1% /\n"
+      },
+      "cpu_model": "Intel(R) Xeon(R) Processor @ 3.20GHz",
+      "spec": {
+        "uuid": "eaf61c35-a989-4097-bdd0-ef1dc30a7009",
+        "name": "Intel v1",
+        "slug": "intel-v1",
+        "os": "linux",
+        "architecture": "x86_64",
+        "sandbox": "firecracker",
+        "cpu": 4,
+        "memory": 51539607552,
+        "disk": 137438953472,
+        "network": false,
+        "fallback": "2026-03-10T05:29:05Z",
+        "created": "2026-03-10T05:29:05Z",
+        "modified": "2026-03-10T05:29:05Z",
+        "archived": null
+      }
+    },
+    {
+      "job": "01a073be-c13b-74b0-8a4f-4bca984c22f8",
+      "host": {
+        "platform": "Linux-6.1.177-x86_64-with-glibc2.36",
+        "python": "3.12.14",
+        "cpu_count": 4,
+        "arguments": {
+          "baseline": "/opt/keel/bin/keel-alpha2",
+          "candidate": "/opt/keel/bin/keel-alpha3",
+          "policy": "always",
+          "rep": 3,
+          "seconds": 5.0,
+          "enable_loopback": true
+        },
+        "harness_revision": "ddedb29c68259b9c2e8891d3190c52708f4eeb13",
+        "loopback": {
+          "before": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK"
+              ],
+              "mtu": 65536,
+              "qdisc": "noop",
+              "operstate": "DOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ],
+          "after": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK",
+                "UP",
+                "LOWER_UP"
+              ],
+              "mtu": 65536,
+              "qdisc": "noqueue",
+              "operstate": "UNKNOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ]
+        },
+        "placement": "server and load generator share one execution environment over loopback TCP; provider job metadata identifies the sandbox",
+        "job_script_sha256": "a5fe487d6e0ebfb7a8b9991eda6d53544dd4aaaf3126e1a420dc3e61d10e297b",
+        "filesystem": "Filesystem     Type 1K-blocks   Used Available Use% Mounted on\n/dev/root      ext4 131001348 170928 130814036   1% /\n"
+      },
+      "cpu_model": "Intel(R) Xeon(R) Processor @ 3.20GHz",
+      "spec": {
+        "uuid": "eaf61c35-a989-4097-bdd0-ef1dc30a7009",
+        "name": "Intel v1",
+        "slug": "intel-v1",
+        "os": "linux",
+        "architecture": "x86_64",
+        "sandbox": "firecracker",
+        "cpu": 4,
+        "memory": 51539607552,
+        "disk": 137438953472,
+        "network": false,
+        "fallback": "2026-03-10T05:29:05Z",
+        "created": "2026-03-10T05:29:05Z",
+        "modified": "2026-03-10T05:29:05Z",
+        "archived": null
+      }
+    },
+    {
+      "job": "01a073bf-57c7-7c43-9dda-d7caa31acd78",
+      "host": {
+        "platform": "Linux-6.1.177-x86_64-with-glibc2.36",
+        "python": "3.12.14",
+        "cpu_count": 4,
+        "arguments": {
+          "baseline": "/opt/keel/bin/keel-alpha2",
+          "candidate": "/opt/keel/bin/keel-alpha3",
+          "policy": "off",
+          "rep": 4,
+          "seconds": 5.0,
+          "enable_loopback": true
+        },
+        "harness_revision": "ddedb29c68259b9c2e8891d3190c52708f4eeb13",
+        "loopback": {
+          "before": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK"
+              ],
+              "mtu": 65536,
+              "qdisc": "noop",
+              "operstate": "DOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ],
+          "after": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK",
+                "UP",
+                "LOWER_UP"
+              ],
+              "mtu": 65536,
+              "qdisc": "noqueue",
+              "operstate": "UNKNOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ]
+        },
+        "placement": "server and load generator share one execution environment over loopback TCP; provider job metadata identifies the sandbox",
+        "job_script_sha256": "a5fe487d6e0ebfb7a8b9991eda6d53544dd4aaaf3126e1a420dc3e61d10e297b",
+        "filesystem": "Filesystem     Type 1K-blocks   Used Available Use% Mounted on\n/dev/root      ext4 131001348 170928 130814036   1% /\n"
+      },
+      "cpu_model": "Intel(R) Xeon(R) Processor @ 3.20GHz",
+      "spec": {
+        "uuid": "eaf61c35-a989-4097-bdd0-ef1dc30a7009",
+        "name": "Intel v1",
+        "slug": "intel-v1",
+        "os": "linux",
+        "architecture": "x86_64",
+        "sandbox": "firecracker",
+        "cpu": 4,
+        "memory": 51539607552,
+        "disk": 137438953472,
+        "network": false,
+        "fallback": "2026-03-10T05:29:05Z",
+        "created": "2026-03-10T05:29:05Z",
+        "modified": "2026-03-10T05:29:05Z",
+        "archived": null
+      }
+    },
+    {
+      "job": "01a073bf-edf1-7782-beac-7b1496af2ad0",
+      "host": {
+        "platform": "Linux-6.1.177-x86_64-with-glibc2.36",
+        "python": "3.12.14",
+        "cpu_count": 4,
+        "arguments": {
+          "baseline": "/opt/keel/bin/keel-alpha2",
+          "candidate": "/opt/keel/bin/keel-alpha3",
+          "policy": "everysec",
+          "rep": 4,
+          "seconds": 5.0,
+          "enable_loopback": true
+        },
+        "harness_revision": "ddedb29c68259b9c2e8891d3190c52708f4eeb13",
+        "loopback": {
+          "before": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK"
+              ],
+              "mtu": 65536,
+              "qdisc": "noop",
+              "operstate": "DOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ],
+          "after": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK",
+                "UP",
+                "LOWER_UP"
+              ],
+              "mtu": 65536,
+              "qdisc": "noqueue",
+              "operstate": "UNKNOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ]
+        },
+        "placement": "server and load generator share one execution environment over loopback TCP; provider job metadata identifies the sandbox",
+        "job_script_sha256": "a5fe487d6e0ebfb7a8b9991eda6d53544dd4aaaf3126e1a420dc3e61d10e297b",
+        "filesystem": "Filesystem     Type 1K-blocks   Used Available Use% Mounted on\n/dev/root      ext4 131001348 170928 130814036   1% /\n"
+      },
+      "cpu_model": "Intel(R) Xeon(R) Processor @ 3.20GHz",
+      "spec": {
+        "uuid": "eaf61c35-a989-4097-bdd0-ef1dc30a7009",
+        "name": "Intel v1",
+        "slug": "intel-v1",
+        "os": "linux",
+        "architecture": "x86_64",
+        "sandbox": "firecracker",
+        "cpu": 4,
+        "memory": 51539607552,
+        "disk": 137438953472,
+        "network": false,
+        "fallback": "2026-03-10T05:29:05Z",
+        "created": "2026-03-10T05:29:05Z",
+        "modified": "2026-03-10T05:29:05Z",
+        "archived": null
+      }
+    },
+    {
+      "job": "01a073c0-83cc-73f3-9e0a-25733cb69c73",
+      "host": {
+        "platform": "Linux-6.1.177-x86_64-with-glibc2.36",
+        "python": "3.12.14",
+        "cpu_count": 4,
+        "arguments": {
+          "baseline": "/opt/keel/bin/keel-alpha2",
+          "candidate": "/opt/keel/bin/keel-alpha3",
+          "policy": "always",
+          "rep": 4,
+          "seconds": 5.0,
+          "enable_loopback": true
+        },
+        "harness_revision": "ddedb29c68259b9c2e8891d3190c52708f4eeb13",
+        "loopback": {
+          "before": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK"
+              ],
+              "mtu": 65536,
+              "qdisc": "noop",
+              "operstate": "DOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ],
+          "after": [
+            {
+              "ifindex": 1,
+              "ifname": "lo",
+              "flags": [
+                "LOOPBACK",
+                "UP",
+                "LOWER_UP"
+              ],
+              "mtu": 65536,
+              "qdisc": "noqueue",
+              "operstate": "UNKNOWN",
+              "linkmode": "DEFAULT",
+              "group": "default",
+              "txqlen": 1000,
+              "link_type": "loopback",
+              "address": "00:00:00:00:00:00",
+              "broadcast": "00:00:00:00:00:00"
+            }
+          ]
+        },
+        "placement": "server and load generator share one execution environment over loopback TCP; provider job metadata identifies the sandbox",
+        "job_script_sha256": "a5fe487d6e0ebfb7a8b9991eda6d53544dd4aaaf3126e1a420dc3e61d10e297b",
+        "filesystem": "Filesystem     Type 1K-blocks   Used Available Use% Mounted on\n/dev/root      ext4 131001348 170928 130814036   1% /\n"
+      },
+      "cpu_model": "Intel(R) Xeon(R) Processor @ 3.20GHz",
+      "spec": {
+        "uuid": "eaf61c35-a989-4097-bdd0-ef1dc30a7009",
+        "name": "Intel v1",
+        "slug": "intel-v1",
+        "os": "linux",
+        "architecture": "x86_64",
+        "sandbox": "firecracker",
+        "cpu": 4,
+        "memory": 51539607552,
+        "disk": 137438953472,
+        "network": false,
+        "fallback": "2026-03-10T05:29:05Z",
+        "created": "2026-03-10T05:29:05Z",
+        "modified": "2026-03-10T05:29:05Z",
+        "archived": null
+      }
+    }
+  ],
+  "measurements": [
+    {
+      "arm": "baseline-sync",
+      "policy": "off",
+      "rep": 0,
+      "role": "load",
+      "attempts": 34301,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6860.2,
+      "p99_ms": 9.990152999999946,
+      "p999_ms": 11.242450000000126,
+      "max_ms": 13.286160999999908,
+      "rss_peak_kib": 13152,
+      "cpu_percent_lifetime_median": 24.4,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 116,
+      "gc_stw_max_ms_including_setup": 0.063,
+      "gc_stw_total_ms_including_setup": 4.098
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "off",
+      "rep": 0,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.6034120000574248,
+      "p999_ms": 3.6832259999999284,
+      "max_ms": 4.506287999999969,
+      "rss_peak_kib": 13152,
+      "cpu_percent_lifetime_median": 24.4,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 116,
+      "gc_stw_max_ms_including_setup": 0.063,
+      "gc_stw_total_ms_including_setup": 4.098
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "off",
+      "rep": 0,
+      "role": "load",
+      "attempts": 34120,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6824.0,
+      "p99_ms": 0.6662510000001731,
+      "p999_ms": 11.09545799999978,
+      "max_ms": 12.682073000000571,
+      "rss_peak_kib": 14640,
+      "cpu_percent_lifetime_median": 24.8,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 115,
+      "gc_stw_max_ms_including_setup": 0.184,
+      "gc_stw_total_ms_including_setup": 4.1499999999999995
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "off",
+      "rep": 0,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.0395130001015218,
+      "p999_ms": 1.849579000062107,
+      "max_ms": 1.8682330000006075,
+      "rss_peak_kib": 14640,
+      "cpu_percent_lifetime_median": 24.8,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 115,
+      "gc_stw_max_ms_including_setup": 0.184,
+      "gc_stw_total_ms_including_setup": 4.1499999999999995
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "off",
+      "rep": 0,
+      "role": "load",
+      "attempts": 34701,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6940.2,
+      "p99_ms": 9.991920000000931,
+      "p999_ms": 10.900057999998936,
+      "max_ms": 12.54496199999977,
+      "rss_peak_kib": 15644,
+      "cpu_percent_lifetime_median": 26.2,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 117,
+      "gc_stw_max_ms_including_setup": 0.384,
+      "gc_stw_total_ms_including_setup": 5.422
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "off",
+      "rep": 0,
+      "role": "probe",
+      "attempts": 500,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.0,
+      "p99_ms": 1.542487999763864,
+      "p999_ms": 2.1035369998685383,
+      "max_ms": 6.102040000026676,
+      "rss_peak_kib": 15644,
+      "cpu_percent_lifetime_median": 26.2,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 117,
+      "gc_stw_max_ms_including_setup": 0.384,
+      "gc_stw_total_ms_including_setup": 5.422
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "everysec",
+      "rep": 0,
+      "role": "load",
+      "attempts": 33402,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6680.4,
+      "p99_ms": 10.171578999999653,
+      "p999_ms": 11.514433999999962,
+      "max_ms": 15.752295000000194,
+      "rss_peak_kib": 12984,
+      "cpu_percent_lifetime_median": 26.5,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 116,
+      "gc_stw_max_ms_including_setup": 0.392,
+      "gc_stw_total_ms_including_setup": 4.6419999999999995
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "everysec",
+      "rep": 0,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.8259839999996696,
+      "p999_ms": 11.095786000057117,
+      "max_ms": 16.00878900003,
+      "rss_peak_kib": 12984,
+      "cpu_percent_lifetime_median": 26.5,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 116,
+      "gc_stw_max_ms_including_setup": 0.392,
+      "gc_stw_total_ms_including_setup": 4.6419999999999995
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "everysec",
+      "rep": 0,
+      "role": "load",
+      "attempts": 33402,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6680.4,
+      "p99_ms": 2.0955850000010656,
+      "p999_ms": 11.137738000000397,
+      "max_ms": 13.052268000000034,
+      "rss_peak_kib": 14144,
+      "cpu_percent_lifetime_median": 26.4,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 154,
+      "gc_stw_max_ms_including_setup": 0.242,
+      "gc_stw_total_ms_including_setup": 5.635
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "everysec",
+      "rep": 0,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.1039870001052776,
+      "p999_ms": 1.929039000035715,
+      "max_ms": 2.0627930000003403,
+      "rss_peak_kib": 14144,
+      "cpu_percent_lifetime_median": 26.4,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 154,
+      "gc_stw_max_ms_including_setup": 0.242,
+      "gc_stw_total_ms_including_setup": 5.635
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "everysec",
+      "rep": 0,
+      "role": "load",
+      "attempts": 33042,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6608.4,
+      "p99_ms": 1.4301190000001185,
+      "p999_ms": 10.548147999998037,
+      "max_ms": 17.1332539999991,
+      "rss_peak_kib": 14012,
+      "cpu_percent_lifetime_median": 31.8,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 174,
+      "gc_stw_max_ms_including_setup": 0.388,
+      "gc_stw_total_ms_including_setup": 5.957
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "everysec",
+      "rep": 0,
+      "role": "probe",
+      "attempts": 500,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.0,
+      "p99_ms": 1.0950120000075003,
+      "p999_ms": 2.451578999998816,
+      "max_ms": 6.952885000030662,
+      "rss_peak_kib": 14012,
+      "cpu_percent_lifetime_median": 31.8,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 174,
+      "gc_stw_max_ms_including_setup": 0.388,
+      "gc_stw_total_ms_including_setup": 5.957
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "always",
+      "rep": 0,
+      "role": "load",
+      "attempts": 25502,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 5100.4,
+      "p99_ms": 10.22336399999979,
+      "p999_ms": 11.725642000000036,
+      "max_ms": 15.59046399999997,
+      "rss_peak_kib": 14724,
+      "cpu_percent_lifetime_median": 23.7,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 89,
+      "gc_stw_max_ms_including_setup": 0.065,
+      "gc_stw_total_ms_including_setup": 2.802
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "always",
+      "rep": 0,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.3074170000830776,
+      "p999_ms": 6.20541600003488,
+      "max_ms": 6.792974000055629,
+      "rss_peak_kib": 14724,
+      "cpu_percent_lifetime_median": 23.7,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 89,
+      "gc_stw_max_ms_including_setup": 0.065,
+      "gc_stw_total_ms_including_setup": 2.802
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "always",
+      "rep": 0,
+      "role": "load",
+      "attempts": 25702,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 5140.4,
+      "p99_ms": 10.105715999999987,
+      "p999_ms": 11.340323999998958,
+      "max_ms": 14.143199999999467,
+      "rss_peak_kib": 15064,
+      "cpu_percent_lifetime_median": 25.4,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 133,
+      "gc_stw_max_ms_including_setup": 0.401,
+      "gc_stw_total_ms_including_setup": 4.967
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "always",
+      "rep": 0,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.113582000080271,
+      "p999_ms": 3.510194000037714,
+      "max_ms": 13.43123200003582,
+      "rss_peak_kib": 15064,
+      "cpu_percent_lifetime_median": 25.4,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 133,
+      "gc_stw_max_ms_including_setup": 0.401,
+      "gc_stw_total_ms_including_setup": 4.967
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "always",
+      "rep": 0,
+      "role": "load",
+      "attempts": 25046,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 5009.2,
+      "p99_ms": 10.10209200000034,
+      "p999_ms": 11.277019000001332,
+      "max_ms": 13.488097999999837,
+      "rss_peak_kib": 15388,
+      "cpu_percent_lifetime_median": 28.3,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 114,
+      "gc_stw_max_ms_including_setup": 0.399,
+      "gc_stw_total_ms_including_setup": 4.889
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "always",
+      "rep": 0,
+      "role": "probe",
+      "attempts": 500,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.0,
+      "p99_ms": 1.49081099997872,
+      "p999_ms": 2.9495639999996826,
+      "max_ms": 8.647675000014843,
+      "rss_peak_kib": 15388,
+      "cpu_percent_lifetime_median": 28.3,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 114,
+      "gc_stw_max_ms_including_setup": 0.399,
+      "gc_stw_total_ms_including_setup": 4.889
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "off",
+      "rep": 1,
+      "role": "load",
+      "attempts": 34401,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6880.2,
+      "p99_ms": 10.030039000000102,
+      "p999_ms": 11.048204999999811,
+      "max_ms": 12.72562899999996,
+      "rss_peak_kib": 13620,
+      "cpu_percent_lifetime_median": 23.8,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 116,
+      "gc_stw_max_ms_including_setup": 0.079,
+      "gc_stw_total_ms_including_setup": 3.502
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "off",
+      "rep": 1,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.1064880000910549,
+      "p999_ms": 1.8957959999998941,
+      "max_ms": 3.824922000000175,
+      "rss_peak_kib": 13620,
+      "cpu_percent_lifetime_median": 23.8,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 116,
+      "gc_stw_max_ms_including_setup": 0.079,
+      "gc_stw_total_ms_including_setup": 3.502
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "off",
+      "rep": 1,
+      "role": "load",
+      "attempts": 34901,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6980.2,
+      "p99_ms": 9.981024999998311,
+      "p999_ms": 10.755010000000453,
+      "max_ms": 11.72578399999935,
+      "rss_peak_kib": 15076,
+      "cpu_percent_lifetime_median": 25.4,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 118,
+      "gc_stw_max_ms_including_setup": 0.154,
+      "gc_stw_total_ms_including_setup": 4.422
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "off",
+      "rep": 1,
+      "role": "probe",
+      "attempts": 500,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.0,
+      "p99_ms": 1.155094999841566,
+      "p999_ms": 1.891806999999801,
+      "max_ms": 3.3415970000252315,
+      "rss_peak_kib": 15076,
+      "cpu_percent_lifetime_median": 25.4,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 118,
+      "gc_stw_max_ms_including_setup": 0.154,
+      "gc_stw_total_ms_including_setup": 4.422
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "off",
+      "rep": 1,
+      "role": "load",
+      "attempts": 34101,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6820.2,
+      "p99_ms": 9.96763500000064,
+      "p999_ms": 11.11281200000036,
+      "max_ms": 12.302671000000487,
+      "rss_peak_kib": 14984,
+      "cpu_percent_lifetime_median": 25.2,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 115,
+      "gc_stw_max_ms_including_setup": 0.09699999999999999,
+      "gc_stw_total_ms_including_setup": 4.329
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "off",
+      "rep": 1,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.2602040000864179,
+      "p999_ms": 1.452523000088135,
+      "max_ms": 2.3612750000001625,
+      "rss_peak_kib": 14984,
+      "cpu_percent_lifetime_median": 25.2,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 115,
+      "gc_stw_max_ms_including_setup": 0.09699999999999999,
+      "gc_stw_total_ms_including_setup": 4.329
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "everysec",
+      "rep": 1,
+      "role": "load",
+      "attempts": 33602,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6720.4,
+      "p99_ms": 9.693393999999689,
+      "p999_ms": 11.347341000000455,
+      "max_ms": 15.61823699999998,
+      "rss_peak_kib": 12964,
+      "cpu_percent_lifetime_median": 25.6,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 116,
+      "gc_stw_max_ms_including_setup": 0.185,
+      "gc_stw_total_ms_including_setup": 4.4719999999999995
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "everysec",
+      "rep": 1,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.5436360000435911,
+      "p999_ms": 4.807602999999938,
+      "max_ms": 13.01987400005622,
+      "rss_peak_kib": 12964,
+      "cpu_percent_lifetime_median": 25.6,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 116,
+      "gc_stw_max_ms_including_setup": 0.185,
+      "gc_stw_total_ms_including_setup": 4.4719999999999995
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "everysec",
+      "rep": 1,
+      "role": "load",
+      "attempts": 34302,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6860.4,
+      "p99_ms": 6.518780999998697,
+      "p999_ms": 10.66826200000115,
+      "max_ms": 11.494178000001298,
+      "rss_peak_kib": 15952,
+      "cpu_percent_lifetime_median": 27.3,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 158,
+      "gc_stw_max_ms_including_setup": 0.185,
+      "gc_stw_total_ms_including_setup": 5.358
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "everysec",
+      "rep": 1,
+      "role": "probe",
+      "attempts": 500,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.0,
+      "p99_ms": 1.122486000038947,
+      "p999_ms": 1.8992069999992367,
+      "max_ms": 2.3573170000315002,
+      "rss_peak_kib": 15952,
+      "cpu_percent_lifetime_median": 27.3,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 158,
+      "gc_stw_max_ms_including_setup": 0.185,
+      "gc_stw_total_ms_including_setup": 5.358
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "everysec",
+      "rep": 1,
+      "role": "load",
+      "attempts": 32302,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6460.4,
+      "p99_ms": 2.4549990000011235,
+      "p999_ms": 11.06933500000018,
+      "max_ms": 12.58843499999962,
+      "rss_peak_kib": 14392,
+      "cpu_percent_lifetime_median": 31.5,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 170,
+      "gc_stw_max_ms_including_setup": 0.141,
+      "gc_stw_total_ms_including_setup": 5.817
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "everysec",
+      "rep": 1,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.0745030000816058,
+      "p999_ms": 1.2223940000364308,
+      "max_ms": 2.1802939999995274,
+      "rss_peak_kib": 14392,
+      "cpu_percent_lifetime_median": 31.5,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 170,
+      "gc_stw_max_ms_including_setup": 0.141,
+      "gc_stw_total_ms_including_setup": 5.817
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "always",
+      "rep": 1,
+      "role": "load",
+      "attempts": 25402,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 5080.4,
+      "p99_ms": 10.339704000000172,
+      "p999_ms": 11.645643000000483,
+      "max_ms": 13.880885999999926,
+      "rss_peak_kib": 13720,
+      "cpu_percent_lifetime_median": 23.5,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 89,
+      "gc_stw_max_ms_including_setup": 0.079,
+      "gc_stw_total_ms_including_setup": 2.796
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "always",
+      "rep": 1,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.3768880000890604,
+      "p999_ms": 8.921926000057034,
+      "max_ms": 10.379565000035562,
+      "rss_peak_kib": 13720,
+      "cpu_percent_lifetime_median": 23.5,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 89,
+      "gc_stw_max_ms_including_setup": 0.079,
+      "gc_stw_total_ms_including_setup": 2.796
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "always",
+      "rep": 1,
+      "role": "load",
+      "attempts": 25882,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 5176.4,
+      "p99_ms": 1.9634429999992875,
+      "p999_ms": 11.165195000000239,
+      "max_ms": 12.826528999999809,
+      "rss_peak_kib": 15460,
+      "cpu_percent_lifetime_median": 26.4,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 134,
+      "gc_stw_max_ms_including_setup": 0.214,
+      "gc_stw_total_ms_including_setup": 5.391
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "always",
+      "rep": 1,
+      "role": "probe",
+      "attempts": 500,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.0,
+      "p99_ms": 1.17584200001275,
+      "p999_ms": 2.2755000000334036,
+      "max_ms": 3.219426999999442,
+      "rss_peak_kib": 15460,
+      "cpu_percent_lifetime_median": 26.4,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 134,
+      "gc_stw_max_ms_including_setup": 0.214,
+      "gc_stw_total_ms_including_setup": 5.391
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "always",
+      "rep": 1,
+      "role": "load",
+      "attempts": 24658,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 4931.6,
+      "p99_ms": 2.1070399999985057,
+      "p999_ms": 11.419147999999879,
+      "max_ms": 14.48366800000045,
+      "rss_peak_kib": 15776,
+      "cpu_percent_lifetime_median": 27.6,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 131,
+      "gc_stw_max_ms_including_setup": 0.275,
+      "gc_stw_total_ms_including_setup": 4.625
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "always",
+      "rep": 1,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 0.8986240000865564,
+      "p999_ms": 1.2485080000015358,
+      "max_ms": 3.003768000000129,
+      "rss_peak_kib": 15776,
+      "cpu_percent_lifetime_median": 27.6,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 131,
+      "gc_stw_max_ms_including_setup": 0.275,
+      "gc_stw_total_ms_including_setup": 4.625
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "off",
+      "rep": 2,
+      "role": "load",
+      "attempts": 34301,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6860.2,
+      "p99_ms": 9.986230000000873,
+      "p999_ms": 11.322473999999971,
+      "max_ms": 12.829240000000297,
+      "rss_peak_kib": 13128,
+      "cpu_percent_lifetime_median": 25.0,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 122,
+      "gc_stw_max_ms_including_setup": 0.184,
+      "gc_stw_total_ms_including_setup": 4.7909999999999995
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "off",
+      "rep": 2,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.173686000049301,
+      "p999_ms": 1.4805770000805296,
+      "max_ms": 2.045480000000488,
+      "rss_peak_kib": 13128,
+      "cpu_percent_lifetime_median": 25.0,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 122,
+      "gc_stw_max_ms_including_setup": 0.184,
+      "gc_stw_total_ms_including_setup": 4.7909999999999995
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "off",
+      "rep": 2,
+      "role": "load",
+      "attempts": 34801,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6960.2,
+      "p99_ms": 10.013958000000045,
+      "p999_ms": 10.454011999998514,
+      "max_ms": 12.18033800000029,
+      "rss_peak_kib": 15072,
+      "cpu_percent_lifetime_median": 25.1,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 118,
+      "gc_stw_max_ms_including_setup": 0.164,
+      "gc_stw_total_ms_including_setup": 3.678
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "off",
+      "rep": 2,
+      "role": "probe",
+      "attempts": 500,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.0,
+      "p99_ms": 1.103250999985761,
+      "p999_ms": 1.2724030000512698,
+      "max_ms": 1.9698740000002601,
+      "rss_peak_kib": 15072,
+      "cpu_percent_lifetime_median": 25.1,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 118,
+      "gc_stw_max_ms_including_setup": 0.164,
+      "gc_stw_total_ms_including_setup": 3.678
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "off",
+      "rep": 2,
+      "role": "load",
+      "attempts": 33743,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6748.6,
+      "p99_ms": 0.9269520000001474,
+      "p999_ms": 11.34265499999998,
+      "max_ms": 14.710452999999957,
+      "rss_peak_kib": 15880,
+      "cpu_percent_lifetime_median": 26.1,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 114,
+      "gc_stw_max_ms_including_setup": 0.394,
+      "gc_stw_total_ms_including_setup": 5.217
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "off",
+      "rep": 2,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.3690780000512603,
+      "p999_ms": 2.6833740000000716,
+      "max_ms": 5.9856389999999315,
+      "rss_peak_kib": 15880,
+      "cpu_percent_lifetime_median": 26.1,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 114,
+      "gc_stw_max_ms_including_setup": 0.394,
+      "gc_stw_total_ms_including_setup": 5.217
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "everysec",
+      "rep": 2,
+      "role": "load",
+      "attempts": 33503,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6700.6,
+      "p99_ms": 10.084057000000257,
+      "p999_ms": 11.332428999999422,
+      "max_ms": 12.792160999999247,
+      "rss_peak_kib": 14052,
+      "cpu_percent_lifetime_median": 26.0,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 116,
+      "gc_stw_max_ms_including_setup": 0.392,
+      "gc_stw_total_ms_including_setup": 4.357
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "everysec",
+      "rep": 2,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.8655130000002629,
+      "p999_ms": 3.1258450000386517,
+      "max_ms": 9.06490300003604,
+      "rss_peak_kib": 14052,
+      "cpu_percent_lifetime_median": 26.0,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 116,
+      "gc_stw_max_ms_including_setup": 0.392,
+      "gc_stw_total_ms_including_setup": 4.357
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "everysec",
+      "rep": 2,
+      "role": "load",
+      "attempts": 34202,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6840.4,
+      "p99_ms": 6.771794000000497,
+      "p999_ms": 10.796023000001043,
+      "max_ms": 11.622594000002096,
+      "rss_peak_kib": 15420,
+      "cpu_percent_lifetime_median": 27.0,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 158,
+      "gc_stw_max_ms_including_setup": 0.076,
+      "gc_stw_total_ms_including_setup": 5.375
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "everysec",
+      "rep": 2,
+      "role": "probe",
+      "attempts": 500,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.0,
+      "p99_ms": 1.0376070000059912,
+      "p999_ms": 1.4985020000359839,
+      "max_ms": 1.944965999999937,
+      "rss_peak_kib": 15420,
+      "cpu_percent_lifetime_median": 27.0,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 158,
+      "gc_stw_max_ms_including_setup": 0.076,
+      "gc_stw_total_ms_including_setup": 5.375
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "everysec",
+      "rep": 2,
+      "role": "load",
+      "attempts": 32102,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6420.4,
+      "p99_ms": 2.7347699999999975,
+      "p999_ms": 11.157505999999984,
+      "max_ms": 15.73353200000005,
+      "rss_peak_kib": 14200,
+      "cpu_percent_lifetime_median": 31.1,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 170,
+      "gc_stw_max_ms_including_setup": 0.309,
+      "gc_stw_total_ms_including_setup": 6.434
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "everysec",
+      "rep": 2,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.1099079999998818,
+      "p999_ms": 3.287697999999839,
+      "max_ms": 3.725978999999935,
+      "rss_peak_kib": 14200,
+      "cpu_percent_lifetime_median": 31.1,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 170,
+      "gc_stw_max_ms_including_setup": 0.309,
+      "gc_stw_total_ms_including_setup": 6.434
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "always",
+      "rep": 2,
+      "role": "load",
+      "attempts": 25502,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 5100.4,
+      "p99_ms": 10.141660999998692,
+      "p999_ms": 12.020758000000242,
+      "max_ms": 14.11820600000091,
+      "rss_peak_kib": 13172,
+      "cpu_percent_lifetime_median": 24.3,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 89,
+      "gc_stw_max_ms_including_setup": 0.435,
+      "gc_stw_total_ms_including_setup": 4.164
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "always",
+      "rep": 2,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.8936760000052288,
+      "p999_ms": 2.1604910000370126,
+      "max_ms": 7.102781000035918,
+      "rss_peak_kib": 13172,
+      "cpu_percent_lifetime_median": 24.3,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 89,
+      "gc_stw_max_ms_including_setup": 0.435,
+      "gc_stw_total_ms_including_setup": 4.164
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "always",
+      "rep": 2,
+      "role": "load",
+      "attempts": 25802,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 5160.4,
+      "p99_ms": 10.166031000000686,
+      "p999_ms": 11.191224000000943,
+      "max_ms": 13.96314299999979,
+      "rss_peak_kib": 15196,
+      "cpu_percent_lifetime_median": 25.9,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 134,
+      "gc_stw_max_ms_including_setup": 0.187,
+      "gc_stw_total_ms_including_setup": 5.086
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "always",
+      "rep": 2,
+      "role": "probe",
+      "attempts": 500,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.0,
+      "p99_ms": 1.734293000037468,
+      "p999_ms": 2.6429810000010434,
+      "max_ms": 6.31118100001693,
+      "rss_peak_kib": 15196,
+      "cpu_percent_lifetime_median": 25.9,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 134,
+      "gc_stw_max_ms_including_setup": 0.187,
+      "gc_stw_total_ms_including_setup": 5.086
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "always",
+      "rep": 2,
+      "role": "load",
+      "attempts": 24502,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 4900.4,
+      "p99_ms": 10.21991699999969,
+      "p999_ms": 11.886696000000363,
+      "max_ms": 15.075792999999837,
+      "rss_peak_kib": 16296,
+      "cpu_percent_lifetime_median": 28.5,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 112,
+      "gc_stw_max_ms_including_setup": 0.217,
+      "gc_stw_total_ms_including_setup": 4.666
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "always",
+      "rep": 2,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.4233790000517388,
+      "p999_ms": 4.513275999999955,
+      "max_ms": 5.00601500005704,
+      "rss_peak_kib": 16296,
+      "cpu_percent_lifetime_median": 28.5,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 112,
+      "gc_stw_max_ms_including_setup": 0.217,
+      "gc_stw_total_ms_including_setup": 4.666
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "off",
+      "rep": 3,
+      "role": "load",
+      "attempts": 34701,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6940.2,
+      "p99_ms": 9.965693999999914,
+      "p999_ms": 10.88318500000085,
+      "max_ms": 12.884762999998856,
+      "rss_peak_kib": 14276,
+      "cpu_percent_lifetime_median": 25.3,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 117,
+      "gc_stw_max_ms_including_setup": 0.403,
+      "gc_stw_total_ms_including_setup": 4.835
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "off",
+      "rep": 3,
+      "role": "probe",
+      "attempts": 500,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.0,
+      "p99_ms": 1.6027599998196251,
+      "p999_ms": 1.8318999999991092,
+      "max_ms": 3.774442000025857,
+      "rss_peak_kib": 14276,
+      "cpu_percent_lifetime_median": 25.3,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 117,
+      "gc_stw_max_ms_including_setup": 0.403,
+      "gc_stw_total_ms_including_setup": 4.835
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "off",
+      "rep": 3,
+      "role": "load",
+      "attempts": 34101,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6820.2,
+      "p99_ms": 10.047789999999779,
+      "p999_ms": 11.202866999999728,
+      "max_ms": 12.459590999998937,
+      "rss_peak_kib": 14744,
+      "cpu_percent_lifetime_median": 25.3,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 115,
+      "gc_stw_max_ms_including_setup": 0.097,
+      "gc_stw_total_ms_including_setup": 4.079
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "off",
+      "rep": 3,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.157944000025779,
+      "p999_ms": 1.822519000000078,
+      "max_ms": 2.627842000073599,
+      "rss_peak_kib": 14744,
+      "cpu_percent_lifetime_median": 25.3,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 115,
+      "gc_stw_max_ms_including_setup": 0.097,
+      "gc_stw_total_ms_including_setup": 4.079
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "off",
+      "rep": 3,
+      "role": "load",
+      "attempts": 34001,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6800.2,
+      "p99_ms": 10.031566000000325,
+      "p999_ms": 11.183400000000177,
+      "max_ms": 14.921220000000623,
+      "rss_peak_kib": 16036,
+      "cpu_percent_lifetime_median": 25.1,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 115,
+      "gc_stw_max_ms_including_setup": 0.184,
+      "gc_stw_total_ms_including_setup": 4.093
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "off",
+      "rep": 3,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.1600640000679618,
+      "p999_ms": 2.2600379999999642,
+      "max_ms": 4.769965000000154,
+      "rss_peak_kib": 16036,
+      "cpu_percent_lifetime_median": 25.1,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 115,
+      "gc_stw_max_ms_including_setup": 0.184,
+      "gc_stw_total_ms_including_setup": 4.093
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "everysec",
+      "rep": 3,
+      "role": "load",
+      "attempts": 34223,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6844.6,
+      "p99_ms": 10.060457999998107,
+      "p999_ms": 10.926988000001359,
+      "max_ms": 12.052218999999198,
+      "rss_peak_kib": 13968,
+      "cpu_percent_lifetime_median": 26.4,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 118,
+      "gc_stw_max_ms_including_setup": 0.172,
+      "gc_stw_total_ms_including_setup": 4.821
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "everysec",
+      "rep": 3,
+      "role": "probe",
+      "attempts": 500,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.0,
+      "p99_ms": 1.6788399999363435,
+      "p999_ms": 4.150234000034558,
+      "max_ms": 6.861982000035738,
+      "rss_peak_kib": 13968,
+      "cpu_percent_lifetime_median": 26.4,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 118,
+      "gc_stw_max_ms_including_setup": 0.172,
+      "gc_stw_total_ms_including_setup": 4.821
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "everysec",
+      "rep": 3,
+      "role": "load",
+      "attempts": 32982,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6596.4,
+      "p99_ms": 2.659746000000851,
+      "p999_ms": 11.523893999999757,
+      "max_ms": 12.775120000000584,
+      "rss_peak_kib": 15124,
+      "cpu_percent_lifetime_median": 27.5,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 151,
+      "gc_stw_max_ms_including_setup": 0.404,
+      "gc_stw_total_ms_including_setup": 6.693
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "everysec",
+      "rep": 3,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.3018250000627063,
+      "p999_ms": 1.837386000104857,
+      "max_ms": 2.6675550000003767,
+      "rss_peak_kib": 15124,
+      "cpu_percent_lifetime_median": 27.5,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 151,
+      "gc_stw_max_ms_including_setup": 0.404,
+      "gc_stw_total_ms_including_setup": 6.693
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "everysec",
+      "rep": 3,
+      "role": "load",
+      "attempts": 32402,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6480.4,
+      "p99_ms": 2.6120039999999456,
+      "p999_ms": 11.082844000000591,
+      "max_ms": 14.28231400000013,
+      "rss_peak_kib": 16056,
+      "cpu_percent_lifetime_median": 31.4,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 171,
+      "gc_stw_max_ms_including_setup": 0.107,
+      "gc_stw_total_ms_including_setup": 5.429
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "everysec",
+      "rep": 3,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 0.9622110000169215,
+      "p999_ms": 3.302882999999923,
+      "max_ms": 3.6091439999998975,
+      "rss_peak_kib": 16056,
+      "cpu_percent_lifetime_median": 31.4,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 171,
+      "gc_stw_max_ms_including_setup": 0.107,
+      "gc_stw_total_ms_including_setup": 5.429
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "always",
+      "rep": 3,
+      "role": "load",
+      "attempts": 25992,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 5198.4,
+      "p99_ms": 10.317414000002856,
+      "p999_ms": 11.071464000000475,
+      "max_ms": 13.349215999999942,
+      "rss_peak_kib": 13128,
+      "cpu_percent_lifetime_median": 24.0,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 90,
+      "gc_stw_max_ms_including_setup": 0.393,
+      "gc_stw_total_ms_including_setup": 3.715
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "always",
+      "rep": 3,
+      "role": "probe",
+      "attempts": 500,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.0,
+      "p99_ms": 1.2029530000177147,
+      "p999_ms": 7.262792000034324,
+      "max_ms": 12.67878500001629,
+      "rss_peak_kib": 13128,
+      "cpu_percent_lifetime_median": 24.0,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 90,
+      "gc_stw_max_ms_including_setup": 0.393,
+      "gc_stw_total_ms_including_setup": 3.715
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "always",
+      "rep": 3,
+      "role": "load",
+      "attempts": 25302,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 5060.4,
+      "p99_ms": 10.26313300000048,
+      "p999_ms": 11.626601999999764,
+      "max_ms": 15.07314599999976,
+      "rss_peak_kib": 15048,
+      "cpu_percent_lifetime_median": 23.6,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 118,
+      "gc_stw_max_ms_including_setup": 0.378,
+      "gc_stw_total_ms_including_setup": 4.304
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "always",
+      "rep": 3,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.0410380000980268,
+      "p999_ms": 3.5729550000001,
+      "max_ms": 7.276126000036243,
+      "rss_peak_kib": 15048,
+      "cpu_percent_lifetime_median": 23.6,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 118,
+      "gc_stw_max_ms_including_setup": 0.378,
+      "gc_stw_total_ms_including_setup": 4.304
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "always",
+      "rep": 3,
+      "role": "load",
+      "attempts": 24502,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 4900.4,
+      "p99_ms": 10.341683000000046,
+      "p999_ms": 11.485743000000603,
+      "max_ms": 15.073484999999831,
+      "rss_peak_kib": 15060,
+      "cpu_percent_lifetime_median": 28.3,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 132,
+      "gc_stw_max_ms_including_setup": 0.215,
+      "gc_stw_total_ms_including_setup": 4.62
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "always",
+      "rep": 3,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 0.9562300001064727,
+      "p999_ms": 4.5845070000001265,
+      "max_ms": 8.489787000056204,
+      "rss_peak_kib": 15060,
+      "cpu_percent_lifetime_median": 28.3,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 132,
+      "gc_stw_max_ms_including_setup": 0.215,
+      "gc_stw_total_ms_including_setup": 4.62
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "off",
+      "rep": 4,
+      "role": "load",
+      "attempts": 34901,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6980.2,
+      "p99_ms": 10.089373000001345,
+      "p999_ms": 10.867535999999234,
+      "max_ms": 11.415783000000346,
+      "rss_peak_kib": 13180,
+      "cpu_percent_lifetime_median": 24.4,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 118,
+      "gc_stw_max_ms_including_setup": 0.182,
+      "gc_stw_total_ms_including_setup": 4.654
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "off",
+      "rep": 4,
+      "role": "probe",
+      "attempts": 500,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.0,
+      "p99_ms": 1.1464320000360573,
+      "p999_ms": 1.6764179999348983,
+      "max_ms": 1.7039590000251792,
+      "rss_peak_kib": 13180,
+      "cpu_percent_lifetime_median": 24.4,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 118,
+      "gc_stw_max_ms_including_setup": 0.182,
+      "gc_stw_total_ms_including_setup": 4.654
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "off",
+      "rep": 4,
+      "role": "load",
+      "attempts": 34001,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6800.2,
+      "p99_ms": 10.105492000000105,
+      "p999_ms": 11.106492999999773,
+      "max_ms": 15.292778999999923,
+      "rss_peak_kib": 15764,
+      "cpu_percent_lifetime_median": 24.7,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 115,
+      "gc_stw_max_ms_including_setup": 0.113,
+      "gc_stw_total_ms_including_setup": 3.534
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "off",
+      "rep": 4,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 0.9990650000446522,
+      "p999_ms": 1.2491630000059928,
+      "max_ms": 4.902811000000007,
+      "rss_peak_kib": 15764,
+      "cpu_percent_lifetime_median": 24.7,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 115,
+      "gc_stw_max_ms_including_setup": 0.113,
+      "gc_stw_total_ms_including_setup": 3.534
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "off",
+      "rep": 4,
+      "role": "load",
+      "attempts": 34101,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6820.2,
+      "p99_ms": 10.068460000001167,
+      "p999_ms": 11.290805999999876,
+      "max_ms": 13.068381000000073,
+      "rss_peak_kib": 15912,
+      "cpu_percent_lifetime_median": 25.4,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 115,
+      "gc_stw_max_ms_including_setup": 0.41500000000000004,
+      "gc_stw_total_ms_including_setup": 5.772
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "off",
+      "rep": 4,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.3530410000957005,
+      "p999_ms": 1.845266000000123,
+      "max_ms": 1.889955000025978,
+      "rss_peak_kib": 15912,
+      "cpu_percent_lifetime_median": 25.4,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 115,
+      "gc_stw_max_ms_including_setup": 0.41500000000000004,
+      "gc_stw_total_ms_including_setup": 5.772
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "everysec",
+      "rep": 4,
+      "role": "load",
+      "attempts": 34102,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6820.4,
+      "p99_ms": 9.285554999999945,
+      "p999_ms": 11.070273999999714,
+      "max_ms": 12.638136999999716,
+      "rss_peak_kib": 14384,
+      "cpu_percent_lifetime_median": 26.0,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 118,
+      "gc_stw_max_ms_including_setup": 0.095,
+      "gc_stw_total_ms_including_setup": 4.499
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "everysec",
+      "rep": 4,
+      "role": "probe",
+      "attempts": 500,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.0,
+      "p99_ms": 1.2155080000368912,
+      "p999_ms": 2.9667160000013126,
+      "max_ms": 5.6970680000354434,
+      "rss_peak_kib": 14384,
+      "cpu_percent_lifetime_median": 26.0,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 118,
+      "gc_stw_max_ms_including_setup": 0.095,
+      "gc_stw_total_ms_including_setup": 4.499
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "everysec",
+      "rep": 4,
+      "role": "load",
+      "attempts": 33502,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6700.4,
+      "p99_ms": 2.4026870000000145,
+      "p999_ms": 11.122058000000212,
+      "max_ms": 14.316117999999989,
+      "rss_peak_kib": 14476,
+      "cpu_percent_lifetime_median": 27.0,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 173,
+      "gc_stw_max_ms_including_setup": 0.16,
+      "gc_stw_total_ms_including_setup": 5.115
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "everysec",
+      "rep": 4,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.0247720000000626,
+      "p999_ms": 1.607236000030099,
+      "max_ms": 3.74741600000017,
+      "rss_peak_kib": 14476,
+      "cpu_percent_lifetime_median": 27.0,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 173,
+      "gc_stw_max_ms_including_setup": 0.16,
+      "gc_stw_total_ms_including_setup": 5.115
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "everysec",
+      "rep": 4,
+      "role": "load",
+      "attempts": 32102,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 6420.4,
+      "p99_ms": 2.7325690000008507,
+      "p999_ms": 11.173701999999786,
+      "max_ms": 13.380989999999926,
+      "rss_peak_kib": 14492,
+      "cpu_percent_lifetime_median": 30.7,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 169,
+      "gc_stw_max_ms_including_setup": 0.158,
+      "gc_stw_total_ms_including_setup": 5.678
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "everysec",
+      "rep": 4,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 0.9643150000844258,
+      "p999_ms": 1.6088720000340118,
+      "max_ms": 1.8809879999999168,
+      "rss_peak_kib": 14492,
+      "cpu_percent_lifetime_median": 30.7,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 169,
+      "gc_stw_max_ms_including_setup": 0.158,
+      "gc_stw_total_ms_including_setup": 5.678
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "always",
+      "rep": 4,
+      "role": "load",
+      "attempts": 25702,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 5140.4,
+      "p99_ms": 10.370359999999579,
+      "p999_ms": 11.47971800000036,
+      "max_ms": 13.060220999999927,
+      "rss_peak_kib": 13240,
+      "cpu_percent_lifetime_median": 24.2,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 90,
+      "gc_stw_max_ms_including_setup": 0.393,
+      "gc_stw_total_ms_including_setup": 3.193
+    },
+    {
+      "arm": "baseline-sync",
+      "policy": "always",
+      "rep": 4,
+      "role": "probe",
+      "attempts": 500,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.0,
+      "p99_ms": 2.0370429999996276,
+      "p999_ms": 3.471344000015364,
+      "max_ms": 6.9378670000350695,
+      "rss_peak_kib": 13240,
+      "cpu_percent_lifetime_median": 24.2,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 90,
+      "gc_stw_max_ms_including_setup": 0.393,
+      "gc_stw_total_ms_including_setup": 3.193
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "always",
+      "rep": 4,
+      "role": "load",
+      "attempts": 25402,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 5080.4,
+      "p99_ms": 10.404344000000343,
+      "p999_ms": 11.673369000000378,
+      "max_ms": 15.824790000000144,
+      "rss_peak_kib": 15748,
+      "cpu_percent_lifetime_median": 25.1,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 127,
+      "gc_stw_max_ms_including_setup": 0.391,
+      "gc_stw_total_ms_including_setup": 5.97
+    },
+    {
+      "arm": "candidate-sync",
+      "policy": "always",
+      "rep": 4,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 1.9114860000577494,
+      "p999_ms": 5.223382000000054,
+      "max_ms": 11.805362000057329,
+      "rss_peak_kib": 15748,
+      "cpu_percent_lifetime_median": 25.1,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 127,
+      "gc_stw_max_ms_including_setup": 0.391,
+      "gc_stw_total_ms_including_setup": 5.97
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "always",
+      "rep": 4,
+      "role": "load",
+      "attempts": 24441,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 4888.2,
+      "p99_ms": 10.33990699999876,
+      "p999_ms": 11.46635100000104,
+      "max_ms": 14.45236300000019,
+      "rss_peak_kib": 15444,
+      "cpu_percent_lifetime_median": 27.7,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 131,
+      "gc_stw_max_ms_including_setup": 0.392,
+      "gc_stw_total_ms_including_setup": 4.579
+    },
+    {
+      "arm": "candidate-worker",
+      "policy": "always",
+      "rep": 4,
+      "role": "probe",
+      "attempts": 501,
+      "errors": 0,
+      "drops": 0,
+      "requests_per_second": 100.2,
+      "p99_ms": 0.8511580000458707,
+      "p999_ms": 2.8911210000002185,
+      "max_ms": 7.337079000036439,
+      "rss_peak_kib": 15444,
+      "cpu_percent_lifetime_median": 27.7,
+      "telemetry_samples": 9,
+      "gc_cycles_including_setup": 131,
+      "gc_stw_max_ms_including_setup": 0.392,
+      "gc_stw_total_ms_including_setup": 4.579
+    }
+  ],
+  "medians": [
+    {
+      "policy": "off",
+      "arm": "baseline-sync",
+      "role": "load",
+      "requests_per_second": 6880.2,
+      "p99_ms": 9.990152999999946,
+      "p999_ms": 11.048204999999811,
+      "max_ms": 12.829240000000297,
+      "rss_peak_kib": 13180
+    },
+    {
+      "policy": "off",
+      "arm": "baseline-sync",
+      "role": "probe",
+      "requests_per_second": 100.2,
+      "p99_ms": 1.173686000049301,
+      "p999_ms": 1.8318999999991092,
+      "max_ms": 3.774442000025857,
+      "rss_peak_kib": 13180
+    },
+    {
+      "policy": "off",
+      "arm": "candidate-sync",
+      "role": "load",
+      "requests_per_second": 6824.0,
+      "p99_ms": 10.013958000000045,
+      "p999_ms": 11.09545799999978,
+      "max_ms": 12.459590999998937,
+      "rss_peak_kib": 15072
+    },
+    {
+      "policy": "off",
+      "arm": "candidate-sync",
+      "role": "probe",
+      "requests_per_second": 100.2,
+      "p99_ms": 1.103250999985761,
+      "p999_ms": 1.822519000000078,
+      "max_ms": 2.627842000073599,
+      "rss_peak_kib": 15072
+    },
+    {
+      "policy": "off",
+      "arm": "candidate-worker",
+      "role": "load",
+      "requests_per_second": 6820.2,
+      "p99_ms": 9.991920000000931,
+      "p999_ms": 11.183400000000177,
+      "max_ms": 13.068381000000073,
+      "rss_peak_kib": 15880
+    },
+    {
+      "policy": "off",
+      "arm": "candidate-worker",
+      "role": "probe",
+      "requests_per_second": 100.2,
+      "p99_ms": 1.3530410000957005,
+      "p999_ms": 2.1035369998685383,
+      "max_ms": 4.769965000000154,
+      "rss_peak_kib": 15880
+    },
+    {
+      "policy": "everysec",
+      "arm": "baseline-sync",
+      "role": "load",
+      "requests_per_second": 6720.4,
+      "p99_ms": 10.060457999998107,
+      "p999_ms": 11.332428999999422,
+      "max_ms": 12.792160999999247,
+      "rss_peak_kib": 13968
+    },
+    {
+      "policy": "everysec",
+      "arm": "baseline-sync",
+      "role": "probe",
+      "requests_per_second": 100.2,
+      "p99_ms": 1.6788399999363435,
+      "p999_ms": 4.150234000034558,
+      "max_ms": 9.06490300003604,
+      "rss_peak_kib": 13968
+    },
+    {
+      "policy": "everysec",
+      "arm": "candidate-sync",
+      "role": "load",
+      "requests_per_second": 6700.4,
+      "p99_ms": 2.659746000000851,
+      "p999_ms": 11.122058000000212,
+      "max_ms": 12.775120000000584,
+      "rss_peak_kib": 15124
+    },
+    {
+      "policy": "everysec",
+      "arm": "candidate-sync",
+      "role": "probe",
+      "requests_per_second": 100.2,
+      "p99_ms": 1.1039870001052776,
+      "p999_ms": 1.837386000104857,
+      "max_ms": 2.3573170000315002,
+      "rss_peak_kib": 15124
+    },
+    {
+      "policy": "everysec",
+      "arm": "candidate-worker",
+      "role": "load",
+      "requests_per_second": 6460.4,
+      "p99_ms": 2.6120039999999456,
+      "p999_ms": 11.082844000000591,
+      "max_ms": 14.28231400000013,
+      "rss_peak_kib": 14392
+    },
+    {
+      "policy": "everysec",
+      "arm": "candidate-worker",
+      "role": "probe",
+      "requests_per_second": 100.2,
+      "p99_ms": 1.0745030000816058,
+      "p999_ms": 2.451578999998816,
+      "max_ms": 3.6091439999998975,
+      "rss_peak_kib": 14392
+    },
+    {
+      "policy": "always",
+      "arm": "baseline-sync",
+      "role": "load",
+      "requests_per_second": 5100.4,
+      "p99_ms": 10.317414000002856,
+      "p999_ms": 11.645643000000483,
+      "max_ms": 13.880885999999926,
+      "rss_peak_kib": 13240
+    },
+    {
+      "policy": "always",
+      "arm": "baseline-sync",
+      "role": "probe",
+      "requests_per_second": 100.2,
+      "p99_ms": 1.3768880000890604,
+      "p999_ms": 6.20541600003488,
+      "max_ms": 7.102781000035918,
+      "rss_peak_kib": 13240
+    },
+    {
+      "policy": "always",
+      "arm": "candidate-sync",
+      "role": "load",
+      "requests_per_second": 5140.4,
+      "p99_ms": 10.166031000000686,
+      "p999_ms": 11.340323999998958,
+      "max_ms": 14.143199999999467,
+      "rss_peak_kib": 15196
+    },
+    {
+      "policy": "always",
+      "arm": "candidate-sync",
+      "role": "probe",
+      "requests_per_second": 100.2,
+      "p99_ms": 1.17584200001275,
+      "p999_ms": 3.510194000037714,
+      "max_ms": 7.276126000036243,
+      "rss_peak_kib": 15196
+    },
+    {
+      "policy": "always",
+      "arm": "candidate-worker",
+      "role": "load",
+      "requests_per_second": 4900.4,
+      "p99_ms": 10.21991699999969,
+      "p999_ms": 11.46635100000104,
+      "max_ms": 14.48366800000045,
+      "rss_peak_kib": 15444
+    },
+    {
+      "policy": "always",
+      "arm": "candidate-worker",
+      "role": "probe",
+      "requests_per_second": 100.2,
+      "p99_ms": 0.9562300001064727,
+      "p999_ms": 2.9495639999996826,
+      "max_ms": 7.337079000036439,
+      "rss_peak_kib": 15444
+    }
+  ],
+  "paired_ratios": [
+    {
+      "policy": "off",
+      "numerator": "candidate-worker",
+      "denominator": "candidate-sync",
+      "role": "load",
+      "field": "requests_per_second",
+      "values": [
+        1.0170281359906213,
+        0.9770780206870864,
+        0.9695985747535991,
+        0.9970675346764024,
+        1.002941089967942
+      ],
+      "median": 0.9970675346764024,
+      "min": 0.9695985747535991,
+      "max": 1.0170281359906213
+    },
+    {
+      "policy": "off",
+      "numerator": "candidate-worker",
+      "denominator": "candidate-sync",
+      "role": "probe",
+      "field": "p99_ms",
+      "values": [
+        1.4838563823763824,
+        1.0909959789101924,
+        1.2409487959393921,
+        1.0018308312337518,
+        1.3543072773395401
+      ],
+      "median": 1.2409487959393921,
+      "min": 1.0018308312337518,
+      "max": 1.4838563823763824
+    },
+    {
+      "policy": "off",
+      "numerator": "candidate-sync",
+      "denominator": "baseline-sync",
+      "role": "load",
+      "field": "requests_per_second",
+      "values": [
+        0.9947231859129472,
+        1.014534461207523,
+        1.014576834494621,
+        0.9827094320048414,
+        0.9742127732729721
+      ],
+      "median": 0.9947231859129472,
+      "min": 0.9742127732729721,
+      "max": 1.014576834494621
+    },
+    {
+      "policy": "off",
+      "numerator": "candidate-sync",
+      "denominator": "baseline-sync",
+      "role": "probe",
+      "field": "p99_ms",
+      "values": [
+        0.6483130973600625,
+        1.0439290798874559,
+        0.9399882080381112,
+        0.7224687415184395,
+        0.8714559607662992
+      ],
+      "median": 0.8714559607662992,
+      "min": 0.6483130973600625,
+      "max": 1.0439290798874559
+    },
+    {
+      "policy": "everysec",
+      "numerator": "candidate-worker",
+      "denominator": "candidate-sync",
+      "role": "load",
+      "field": "requests_per_second",
+      "values": [
+        0.9892222022633376,
+        0.9416943618447904,
+        0.9386000818665575,
+        0.9824146504153781,
+        0.9582114500626828
+      ],
+      "median": 0.9582114500626828,
+      "min": 0.9386000818665575,
+      "max": 0.9892222022633376
+    },
+    {
+      "policy": "everysec",
+      "numerator": "candidate-worker",
+      "denominator": "candidate-sync",
+      "role": "probe",
+      "field": "p99_ms",
+      "values": [
+        0.991870375197424,
+        0.9572529190068506,
+        1.0696805245082899,
+        0.7391246903159593,
+        0.9410044381426961
+      ],
+      "median": 0.9572529190068506,
+      "min": 0.7391246903159593,
+      "max": 1.0696805245082899
+    },
+    {
+      "policy": "everysec",
+      "numerator": "candidate-sync",
+      "denominator": "baseline-sync",
+      "role": "load",
+      "field": "requests_per_second",
+      "values": [
+        1.0,
+        1.0208320933277781,
+        1.0208638032415007,
+        0.9637378371270782,
+        0.9824057240044572
+      ],
+      "median": 1.0,
+      "min": 0.9637378371270782,
+      "max": 1.0208638032415007
+    },
+    {
+      "policy": "everysec",
+      "numerator": "candidate-sync",
+      "denominator": "baseline-sync",
+      "role": "probe",
+      "field": "p99_ms",
+      "values": [
+        0.6045983974150252,
+        0.7271701359693923,
+        0.5562046471966933,
+        0.7754312502156653,
+        0.8430812466630909
+      ],
+      "median": 0.7271701359693923,
+      "min": 0.5562046471966933,
+      "max": 0.8430812466630909
+    },
+    {
+      "policy": "always",
+      "numerator": "candidate-worker",
+      "denominator": "candidate-sync",
+      "role": "load",
+      "field": "requests_per_second",
+      "values": [
+        0.9744766944206676,
+        0.9527084460242641,
+        0.9496163088132703,
+        0.9683819460912181,
+        0.9621683332021101
+      ],
+      "median": 0.9621683332021101,
+      "min": 0.9496163088132703,
+      "max": 0.9744766944206676
+    },
+    {
+      "policy": "always",
+      "numerator": "candidate-worker",
+      "denominator": "candidate-sync",
+      "role": "probe",
+      "field": "p99_ms",
+      "values": [
+        1.3387527814487457,
+        0.7642387328202364,
+        0.8207257943271339,
+        0.918535154352129,
+        0.44528602355453073
+      ],
+      "median": 0.8207257943271339,
+      "min": 0.44528602355453073,
+      "max": 1.3387527814487457
+    },
+    {
+      "policy": "always",
+      "numerator": "candidate-sync",
+      "denominator": "baseline-sync",
+      "role": "load",
+      "field": "requests_per_second",
+      "values": [
+        1.007842522155125,
+        1.018896149909456,
+        1.0117637832326876,
+        0.9734533702677747,
+        0.9883277565948175
+      ],
+      "median": 1.007842522155125,
+      "min": 0.9734533702677747,
+      "max": 1.018896149909456
+    },
+    {
+      "policy": "always",
+      "numerator": "candidate-sync",
+      "denominator": "baseline-sync",
+      "role": "probe",
+      "field": "p99_ms",
+      "values": [
+        0.8517420226366265,
+        0.8539852187953514,
+        0.9158340708931618,
+        0.8654020565081899,
+        0.9383631077292423
+      ],
+      "median": 0.8654020565081899,
+      "min": 0.8517420226366265,
+      "max": 0.9383631077292423
+    }
+  ],
+  "raw_files": [
+    {
+      "job": "01a073b4-d8e8-7b41-b480-c620c01c2c87",
+      "path": "paired/baseline-sync-off-0.csv.gz",
+      "sha256": "5b74c72987b1f89247dbbc7eada1ba2f155e505e880f76a5bbc44f76d4ec2cf7",
+      "attempts": 34802
+    },
+    {
+      "job": "01a073b4-d8e8-7b41-b480-c620c01c2c87",
+      "path": "paired/candidate-sync-off-0.csv.gz",
+      "sha256": "719ba5eb6e37391da74f2f2388bf6d0eab033d17a947086a55b283687d4b0573",
+      "attempts": 34621
+    },
+    {
+      "job": "01a073b4-d8e8-7b41-b480-c620c01c2c87",
+      "path": "paired/candidate-worker-off-0.csv.gz",
+      "sha256": "d6141ac9bfec2c9e47ee801a3809de035616b612bc60a4b9a1d5b4c413de9632",
+      "attempts": 35201
+    },
+    {
+      "job": "01a073b6-ba95-79d1-9f46-32ac5a754e99",
+      "path": "paired/baseline-sync-everysec-0.csv.gz",
+      "sha256": "38757fe03b2fb550563b76156d96e61b6e2e63079e55fdf2f440cb291fcf4a52",
+      "attempts": 33903
+    },
+    {
+      "job": "01a073b6-ba95-79d1-9f46-32ac5a754e99",
+      "path": "paired/candidate-sync-everysec-0.csv.gz",
+      "sha256": "2e5de62823c57aee1fa4171a72adb5fa557dbf6561fe86ae55b5011781c661c8",
+      "attempts": 33903
+    },
+    {
+      "job": "01a073b6-ba95-79d1-9f46-32ac5a754e99",
+      "path": "paired/candidate-worker-everysec-0.csv.gz",
+      "sha256": "bec77ef799fd0d105cab8d03a3160a35fdb2e1bcd579623721647eba337d81c1",
+      "attempts": 33542
+    },
+    {
+      "job": "01a073b7-50a3-7823-a8af-b017701939eb",
+      "path": "paired/baseline-sync-always-0.csv.gz",
+      "sha256": "6dcf4faafc6801f96e18edfdbe5fa5524d990aafa9a53b6d9436d2a948a73e1c",
+      "attempts": 26003
+    },
+    {
+      "job": "01a073b7-50a3-7823-a8af-b017701939eb",
+      "path": "paired/candidate-sync-always-0.csv.gz",
+      "sha256": "4c1fed144fe9f189bfbb5b38bca38c504874a8a3f9d3d85d8517bcf30f64f486",
+      "attempts": 26203
+    },
+    {
+      "job": "01a073b7-50a3-7823-a8af-b017701939eb",
+      "path": "paired/candidate-worker-always-0.csv.gz",
+      "sha256": "8818962c5dc65684c0bb4f0f0a030cf318027b8c7f2407828d4db57d16a0346e",
+      "attempts": 25546
+    },
+    {
+      "job": "01a073b7-e5f7-7422-a3f6-243265914d06",
+      "path": "paired/baseline-sync-off-1.csv.gz",
+      "sha256": "3207c9d291caeae167bbaf5ea93c428392844cf1b07411be5c407781371d3ed7",
+      "attempts": 34902
+    },
+    {
+      "job": "01a073b7-e5f7-7422-a3f6-243265914d06",
+      "path": "paired/candidate-sync-off-1.csv.gz",
+      "sha256": "dea9a87db6ab50720b3d83eb84a65faf4e175a16ef3b046557991cee7e0e9cf1",
+      "attempts": 35401
+    },
+    {
+      "job": "01a073b7-e5f7-7422-a3f6-243265914d06",
+      "path": "paired/candidate-worker-off-1.csv.gz",
+      "sha256": "d933f47c585a288eea380045585663811f060c225a7358cde947f2e801d4d018",
+      "attempts": 34602
+    },
+    {
+      "job": "01a073b8-7c43-7bd3-a705-cd113cef0345",
+      "path": "paired/baseline-sync-everysec-1.csv.gz",
+      "sha256": "10eaa872dd09cf1543b56601d2a9f9eecfea4e68a9489de2f2b9d1544184712f",
+      "attempts": 34103
+    },
+    {
+      "job": "01a073b8-7c43-7bd3-a705-cd113cef0345",
+      "path": "paired/candidate-sync-everysec-1.csv.gz",
+      "sha256": "596d69887ebeb9e5c4197e8b4e7fb6e706e340f6b99534af959b4bc55936e7f8",
+      "attempts": 34802
+    },
+    {
+      "job": "01a073b8-7c43-7bd3-a705-cd113cef0345",
+      "path": "paired/candidate-worker-everysec-1.csv.gz",
+      "sha256": "71ce402b8053a11995ca2793e66888cc6822b9289b154584571a42f334baa2e9",
+      "attempts": 32803
+    },
+    {
+      "job": "01a073b9-1027-7e30-99ca-9b6a17516bde",
+      "path": "paired/baseline-sync-always-1.csv.gz",
+      "sha256": "62de565f2e6d5e6ab662c6da2f5e40b5a3682755ef5aaa0bf86cedac1ea12c3a",
+      "attempts": 25903
+    },
+    {
+      "job": "01a073b9-1027-7e30-99ca-9b6a17516bde",
+      "path": "paired/candidate-sync-always-1.csv.gz",
+      "sha256": "a31c42572982ab6ae6d73bc09932385f836f4ada567fb03e93d4c3921a8f762d",
+      "attempts": 26382
+    },
+    {
+      "job": "01a073b9-1027-7e30-99ca-9b6a17516bde",
+      "path": "paired/candidate-worker-always-1.csv.gz",
+      "sha256": "20d95d098f567e3fcede80a013c40bcd1948930373c857e3218044e289e8b8b4",
+      "attempts": 25159
+    },
+    {
+      "job": "01a073b9-a4e7-7072-a1c6-4d60331c2427",
+      "path": "paired/baseline-sync-off-2.csv.gz",
+      "sha256": "13a77669e912b7b20b7a5d82704ab0f3081ae8fa9cbd7ae03ae374fba3f4352a",
+      "attempts": 34802
+    },
+    {
+      "job": "01a073b9-a4e7-7072-a1c6-4d60331c2427",
+      "path": "paired/candidate-sync-off-2.csv.gz",
+      "sha256": "e3cc4273f6afa5e72846d99d666840cdea9e59ea9e6bbb8d8a03007908c6f7cd",
+      "attempts": 35301
+    },
+    {
+      "job": "01a073b9-a4e7-7072-a1c6-4d60331c2427",
+      "path": "paired/candidate-worker-off-2.csv.gz",
+      "sha256": "2ea7f1ced4fd141b26c498d67c5f112ffff876abd279d56904d9dc29d5d58f8c",
+      "attempts": 34244
+    },
+    {
+      "job": "01a073ba-39b4-7871-beb4-32b325bd516c",
+      "path": "paired/baseline-sync-everysec-2.csv.gz",
+      "sha256": "3ddd8f38e1d1f3da2c4925ec39ae6f88926f422bd453a7dee47d4a7243733661",
+      "attempts": 34004
+    },
+    {
+      "job": "01a073ba-39b4-7871-beb4-32b325bd516c",
+      "path": "paired/candidate-sync-everysec-2.csv.gz",
+      "sha256": "7d3e753da52b6fc7037b49f4af2c0d1420cd63e1e8bd0aba030a20890886eba0",
+      "attempts": 34702
+    },
+    {
+      "job": "01a073ba-39b4-7871-beb4-32b325bd516c",
+      "path": "paired/candidate-worker-everysec-2.csv.gz",
+      "sha256": "6d4bbbe167174bfd41c299a1ec2feea79e7065848821f5af4deb99ee9bdc13be",
+      "attempts": 32603
+    },
+    {
+      "job": "01a073ba-d00d-7061-a285-41aaa4025603",
+      "path": "paired/baseline-sync-always-2.csv.gz",
+      "sha256": "86c78080633eb3eb6c2f3599aa93f8e6b5ba200891e0efadd228ac4efc7e16e5",
+      "attempts": 26003
+    },
+    {
+      "job": "01a073ba-d00d-7061-a285-41aaa4025603",
+      "path": "paired/candidate-sync-always-2.csv.gz",
+      "sha256": "3b248c07ca32d3f9a61048dbf1559028cbfa340e11a015874f0c1508efb9ac95",
+      "attempts": 26302
+    },
+    {
+      "job": "01a073ba-d00d-7061-a285-41aaa4025603",
+      "path": "paired/candidate-worker-always-2.csv.gz",
+      "sha256": "ab6ce9b1709c05fe02c8708a4b7bb98ae57fcfb67bdec42ebd3135d0707131c8",
+      "attempts": 25003
+    },
+    {
+      "job": "01a073bd-9266-7632-a04f-e92ffd36dcd2",
+      "path": "paired/baseline-sync-off-3.csv.gz",
+      "sha256": "fd2804f7c0f662fa72774b6ae358152b99f02f0e92ae13e5f518b187cce7dae8",
+      "attempts": 35201
+    },
+    {
+      "job": "01a073bd-9266-7632-a04f-e92ffd36dcd2",
+      "path": "paired/candidate-sync-off-3.csv.gz",
+      "sha256": "9cc4a43ade22d076630a4b1d9688c67d9760450254003d79f838b519ecd05019",
+      "attempts": 34602
+    },
+    {
+      "job": "01a073bd-9266-7632-a04f-e92ffd36dcd2",
+      "path": "paired/candidate-worker-off-3.csv.gz",
+      "sha256": "df434238bc23b65ceeb3349f8b58fce0e780fa0cf9c9378106f2664b5f7e0269",
+      "attempts": 34502
+    },
+    {
+      "job": "01a073be-29eb-7280-b998-158158ff0fc8",
+      "path": "paired/baseline-sync-everysec-3.csv.gz",
+      "sha256": "ea864eb889c3921ac93e507d162441158592e1ec45fd2c5343a02b0eb3066dd9",
+      "attempts": 34723
+    },
+    {
+      "job": "01a073be-29eb-7280-b998-158158ff0fc8",
+      "path": "paired/candidate-sync-everysec-3.csv.gz",
+      "sha256": "f80fdda0f30f2dde526e65526da867431e95137b9bbf05591863d501adcc5a44",
+      "attempts": 33483
+    },
+    {
+      "job": "01a073be-29eb-7280-b998-158158ff0fc8",
+      "path": "paired/candidate-worker-everysec-3.csv.gz",
+      "sha256": "61c5770fdd4422231e37ea5eb926d5f59de463c7e3028cd9db4dd77df83ac633",
+      "attempts": 32903
+    },
+    {
+      "job": "01a073be-c13b-74b0-8a4f-4bca984c22f8",
+      "path": "paired/baseline-sync-always-3.csv.gz",
+      "sha256": "14089995ac9212601cf6706523634008dad71053333b19df8360ce4fcd25267b",
+      "attempts": 26492
+    },
+    {
+      "job": "01a073be-c13b-74b0-8a4f-4bca984c22f8",
+      "path": "paired/candidate-sync-always-3.csv.gz",
+      "sha256": "3597d87180cbd1279883efcb5155e17919d8f0c1b729a6463aecc9f95c5f3315",
+      "attempts": 25803
+    },
+    {
+      "job": "01a073be-c13b-74b0-8a4f-4bca984c22f8",
+      "path": "paired/candidate-worker-always-3.csv.gz",
+      "sha256": "6d7cd36bfa9360e8d649889abe1cff941931c167d065e43505823d6e65d22d60",
+      "attempts": 25003
+    },
+    {
+      "job": "01a073bf-57c7-7c43-9dda-d7caa31acd78",
+      "path": "paired/baseline-sync-off-4.csv.gz",
+      "sha256": "912d779fa02af78fca298cb8e55089029ea55860128344fd31266ea6731abaf1",
+      "attempts": 35401
+    },
+    {
+      "job": "01a073bf-57c7-7c43-9dda-d7caa31acd78",
+      "path": "paired/candidate-sync-off-4.csv.gz",
+      "sha256": "7948e80d1352fd3b691a642f4ea6cda4a6c06b29612f7b4d742c70568be7e3ee",
+      "attempts": 34502
+    },
+    {
+      "job": "01a073bf-57c7-7c43-9dda-d7caa31acd78",
+      "path": "paired/candidate-worker-off-4.csv.gz",
+      "sha256": "338a898991236d4fb836674c8a63b2f0b5e88267d28d6b92f0c9a5e5c160fa84",
+      "attempts": 34602
+    },
+    {
+      "job": "01a073bf-edf1-7782-beac-7b1496af2ad0",
+      "path": "paired/baseline-sync-everysec-4.csv.gz",
+      "sha256": "e68425e04f0c16df9f872f697d869a2f08cf9b6a4ab4e3b470d92be8dea16816",
+      "attempts": 34602
+    },
+    {
+      "job": "01a073bf-edf1-7782-beac-7b1496af2ad0",
+      "path": "paired/candidate-sync-everysec-4.csv.gz",
+      "sha256": "8f74b73f02ef0aba3f7350dd0e8950cfb40fb5b7aca3dc850c9527c5d31421f1",
+      "attempts": 34003
+    },
+    {
+      "job": "01a073bf-edf1-7782-beac-7b1496af2ad0",
+      "path": "paired/candidate-worker-everysec-4.csv.gz",
+      "sha256": "eb32bfee02ba7feb255bba20f3083293360315dc597315f444df8b76616a0da6",
+      "attempts": 32603
+    },
+    {
+      "job": "01a073c0-83cc-73f3-9e0a-25733cb69c73",
+      "path": "paired/baseline-sync-always-4.csv.gz",
+      "sha256": "1c6121e86751ff5f99259d50cd3b5877402a3127d325f1a91ef8a752124985e0",
+      "attempts": 26202
+    },
+    {
+      "job": "01a073c0-83cc-73f3-9e0a-25733cb69c73",
+      "path": "paired/candidate-sync-always-4.csv.gz",
+      "sha256": "5f532b27b40f640b263b6ec506df8e8d8c392b6df030fb2f008718394e806a68",
+      "attempts": 25903
+    },
+    {
+      "job": "01a073c0-83cc-73f3-9e0a-25733cb69c73",
+      "path": "paired/candidate-worker-always-4.csv.gz",
+      "sha256": "b4060b21b52d245907b298b810f8705eee42d1ad221182f35db2bd06033c5dd8",
+      "attempts": 24942
+    }
+  ],
+  "excluded_failed_jobs": [
+    {
+      "uuid": "01a073aa-2aa0-73f1-95c7-bc24acee2dbf",
+      "status": "failed",
+      "reason": "initial image did not enable the offline guest loopback interface; no successful performance observations",
+      "runner": "997069de-45de-45c7-bd9c-21045e5607f0",
+      "archive_sha256": "b3a995e383e5f1648f96587433b90c7c934d7364519af488a84920eb55c5d4d4"
+    }
+  ],
+  "limits": [
+    "five-second arms; not sustained capacity or statistical proof of improvement",
+    "server and Python load generator share one four-vCPU Firecracker guest over loopback",
+    "on-demand Bencher runner; no reserved separate client/server hosts",
+    "AOF off disables worker in all arms; worker label is a repeat control for off",
+    "ps CPU is lifetime average; RSS sampled every 0.5s; GC tracing enabled in every arm",
+    "GC summaries include setup and shutdown",
+    "all exact source revisions rebuilt using Go 1.27.1 and CGO_ENABLED=0; these are not byte-identical to release downloads",
+    "raw archives retained locally and available through authenticated project Jobs API"
+  ]
+}

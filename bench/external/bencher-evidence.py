@@ -32,10 +32,13 @@ def unpack(document, destination):
     if len(raw) != envelope['bytes'] or hashlib.sha256(raw).hexdigest() != envelope['sha256']:
         raise ValueError('evidence length/checksum mismatch')
     with tarfile.open(fileobj=io.BytesIO(raw)) as archive:
-        members = archive.getmembers()
-        if len(members) > 1000 or sum(m.size for m in members) > 256 * 1024 * 1024:
-            raise ValueError('unpacked evidence exceeds the supported limit')
-        for member in members:
+        members = []
+        expanded_bytes = 0
+        for member in archive:
+            members.append(member)
+            expanded_bytes += member.size
+            if len(members) > 1000 or expanded_bytes > 256 * 1024 * 1024:
+                raise ValueError('unpacked evidence exceeds the supported limit')
             path = Path(member.name)
             if (path.is_absolute() or '..' in path.parts or not path.parts or
                     path.parts[0] != 'evidence' or not (member.isfile() or member.isdir())):

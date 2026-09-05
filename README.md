@@ -182,11 +182,12 @@ In order of distance, not size.
   recovery each wait on a pilot that shows which constraint is real; the
   [delivery checklist](docs/engineering-delivery.md#5-demand-led-scaling-decision) lists
   the evidence each needs first.
-- **Evidence before a release past alpha.** Controlled-host Linux benchmark runs, hosted
-  load runs, and an application pilot with stated RPO, RTO, and memory targets have not
-  happened. Alpha.3 adds four native installation targets, upgrade/rollback checks,
-  matched shared-runner benchmarks and bounded crash/disk-full tests; it remains a
-  pre-release. The [closeout record](docs/alpha3-closeout.md) reports those results. The
+- **Evidence before a release past alpha.** Separate-host deployment benchmarks and
+  an application pilot with stated RPO, RTO, and memory targets remain outstanding.
+  Alpha.3 adds four native installation targets, upgrade/rollback checks, matched
+  shared-runner benchmarks and bounded crash/disk-full tests; it remains a
+  pre-release. The [closeout record](docs/alpha3-closeout.md) reports those results,
+  and [hosted validation](docs/post-alpha3-hosted-validation.md) adds Bencher execution. The
   [delivery checklist](docs/engineering-delivery.md#4-alpha-preparation-and-evidence)
   says what counts.
 - **Boundaries that stay.** No native TLS (use a proxy), `SET` refuses to overwrite a
