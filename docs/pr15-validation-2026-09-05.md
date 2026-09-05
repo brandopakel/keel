@@ -56,6 +56,8 @@ processes per durability policy for 30 seconds, with authenticated loopback traf
 1,000 cache keys, a 10,000-element list, one closed-loop load client and an independent
 100 Hz scheduled PING probe. Each persistent run issued one successful BGREWRITEAOF
 request. Probe latency includes scheduling delay and client parsing overhead.
+Here `off` means AOF is disabled (no `-appendonly` flag); it is not the
+`-appendfsync no` policy. Neither `off` row enables worker appends.
 
 | Append configuration | Policy | Median load requests/s | Median probe p99 (ms) | Probe p99 range (ms) |
 | --- | --- | ---: | ---: | ---: |

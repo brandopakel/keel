@@ -12,6 +12,8 @@ def export(path):
         for row in csv.DictReader(stream):
             value=float(row['scheduled_ms'])
             if not math.isfinite(value) or value<0: raise ValueError('invalid latency')
+            # The harness emits error text, with only the empty string meaning
+            # success. This is not a boolean/numeric flag column.
             groups[(row['policy'],row['rep'],row['role'])].append((value,bool(row['error'])))
     if not groups: raise ValueError('empty benchmark')
     output={}

@@ -14,10 +14,11 @@ for os in linux darwin; do
       -o "$target/keel" ./cmd/keel
     cp LICENSE THIRD_PARTY_NOTICES.md README.md "$target/"
     cp -R docs examples "$target/"
+    cp -R scripts "$target/"
     mkdir -p "$target/bench"
     cp -R bench/external "$target/bench/"
     cp bench/run-tail.py "$target/bench/"
-    tar --exclude='__pycache__' --exclude='*.pyc' -C "$target" -czf "$target.tar.gz" keel LICENSE THIRD_PARTY_NOTICES.md README.md docs examples bench
+    tar --exclude='__pycache__' --exclude='*.pyc' -C "$target" -czf "$target.tar.gz" keel LICENSE THIRD_PARTY_NOTICES.md README.md docs examples bench scripts
     shasum -a 256 "$target.tar.gz" > "$target.tar.gz.sha256"
   done
 done

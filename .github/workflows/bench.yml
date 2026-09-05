@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: Tail smoke or full throughput/memory/network matrix
+        description: Tail smoke, full matrix, or matched benchmark and operational closeout
         type: choice
-        options: [tail, full]
+        options: [tail, full, closeout]
         default: tail
   push:
     branches: [ develop, experiment/** ]
@@ -20,6 +20,10 @@ permissions:
   contents: read
 
 jobs:
+  closeout:
+    if: github.event_name == 'workflow_dispatch' && inputs.suite == 'closeout'
+    uses: ./.github/workflows/closeout.yml
+
   matrix:
     if: github.event_name == 'workflow_dispatch' && inputs.suite == 'full'
     name: throughput matrix (loopback)
@@ -133,6 +137,7 @@ jobs:
         with: { name: linux-offloopback, path: bench/results/offloopback-linux.csv }
 
   tail-latency:
+    if: github.event_name != 'workflow_dispatch' || inputs.suite != 'closeout'
     name: mixed traffic and rewrite (${{ matrix.append }})
     strategy:
       fail-fast: false

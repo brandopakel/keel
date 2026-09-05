@@ -227,11 +227,11 @@ func TestAutomaticRewriteTriggersOnGrowth(t *testing.T) {
 
 func testAutomaticRewriteTriggersOnGrowth(t *testing.T, delayedSync bool) {
 	t.Helper()
-	pct, min := config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize
+	pct, minSize := config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize
 	policy, syncFile := config.AOFFsync, aofSync
 	defer func() {
 		CloseAOF()
-		config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize = pct, min
+		config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize = pct, minSize
 		config.AOFFsync, aofSync = policy, syncFile
 	}()
 	config.AOFAutoRewritePercentage = 100
@@ -295,9 +295,9 @@ func testAutomaticRewriteTriggersOnGrowth(t *testing.T, delayedSync bool) {
 
 // TestAutomaticRewriteCanBeTurnedOff.
 func TestAutomaticRewriteCanBeTurnedOff(t *testing.T) {
-	pct, min := config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize
+	pct, minSize := config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize
 	defer func() {
-		config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize = pct, min
+		config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize = pct, minSize
 	}()
 	config.AOFAutoRewritePercentage = 0
 	config.AOFAutoRewriteMinSize = 1

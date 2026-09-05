@@ -1,0 +1,63 @@
+name: Alpha closeout evidence
+on:
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  paired-benchmark:
+    name: Interleaved baseline and candidate benchmark
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version: stable }
+      - name: Build both revisions with the same Go toolchain
+        run: |
+          go build -o /tmp/keel-candidate ./cmd/keel
+          git worktree add --detach "$RUNNER_TEMP/keel-alpha2" v0.1.0-alpha.2
+          go -C "$RUNNER_TEMP/keel-alpha2" build -o /tmp/keel-baseline ./cmd/keel
+      - name: Retain host and filesystem details
+        run: |
+          mkdir -p evidence
+          uname -a > evidence/uname.txt
+          lscpu > evidence/lscpu.txt
+          df -T . > evidence/filesystem.txt
+          go version > evidence/go.txt
+      - name: Five repetitions of matched workloads
+        run: python3 bench/run-paired-tail.py --baseline /tmp/keel-baseline --candidate /tmp/keel-candidate --out evidence/paired --seconds 15 --reps 5
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with: { name: paired-benchmark, path: evidence, retention-days: 90 }
+
+  operational:
+    name: Fifteen-minute soak and storage faults
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version: stable }
+      - run: go build -o /tmp/keel-candidate ./cmd/keel
+      - name: Filesystem evidence
+        run: |
+          mkdir -p evidence
+          df -T . > evidence/filesystem.txt
+          uname -a > evidence/uname.txt
+      - name: Mixed writes, rewrites, crashes, replica outages and manual promotion
+        run: python3 scripts/soak.py --bin /tmp/keel-candidate --seconds 900 --out evidence/soak
+      - name: Real ENOSPC on a private bounded filesystem
+        run: |
+          fault_mount="$RUNNER_TEMP/keel-fault"
+          mkdir "$fault_mount"
+          sudo mount -t tmpfs -o size=16m,mode=0777 tmpfs "$fault_mount"
+          trap 'sudo umount "$fault_mount"' EXIT
+          python3 scripts/soak.py --bin /tmp/keel-candidate --fault-only --disk-root "$fault_mount" --out evidence/enospc
+      - name: Repeated persistence sync and reply-barrier fault tests
+        run: go test -race ./internal/core ./cmd/keel -run '^(TestBackgroundSyncDoesNotBlockAndPreservesLaterWrites|TestRewriteAndCloseFenceBackgroundSync|TestAsyncAppendBarrierAndFailure|TestAOFWriteFailureDoesNotAcknowledge)$' -count=20
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with: { name: operational-soak, path: evidence, retention-days: 90 }

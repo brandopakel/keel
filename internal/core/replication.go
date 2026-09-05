@@ -132,6 +132,8 @@ func sealReplication() error {
 func frameChecksum(f ReplicationFrame) string {
 	// Include ordering metadata, not only the payload, in the integrity check.
 	f.Checksum = ""
+	// All fields are JSON-supported scalars or []byte; there are no custom
+	// marshalers, cycles, floats or interface values that could make this fail.
 	encoded, _ := json.Marshal(f)
 	sum := sha256.Sum256(encoded)
 	return hex.EncodeToString(sum[:])

@@ -46,6 +46,8 @@ def run(args, policy, repetition):
             reservation.bind(('127.0.0.1', 0)); port = reservation.getsockname()[1]
         password=secrets.token_hex(32)
         env=dict(os.environ,KEEL_BENCH_PASSWORD=password)
+        if getattr(args, 'telemetry', False):
+            env['GODEBUG'] = 'gctrace=1'
         argv = [args.bin, '-port', str(port), '-requirepass-env', 'KEEL_BENCH_PASSWORD']
         if policy != 'off':
             argv += ['-appendonly', '-appendfilename', directory+'/log.aof', '-appendfsync', policy]
@@ -54,6 +56,9 @@ def run(args, policy, repetition):
         with open(log_path, 'w+') as log:
             process = subprocess.Popen(argv, env=env, stdout=log, stderr=log)
             clients = []
+            telemetry = []
+            stop_monitor = threading.Event()
+            monitor = None
             try:
                 deadline = time.monotonic()+5
                 while True:
@@ -65,12 +70,28 @@ def run(args, policy, repetition):
                         time.sleep(.01)
                 probe = Client(port,password); clients.append(probe)
                 for i in range(1000): load.call('SET', 'cache:'+str(i), 'v'*256, 'PX', 60000)
-                load.call('RPUSH', 'large', *(['v'*128]*args.members))
+                # Keep setup requests bounded even when the measured list is large.
+                for first in range(0, args.members, 256):
+                    load.call('RPUSH', 'large', *(['v'*128]*min(256, args.members-first)))
                 # Warmup has the same small-key read/write distribution.
                 for i in range(200):
                     if i%5==0: load.call('SET','cache:'+str(i),'v'*256,'PX',60000)
                     else: load.call('GET','cache:'+str(i))
                 start = time.monotonic(); end = start+args.seconds
+                if getattr(args, 'telemetry', False):
+                    def observe():
+                        while not stop_monitor.wait(.5):
+                            try:
+                                stats = subprocess.check_output(
+                                    ['ps','-o','rss=,pcpu=','-p',str(process.pid)],
+                                    text=True, timeout=2).strip().split()
+                                telemetry.append({'seconds':time.monotonic()-start,
+                                                  'rss_kib':int(stats[0]),
+                                                  'cpu_percent_lifetime':float(stats[1])})
+                            except Exception as exc:
+                                telemetry.append({'seconds':time.monotonic()-start,'error':str(exc)})
+                    monitor = threading.Thread(target=observe)
+                    monitor.start()
                 def sample(client, role, operation, parts, scheduled):
                     before = time.monotonic(); error = ''
                     try: client.call(*parts)
@@ -98,6 +119,10 @@ def run(args, policy, repetition):
                     sample(load,'load',parts[0],parts,time.monotonic()); i+=1
                 thread.join()
             finally:
+                stop_monitor.set()
+                if monitor is not None:
+                    monitor.join()
+                    Path(log_path+'.telemetry.json').write_text(json.dumps(telemetry,indent=2)+'\n')
                 for client in clients: client.close()
                 process.terminate()
                 try: process.wait(timeout=7)
@@ -114,6 +139,7 @@ def main():
     parser.add_argument('--seconds', type=float, default=10)
     parser.add_argument('--reps', type=int, default=3)
     parser.add_argument('--members', type=int, default=10000)
+    parser.add_argument('--telemetry', action='store_true', help='retain ps RSS/CPU samples and Go GC trace logs')
     parser.add_argument('--policies', nargs='+', default=['off','everysec','always'])
     args=parser.parse_args()
     if not math.isfinite(args.seconds) or args.seconds<1 or args.reps<1 or args.members<1: parser.error('duration >= 1 second and positive repetitions/members required')
@@ -127,7 +153,11 @@ def main():
             for policy in args.policies:
                 try: rows=run(args,policy,rep)
                 except RunFailure as exc:
-                    writer.writerows(exc.rows); file.flush(); raise
+                    writer.writerows(exc.rows or [[policy,rep,'setup','INIT',0,0,0,f'{type(exc).__name__}: {exc}']])
+                    file.flush(); raise
+                except Exception as exc:
+                    writer.writerow([policy,rep,'setup','INIT',0,0,0,f'{type(exc).__name__}: {exc}'])
+                    file.flush(); raise
                 writer.writerows(rows); file.flush()
                 for role in ['load','probe']:
                     selected=[r for r in rows if r[2]==role]; values=sorted(r[6] for r in selected)
