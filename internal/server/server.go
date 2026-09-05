@@ -527,6 +527,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 		return err
 	}
 	setWaker(func() { syscall.Write(wakeupFDs[1], []byte{0}) })
+	defer setWaker(nil) // detach callbacks before closing/reusing the pipe descriptors
 	replicaUpdates, stopReplica := startReplicaTransport()
 	defer stopReplica()
 

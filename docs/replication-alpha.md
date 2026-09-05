@@ -1,6 +1,6 @@
 # Experimental replication and asynchronous appends
 
-Status: implemented in the working tree, not included in v0.1.0-alpha.2.
+Introduced after v0.1.0-alpha.2.
 Both features are opt-in. This is a bounded first replication implementation for
 small pilot datasets, not a capacity, high-availability or zero-loss guarantee.
 

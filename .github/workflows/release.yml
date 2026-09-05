@@ -68,7 +68,10 @@ jobs:
           # binary, as their licence asks.
           cp LICENSE THIRD_PARTY_NOTICES.md README.md dist/
           cp -R docs examples dist/
-          tar -C dist -czf "keel_${version}_${GOOS}_${GOARCH}.tar.gz" keel LICENSE THIRD_PARTY_NOTICES.md README.md docs examples
+          mkdir -p dist/bench
+          cp -R bench/external dist/bench/
+          cp bench/run-tail.py dist/bench/
+          tar --exclude='__pycache__' --exclude='*.pyc' -C dist -czf "keel_${version}_${GOOS}_${GOARCH}.tar.gz" keel LICENSE THIRD_PARTY_NOTICES.md README.md docs examples bench
           sha256sum "keel_${version}_${GOOS}_${GOARCH}.tar.gz" \
             > "keel_${version}_${GOOS}_${GOARCH}.tar.gz.sha256"
 

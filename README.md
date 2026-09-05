@@ -175,7 +175,7 @@ Background `everysec` syncing improves concurrency, but append writes, rewrite
 writes/finalization, whole-key replies and other large-key serialization can still
 stall the event loop. `INFO persistence` exposes `aof_pending_fsync`.
 Optional worker appends (`-aof-async-append`) and bounded primary/read-only replication
-are implemented as unreleased experiments; see [contracts and limits](docs/replication-alpha.md).
+are opt-in experiments introduced after v0.1.0-alpha.2; see [contracts and limits](docs/replication-alpha.md).
 Automatic failover, partitioning and a public embedding API remain unimplemented.
 See the [next-stage engineering contract](docs/async-scaling.md) for
 acceptance criteria and the [pilot plan](docs/pilot-plan.md) for application evidence.
