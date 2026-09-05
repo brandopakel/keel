@@ -53,7 +53,8 @@ populate the variable; avoid putting secrets in process arguments or shell histo
 Important boundaries:
 
 - One database, RESP2, IPv4. No transactions, Lua, Pub/Sub, blocking list commands,
-  ACL roles, native TLS, replication, cluster routing, or supported embedding API.
+  ACL roles, native TLS, cluster routing, or supported embedding API.
+  Opt-in [replication](docs/replication-alpha.md) is experimental and bounded.
   Clients must avoid RESP3 negotiation and unsupported initialization commands.
 - `SET` and `MSET` refuse keys of another type with `WRONGTYPE`; unlike Redis SET,
   they do not overwrite collections. Delete explicitly when changing type.
@@ -86,7 +87,8 @@ portions of Redis's [SET](https://redis.io/docs/latest/commands/set/) and
 
 - `always`: append and sync before successful replies. A write or sync failure stops
   the server without sending staged success replies.
-- `everysec`: append before replies; sync on the clock, including idle periods.
+- `everysec`: append before replies; sync in a background worker on the clock, including idle periods.
+  At most one sync runs at a time. A reported background failure stops the server at the next loop check.
   A crash can lose recent writes. Slow storage can stretch the nominal one-second window.
 - `no`: append before replies; let the OS schedule durability, with a sync on clean shutdown.
 
@@ -105,7 +107,8 @@ also share a 256 MiB limit; excess clients are closed. These are resource limits
 a reply can allocate before the output limit is checked.
 
 Rewrites advance in slices of at most 2048 keys, targeting 1 MiB or 1 ms between
-keys. Dirty keys are also processed in slices. A rewrite is abandoned if it exceeds
+keys. Large lists additionally yield every 256 elements or about 64 KiB; one large
+element can exceed that byte target. Mutations restart the list copy. Dirty keys are also processed in slices. A rewrite is abandoned if it exceeds
 30 seconds or 100,000 dirty keys; the original log remains authoritative. Snapshot
 creation refuses more than one million keys. Snapshot enumeration, individual large
 keys, disk writes, and final sync remain synchronous. There is no hard rewrite latency SLA.
@@ -190,3 +193,22 @@ In order of distance, not size.
 Keel was formerly named memkv and grew from [quangh33/memkv](https://github.com/quangh33/memkv).
 The original lineage is retained in Git history. Project code is under the [MIT license](LICENSE);
 Redis-derived code retains its BSD terms in [third-party notices](THIRD_PARTY_NOTICES.md).
+
+### Latency and scaling work
+
+Run `python3 bench/run-tail.py --bin ./keel --out bench/results/tail.csv.gz`
+for repeated mixed cache traffic, TTL writes, large-list reads, rewrites, and an
+independent scheduled PING probe under all three persistence settings. Raw attempts,
+errors and binary metadata are retained. This is a local diagnostic workload, not
+an open-loop saturation test or proof of application performance.
+
+Background `everysec` syncing improves concurrency, but append writes, rewrite
+writes/finalization, whole-key replies and other large-key serialization can still
+stall the event loop. `INFO persistence` exposes `aof_pending_fsync`.
+Optional worker appends (`-aof-async-append`) and bounded primary/read-only replication
+are opt-in experiments introduced after v0.1.0-alpha.2; see [contracts and limits](docs/replication-alpha.md).
+Automatic failover, partitioning and a public embedding API remain unimplemented.
+See the [next-stage engineering contract](docs/async-scaling.md) for
+acceptance criteria and the [pilot plan](docs/pilot-plan.md) for application evidence.
+
+Runnable [Bencher, k6 and AWS DLT adapters](bench/external/README.md) are available for external testing.

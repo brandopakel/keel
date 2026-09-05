@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"net"
 	"os"
 	"os/signal"
 	"strconv"
@@ -30,30 +31,35 @@ import (
 // than a trade-off, so serving unbuffered has to be asked for explicitly with
 // -mode kqueue-nobuf.
 var (
-	mode           string
-	evictPolicy    string
-	maxKeys        int
-	lruSamples     int
-	lfuLogFactor   int
-	lfuDecayPeriod int
-	maxMemory      string
-	lcsMaxCells    uint64
-	ioThreads      int
-	appendOnly     bool
-	appendFilename string
-	appendFsync    string
-	aofRewritePct  int
-	aofRewriteMin  string
-	expireSamples  int
-	cronIntervalMs int
-	showVersion    bool
-	passwordEnv    string
+	mode               string
+	evictPolicy        string
+	maxKeys            int
+	lruSamples         int
+	lfuLogFactor       int
+	lfuDecayPeriod     int
+	maxMemory          string
+	lcsMaxCells        uint64
+	ioThreads          int
+	appendOnly         bool
+	appendFilename     string
+	appendFsync        string
+	aofRewritePct      int
+	aofRewriteMin      string
+	expireSamples      int
+	cronIntervalMs     int
+	showVersion        bool
+	passwordEnv        string
+	replicaPasswordEnv string
 )
 
 // parseFlags reads the command line into config. It runs before anything
 // starts, from main rather than from an init, so that nothing else in the
 // process can observe a setting before the flag that changes it has been read.
 func parseFlags() {
+	flag.BoolVar(&config.ReplicationFeed, "replication-feed", false, "experimental: enable bounded canonical replication feed")
+	flag.StringVar(&config.ReplicaOf, "replicaof", "", "experimental: read-only replica of host:port")
+	flag.StringVar(&replicaPasswordEnv, "primary-password-env", "", "environment variable holding the primary AUTH password")
+	flag.BoolVar(&config.ReplicaTLS, "primary-tls", false, "verify TLS when connecting to the primary proxy")
 	flag.BoolVar(&showVersion, "version", false, "print the version and exit")
 	flag.StringVar(&config.Host, "host", config.Host,
 		"IPv4 address to listen on; 0.0.0.0 is every interface")
@@ -73,6 +79,7 @@ func parseFlags() {
 		"accesses before an idle LFU counter drops by one; 0 disables forgetting")
 	flag.Uint64Var(&lcsMaxCells, "lcs-max-cells", config.LCSMaxCells,
 		"largest len(key1)*len(key2) LCS will attempt; 0 is unbounded")
+	flag.BoolVar(&config.AOFAsyncAppend, "aof-async-append", false, "experimental: append on a worker with one-batch command backpressure")
 	flag.BoolVar(&appendOnly, "appendonly", config.AOFEnabled,
 		"log every write to an append-only file and replay it at startup")
 	flag.StringVar(&appendFilename, "appendfilename", config.AOFFileName,
@@ -120,6 +127,9 @@ func parseFlags() {
 	case config.FsyncAlways, config.FsyncEverySec, config.FsyncNever:
 	default:
 		log.Fatalf("unknown -appendfsync %q (want always, everysec or no)", appendFsync)
+	}
+	if config.AOFAsyncAppend && !appendOnly {
+		log.Fatal("-aof-async-append requires -appendonly")
 	}
 	config.AOFEnabled = appendOnly
 	config.AOFFileName = appendFilename
@@ -189,6 +199,25 @@ func main() {
 }
 
 func runServer() error {
+	if config.ReplicationFeed || config.ReplicaOf != "" {
+		if !config.AOFEnabled || config.RequirePass == "" || mode != "kqueue" {
+			return fmt.Errorf("replication requires authenticated AOF in kqueue mode")
+		}
+		if config.ReplicaOf != "" {
+			host, port, err := net.SplitHostPort(config.ReplicaOf)
+			n, parseErr := strconv.Atoi(port)
+			if err != nil || parseErr != nil || host == "" || n < 1 || n > 65535 {
+				return fmt.Errorf("replicaof requires host:port with a valid port")
+			}
+			if config.ReplicationFeed || config.MaxMemory != 0 {
+				return fmt.Errorf("replica requires no feed and no local eviction limits")
+			}
+			config.ReplicaPassword = os.Getenv(replicaPasswordEnv)
+			if config.ReplicaPassword == "" {
+				return fmt.Errorf("replica requires -primary-password-env naming a nonempty variable")
+			}
+		}
+	}
 	if config.MaxConnection < 1 || config.MaxConnection > 100000 || config.Port < 1 || config.Port > 65535 {
 		return fmt.Errorf("invalid port or maxclients (1..100000)")
 	}
@@ -218,6 +247,10 @@ func runServer() error {
 	fmt.Printf("starting keel %s ...\n", config.BuildVersion())
 	if err := server.StartAOF(); err != nil {
 		return fmt.Errorf("appendonly: %w", err)
+	}
+
+	if err := core.InitReplication(); err != nil {
+		return err
 	}
 
 	signals := make(chan os.Signal, 2)

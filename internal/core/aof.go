@@ -29,7 +29,7 @@ import (
 // makes it cheap to write and expensive to load: a key written a million times
 // is a million lines, and replaying is as slow as the original run was. That is
 // the trade Redis makes too, and it is why an AOF eventually needs rewriting
-// into a shorter log that produces the same state. That is not built yet.
+// into a shorter log that produces the same state. Incremental rewrites do that.
 //
 // # What has to be recorded, and what has to be rewritten
 //
@@ -82,12 +82,13 @@ type aofState struct {
 	extra [][]string
 	// replaying suppresses recording, so loading a log does not write it back
 	// into itself.
-	recovered []string
-	replaying bool
-	lastSync  time.Time
-	dirty     bool
-	failed    error
-	skip      bool
+	recovered   []string
+	replaying   bool
+	lastSync    time.Time
+	syncPending chan error
+	dirty       bool
+	failed      error
+	skip        bool
 
 	// baseSize is the file's size after the last rewrite, and written what has
 	// been appended since. Their ratio is what the automatic rewrite triggers
@@ -185,6 +186,7 @@ func OpenAOF(path string) error {
 		// hear about them here or it would carry a key forward that the server
 		// had already dropped.
 		noteRewriteDirty(key)
+		noteReplicationDirty(key)
 	}
 	return nil
 }
@@ -196,6 +198,9 @@ func CloseAOF() error {
 	if aof.file == nil {
 		return nil
 	}
+	// Join both workers even after a failure before closing their descriptor.
+	pollAppend(true)
+	pollAOFSync(true)
 	err := flushAOF(true)
 	if cerr := aof.file.Close(); err == nil {
 		err = cerr
@@ -241,6 +246,12 @@ func aofCommit(cmd *Command, reply []byte) {
 	if rewrite.active {
 		for _, key := range writtenKeys(cmd) {
 			noteRewriteDirty(key)
+		}
+	}
+
+	if writeCommands[cmd.Cmd] {
+		for _, key := range writtenKeys(cmd) {
+			noteReplicationDirty(key)
 		}
 	}
 
@@ -322,7 +333,30 @@ func FlushAOF() error {
 // aofSync is injectable so tests can exercise disk failures without relying on hardware.
 var aofSync = func(f *os.File) error { return f.Sync() }
 
+// Only the event loop touches aof state. The worker owns one Sync call and
+// publishes its result through a buffered channel; there is never a work queue.
+func pollAOFSync(wait bool) {
+	if aof.syncPending == nil {
+		return
+	}
+	var err error
+	if wait {
+		err = <-aof.syncPending
+	} else {
+		select {
+		case err = <-aof.syncPending:
+		default:
+			return
+		}
+	}
+	aof.syncPending = nil
+	if err != nil && aof.failed == nil {
+		aof.failed = err
+	}
+}
+
 func flushAOF(closing bool) error {
+	pollAOFSync(closing || config.AOFFsync == config.FsyncAlways)
 	if aof.file == nil {
 		return nil
 	}
@@ -347,7 +381,17 @@ func flushAOF(closing bool) error {
 	}
 	syncDue := closing || config.AOFFsync == config.FsyncAlways ||
 		(config.AOFFsync == config.FsyncEverySec && time.Since(aof.lastSync) >= time.Second)
-	if aof.dirty && syncDue {
+	if aof.dirty && syncDue && aof.syncPending == nil {
+		if !closing && config.AOFFsync == config.FsyncEverySec {
+			result := make(chan error, 1)
+			file, syncFile := aof.file, aofSync
+			aof.syncPending = result
+			aof.lastSync = time.Now()
+			// Writes during this Sync stay dirty and require another sync.
+			aof.dirty = false
+			go func() { result <- syncFile(file) }()
+			return nil
+		}
 		if err := aofSync(aof.file); err != nil {
 			aof.failed = err
 			return err

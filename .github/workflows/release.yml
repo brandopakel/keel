@@ -68,9 +68,14 @@ jobs:
           # binary, as their licence asks.
           cp LICENSE THIRD_PARTY_NOTICES.md README.md dist/
           cp -R docs examples dist/
-          tar -C dist -czf "keel_${version}_${GOOS}_${GOARCH}.tar.gz" keel LICENSE THIRD_PARTY_NOTICES.md README.md docs examples
+          cp -R scripts dist/
+          mkdir -p dist/bench
+          cp -R bench/external dist/bench/
+          cp bench/run-tail.py dist/bench/
+          tar --exclude='__pycache__' --exclude='*.pyc' -C dist -czf "keel_${version}_${GOOS}_${GOARCH}.tar.gz" keel LICENSE THIRD_PARTY_NOTICES.md README.md docs examples bench scripts
           sha256sum "keel_${version}_${GOOS}_${GOARCH}.tar.gz" \
             > "keel_${version}_${GOOS}_${GOARCH}.tar.gz.sha256"
+          sha256sum -c "keel_${version}_${GOOS}_${GOARCH}.tar.gz.sha256"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -79,31 +84,94 @@ jobs:
             *.tar.gz
             *.tar.gz.sha256
 
+  native-artifacts:
+    needs: binaries
+    name: native archive / ${{ matrix.goos }}-${{ matrix.goarch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64, runner: ubuntu-24.04 }
+          - { goos: linux, goarch: arm64, runner: ubuntu-24.04-arm }
+          - { goos: darwin, goarch: amd64, runner: macos-15-intel }
+          - { goos: darwin, goarch: arm64, runner: macos-15 }
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: keel-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: archives
+      - name: Verify and install native candidate
+        run: python3 scripts/check-archive.py --archive archives/*.tar.gz --revision "$GITHUB_SHA" --out installed
+      - name: Download and verify published alpha.2
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_OS: ${{ matrix.goos }}
+          TARGET_ARCH: ${{ matrix.goarch }}
+        run: |
+          gh release download v0.1.0-alpha.2 --repo "$GITHUB_REPOSITORY" --pattern "keel_v0.1.0-alpha.2_${TARGET_OS}_${TARGET_ARCH}.tar.gz*" --dir baseline-archive
+          python3 scripts/check-archive.py --archive baseline-archive/*.tar.gz --out baseline
+      - name: Upgrade, rewrite, restart and backup rollback
+        run: python3 installed/scripts/check-upgrade.py --baseline baseline/keel --candidate installed/keel --out upgrade-evidence
+      - name: Documented client installation
+        run: |
+          python3 -m venv client-venv
+          client-venv/bin/python -m pip install 'redis==5.2.1'
+          BIN="$PWD/installed/keel" client-venv/bin/python installed/examples/test_client.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: native-evidence-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            installed/archive-check.json
+            baseline/archive-check.json
+            upgrade-evidence
+
   release:
     name: attach to the release
-    needs: binaries
+    needs: native-artifacts
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
+          pattern: keel-*
           merge-multiple: true
           path: dist
 
       # Pushing a tag does not create a release, and `gh release upload` will
       # not create one either - it fails on a tag that has no release, which
       # would have been the first time this workflow ever ran.
-      - name: Create the release if the tag has none
+      - name: Prepare draft release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          Path('release-notes.md').write_text(Path('docs/alpha-release-notes.md').read_text().split('\n---\n', 1)[0])
+          PY
           gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1 \
             || gh release create "${GITHUB_REF_NAME}" \
                  --repo "${GITHUB_REPOSITORY}" \
                  --title "${GITHUB_REF_NAME}" \
-                 --generate-notes --prerelease
+                 --notes-file release-notes.md --draft --prerelease
 
       - name: Upload
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${GITHUB_REF_NAME}" dist/* --clobber --repo "${GITHUB_REPOSITORY}"
+
+      - name: Verify uploaded assets and publish prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dir downloaded
+          cd downloaded
+          test "$(find . -name '*.tar.gz' | wc -l)" -eq 4
+          sha256sum -c *.sha256
+          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease

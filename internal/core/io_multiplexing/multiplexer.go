@@ -14,6 +14,8 @@ const (
 	OpRead Operation = iota
 	// OpWrite means the descriptor can take bytes without blocking.
 	OpWrite
+	// OpNone removes readiness registration until Monitor re-enables it.
+	OpNone
 )
 
 // Event pairs a descriptor with what it is ready for.

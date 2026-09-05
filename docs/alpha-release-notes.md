@@ -1,3 +1,37 @@
+# v0.1.0-alpha.3
+
+This increment restores production active expiry, moves everysec fsync off the
+command thread, and yields between chunks of large lists during AOF rewriting.
+After snapshot traversal, reconciliation waits for in-flight fsync so hot keys are
+not repeatedly emitted while file replacement is blocked. Failed socket readiness
+registration releases connection accounting, and
+failed replication application disables core reads until a full synchronization.
+
+Two optional experiments are added:
+
+- `-aof-async-append`: one worker batch, command backpressure and a persistence reply
+  barrier. It does not execute commands concurrently with unacknowledged writes.
+- `-replication-feed` / `-replicaof`: authenticated canonical state replication,
+  read-only/stale-read gates, epoch/offset/checksum validation, and manual promotion
+  after external fencing. The initial dataset/frame limit is 8 MiB; retained history
+  is bounded to 16 MiB / 1024 batches. This is asynchronous replication with possible
+  data loss on primary failure, not automatic failover or a zero-loss protocol.
+
+Archives include runnable Bencher, k6 and AWS DLT adapters. Their local/native CI
+smokes validate integration; paid provider runs and real application pilots remain
+pending account/target setup. Existing latency smoke results establish no speedup.
+See [replication-alpha.md](replication-alpha.md) and the README for exact limits.
+
+The [candidate validation record](pr15-validation-2026-09-05.md) tracks the Linux
+race-job correction, benchmark review, native checks and archive verification.
+The [release closeout](alpha3-closeout.md) adds native archive installation,
+alpha.2 upgrade/rollback gates, matched benchmarks and operational fault/soak tests.
+Tag-built artifacts require their own checksum verification before publication.
+
+---
+
+The following notes describe the previously published alpha.2 and are historical.
+
 # v0.1.0-alpha.2
 
 Keel now offers cross-type expiry, conditional SET options, complete per-key memory reporting,

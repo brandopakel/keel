@@ -1,0 +1,49 @@
+{
+  "run_url": "https://github.com/brandopakel/keel/actions/runs/33991071168",
+  "source_commit": "8b7b7ef33cee64c98feb9b2a97c00fcdbedf0a36",
+  "publication_job": "skipped (branch dispatch)",
+  "checks": [
+    "SHA-256 matches sidecar",
+    "required binary, licenses, docs, examples and adapters present",
+    "no Python cache files",
+    "safe archive paths",
+    "binary architecture matches target",
+    "Go VCS revision matches clean source",
+    "Darwin ARM64 version invocation passed"
+  ],
+  "archives": [
+    {
+      "archive": "keel_8b7b7ef_darwin_amd64.tar.gz",
+      "sha256": "87c77d992fa06b3b21ae9ebfbbb6e99bbf496e33b3e1cfe562ed6ddb7cd2976d",
+      "binary_sha256": "003e261067606b5996c8fba25c167bd1ee330be2a91ed48d12ebe4e4ee75c0d5",
+      "file": "Mach-O 64-bit executable x86_64",
+      "buildinfo": "\tpath\tgithub.com/brandopakel/keel/cmd/keel\n\tmod\tgithub.com/brandopakel/keel\tv0.0.0-20260905204537-8b7b7ef33cee\t\n\tdep\tgithub.com/spaolacci/murmur3\tv1.1.0\th1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tDefaultGODEBUG=containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,httpcookiemaxnum=0,httpservecontentkeepheaders=1,multipathtcp=0,randseednop=0,rsa1024min=0,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,tracebacklabels=0,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,winreadlinkvolume=0,winsymlink=0,x509negativeserial=1,x509rsacrt=0,x509sha256skid=0,x509sslcertoverrideplatform=0,x509usepolicies=0\n\tbuild\tCGO_ENABLED=0\n\tbuild\tGOARCH=amd64\n\tbuild\tGOOS=darwin\n\tbuild\tGOAMD64=v1\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=8b7b7ef33cee64c98feb9b2a97c00fcdbedf0a36\n\tbuild\tvcs.time=2026-09-05T20:45:37Z\n\tbuild\tvcs.modified=false\n",
+      "files": 35
+    },
+    {
+      "archive": "keel_8b7b7ef_darwin_arm64.tar.gz",
+      "sha256": "b3d5fb341bfce54f20327d6bf094289d40dbab028f079be0e7c29da9b7f0f27e",
+      "binary_sha256": "b94056ea46c3a03a8328f9b9ad352fb25f4bc7e2b6de278985fad078cfe72328",
+      "file": "Mach-O 64-bit executable arm64",
+      "buildinfo": "\tpath\tgithub.com/brandopakel/keel/cmd/keel\n\tmod\tgithub.com/brandopakel/keel\tv0.0.0-20260905204537-8b7b7ef33cee\t\n\tdep\tgithub.com/spaolacci/murmur3\tv1.1.0\th1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tDefaultGODEBUG=containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,httpcookiemaxnum=0,httpservecontentkeepheaders=1,multipathtcp=0,randseednop=0,rsa1024min=0,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,tracebacklabels=0,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,winreadlinkvolume=0,winsymlink=0,x509negativeserial=1,x509rsacrt=0,x509sha256skid=0,x509sslcertoverrideplatform=0,x509usepolicies=0\n\tbuild\tCGO_ENABLED=0\n\tbuild\tGOARCH=arm64\n\tbuild\tGOOS=darwin\n\tbuild\tGOARM64=v8.0\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=8b7b7ef33cee64c98feb9b2a97c00fcdbedf0a36\n\tbuild\tvcs.time=2026-09-05T20:45:37Z\n\tbuild\tvcs.modified=false\n",
+      "files": 35,
+      "version_output": "keel 8b7b7ef (8b7b7ef33cee)"
+    },
+    {
+      "archive": "keel_8b7b7ef_linux_amd64.tar.gz",
+      "sha256": "35552bfd7da98022d4bffb88e859dad830ce6336cc8b919d04a4e7cf0692d096",
+      "binary_sha256": "6d2c2b41f6853ceccb42fa3360731de10474cf34e0a7a210755a405c05825d9b",
+      "file": "ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, Go BuildID=2q6a3X4Dyex9YkozIndA/dDmU7YtiYM5C-k6BAnIY/ICWOd3q5tzMxHc8ARzRf/gceU79_Qk_ny25NA3Uom, BuildID[sha1]=91600c273cf7076c56ef8e9ec7adda6cf1c94b0e, stripped",
+      "buildinfo": "\tpath\tgithub.com/brandopakel/keel/cmd/keel\n\tmod\tgithub.com/brandopakel/keel\tv0.0.0-20260905204537-8b7b7ef33cee\t\n\tdep\tgithub.com/spaolacci/murmur3\tv1.1.0\th1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tDefaultGODEBUG=containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,httpcookiemaxnum=0,httpservecontentkeepheaders=1,multipathtcp=0,randseednop=0,rsa1024min=0,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,tracebacklabels=0,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,winreadlinkvolume=0,winsymlink=0,x509negativeserial=1,x509rsacrt=0,x509sha256skid=0,x509sslcertoverrideplatform=0,x509usepolicies=0\n\tbuild\tCGO_ENABLED=0\n\tbuild\tGOARCH=amd64\n\tbuild\tGOOS=linux\n\tbuild\tGOAMD64=v1\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=8b7b7ef33cee64c98feb9b2a97c00fcdbedf0a36\n\tbuild\tvcs.time=2026-09-05T20:45:37Z\n\tbuild\tvcs.modified=false\n",
+      "files": 35
+    },
+    {
+      "archive": "keel_8b7b7ef_linux_arm64.tar.gz",
+      "sha256": "6b3081f3816caffe0e9f4f938fdbfd7d86d21e3db3b4e8bc4ca12582d62bd29a",
+      "binary_sha256": "7793196a65c7d3f79bcb98a97d5439456a6f0195945ac4ec82f8004efefc6f72",
+      "file": "ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), statically linked, Go BuildID=nb0Toh5ekRJkyj1kBIdY/ECbqG2oLLrB5KTSCHX8I/v_3xOsX2o1ZRNySPRcdD/cUcOp2rI8b_7VDaRcWq1, BuildID[sha1]=930d3e76933c734689613bc850b19342441b3c80, stripped",
+      "buildinfo": "\tpath\tgithub.com/brandopakel/keel/cmd/keel\n\tmod\tgithub.com/brandopakel/keel\tv0.0.0-20260905204537-8b7b7ef33cee\t\n\tdep\tgithub.com/spaolacci/murmur3\tv1.1.0\th1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tDefaultGODEBUG=containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,httpcookiemaxnum=0,httpservecontentkeepheaders=1,multipathtcp=0,randseednop=0,rsa1024min=0,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,tracebacklabels=0,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,winreadlinkvolume=0,winsymlink=0,x509negativeserial=1,x509rsacrt=0,x509sha256skid=0,x509sslcertoverrideplatform=0,x509usepolicies=0\n\tbuild\tCGO_ENABLED=0\n\tbuild\tGOARCH=arm64\n\tbuild\tGOOS=linux\n\tbuild\tGOARM64=v8.0\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=8b7b7ef33cee64c98feb9b2a97c00fcdbedf0a36\n\tbuild\tvcs.time=2026-09-05T20:45:37Z\n\tbuild\tvcs.modified=false\n",
+      "files": 35
+    }
+  ]
+}

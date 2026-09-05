@@ -254,14 +254,138 @@ func TestPendingRepliesSurviveOtherTraffic(t *testing.T) {
 
 func TestAOFWriteFailureDoesNotAcknowledge(t *testing.T) {
 	t.Setenv("KEEL_TEST_FILE_LIMIT", "1024")
-	s := startTestServer(t, "-appendonly", "-appendfsync", "always", "-appendfilename", filepath.Join(t.TempDir(), "limited.aof"))
+	for _, async := range []bool{false, true} {
+		t.Run(strconv.FormatBool(async), func(t *testing.T) {
+			args := []string{"-appendonly", "-appendfsync", "always", "-appendfilename", filepath.Join(t.TempDir(), "limited.aof")}
+			if async {
+				args = append(args, "-aof-async-append")
+			}
+			s := startTestServer(t, args...)
+			c, r := connectTest(t, s)
+			defer c.Close()
+			io.WriteString(c, request("SET", "large", strings.Repeat("x", 4096)))
+			line, err := r.ReadString('\n')
+			if err == nil && line == "+OK\r\n" {
+				t.Fatal("acknowledged a failed AOF write")
+			}
+			if timeout, ok := err.(net.Error); ok && timeout.Timeout() {
+				t.Fatal("server did not fail promptly")
+			}
+		})
+	}
+}
+
+func TestIdleActiveExpiry(t *testing.T) {
+	s := startTestServer(t)
 	c, r := connectTest(t, s)
-	io.WriteString(c, request("SET", "large", strings.Repeat("x", 4096)))
-	line, err := r.ReadString('\n')
-	if err == nil && line == "+OK\r\n" {
-		t.Fatal("acknowledged a failed AOF write")
+	defer c.Close()
+	if got := call(t, c, r, "SET", "idle", "value", "PX", "50"); got != "+OK" {
+		t.Fatal(got)
 	}
-	if timeout, ok := err.(net.Error); ok && timeout.Timeout() {
-		t.Fatal("server did not fail promptly")
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		// INFO does not read the key or trigger lazy expiry.
+		info := call(t, c, r, "INFO", "stats")
+		if strings.Contains(info, "expired_keys:1\r\n") {
+			s.stop(t)
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
 	}
+	t.Fatal("idle TTL was not actively reclaimed")
+}
+
+func TestAsyncAppendPipelineAndRestart(t *testing.T) {
+	for _, policy := range []string{"always", "everysec", "no"} {
+		t.Run(policy, func(t *testing.T) {
+			args := []string{"-appendonly", "-aof-async-append", "-appendfsync", policy, "-appendfilename", filepath.Join(t.TempDir(), "log")}
+			s := startTestServer(t, args...)
+			c, r := connectTest(t, s)
+			for i := 0; i < 100; i++ {
+				io.WriteString(c, request("SET", "k", strconv.Itoa(i))+request("GET", "k"))
+				if got := reply(t, r); got != "+OK" {
+					t.Fatal(got)
+				}
+				if got := reply(t, r); got != strconv.Itoa(i) {
+					t.Fatal(got)
+				}
+			}
+			if got := call(t, c, r, "BGREWRITEAOF"); !strings.HasPrefix(got, "+") {
+				t.Fatal(got)
+			}
+			c.Close()
+			s.stop(t)
+			s = startTestServer(t, args...)
+			c, r = connectTest(t, s)
+			if got := call(t, c, r, "GET", "k"); got != "99" {
+				t.Fatal(got)
+			}
+			c.Close()
+			s.stop(t)
+		})
+	}
+}
+
+func TestReplicaFullSyncWritesAndReconnect(t *testing.T) {
+	primaryArgs := []string{"-appendonly", "-aof-async-append", "-replication-feed", "-requirepass-env", "KEEL_TEST_PASSWORD", "-appendfilename", filepath.Join(t.TempDir(), "primary")}
+	primary := startTestServer(t, primaryArgs...)
+	pc, pr := connectTest(t, primary)
+	call(t, pc, pr, "AUTH", "integration-secret")
+	call(t, pc, pr, "SET", "replicated", "before")
+	replicaArgs := []string{"-appendonly", "-aof-async-append", "-requirepass-env", "KEEL_TEST_PASSWORD", "-primary-password-env", "KEEL_TEST_PASSWORD", "-replicaof", primary.addr, "-appendfilename", filepath.Join(t.TempDir(), "replica")}
+	replica := startTestServer(t, replicaArgs...)
+	rc, rr := connectTest(t, replica)
+	call(t, rc, rr, "AUTH", "integration-secret")
+	await := func(expected string) {
+		t.Helper()
+		until := time.Now().Add(5 * time.Second)
+		for time.Now().Before(until) {
+			if call(t, rc, rr, "GET", "replicated") == expected {
+				return
+			}
+			time.Sleep(25 * time.Millisecond)
+		}
+		t.Fatal("replica did not catch up", expected)
+	}
+	await("before")
+	if got := call(t, rc, rr, "SET", "replicated", "illegal"); !strings.Contains(got, "READONLY") {
+		t.Fatal(got)
+	}
+	call(t, pc, pr, "SET", "replicated", "after")
+	await("after")
+	rc.Close()
+	replica.stop(t)
+	call(t, pc, pr, "SET", "replicated", "while-offline")
+	replica = startTestServer(t, replicaArgs...)
+	rc, rr = connectTest(t, replica)
+	call(t, rc, rr, "AUTH", "integration-secret")
+	await("while-offline")
+	pc.Close()
+	primary.stop(t) // fence the old writer before manual promotion
+	rc.SetDeadline(time.Now().Add(10 * time.Second))
+	deadline := time.Now().Add(7 * time.Second)
+	stale := false
+	for time.Now().Before(deadline) {
+		if strings.Contains(call(t, rc, rr, "GET", "replicated"), "MASTERDOWN") {
+			stale = true
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if !stale {
+		t.Fatal("replica served stale state beyond its window")
+	}
+	rc.Close()
+	replica.stop(t) // clean shutdown flushes the complete applied state
+	promoted := startTestServer(t, "-appendonly", "-aof-async-append", "-requirepass-env", "KEEL_TEST_PASSWORD", "-appendfilename", replicaArgs[len(replicaArgs)-1])
+	c, r := connectTest(t, promoted)
+	call(t, c, r, "AUTH", "integration-secret")
+	if got := call(t, c, r, "GET", "replicated"); got != "while-offline" {
+		t.Fatal(got)
+	}
+	if got := call(t, c, r, "SET", "replicated", "promoted"); got != "+OK" {
+		t.Fatal(got)
+	}
+	c.Close()
+	promoted.stop(t)
 }

@@ -467,6 +467,8 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 
 	clientNumber := 0
 	nextMaintenance := time.Now()
+	var heldReplies []*client
+	paused := make(map[int]*client)
 
 	// The connections taking part in each phase of the current cycle, and the
 	// arena their replies are staged in. Kept across cycles and truncated
@@ -525,6 +527,9 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 		return err
 	}
 	setWaker(func() { syscall.Write(wakeupFDs[1], []byte{0}) })
+	defer setWaker(nil) // detach callbacks before closing/reusing the pipe descriptors
+	replicaUpdates, stopReplica := startReplicaTransport()
+	defer stopReplica()
 
 	// A heartbeat, so work that is due because of the clock happens on a server
 	// nobody is talking to.
@@ -567,6 +572,88 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 			}
 			log.Println("multiplexer:", err)
 			continue
+		}
+
+		if config.AOFAsyncAppend && core.AppendPending() {
+			ready, err := core.FlushAOFAsync(wake)
+			if err != nil {
+				requestShutdown()
+				return err
+			}
+			if ready {
+				live := heldReplies[:0]
+				for _, c := range heldReplies {
+					if clients[c.fd] == c {
+						live = append(live, c)
+					}
+				}
+				flushClientReplies(pool, ioMultiplexer, live)
+				heldReplies = nil
+				for fd, c := range paused {
+					if clients[fd] == c {
+						op := io_multiplexing.OpRead
+						if len(c.out) > 0 {
+							op = io_multiplexing.OpWrite
+						}
+						if err := ioMultiplexer.Monitor(io_multiplexing.Event{Fd: fd, Op: op}); err != nil {
+							closeClient(c)
+						}
+					}
+					delete(paused, fd)
+				}
+				if core.RewriteActive() {
+					wake()
+				}
+				// Readiness is level-triggered; re-check after restoring interests.
+				continue
+			}
+			for _, ev := range events {
+				switch ev.Fd {
+				case wakeupFDs[0]:
+					var drain [64]byte
+					syscall.Read(wakeupFDs[0], drain[:])
+				case serverFD:
+					if len(clients) < config.MaxConnection {
+						if c, ok := acceptClient(serverFD, ioMultiplexer); ok {
+							clients[c.fd] = c
+						}
+					} else {
+						fd, _, err := syscall.Accept(serverFD)
+						if err == nil {
+							syscall.Close(fd)
+						}
+					}
+				default:
+					if c := clients[ev.Fd]; c != nil {
+						if err := ioMultiplexer.Monitor(io_multiplexing.Event{Fd: c.fd, Op: io_multiplexing.OpNone}); err != nil {
+							closeClient(c)
+						} else {
+							paused[c.fd] = c
+						}
+					}
+				}
+			}
+			if time.Now().After(nextMaintenance) {
+				nextMaintenance = time.Now().Add(time.Second)
+				for _, c := range clients {
+					if time.Since(c.lastProgress) > 30*time.Second && (len(c.out) > 0 || c.buf != nil) {
+						closeClient(c)
+						delete(paused, c.fd)
+					}
+				}
+			}
+			continue
+		}
+
+		select {
+		case update := <-replicaUpdates:
+			err := core.ApplyReplication(update.frame)
+			update.applied <- err
+			if err != nil {
+				requestShutdown()
+				return err
+			}
+		default:
 		}
 
 		// Set when the wakeup pipe fires. The batch in hand is served to
@@ -665,22 +752,46 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 			}
 		}
 
+		// Reap idle keys before flushing their removal records.
+		core.ExpireCycle()
+
 		// The log is written and synced here, after every command has run and
 		// before a single reply goes out. Under appendfsync always that
 		// ordering is the whole guarantee: a client is told its write succeeded
 		// only once the record of it is on disk. Flushing after the replies
 		// would be faster and would be a lie.
-		if err := core.FlushAOF(); err != nil {
-			// Carrying on would keep acknowledging writes that are not being
-			// recorded, which is worse than stopping: the data looks safe and
-			// is not. Redis stops accepting writes here for the same reason.
-			log.Println("appendonly: write failed, stopping:", err)
-			requestShutdown()
-			return err
+		ready := true
+		var flushErr error
+		if config.AOFAsyncAppend {
+			ready, flushErr = core.FlushAOFAsync(wake)
+		} else {
+			flushErr = core.FlushAOF()
 		}
-
-		// Keys whose TTL has passed are reaped here rather than waiting for
-		// someone to read them. Almost every turn this is one length check.
+		if flushErr != nil {
+			log.Println("appendonly: write failed, stopping:", flushErr)
+			requestShutdown()
+			return flushErr
+		}
+		if !ready {
+			for _, c := range writable {
+				if c.inArena {
+					c.out = append([]byte(nil), arena.buf[c.outStart:c.outEnd]...)
+					c.outBytes = cap(c.out)
+					c.inArena = false
+				}
+				if !accountClient(c) {
+					closeClient(c)
+					continue
+				}
+				if err := ioMultiplexer.Monitor(io_multiplexing.Event{Fd: c.fd, Op: io_multiplexing.OpNone}); err != nil {
+					closeClient(c)
+					continue
+				}
+				paused[c.fd] = c
+				heldReplies = append(heldReplies, c)
+			}
+			continue
+		}
 
 		// A rewrite advances one slice per cycle, inside the flush above, and
 		// cycles only happen when the multiplexer returns. A server that goes
@@ -703,36 +814,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 
 		// Every syscall remains nonblocking. A partial reply owns its remaining
 		// bytes and resumes on writable readiness; no worker waits for a reader.
-		pool.run(writable, true)
-		for _, c := range writable {
-			if c.err != nil {
-				closeClient(c)
-				continue
-			}
-			if len(c.out) > 0 {
-				if c.inArena {
-					c.out = append([]byte(nil), c.out...)
-					c.outBytes = cap(c.out)
-					c.inArena = false
-				}
-				if err := ioMultiplexer.Monitor(io_multiplexing.Event{Fd: c.fd, Op: io_multiplexing.OpWrite}); err != nil {
-					closeClient(c)
-				}
-			} else {
-				c.out = nil
-				c.outBytes = 0
-				c.frames = nil
-				c.inArena = false
-				if c.closeAfterWrite {
-					closeClient(c)
-					continue
-				}
-				if err := ioMultiplexer.Monitor(io_multiplexing.Event{Fd: c.fd, Op: io_multiplexing.OpRead}); err != nil {
-					closeClient(c)
-				}
-			}
-			accountClient(c)
-		}
+		flushClientReplies(pool, ioMultiplexer, writable)
 		now := time.Now()
 		if !now.Before(nextMaintenance) {
 			nextMaintenance = now.Add(time.Second)
@@ -885,4 +967,39 @@ func accountClient(c *client) bool {
 	retainedClientBytes += used - c.accounted
 	c.accounted = used
 	return retainedClientBytes <= maxRetainedClientBytes
+}
+
+func flushClientReplies(pool *ioPool, ioMultiplexer io_multiplexing.IOMultiplexer, writable []*client) {
+	pool.run(writable, true)
+	for _, c := range writable {
+		if c.err != nil {
+			closeClient(c)
+			continue
+		}
+		if len(c.out) > 0 {
+			if c.inArena {
+				c.out = append([]byte(nil), c.out...)
+				c.outBytes = cap(c.out)
+				c.inArena = false
+			}
+			if err := ioMultiplexer.Monitor(io_multiplexing.Event{Fd: c.fd, Op: io_multiplexing.OpWrite}); err != nil {
+				closeClient(c)
+				continue
+			}
+		} else {
+			c.out = nil
+			c.outBytes = 0
+			c.frames = nil
+			c.inArena = false
+			if c.closeAfterWrite {
+				closeClient(c)
+				continue
+			}
+			if err := ioMultiplexer.Monitor(io_multiplexing.Event{Fd: c.fd, Op: io_multiplexing.OpRead}); err != nil {
+				closeClient(c)
+				continue
+			}
+		}
+		accountClient(c)
+	}
 }

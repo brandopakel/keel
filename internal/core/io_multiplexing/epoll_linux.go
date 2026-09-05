@@ -31,6 +31,13 @@ func CreateIOMultiplexer() (*Epoll, error) {
 }
 
 func (ep *Epoll) Monitor(event Event) error {
+	if event.Op == OpNone {
+		err := syscall.EpollCtl(ep.fd, syscall.EPOLL_CTL_DEL, event.Fd, nil)
+		if err == syscall.ENOENT {
+			return nil
+		}
+		return err
+	}
 	native := syscall.EpollEvent{Events: syscall.EPOLLIN, Fd: int32(event.Fd)}
 	if event.Op == OpWrite {
 		native.Events = syscall.EPOLLOUT

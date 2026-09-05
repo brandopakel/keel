@@ -47,7 +47,8 @@ func TestEveryRegisteredCommandIsTypeCheckedOrDeliberatelyNot(t *testing.T) {
 	// the type table on purpose; everything else in the dispatch table has to
 	// be in it, or a name held by another type would slip through.
 	exempt := map[string]bool{
-		"PING": true, "DEL": true, "EXISTS": true, "TYPE": true, "KEYS": true, "MGET": true,
+		"KEEL.REPL.PULL": true, // protocol cursor, not key arguments
+		"PING":           true, "DEL": true, "EXISTS": true, "TYPE": true, "KEYS": true, "MGET": true,
 		"FLUSHDB": true, "DBSIZE": true, "MEMORY": true, "INFO": true, "BGREWRITEAOF": true,
 		"KEEL.DUMP": true, "KEEL.RESTORE": true, "MEMKV.DUMP": true, "MEMKV.RESTORE": true,
 		"TTL": true, "PTTL": true, "EXPIRE": true, "PEXPIRE": true, "EXPIREAT": true, "PEXPIREAT": true, "PERSIST": true, "MORRIS.INFO": true,

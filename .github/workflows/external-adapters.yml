@@ -1,0 +1,38 @@
+name: External adapters
+on:
+  pull_request:
+    branches: [develop]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    name: RESP adapters and provider packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version-file: go.mod }
+      - run: go build -o /tmp/keel ./cmd/keel
+      - name: Isolated Locust environment
+        run: |
+          python3 -m venv /tmp/keel-load
+          /tmp/keel-load/bin/python -m pip install -r bench/external/requirements.txt
+      - name: Pinned k6 TCP binary
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.3.1 --repo grafana/xk6-tcp --pattern xk6-tcp_v0.3.1_linux_amd64.tar.gz --dir /tmp/keel-k6
+          echo '52ecb394a0ea26b2e571609a95286843a428fedcafc360cb75ef4ca3d3fd6c71  /tmp/keel-k6/xk6-tcp_v0.3.1_linux_amd64.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/keel-k6/xk6-tcp_v0.3.1_linux_amd64.tar.gz -C /tmp/keel-k6
+          /tmp/keel-k6/xk6-tcp_v0.3.1_linux_amd64/k6 version
+      - run: node bench/external/k6/resp.test.mjs
+      - run: python3 bench/external/test_export.py
+      - run: python3 bench/external/smoke.py --bin /tmp/keel --locust /tmp/keel-load/bin/locust --k6 /tmp/keel-k6/xk6-tcp_v0.3.1_linux_amd64/k6
+      - run: python3 bench/external/aws/package.py --host keel.internal.example --out /tmp/keel-dlt.zip
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: aws-dlt-script-package
+          path: /tmp/keel-dlt.*

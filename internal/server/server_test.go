@@ -9,9 +9,50 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/brandopakel/keel/internal/core"
+	"github.com/brandopakel/keel/internal/core/io_multiplexing"
 )
+
+type failingMonitor struct {
+	io_multiplexing.IOMultiplexer
+	operation io_multiplexing.Operation
+}
+
+func (m *failingMonitor) Monitor(event io_multiplexing.Event) error {
+	m.operation = event.Op
+	return errors.New("injected registration failure")
+}
+
+func TestFlushClientRepliesReleasesAccountingOnMonitorFailure(t *testing.T) {
+	for _, pending := range []bool{false, true} {
+		t.Run(fmt.Sprintf("pending=%t", pending), func(t *testing.T) {
+			before := retainedClientBytes
+			defer func() { retainedClientBytes = before }()
+			r, _ := socketPair(t)
+			c := &client{fd: r, out: []byte("+OK\r\n+PONG\r\n"), buf: &connBuffer{data: make([]byte, 32)}}
+			if pending {
+				// Only write the first frame, leaving output to register for OpWrite.
+				c.frames = []int{5, 7}
+			}
+			clients[r] = c
+			require.True(t, accountClient(c))
+			pool := newIOPool(1)
+			defer pool.stop()
+			monitor := &failingMonitor{}
+			flushClientReplies(pool, monitor, []*client{c})
+			want := io_multiplexing.OpRead
+			if pending {
+				want = io_multiplexing.OpWrite
+			}
+			require.Equal(t, want, monitor.operation)
+			require.NotContains(t, clients, r)
+			require.Zero(t, c.accounted)
+			require.Equal(t, before, retainedClientBytes, "closed clients must release their retained buffers")
+		})
+	}
+}
 
 // socketPair returns a connected pair and guarantees the read side is clean of
 // buffered state afterwards. clients is keyed by fd and the OS reuses fd

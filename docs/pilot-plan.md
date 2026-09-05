@@ -31,3 +31,8 @@ Before public alpha promotion:
 
 Before a stable release, require application pilots, longer adversarial/soak tests, storage-failure
 coverage on deployment filesystems, and explicit support/versioning commitments.
+
+External execution is part of the next evaluation: compare controlled separate-host
+RESP benchmarks with a candidate managed service before selecting a provider.
+Keep workload scripts, raw results and correctness assertions portable. See the
+[external testing decision](async-scaling.md#external-testing-and-benchmarking-decision).

@@ -156,3 +156,6 @@ jobs:
       # them under -race measures the instrumentation.
       - name: Test with the race detector
         run: go test -race -v ./...
+
+      - name: Repeat rewrite, replication and connection regressions
+        run: go test -race ./internal/core ./internal/server -run '^(TestAutomaticRewriteTriggersOnGrowth|TestReplicationApplyFailureDisablesReadsUntilFullSync|TestFlushClientRepliesReleasesAccountingOnMonitorFailure)$' -count=20

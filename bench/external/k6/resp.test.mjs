@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {encode,parse} from './resp.mjs';
+const bytes=s=>new TextEncoder().encode(s);
+assert.equal(new TextDecoder().decode(encode(['SET','é','你好'])),'*3\r\n$3\r\nSET\r\n$2\r\né\r\n$6\r\n你好\r\n');
+const frame=bytes('*3\r\n+OK\r\n$4\r\na\r\nb\r\n:-7\r\n');
+for(let n=0;n<frame.length;n++)assert.equal(parse(frame.slice(0,n)),null);
+const result=parse(frame);assert.equal(result.next,frame.length);assert.equal(result.value[0],'OK');assert.deepEqual(result.value[1],bytes('a\r\nb'));assert.equal(result.value[2],-7);
+assert.equal(parse(bytes('$-1\r\n')).value,null);
+assert.throws(()=>parse(bytes('$2\r\nabxx')),/terminator/);
+assert.throws(()=>parse(bytes('$-2\r\n')),/length/);
+assert.equal(parse(bytes('+OK\r\n:2\r\n')).next,5);
+console.log('RESP framing tests passed');

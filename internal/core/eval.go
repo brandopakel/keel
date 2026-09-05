@@ -26,7 +26,8 @@ var commandTable = map[string]func([]string) []byte{
 	"PEXPIRE": cmdPEXPIRE, "EXPIREAT": cmdEXPIREAT, "PERSIST": cmdPERSIST,
 
 	// Server
-	"DBSIZE": cmdDBSIZE, "FLUSHDB": cmdFLUSHDB, "MEMORY": cmdMEMORY, "INFO": cmdINFO,
+	"KEEL.REPL.PULL": cmdReplicationPull,
+	"DBSIZE":         cmdDBSIZE, "FLUSHDB": cmdFLUSHDB, "MEMORY": cmdMEMORY, "INFO": cmdINFO,
 	"BGREWRITEAOF": cmdBGREWRITEAOF,
 	"KEEL.DUMP":    cmdDUMP, "KEEL.RESTORE": cmdRESTORE,
 	// The names from before the server was renamed, so a log written then
@@ -85,6 +86,10 @@ func cmdPING(args []string) []byte {
 // command this server does not have, which is returned as an error so that a
 // log replay stops on it rather than skipping past a command it cannot run.
 func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
+	if err := replicaCommandError(cmd.Cmd); err != nil {
+		_, werr := c.Write(Encode(err, false))
+		return werr
+	}
 	// Anything a command wants written to the log instead of itself is staged
 	// while it runs, so the slate has to be clean before it starts. This comes
 	// first because the type check below reads keys, and reading a key whose

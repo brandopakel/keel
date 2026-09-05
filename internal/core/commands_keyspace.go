@@ -163,6 +163,7 @@ func cmdFLUSHDB(args []string) []byte {
 	data_structure.EachKeyspace(func(ks data_structure.Keyspace) {
 		for _, key := range ks.Keys() {
 			noteRewriteDirty(key)
+			noteReplicationDirty(key)
 			ks.Delete(key)
 		}
 	})

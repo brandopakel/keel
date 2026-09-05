@@ -1,0 +1,19 @@
+{
+  "arguments": {
+    "bin": "/private/tmp/keel-async-review",
+    "out": "bench/results/tail-async.csv.gz",
+    "seconds": 5.0,
+    "reps": 3,
+    "members": 10000,
+    "policies": [
+      "off",
+      "everysec",
+      "always"
+    ]
+  },
+  "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "python": "3.14.5",
+  "binary_sha256": "8bb60d3b5c8bdb57d6aff35a75a70a41f71fa1f7b50198bbae96084fd4f43265",
+  "timestamp_utc": "2026-09-05T07:13:29Z",
+  "model": "closed-loop load; 100Hz scheduled independent probe; probe scheduled latency includes queueing"
+}
