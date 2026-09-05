@@ -1,6 +1,6 @@
 # Pinned Linux amd64 Python image; the final image digest identifies installed OS packages.
 FROM python:3.12-slim-bookworm@sha256:9c47360a2a0355e2da18516d0b1c2126ec22c195d2185e97347c9d98398c5bef
-RUN apt-get update && apt-get install -y --no-install-recommends procps \
+RUN apt-get update && apt-get install -y --no-install-recommends procps iproute2 \
     && dpkg-query -W > /opt/keel-packages.txt \
     && rm -rf /var/lib/apt/lists/*
 COPY bin/ /opt/keel/bin/

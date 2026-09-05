@@ -64,9 +64,9 @@ def run(args, policy, repetition):
                 while True:
                     try:
                         load = Client(port,password); clients.append(load); break
-                    except OSError:
+                    except OSError as exc:
                         if process.poll() is not None or time.monotonic() > deadline:
-                            log.seek(0); raise RuntimeError(log.read())
+                            log.seek(0); raise RuntimeError(f'server readiness failed: {type(exc).__name__}: {exc}\n{log.read()}') from exc
                         time.sleep(.01)
                 probe = Client(port,password); clients.append(probe)
                 for i in range(1000): load.call('SET', 'cache:'+str(i), 'v'*256, 'PX', 60000)

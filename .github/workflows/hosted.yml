@@ -29,7 +29,7 @@ jobs:
       - name: Build and exercise the image without external networking
         run: |
           docker build --platform linux/amd64 --build-arg "HARNESS_REVISION=$GITHUB_SHA" -f bench/external/bencher.Dockerfile -t keel-hosted:$GITHUB_SHA image-context
-          docker run --rm --network=none keel-hosted:$GITHUB_SHA --policy off --rep 0 --seconds 1 > evidence/smoke.bmf.json 2> evidence/smoke.stderr.json
+          docker run --rm --network=none keel-hosted:$GITHUB_SHA --policy off --rep 0 --seconds 1 --enable-loopback > evidence/smoke.bmf.json 2> evidence/smoke.stderr.json
           python3 - <<'PY'
           import base64, hashlib, json
           from pathlib import Path
