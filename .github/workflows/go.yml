@@ -1,8 +1,9 @@
 # Build, vet and test on every push to the working branch and every pull
 # request into it.
 #
-# This previously ran only on `main`, which tracks upstream unchanged, so none
-# of the work on `develop` was ever built or tested here.
+# This previously ran only on `main`, which mirrored upstream unchanged, so none
+# of the work on `develop` was ever built or tested here. `main` is gone now:
+# `develop` is the only branch, and the one every pull request targets.
 #
 # The matrix runs the floor go.mod declares as well as current Go, because the
 # floor is a claim: the memory accounting in internal/data_structure/memory.go
@@ -12,7 +13,7 @@ name: Go
 
 on:
   push:
-    branches: [ develop, main ]
+    branches: [ develop ]
   pull_request:
     branches: [ develop ]
 
