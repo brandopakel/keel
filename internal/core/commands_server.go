@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/constant"
@@ -96,6 +97,22 @@ func cmdINFO(args []string) []byte {
 	var b strings.Builder
 	want := func(name string) bool { return section == "" || section == name }
 
+	if want("replication") {
+		role := "primary"
+		if config.ReplicaOf != "" {
+			role = "replica"
+		}
+		ready := 0
+		if replicaReady {
+			ready = 1
+		}
+		age := int64(-1)
+		if !replicaUpdated.IsZero() {
+			age = time.Since(replicaUpdated).Milliseconds()
+		}
+		fmt.Fprintf(&b, "# Replication\r\nprimary_epoch:%s\r\nreplica_epoch:%s\r\nreplication_pending_keys:%d\r\nreplication_epoch_invalidated:%t\r\n", replication.epoch, replicaEpoch, len(replication.dirty), replication.invalidated)
+		fmt.Fprintf(&b, "role:%s\r\nreplica_ready:%d\r\nreplica_offset:%d\r\nreplica_last_update_ms:%d\r\nprimary_offset:%d\r\nreplication_history_bytes:%d\r\n\r\n", role, ready, replicaOffset, age, replication.offset, replication.bytes)
+	}
 	if want("server") {
 		fmt.Fprintf(&b, "# Server\r\nkeel_version:%s\r\nresp_version:2\r\n\r\n", config.BuildVersion())
 	}
@@ -127,6 +144,11 @@ func cmdINFO(args []string) []byte {
 			status = "err"
 		}
 		fmt.Fprintf(&b, "aof_rewrite_in_progress:%d\r\naof_last_write_status:%s\r\naof_buffer_length:%d\r\n", active, status, len(aof.buf))
+		pending := 0
+		if aof.syncPending != nil {
+			pending = 1
+		}
+		fmt.Fprintf(&b, "aof_pending_fsync:%d\r\naof_pending_append_bytes:%d\r\n", pending, appendBytes)
 		fmt.Fprintf(&b, "aof_rewrites:%d\r\naof_keys_at_last_rewrite:%d\r\n\r\n", rewrites, keys)
 	}
 	if want("keyspace") {

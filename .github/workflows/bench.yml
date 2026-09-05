@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version-file: go.mod }
-      - run: sudo apt-get update && sudo apt-get install -y redis-server redis-tools
+      - run: sudo apt-get update && sudo apt-get install -y redis-server redis-tools lsof
       - run: go build -o /tmp/keel ./cmd/keel
       - name: environment
         run: |
@@ -30,13 +30,14 @@ jobs:
           set -e
           port=7100
           for m in kqueue-nobuf kqueue net net-small net-direct net-chan; do
-            port=$((port+1)); /tmp/keel -port $port -mode $m & sleep 1
+            port=$((port+1)); /tmp/keel -port $port -mode $m & server_pid=$!; sleep 1
             [ "$(redis-cli -p $port ping)" = "PONG" ] || { echo "$m failed"; exit 1; }
-            echo "  $m OK"; pkill -f "/tmp/keel -port $port" || true; sleep 0.3
+            echo "  $m OK"; kill "$server_pid"; wait "$server_pid" || true; sleep 0.3
           done
       - run: BIN=/tmp/keel OUT=bench/results/matrix-linux.csv REPS=5 ./bench/run-matrix.sh
       - run: python3 bench/summarise.py bench/results/matrix-linux.csv | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
+        if: always()
         with: { name: linux-matrix, path: bench/results/matrix-linux.csv }
 
   memory-and-latency:
@@ -50,7 +51,7 @@ jobs:
       - run: |
           sudo apt-get update
           sudo apt-get install -y redis-server redis-tools lsof
-          sudo apt-get install -y memtier-benchmark || echo "memtier unavailable, latency step will skip"
+          sudo apt-get install -y memtier-benchmark
       - run: go build -o /tmp/keel ./cmd/keel
       - name: memory vs connection count
         run: |
@@ -59,9 +60,13 @@ jobs:
           python3 - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
           import csv
           from collections import defaultdict
+          from statistics import median
+          samples=defaultdict(list)
           d=defaultdict(dict)
           for r in csv.DictReader(open("bench/results/memory-linux.csv")):
-              d[r["server"]][r["conns"]]=(int(r["rss_kb"]),float(r["goroutine_cost_kb_per_conn"]))
+              samples[(r["server"],r["conns"])].append((int(r["rss_kb"]),float(r["rss_delta_kb_per_conn"])))
+          for (server, conns), rows in samples.items():
+              d[server][conns]=(median(v[0] for v in rows),median(v[1] for v in rows))
           S=[s for s in ["redis","kqueue-nobuf","kqueue","net","net-small","net-direct","net-chan"] if s in d]
           print("## Memory on Linux\n")
           print("| conns | " + " | ".join(S) + " |"); print("|---|"+"---:|"*len(S))
@@ -74,12 +79,12 @@ jobs:
           PY
       - name: latency percentiles
         run: |
-          command -v memtier_benchmark >/dev/null || { echo "memtier not installed, skipping"; exit 0; }
-          BIN=/tmp/keel OUT=bench/results/memtier-linux.csv REPS=3 ./bench/run-memtier.sh || true
+          BIN=/tmp/keel OUT=bench/results/memtier-linux.csv REPS=3 ./bench/run-memtier.sh
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: linux-memory-latency
-          path: bench/results/memory-linux.csv
+          path: bench/results/
 
   off-loopback:
     name: off-loopback (veth across namespaces)
@@ -89,7 +94,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version-file: go.mod }
-      - run: sudo apt-get update && sudo apt-get install -y redis-server redis-tools iproute2
+      - run: sudo apt-get update && sudo apt-get install -y redis-server redis-tools iproute2 lsof
       - run: go build -o /tmp/keel ./cmd/keel
       - name: run across a veth pair
         run: |
@@ -100,7 +105,8 @@ jobs:
           agg=defaultdict(list)
           for r in csv.DictReader(open("bench/results/offloopback-linux.csv")):
               v=float(r["rps"])
-              if v>0: agg[(r["server"],r["command"],r["pipeline"],r["datasize"])].append(v)
+              if v<=0: raise ValueError("nonpositive throughput measurement")
+              agg[(r["server"],r["command"],r["pipeline"],r["datasize"])].append(v)
           med={k:st.median(v) for k,v in agg.items()}
           servers=sorted({k[0] for k in med})
           scen=sorted({(k[1],k[2],k[3]) for k in med}, key=lambda x:(x[0],int(x[1]),int(x[3])))
@@ -111,4 +117,21 @@ jobs:
               print(f"| {c} P={p} d={d} | " + " | ".join(row) + " |")
           PY
       - uses: actions/upload-artifact@v4
+        if: always()
         with: { name: linux-offloopback, path: bench/results/offloopback-linux.csv }
+
+  tail-latency:
+    name: mixed traffic, expiry, large lists and rewrite
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - run: go build -o /tmp/keel ./cmd/keel
+      - run: python3 bench/run-tail.py --bin /tmp/keel --out bench/results/tail-linux.csv.gz --seconds 30 --reps 3
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-tail-latency
+          path: bench/results/tail-linux.*

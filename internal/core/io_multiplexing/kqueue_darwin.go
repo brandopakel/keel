@@ -31,6 +31,15 @@ func CreateIOMultiplexer() (*KQueue, error) {
 }
 
 func (kq *KQueue) Monitor(event Event) error {
+	if event.Op == OpNone {
+		for _, filter := range []int16{syscall.EVFILT_READ, syscall.EVFILT_WRITE} {
+			_, err := syscall.Kevent(kq.fd, []syscall.Kevent_t{{Ident: uint64(event.Fd), Filter: filter, Flags: syscall.EV_DELETE}}, nil, nil)
+			if err != nil && err != syscall.ENOENT {
+				return err
+			}
+		}
+		return nil
+	}
 	filter := int16(syscall.EVFILT_READ)
 	if event.Op == OpWrite {
 		filter = syscall.EVFILT_WRITE

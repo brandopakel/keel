@@ -14,7 +14,7 @@ import (
 // - the same argument the eviction pool makes, that a random sample is a cheap
 // way to tell a keyspace with a problem from one without.
 func ExpireCycle() int {
-	if config.ActiveExpireSamples <= 0 || KeysWithExpiry() == 0 {
+	if config.ReplicaOf != "" || config.ActiveExpireSamples <= 0 || KeysWithExpiry() == 0 {
 		return 0
 	}
 

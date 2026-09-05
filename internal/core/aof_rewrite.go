@@ -78,7 +78,10 @@ var rewrite struct {
 	// dirty is every key written since the rewrite started. These are the keys
 	// the walk may have recorded wrongly, and they are all rewritten at the end
 	// from whatever they hold then.
-	dirty map[string]struct{}
+	dirty      map[string]struct{}
+	listActive bool
+	listKey    string
+	listPos    int
 }
 
 // RewriteActive reports whether a rewrite is part-way through.
@@ -91,6 +94,9 @@ func StartRewrite() error {
 	}
 	if rewrite.active {
 		return fmt.Errorf("a rewrite is already running")
+	}
+	if config.AOFAsyncAppend && (AppendPending() || len(aof.buf) > 0) {
+		return fmt.Errorf("rewrite waits for pending append; retry after the write reply")
 	}
 
 	// Anything still buffered belongs to the state about to be walked, so it
@@ -117,6 +123,7 @@ func StartRewrite() error {
 	rewrite.file = f
 	rewrite.written = 0
 	rewrite.pos = 0
+	rewrite.listActive = false
 	rewrite.dirty = make(map[string]struct{})
 	rewrite.keys = allKeyNames()
 	return nil
@@ -125,6 +132,10 @@ func StartRewrite() error {
 // AdvanceRewrite emits the next slice of the walk, and finishes if that was the
 // last of it. The event loop calls it once a cycle while a rewrite is active.
 func AdvanceRewrite() error {
+	pollAOFSync(false)
+	if aof.failed != nil {
+		return aof.failed
+	}
 	if !rewrite.active {
 		return nil
 	}
@@ -132,6 +143,14 @@ func AdvanceRewrite() error {
 	if time.Since(rewrite.started) > 30*time.Second || len(rewrite.dirty) > 100000 {
 		abortRewrite(fmt.Errorf("rewrite exceeded duration or dirty-key budget"))
 		return nil // the original log continues to contain every write
+	}
+	if rewrite.listActive {
+		body := emitListSlice(nil)
+		if err := rewriteWrite(body); err != nil {
+			abortRewrite(err)
+			return err
+		}
+		return nil
 	}
 	deadline := time.Now().Add(time.Millisecond)
 	var body []byte
@@ -141,19 +160,19 @@ func AdvanceRewrite() error {
 		rewrite.pos++
 		count++
 		if _, touched := rewrite.dirty[key]; !touched {
-			body = emitKey(body, key)
+			body = emitRewriteKey(body, key)
 		}
-		if len(body) >= 1<<20 || time.Now().After(deadline) {
+		if rewrite.listActive || len(body) >= 1<<20 || time.Now().After(deadline) {
 			break
 		}
 	}
-	if rewrite.pos == len(rewrite.keys) {
+	if rewrite.pos == len(rewrite.keys) && !rewrite.listActive {
 		for key := range rewrite.dirty {
-			if count >= rewriteChunk || len(body) >= 1<<20 || time.Now().After(deadline) {
+			if rewrite.listActive || count >= rewriteChunk || len(body) >= 1<<20 || time.Now().After(deadline) {
 				break
 			}
 			body = appendCommand(body, "DEL", key)
-			body = emitKey(body, key)
+			body = emitRewriteKey(body, key)
 			delete(rewrite.dirty, key)
 			count++
 		}
@@ -162,23 +181,68 @@ func AdvanceRewrite() error {
 		abortRewrite(err)
 		return err
 	}
-	if rewrite.pos < len(rewrite.keys) || len(rewrite.dirty) > 0 {
+	if rewrite.listActive || rewrite.pos < len(rewrite.keys) || len(rewrite.dirty) > 0 {
 		return nil
 	}
 
 	return finishRewrite()
 }
 
+// Large lists have O(1) indexed access, so they can be serialized across
+// turns without copying a snapshot. A mutation invalidates the cursor.
+func emitRewriteKey(dst []byte, key string) []byte {
+	if l, ok := listStore.Peek(key); ok && l.Len() > 256 {
+		rewrite.listActive, rewrite.listKey, rewrite.listPos = true, key, 0
+		return emitListSlice(appendCommand(dst, "DEL", key))
+	}
+	return emitKey(dst, key)
+}
+
+func emitListSlice(dst []byte) []byte {
+	key := rewrite.listKey
+	l, ok := listStore.Peek(key)
+	if !ok {
+		rewrite.listActive = false
+		return dst
+	}
+	parts := []string{"RPUSH", key}
+	bytes := 0
+	for rewrite.listPos < l.Len() && len(parts) < 258 && bytes < 64<<10 {
+		value, _ := l.Index(rewrite.listPos)
+		parts = append(parts, value)
+		bytes += len(value)
+		rewrite.listPos++
+	}
+	dst = appendCommand(dst, parts...)
+	if rewrite.listPos == l.Len() {
+		rewrite.listActive = false
+		if at, has := listStore.GetExpiry(key); has {
+			dst = appendCommand(dst, "PEXPIREAT", key, strconv.FormatUint(at, 10))
+		}
+	}
+	return dst
+}
+
 // noteRewriteDirty records that a key was written while a rewrite is walking.
 func noteRewriteDirty(key string) {
 	if rewrite.active {
 		rewrite.dirty[key] = struct{}{}
+		if rewrite.listActive && rewrite.listKey == key {
+			// Discard the cursor, not the partial log. Reconciliation starts
+			// with DEL and replaces every already-emitted fragment.
+			rewrite.listActive = false
+		}
 	}
 }
 
 // finishRewrite writes the keys that changed during the walk, then swaps the
 // new log in.
 func finishRewrite() error {
+	// Keep reconciling mutations while the old descriptor is being synced.
+	// Never close or replace a descriptor owned by the worker.
+	if aof.syncPending != nil {
+		return nil
+	}
 
 	if err := rewrite.file.Sync(); err != nil {
 		abortRewrite(err)

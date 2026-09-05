@@ -34,8 +34,9 @@ Implemented:
 
 Limits still requiring engineering if workloads hit them:
 
-- Snapshot enumeration and serialization of an individual key remain synchronous.
-- AOF writes and syncs remain synchronous; slow storage can stall commands.
+- Snapshot enumeration and most individual-key serialization remain synchronous. Large-list rewrites now yield between bounded chunks, restarting on mutation.
+- AOF appends, rewrite writes/finalization and `always` sync remain synchronous; slow storage can stall commands.
+- `everysec` now uses one background sync worker, with error propagation and descriptor lifecycle fences.
 - Response encoding allocates before checking its limit. Parsing and command execution require transient memory.
 - Whole-key commands and large computations remain proportional to their input. These are not hard latency bounds.
 - There is no per-client rate limit or CPU budget, nor fairness guarantee against expensive-command traffic.
@@ -98,3 +99,54 @@ Defer embedding, partitioning, and replication until a pilot identifies the actu
 
 The [pilot plan](pilot-plan.md) collects these inputs. Implementing all three speculatively would
 create three products without establishing which one users need.
+
+## September 5 follow-up (working tree, not yet released)
+
+- Restored active expiry in the production event loop and added a real-server idle-expiry regression.
+- Background everysec fsync, sticky failure reporting, and close/rewrite descriptor fences.
+- Large-list rewrite chunks (256 elements / approximately 64 KiB), with mutation/replay tests.
+- Repeated mixed-traffic tail-latency harness with independent scheduled probes and raw errors.
+- Benchmark CI now uses the current memory columns and medians, fails on missing memtier or
+  failed latency runs, retains artifacts on failure, and stops smoke servers by exact PID.
+- Wider scaling acceptance criteria are in [async-scaling.md](async-scaling.md).
+
+External application pilots, replication, partitioning and embedding remain incomplete.
+The preceding implementation bullets do not establish a hard latency or data-loss bound.
+
+External testing deliberation: adopt a layered CI/controlled-host/pilot strategy;
+evaluate managed k6 or AWS load orchestration against RESP support, raw export,
+reproducibility and cost. Do not move all correctness and fault tests into a hosted
+load service. The detailed selection gates and first experiment are included in
+[the updated plan](async-scaling.md#external-testing-and-benchmarking-decision).
+
+Follow-up local validation: full Go suite, race suite and vet passed; nine baseline
+and nine candidate latency smoke runs completed without request errors. The
+[latency report](latency-smoke-2026-09-05.md) records the unchanged everysec p99 and
+measurement limits. Expanded Linux benchmark CI has not run for this working tree.
+The installed memtier tool also completed all five scenarios with the corrected
+nested-percentile parser. Raw memtier JSON/logs are now retained rather than deleted;
+missing metrics fail instead of silently becoming zero. Benchmark YAML and shell
+syntax checks pass. These checks do not replace the pending controlled-host runs.
+
+## Next implementation increment (working tree)
+
+This supersedes the earlier “replication and fully asynchronous appends unfinished”
+status with narrower, implemented experimental contracts:
+
+- `-aof-async-append`: one worker batch and a reply/command barrier; readiness
+  backpressure, write/sync failure propagation, pipeline/restart regressions.
+  Concurrent command execution during disk appends remains future work.
+- `-replication-feed` / `-replicaof`: authenticated bounded canonical full/delta
+  replication, epoch/offset checks, checksum, read-only/stale gates and manual
+  promotion after external fencing. See [exact limits](replication-alpha.md).
+- Bencher BMF export and explicit publish wrapper; k6 RESP framing and scheduled
+  load; AWS DLT Locust archive builder. [Adapter instructions](../bench/external/README.md).
+- Actual local k6 and Locust smoke runs pass against an authenticated AOF process.
+  BMF export, framing tests and AWS package generation are validated locally.
+
+Hosted Bencher publication, controlled cloud runs, AWS provisioning and real pilots
+remain pending the owner's account/region/budget/application inputs. No provider
+execution or user adoption is implied by a locally tested adapter.
+Local follow-up validation now also covers primary outage/stale-read rejection and
+clean manual promotion after stopping the old writer. Full Go tests and vet pass;
+race results and native CI are tracked for the final source revision separately.

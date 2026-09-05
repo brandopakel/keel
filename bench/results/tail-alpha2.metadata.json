@@ -1,0 +1,19 @@
+{
+  "arguments": {
+    "bin": "/private/tmp/keel-release-alpha2/keel",
+    "out": "bench/results/tail-alpha2.csv",
+    "seconds": 5.0,
+    "reps": 3,
+    "members": 10000,
+    "policies": [
+      "off",
+      "everysec",
+      "always"
+    ]
+  },
+  "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "python": "3.14.5",
+  "binary_sha256": "33827ad5e4ccd51d95de6324ec494a6abbc010c32ffce259e4de061c41675d87",
+  "timestamp_utc": "2026-09-05T07:09:39Z",
+  "model": "closed-loop load; 100Hz scheduled independent probe; probe scheduled latency includes queueing"
+}

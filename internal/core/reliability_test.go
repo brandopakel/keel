@@ -143,6 +143,7 @@ func TestIdleFsyncAndStickyFailure(t *testing.T) {
 	require.Zero(t, calls)
 	aof.lastSync = time.Now().Add(-2 * time.Second)
 	require.NoError(t, FlushAOF())
+	pollAOFSync(true)
 	require.Equal(t, 1, calls)
 	require.False(t, aof.dirty)
 	config.AOFFsync = config.FsyncAlways
@@ -283,4 +284,173 @@ func TestLazyExpiryIsLoggedBeforeRecreation(t *testing.T) {
 	require.Equal(t, "1", run(t, "GET", "n"))
 	require.Equal(t, int64(1), run(t, "HLEN", "h"))
 	require.Equal(t, "value", run(t, "HGET", "h", "new"))
+}
+
+func TestBackgroundSyncDoesNotBlockAndPreservesLaterWrites(t *testing.T) {
+	ResetStores()
+	oldPolicy, oldSync := config.AOFFsync, aofSync
+	release := make(chan struct{})
+	defer func() { CloseAOF(); config.AOFFsync = oldPolicy; aofSync = oldSync }()
+	config.AOFFsync = config.FsyncEverySec
+	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "log")))
+	diskErr := errors.New("background sync failed")
+	aofSync = func(*os.File) error { <-release; return diskErr }
+	run(t, "SET", "first", "value")
+	aof.lastSync = time.Now().Add(-2 * time.Second)
+	// A blocked Sync must not block this call. The timer also releases the fake
+	// disk if a regression blocks, so the test fails rather than hanging CI.
+	timer := time.AfterFunc(time.Second, func() { close(release) })
+	started := time.Now()
+	require.NoError(t, FlushAOF())
+	elapsed := time.Since(started)
+	run(t, "SET", "later", "value")
+	require.NoError(t, FlushAOF())
+	require.True(t, aof.dirty)
+	require.NotNil(t, aof.syncPending)
+	if timer.Stop() {
+		close(release)
+	}
+	pollAOFSync(true)
+	require.Less(t, elapsed, 500*time.Millisecond)
+	require.ErrorIs(t, FlushAOF(), diskErr)
+	require.ErrorIs(t, CloseAOF(), diskErr)
+}
+
+func TestLargeListRewriteRestartsAfterMutation(t *testing.T) {
+	for _, mutation := range []string{"append", "replace", "delete"} {
+		t.Run(mutation, func(t *testing.T) {
+			ResetStores()
+			path := filepath.Join(t.TempDir(), "log")
+			require.NoError(t, OpenAOF(path))
+			defer CloseAOF()
+			values := []string{"large"}
+			for i := 0; i < 2000; i++ {
+				values = append(values, strconv.Itoa(i))
+			}
+			run(t, "RPUSH", values...)
+			run(t, "PEXPIRE", "large", "60000")
+			require.NoError(t, StartRewrite())
+			require.NoError(t, AdvanceRewrite())
+			require.True(t, rewrite.listActive, "large list should yield between chunks")
+			switch mutation {
+			case "append":
+				run(t, "RPUSH", "large", "last")
+			case "replace":
+				run(t, "DEL", "large")
+				run(t, "SET", "large", "replacement")
+			case "delete":
+				run(t, "DEL", "large")
+			}
+			require.False(t, rewrite.listActive)
+			for i := 0; rewrite.active && i < 100; i++ {
+				require.NoError(t, FlushAOF())
+			}
+			require.False(t, rewrite.active)
+			require.NoError(t, CloseAOF())
+			ResetStores()
+			_, err := LoadAOF(path)
+			require.NoError(t, err)
+			switch mutation {
+			case "append":
+				l, ok := listStore.Peek("large")
+				require.True(t, ok)
+				require.Equal(t, 2001, l.Len())
+				first, _ := l.Index(0)
+				last, _ := l.Index(-1)
+				require.Equal(t, "0", first)
+				require.Equal(t, "last", last)
+				_, has := listStore.GetExpiry("large")
+				require.True(t, has)
+			case "replace":
+				require.Equal(t, "replacement", dictStore.Peek("large").Value)
+			case "delete":
+				require.Nil(t, dictStore.Peek("large"))
+				_, ok := listStore.Peek("large")
+				require.False(t, ok)
+			}
+		})
+	}
+}
+
+func TestRewriteAndCloseFenceBackgroundSync(t *testing.T) {
+	ResetStores()
+	oldPolicy, oldSync := config.AOFFsync, aofSync
+	defer func() { CloseAOF(); config.AOFFsync = oldPolicy; aofSync = oldSync }()
+	config.AOFFsync = config.FsyncEverySec
+	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "log")))
+	release := make(chan struct{})
+	timer := time.AfterFunc(time.Second, func() { close(release) })
+	defer func() {
+		if timer.Stop() {
+			close(release)
+		}
+	}()
+	aofSync = func(f *os.File) error { <-release; _, err := f.Stat(); return err }
+	run(t, "SET", "k", "v")
+	aof.lastSync = time.Now().Add(-2 * time.Second)
+	require.NoError(t, FlushAOF())
+	oldFile := aof.file
+	require.NoError(t, StartRewrite())
+	require.NoError(t, AdvanceRewrite())
+	require.True(t, rewrite.active)
+	require.Same(t, oldFile, aof.file)
+	// Close must join the worker before closing its file descriptor.
+	CancelRewrite()
+	require.NoError(t, CloseAOF())
+	require.Nil(t, aof.syncPending)
+}
+
+func TestAsyncAppendBarrierAndFailure(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		t.Run(strconv.FormatBool(fail), func(t *testing.T) {
+			ResetStores()
+			oldWrite, oldPolicy := aofWrite, config.AOFFsync
+			defer func() { CloseAOF(); aofWrite = oldWrite; config.AOFFsync = oldPolicy }()
+			config.AOFFsync = config.FsyncAlways
+			path := filepath.Join(t.TempDir(), "log")
+			require.NoError(t, OpenAOF(path))
+			release := make(chan struct{})
+			timer := time.AfterFunc(time.Second, func() { close(release) })
+			defer func() {
+				if timer.Stop() {
+					close(release)
+				}
+			}()
+			diskErr := errors.New("injected append failure")
+			aofWrite = func(f *os.File, b []byte) (int, error) {
+				<-release
+				if fail {
+					return 0, diskErr
+				}
+				return f.Write(b)
+			}
+			run(t, "SET", "k", "value")
+			start := time.Now()
+			ready, err := FlushAOFAsync(nil)
+			require.NoError(t, err)
+			require.False(t, ready)
+			require.Less(t, time.Since(start), 500*time.Millisecond)
+			require.True(t, AppendPending())
+			ready, err = FlushAOFAsync(nil)
+			require.NoError(t, err)
+			require.False(t, ready)
+			if timer.Stop() {
+				close(release)
+			}
+			pollAppend(true)
+			ready, err = FlushAOFAsync(nil)
+			if fail {
+				require.ErrorIs(t, err, diskErr)
+				require.False(t, ready)
+			} else {
+				require.NoError(t, err)
+				require.True(t, ready)
+				require.NoError(t, CloseAOF())
+				ResetStores()
+				_, err = LoadAOF(path)
+				require.NoError(t, err)
+				require.Equal(t, "value", dictStore.Peek("k").Value)
+			}
+		})
+	}
 }

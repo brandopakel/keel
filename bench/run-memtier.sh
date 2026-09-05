@@ -6,6 +6,9 @@ set -euo pipefail
 source "$(dirname "$0")/process.sh"
 BIN="${BIN:?set BIN}"; OUT="${OUT:-bench/results/memtier.csv}"; REPS="${REPS:-3}"
 PORT=${PORT_BASE:-11000}
+RAW="${OUT%.csv}-raw"
+mkdir -p "$RAW"
+memtier_benchmark --version > "$RAW/tool-version.txt" 2>&1
 echo "server,scenario,keypattern,datasize,pipeline,rep,ops_sec,p50_ms,p99_ms,p999_ms" > "$OUT"
 
 SRV_PORT=""
@@ -24,20 +27,33 @@ run() { # srv scenario kp ds pl port args...
   local srv=$1 scen=$2 kp=$3 ds=$4 pl=$5 p=$6; shift 6
   for rep in $(seq 1 "$REPS"); do
     local j
-    j=$(mktemp)
+    j="$RAW/$srv-$scen-$rep.json"
     memtier_benchmark -s 127.0.0.1 -p "$p" -P redis \
       -t 4 -c 25 --test-time=6 --hide-histogram --json-out-file="$j" \
-      --pipeline="$pl" --key-pattern="$kp" "$@" >/dev/null 2>&1
+      --pipeline="$pl" --key-pattern="$kp" "$@" >"$RAW/$srv-$scen-$rep.log" 2>&1
     python3 - "$j" "$srv" "$scen" "$kp" "$ds" "$pl" "$rep" "$OUT" <<'PY'
 import json,sys
 j,srv,scen,kp,ds,pl,rep,out = sys.argv[1:9]
 try: d=json.load(open(j))["ALL STATS"]["Totals"]
 except Exception as exc: sys.exit(f"invalid memtier output: {exc}")
-row=[srv,scen,kp,ds,pl,rep,f'{d.get("Ops/sec",0):.2f}',
-     f'{d.get("p50 Latency",0):.3f}',f'{d.get("p99 Latency",0):.3f}',f'{d.get("p99.9 Latency",0):.3f}']
+def percentile(target):
+    # Current memtier stores percentile values in a nested object. Older
+    # versions may expose the human-readable column names at the top level.
+    for key, value in d.get("Percentile Latencies", {}).items():
+        if key.startswith("p"):
+            try: matched = float(key[1:]) == target
+            except ValueError: continue
+            if matched: return float(value)
+    return float(d[f"p{target:g} Latency"])
+try:
+    rate=float(d["Ops/sec"])
+    if rate<=0: raise ValueError("nonpositive throughput")
+    row=[srv,scen,kp,ds,pl,rep,f'{rate:.2f}',
+         f'{percentile(50):.3f}',f'{percentile(99):.3f}',f'{percentile(99.9):.3f}']
+except (KeyError,TypeError,ValueError) as exc:
+    sys.exit(f"missing or invalid memtier metrics: {exc}")
 open(out,"a").write(",".join(map(str,row))+"\n")
 PY
-    rm -f "$j"
   done
 }
 

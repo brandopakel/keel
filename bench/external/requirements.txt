@@ -1,0 +1,2 @@
+# Standalone validation. AWS DLT supplies its own Locust runtime; record its version.
+locust==2.46.4
