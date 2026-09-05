@@ -1,9 +1,8 @@
 # Build, vet and test on every push to the working branch and every pull
 # request into it.
 #
-# This previously ran only on `main`, which mirrored upstream unchanged, so none
-# of the work on `develop` was ever built or tested here. `main` is gone now:
-# `develop` is the only branch, and the one every pull request targets.
+# This runs on `develop` alone: it is the only branch, and the one every pull
+# request targets. `main`, which mirrored upstream unchanged, is gone.
 #
 # The matrix runs the floor go.mod declares as well as current Go, because the
 # floor is a claim: the memory accounting in internal/data_structure/memory.go
@@ -13,9 +12,9 @@ name: Go
 
 on:
   push:
-    branches: [ develop ]
+    branches: [develop]
   pull_request:
-    branches: [ develop ]
+    branches: [develop]
 
 permissions:
   contents: read
@@ -31,8 +30,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: [ '1.22', 'stable' ]
-        os: [ ubuntu-latest, macos-latest ]
+        go: ['1.22', 'stable']
+        os: [ubuntu-latest, macos-latest]
     steps:
       # Actions are pinned to commit SHAs rather than tags: a tag is mutable and
       # can be repointed at code this workflow never reviewed. Dependabot bumps
