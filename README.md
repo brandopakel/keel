@@ -164,8 +164,8 @@ application requirements, not features implied by I/O threads.
 
 In order of distance, not size.
 
-- **Landing the experiments.** Asynchronous appends and bounded primary/read-only
-  replication are implemented as unreleased experiments with their own contracts and
+- **Validating the experiments.** Asynchronous appends and bounded primary/read-only
+  replication are included in alpha.3 as opt-in experiments with their own contracts and
   limits. Command execution concurrent with disk appends, automatic failover, and
   fencing are not started.
 - **Command surface outside the contract.** Transactions, Lua, Pub/Sub, blocking list
@@ -184,7 +184,9 @@ In order of distance, not size.
   the evidence each needs first.
 - **Evidence before a release past alpha.** Controlled-host Linux benchmark runs, hosted
   load runs, and an application pilot with stated RPO, RTO, and memory targets have not
-  happened; `v0.1.0-alpha.2` is a pre-release for that reason. The
+  happened. Alpha.3 adds four native installation targets, upgrade/rollback checks,
+  matched shared-runner benchmarks and bounded crash/disk-full tests; it remains a
+  pre-release. The [closeout record](docs/alpha3-closeout.md) reports those results. The
   [delivery checklist](docs/engineering-delivery.md#4-alpha-preparation-and-evidence)
   says what counts.
 - **Boundaries that stay.** No native TLS (use a proxy), `SET` refuses to overwrite a
