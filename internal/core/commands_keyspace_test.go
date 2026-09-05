@@ -55,9 +55,12 @@ func TestExistsCountsRepeatsRepeatedly(t *testing.T) {
 
 func TestExistsDoesNotSeeAnExpiredKey(t *testing.T) {
 	ResetStores()
-	run(t, "SET", "k", "v", "PX", "1")
+	// A TTL long enough that the first EXISTS lands inside it on a slow
+	// runner: with one millisecond, the macOS CI job saw the key expire
+	// between the SET and the check.
+	run(t, "SET", "k", "v", "PX", "200")
 	assert.Equal(t, int64(1), run(t, "EXISTS", "k"))
-	waitPast(5)
+	waitPast(250)
 	assert.Equal(t, int64(0), run(t, "EXISTS", "k"),
 		"a key past its TTL exists no more than a deleted one")
 }
