@@ -76,7 +76,10 @@ func TestTTLAndPTTL(t *testing.T) {
 	run(t, "SET", "k", "v", "PX", "2500")
 	pttl := run(t, "PTTL", "k").(int64)
 	assert.True(t, pttl > 2000 && pttl <= 2500, "PTTL %d should be in milliseconds", pttl)
-	assert.EqualValues(t, 3, run(t, "TTL", "k"), "TTL rounds to the nearest second, as Redis does")
+	// 2500ms rounds to 3 and 2499ms to 2, so either answer shows the rounding
+	// without pinning the test to the millisecond between the two commands.
+	assert.Contains(t, []interface{}{int64(2), int64(3)}, run(t, "TTL", "k"),
+		"TTL rounds to the nearest second, as Redis does")
 
 	assert.Contains(t, run(t, "TTL"), "wrong number of arguments")
 	assert.Contains(t, run(t, "PTTL", "a", "b"), "wrong number of arguments")
@@ -100,6 +103,12 @@ func TestEXPIRE(t *testing.T) {
 	assert.Contains(t, run(t, "EXPIRE", "k", "soon"), "not an integer")
 	assert.Contains(t, run(t, "EXPIRE", "k", "9223372036854775807"), "invalid expire time")
 	assert.EqualValues(t, -1, run(t, "TTL", "k"), "a refused EXPIRE sets nothing")
+
+	// SET is bounded the same way: a duration that would carry the instant
+	// past what the clock can hold is refused rather than stored and wrapped.
+	assert.Contains(t, run(t, "SET", "far", "v", "EX", "9223372036854775"), "invalid expire time")
+	assert.Contains(t, run(t, "SET", "far", "v", "PX", "9223372036854775807"), "invalid expire time")
+	assert.EqualValues(t, 0, run(t, "EXISTS", "far"), "and nothing was written")
 	assert.Contains(t, run(t, "EXPIRE", "k"), "wrong number of arguments")
 }
 

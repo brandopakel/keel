@@ -60,6 +60,13 @@ func cmdSET(args []string) []byte {
 			// two different questions at once.
 			return Encode(errSetExpire, false)
 		}
+		// The expiry is stored as an instant, so the duration is bounded by
+		// how far the clock can go: a TTL that would carry the instant past
+		// the largest signed 64-bit value wraps when it is read back, and
+		// a key that never expires is the wrong way to fail.
+		if ttlMs > math.MaxInt64-time.Now().UnixMilli() {
+			return Encode(errSetExpire, false)
+		}
 	default:
 		return Encode(errSyntax, false)
 	}

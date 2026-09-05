@@ -95,6 +95,31 @@ func TestDecodeRefusesWhatCanNeverBeValid(t *testing.T) {
 	}
 }
 
+// TestDecodeBoundsNesting: each nested array is a recursive call, and a client
+// could otherwise open a few hundred thousand of them with one header each and
+// run the decoder out of stack.
+func TestDecodeBoundsNesting(t *testing.T) {
+	nested := func(depth int) string {
+		return strings.Repeat("*1\r\n", depth) + ":1\r\n"
+	}
+	v, _, err := core.DecodeOne([]byte(nested(32)))
+	assert.NoError(t, err, "32 levels are allowed")
+	for i := 0; i < 32; i++ {
+		v = v.([]interface{})[0]
+	}
+	assert.Equal(t, int64(1), v)
+
+	_, _, err = core.DecodeOne([]byte(nested(33)))
+	assert.True(t, errors.Is(err, core.ErrProtocol), "33 are not: got %v", err)
+	_, _, err = core.DecodeOne([]byte(nested(200000)))
+	assert.True(t, errors.Is(err, core.ErrProtocol), "and a stack's worth is refused at the bound, not after it")
+
+	// A partial deep frame is still incomplete rather than a protocol error,
+	// as long as it is within the bound.
+	_, _, err = core.DecodeOne([]byte(strings.Repeat("*1\r\n", 10)))
+	assert.True(t, errors.Is(err, core.ErrIncompleteFrame))
+}
+
 func TestEncodeProducesTheSpecifiedWireForm(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -119,6 +144,7 @@ func TestEncodeProducesTheSpecifiedWireForm(t *testing.T) {
 		{"uint32", uint32(4294967295), false, ":4294967295\r\n"},
 		{"uint64", uint64(18446744073709551615), false, ":18446744073709551615\r\n"},
 		{"error", errors.New("ERR something went wrong"), false, "-ERR something went wrong\r\n"},
+		{"error quoting a client's line breaks", errors.New("ERR bad key 'a\r\nb\n'"), false, "-ERR bad key 'a  b '\r\n"},
 		{"nil is the null bulk string", nil, false, "$-1\r\n"},
 		{"empty string slice", []string{}, false, "*0\r\n"},
 		{"string slice", []string{"a", "bb", "ccc"}, false, "*3\r\n$1\r\na\r\n$2\r\nbb\r\n$3\r\nccc\r\n"},

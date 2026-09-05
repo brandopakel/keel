@@ -50,6 +50,11 @@ var ErrProtocol = errors.New("ERR Protocol error: invalid RESP input")
 const (
 	maxMultiBulkLength = 1024 * 1024
 	maxBulkLength      = 512 * 1024 * 1024
+	// maxArrayDepth bounds how deeply arrays may nest. Each level is a
+	// recursive call, so without a bound a client could send "*1\r\n" a few
+	// hundred thousand times and run the decoder out of stack. A command is
+	// one array of bulk strings, so no legitimate input comes near this.
+	maxArrayDepth = 32
 )
 
 // frameReader walks one RESP value at the front of a byte slice, remembering
@@ -57,6 +62,8 @@ const (
 type frameReader struct {
 	data []byte
 	pos  int
+	// depth is how many arrays are open around the value being read.
+	depth int
 }
 
 // line returns the current line without its CRLF and steps past it. No CRLF in
@@ -193,6 +200,12 @@ func (r *frameReader) array() (interface{}, error) {
 	if n > maxMultiBulkLength {
 		return nil, ErrProtocol
 	}
+	if r.depth >= maxArrayDepth {
+		return nil, ErrProtocol
+	}
+	r.depth++
+	defer func() { r.depth-- }()
+
 	out := make([]interface{}, n)
 	for i := range out {
 		if out[i], err = r.value(); err != nil {
@@ -258,9 +271,23 @@ func appendSimpleString(dst []byte, s string) []byte {
 	return append(dst, '\r', '\n')
 }
 
+// appendError writes an error reply. An error line ends at the first CRLF, and
+// some errors quote the argument that caused them, which a client chose - so a
+// CR or LF inside the message would end the reply early and leave the rest to
+// be read as the next one. Both are written as spaces, as Redis writes them.
 func appendError(dst []byte, msg string) []byte {
 	dst = append(dst, '-')
-	dst = append(dst, msg...)
+	if strings.IndexAny(msg, "\r\n") < 0 {
+		dst = append(dst, msg...)
+	} else {
+		for i := 0; i < len(msg); i++ {
+			if c := msg[i]; c == '\r' || c == '\n' {
+				dst = append(dst, ' ')
+			} else {
+				dst = append(dst, c)
+			}
+		}
+	}
 	return append(dst, '\r', '\n')
 }
 
