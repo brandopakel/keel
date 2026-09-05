@@ -1,4 +1,4 @@
-# v0.1.0-alpha.3 candidate
+# v0.1.0-alpha.3
 
 This increment restores production active expiry, moves everysec fsync off the
 command thread, and yields between chunks of large lists during AOF rewriting.
@@ -24,6 +24,8 @@ See [replication-alpha.md](replication-alpha.md) and the README for exact limits
 
 The [candidate validation record](pr15-validation-2026-09-05.md) tracks the Linux
 race-job correction, benchmark review, native checks and archive verification.
+The [release closeout](alpha3-closeout.md) adds native archive installation,
+alpha.2 upgrade/rollback gates, matched benchmarks and operational fault/soak tests.
 Tag-built artifacts require their own checksum verification before publication.
 
 ---

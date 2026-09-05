@@ -24,4 +24,4 @@ Candidate results correspond to the working-tree executable hash in metadata, no
 The expanded Linux workflow has been edited locally but has not been executed for this revision.
 
 The later [PR #15 validation](pr15-validation-2026-09-05.md#completed-linux-benchmark-review)
-records completed Linux runs with synchronous and worker append configurations.
+records completed Linux runs with synchronous appends and appends performed by a worker.
