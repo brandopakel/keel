@@ -31,6 +31,7 @@ func ResetStores() {
 	data_structure.ResetKeyspaces()
 	// The counter describes the keyspace being thrown away, so it goes with it.
 	expiredKeys = 0
+	aof.recovered = nil
 
 	dictStore = data_structure.CreateDict()
 	zsetStore = data_structure.NewKeyed[*data_structure.ZSet]("zset")

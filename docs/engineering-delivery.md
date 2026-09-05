@@ -16,6 +16,7 @@ Implemented and regression-tested:
 - Reject AOF on benchmark net modes. Exit promptly on internal server failures or invalid configuration.
 - Account for integer value changes and TTL metadata; enforce eviction after a complete command.
 - Keep historical replay independent of current expiry time, then expire keys before enforcing limits.
+- Log startup expiry/eviction removals before new writes and lazy-expiry removals before key recreation.
 - Preserve TTL across types, AOF replay, rewrites, and in-place mutations.
 
 ## 2. Bounded connection and rewrite work

@@ -234,3 +234,53 @@ func TestReplayExpiryDoesNotResurrectHistoricalMutations(t *testing.T) {
 	require.Zero(t, data_structure.TotalKeys())
 	require.Zero(t, data_structure.TotalMemUsed())
 }
+
+func TestStartupExpiryIsLoggedBeforeKeyReuse(t *testing.T) {
+	path := withAOF(t, func() {
+		run(t, "SET", "n", "9", "PX", "100")
+		run(t, "HSET", "h", "old", "value")
+		run(t, "PEXPIRE", "h", "100")
+	})
+	time.Sleep(120 * time.Millisecond)
+	restart(t, path)
+	require.Zero(t, data_structure.TotalKeys())
+	require.NoError(t, OpenAOF(path))
+	run(t, "INCR", "n")
+	run(t, "HSET", "h", "new", "value")
+	require.NoError(t, CloseAOF())
+	restart(t, path)
+	require.Equal(t, "1", run(t, "GET", "n"))
+	require.Equal(t, int64(1), run(t, "HLEN", "h"))
+	require.Equal(t, "value", run(t, "HGET", "h", "new"))
+	require.Equal(t, int64(-1), run(t, "PTTL", "h"))
+}
+
+func TestStartupEvictionsRemainDeletedAfterBudgetIncrease(t *testing.T) {
+	old := config.KeyNumberLimit
+	defer func() { config.KeyNumberLimit = old; ResetStores() }()
+	config.KeyNumberLimit = 100
+	path := withAOF(t, func() { run(t, "SET", "a", "1"); run(t, "SET", "b", "2") })
+	config.KeyNumberLimit = 1
+	restart(t, path)
+	require.Equal(t, 1, data_structure.TotalKeys())
+	require.NoError(t, OpenAOF(path))
+	require.NoError(t, CloseAOF())
+	config.KeyNumberLimit = 100
+	restart(t, path)
+	require.Equal(t, 1, data_structure.TotalKeys())
+}
+
+func TestLazyExpiryIsLoggedBeforeRecreation(t *testing.T) {
+	path := withAOF(t, func() {
+		run(t, "SET", "n", "9", "PX", "100")
+		run(t, "HSET", "h", "old", "value")
+		run(t, "PEXPIRE", "h", "100")
+		time.Sleep(120 * time.Millisecond)
+		require.Equal(t, int64(1), run(t, "INCR", "n"))
+		require.Equal(t, int64(1), run(t, "HSET", "h", "new", "value"))
+	})
+	restart(t, path)
+	require.Equal(t, "1", run(t, "GET", "n"))
+	require.Equal(t, int64(1), run(t, "HLEN", "h"))
+	require.Equal(t, "value", run(t, "HGET", "h", "new"))
+}

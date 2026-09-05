@@ -82,6 +82,7 @@ type aofState struct {
 	extra [][]string
 	// replaying suppresses recording, so loading a log does not write it back
 	// into itself.
+	recovered []string
 	replaying bool
 	lastSync  time.Time
 	dirty     bool
@@ -171,6 +172,10 @@ func OpenAOF(path string) error {
 		aof.baseSize = info.Size()
 	}
 	aof.written = 0
+	for _, key := range aof.recovered {
+		aof.buf = appendCommand(aof.buf, "DEL", key)
+	}
+	aof.recovered = nil
 	data_structure.OnRemove = func(keyspace, key string) {
 		if aof.file == nil || aof.replaying {
 			return
@@ -362,6 +367,7 @@ func flushAOF(closing bool) error {
 // good. Anything malformed earlier in the file is a real error and is reported
 // as one.
 func LoadAOF(path string) (int, error) {
+	aof.recovered = nil
 	f, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return 0, nil
@@ -374,6 +380,9 @@ func LoadAOF(path string) (int, error) {
 	data_structure.SuspendEviction = true
 	data_structure.SuspendExpiry = true
 	defer func() {
+		priorRemovalHook := data_structure.OnRemove
+		data_structure.OnRemove = func(_, key string) { aof.recovered = append(aof.recovered, key) }
+		defer func() { data_structure.OnRemove = priorRemovalHook }()
 		data_structure.SuspendExpiry = false
 		data_structure.EachKeyspace(func(ks data_structure.Keyspace) { ks.ActiveExpire(ks.KeysWithExpiry()) })
 		aof.replaying = false

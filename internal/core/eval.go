@@ -112,6 +112,9 @@ func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	suspended := data_structure.SuspendEviction
 	data_structure.SuspendEviction = true
 	res := handler(cmd.Args)
+	// With eviction suspended, removals so far are lazy expiry. They precede
+	// this command: recording them after INCR/HSET would delete the recreated key.
+	aofCommitExtras()
 	data_structure.SuspendEviction = suspended
 	data_structure.EnforceLimits()
 
