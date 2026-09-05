@@ -29,7 +29,7 @@ jobs:
           tar -xzf /tmp/keel-k6/xk6-tcp_v0.3.1_linux_amd64.tar.gz -C /tmp/keel-k6
           /tmp/keel-k6/xk6-tcp_v0.3.1_linux_amd64/k6 version
       - run: node bench/external/k6/resp.test.mjs
-      - run: python3 bench/external/test_export.py
+      - run: python3 -m unittest discover -s bench/external -p 'test_*.py'
       - run: python3 bench/external/smoke.py --bin /tmp/keel --locust /tmp/keel-load/bin/locust --k6 /tmp/keel-k6/xk6-tcp_v0.3.1_linux_amd64/k6
       - run: python3 bench/external/aws/package.py --host keel.internal.example --out /tmp/keel-dlt.zip
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

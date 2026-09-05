@@ -29,6 +29,8 @@ parser.add_argument('--policies', nargs='+', choices=['off', 'everysec', 'always
 args = parser.parse_args()
 if not math.isfinite(args.seconds) or args.seconds < 1 or args.reps < 1 or args.start_rep < 0:
     parser.error('positive repetitions and at least one second required')
+if len(set(args.policies)) != len(args.policies):
+    parser.error('persistence policies must be unique so raw files cannot be overwritten')
 root = Path(args.out).resolve()
 assert not root.exists(), 'use a fresh result directory'
 root.mkdir(parents=True)
