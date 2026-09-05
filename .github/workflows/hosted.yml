@@ -1,0 +1,50 @@
+name: Build offline hosted benchmark image
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version: '1.27.1' }
+      - name: Build both released revisions with one toolchain
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          mkdir -p image-context/bin image-context/bench/external evidence
+          git worktree add --detach "$RUNNER_TEMP/keel-baseline" 3596d92d192dd1f7bfceba77303212b514c84b7d
+          git worktree add --detach "$RUNNER_TEMP/keel-candidate" a9de9156aeb4d3ef18c06cff8784350f05867045
+          go -C "$RUNNER_TEMP/keel-baseline" build -trimpath -o "$PWD/image-context/bin/keel-alpha2" ./cmd/keel
+          go -C "$RUNNER_TEMP/keel-candidate" build -trimpath -o "$PWD/image-context/bin/keel-alpha3" ./cmd/keel
+          cp "$(command -v go)" image-context/bin/go
+          cp bench/run-tail.py bench/run-paired-tail.py image-context/bench/
+          cp bench/external/bencher_job.py image-context/bench/external/
+          go version -m image-context/bin/keel-alpha2 image-context/bin/keel-alpha3 > evidence/binary-buildinfo.txt
+          sha256sum image-context/bin/* > evidence/binary-checksums.txt
+      - name: Build and exercise the image without external networking
+        run: |
+          docker build --platform linux/amd64 --build-arg "HARNESS_REVISION=$GITHUB_SHA" -f bench/external/bencher.Dockerfile -t keel-hosted:$GITHUB_SHA image-context
+          docker run --rm --network=none keel-hosted:$GITHUB_SHA --policy off --rep 0 --seconds 1 > evidence/smoke.bmf.json 2> evidence/smoke.stderr.json
+          python3 - <<'PY'
+          import base64, hashlib, json
+          from pathlib import Path
+          envelope = json.loads(Path('evidence/smoke.stderr.json').read_text())['keel_evidence_v1']
+          raw = base64.b64decode(envelope['tar_gzip_base64'], validate=True)
+          assert hashlib.sha256(raw).hexdigest() == envelope['sha256']
+          assert len(raw) == envelope['bytes']
+          metrics = json.loads(Path('evidence/smoke.bmf.json').read_text())
+          assert len(metrics) == 42
+          assert all(value['count']['value'] == 0 for key, value in metrics.items() if key.endswith(('/errors', '/drops')))
+          Path('evidence/smoke-evidence.tar.gz').write_bytes(raw)
+          PY
+          docker image inspect keel-hosted:$GITHUB_SHA > evidence/image-inspect.json
+          docker save keel-hosted:$GITHUB_SHA -o evidence/keel-hosted-image.tar
+          sha256sum evidence/keel-hosted-image.tar > evidence/keel-hosted-image.tar.sha256
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with: { name: hosted-benchmark-image, path: evidence, retention-days: 90 }
