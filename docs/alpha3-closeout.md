@@ -5,6 +5,10 @@ matched benchmarks and bounded operational failures. The earlier
 [candidate record](pr15-validation-2026-09-05.md) identifies the original validation
 and its limitations. This follow-up adds repeatable release gates and their results.
 
+The later [hosted validation record](post-alpha3-hosted-validation.md) adds actual
+Bencher execution and further local recovery testing. The results and pending
+inputs below describe the original release closeout.
+
 ## Review and source provenance
 
 All 17 PR #15 review threads were assessed and resolved against fixes or the

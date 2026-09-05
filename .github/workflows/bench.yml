@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: Tail smoke, full matrix, or matched benchmark and operational closeout
+        description: Tail smoke, full matrix, closeout, or offline hosted benchmark image
         type: choice
-        options: [tail, full, closeout]
+        options: [tail, full, closeout, hosted]
         default: tail
   push:
     branches: [ develop, experiment/** ]
@@ -20,6 +20,10 @@ permissions:
   contents: read
 
 jobs:
+  hosted:
+    if: github.event_name == 'workflow_dispatch' && inputs.suite == 'hosted'
+    uses: ./.github/workflows/hosted.yml
+
   closeout:
     if: github.event_name == 'workflow_dispatch' && inputs.suite == 'closeout'
     uses: ./.github/workflows/closeout.yml
@@ -137,7 +141,7 @@ jobs:
         with: { name: linux-offloopback, path: bench/results/offloopback-linux.csv }
 
   tail-latency:
-    if: github.event_name != 'workflow_dispatch' || inputs.suite != 'closeout'
+    if: github.event_name != 'workflow_dispatch' || (inputs.suite != 'closeout' && inputs.suite != 'hosted')
     name: mixed traffic and rewrite (${{ matrix.append }})
     strategy:
       fail-fast: false

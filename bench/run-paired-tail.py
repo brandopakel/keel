@@ -6,6 +6,7 @@ import gzip
 import hashlib
 import importlib.util
 import json
+import math
 import os
 import platform
 import subprocess
@@ -22,9 +23,14 @@ parser.add_argument('--candidate', required=True)
 parser.add_argument('--out', required=True)
 parser.add_argument('--seconds', type=float, default=15)
 parser.add_argument('--reps', type=int, default=5)
+parser.add_argument('--start-rep', type=int, default=0)
+parser.add_argument('--policies', nargs='+', choices=['off', 'everysec', 'always'],
+                    default=['off', 'everysec', 'always'])
 args = parser.parse_args()
-if args.seconds < 1 or args.reps < 1:
+if not math.isfinite(args.seconds) or args.seconds < 1 or args.reps < 1 or args.start_rep < 0:
     parser.error('positive repetitions and at least one second required')
+if len(set(args.policies)) != len(args.policies):
+    parser.error('persistence policies must be unique so raw files cannot be overwritten')
 root = Path(args.out).resolve()
 assert not root.exists(), 'use a fresh result directory'
 root.mkdir(parents=True)
@@ -33,6 +39,7 @@ binaries = {'baseline-sync': str(Path(args.baseline).resolve()),
             'candidate-worker': str(Path(args.candidate).resolve())}
 metadata = {'platform': platform.platform(), 'cpus': os.cpu_count(),
             'python': platform.python_version(), 'seconds': args.seconds, 'reps': args.reps,
+            'start_rep': args.start_rep, 'policies': args.policies,
             'harness_sha256': hashlib.sha256(Path(spec.origin).read_bytes()).hexdigest(),
             'driver_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             'model': 'same-host loopback; fresh processes; rotated/reversed arm order; closed-loop load and 100Hz scheduled probe',
@@ -43,12 +50,12 @@ metadata = {'platform': platform.platform(), 'cpus': os.cpu_count(),
 summaries = []
 failures = 0
 try:
-    for rep in range(args.reps):
+    for rep in range(args.start_rep, args.start_rep + args.reps):
         order = list(binaries)
         order = order[rep % 3:] + order[:rep % 3]
         if rep % 2:
             order.reverse()
-        for policy in ['off', 'everysec', 'always']:
+        for policy in args.policies:
             for arm in order:
                 metadata['order'].append({'rep': rep, 'policy': policy, 'arm': arm})
                 path = root / f'{arm}-{policy}-{rep}.csv.gz'

@@ -1,0 +1,930 @@
+{
+  "release": "v0.1.0-alpha.3",
+  "release_source": "a9de9156aeb4d3ef18c06cff8784350f05867045",
+  "report": {
+    "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+    "binary_sha256": "4c65f65d1ade25cc29e670788884d3b2d0fe3e9d4f27d9c86f28516f69267088",
+    "acknowledged_writes": 463751,
+    "primary_crash_recoveries": 19,
+    "replica_crash_recoveries": 38,
+    "faults": [
+      {
+        "worker": false,
+        "fault": "RLIMIT_FSIZE",
+        "passed": true
+      },
+      {
+        "worker": true,
+        "fault": "RLIMIT_FSIZE",
+        "passed": true
+      }
+    ],
+    "passed": true,
+    "manual_promotion": true,
+    "elapsed_seconds": 3601.029394833953
+  },
+  "host": {
+    "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "filesystem_type": "apfs",
+    "filesystem_name": "APFS",
+    "cpu": "Apple M4 Pro",
+    "logical_cpus": 12,
+    "memory_bytes": 25769803776,
+    "placement": "local workstation; primary, replica and synthetic load colocated; not a deployment host",
+    "requested_seconds": 3600
+  },
+  "configuration": {
+    "appendfsync": "always",
+    "primary_and_replica_worker_appends": true,
+    "requested_seconds": 3600,
+    "cycle_seconds": 60,
+    "checkpoint_interval_seconds": 30,
+    "primary_outage_seconds": 6
+  },
+  "rewrite_checkpoints": 115,
+  "max_combined_sampled_rss_kib": 53920,
+  "checkpoints": [
+    {
+      "seconds": 30.003479167004116,
+      "acknowledged_writes": 3953,
+      "combined_sampled_rss_kib": 38800,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 60.17208670894615,
+      "acknowledged_writes": 7884,
+      "combined_sampled_rss_kib": 44560,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 90.34024549997412,
+      "acknowledged_writes": 11827,
+      "combined_sampled_rss_kib": 46208,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 120.46322916692588,
+      "acknowledged_writes": 15783,
+      "combined_sampled_rss_kib": 51408,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 150.6611891669454,
+      "acknowledged_writes": 19848,
+      "combined_sampled_rss_kib": 51920,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 186.33105899998918,
+      "acknowledged_writes": 23739,
+      "combined_sampled_rss_kib": 40288,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 216.4791182919871,
+      "acknowledged_writes": 27669,
+      "combined_sampled_rss_kib": 40896,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 246.57780974998605,
+      "acknowledged_writes": 31587,
+      "combined_sampled_rss_kib": 45776,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 276.80391320900526,
+      "acknowledged_writes": 35501,
+      "combined_sampled_rss_kib": 47472,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 306.8999226669548,
+      "acknowledged_writes": 39422,
+      "combined_sampled_rss_kib": 52352,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 337.0149809999857,
+      "acknowledged_writes": 43368,
+      "combined_sampled_rss_kib": 52800,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 372.69657841697335,
+      "acknowledged_writes": 47320,
+      "combined_sampled_rss_kib": 40352,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 402.83760466694366,
+      "acknowledged_writes": 51249,
+      "combined_sampled_rss_kib": 41008,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 432.9354467089288,
+      "acknowledged_writes": 55121,
+      "combined_sampled_rss_kib": 45280,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 463.0824994589202,
+      "acknowledged_writes": 59041,
+      "combined_sampled_rss_kib": 46944,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 493.203517041984,
+      "acknowledged_writes": 63027,
+      "combined_sampled_rss_kib": 51248,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 523.3215196669335,
+      "acknowledged_writes": 66985,
+      "combined_sampled_rss_kib": 51824,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 559.0942640419817,
+      "acknowledged_writes": 70868,
+      "combined_sampled_rss_kib": 40016,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 589.2059484169586,
+      "acknowledged_writes": 74877,
+      "combined_sampled_rss_kib": 40944,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 619.3929194589145,
+      "acknowledged_writes": 78879,
+      "combined_sampled_rss_kib": 45600,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 649.4709985419177,
+      "acknowledged_writes": 82851,
+      "combined_sampled_rss_kib": 46800,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 679.6528861669358,
+      "acknowledged_writes": 86781,
+      "combined_sampled_rss_kib": 51840,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 709.7450667499797,
+      "acknowledged_writes": 90797,
+      "combined_sampled_rss_kib": 52560,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 745.6028816249454,
+      "acknowledged_writes": 94734,
+      "combined_sampled_rss_kib": 40480,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 775.7447388339788,
+      "acknowledged_writes": 98662,
+      "combined_sampled_rss_kib": 41056,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 805.9346421249211,
+      "acknowledged_writes": 102579,
+      "combined_sampled_rss_kib": 45296,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 836.1302520419704,
+      "acknowledged_writes": 106512,
+      "combined_sampled_rss_kib": 46896,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 866.3102955420036,
+      "acknowledged_writes": 110476,
+      "combined_sampled_rss_kib": 52864,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 896.4911590839038,
+      "acknowledged_writes": 114435,
+      "combined_sampled_rss_kib": 53280,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 932.1376468339004,
+      "acknowledged_writes": 118366,
+      "combined_sampled_rss_kib": 40352,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 962.2526074999478,
+      "acknowledged_writes": 122383,
+      "combined_sampled_rss_kib": 41136,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 992.4045598339289,
+      "acknowledged_writes": 126449,
+      "combined_sampled_rss_kib": 45232,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1022.5523345419206,
+      "acknowledged_writes": 130235,
+      "combined_sampled_rss_kib": 47568,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1052.6863965839148,
+      "acknowledged_writes": 134271,
+      "combined_sampled_rss_kib": 52240,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1082.8864694169024,
+      "acknowledged_writes": 138212,
+      "combined_sampled_rss_kib": 52640,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1118.6222309169825,
+      "acknowledged_writes": 141540,
+      "combined_sampled_rss_kib": 39968,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1148.7623414589325,
+      "acknowledged_writes": 145554,
+      "combined_sampled_rss_kib": 41648,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1178.875486542005,
+      "acknowledged_writes": 149508,
+      "combined_sampled_rss_kib": 46832,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1208.969313833979,
+      "acknowledged_writes": 153581,
+      "combined_sampled_rss_kib": 47584,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1239.1723042089725,
+      "acknowledged_writes": 157589,
+      "combined_sampled_rss_kib": 52656,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1269.3064345839666,
+      "acknowledged_writes": 161804,
+      "combined_sampled_rss_kib": 53360,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1305.26883716695,
+      "acknowledged_writes": 165794,
+      "combined_sampled_rss_kib": 40544,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1335.3860310839955,
+      "acknowledged_writes": 169943,
+      "combined_sampled_rss_kib": 41216,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1365.5237292919774,
+      "acknowledged_writes": 173974,
+      "combined_sampled_rss_kib": 45872,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1395.6477182499366,
+      "acknowledged_writes": 178187,
+      "combined_sampled_rss_kib": 47680,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1425.835731166997,
+      "acknowledged_writes": 182303,
+      "combined_sampled_rss_kib": 53392,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1455.9817512499867,
+      "acknowledged_writes": 186352,
+      "combined_sampled_rss_kib": 53920,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1491.8700672090054,
+      "acknowledged_writes": 190583,
+      "combined_sampled_rss_kib": 40352,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1521.9857468749397,
+      "acknowledged_writes": 194628,
+      "combined_sampled_rss_kib": 41040,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1552.1556570839603,
+      "acknowledged_writes": 198542,
+      "combined_sampled_rss_kib": 46464,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1582.2830506669125,
+      "acknowledged_writes": 202525,
+      "combined_sampled_rss_kib": 47856,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1612.4546954999678,
+      "acknowledged_writes": 206286,
+      "combined_sampled_rss_kib": 52064,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1642.556942333933,
+      "acknowledged_writes": 210046,
+      "combined_sampled_rss_kib": 52544,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1678.615728667006,
+      "acknowledged_writes": 213655,
+      "combined_sampled_rss_kib": 39936,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1708.7389802499674,
+      "acknowledged_writes": 217770,
+      "combined_sampled_rss_kib": 41088,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1738.9096503339242,
+      "acknowledged_writes": 221822,
+      "combined_sampled_rss_kib": 46224,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1769.031759958947,
+      "acknowledged_writes": 226033,
+      "combined_sampled_rss_kib": 48256,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1799.1977869999828,
+      "acknowledged_writes": 230184,
+      "combined_sampled_rss_kib": 52416,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1829.3148577089887,
+      "acknowledged_writes": 234356,
+      "combined_sampled_rss_kib": 52784,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1865.310303874896,
+      "acknowledged_writes": 238468,
+      "combined_sampled_rss_kib": 40048,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1895.4547706249868,
+      "acknowledged_writes": 242476,
+      "combined_sampled_rss_kib": 40960,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1925.6001904589357,
+      "acknowledged_writes": 246459,
+      "combined_sampled_rss_kib": 45616,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1955.7191488340031,
+      "acknowledged_writes": 250485,
+      "combined_sampled_rss_kib": 47344,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 1985.9150252919644,
+      "acknowledged_writes": 254571,
+      "combined_sampled_rss_kib": 51568,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2016.0393003339414,
+      "acknowledged_writes": 258872,
+      "combined_sampled_rss_kib": 51968,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2052.0727218749234,
+      "acknowledged_writes": 263107,
+      "combined_sampled_rss_kib": 39968,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2082.1943172499305,
+      "acknowledged_writes": 267242,
+      "combined_sampled_rss_kib": 41280,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2112.4094678749098,
+      "acknowledged_writes": 271205,
+      "combined_sampled_rss_kib": 45776,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2142.5255426249932,
+      "acknowledged_writes": 275284,
+      "combined_sampled_rss_kib": 47856,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2172.742507499992,
+      "acknowledged_writes": 279290,
+      "combined_sampled_rss_kib": 52256,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2202.8586050419835,
+      "acknowledged_writes": 283344,
+      "combined_sampled_rss_kib": 52720,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2238.872054458945,
+      "acknowledged_writes": 287258,
+      "combined_sampled_rss_kib": 40480,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2269.018409249955,
+      "acknowledged_writes": 291408,
+      "combined_sampled_rss_kib": 41424,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2299.216789625003,
+      "acknowledged_writes": 295462,
+      "combined_sampled_rss_kib": 44656,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2329.3350265839836,
+      "acknowledged_writes": 299564,
+      "combined_sampled_rss_kib": 46720,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2359.5417489999672,
+      "acknowledged_writes": 303738,
+      "combined_sampled_rss_kib": 51824,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2389.668052916997,
+      "acknowledged_writes": 307820,
+      "combined_sampled_rss_kib": 52272,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2425.698534833966,
+      "acknowledged_writes": 311925,
+      "combined_sampled_rss_kib": 39984,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2455.852044667001,
+      "acknowledged_writes": 315981,
+      "combined_sampled_rss_kib": 40688,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2486.057263249997,
+      "acknowledged_writes": 319964,
+      "combined_sampled_rss_kib": 45456,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2516.1456272089854,
+      "acknowledged_writes": 324139,
+      "combined_sampled_rss_kib": 47360,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2546.4241005419753,
+      "acknowledged_writes": 328102,
+      "combined_sampled_rss_kib": 52144,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2576.559145333944,
+      "acknowledged_writes": 332141,
+      "combined_sampled_rss_kib": 52528,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2612.531133499928,
+      "acknowledged_writes": 335875,
+      "combined_sampled_rss_kib": 40496,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2642.659244499984,
+      "acknowledged_writes": 339721,
+      "combined_sampled_rss_kib": 41104,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2672.927196249948,
+      "acknowledged_writes": 343553,
+      "combined_sampled_rss_kib": 45808,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2703.0462658338947,
+      "acknowledged_writes": 347397,
+      "combined_sampled_rss_kib": 48016,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2733.324268166907,
+      "acknowledged_writes": 351225,
+      "combined_sampled_rss_kib": 52800,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2763.445231874939,
+      "acknowledged_writes": 354946,
+      "combined_sampled_rss_kib": 53328,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2799.4284020419,
+      "acknowledged_writes": 358678,
+      "combined_sampled_rss_kib": 40432,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2829.5772586249514,
+      "acknowledged_writes": 362520,
+      "combined_sampled_rss_kib": 41120,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2859.829085959005,
+      "acknowledged_writes": 366340,
+      "combined_sampled_rss_kib": 44864,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2889.945333541953,
+      "acknowledged_writes": 370140,
+      "combined_sampled_rss_kib": 47072,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2920.2292162919184,
+      "acknowledged_writes": 373951,
+      "combined_sampled_rss_kib": 51776,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2950.3512208749307,
+      "acknowledged_writes": 377807,
+      "combined_sampled_rss_kib": 52240,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 2986.3271068339236,
+      "acknowledged_writes": 381567,
+      "combined_sampled_rss_kib": 40192,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 3016.433241916937,
+      "acknowledged_writes": 385382,
+      "combined_sampled_rss_kib": 40832,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 3046.7474347919924,
+      "acknowledged_writes": 389207,
+      "combined_sampled_rss_kib": 46464,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 3076.87616216694,
+      "acknowledged_writes": 393141,
+      "combined_sampled_rss_kib": 47504,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 3107.327121499926,
+      "acknowledged_writes": 397341,
+      "combined_sampled_rss_kib": 53216,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 3137.5301797499415,
+      "acknowledged_writes": 401403,
+      "combined_sampled_rss_kib": 53792,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 3173.5011280420003,
+      "acknowledged_writes": 405712,
+      "combined_sampled_rss_kib": 40208,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 3203.6232739589177,
+      "acknowledged_writes": 409969,
+      "combined_sampled_rss_kib": 41616,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 3233.9350454999367,
+      "acknowledged_writes": 414356,
+      "combined_sampled_rss_kib": 46128,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 3264.056315291906,
+      "acknowledged_writes": 418804,
+      "combined_sampled_rss_kib": 47264,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 3294.390151833999,
+      "acknowledged_writes": 422716,
+      "combined_sampled_rss_kib": 52848,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 3324.5112009999575,
+      "acknowledged_writes": 426982,
+      "combined_sampled_rss_kib": 53200,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 3360.5415981248952,
+      "acknowledged_writes": 431182,
+      "combined_sampled_rss_kib": 39664,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 3390.658864041907,
+      "acknowledged_writes": 435486,
+      "combined_sampled_rss_kib": 41200,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 3421.013253708952,
+      "acknowledged_writes": 439481,
+      "combined_sampled_rss_kib": 45424,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 3451.1564953339985,
+      "acknowledged_writes": 443678,
+      "combined_sampled_rss_kib": 47504,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 3481.4623602499487,
+      "acknowledged_writes": 447842,
+      "combined_sampled_rss_kib": 51808,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 3511.6024797499413,
+      "acknowledged_writes": 452222,
+      "combined_sampled_rss_kib": 52320,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 3547.614920833963,
+      "acknowledged_writes": 456416,
+      "combined_sampled_rss_kib": 40480,
+      "persistence_status": "ok",
+      "replica_ready": true
+    },
+    {
+      "seconds": 3577.7242362919496,
+      "acknowledged_writes": 460587,
+      "combined_sampled_rss_kib": 41328,
+      "persistence_status": "ok",
+      "replica_ready": true
+    }
+  ],
+  "archive": {
+    "name": "soak-apfs-1h-evidence.tar.gz",
+    "sha256": "5ce0d8c4e19415e54181b30f4a993162114dd11f69d760f0def31a2af5e615aa",
+    "bytes": 5750358,
+    "retained_under_ignored": "dist/validation/post-alpha3"
+  },
+  "raw_files": [
+    {
+      "path": "fault-worker-False/.keel-torn-tail-3747726863",
+      "sha256": "c897b8d2069dad393513fb1f22d854f8b593479c51ba3332858627c6fe6459f2",
+      "bytes": 4054
+    },
+    {
+      "path": "fault-worker-False/server.log",
+      "sha256": "be20e11931dd898503415a01bf5532bf728b085f938fbb6c6334847fe637aadb",
+      "bytes": 1625
+    },
+    {
+      "path": "fault-worker-False/store.aof",
+      "sha256": "030ca241966b030910014123dca2e563cf3ca36cc0599e09a7e8d50cccc85ffa",
+      "bytes": 42
+    },
+    {
+      "path": "fault-worker-True/.keel-torn-tail-3021505880",
+      "sha256": "c897b8d2069dad393513fb1f22d854f8b593479c51ba3332858627c6fe6459f2",
+      "bytes": 4054
+    },
+    {
+      "path": "fault-worker-True/server.log",
+      "sha256": "3d22c3ddee65266b3c43c5e1427b3bf0d556e8f4d3ae6a567e0338e6d8019fc5",
+      "bytes": 1446
+    },
+    {
+      "path": "fault-worker-True/store.aof",
+      "sha256": "030ca241966b030910014123dca2e563cf3ca36cc0599e09a7e8d50cccc85ffa",
+      "bytes": 42
+    },
+    {
+      "path": "host.json",
+      "sha256": "6e62c389bc22e1c9039f7505911e96251479e39cc09189c9b21b4ad3d8fc4e5e",
+      "bytes": 349
+    },
+    {
+      "path": "primary/server.log",
+      "sha256": "79bc8d4c58f78c8ac21a1da1a9b12a2c4ca6e130a516de4fe382e125d9196883",
+      "bytes": 180465
+    },
+    {
+      "path": "primary/store.aof",
+      "sha256": "7e80a56c4a4aef45e9f30509bbc35a69719781b435f378f6da1fb9b27ce3c24f",
+      "bytes": 1278831
+    },
+    {
+      "path": "replica/server.log",
+      "sha256": "ee7f350fa1fe868edacf237537d73acc5236bda11bdd454ec1557d8a1814912b",
+      "bytes": 980634
+    },
+    {
+      "path": "replica/store.aof",
+      "sha256": "f782c4733b7e273b8784b9ffa9de09af38f0fd200ab1b25e3d910bd6e92b453e",
+      "bytes": 207626857
+    },
+    {
+      "path": "report.json",
+      "sha256": "6097c923e0f1dadfe044d7579a41ce0eb5688956aa8f3ba9a9c54ac9c4e6ee2c",
+      "bytes": 110970
+    }
+  ],
+  "limits": [
+    "local APFS workstation, with primary, replica and synthetic load colocated",
+    "one hour is bounded; no deployment-filesystem or multi-day result",
+    "RLIMIT_FSIZE exercises file-write failures, not real APFS ENOSPC or power loss",
+    "primary recovery checks use always fsync; asynchronous replication loss limits are unchanged",
+    "RSS samples are at rewrite checkpoints; they are not continuous peak-memory measurements",
+    "manual promotion follows quiescing/fencing and replica catch-up; no automatic failover"
+  ]
+}
