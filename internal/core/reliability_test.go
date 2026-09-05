@@ -299,7 +299,7 @@ func TestBackgroundSyncDoesNotBlockAndPreservesLaterWrites(t *testing.T) {
 	aof.lastSync = time.Now().Add(-2 * time.Second)
 	// A blocked Sync must not block this call. The timer also releases the fake
 	// disk if a regression blocks, so the test fails rather than hanging CI.
-	timer := time.AfterFunc(time.Second, func() { close(release) })
+	timer := time.AfterFunc(10*time.Second, func() { close(release) })
 	started := time.Now()
 	require.NoError(t, FlushAOF())
 	elapsed := time.Since(started)
@@ -410,7 +410,7 @@ func TestAsyncAppendBarrierAndFailure(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "log")
 			require.NoError(t, OpenAOF(path))
 			release := make(chan struct{})
-			timer := time.AfterFunc(time.Second, func() { close(release) })
+			timer := time.AfterFunc(10*time.Second, func() { close(release) })
 			defer func() {
 				if timer.Stop() {
 					close(release)

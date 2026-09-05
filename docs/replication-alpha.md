@@ -25,8 +25,9 @@ returns a retry error; request it after receiving those writes' replies.
 
 Configure runtime secrets first, outside shell history/source control. Example
 commands assume `KEEL_PASSWORD` and `PRIMARY_PASSWORD` are already set securely.
-The addresses below belong on a private network; `-primary-tls` verifies TLS when
-connecting through the primary's TLS proxy.
+The addresses below belong on a private network. The example assumes a TLS proxy
+at `primary.internal.example:6380` forwarding to `10.0.1.10:6379`, with a certificate
+trusted by the replica. `-primary-tls` verifies that certificate and hostname.
 
 ```sh
 # Primary
@@ -37,8 +38,8 @@ connecting through the primary's TLS proxy.
 # Replica (its own local client password can differ)
 ./keel -host 10.0.1.11 -port 6379 -appendonly \
   -appendfilename ./replica.aof -requirepass-env KEEL_PASSWORD \
-  -aof-async-append -replicaof 10.0.1.10:6379 \
-  -primary-password-env PRIMARY_PASSWORD
+  -aof-async-append -replicaof primary.internal.example:6380 \
+  -primary-password-env PRIMARY_PASSWORD -primary-tls
 ```
 
 Replication requires AUTH, AOF and the normal event-loop mode on both nodes.

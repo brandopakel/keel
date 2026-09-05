@@ -227,6 +227,9 @@ func ApplyReplication(frame ReplicationFrame) error {
 	if frame.Full && (len(commands) == 0 || commands[0].Cmd != "FLUSHDB") {
 		return errors.New("snapshot lacks reset")
 	}
+	// The server stops on an apply error. Also gate reads here so partial
+	// state cannot be read or resumed with a delta by another caller.
+	replicaReady = false
 	replicaApplying = true
 	defer func() { replicaApplying = false }()
 	for _, cmd := range commands {

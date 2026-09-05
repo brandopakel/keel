@@ -53,7 +53,8 @@ populate the variable; avoid putting secrets in process arguments or shell histo
 Important boundaries:
 
 - One database, RESP2, IPv4. No transactions, Lua, Pub/Sub, blocking list commands,
-  ACL roles, native TLS, replication, cluster routing, or supported embedding API.
+  ACL roles, native TLS, cluster routing, or supported embedding API.
+  Opt-in [replication](docs/replication-alpha.md) is experimental and bounded.
   Clients must avoid RESP3 negotiation and unsupported initialization commands.
 - `SET` and `MSET` refuse keys of another type with `WRONGTYPE`; unlike Redis SET,
   they do not overwrite collections. Delete explicitly when changing type.

@@ -18,9 +18,9 @@ smokes validate integration; paid provider runs and real application pilots rema
 pending account/target setup. Existing latency smoke results establish no speedup.
 See [replication-alpha.md](replication-alpha.md) and the README for exact limits.
 
-Full Go tests, race detection, native Linux/macOS Go floor/current, Docker persistence
-and Linux provider-adapter checks passed on the feature revision. Release artifacts
-still require their own tag workflow and checksum verification before publication.
+The [candidate validation record](pr15-validation-2026-09-05.md) tracks the Linux
+race-job correction, benchmark review, native checks and archive verification.
+Tag-built artifacts require their own checksum verification before publication.
 
 ---
 

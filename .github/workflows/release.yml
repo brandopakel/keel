@@ -74,6 +74,7 @@ jobs:
           tar --exclude='__pycache__' --exclude='*.pyc' -C dist -czf "keel_${version}_${GOOS}_${GOARCH}.tar.gz" keel LICENSE THIRD_PARTY_NOTICES.md README.md docs examples bench
           sha256sum "keel_${version}_${GOOS}_${GOARCH}.tar.gz" \
             > "keel_${version}_${GOOS}_${GOARCH}.tar.gz.sha256"
+          sha256sum -c "keel_${version}_${GOOS}_${GOARCH}.tar.gz.sha256"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

@@ -144,6 +144,12 @@ func AdvanceRewrite() error {
 		abortRewrite(fmt.Errorf("rewrite exceeded duration or dirty-key budget"))
 		return nil // the original log continues to contain every write
 	}
+	// Once the snapshot walk is done, retain changed key names until the sync
+	// worker releases the old descriptor. Re-emitting hot keys every cycle
+	// while replacement is blocked can make the rewrite larger than the log.
+	if rewrite.pos == len(rewrite.keys) && !rewrite.listActive && aof.syncPending != nil {
+		return nil
+	}
 	if rewrite.listActive {
 		body := emitListSlice(nil)
 		if err := rewriteWrite(body); err != nil {
@@ -238,7 +244,6 @@ func noteRewriteDirty(key string) {
 // finishRewrite writes the keys that changed during the walk, then swaps the
 // new log in.
 func finishRewrite() error {
-	// Keep reconciling mutations while the old descriptor is being synced.
 	// Never close or replace a descriptor owned by the worker.
 	if aof.syncPending != nil {
 		return nil

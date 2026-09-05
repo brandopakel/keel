@@ -119,3 +119,40 @@ func TestReplicationHistoryAndDirtyOverflowRequireFullSync(t *testing.T) {
 	require.True(t, frame.Full)
 	require.NotEqual(t, epoch, frame.Epoch)
 }
+
+func TestReplicationApplyFailureDisablesReadsUntilFullSync(t *testing.T) {
+	ResetStores()
+	oldReplica := config.ReplicaOf
+	oldExpiry, oldEviction := data_structure.SuspendExpiry, data_structure.SuspendEviction
+	defer func() {
+		config.ReplicaOf = oldReplica
+		data_structure.SuspendExpiry, data_structure.SuspendEviction = oldExpiry, oldEviction
+	}()
+	config.ReplicaOf = "test:1"
+	require.NoError(t, InitReplication())
+	full := ReplicationFrame{Version: 1, Epoch: "0123456789abcdef0123456789abcdef", Full: true, To: 1}
+	full.Body = appendCommand(nil, "FLUSHDB")
+	full.Body = appendCommand(full.Body, "SET", "k", "original")
+	full.Checksum = frameChecksum(full)
+	require.NoError(t, ApplyReplication(full))
+	require.Equal(t, "original", run(t, "GET", "k"))
+	updated := replicaUpdated
+	broken := ReplicationFrame{Version: 1, Epoch: full.Epoch, From: 1, To: 2}
+	broken.Body = appendCommand(nil, "DEL", "k")
+	broken.Body = appendCommand(broken.Body, "SET", "k") // valid RESP, invalid command arity
+	broken.Checksum = frameChecksum(broken)
+	require.ErrorContains(t, ApplyReplication(broken), "replication apply")
+	require.Nil(t, dictStore.Peek("k"), "the first command applied before the second failed")
+	require.False(t, replicaReady)
+	require.False(t, replicaApplying)
+	require.Equal(t, uint64(1), replicaOffset)
+	require.Equal(t, updated, replicaUpdated)
+	require.Contains(t, string(rawReply(t, "GET", "k")), "MASTERDOWN")
+	broken.Body = appendCommand(nil, "SET", "k", "replacement")
+	broken.Checksum = frameChecksum(broken)
+	require.ErrorContains(t, ApplyReplication(broken), "replication offset gap", "delta cannot repair unknown partial state")
+	full.From = 1
+	full.Checksum = frameChecksum(full)
+	require.NoError(t, ApplyReplication(full))
+	require.Equal(t, "original", run(t, "GET", "k"))
+}

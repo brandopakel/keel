@@ -984,6 +984,7 @@ func flushClientReplies(pool *ioPool, ioMultiplexer io_multiplexing.IOMultiplexe
 			}
 			if err := ioMultiplexer.Monitor(io_multiplexing.Event{Fd: c.fd, Op: io_multiplexing.OpWrite}); err != nil {
 				closeClient(c)
+				continue
 			}
 		} else {
 			c.out = nil
@@ -996,6 +997,7 @@ func flushClientReplies(pool *ioPool, ioMultiplexer io_multiplexing.IOMultiplexe
 			}
 			if err := ioMultiplexer.Monitor(io_multiplexing.Event{Fd: c.fd, Op: io_multiplexing.OpRead}); err != nil {
 				closeClient(c)
+				continue
 			}
 		}
 		accountClient(c)

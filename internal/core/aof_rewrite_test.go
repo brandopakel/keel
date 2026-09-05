@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/constant"
@@ -217,21 +218,66 @@ func TestRewriteLeavesNoTemporaryFile(t *testing.T) {
 
 // TestAutomaticRewriteTriggersOnGrowth.
 func TestAutomaticRewriteTriggersOnGrowth(t *testing.T) {
+	for _, delayedSync := range []bool{false, true} {
+		t.Run("delayed-sync="+strconv.FormatBool(delayedSync), func(t *testing.T) {
+			testAutomaticRewriteTriggersOnGrowth(t, delayedSync)
+		})
+	}
+}
+
+func testAutomaticRewriteTriggersOnGrowth(t *testing.T, delayedSync bool) {
+	t.Helper()
 	pct, min := config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize
+	policy, syncFile := config.AOFFsync, aofSync
 	defer func() {
+		CloseAOF()
 		config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize = pct, min
+		config.AOFFsync, aofSync = policy, syncFile
 	}()
 	config.AOFAutoRewritePercentage = 100
 	config.AOFAutoRewriteMinSize = 4096
+	config.AOFFsync = config.FsyncEverySec
 
 	path := filepath.Join(t.TempDir(), "auto.aof")
 	ResetStores()
-	assert.NoError(t, OpenAOF(path))
-
+	require.NoError(t, OpenAOF(path))
+	releaseSync := func() {}
+	if delayedSync {
+		release := make(chan struct{})
+		releaseSync = func() {
+			if release != nil {
+				close(release)
+				release = nil
+			}
+		}
+		defer releaseSync()
+		blocked := release
+		aofSync = func(f *os.File) error { <-blocked; return f.Sync() }
+		aof.lastSync = time.Now().Add(-2 * time.Second)
+	}
 	for i := 0; i < 4000; i++ {
 		run(t, "SET", "hot", strconv.Itoa(i))
-		assert.NoError(t, FlushAOF())
+		require.NoError(t, FlushAOF())
 	}
+	if delayedSync {
+		require.True(t, RewriteActive(), "file replacement must wait for the sync worker")
+		require.Less(t, rewrite.written, int64(4096), "waiting for sync must not repeatedly serialize the hot key")
+		size, err := os.Stat(path)
+		require.NoError(t, err)
+		require.Greater(t, size.Size(), int64(64*1024), "the old log grows while sync holds its descriptor")
+	}
+	releaseSync()
+	// A background everysec sync keeps the old descriptor alive and can delay
+	// replacement past the final write. Check size only after the automatic
+	// rewrite has completed, including its idle event-loop turns.
+	pollAOFSync(true)
+	require.NoError(t, FlushAOF())
+	for i := 0; RewriteActive() && i < 100; i++ {
+		pollAOFSync(true)
+		require.NoError(t, FlushAOF())
+	}
+	require.False(t, RewriteActive(), "automatic rewrite must finish after sync completes")
+
 	_, _, rewrites, _ := AOFStats()
 	assert.Greater(t, rewrites, 0, "a log growing past the threshold must rewrite itself")
 
