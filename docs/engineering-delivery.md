@@ -35,7 +35,7 @@ Implemented:
 Limits still requiring engineering if workloads hit them:
 
 - Snapshot enumeration and most individual-key serialization remain synchronous. Large-list rewrites now yield between bounded chunks, restarting on mutation.
-- AOF appends, rewrite writes/finalization and `always` sync remain synchronous; slow storage can stall commands.
+- By default AOF appends, rewrite writes/finalization and `always` sync remain synchronous. Optional worker appends are described in the later implementation increment; slow storage can still delay commands.
 - `everysec` now uses one background sync worker, with error propagation and descriptor lifecycle fences.
 - Response encoding allocates before checking its limit. Parsing and command execution require transient memory.
 - Whole-key commands and large computations remain proportional to their input. These are not hard latency bounds.
@@ -89,7 +89,9 @@ No outside user adoption or production validation is implied by candidate archiv
 
 ## 5. Demand-led scaling decision
 
-Defer embedding, partitioning, and replication until a pilot identifies the actual constraint.
+Embedding and partitioning remain demand-led. The owner-requested replication experiment
+is now available behind explicit flags; deployment still requires a pilot
+that accepts its loss, freshness and manual-fencing contract.
 
 | Observed need | Engineering commitment | Evidence required first |
 | --- | --- | --- |
@@ -110,7 +112,8 @@ create three products without establishing which one users need.
   failed latency runs, retains artifacts on failure, and stops smoke servers by exact PID.
 - Wider scaling acceptance criteria are in [async-scaling.md](async-scaling.md).
 
-External application pilots, replication, partitioning and embedding remain incomplete.
+External application pilots, automatic failover, partitioning and embedding remain incomplete.
+The later increment implements bounded experimental replication.
 The preceding implementation bullets do not establish a hard latency or data-loss bound.
 
 External testing deliberation: adopt a layered CI/controlled-host/pilot strategy;

@@ -73,8 +73,10 @@ Implemented first-stage protocol elements: primary identity/epoch and monotonic 
 versioned transport; consistent full synchronization plus a bounded catch-up log;
 checksummed frames; disconnect/resync on lag overflow; ordered application of
 canonical mutations (including random outcomes, expiry and eviction); read-only
-command enforcement; lag/offset diagnostics; durable replica checkpoint policy;
-and promotion that fences the old writer. A replica must not independently evict
+command enforcement; lag/offset diagnostics; and local AOF persistence. Replica restart currently
+requires full synchronization rather than a durable resumable checkpoint. Manual
+promotion requires the operator to fence the old writer; the server does not
+provide distributed fencing or an election. A replica must not independently evict
 keys or draw different random outcomes. Filesystem AOF positions alone are not
 stable replication offsets because rewriting changes them.
 
