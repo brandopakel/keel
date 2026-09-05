@@ -1,6 +1,7 @@
 package io_multiplexing
 
 import (
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -78,16 +79,19 @@ func TestCheckIsLevelTriggered(t *testing.T) {
 	syscall.Read(r, buf[:])
 
 	// Drained, the pipe is no longer reported; a write from elsewhere is
-	// what ends the wait.
+	// what ends the wait. The writer records that it has written before it
+	// writes, so Check returning proves the write happened first - without a
+	// measured duration, which a slow scheduler could make wrong either way.
+	var written atomic.Bool
 	go func() {
 		time.Sleep(20 * time.Millisecond)
+		written.Store(true)
 		syscall.Write(w, []byte{2})
 	}()
-	start := time.Now()
 	events, err := mux.Check()
 	assert.NoError(t, err)
 	assert.Len(t, events, 1)
-	assert.GreaterOrEqual(t, time.Since(start), 15*time.Millisecond, "Check blocked until the write")
+	assert.True(t, written.Load(), "Check returned before anything was written")
 }
 
 func TestClosedWriteEndReadsAsReadable(t *testing.T) {
