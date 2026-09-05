@@ -25,8 +25,8 @@ func CreateIOMultiplexer() (*Epoll, error) {
 	}
 	return &Epoll{
 		fd:     fd,
-		native: make([]syscall.EpollEvent, config.MaxConnection),
-		ready:  make([]Event, 0, config.MaxConnection),
+		native: make([]syscall.EpollEvent, min(config.MaxConnection, 128)),
+		ready:  make([]Event, 0, min(config.MaxConnection, 128)),
 	}, nil
 }
 
@@ -35,7 +35,11 @@ func (ep *Epoll) Monitor(event Event) error {
 	if event.Op == OpWrite {
 		native.Events = syscall.EPOLLOUT
 	}
-	return syscall.EpollCtl(ep.fd, syscall.EPOLL_CTL_ADD, event.Fd, &native)
+	err := syscall.EpollCtl(ep.fd, syscall.EPOLL_CTL_ADD, event.Fd, &native)
+	if err == syscall.EEXIST {
+		err = syscall.EpollCtl(ep.fd, syscall.EPOLL_CTL_MOD, event.Fd, &native)
+	}
+	return err
 }
 
 // Check waits with no timeout: the loop is woken by the descriptors it

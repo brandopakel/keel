@@ -14,13 +14,20 @@ import (
 // - the same argument the eviction pool makes, that a random sample is a cheap
 // way to tell a keyspace with a problem from one without.
 func ExpireCycle() int {
-	if config.ActiveExpireSamples <= 0 {
+	if config.ActiveExpireSamples <= 0 || KeysWithExpiry() == 0 {
 		return 0
 	}
 
 	total := 0
 	for round := 0; round < config.ActiveExpireRounds; round++ {
-		examined, expired := dictStore.ActiveExpire(config.ActiveExpireSamples)
+		examined, expired := 0, 0
+		expireCursor = data_structure.EachKeyspaceFrom(expireCursor, func(ks data_structure.Keyspace) {
+			if examined < config.ActiveExpireSamples {
+				n, d := ks.ActiveExpire(config.ActiveExpireSamples - examined)
+				examined += n
+				expired += d
+			}
+		})
 		total += expired
 		if examined == 0 {
 			break
@@ -48,11 +55,16 @@ func ExpireCycle() int {
 // lazily by a read are not counted here, because the number is here to answer
 // whether the cycle is keeping up.
 var expiredKeys uint64
+var expireCursor int
 
 // ExpiredKeys reports how many keys the cycle has removed.
 func ExpiredKeys() uint64 { return expiredKeys }
 
 // KeysWithExpiry reports how many keys are carrying a TTL.
-func KeysWithExpiry() int { return dictStore.KeysWithExpiry() }
+func KeysWithExpiry() int {
+	n := 0
+	data_structure.EachKeyspace(func(ks data_structure.Keyspace) { n += ks.KeysWithExpiry() })
+	return n
+}
 
 var _ = data_structure.TotalKeys

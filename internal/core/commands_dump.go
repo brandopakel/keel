@@ -1,8 +1,11 @@
 package core
 
 import (
+	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash/crc32"
 	"math"
 	"strconv"
 
@@ -29,9 +32,8 @@ import (
 // those logs into a startup error, or worse into a silently shorter keyspace.
 // Only the new name is ever written.
 //
-// The format is a type tag and the type's own bytes. It is written and read by
-// one process on one machine, so it carries no version and no checksum; making
-// it portable is a different feature with different obligations.
+// New payloads have a KEL1 version prefix and CRC32 checksum. Legacy unversioned
+// payloads remain readable. Neither form includes the key's expiry deadline.
 const (
 	dumpTagString = byte(1)
 	dumpTagSet    = byte(2)
@@ -41,10 +43,38 @@ const (
 	dumpTagMorris = byte(6)
 	dumpTagHLL    = byte(7)
 	dumpTagCuckoo = byte(8)
+	dumpTagHash   = byte(9)
+	dumpTagList   = byte(10)
 )
 
 // dumpKey serialises whatever holds the key.
 func dumpKey(key string) ([]byte, bool) {
+	payload, ok := dumpValue(key)
+	if !ok {
+		return nil, false
+	}
+	out := append([]byte("KEL1"), payload...)
+	out = binary.LittleEndian.AppendUint32(out, crc32.ChecksumIEEE(out))
+	return out, true
+}
+
+func dumpValue(key string) ([]byte, bool) {
+	if h, ok := hashStore.Peek(key); ok {
+		w := &respParts{}
+		fs, vs := h.Entries()
+		for i, f := range fs {
+			w.add(f)
+			w.add(vs[i])
+		}
+		return append([]byte{dumpTagHash}, w.encode()...), true
+	}
+	if l, ok := listStore.Peek(key); ok {
+		w := &respParts{}
+		for _, v := range l.All() {
+			w.add(v)
+		}
+		return append([]byte{dumpTagList}, w.encode()...), true
+	}
 	// Peek, not Get. Get records an access and reaps an expired key, and this
 	// is called for every key of a rewrite: reading the keyspace would mark all
 	// of it recently used and leave eviction with no idea which keys anyone
@@ -94,6 +124,19 @@ func dumpKey(key string) ([]byte, bool) {
 // turns out to be malformed leaves the key exactly as it was. Deleting first
 // and decoding second lost the old value on every bad payload.
 func restoreKey(key string, payload []byte) error {
+	if err := affordable(uint64(len(payload))); err != nil {
+		return err
+	}
+	if bytes.HasPrefix(payload, []byte("KEL")) {
+		if len(payload) < 9 || string(payload[:4]) != "KEL1" {
+			return errors.New("ERR unsupported dump version")
+		}
+		end := len(payload) - 4
+		if crc32.ChecksumIEEE(payload[:end]) != binary.LittleEndian.Uint32(payload[end:]) {
+			return errors.New("ERR dump checksum mismatch")
+		}
+		payload = payload[4:end]
+	}
 	if len(payload) == 0 {
 		return errors.New("MEMKV: empty payload")
 	}
@@ -112,6 +155,24 @@ func restoreKey(key string, payload []byte) error {
 // the step that puts that value in its keyspace, having changed nothing yet.
 func decodeRestorePayload(key string, tag byte, body []byte) (store func(), err error) {
 	switch tag {
+	case dumpTagHash, dumpTagList:
+		parts, err := decodeParts(body)
+		if err != nil {
+			return nil, err
+		}
+		if len(parts) == 0 || (tag == dumpTagHash && len(parts)%2 != 0) {
+			return nil, errors.New("ERR invalid collection payload")
+		}
+		if tag == dumpTagHash {
+			h := data_structure.NewHash()
+			for i := 0; i < len(parts); i += 2 {
+				h.Set(parts[i], parts[i+1])
+			}
+			return func() { hashStore.Put(key, h) }, nil
+		}
+		l := data_structure.NewList()
+		l.PushBack(parts...)
+		return func() { listStore.Put(key, l) }, nil
 	case dumpTagString:
 		value := string(body)
 		oType, oEnc := deduceTypeString(value)
@@ -120,6 +181,9 @@ func decodeRestorePayload(key string, tag byte, body []byte) (store func(), err 
 		members, err := decodeParts(body)
 		if err != nil {
 			return nil, err
+		}
+		if len(members) == 0 {
+			return nil, errors.New("ERR empty set payload")
 		}
 		set := data_structure.NewSet()
 		if len(members) > 0 {
@@ -131,7 +195,7 @@ func decodeRestorePayload(key string, tag byte, body []byte) (store func(), err 
 		if err != nil {
 			return nil, err
 		}
-		if len(parts)%2 != 0 {
+		if len(parts) == 0 || len(parts)%2 != 0 {
 			return nil, errors.New("MEMKV: sorted set payload is not score/member pairs")
 		}
 		zset := data_structure.CreateZSet()

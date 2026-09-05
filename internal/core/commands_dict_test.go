@@ -38,7 +38,7 @@ func TestCmdSetRejectsWhatItDoesNotImplement(t *testing.T) {
 	for _, bad := range [][]string{
 		{"k", "v", "ZZ", "100"},
 		{"k", "v", "KEEPTTL", "100"},
-		{"k", "v", "EXAT", "100"},
+		{"k", "v", "NX", "XX"},
 	} {
 		res, _ := Decode(cmdSET(bad))
 		assert.Contains(t, res, "syntax error", "SET %v must be refused, not guessed at", bad)

@@ -25,8 +25,8 @@ func CreateIOMultiplexer() (*KQueue, error) {
 	}
 	return &KQueue{
 		fd:     fd,
-		native: make([]syscall.Kevent_t, config.MaxConnection),
-		ready:  make([]Event, 0, config.MaxConnection),
+		native: make([]syscall.Kevent_t, min(config.MaxConnection, 128)),
+		ready:  make([]Event, 0, min(config.MaxConnection, 128)),
 	}, nil
 }
 
@@ -35,6 +35,11 @@ func (kq *KQueue) Monitor(event Event) error {
 	if event.Op == OpWrite {
 		filter = syscall.EVFILT_WRITE
 	}
+	other := int16(syscall.EVFILT_WRITE)
+	if filter == syscall.EVFILT_WRITE {
+		other = syscall.EVFILT_READ
+	}
+	_, _ = syscall.Kevent(kq.fd, []syscall.Kevent_t{{Ident: uint64(event.Fd), Filter: other, Flags: syscall.EV_DELETE}}, nil, nil)
 	change := syscall.Kevent_t{
 		Ident:  uint64(event.Fd),
 		Filter: filter,

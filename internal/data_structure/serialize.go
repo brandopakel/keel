@@ -52,7 +52,7 @@ func (r *cursor) take(n int) []byte {
 	if r.err != nil {
 		return nil
 	}
-	if len(r.b) < n {
+	if n < 0 || len(r.b) < n {
 		r.err = errShortPayload
 		return nil
 	}
@@ -86,7 +86,7 @@ func (r *cursor) bytes() []byte {
 	}
 	// Length-prefixed, and the length comes from the file, so it is checked
 	// against what is actually there before it becomes an allocation.
-	if uint64(len(r.b)) < n {
+	if uint64(len(r.b)) < n || n > MaxStructureBytes {
 		r.err = errShortPayload
 		return nil
 	}
@@ -145,6 +145,9 @@ func UnmarshalMorris(p []byte) (*Morris, error) {
 	if err := checkTable(uint64(m.width), uint64(m.depth), len(r.b), 1); err != nil {
 		return nil, fmt.Errorf("morris counter: %w", err)
 	}
+	if m.rngState == 0 {
+		return nil, errors.New("morris counter: invalid RNG")
+	}
 	n := uint64(m.width) * uint64(m.depth)
 	m.counters = make([]uint8, n)
 	copy(m.counters, r.take(int(n)))
@@ -161,7 +164,7 @@ func checkTable(w, d uint64, remaining int, cellBytes uint64) error {
 	if w > math.MaxUint32/d {
 		return errors.New("dimensions overflow")
 	}
-	if want := w * d * cellBytes; want != uint64(remaining) {
+	if want := w * d * cellBytes; want > MaxStructureBytes || want != uint64(remaining) {
 		return fmt.Errorf("%dx%d needs %d bytes, payload has %d", w, d, want, remaining)
 	}
 	return nil
@@ -187,7 +190,16 @@ func UnmarshalHLL(p []byte) (*HLL, error) {
 	// cachedCount is left invalid rather than stored: it is an optimisation
 	// derived from the registers, and recomputing it costs one pass the first
 	// time anyone asks.
-	return &HLL{regs: regs}, nil
+	h := &HLL{regs: regs}
+	if len(r.b) != 0 {
+		return nil, errors.New("hyperloglog: trailing bytes")
+	}
+	for i := 0; i < hllRegisters; i++ {
+		if h.getRegister(i) > hllQ+1 {
+			return nil, errors.New("hyperloglog: invalid register")
+		}
+	}
+	return h, nil
 }
 
 // --- Cuckoo filter ---
@@ -224,6 +236,9 @@ func UnmarshalCuckoo(p []byte) (*CuckooFilter, error) {
 	// a crash.
 	if c.numBuckets == 0 || c.numBuckets&(c.numBuckets-1) != 0 {
 		return nil, fmt.Errorf("cuckoo filter: %d buckets is not a power of two", c.numBuckets)
+	}
+	if c.numBuckets > MaxStructureBytes/(CuckooBucketSize*2) || n > MaxStructureBytes/2 || n != uint64(len(r.b))/2 || uint64(len(r.b))%2 != 0 || c.deleted > c.inserted || c.rngState == 0 {
+		return nil, errors.New("cuckoo filter: invalid dimensions or state")
 	}
 	if n != c.numBuckets*CuckooBucketSize {
 		return nil, fmt.Errorf("cuckoo filter: %d buckets needs %d slots, payload has %d",
@@ -270,7 +285,7 @@ func UnmarshalSBChain(p []byte) (*SBChain, error) {
 	}
 	// One link is a few dozen bytes at minimum, so a count larger than the
 	// bytes remaining cannot be honest and must not become an allocation.
-	if count > uint64(len(r.b)) {
+	if count == 0 || s.growthFactor == 0 || count > uint64(len(r.b))/53 {
 		return nil, fmt.Errorf("bloom filter: %d links in %d bytes", count, len(r.b))
 	}
 
@@ -286,6 +301,9 @@ func UnmarshalSBChain(p []byte) (*SBChain, error) {
 		b.bf = r.bytes()
 		if r.err != nil {
 			return nil, r.err
+		}
+		if b.Hashes < 1 || b.Hashes > 2048 || b.bits == 0 || b.Entries == 0 || math.IsNaN(b.Error) || b.Error <= 0 || b.Error >= 1 || math.IsNaN(b.bitPerEntry) || math.IsInf(b.bitPerEntry, 0) || b.bitPerEntry <= 0 {
+			return nil, errors.New("bloom filter: invalid state")
 		}
 		if uint64(len(b.bf))*8 < b.bits {
 			return nil, fmt.Errorf("bloom filter: %d bits do not fit in %d bytes", b.bits, len(b.bf))

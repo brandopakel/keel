@@ -98,3 +98,6 @@ func WaitForSignal(wg *sync.WaitGroup, signals chan os.Signal) {
 		os.Exit(1)
 	}()
 }
+
+// Stop requests shutdown and wakes a parked server.
+func Stop() { requestShutdown(); wake() }

@@ -21,12 +21,13 @@ permissions:
 
 jobs:
   build:
-    name: go ${{ matrix.go }}
-    runs-on: ubuntu-latest
+    name: ${{ matrix.os }} / go ${{ matrix.go }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         go: [ '1.22', 'stable' ]
+        os: [ ubuntu-latest, macos-latest ]
     steps:
       # Actions are pinned to commit SHAs rather than tags: a tag is mutable and
       # can be repointed at code this workflow never reviewed. Dependabot bumps
@@ -50,6 +51,18 @@ jobs:
 
       - name: Test
         run: go test -v ./...
+
+      - name: Redis client integration
+        if: matrix.go == 'stable'
+        run: |
+          go build -o /tmp/keel-client-test ./cmd/keel
+          python3 -m venv /tmp/keel-client-venv
+          /tmp/keel-client-venv/bin/python -m pip install 'redis==5.2.1'
+          BIN=/tmp/keel-client-test /tmp/keel-client-venv/bin/python examples/test_client.py
+
+      - name: Restore fuzz smoke
+        if: matrix.go == 'stable'
+        run: go test ./internal/core -run '^$' -fuzz '^FuzzRestoreValidation$' -fuzztime=10s -parallel=2
 
   docker:
     name: docker image
@@ -89,7 +102,7 @@ jobs:
           # ownership, and creates a missing bind-mount directory as root,
           # which an unprivileged container cannot write into.
           docker run -d --name keel-ci -p 127.0.0.1:8081:8081 \
-            -v keel-ci-data:/data keel:ci -appendonly
+            -v keel-ci-data:/data keel:ci -host 0.0.0.0 -appendonly
           wait_ready 8081
           docker run --rm --network host redis:8-alpine redis-cli -p 8081 rpush l a b c
           docker run --rm --network host redis:8-alpine redis-cli -p 8081 hset h f v
@@ -104,7 +117,7 @@ jobs:
           # to mount one. Recreating against it and finding the keys is the
           # test; stopping a container and trusting the bytes is not.
           docker run -d --name keel-again -p 127.0.0.1:8081:8081 \
-            -v keel-ci-data:/data keel:ci -appendonly
+            -v keel-ci-data:/data keel:ci -host 0.0.0.0 -appendonly
           wait_ready 8081
           test "$(docker run --rm --network host redis:8-alpine redis-cli -p 8081 dbsize)" = 2
           test "$(docker run --rm --network host redis:8-alpine redis-cli -p 8081 lrange l 0 -1 | tr '\n' ',')" = "a,b,c,"
@@ -113,7 +126,7 @@ jobs:
           # And the bind-mount form the README documents, made by hand first.
           mkdir -p /tmp/keel-bind && sudo chown 65534:65534 /tmp/keel-bind
           docker run -d --name keel-bind -p 127.0.0.1:8082:8081 \
-            -v /tmp/keel-bind:/data keel:ci -appendonly
+            -v /tmp/keel-bind:/data keel:ci -host 0.0.0.0 -appendonly
           wait_ready 8082
           docker logs keel-bind 2>&1 | grep -q "appendonly: on"
           docker run --rm --network host redis:8-alpine redis-cli -p 8082 set k v

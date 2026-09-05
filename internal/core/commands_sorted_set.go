@@ -283,3 +283,42 @@ func cmdZCARD(args []string) []byte {
 	}
 	return Encode(zs.Len(), false)
 }
+
+// cmdZRANGE supports rank ranges, REV and WITHSCORES; score/lex ranges are rejected.
+func cmdZRANGE(args []string) []byte {
+	if len(args) < 3 {
+		return Encode(errSyntax, false)
+	}
+	start, e1 := strconv.Atoi(args[1])
+	stop, e2 := strconv.Atoi(args[2])
+	if e1 != nil || e2 != nil {
+		return Encode(errNotAnInteger, false)
+	}
+	reverse, withScores := false, false
+	for _, opt := range args[3:] {
+		switch strings.ToUpper(opt) {
+		case "REV":
+			reverse = true
+		case "WITHSCORES":
+			withScores = true
+		default:
+			return Encode(errSyntax, false)
+		}
+	}
+	zs, ok := zsetFor(args[0])
+	if !ok {
+		return constant.RespEmptyArray
+	}
+	members, scores := zs.RangeByRank(start, stop, reverse)
+	if len(members) == 0 {
+		return constant.RespEmptyArray
+	}
+	if !withScores {
+		return Encode(members, false)
+	}
+	out := make([]string, 0, len(members)*2)
+	for i, m := range members {
+		out = append(out, m, formatZScore(scores[i]))
+	}
+	return Encode(out, false)
+}

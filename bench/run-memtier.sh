@@ -2,7 +2,8 @@
 # memtier_benchmark pass: randomised keys and payloads, which redis-benchmark
 # does not do. Fixed-size payloads and sequential keys can flatter an allocator
 # and a hash table; random sizes and access patterns are the more honest test.
-set -uo pipefail
+set -euo pipefail
+source "$(dirname "$0")/process.sh"
 BIN="${BIN:?set BIN}"; OUT="${OUT:-bench/results/memtier.csv}"; REPS="${REPS:-3}"
 PORT=${PORT_BASE:-11000}
 echo "server,scenario,keypattern,datasize,pipeline,rep,ops_sec,p50_ms,p99_ms,p999_ms" > "$OUT"
@@ -13,21 +14,17 @@ start() {  # sets SRV_PORT; must NOT be called in a subshell
   PORT=$((PORT+1)); local p=$PORT; SRV_PORT=$p
   if [ "$kind" = redis ]; then redis-server --port "$p" --save '' --appendonly no >/dev/null 2>&1 &
   else "$BIN" -port "$p" -mode "$kind" >"/tmp/mt-$kind.log" 2>&1 & fi
-  for _ in $(seq 1 50); do redis-cli -p "$p" ping >/dev/null 2>&1 && break; perl -e 'select(undef,undef,undef,0.1)'; done
-  local owner comm
-  owner=$(lsof -ti:$p 2>/dev/null | head -1); comm=$(ps -o comm= -p "$owner" 2>/dev/null)
-  case "$kind" in
-    redis) echo "$comm" | grep -q redis-server || { echo "FATAL :$p owned by $comm" >&2; exit 1; } ;;
-    *)     echo "$comm" | grep -q "$(basename "$BIN")" || { echo "FATAL :$p owned by $comm" >&2; exit 1; } ;;
-  esac
+  SRV_PID=$!
+  verify_owned "$p"
 }
-stop() { pkill -f "$BIN" 2>/dev/null; pkill -f "redis-server" 2>/dev/null; perl -e 'select(undef,undef,undef,0.4)'; }
+stop() { stop_owned; }
 
 # scenario: label | extra memtier args
 run() { # srv scenario kp ds pl port args...
   local srv=$1 scen=$2 kp=$3 ds=$4 pl=$5 p=$6; shift 6
   for rep in $(seq 1 "$REPS"); do
-    local j=/tmp/mt.json
+    local j
+    j=$(mktemp)
     memtier_benchmark -s 127.0.0.1 -p "$p" -P redis \
       -t 4 -c 25 --test-time=6 --hide-histogram --json-out-file="$j" \
       --pipeline="$pl" --key-pattern="$kp" "$@" >/dev/null 2>&1
@@ -35,11 +32,12 @@ run() { # srv scenario kp ds pl port args...
 import json,sys
 j,srv,scen,kp,ds,pl,rep,out = sys.argv[1:9]
 try: d=json.load(open(j))["ALL STATS"]["Totals"]
-except Exception: sys.exit()
+except Exception as exc: sys.exit(f"invalid memtier output: {exc}")
 row=[srv,scen,kp,ds,pl,rep,f'{d.get("Ops/sec",0):.2f}',
      f'{d.get("p50 Latency",0):.3f}',f'{d.get("p99 Latency",0):.3f}',f'{d.get("p99.9 Latency",0):.3f}']
 open(out,"a").write(",".join(map(str,row))+"\n")
 PY
+    rm -f "$j"
   done
 }
 

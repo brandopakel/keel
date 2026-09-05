@@ -4,14 +4,17 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"os/signal"
 	"strconv"
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/brandopakel/keel/internal/config"
+	"github.com/brandopakel/keel/internal/core"
 	"github.com/brandopakel/keel/internal/server"
 )
 
@@ -44,6 +47,7 @@ var (
 	expireSamples  int
 	cronIntervalMs int
 	showVersion    bool
+	passwordEnv    string
 )
 
 // parseFlags reads the command line into config. It runs before anything
@@ -54,7 +58,7 @@ func parseFlags() {
 	flag.StringVar(&config.Host, "host", config.Host,
 		"IPv4 address to listen on; 0.0.0.0 is every interface")
 	flag.IntVar(&config.Port, "port", config.Port, "TCP port to listen on")
-	flag.StringVar(&mode, "mode", "kqueue", "io mode: kqueue (default) | kqueue-nobuf | net | net-small | net-direct | net-chan | net-nolock")
+	flag.StringVar(&mode, "mode", "kqueue", "io mode: kqueue (default) | kqueue-nobuf | net | net-small | net-direct | net-chan")
 	flag.StringVar(&maxMemory, "maxmemory", "0",
 		"bound the keyspace in bytes, e.g. 512mb or 2gb; 0 is unbounded")
 	flag.IntVar(&maxKeys, "maxkeys", config.KeyNumberLimit,
@@ -87,7 +91,15 @@ func parseFlags() {
 	flag.IntVar(&ioThreads, "io-threads", config.IOThreads,
 		"threads that read, parse and write sockets, including the event loop's own; "+
 			"command execution stays on one thread whatever this is")
+	flag.IntVar(&config.MaxConnection, "maxclients", config.MaxConnection, "maximum connected clients")
+	flag.StringVar(&passwordEnv, "requirepass-env", "", "environment variable containing the required AUTH password")
 	flag.Parse()
+	if passwordEnv != "" {
+		config.RequirePass = os.Getenv(passwordEnv)
+		if config.RequirePass == "" {
+			log.Fatal("-requirepass-env names an empty or missing environment variable")
+		}
+	}
 
 	parsed, err := parseSize(maxMemory)
 	if err != nil {
@@ -158,6 +170,9 @@ func parseSize(s string) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
+	if n > math.MaxInt64/mult {
+		return 0, fmt.Errorf("size overflows signed 64-bit byte count")
+	}
 	return n * mult, nil
 }
 
@@ -167,55 +182,75 @@ func main() {
 		fmt.Println(versionLine())
 		return
 	}
-
-	fmt.Printf("starting keel %s ...\n", config.BuildVersion())
-
-	// Two goroutines to wait for: the server loop, and the one that turns
-	// SIGTERM or SIGINT into a request for it to stop.
-	stopSignals := make(chan os.Signal, 1)
-	signal.Notify(stopSignals, syscall.SIGTERM, syscall.SIGINT)
-	var running sync.WaitGroup
-	running.Add(2)
-
-	// Loaded before any loop starts. Doing it inside the server goroutine would
-	// race the listener: a client could connect and be answered out of a
-	// keyspace that is still being replayed into.
-	if err := server.StartAOF(); err != nil {
-		log.Fatalf("appendonly: %v", err)
+	if err := runServer(); err != nil {
+		log.Println(err)
+		os.Exit(1)
 	}
+}
 
+func runServer() error {
+	if config.MaxConnection < 1 || config.MaxConnection > 100000 || config.Port < 1 || config.Port > 65535 {
+		return fmt.Errorf("invalid port or maxclients (1..100000)")
+	}
+	if config.RequirePass != "" && mode != "kqueue" && mode != "kqueue-nobuf" {
+		return fmt.Errorf("authentication requires an event-loop mode")
+	}
+	if config.KeyNumberLimit < 1 || config.LRUSamples < 1 || config.LFULogFactor < 0 || config.LFUDecayPeriod < 0 {
+		return fmt.Errorf("invalid eviction limits")
+	}
+	if config.AOFEnabled && mode != "kqueue" {
+		return fmt.Errorf("-appendonly requires -mode kqueue; other modes are benchmarks")
+	}
+	var serve func(*sync.WaitGroup) error
 	switch mode {
 	case "kqueue":
-		go server.RunAsyncTCPServer(&running)
+		serve = server.RunAsyncTCPServer
 	case "kqueue-nobuf":
 		server.WriteUnbuffered = true
-		go server.RunAsyncTCPServer(&running)
-	case "net":
-		server.ActiveNetVariant = server.NetVariantMutex
-		go server.RunNetTCPServer(&running)
-	case "net-small":
-		server.ActiveNetVariant = server.NetVariantSmallBuf
-		go server.RunNetTCPServer(&running)
-	case "net-direct":
-		server.ActiveNetVariant = server.NetVariantDirect
-		go server.RunNetTCPServer(&running)
-	case "net-chan":
-		server.ActiveNetVariant = server.NetVariantChannel
-		go server.RunNetTCPServer(&running)
-	case "net-nolock":
-		// diagnostic only: PING-safe, races on any command that touches a store
-		server.EvalUnlocked = true
-		go server.RunNetTCPServer(&running)
-	case "kqueue-wbuf":
-		// Retired 2026-08-27. Kept as a named case so a stale command line says
-		// what happened instead of just failing to match.
-		log.Fatalf("-mode kqueue-wbuf was renamed: coalescing is now the default -mode kqueue, " +
-			"and the old unbuffered -mode kqueue is now -mode kqueue-nobuf")
+		serve = server.RunAsyncTCPServer
+	case "net", "net-small", "net-direct", "net-chan":
+		variants := map[string]server.NetVariant{"net": server.NetVariantMutex, "net-small": server.NetVariantSmallBuf, "net-direct": server.NetVariantDirect, "net-chan": server.NetVariantChannel}
+		server.ActiveNetVariant = variants[mode]
+		serve = server.RunNetTCPServer
 	default:
-		log.Fatalf("unknown -mode %q (want kqueue, kqueue-nobuf or net*)", mode)
+		return fmt.Errorf("unknown or unsupported mode %q", mode)
 	}
-	go server.WaitForSignal(&running, stopSignals)
-	running.Wait()
+	fmt.Printf("starting keel %s ...\n", config.BuildVersion())
+	if err := server.StartAOF(); err != nil {
+		return fmt.Errorf("appendonly: %w", err)
+	}
+
+	signals := make(chan os.Signal, 2)
+	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
+	defer signal.Stop(signals)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	done := make(chan error, 1)
+	go func() { done <- serve(&wg) }()
+	select {
+	case err := <-done:
+		closeErr := core.CloseAOF()
+		if err != nil {
+			return err
+		}
+		return closeErr
+	case <-signals:
+		server.Stop()
+	}
+	timer := time.NewTimer(5 * time.Second)
+	defer timer.Stop()
+	select {
+	case err := <-done:
+		closeErr := core.CloseAOF()
+		if err != nil {
+			return err
+		}
+		return closeErr
+	case <-signals:
+		return fmt.Errorf("second termination signal")
+	case <-timer.C:
+		return fmt.Errorf("shutdown exceeded five seconds")
+	}
 }
 
 // versionLine is what -version prints: the version, and the commit when the

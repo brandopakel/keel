@@ -70,7 +70,15 @@ func (d *Dict) NewObj(value interface{}, oType uint8, oEnc uint8) *Obj {
 }
 
 // nowMs is the clock every expiry is compared against.
-func nowMs() uint64 { return uint64(time.Now().UnixMilli()) }
+// SuspendExpiry keeps historical AOF mutations independent of the replay wall clock.
+var SuspendExpiry bool
+
+func nowMs() uint64 {
+	if SuspendExpiry {
+		return 0
+	}
+	return uint64(time.Now().UnixMilli())
+}
 
 // HasExpired reports whether a key has a TTL that has already passed.
 func (d *Dict) HasExpired(k string) bool {
@@ -93,6 +101,9 @@ func (d *Dict) SetExpiry(k string, ttlMs int64) {
 // epoch. Persistence needs this: a relative TTL written to a log becomes a new
 // TTL every time the log is replayed.
 func (d *Dict) SetExpiryAt(k string, atMs uint64) {
+	if _, ok := d.dictStore[k]; !ok {
+		return
+	}
 	// Giving a key an expiry costs a second map entry, and entryBytes charges
 	// for it - so the charge has to be made here, when the entry appears.
 	//
@@ -106,6 +117,7 @@ func (d *Dict) SetExpiryAt(k string, atMs uint64) {
 		d.memUsed += expiryOverhead
 	}
 	d.expiredDictStore[k] = atMs
+	EnforceLimits()
 }
 
 // ExpiryOf reports a key's absolute expiry, for a log that has to record when
@@ -253,3 +265,24 @@ func (d *Dict) SampleKeys(dst []Candidate, n int) []Candidate {
 }
 
 func (d *Dict) Delete(key string) bool { return d.Del(key) }
+
+// UpdateValue accounts an in-place value change while preserving its expiry.
+func (d *Dict) UpdateValue(key string, value string) {
+	obj := d.dictStore[key]
+	if obj == nil {
+		return
+	}
+	d.memUsed -= d.entryBytes(key, obj)
+	obj.Value = value
+	d.memUsed += d.entryBytes(key, obj)
+	EnforceLimits()
+}
+
+func (d *Dict) ClearExpiry(key string) bool {
+	if _, ok := d.expiredDictStore[key]; !ok {
+		return false
+	}
+	delete(d.expiredDictStore, key)
+	d.memUsed -= expiryOverhead
+	return true
+}

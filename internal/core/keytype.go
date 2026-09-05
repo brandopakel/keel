@@ -19,8 +19,8 @@ import (
 // added is the one that forgets it, and what it silently does instead is the
 // bug this is fixing.
 var commandKeyspace = map[string]string{
-	"SET": "string", "GET": "string", "TTL": "string", "PTTL": "string",
-	"EXPIRE": "string", "PEXPIREAT": "string", "INCR": "string", "MSET": "string",
+	"SET": "string", "GET": "string", "INCR": "string", "INCRBY": "string", "DECR": "string", "DECRBY": "string", "MSET": "string",
+	"LCS": "string",
 
 	// EXISTS, TYPE, KEYS, DEL and FLUSHDB are deliberately absent: they answer
 	// about a name whatever type holds it, so constraining them to a keyspace
@@ -33,14 +33,14 @@ var commandKeyspace = map[string]string{
 	"HVALS": "hash", "HGETALL": "hash", "HINCRBY": "hash",
 
 	"LPUSH": "list", "RPUSH": "list", "LPOP": "list", "RPOP": "list",
-	"LLEN": "list", "LINDEX": "list", "LSET": "list", "LRANGE": "list",
+	"LTRIM": "list", "LLEN": "list", "LINDEX": "list", "LSET": "list", "LRANGE": "list",
 
 	"SADD": "set", "SREM": "set", "SCARD": "set", "SMEMBERS": "set",
 	"SISMEMBER": "set", "SMISMEMBER": "set", "SRANDMEMBER": "set", "SRAND": "set",
 	"SPOP": "set",
 
 	"ZADD": "zset", "ZRANK": "zset", "ZREM": "zset", "ZSCORE": "zset",
-	"ZCARD": "zset",
+	"ZRANGE": "zset", "ZCARD": "zset",
 
 	// Geospatial keys are sorted sets, as they are in Redis: the geohash is the
 	// score, which is what makes GEOSEARCH a range query over a skip list.
@@ -91,6 +91,9 @@ func commandKeys(cmd *Command) []string {
 	if len(cmd.Args) == 0 {
 		return nil
 	}
+	if cmd.Cmd == "LCS" {
+		return cmd.Args[:min(2, len(cmd.Args))]
+	}
 	if stride, ok := strideKeyCommands[cmd.Cmd]; ok {
 		keys := make([]string, 0, (len(cmd.Args)+stride-1)/stride)
 		for i := 0; i < len(cmd.Args); i += stride {
@@ -128,7 +131,7 @@ func writtenKeys(cmd *Command) []string {
 		// source recorded as dirty costs one redundant re-emit and a source
 		// missed would be a bug, so all of them count.
 		return cmd.Args
-	case "KEEL.RESTORE", "MEMKV.RESTORE":
+	case "KEEL.RESTORE", "MEMKV.RESTORE", "EXPIRE", "PEXPIRE", "EXPIREAT", "PEXPIREAT", "PERSIST":
 		return cmd.Args[:1]
 	}
 	if _, known := commandKeyspace[cmd.Cmd]; known {

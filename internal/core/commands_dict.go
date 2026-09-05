@@ -33,61 +33,87 @@ func cmdSET(args []string) []byte {
 	if len(args) < 2 {
 		return Encode(errors.New("ERR wrong number of arguments for 'SET' command"), false)
 	}
-	key, value := args[0], args[1]
-
-	var ttlMs int64
-	switch len(args) {
-	case 2:
-	case 4:
-		amount, err := strconv.ParseInt(args[3], 10, 64)
-		if err != nil {
-			return Encode(errNotAnInteger, false)
-		}
-		switch strings.ToUpper(args[2]) {
-		case "EX":
-			if amount > math.MaxInt64/1000 {
+	nx, xx, get, keep := false, false, false, false
+	var at int64
+	expiry := false
+	for i := 2; i < len(args); i++ {
+		switch strings.ToUpper(args[i]) {
+		case "NX":
+			nx = true
+		case "XX":
+			xx = true
+		case "GET":
+			get = true
+		case "KEEPTTL":
+			if expiry {
+				return Encode(errSyntax, false)
+			}
+			keep = true
+		case "EX", "PX", "EXAT", "PXAT":
+			if expiry || keep || i+1 == len(args) {
+				return Encode(errSyntax, false)
+			}
+			opt := strings.ToUpper(args[i])
+			i++
+			n, err := strconv.ParseInt(args[i], 10, 64)
+			if err != nil {
+				return Encode(errNotAnInteger, false)
+			}
+			if n <= 0 {
 				return Encode(errSetExpire, false)
 			}
-			ttlMs = amount * 1000
-		case "PX":
-			ttlMs = amount
+			if opt == "EX" || opt == "EXAT" {
+				if n > math.MaxInt64/1000 {
+					return Encode(errSetExpire, false)
+				}
+				n *= 1000
+			}
+			at = n
+			if opt == "EX" || opt == "PX" {
+				var ok bool
+				at, ok = expiryInstant(n)
+				if !ok {
+					return Encode(errSetExpire, false)
+				}
+			}
+			expiry = true
 		default:
 			return Encode(errSyntax, false)
 		}
-		if amount <= 0 {
-			// Redis's wording. A TTL already in the past is a delete dressed up
-			// as a write, and answering OK to it would be the wrong answer to
-			// two different questions at once.
-			return Encode(errSetExpire, false)
-		}
-	default:
+	}
+	if nx && xx {
 		return Encode(errSyntax, false)
 	}
-
-	// The expiry is stored as an instant, so the duration is bounded by how
-	// far the clock can go: a TTL that would carry the instant past the
-	// largest signed 64-bit value wraps when it is read back, and a key that
-	// never expires is the wrong way to fail. The instant is computed once and
-	// the same one is stored, so the bound checked is the bound kept.
-	var expireAt int64
-	if ttlMs > 0 {
-		var ok bool
-		if expireAt, ok = expiryInstant(ttlMs); !ok {
-			return Encode(errSetExpire, false)
+	key, value := args[0], args[1]
+	obj := dictStore.Get(key)
+	reply := constant.RespOk
+	if get {
+		reply = constant.RespNil
+		if obj != nil {
+			reply = Encode(obj.Value, false)
 		}
 	}
-
-	oType, oEnc := deduceTypeString(value)
-	dictStore.Put(key, dictStore.NewObj(value, oType, oEnc))
-	if ttlMs > 0 {
-		// After the Put, which clears whatever expiry the key had before.
-		dictStore.SetExpiryAt(key, uint64(expireAt))
-		// The TTL arrived as a duration and has to be logged as an instant, so
-		// the value and its expiry are recorded as two commands.
-		aofRecord("SET", key, value)
-		aofExpireAt(key)
+	if (nx && obj != nil) || (xx && obj == nil) {
+		aof.skip = true
+		if get {
+			return reply
+		}
+		return constant.RespNil
 	}
-	return constant.RespOk
+	if keep && obj != nil {
+		old, has := dictStore.GetExpiry(key)
+		if has {
+			at, expiry = int64(old), true
+		}
+	}
+	t, enc := deduceTypeString(value)
+	dictStore.Put(key, dictStore.NewObj(value, t, enc))
+	aofRecord("SET", key, value)
+	if expiry {
+		dictStore.SetExpiryAt(key, uint64(at))
+		aofRecord("PEXPIREAT", key, strconv.FormatInt(at, 10))
+	}
+	return reply
 }
 
 // expiryInstant turns a positive duration in milliseconds into the instant it
@@ -117,18 +143,15 @@ func cmdGET(args []string) []byte {
 // answers are Redis's: -2 for a key that is not there, -1 for one with no
 // expiry.
 func remainingTTL(key string) int64 {
-	if dictStore.Get(key) == nil {
+	owner, ok := data_structure.OwnerOf(key)
+	if !ok {
 		return -2
 	}
-	at, has := dictStore.GetExpiry(key)
+	at, has := owner.GetExpiry(key)
 	if !has {
 		return -1
 	}
-	left := int64(at) - time.Now().UnixMilli()
-	if left < 0 {
-		return 0
-	}
-	return left
+	return max(0, int64(at)-time.Now().UnixMilli())
 }
 
 // cmdTTL answers a key's time to live in whole seconds, rounded to the nearest
@@ -175,96 +198,126 @@ func cmdDEL(args []string) []byte {
 // cmdEXPIRE implements EXPIRE key seconds. A time already passed - zero or
 // negative - deletes the key, as it does in Redis, and is logged as the DEL
 // it amounts to.
-func cmdEXPIRE(args []string) []byte {
-	if len(args) != 2 {
-		return Encode(errors.New("ERR wrong number of arguments for 'EXPIRE' command"), false)
+func cmdEXPIRE(args []string) []byte    { return expireCommand(args, 1000, false) }
+func cmdPEXPIRE(args []string) []byte   { return expireCommand(args, 1, false) }
+func cmdEXPIREAT(args []string) []byte  { return expireCommand(args, 1000, true) }
+func cmdPEXPIREAT(args []string) []byte { return expireCommand(args, 1, true) }
+
+func expireCommand(args []string, scale int64, absolute bool) []byte {
+	if len(args) < 2 {
+		return Encode(errors.New("ERR wrong number of arguments for expiry command"), false)
 	}
-	key := args[0]
-	seconds, err := strconv.ParseInt(args[1], 10, 64)
+	n, err := strconv.ParseInt(args[1], 10, 64)
 	if err != nil {
 		return Encode(errNotAnInteger, false)
 	}
-	if dictStore.Get(key) == nil {
+	if n > math.MaxInt64/scale || n < math.MinInt64/scale {
+		return Encode(errExpireExpire, false)
+	}
+	at := n * scale
+	if !absolute && at > 0 {
+		var ok bool
+		at, ok = expiryInstant(at)
+		if !ok {
+			return Encode(errExpireExpire, false)
+		}
+	}
+	nx, xx, gt, lt := false, false, false, false
+	for _, opt := range args[2:] {
+		switch strings.ToUpper(opt) {
+		case "NX":
+			nx = true
+		case "XX":
+			xx = true
+		case "GT":
+			gt = true
+		case "LT":
+			lt = true
+		default:
+			return Encode(errSyntax, false)
+		}
+	}
+	if (nx && (xx || gt || lt)) || (gt && lt) {
+		return Encode(errSyntax, false)
+	}
+	owner, ok := data_structure.OwnerOf(args[0])
+	if !ok {
+		aof.skip = true
 		return constant.RespZero
 	}
-	if seconds <= 0 {
-		dictStore.Del(key)
-		aofRecord("DEL", key)
+	old, has := owner.GetExpiry(args[0])
+	if (nx && has) || (xx && !has) || (gt && (!has || at <= int64(old))) || (lt && has && at >= int64(old)) {
+		aof.skip = true
+		return constant.RespZero
+	}
+	if at <= time.Now().UnixMilli() && !aof.replaying {
+		owner.Delete(args[0])
+		aofRecord("DEL", args[0])
 		return constant.RespOne
 	}
-	if seconds > math.MaxInt64/1000 {
-		return Encode(errExpireExpire, false)
-	}
-	expireAt, ok := expiryInstant(seconds * 1000)
-	if !ok {
-		return Encode(errExpireExpire, false)
-	}
-	dictStore.SetExpiryAt(key, uint64(expireAt))
-	aofExpireAt(key)
+	owner.SetExpiryAt(args[0], uint64(at))
+	aofRecord("PEXPIREAT", args[0], strconv.FormatInt(at, 10))
 	return constant.RespOne
 }
 
-// cmdPEXPIREAT sets a key's expiry to an absolute time in milliseconds.
-//
-// EXPIRE says "in ten seconds", which is a different instant every time it is
-// evaluated. That is fine from a client and wrong in a log: replaying it a day
-// later grants a fresh ten seconds, so every restart silently renews every TTL
-// in the keyspace and nothing with an expiry ever actually expires. The
-// append-only file therefore records this instead, which names an instant that
-// does not move. Redis rewrites EXPIRE the same way and for the same reason.
-func cmdPEXPIREAT(args []string) []byte {
-	if len(args) != 2 {
-		return Encode(errors.New("ERR wrong number of arguments for 'PEXPIREAT' command"), false)
+func cmdPERSIST(args []string) []byte {
+	if len(args) != 1 {
+		return Encode(errSyntax, false)
 	}
-	atMs, err := strconv.ParseInt(args[1], 10, 64)
-	if err != nil {
-		return Encode(errNotAnInteger, false)
-	}
-
-	obj := dictStore.Get(args[0])
-	if obj == nil {
-		return constant.RespZero
-	}
-	if atMs <= time.Now().UnixMilli() {
-		// Already in the past, so this is a delete. Saying so now beats
-		// storing an expiry that the next read would act on anyway.
-		dictStore.Del(args[0])
+	owner, ok := data_structure.OwnerOf(args[0])
+	if ok && owner.ClearExpiry(args[0]) {
 		return constant.RespOne
 	}
-	dictStore.SetExpiryAt(args[0], uint64(atMs))
-	return constant.RespOne
+	return constant.RespZero
 }
 
 // cmdINCR adds one to the integer a key holds, treating a missing key as zero.
 // The value is changed in place, so a TTL on the key survives, as it does in
 // Redis. A value that is not a canonical integer is refused, and so is one
 // that would overflow, rather than wrapping to a number nobody asked for.
-func cmdINCR(args []string) []byte {
-	if len(args) != 1 {
-		return Encode(errors.New("ERR wrong number of arguments for 'INCR' command"), false)
+func cmdINCR(args []string) []byte   { return increment(args, 1, false) }
+func cmdDECR(args []string) []byte   { return increment(args, -1, false) }
+func cmdINCRBY(args []string) []byte { return increment(args, 1, true) }
+func cmdDECRBY(args []string) []byte { return increment(args, -1, true) }
+func increment(args []string, sign int64, explicit bool) []byte {
+	want := 1
+	if explicit {
+		want = 2
+	}
+	if len(args) != want {
+		return Encode(errors.New("ERR wrong number of arguments for increment command"), false)
+	}
+	delta := sign
+	if explicit {
+		n, err := strconv.ParseInt(args[1], 10, 64)
+		if err != nil {
+			return Encode(errNotAnInteger, false)
+		}
+		if sign == -1 && n == math.MinInt64 {
+			return Encode(errIncrOverflow, false)
+		}
+		delta = n * sign
 	}
 	key := args[0]
 	obj := dictStore.Get(key)
-	if obj == nil {
-		obj = dictStore.NewObj("0", constant.ObjTypeString, constant.ObjEncodingInt)
-		dictStore.Put(key, obj)
+	current := int64(0)
+	if obj != nil {
+		var err error
+		current, err = strconv.ParseInt(obj.Value.(string), 10, 64)
+		if err != nil || strconv.FormatInt(current, 10) != obj.Value.(string) {
+			return Encode(errNotAnInteger, false)
+		}
 	}
-	if err := assertType(obj.TypeEncoding, constant.ObjTypeString); err != nil {
-		return Encode(err, false)
-	}
-	if err := assertEncoding(obj.TypeEncoding, constant.ObjEncodingInt); err != nil {
-		return Encode(err, false)
-	}
-
-	current, err := strconv.ParseInt(obj.Value.(string), 10, 64)
-	if err != nil {
-		return Encode(errNotAnInteger, false)
-	}
-	if current == math.MaxInt64 {
+	if (delta > 0 && current > math.MaxInt64-delta) || (delta < 0 && current < math.MinInt64-delta) {
 		return Encode(errIncrOverflow, false)
 	}
-	current++
-	obj.Value = strconv.FormatInt(current, 10)
+	current += delta
+	value := strconv.FormatInt(current, 10)
+	if obj == nil {
+		dictStore.Put(key, dictStore.NewObj(value, constant.ObjTypeString, constant.ObjEncodingInt))
+	} else {
+		dictStore.UpdateValue(key, value)
+	}
 	return Encode(current, false)
 }
 

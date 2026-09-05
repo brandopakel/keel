@@ -12,7 +12,8 @@
 # where the extra cores are. Hence the concurrency sweep (does it need enough
 # ready connections to be worth a handoff?), the size sweep (is the win in the
 # copying?) and the pipeline sweep (does coalescing already do the job?).
-set -uo pipefail
+set -euo pipefail
+source "$(dirname "$0")/process.sh"
 
 BIN="${BIN:?set BIN to the keel binary}"
 OUT="${OUT:-bench/results/iothreads.csv}"
@@ -37,25 +38,10 @@ start_server() { # $1=io-threads ; sets SRV_PORT and SRV_PID
   "$BIN" -port "$SRV_PORT" -mode kqueue -io-threads "$threads" \
       >"/tmp/bench-iothreads-$threads.log" 2>&1 &
   SRV_PID=$!
-  local ready=no
-  for _ in $(seq 1 80); do
-    if [ "$(redis-cli -h 127.0.0.1 -p "$SRV_PORT" ping 2>/dev/null)" = "PONG" ]; then ready=yes; break; fi
-    perl -e 'select(undef,undef,undef,0.1)'
-  done
-  [ "$ready" = yes ] || { echo "FATAL: io-threads=$threads never bound :$SRV_PORT" >&2; exit 1; }
-  local owner; owner=$(lsof -ti:"$SRV_PORT" 2>/dev/null | head -1)
-  local comm;  comm=$(ps -o comm= -p "$owner" 2>/dev/null)
-  echo "$comm" | grep -q "$(basename "$BIN")" \
-    || { echo "FATAL: :$SRV_PORT owned by $comm, expected $(basename "$BIN")" >&2; exit 1; }
-  echo "    [io-threads=$threads on :$SRV_PORT pid=$owner verified]" >&2
+  verify_owned "$SRV_PORT"
 }
 
-stop_servers() {
-  [ -n "$SRV_PID" ] && kill "$SRV_PID" 2>/dev/null
-  pkill -f "$BIN" 2>/dev/null
-  SRV_PID=""; SRV_PORT=""
-  perl -e 'select(undef,undef,undef,0.6)'
-}
+stop_servers() { stop_owned; SRV_PORT=""; }
 
 # run_bench <label-server> <suite> <port> <command-label> <n> <conns> <pipe> <datasize> <args...>
 run_bench() {
@@ -63,10 +49,10 @@ run_bench() {
   for rep in $(seq 1 "$REPS"); do
     local line rps p50
     line=$(redis-benchmark -h 127.0.0.1 -p "$p" -n "$n" -c "$c" -P "$pl" -q "$@" 2>/dev/null \
-             | tr '\r' '\n' | grep -m1 -o '[0-9.]\+ requests per second.*')
+             | tr '\r' '\n' | grep -o '[0-9.]\+ requests per second.*' | tail -1)
     rps=$(echo "$line" | grep -o '^[0-9.]\+')
     p50=$(echo "$line" | grep -o 'p50=[0-9.]\+' | cut -d= -f2)
-    [ -z "$rps" ] && rps=0 && p50=0
+    [ -n "$rps" ] || { echo "benchmark returned no throughput" >&2; exit 1; }
     echo "$srv,$suite,$label,$c,$pl,$d,$rep,$rps,$p50" >> "$OUT"
   done
 }

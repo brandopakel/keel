@@ -169,6 +169,9 @@ func (r *frameReader) bulk() (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
+	if n < -1 {
+		return nil, ErrProtocol
+	}
 	if n < 0 {
 		return "", nil
 	}
@@ -183,6 +186,9 @@ func (r *frameReader) bulk() (interface{}, error) {
 	if end > len(r.data) {
 		return nil, ErrIncompleteFrame
 	}
+	if r.data[end-2] != '\r' || r.data[end-1] != '\n' {
+		return nil, ErrProtocol
+	}
 	s := string(r.data[r.pos : r.pos+int(n)])
 	r.pos = end
 	return s, nil
@@ -193,6 +199,9 @@ func (r *frameReader) array() (interface{}, error) {
 	n, err := r.integer()
 	if err != nil {
 		return nil, err
+	}
+	if n < -1 {
+		return nil, ErrProtocol
 	}
 	if n < 0 {
 		return nil, nil
@@ -206,11 +215,13 @@ func (r *frameReader) array() (interface{}, error) {
 	r.depth++
 	defer func() { r.depth-- }()
 
-	out := make([]interface{}, n)
-	for i := range out {
-		if out[i], err = r.value(); err != nil {
+	out := make([]interface{}, 0, min(int(n), 16))
+	for i := int64(0); i < n; i++ {
+		value, err := r.value()
+		if err != nil {
 			return nil, err
 		}
+		out = append(out, value)
 	}
 	return out, nil
 }

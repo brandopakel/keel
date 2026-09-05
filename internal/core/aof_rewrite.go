@@ -2,9 +2,11 @@ package core
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/data_structure"
@@ -43,27 +45,10 @@ import (
 // what it costs is one pass over the keys written during the rewrite rather
 // than a copy of the keyspace.
 //
-// Measured over a million string keys, by TestRewriteStallProfile: collecting
-// the names 9ms, then 488 slices with a median of 0.5ms, then a final 10ms to
-// write the keys that changed and sync the file. The work is the same as doing
-// it in one go and slightly more of it, and the longest a client waits has gone
-// from 186ms to about 10ms.
-//
-// Two stalls are left and both are the ends rather than the middle. Collecting
-// the key names is one pass over the keyspace, and the final slice is one pass
-// over what changed during the walk plus the fsync. Slicing those as well is
-// possible and was not worth it at 8ms and 13ms; the 186ms was.
-//
-// Over the wire, which is the measurement that counts: 400,000 keys, a second
-// connection sending PING throughout, the two versions under one harness.
-//
-//	                  rewrite takes    worst PING elsewhere
-//	all at once             104ms                  103.8ms
-//	a slice at a time       131ms                    9.4ms
-//
-// A client's worst wait falls elevenfold and the rewrite takes a quarter longer,
-// which is the per-slice overhead. That is the trade, and it is the right way
-// round: nobody is waiting on the rewrite, and everybody is waiting on the loop.
+// Slices stop between keys after 2048 keys, 1 MiB or 2 ms. Dirty-key
+// reconciliation uses the same budgets. Snapshot enumeration, a single key,
+// filesystem writes and the final sync can exceed the time target. Admission
+// and duration limits prevent an unbounded snapshot or endlessly growing walk.
 
 // rewriteChunk is how many keys one cycle of the walk emits.
 //
@@ -73,9 +58,12 @@ import (
 // write that a client's own command may be waiting on anyway.
 const rewriteChunk = 2048
 
+var nextAutoRewrite time.Time
+
 // rewrite is the state of the walk in progress, if there is one.
 var rewrite struct {
 	active  bool
+	started time.Time
 	path    string
 	tmpPath string
 	file    *os.File
@@ -112,6 +100,9 @@ func StartRewrite() error {
 		return err
 	}
 
+	if data_structure.TotalKeys() > 1000000 {
+		return fmt.Errorf("rewrite snapshot limit: at most 1000000 keys")
+	}
 	path := aof.path
 	tmpPath := path + ".rewrite"
 	f, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
@@ -120,6 +111,7 @@ func StartRewrite() error {
 	}
 
 	rewrite.active = true
+	rewrite.started = time.Now()
 	rewrite.path = path
 	rewrite.tmpPath = tmpPath
 	rewrite.file = f
@@ -137,30 +129,43 @@ func AdvanceRewrite() error {
 		return nil
 	}
 
-	end := rewrite.pos + rewriteChunk
-	if end > len(rewrite.keys) {
-		end = len(rewrite.keys)
+	if time.Since(rewrite.started) > 30*time.Second || len(rewrite.dirty) > 100000 {
+		abortRewrite(fmt.Errorf("rewrite exceeded duration or dirty-key budget"))
+		return nil // the original log continues to contain every write
 	}
-
+	deadline := time.Now().Add(2 * time.Millisecond)
 	var body []byte
-	for _, key := range rewrite.keys[rewrite.pos:end] {
-		// Skipped here rather than at the end: a key written during the rewrite
-		// is going to be written again from its current state anyway, so
-		// recording the version the walk can see is wasted bytes.
-		if _, touched := rewrite.dirty[key]; touched {
-			continue
+	count := 0
+	for rewrite.pos < len(rewrite.keys) && count < rewriteChunk {
+		key := rewrite.keys[rewrite.pos]
+		rewrite.pos++
+		count++
+		if _, touched := rewrite.dirty[key]; !touched {
+			body = emitKey(body, key)
 		}
-		body = emitKey(body, key)
+		if len(body) >= 1<<20 || time.Now().After(deadline) {
+			break
+		}
 	}
-	rewrite.pos = end
-
+	if rewrite.pos == len(rewrite.keys) {
+		for key := range rewrite.dirty {
+			if count >= rewriteChunk || len(body) >= 1<<20 || time.Now().After(deadline) {
+				break
+			}
+			body = appendCommand(body, "DEL", key)
+			body = emitKey(body, key)
+			delete(rewrite.dirty, key)
+			count++
+		}
+	}
 	if err := rewriteWrite(body); err != nil {
 		abortRewrite(err)
 		return err
 	}
-	if rewrite.pos < len(rewrite.keys) {
+	if rewrite.pos < len(rewrite.keys) || len(rewrite.dirty) > 0 {
 		return nil
 	}
+
 	return finishRewrite()
 }
 
@@ -174,20 +179,6 @@ func noteRewriteDirty(key string) {
 // finishRewrite writes the keys that changed during the walk, then swaps the
 // new log in.
 func finishRewrite() error {
-	var body []byte
-	for key := range rewrite.dirty {
-		// DEL first, unconditionally. The walk may have recorded an older
-		// version of this key, and for a set or a sorted set a second record
-		// would merge with the first rather than replace it - leaving members
-		// that were removed during the rewrite alive again. It also covers the
-		// key having changed type, and the key having gone entirely.
-		body = appendCommand(body, "DEL", key)
-		body = emitKey(body, key)
-	}
-	if err := rewriteWrite(body); err != nil {
-		abortRewrite(err)
-		return err
-	}
 
 	if err := rewrite.file.Sync(); err != nil {
 		abortRewrite(err)
@@ -208,7 +199,10 @@ func finishRewrite() error {
 	}
 	// The directory entry has to reach disk too, or a crash can leave the
 	// rename unrecorded and the old file back in place.
-	syncDir(filepath.Dir(rewrite.path))
+	if err := syncDir(filepath.Dir(rewrite.path)); err != nil {
+		aof.failed = err
+		return err
+	}
 
 	// Appending must continue into the file that is now there, not the one the
 	// old descriptor still points at - which, having been renamed over, no
@@ -238,6 +232,7 @@ func finishRewrite() error {
 // file has had every write appended to it throughout, so abandoning the new one
 // loses nothing.
 func abortRewrite(cause error) {
+	nextAutoRewrite = time.Now().Add(time.Minute)
 	if rewrite.file != nil {
 		rewrite.file.Close()
 	}
@@ -264,6 +259,9 @@ func rewriteWrite(body []byte) error {
 	}
 	n, err := rewrite.file.Write(body)
 	rewrite.written += int64(n)
+	if err == nil && n != len(body) {
+		return io.ErrShortWrite
+	}
 	return err
 }
 
@@ -291,17 +289,26 @@ func allKeyNames() []string {
 // send, so the log stays something a person can read. The rest have no command
 // that rebuilds them and go out as bytes.
 func emitKey(dst []byte, key string) []byte {
+	before := len(dst)
+	dst = emitValue(dst, key)
+	if len(dst) > before {
+		data_structure.EachKeyspace(func(ks data_structure.Keyspace) {
+			if at, has := ks.GetExpiry(key); has {
+				dst = appendCommand(dst, "PEXPIREAT", key, strconv.FormatUint(at, 10))
+			}
+		})
+	}
+	return dst
+}
+
+func emitValue(dst []byte, key string) []byte {
 	if obj := dictStore.Peek(key); obj != nil {
 		value, ok := obj.Value.(string)
 		if !ok {
 			return dst
 		}
 		dst = appendCommand(dst, "SET", key, value)
-		if at, has := dictStore.ExpiryOf(key); has {
-			// Written as the instant it falls due. A duration would mean
-			// something different every time the log was read.
-			dst = appendCommand(dst, "PEXPIREAT", key, strconv.FormatUint(at, 10))
-		}
+
 		return dst
 	}
 	if set, ok := setStore.Peek(key); ok {
@@ -358,10 +365,7 @@ func syncDir(dir string) error {
 		return err
 	}
 	defer d.Close()
-	// Some filesystems refuse to sync a directory. That is not a reason to fail
-	// a rewrite that has otherwise succeeded.
-	_ = d.Sync()
-	return nil
+	return d.Sync()
 }
 
 // maybeRewrite starts a rewrite if the log has grown past the configured share
@@ -373,6 +377,9 @@ func syncDir(dir string) error {
 // nothing to gain from being rewritten, and a 100MB log for 1MB of data is
 // almost entirely history.
 func maybeRewrite() {
+	if time.Now().Before(nextAutoRewrite) {
+		return
+	}
 	if aof.file == nil || rewrite.active || config.AOFAutoRewritePercentage <= 0 {
 		return
 	}
@@ -387,6 +394,7 @@ func maybeRewrite() {
 		}
 	}
 	if err := StartRewrite(); err != nil {
+		nextAutoRewrite = time.Now().Add(time.Minute)
 		aofLog("automatic rewrite failed to start: %v", err)
 	}
 }

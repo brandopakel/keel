@@ -7,8 +7,8 @@ var (
 	// Host is the interface to bind. The event loop binds IPv4 only, so this
 	// has to be an IPv4 address; 0.0.0.0 is every interface, which is the
 	// Redis default and, like Redis, a reason to keep the server behind a
-	// firewall.
-	Host = "0.0.0.0"
+	// firewall. Localhost is the safe standalone default.
+	Host = "127.0.0.1"
 	Port = 8081
 	// MaxConnection is the listen backlog, and the most descriptors one turn
 	// of the event loop can be handed at once.
@@ -170,3 +170,6 @@ const (
 	FsyncEverySec = "everysec"
 	FsyncNever    = "no"
 )
+
+// RequirePass is configured from an environment variable, never a command-line secret.
+var RequirePass string

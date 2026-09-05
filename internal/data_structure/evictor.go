@@ -35,6 +35,12 @@ var (
 // Keyspace is what eviction needs from a store, whatever it holds.
 type Keyspace interface {
 	KeyspaceName() string
+	GetExpiry(string) (uint64, bool)
+	SetExpiryAt(string, uint64)
+	ClearExpiry(string) bool
+	KeysWithExpiry() int
+	ActiveExpire(int) (int, int)
+	EntryBytes(string) (uint64, bool)
 	Len() int
 	MemUsed() uint64
 	// Has reports whether the key is present, without counting as a use of it.
@@ -326,4 +332,15 @@ func evictArbitrary() bool {
 		pick -= ks.Len()
 	}
 	return false
+}
+
+// EachKeyspaceFrom visits every store once, rotating the first sampled store.
+func EachKeyspaceFrom(start int, fn func(Keyspace)) int {
+	if len(keyspaces) == 0 {
+		return 0
+	}
+	for i := 0; i < len(keyspaces); i++ {
+		fn(keyspaces[(start+i)%len(keyspaces)])
+	}
+	return (start + 1) % len(keyspaces)
 }
