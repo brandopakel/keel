@@ -153,3 +153,7 @@ execution or user adoption is implied by a locally tested adapter.
 Local follow-up validation now also covers primary outage/stale-read rejection and
 clean manual promotion after stopping the old writer. Full Go tests and vet pass;
 race results and native CI are tracked for the final source revision separately.
+The Linux benchmark workflow now has an explicit full-matrix dispatch and a default
+bounded tail run comparing synchronous versus worker append configurations. The
+harness records its own hash, uses a fresh authentication secret per owned process,
+and records dropped probes when a slow server exceeds the drain deadline.

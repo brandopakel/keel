@@ -7,11 +7,18 @@ name: Benchmark
 
 on:
   workflow_dispatch:
+    inputs:
+      suite:
+        description: Tail smoke or full throughput/memory/network matrix
+        type: choice
+        options: [tail, full]
+        default: tail
   push:
     branches: [ develop, experiment/** ]
 
 jobs:
   matrix:
+    if: github.event_name == 'workflow_dispatch' && inputs.suite == 'full'
     name: throughput matrix (loopback)
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -41,6 +48,7 @@ jobs:
         with: { name: linux-matrix, path: bench/results/matrix-linux.csv }
 
   memory-and-latency:
+    if: github.event_name == 'workflow_dispatch' && inputs.suite == 'full'
     name: memory + latency (Linux)
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -87,6 +95,7 @@ jobs:
           path: bench/results/
 
   off-loopback:
+    if: github.event_name == 'workflow_dispatch' && inputs.suite == 'full'
     name: off-loopback (veth across namespaces)
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -121,7 +130,11 @@ jobs:
         with: { name: linux-offloopback, path: bench/results/offloopback-linux.csv }
 
   tail-latency:
-    name: mixed traffic, expiry, large lists and rewrite
+    name: mixed traffic and rewrite (${{ matrix.append }})
+    strategy:
+      fail-fast: false
+      matrix:
+        append: [sync, async]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -129,9 +142,15 @@ jobs:
       - uses: actions/setup-go@v5
         with: { go-version-file: go.mod }
       - run: go build -o /tmp/keel ./cmd/keel
-      - run: python3 bench/run-tail.py --bin /tmp/keel --out bench/results/tail-linux.csv.gz --seconds 30 --reps 3
+      - name: Repeated workload with retained errors and dropped probes
+        env:
+          APPEND_MODE: ${{ matrix.append }}
+        run: |
+          args=()
+          if [[ "$APPEND_MODE" == async ]]; then args+=(--async-append); fi
+          python3 bench/run-tail.py --bin /tmp/keel --out "bench/results/tail-linux-$APPEND_MODE.csv.gz" --seconds 30 --reps 3 "${args[@]}"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: linux-tail-latency
-          path: bench/results/tail-linux.*
+          name: linux-tail-latency-${{ matrix.append }}
+          path: bench/results/tail-linux-*

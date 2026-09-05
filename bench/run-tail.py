@@ -3,7 +3,7 @@
 Records all attempts, including errors. Probe latency includes scheduling delay.
 No third-party dependencies. Not an open-loop saturation/production claim.
 """
-import argparse, csv, gzip, hashlib, json, os, platform, socket, subprocess, tempfile, threading, time
+import argparse, csv, gzip, hashlib, json, math, os, platform, secrets, socket, subprocess, tempfile, threading, time
 from pathlib import Path
 
 class RunFailure(RuntimeError):
@@ -12,9 +12,13 @@ class RunFailure(RuntimeError):
         self.rows = rows
 
 class Client:
-    def __init__(self, port):
+    def __init__(self, port, password):
         self.sock = socket.create_connection(('127.0.0.1', port), timeout=3)
         self.stream = self.sock.makefile('rb')
+        try:
+            if self.call('AUTH',password) != b'OK': raise RuntimeError('benchmark server AUTH mismatch')
+        except Exception:
+            self.close(); raise
     def close(self):
         self.stream.close(); self.sock.close()
     def call(self, *parts):
@@ -40,26 +44,32 @@ def run(args, policy, repetition):
     with tempfile.TemporaryDirectory(prefix='keel-tail-') as directory:
         with socket.socket() as reservation:
             reservation.bind(('127.0.0.1', 0)); port = reservation.getsockname()[1]
-        argv = [args.bin, '-port', str(port)]
-        if policy != 'off': argv += ['-appendonly', '-appendfilename', directory+'/log.aof', '-appendfsync', policy]
+        password=secrets.token_hex(32)
+        env=dict(os.environ,KEEL_BENCH_PASSWORD=password)
+        argv = [args.bin, '-port', str(port), '-requirepass-env', 'KEEL_BENCH_PASSWORD']
+        if policy != 'off':
+            argv += ['-appendonly', '-appendfilename', directory+'/log.aof', '-appendfsync', policy]
+            if args.async_append: argv += ['-aof-async-append']
         log_path = str(args.out)+f'.{policy}.{repetition}.server.log'
         with open(log_path, 'w+') as log:
-            process = subprocess.Popen(argv, stdout=log, stderr=log)
+            process = subprocess.Popen(argv, env=env, stdout=log, stderr=log)
             clients = []
             try:
                 deadline = time.monotonic()+5
                 while True:
                     try:
-                        load = Client(port); clients.append(load); break
+                        load = Client(port,password); clients.append(load); break
                     except OSError:
                         if process.poll() is not None or time.monotonic() > deadline:
                             log.seek(0); raise RuntimeError(log.read())
                         time.sleep(.01)
-                probe = Client(port); clients.append(probe)
+                probe = Client(port,password); clients.append(probe)
                 for i in range(1000): load.call('SET', 'cache:'+str(i), 'v'*256, 'PX', 60000)
                 load.call('RPUSH', 'large', *(['v'*128]*args.members))
                 # Warmup has the same small-key read/write distribution.
-                for i in range(200): load.call('GET', 'cache:'+str(i))
+                for i in range(200):
+                    if i%5==0: load.call('SET','cache:'+str(i),'v'*256,'PX',60000)
+                    else: load.call('GET','cache:'+str(i))
                 start = time.monotonic(); end = start+args.seconds
                 def sample(client, role, operation, parts, scheduled):
                     before = time.monotonic(); error = ''
@@ -70,6 +80,11 @@ def run(args, policy, repetition):
                 def probes():
                     scheduled = start
                     while scheduled < end:
+                        if time.monotonic() > end+3:
+                            while scheduled < end:
+                                rows.append([policy,repetition,'probe','PING',scheduled-start,0,(time.monotonic()-scheduled)*1000,'dropped: probe drain deadline'])
+                                scheduled += .01
+                            break
                         time.sleep(max(0, scheduled-time.monotonic()))
                         sample(probe, 'probe', 'PING', ['PING'], scheduled)
                         scheduled += .01
@@ -95,14 +110,15 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--bin', required=True)
     parser.add_argument('--out', required=True)
+    parser.add_argument('--async-append', action='store_true', help='enable worker appends for persistent policies')
     parser.add_argument('--seconds', type=float, default=10)
     parser.add_argument('--reps', type=int, default=3)
     parser.add_argument('--members', type=int, default=10000)
     parser.add_argument('--policies', nargs='+', default=['off','everysec','always'])
     args=parser.parse_args()
-    if args.seconds<=0 or args.reps<1 or args.members<1: parser.error('positive duration, repetitions and members required')
+    if not math.isfinite(args.seconds) or args.seconds<1 or args.reps<1 or args.members<1: parser.error('duration >= 1 second and positive repetitions/members required')
     args.bin=str(Path(args.bin).resolve()); out=Path(args.out); out.parent.mkdir(parents=True,exist_ok=True)
-    metadata={'arguments':vars(args),'platform':platform.platform(),'python':platform.python_version(),'binary_sha256':hashlib.sha256(Path(args.bin).read_bytes()).hexdigest(),'timestamp_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'model':'closed-loop load; 100Hz scheduled independent probe; probe scheduled latency includes queueing'}
+    metadata={'arguments':vars(args),'platform':platform.platform(),'python':platform.python_version(),'binary_sha256':hashlib.sha256(Path(args.bin).read_bytes()).hexdigest(),'harness_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'timestamp_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'authenticated':True,'model':'closed-loop load; 100Hz scheduled independent probe; probe scheduled latency includes queueing'}
     out.with_suffix('.metadata.json').write_text(json.dumps(metadata,indent=2)+'\n')
     failures=0
     with (gzip.open(out, 'wt') if out.suffix == '.gz' else out.open('w')) as file:
