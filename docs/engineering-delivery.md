@@ -157,3 +157,7 @@ The Linux benchmark workflow now has an explicit full-matrix dispatch and a defa
 bounded tail run comparing synchronous versus worker append configurations. The
 harness records its own hash, uses a fresh authentication secret per owned process,
 and records dropped probes when a slow server exceeds the drain deadline.
+
+The [PR #15 validation record](pr15-validation-2026-09-05.md) supersedes the pending
+Linux CI/benchmark status above. It records the delayed-fsync rewrite correction,
+completed native checks, benchmark findings and four verified candidate archives.

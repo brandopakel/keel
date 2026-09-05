@@ -85,9 +85,33 @@ metadata and process logs are in the run's `linux-tail-latency-sync` and
 Thirty local race repetitions passed for the rewrite, delayed-sync lifecycle,
 large-list mutation, replication failure and connection-accounting regressions.
 The full local Go suite, full race suite, vet, RESP framing, BMF export and AWS
-package checks passed. Native CI/release-candidate archive checks are being
-recorded against the corrected revision. The branch-dispatched release workflow
-skips publication; tag-time artifact verification remains a separate publication step.
+package checks passed. Authenticated k6 and Locust smokes also passed against the
+local packaged Darwin ARM64 candidate.
+
+All native checks passed on corrected source revision
+`8b7b7ef33cee64c98feb9b2a97c00fcdbedf0a36`:
+
+| Gate | Evidence |
+| --- | --- |
+| Linux/macOS, Go 1.22/current, build/test/vet, client integration and restore fuzz smoke | [Go run 33991061470](https://github.com/brandopakel/keel/actions/runs/33991061470) |
+| Linux full race suite plus 20 repetitions of the new regressions | Same Go run, race-detector job |
+| Docker named-volume/bind-mount persistence and restart | Same Go run, Docker job |
+| Linux authenticated k6/Locust, RESP, BMF and AWS packaging | [Adapters run 33991061481](https://github.com/brandopakel/keel/actions/runs/33991061481) |
+| Native Linux/macOS current-Go full tests, race and vet, then four target archives | [Release dry run 33991071168](https://github.com/brandopakel/keel/actions/runs/33991071168) |
+
+All four GitHub archives were downloaded and their SHA-256 sidecars, required
+licenses/docs/examples/adapters, binary architectures and clean Go VCS revision
+verified. Python cache files are absent. [Archive hashes and build metadata](pr15-candidate-archives.json)
+identify these exact source-`8b7b7ef` artifacts. The downloaded Darwin ARM64 binary's
+version invocation and authenticated k6/Locust adapter smokes passed.
+Linux ARM64 and Darwin amd64 artifacts were cross-compiled and inspected, not
+executed on native hardware in this session.
+
+Archives and raw validation logs are retained in `dist/validation/pr15/`. The
+release workflow's publication job was skipped because this was a branch dispatch.
+Pre-publication validation is complete for this candidate; a future release tag
+must build and verify its own artifacts. The evidence-only follow-up changes docs
+and preserves the validated implementation.
 
 Controlled Bencher/KVM execution, hosted dashboards, paid AWS/Grafana runs, and
 real application pilots remain pending their documented host/account/target inputs.

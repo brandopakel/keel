@@ -22,3 +22,6 @@ Executable/environment metadata: [alpha.2](../bench/results/tail-alpha2.metadata
 
 Candidate results correspond to the working-tree executable hash in metadata, not to a published release.
 The expanded Linux workflow has been edited locally but has not been executed for this revision.
+
+The later [PR #15 validation](pr15-validation-2026-09-05.md#completed-linux-benchmark-review)
+records completed Linux runs with synchronous and worker append configurations.

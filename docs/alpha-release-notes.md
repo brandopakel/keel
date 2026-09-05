@@ -2,6 +2,10 @@
 
 This increment restores production active expiry, moves everysec fsync off the
 command thread, and yields between chunks of large lists during AOF rewriting.
+After snapshot traversal, reconciliation waits for in-flight fsync so hot keys are
+not repeatedly emitted while file replacement is blocked. Failed socket readiness
+registration releases connection accounting, and
+failed replication application disables core reads until a full synchronization.
 
 Two optional experiments are added:
 
