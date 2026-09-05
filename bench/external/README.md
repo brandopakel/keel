@@ -92,3 +92,17 @@ run. [Official AWS packaging and traffic-shape contract](https://docs.aws.amazon
 - Interleave baseline/candidate order; match traffic shape, values, expiry and durability.
 - Retain errors/drops, raw latency, RSS/CPU/GC and recovery correctness.
 - Passing adapters establish protocol/tool integration, not controlled-cloud results or adoption.
+
+### Bencher controlled runner entrypoint
+
+`bencher-runner.sh` starts an already registered runner on a Linux/KVM host with
+`BENCHER_HOST`, `BENCHER_RUNNER` and `BENCHER_RUNNER_KEY` supplied by the host's secret
+store. It requires a Firecracker Spec and disables automatic runner updates so a
+benchmark series keeps the same verified executable. It does not enable unsandboxed
+jobs or register resources under an unspecified account.
+
+Register the Runner, create a Spec describing the actual CPU/memory/disk and network
+policy, and assign that Spec to the Runner in the owner-selected Bencher account
+before invoking the script. Record the chosen runner binary version and SHA-256.
+This entrypoint has been syntax-checked; actual KVM/Bencher execution remains pending
+host/account access. [Official registration and runner contract](https://bencher.dev/docs/explanation/self-hosted-runners/).
