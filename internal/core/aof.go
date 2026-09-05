@@ -148,6 +148,11 @@ func OpenAOF(path string) error {
 	if err != nil {
 		return err
 	}
+	if err := syncDir(filepath.Dir(path)); err != nil {
+		f.Close()
+		return err
+	}
+
 	aof.file = f
 	aof.path = path
 	aof.lastSync = time.Now()

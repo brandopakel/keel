@@ -4,14 +4,17 @@ Keel is a Go in-memory service for caching and approximate analytics. It combine
 strings, hashes, lists, sets, sorted sets, geospatial queries, and probabilistic
 structures under one estimated memory budget, with expiry and optional persistence.
 
-**Status: alpha development.** This README describes this working tree. It does
-not mean the changes have reached GitHub's default branch or a published release.
+**Status: alpha.** See [Releases](https://github.com/brandopakel/keel/releases) for
+published builds. Documentation on a development branch can include unreleased changes.
 Keel implements a documented RESP2 command subset; Redis protocol support does
 not imply that every Redis client feature or application works unchanged.
 
 ## Run locally
 
-Requires Go 1.22 or newer; Linux and macOS are supported.
+Requires Go 1.22 or newer; Linux and macOS are supported. Use current Go on
+recent macOS: older internal linkers omit the LC_UUID load command required by
+macOS 26 ([Go issue](https://github.com/golang/go/issues/68678)). CI tests the
+Go 1.22 source floor on macOS using external linking; release builds use current Go.
 
 ```sh
 go build -o keel ./cmd/keel

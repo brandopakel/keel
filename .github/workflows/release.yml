@@ -25,7 +25,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
-          go-version-file: go.mod
+          go-version: stable
       - run: go test ./...
       - run: go test -race ./...
       - run: go vet ./...
@@ -49,7 +49,7 @@ jobs:
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          go-version-file: go.mod
+          go-version: stable
           cache: true
 
       - name: Build
@@ -67,7 +67,8 @@ jobs:
           # The notices for the code translated from Redis travel with the
           # binary, as their licence asks.
           cp LICENSE THIRD_PARTY_NOTICES.md README.md dist/
-          tar -C dist -czf "keel_${version}_${GOOS}_${GOARCH}.tar.gz" keel LICENSE THIRD_PARTY_NOTICES.md README.md
+          cp -R docs examples dist/
+          tar -C dist -czf "keel_${version}_${GOOS}_${GOARCH}.tar.gz" keel LICENSE THIRD_PARTY_NOTICES.md README.md docs examples
           sha256sum "keel_${version}_${GOOS}_${GOARCH}.tar.gz" \
             > "keel_${version}_${GOOS}_${GOARCH}.tar.gz.sha256"
 

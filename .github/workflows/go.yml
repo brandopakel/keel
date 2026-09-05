@@ -23,6 +23,10 @@ jobs:
   build:
     name: ${{ matrix.os }} / go ${{ matrix.go }}
     runs-on: ${{ matrix.os }}
+    # Go 1.22's internal Mach-O linker omits LC_UUID required by macOS 26.
+    # https://github.com/golang/go/issues/68678
+    env:
+      GOFLAGS: ${{ matrix.os == 'macos-latest' && matrix.go == '1.22' && '-ldflags=-linkmode=external' || '' }}
     strategy:
       fail-fast: false
       matrix:
