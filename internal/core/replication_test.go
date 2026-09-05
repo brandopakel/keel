@@ -59,6 +59,10 @@ func TestReplicationCanonicalImagesAndOrdering(t *testing.T) {
 	corrupt := second
 	corrupt.Checksum = "bad"
 	require.Error(t, ApplyReplication(corrupt))
+	emptyAdvance := second
+	emptyAdvance.Body = nil
+	emptyAdvance.Checksum = frameChecksum(emptyAdvance)
+	require.Error(t, ApplyReplication(emptyAdvance), "an empty delta cannot advance the cursor")
 	require.NoError(t, ApplyReplication(second))
 	require.Equal(t, expected, snapshotEverything(t))
 	got, _ := dumpKey("mor")
@@ -80,12 +84,16 @@ func firstDeltaWithGap(f ReplicationFrame) ReplicationFrame {
 
 func TestReplicationRejectsMalformedSnapshotBeforeMutation(t *testing.T) {
 	ResetStores()
+	run(t, "SET", "sentinel", "present")
+	oldReady := replicaReady
+	replicaReady = false
 	oldReplica := config.ReplicaOf
-	defer func() { config.ReplicaOf = oldReplica }()
+	defer func() { config.ReplicaOf = oldReplica; replicaReady = oldReady }()
 	config.ReplicaOf = "test:1"
 	f := ReplicationFrame{Version: 1, Epoch: "0123456789abcdef0123456789abcdef", Full: true, Body: []byte("*1\r\n$7\r\nFLUSHDB\r\n*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$999999999\r\n")}
 	f.Checksum = frameChecksum(f)
-	require.Error(t, ApplyReplication(f))
+	require.ErrorContains(t, ApplyReplication(f), "malformed replication command")
+	require.Equal(t, "present", dictStore.Peek("sentinel").Value)
 }
 
 func TestReplicationHistoryAndDirtyOverflowRequireFullSync(t *testing.T) {

@@ -200,6 +200,12 @@ func ApplyReplication(frame ReplicationFrame) error {
 	if !frame.Full && (!replicaReady || frame.Epoch != replicaEpoch || frame.From != replicaOffset || frame.To < frame.From) {
 		return errors.New("replication offset gap")
 	}
+	if frame.Full && replicaReady && frame.From != replicaOffset {
+		return errors.New("snapshot response does not match requested offset")
+	}
+	if !frame.Full && ((len(frame.Body) == 0 && frame.To != frame.From) || (len(frame.Body) > 0 && frame.To == frame.From)) {
+		return errors.New("replication payload and offset disagree")
+	}
 	var commands []*Command
 	body := frame.Body
 	for len(body) > 0 {
