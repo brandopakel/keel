@@ -157,6 +157,36 @@ measurements and behavior; this README defines the current integration contract.
 Embedding, partitioning, and replication are separate future decisions driven by
 application requirements, not features implied by I/O threads.
 
+### What remains to build out
+
+In order of distance, not size.
+
+- **Landing the experiments.** Asynchronous appends and bounded primary/read-only
+  replication are implemented as unreleased experiments with their own contracts and
+  limits. Command execution concurrent with disk appends, automatic failover, and
+  fencing are not started.
+- **Command surface outside the contract.** Transactions, Lua, Pub/Sub, blocking list
+  commands, `SCAN`, RESP3, ACL roles, and cluster routing are absent. `ZRANGE` lacks
+  `BYSCORE`, `BYLEX`, and `LIMIT`; `ZADD` lacks `GT`, `LT`, and `INCR`; `ZCOUNT` and
+  `ZINCRBY` do not exist. The skip list already has the range walks these need.
+  `LREM`, `LINSERT`, `GEOSEARCHSTORE`, the `GEORADIUS` family, `CMS.INFO`, `CMS.MERGE`,
+  and `BF.CARD` are also missing.
+- **Persistence without a latency bound.** The `everysec` window stretches on slow storage.
+  A rewrite abandons itself past thirty seconds or 100,000 dirty keys, and snapshot
+  enumeration, individual large keys, disk writes, and the final sync still run on the
+  command thread. Dumps carry no TTL and are not Redis RDB.
+- **Scaling, deliberately deferred.** Embedding, partitioning, and replication for failure
+  recovery each wait on a pilot that shows which constraint is real; the
+  [delivery checklist](docs/engineering-delivery.md#5-demand-led-scaling-decision) lists
+  the evidence each needs first.
+- **Evidence before a release past alpha.** Controlled-host Linux benchmark runs, hosted
+  load runs, and an application pilot with stated RPO, RTO, and memory targets have not
+  happened; `v0.1.0-alpha.2` is a pre-release for that reason. The
+  [delivery checklist](docs/engineering-delivery.md#4-alpha-preparation-and-evidence)
+  says what counts.
+- **Boundaries that stay.** No native TLS (use a proxy), `SET` refuses to overwrite a
+  collection where Redis would, and `MEMORY USAGE` measures the keyspace, not RSS.
+
 Keel was formerly named memkv and grew from [quangh33/memkv](https://github.com/quangh33/memkv).
 The original lineage is retained in Git history. Project code is under the [MIT license](LICENSE);
 Redis-derived code retains its BSD terms in [third-party notices](THIRD_PARTY_NOTICES.md).
