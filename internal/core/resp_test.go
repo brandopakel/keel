@@ -11,122 +11,214 @@ import (
 	"github.com/brandopakel/keel/internal/core"
 )
 
-func TestSimpleStringDecode(t *testing.T) {
-	cases := map[string]string{
-		"+OK\r\n": "OK",
+// The wire forms below are the ones the RESP specification gives, so a case
+// here is a check against the protocol rather than against this decoder.
+
+func TestDecodeEachValueType(t *testing.T) {
+	cases := []struct {
+		name string
+		wire string
+		want interface{}
+	}{
+		{"simple string", "+OK\r\n", "OK"},
+		{"empty simple string", "+\r\n", ""},
+		{"error carries its message", "-ERR something\r\n", "ERR something"},
+		{"integer", ":1000\r\n", int64(1000)},
+		{"zero", ":0\r\n", int64(0)},
+		{"negative integer", ":-2\r\n", int64(-2)},
+		{"explicitly positive integer", ":+7\r\n", int64(7)},
+		{"largest integer", ":9223372036854775807\r\n", int64(9223372036854775807)},
+		{"smallest integer", ":-9223372036854775808\r\n", int64(-9223372036854775808)},
+		{"bulk string", "$5\r\nhello\r\n", "hello"},
+		{"empty bulk string", "$0\r\n\r\n", ""},
+		{"bulk string holding CRLF", "$4\r\na\r\nb\r\n", "a\r\nb"},
+		{"null bulk string reads as empty", "$-1\r\n", ""},
+		{"empty array", "*0\r\n", []interface{}{}},
+		{"array of bulk strings", "*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n", []interface{}{"hello", "world"}},
+		{"array of integers", "*3\r\n:1\r\n:2\r\n:3\r\n", []interface{}{int64(1), int64(2), int64(3)}},
+		{"mixed array", "*3\r\n:1\r\n$5\r\nhello\r\n+OK\r\n", []interface{}{int64(1), "hello", "OK"}},
+		{"nested arrays", "*2\r\n*2\r\n:1\r\n:2\r\n*2\r\n+Hello\r\n-World\r\n",
+			[]interface{}{[]interface{}{int64(1), int64(2)}, []interface{}{"Hello", "World"}}},
+		{"null array reads as nil", "*-1\r\n", nil},
+		{"null inside an array", "*2\r\n$-1\r\n*-1\r\n", []interface{}{"", nil}},
 	}
-	for k, v := range cases {
-		value, _ := core.Decode([]byte(k))
-		if v != value {
-			t.Fail()
-		}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, n, err := core.DecodeOne([]byte(c.wire))
+			assert.NoError(t, err)
+			assert.Equal(t, c.want, got)
+			assert.Equal(t, len(c.wire), n, "the whole value and nothing more is consumed")
+		})
 	}
 }
 
-func TestError(t *testing.T) {
-	cases := map[string]string{
-		"-Error message\r\n": "Error message",
-	}
-	for k, v := range cases {
-		value, _ := core.Decode([]byte(k))
-		if v != value {
-			t.Fail()
-		}
+func TestDecodeStopsAtTheEndOfTheFirstValue(t *testing.T) {
+	wire := "+first\r\n:2\r\n"
+	got, n, err := core.DecodeOne([]byte(wire))
+	assert.NoError(t, err)
+	assert.Equal(t, "first", got)
+	assert.Equal(t, len("+first\r\n"), n)
+
+	got, err = core.Decode([]byte(wire))
+	assert.NoError(t, err)
+	assert.Equal(t, "first", got, "Decode ignores what follows")
+}
+
+func TestDecodeIncompleteValues(t *testing.T) {
+	for _, wire := range []string{
+		"", "+", "+OK", "+OK\r", ":", ":12", ":12\r", "$", "$5", "$5\r\n", "$5\r\nhel", "$5\r\nhello", "$5\r\nhello\r",
+		"*", "*2", "*2\r\n", "*2\r\n:1\r\n", "*2\r\n:1\r\n$3\r\nab",
+	} {
+		_, n, err := core.DecodeOne([]byte(wire))
+		assert.True(t, errors.Is(err, core.ErrIncompleteFrame), "%q should be incomplete, got %v", wire, err)
+		assert.Zero(t, n)
 	}
 }
 
-func TestInt64(t *testing.T) {
-	cases := map[string]int64{
-		":0\r\n":    0,
-		":1000\r\n": 1000,
-	}
-	for k, v := range cases {
-		value, _ := core.Decode([]byte(k))
-		if v != value {
-			t.Fail()
-		}
-	}
-}
-
-func TestBulkStringDecode(t *testing.T) {
-	cases := map[string]string{
-		"$5\r\nhello\r\n": "hello",
-		"$0\r\n\r\n":      "",
-	}
-	for k, v := range cases {
-		value, _ := core.Decode([]byte(k))
-		if v != value {
-			t.Fail()
-		}
+func TestDecodeRefusesWhatCanNeverBeValid(t *testing.T) {
+	for _, wire := range []string{
+		"%1\r\n",                    // no such type byte
+		"PING\r\n",                  // inline commands are not RESP
+		":\r\n",                     // an integer needs digits
+		":-\r\n",                    // a sign alone is not a number
+		":12a\r\n",                  // nor is a number with letters in it
+		":99999999999999999999\r\n", // more than 64 bits
+		":-9223372036854775809\r\n", // one below the smallest
+		"$abc\r\n",                  // a length must be a number
+		"$536870913\r\n",            // a bulk string above the 512MB bound
+		"*1048577\r\n",              // an array above the 1M element bound
+		"*1\r\n%\r\n",               // a bad element spoils the array
+	} {
+		_, n, err := core.DecodeOne([]byte(wire))
+		assert.True(t, errors.Is(err, core.ErrProtocol), "%q should be a protocol error, got %v", wire, err)
+		assert.Zero(t, n)
 	}
 }
 
-func TestArrayDecode(t *testing.T) {
-	cases := map[string][]interface{}{
-		"*0\r\n":                                                   {},
-		"*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n":                     {"hello", "world"},
-		"*3\r\n:1\r\n:2\r\n:3\r\n":                                 {int64(1), int64(2), int64(3)},
-		"*5\r\n:1\r\n:2\r\n:3\r\n:4\r\n$5\r\nhello\r\n":            {int64(1), int64(2), int64(3), int64(4), "hello"},
-		"*2\r\n*3\r\n:1\r\n:2\r\n:3\r\n*2\r\n+Hello\r\n-World\r\n": {[]int64{int64(1), int64(2), int64(3)}, []interface{}{"Hello", "World"}},
+// TestDecodeBoundsNesting: each nested array is a recursive call, and a client
+// could otherwise open a few hundred thousand of them with one header each and
+// run the decoder out of stack.
+func TestDecodeBoundsNesting(t *testing.T) {
+	nested := func(depth int) string {
+		return strings.Repeat("*1\r\n", depth) + ":1\r\n"
 	}
-	for k, v := range cases {
-		value, _ := core.Decode([]byte(k))
-		array := value.([]interface{})
-		if len(array) != len(v) {
-			t.Fail()
-		}
-		for i := range array {
-			if fmt.Sprintf("%v", v[i]) != fmt.Sprintf("%v", array[i]) {
-				t.Fail()
-			}
-		}
+	v, _, err := core.DecodeOne([]byte(nested(32)))
+	assert.NoError(t, err, "32 levels are allowed")
+	for i := 0; i < 32; i++ {
+		v = v.([]interface{})[0]
+	}
+	assert.Equal(t, int64(1), v)
+
+	_, _, err = core.DecodeOne([]byte(nested(33)))
+	assert.True(t, errors.Is(err, core.ErrProtocol), "33 are not: got %v", err)
+	_, _, err = core.DecodeOne([]byte(nested(200000)))
+	assert.True(t, errors.Is(err, core.ErrProtocol), "and a stack's worth is refused at the bound, not after it")
+
+	// A partial deep frame is still incomplete rather than a protocol error,
+	// as long as it is within the bound.
+	_, _, err = core.DecodeOne([]byte(strings.Repeat("*1\r\n", 10)))
+	assert.True(t, errors.Is(err, core.ErrIncompleteFrame))
+}
+
+func TestEncodeProducesTheSpecifiedWireForm(t *testing.T) {
+	cases := []struct {
+		name   string
+		value  interface{}
+		simple bool
+		want   string
+	}{
+		{"simple string", "OK", true, "+OK\r\n"},
+		{"empty simple string", "", true, "+\r\n"},
+		{"bulk string", "hello", false, "$5\r\nhello\r\n"},
+		{"empty bulk string", "", false, "$0\r\n\r\n"},
+		{"bulk string with CRLF inside", "a\r\nb", false, "$4\r\na\r\nb\r\n"},
+		{"binary bulk string", string([]byte{0, 1, 255}), false, "$3\r\n\x00\x01\xff\r\n"},
+		{"utf8 counts bytes", "h\u00e9", false, "$3\r\nh\u00e9\r\n"},
+		{"int", 42, false, ":42\r\n"},
+		{"negative int", -7, false, ":-7\r\n"},
+		{"int64 max", int64(9223372036854775807), false, ":9223372036854775807\r\n"},
+		{"int64 min", int64(-9223372036854775808), false, ":-9223372036854775808\r\n"},
+		{"int32", int32(-5), false, ":-5\r\n"},
+		{"int16", int16(300), false, ":300\r\n"},
+		{"int8", int8(-128), false, ":-128\r\n"},
+		{"uint32", uint32(4294967295), false, ":4294967295\r\n"},
+		{"uint64", uint64(18446744073709551615), false, ":18446744073709551615\r\n"},
+		{"error", errors.New("ERR something went wrong"), false, "-ERR something went wrong\r\n"},
+		{"error quoting a client's line breaks", errors.New("ERR bad key 'a\r\nb\n'"), false, "-ERR bad key 'a  b '\r\n"},
+		{"nil is the null bulk string", nil, false, "$-1\r\n"},
+		{"empty string slice", []string{}, false, "*0\r\n"},
+		{"string slice", []string{"a", "bb", "ccc"}, false, "*3\r\n$1\r\na\r\n$2\r\nbb\r\n$3\r\nccc\r\n"},
+		{"string slice with empties", []string{"", "x"}, false, "*2\r\n$0\r\n\r\n$1\r\nx\r\n"},
+		{"nested string slices", [][]string{{"a"}, {"b", "c"}}, false, "*2\r\n*1\r\n$1\r\na\r\n*2\r\n$1\r\nb\r\n$1\r\nc\r\n"},
+		{"empty nested", [][]string{}, false, "*0\r\n"},
+		{"interface slice", []interface{}{"a", 1, errors.New("e"), nil}, false, "*4\r\n$1\r\na\r\n:1\r\n-e\r\n$-1\r\n"},
+		{"empty interface slice", []interface{}{}, false, "*0\r\n"},
+		{"int slice is an array of integers", []int{1, 0, -1}, false, "*3\r\n:1\r\n:0\r\n:-1\r\n"},
+		{"int64 slice", []int64{7}, false, "*1\r\n:7\r\n"},
+		{"empty int slice", []int{}, false, "*0\r\n"},
+		{"unencodable type is an error, not a silent nil", 3.14, false, "-ERR cannot encode a float64 as a reply\r\n"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, c.want, string(core.Encode(c.value, c.simple)))
+		})
 	}
 }
 
-func TestEncodeString2DArray(t *testing.T) {
-	var decode = [][]string{{"hello", "world"}, {"1", "2", "3"}, {"xyz"}}
-	encode := core.Encode(decode, false)
-	assert.EqualValues(t, "*3\r\n*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n*3\r\n$1\r\n1\r\n$1\r\n2\r\n$1\r\n3\r\n*1\r\n$3\r\nxyz\r\n", string(encode))
-	decodeAgain, _ := core.Decode(encode)
-	for i := 0; i < 3; i++ {
-		for j := 0; j < len(decode[i]); j++ {
-			assert.EqualValues(t, decode[i][j], decodeAgain.([]interface{})[i].([]interface{})[j])
-		}
+func TestEncodeThenDecodeRoundTrips(t *testing.T) {
+	values := []interface{}{
+		"hello", "", int64(-3), []interface{}{"a", int64(1)}, []interface{}{},
+		[]interface{}{[]interface{}{"deep"}, "b"},
+	}
+	for _, v := range values {
+		got, err := core.Decode(core.Encode(v, false))
+		assert.NoError(t, err)
+		assert.Equal(t, v, got, "%#v", v)
+	}
+	got, _ := core.Decode(core.Encode([]string{"x", "y"}, false))
+	assert.Equal(t, []interface{}{"x", "y"}, got)
+	got, _ = core.Decode(core.Encode([]int{1, 2}, false))
+	assert.Equal(t, []interface{}{int64(1), int64(2)}, got)
+}
+
+func TestParseCmdUpperCasesTheNameAndKeepsTheArguments(t *testing.T) {
+	wire := "*3\r\n$3\r\nput\r\n$5\r\nhello\r\n$5\r\nWorld\r\n"
+	cmd, n, err := core.ParseCmd([]byte(wire))
+	assert.NoError(t, err)
+	assert.Equal(t, len(wire), n)
+	assert.Equal(t, "PUT", cmd.Cmd)
+	assert.Equal(t, []string{"hello", "World"}, cmd.Args, "arguments keep their case")
+
+	cmd, _, err = core.ParseCmd([]byte("*1\r\n$4\r\nping\r\n"))
+	assert.NoError(t, err)
+	assert.Equal(t, "PING", cmd.Cmd)
+	assert.Empty(t, cmd.Args)
+}
+
+// The benchmark reports allocated bytes per operation, which is where the
+// append-based encoder wins over formatting into a string first.
+func benchEncode(b *testing.B, size int) {
+	b.Helper()
+	v := strings.Repeat("x", size)
+	b.ReportAllocs()
+	b.SetBytes(int64(size))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = core.Encode(v, false)
 	}
 }
 
-func TestEncodeInterfaceArray(t *testing.T) {
-	cases := map[string][]interface{}{
-		"*0\r\n":                                        {},
-		"*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n":          {"hello", "world"},
-		"*3\r\n:1\r\n:2\r\n:3\r\n":                      {int64(1), int64(2), int64(3)},
-		"*5\r\n:1\r\n:2\r\n:3\r\n:4\r\n$5\r\nhello\r\n": {int64(1), int64(2), int64(3), int64(4), "hello"},
-		"*2\r\n*3\r\n:1\r\n:2\r\n:3\r\n*2\r\n$5\r\nHello\r\n$5\r\nWorld\r\n": {[]interface{}{int64(1), int64(2), int64(3)}, []interface{}{"Hello", "World"}},
-	}
-	for k, v := range cases {
-		encode := core.Encode(v, false)
-		assert.EqualValues(t, k, string(encode))
-	}
-}
+func BenchmarkEncode64B(b *testing.B)   { benchEncode(b, 64) }
+func BenchmarkEncode4KB(b *testing.B)   { benchEncode(b, 4096) }
+func BenchmarkEncode256KB(b *testing.B) { benchEncode(b, 262144) }
+func BenchmarkEncode1MB(b *testing.B)   { benchEncode(b, 1<<20) }
 
-func TestParseCmd(t *testing.T) {
-	cases := map[string]core.Command{
-		"*3\r\n$3\r\nput\r\n$5\r\nhello\r\n$5\r\nworld\r\n": core.Command{
-			Cmd:  "PUT",
-			Args: []string{"hello", "world"},
-		}}
-	for k, v := range cases {
-		cmd, _, _ := core.ParseCmd([]byte(k))
-		if cmd.Cmd != v.Cmd {
-			t.Fail()
-		}
-		if len(cmd.Args) != len(v.Args) {
-			t.Fail()
-		}
-		for i := 0; i < len(cmd.Args); i++ {
-			if cmd.Args[i] != v.Args[i] {
-				t.Fail()
-			}
+func BenchmarkParseCmd(b *testing.B) {
+	raw := []byte(fmt.Sprintf("*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$%d\r\n%s\r\n", 64, strings.Repeat("v", 64)))
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if _, _, err := core.ParseCmd(raw); err != nil {
+			b.Fatal(err)
 		}
 	}
 }
