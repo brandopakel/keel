@@ -107,7 +107,9 @@ def run(args):
         with socket.socket() as reservation:
             reservation.bind(('127.0.0.1',0))
             port = reservation.getsockname()[1]
-        redis = subprocess.Popen([str(args.redis.resolve()), '-'], stdin=subprocess.PIPE, stdout=log, stderr=log,
+        # Debian's redis-server may be a symlink to a multicall executable;
+        # preserve argv[0], which selects server rather than RDB-check mode.
+        redis = subprocess.Popen([str(args.redis.absolute()), '-'], stdin=subprocess.PIPE, stdout=log, stderr=log,
                                  env={key:value for key,value in server.env.items() if key != 'KEEL_VALIDATION_PASSWORD'})
         redis.stdin.write((f'bind 127.0.0.1\nport {port}\nsave ""\nappendonly no\n'
                            f'requirepass {server.password}\n').encode())

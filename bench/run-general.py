@@ -307,7 +307,8 @@ def main():
     os.umask(0o077)
     args.out = args.out.resolve()
     args.out.mkdir(parents=True, exist_ok=False)
-    arms = [(name, binary.resolve()) for name, binary in
+    # Redis packages can dispatch by argv[0] through a redis-server symlink.
+    arms = [(name, binary.absolute()) for name, binary in
             [('baseline', args.baseline), ('candidate', args.candidate), ('redis', args.redis)] if binary]
     args.memtier = args.memtier.resolve()
     cases = scenarios()
