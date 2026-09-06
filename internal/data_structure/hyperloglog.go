@@ -3,6 +3,7 @@ package data_structure
 import (
 	"math"
 	"math/bits"
+	"sort"
 
 	"github.com/spaolacci/murmur3"
 )
@@ -41,6 +42,9 @@ const (
 	hllRegisterMax = (1 << hllBits) - 1
 	// hllSeed is the murmur seed. Redis uses 0xadc83b19 for the same purpose.
 	hllSeed = 0xadc83b19
+	// Bound insertion work and retained sparse storage before promoting once.
+	hllSparseLimit = 512
+	hllDenseSize   = (hllRegisters*hllBits)/8 + 1
 )
 
 // alphaInf is 1/(2*ln2), the limit of HyperLogLog's alpha_m as m grows. The
@@ -48,17 +52,16 @@ const (
 // per-m constant and empirical bias tables the original paper needed.
 var alphaInf = 1.0 / (2.0 * math.Log(2.0))
 
-// HLL is a dense HyperLogLog sketch.
-//
-// Redis additionally has a sparse encoding for sketches with few distinct items,
-// which stores runs of zero registers instead of the full array and costs a few
-// hundred bytes rather than 12KB. This implementation is dense only: correct at
-// every cardinality, but a key holding three items still costs 12KB.
+// HLL starts with sorted nonzero registers and promotes to dense storage.
+// Both representations use exactly the same registers, hash and estimator.
 type HLL struct {
 	// regs holds hllRegisters 6-bit values, packed four to every three bytes.
 	// One spare byte at the end lets the two-byte window used for reads and
 	// writes run past the last register without a bounds check.
 	regs []byte
+	// Entries pack the 14-bit register index and 6-bit value into uint32.
+	// At most 512 entries bound both binary search and insertion shifting.
+	sparse []uint32
 
 	// cachedCount avoids rescanning 16384 registers when nothing has changed;
 	// Count is otherwise O(m) even when called in a loop.
@@ -67,7 +70,7 @@ type HLL struct {
 }
 
 func CreateHLL() *HLL {
-	return &HLL{regs: make([]byte, (hllRegisters*hllBits)/8+1)}
+	return &HLL{}
 }
 
 // getRegister reads the 6-bit register at i.
@@ -77,21 +80,77 @@ func CreateHLL() *HLL {
 // carries a spare trailing byte: for the last register the window would
 // otherwise read past the end.
 func (h *HLL) getRegister(i int) uint8 {
+	if h.regs == nil {
+		at := h.sparsePosition(i)
+		if at < len(h.sparse) && h.sparse[at]>>hllBits == uint32(i) {
+			return uint8(h.sparse[at] & hllRegisterMax)
+		}
+		return 0
+	}
+	return denseHLLRegister(h.regs, i)
+}
+
+func denseHLLRegister(regs []byte, i int) uint8 {
 	bitPos := i * hllBits
 	byteIdx, bitOff := bitPos/8, bitPos%8
-	window := uint16(h.regs[byteIdx]) | uint16(h.regs[byteIdx+1])<<8
+	window := uint16(regs[byteIdx]) | uint16(regs[byteIdx+1])<<8
 	return uint8((window >> bitOff) & hllRegisterMax)
 }
 
 // setRegister writes the 6-bit register at i.
 func (h *HLL) setRegister(i int, val uint8) {
+	val &= hllRegisterMax
+	if h.regs == nil {
+		at := h.sparsePosition(i)
+		entry := uint32(i)<<hllBits | uint32(val)
+		if at < len(h.sparse) && h.sparse[at]>>hllBits == uint32(i) {
+			if val == 0 {
+				copy(h.sparse[at:], h.sparse[at+1:])
+				h.sparse = h.sparse[:len(h.sparse)-1]
+			} else {
+				h.sparse[at] = entry
+			}
+			return
+		}
+		if val == 0 {
+			return
+		}
+		if len(h.sparse) < hllSparseLimit {
+			if len(h.sparse) == cap(h.sparse) {
+				grown := make([]uint32, len(h.sparse), max(4, 2*cap(h.sparse)))
+				copy(grown, h.sparse)
+				h.sparse = grown
+			}
+			h.sparse = append(h.sparse, 0)
+			copy(h.sparse[at+1:], h.sparse[at:])
+			h.sparse[at] = entry
+			return
+		}
+		h.promoteDense()
+	}
+	setDenseHLLRegister(h.regs, i, val)
+}
+
+func setDenseHLLRegister(regs []byte, i int, val uint8) {
 	bitPos := i * hllBits
 	byteIdx, bitOff := bitPos/8, bitPos%8
-	window := uint16(h.regs[byteIdx]) | uint16(h.regs[byteIdx+1])<<8
+	window := uint16(regs[byteIdx]) | uint16(regs[byteIdx+1])<<8
 	window &^= uint16(hllRegisterMax) << bitOff
 	window |= uint16(val&hllRegisterMax) << bitOff
-	h.regs[byteIdx] = byte(window)
-	h.regs[byteIdx+1] = byte(window >> 8)
+	regs[byteIdx] = byte(window)
+	regs[byteIdx+1] = byte(window >> 8)
+}
+
+func (h *HLL) sparsePosition(i int) int {
+	return sort.Search(len(h.sparse), func(at int) bool { return h.sparse[at]>>hllBits >= uint32(i) })
+}
+
+func (h *HLL) promoteDense() {
+	h.regs = make([]byte, hllDenseSize)
+	for _, entry := range h.sparse {
+		setDenseHLLRegister(h.regs, int(entry>>hllBits), uint8(entry&hllRegisterMax))
+	}
+	h.sparse = nil
 }
 
 // patLen splits a hash into the register it addresses and the value it observes.
@@ -114,6 +173,14 @@ func patLen(hash uint64) (index int, count uint8) {
 // merged by taking the larger of each register pair.
 func (h *HLL) Add(item string) bool {
 	index, count := patLen(murmur3.Sum64WithSeed([]byte(item), hllSeed))
+	if h.regs != nil {
+		if count <= denseHLLRegister(h.regs, index) {
+			return false
+		}
+		setDenseHLLRegister(h.regs, index, count)
+		h.cacheValid = false
+		return true
+	}
 	if count <= h.getRegister(index) {
 		return false
 	}
@@ -131,8 +198,15 @@ func (h *HLL) Count() uint64 {
 	// How many registers hold each value. Everything below is a function of
 	// this histogram rather than of the registers themselves.
 	var histogram [hllQ + 2]int
-	for i := 0; i < hllRegisters; i++ {
-		histogram[h.getRegister(i)]++
+	if h.regs == nil {
+		histogram[0] = hllRegisters - len(h.sparse)
+		for _, entry := range h.sparse {
+			histogram[entry&hllRegisterMax]++
+		}
+	} else {
+		for i := 0; i < hllRegisters; i++ {
+			histogram[denseHLLRegister(h.regs, i)]++
+		}
 	}
 
 	// Ertl's estimator. The original HyperLogLog took a harmonic mean of the
@@ -161,9 +235,18 @@ func (h *HLL) Count() uint64 {
 // maximum and max is associative. Intersections have no such property, which is
 // why HyperLogLog offers a union and not an intersection.
 func (h *HLL) Merge(other *HLL) {
-	for i := 0; i < hllRegisters; i++ {
-		if v := other.getRegister(i); v > h.getRegister(i) {
-			h.setRegister(i, v)
+	if other.regs == nil {
+		for _, entry := range other.sparse {
+			i, v := int(entry>>hllBits), uint8(entry&hllRegisterMax)
+			if v > h.getRegister(i) {
+				h.setRegister(i, v)
+			}
+		}
+	} else {
+		for i := 0; i < hllRegisters; i++ {
+			if v := denseHLLRegister(other.regs, i); v > h.getRegister(i) {
+				h.setRegister(i, v)
+			}
 		}
 	}
 	h.cacheValid = false
@@ -205,8 +288,10 @@ func tau(x float64) float64 {
 	}
 }
 
-// MemUsage estimates the bytes held. A dense HyperLogLog is a fixed 12KB
-// whatever its cardinality, which is the whole point of it.
+// MemUsage charges capacity, including the allocator's dense size class.
 func (h *HLL) MemUsage() uint64 {
+	if h.regs == nil {
+		return 64 + uint64(cap(h.sparse))*4
+	}
 	return hllBaseBytes + uint64(len(h.regs))
 }

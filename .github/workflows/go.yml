@@ -68,6 +68,13 @@ jobs:
         if: matrix.go == 'stable'
         run: go test ./internal/core -run '^$' -fuzz '^FuzzRestoreValidation$' -fuzztime=10s -parallel=2
 
+      - name: Command parser and integer classification fuzz smoke
+        if: matrix.go == 'stable'
+        run: |
+          go test ./internal/core -run '^$' -fuzz '^FuzzCommandParserMatchesValueDecoder$' -fuzztime=10s -parallel=2
+          go test ./internal/core -run '^$' -fuzz '^FuzzStringEncodingMatchesCanonicalInteger$' -fuzztime=10s -parallel=2
+          go test ./internal/data_structure -run '^$' -fuzz '^FuzzSparseHLLMatchesDense$' -fuzztime=10s -parallel=2
+
   docker:
     name: docker image
     runs-on: ubuntu-latest

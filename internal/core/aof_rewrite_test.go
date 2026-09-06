@@ -560,10 +560,9 @@ func TestRewriteDoesNotCountAsUse(t *testing.T) {
 	assert.NoError(t, CloseAOF())
 }
 
-// TestRewriteSliceIsSmallEnoughToNotBeAStall. The point of the walk being
-// incremental is that no single step is long, so the step is what gets measured
-// rather than the whole rewrite.
-func TestRewriteSliceIsSmallEnoughToNotBeAStall(t *testing.T) {
+// Verify bounded work and complete output independently of scheduler, GC and
+// filesystem timing. Log durations as diagnostics; benchmarks measure latency.
+func TestRewriteSlicesObeyKeyBudgetAndReplay(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "slice.aof")
 	ResetStores()
 	assert.NoError(t, OpenAOF(path))
@@ -575,10 +574,14 @@ func TestRewriteSliceIsSmallEnoughToNotBeAStall(t *testing.T) {
 	assert.NoError(t, StartRewrite())
 	slices, worstWalk, final := 0, time.Duration(0), time.Duration(0)
 	for {
+		before := rewrite.pos
 		start := time.Now()
 		more := stepRewrite(t)
 		took := time.Since(start)
 		slices++
+		assert.GreaterOrEqual(t, rewrite.pos-before, 0)
+		assert.LessOrEqual(t, rewrite.pos-before, rewriteChunk,
+			"every walk slice must obey its key budget, including the final slice")
 		if more {
 			if took > worstWalk {
 				worstWalk = took
@@ -594,9 +597,15 @@ func TestRewriteSliceIsSmallEnoughToNotBeAStall(t *testing.T) {
 	t.Logf("200,000 keys: %d slices, worst walk slice %v, final slice %v",
 		slices, worstWalk, final)
 	assert.Greater(t, slices, 50, "the walk must be spread over many cycles")
-	assert.Less(t, worstWalk, 50*time.Millisecond,
-		"and no slice may be anything like the whole rewrite")
+	assert.Equal(t, 1, aof.rewrites, "the rewrite must commit rather than fall back to the original log")
 	assert.NoError(t, CloseAOF())
+	ResetStores()
+	_, err := LoadAOF(path)
+	assert.NoError(t, err)
+	assert.Equal(t, 200000, dictStore.Len())
+	for i := 0; i < 200000; i++ {
+		assert.Equal(t, "some value of a realistic length", run(t, "GET", "k"+strconv.Itoa(i)))
+	}
 }
 
 // TestCancelledRewriteLeavesTheOldLogIntact. A server stopping mid-rewrite must

@@ -20,6 +20,18 @@ var (
 	errIncrOverflow = errors.New("ERR increment or decrement would overflow")
 )
 
+// SETEX/PSETEX share SET's validation and canonical SET/PEXPIREAT persistence.
+// Like SET here, they refuse a key already holding another data type.
+func cmdSETEX(args []string) []byte  { return setWithTTL(args, "EX") }
+func cmdPSETEX(args []string) []byte { return setWithTTL(args, "PX") }
+
+func setWithTTL(args []string, unit string) []byte {
+	if len(args) != 3 {
+		return Encode(errors.New("ERR wrong number of arguments for expiring SET command"), false)
+	}
+	return cmdSET([]string{args[0], args[2], unit, args[1]})
+}
+
 // cmdSET implements SET key value [EX seconds | PX milliseconds].
 //
 // The expiry keyword used to be skipped over entirely: whatever sat in args[2]
@@ -289,8 +301,8 @@ func increment(args []string, sign int64, explicit bool) []byte {
 	}
 	delta := sign
 	if explicit {
-		n, err := strconv.ParseInt(args[1], 10, 64)
-		if err != nil {
+		n, valid := counterInteger(args[1])
+		if !valid {
 			return Encode(errNotAnInteger, false)
 		}
 		if sign == -1 && n == math.MinInt64 {
@@ -302,9 +314,9 @@ func increment(args []string, sign int64, explicit bool) []byte {
 	obj := dictStore.Get(key)
 	current := int64(0)
 	if obj != nil {
-		var err error
-		current, err = strconv.ParseInt(obj.Value.(string), 10, 64)
-		if err != nil || strconv.FormatInt(current, 10) != obj.Value.(string) {
+		var valid bool
+		current, valid = canonicalInteger(obj.Value.(string))
+		if !valid {
 			return Encode(errNotAnInteger, false)
 		}
 	}

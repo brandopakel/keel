@@ -33,6 +33,7 @@ func cmdPFADD(args []string) []byte {
 			changed = true
 		}
 	}
+	hllStore.Resize(key)
 
 	if changed {
 		return constant.RespOne

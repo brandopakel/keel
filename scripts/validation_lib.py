@@ -36,7 +36,8 @@ class Server:
         if async_append:
             self.args.append('-aof-async-append')
         self.args.extend(extra)
-        self.env = dict(os.environ, KEEL_VALIDATION_PASSWORD=self.password)
+        self.env = {key: os.environ[key] for key in ('PATH', 'HOME', 'TMPDIR') if key in os.environ}
+        self.env['KEEL_VALIDATION_PASSWORD'] = self.password
         self.file_limit = file_limit
         self.process = None
         self.client = None

@@ -18,6 +18,7 @@ var commandTable = map[string]func([]string) []byte{
 
 	// Strings
 	"SET": cmdSET, "GET": cmdGET, "INCR": cmdINCR, "INCRBY": cmdINCRBY, "DECR": cmdDECR, "DECRBY": cmdDECRBY, "MGET": cmdMGET, "MSET": cmdMSET,
+	"SETEX": cmdSETEX, "PSETEX": cmdPSETEX,
 	"LCS": cmdLCS,
 
 	// Keys and expiry
