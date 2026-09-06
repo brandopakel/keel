@@ -101,11 +101,13 @@ def write_failure(binary, root, worker, disk_root=None):
 
 def run(args, report):
     root = Path(args.out).resolve()
-    primary = Server(args.bin, root / 'primary', async_append=True, extra=['-replication-feed'])
+    primary = Server(args.bin, root / 'primary', async_append=True,
+                     extra=['-replication-feed'] + (['-aof-concurrent-append'] if args.concurrent else []))
     password = primary.password
     replica = Server(args.bin, root / 'replica', async_append=True, password=password,
                      extra=['-replicaof', f'127.0.0.1:{primary.port}',
-                            '-primary-password-env', 'KEEL_VALIDATION_PASSWORD'])
+                            '-primary-password-env', 'KEEL_VALIDATION_PASSWORD'] +
+                           (['-aof-concurrent-append'] if args.concurrent else []))
     for server in [primary, replica]:
         server.env['GODEBUG'] = 'gctrace=1'
     expected, events = {}, deque(maxlen=128)
@@ -236,6 +238,7 @@ def run(args, report):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('--concurrent', action='store_true', help='exercise bounded concurrent appends on both servers')
     parser.add_argument('--bin', required=True)
     parser.add_argument('--out', required=True)
     parser.add_argument('--seconds', type=float, default=900)
@@ -255,7 +258,7 @@ if __name__ == '__main__':
     report = {'status': 'running', 'platform': platform.platform(), 'binary_sha256': sha256(args.bin),
               'harness_sha256': sha256(__file__), 'seconds_requested': args.seconds,
               'started_utc': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-              'primary_crash_every': args.primary_crash_every,
+              'primary_crash_every': args.primary_crash_every, 'concurrent': args.concurrent,
               'checkpoint_count': 0,
               'acknowledged_writes': 0, 'primary_crash_recoveries': 0,
               'replica_crash_recoveries': 0, 'checkpoints': [], 'faults': [], 'passed': False}

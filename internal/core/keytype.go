@@ -42,6 +42,8 @@ var commandKeyspace = map[string]string{
 
 	"ZADD": "zset", "ZRANK": "zset", "ZREM": "zset", "ZSCORE": "zset",
 	"ZRANGE": "zset", "ZCARD": "zset",
+	"ZCOUNT": "zset", "ZRANGEBYSCORE": "zset", "ZREVRANGEBYSCORE": "zset",
+	"ZINCRBY": "zset", "ZPOPMIN": "zset", "ZPOPMAX": "zset",
 
 	// Geospatial keys are sorted sets, as they are in Redis: the geohash is the
 	// score, which is what makes GEOSEARCH a range query over a skip list.

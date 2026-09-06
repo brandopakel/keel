@@ -83,6 +83,10 @@ def operation(rng):
             ['ZADD', key, 'XX', 'CH', score, member], ['ZREM', key, member],
             ['ZSCORE', key, member], ['ZRANK', key, member], ['ZCARD', key],
             ['ZRANGE', key, -10, 10, 'WITHSCORES'], ['ZRANGE', key, 0, 10, 'REV'],
+            ['ZCOUNT', key, '(0', '+inf'], ['ZRANGEBYSCORE', key, -10, 10, 'WITHSCORES', 'LIMIT', 1, 5],
+            ['ZREVRANGEBYSCORE', key, '+inf', '-inf', 'LIMIT', 0, 3],
+            ['ZINCRBY', key, rng.randrange(-3,4), member], ['ZPOPMIN', key, rng.randrange(4)],
+            ['ZPOPMAX', key, rng.randrange(4)],
         ])
     key = rng.choice(['string','hash','list','set','zset']) + ':' + str(rng.randrange(32))
     return rng.choice([['DEL', key], ['EXISTS', key, 'missing'], ['TYPE', key],
@@ -95,10 +99,11 @@ def run(args):
     root.mkdir(parents=True, exist_ok=False)
     report = {'status': 'running', 'seed': args.seed, 'steps_requested': args.steps,
               'binary_sha256': sha256(args.bin), 'redis_sha256': sha256(args.redis),
-              'harness_sha256': sha256(__file__), 'policy': args.policy,
+              'harness_sha256': sha256(__file__), 'policy': args.policy, 'concurrent': args.concurrent,
               'reply_checks': 0, 'state_checks': 0, 'restarts': 0,
               'limits': 'Supported common RESP2 commands; unordered collections normalized; errors compared by class. No timing-based TTL differential or cross-type SET equivalence claim.'}
-    server = Server(args.bin, root/'keel', policy=args.policy)
+    server = Server(args.bin, root/'keel', policy=args.policy, async_append=args.concurrent,
+                    extra=['-aof-concurrent-append'] if args.concurrent else ())
     server.env = {key: value for key,value in server.env.items() if key in ('PATH','HOME','TMPDIR','KEEL_VALIDATION_PASSWORD')}
     redis = reference = None
     log = (root/'redis.log').open('w')
@@ -171,6 +176,7 @@ def run(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--concurrent', action='store_true')
     parser.add_argument('--bin',type=Path,required=True)
     parser.add_argument('--redis',type=Path,required=True)
     parser.add_argument('--out',type=Path,required=True)

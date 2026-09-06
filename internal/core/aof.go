@@ -86,6 +86,7 @@ type aofState struct {
 	replaying   bool
 	lastSync    time.Time
 	syncPending chan error
+	syncOffset  uint64
 	dirty       bool
 	failed      error
 	skip        bool
@@ -95,10 +96,11 @@ type aofState struct {
 	// on: what matters is how much of the file is superseded, not how big it
 	// is, and only a comparison against the size the data actually needs can
 	// tell those apart.
-	baseSize int64
-	written  int64
-	rewrites int
-	lastKeys int
+	baseSize    int64
+	rewriteBase int64
+	written     int64
+	rewrites    int
+	lastKeys    int
 }
 
 var aof aofState
@@ -117,7 +119,7 @@ var writeCommands = map[string]bool{
 	"HSET": true, "HSETNX": true, "HDEL": true, "HINCRBY": true,
 	"LPUSH": true, "RPUSH": true, "LPOP": true, "RPOP": true, "LTRIM": true, "LSET": true,
 	"SADD": true, "SREM": true, "SPOP": true,
-	"ZADD": true, "ZREM": true,
+	"ZADD": true, "ZREM": true, "ZINCRBY": true, "ZPOPMIN": true, "ZPOPMAX": true,
 	"GEOADD":     true,
 	"BF.RESERVE": true, "BF.ADD": true, "BF.MADD": true,
 	"CMS.INITBYDIM": true, "CMS.INITBYPROB": true, "CMS.INCRBY": true,
@@ -173,7 +175,22 @@ func OpenAOF(path string) error {
 	if info, err := f.Stat(); err == nil {
 		aof.baseSize = info.Size()
 	}
+	aof.rewriteBase = aof.baseSize
+	// Frequent restarts must not reset compaction's growth target to the
+	// ever-growing log. Use a conservative live-state estimate until the next
+	// actual rewrite provides an exact baseline. HLL's wire registers remain
+	// dense even when its in-memory representation is compact.
+	live := data_structure.TotalMemUsed()
+	const maxInt64 = uint64(1<<63 - 1)
+	hllWire := uint64(hllStore.Len()) * (16 << 10)
+	if live <= (maxInt64-hllWire)/3 {
+		if estimate := int64(live*3 + hllWire); estimate < aof.rewriteBase {
+			aof.rewriteBase = estimate
+		}
+	}
 	aof.written = 0
+	appendStarted, appendCompleted = 0, 0
+	appendWritten, appendSynced = 0, 0
 	for _, key := range aof.recovered {
 		aof.buf = appendCommand(aof.buf, "DEL", key)
 	}
@@ -351,6 +368,9 @@ func pollAOFSync(wait bool) {
 		}
 	}
 	aof.syncPending = nil
+	if err == nil {
+		appendSynced = max(appendSynced, aof.syncOffset)
+	}
 	if err != nil && aof.failed == nil {
 		aof.failed = err
 	}
@@ -367,6 +387,8 @@ func flushAOF(closing bool) error {
 	if len(aof.buf) > 0 {
 		n, err := aof.file.Write(aof.buf)
 		aof.written += int64(n)
+		appendStarted += uint64(n)
+		appendWritten += uint64(n)
 		if n > 0 {
 			aof.dirty = true
 		}
@@ -387,10 +409,12 @@ func flushAOF(closing bool) error {
 			result := make(chan error, 1)
 			file, syncFile := aof.file, aofSync
 			aof.syncPending = result
+			aof.syncOffset = appendWritten
 			aof.lastSync = time.Now()
 			// Writes during this Sync stay dirty and require another sync.
 			aof.dirty = false
 			go func() { result <- syncFile(file) }()
+			appendCompleted = appendWritten
 			return nil
 		}
 		if err := aofSync(aof.file); err != nil {
@@ -399,7 +423,9 @@ func flushAOF(closing bool) error {
 		}
 		aof.lastSync = time.Now()
 		aof.dirty = false
+		appendSynced = appendWritten
 	}
+	appendCompleted = appendWritten
 	return nil
 }
 

@@ -99,10 +99,11 @@ var IOThreads = 1
 // syscall per event-loop cycle and, under FsyncAlways, a disk flush before
 // every reply.
 var (
-	AOFEnabled     = false
-	AOFAsyncAppend = false
-	AOFFileName    = "./keel-master.aof"
-	AOFFsync       = FsyncEverySec
+	AOFEnabled          = false
+	AOFAsyncAppend      = false
+	AOFConcurrentAppend = false
+	AOFFileName         = "./keel-master.aof"
+	AOFFsync            = FsyncEverySec
 )
 
 // LegacyAOFFileName is what the default log was called while the server was

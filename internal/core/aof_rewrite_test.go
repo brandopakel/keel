@@ -633,3 +633,37 @@ func TestCancelledRewriteLeavesTheOldLogIntact(t *testing.T) {
 	assert.Equal(t, 10001, data_structure.TotalKeys(),
 		"the old log must still hold everything, including writes after the cancellation")
 }
+
+// Reopening a log must not reset its growth threshold to accumulated history.
+// Otherwise a restart every few minutes can defer automatic compaction forever.
+func TestRestartDoesNotRatchetAutomaticRewriteBaseline(t *testing.T) {
+	oldPct, oldMin := config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize
+	defer func() { CloseAOF(); config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize = oldPct, oldMin }()
+	config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize = 100, 1024
+	path := filepath.Join(t.TempDir(), "ratchet.aof")
+	ResetStores()
+	assert.NoError(t, OpenAOF(path))
+	// Use flushAOF to create a replayable historical log without auto-compaction.
+	for i := 0; i < 200; i++ {
+		run(t, "SET", "hot", strconv.Itoa(i))
+		assert.NoError(t, flushAOF(false))
+	}
+	assert.NoError(t, CloseAOF())
+	ResetStores()
+	_, err := LoadAOF(path)
+	assert.NoError(t, err)
+	assert.NoError(t, OpenAOF(path))
+	assert.Greater(t, aof.baseSize, aof.rewriteBase)
+	before := aof.baseSize
+	for i := 0; i < 100 && aof.rewrites == 0; i++ {
+		assert.NoError(t, FlushAOF())
+	}
+	assert.Equal(t, 1, aof.rewrites)
+	assert.Less(t, aof.baseSize, before/4)
+	assert.Equal(t, aof.baseSize, aof.rewriteBase)
+	assert.NoError(t, CloseAOF())
+	ResetStores()
+	_, err = LoadAOF(path)
+	assert.NoError(t, err)
+	assert.Equal(t, "199", run(t, "GET", "hot"))
+}

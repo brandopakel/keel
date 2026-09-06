@@ -154,3 +154,38 @@ func (zs *ZSet) RangeByRank(start, stop int, reverse bool) ([]string, []float64)
 	}
 	return members, scores
 }
+
+// CountByScore uses boundary ranks, so counting a large range stays O(log n).
+func (zs *ZSet) CountByScore(min, max float64, minEx, maxEx bool) int64 {
+	r := rangeSpec{min: min, max: max, minEx: minEx, maxEx: maxEx}
+	first, last := zs.sl.firstInRange(r), zs.sl.lastInRange(r)
+	if first == nil || last == nil {
+		return 0
+	}
+	return int64(zs.sl.rank(last.score, last.ele) - zs.sl.rank(first.score, first.ele) + 1)
+}
+
+// RangeByScore skips offsets with rank lookup rather than walking skipped rows.
+func (zs *ZSet) RangeByScore(min, max float64, minEx, maxEx bool, offset, count int, reverse bool) ([]string, []float64) {
+	if offset < 0 || count == 0 {
+		return nil, nil
+	}
+	r := rangeSpec{min: min, max: max, minEx: minEx, maxEx: maxEx}
+	first, last := zs.sl.firstInRange(r), zs.sl.lastInRange(r)
+	if first == nil || last == nil {
+		return nil, nil
+	}
+	lo, hi := int(zs.sl.rank(first.score, first.ele))-1, int(zs.sl.rank(last.score, last.ele))-1
+	available := hi - lo + 1
+	if offset >= available {
+		return nil, nil
+	}
+	available -= offset
+	if count < 0 || count > available {
+		count = available
+	}
+	if reverse {
+		return zs.RangeByRank(zs.Len()-1-hi+offset, zs.Len()-1-hi+offset+count-1, true)
+	}
+	return zs.RangeByRank(lo+offset, lo+offset+count-1, false)
+}

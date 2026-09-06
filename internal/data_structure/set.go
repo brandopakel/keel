@@ -81,6 +81,15 @@ func (s *Set) Contains(member string) bool {
 	return present
 }
 
+// MemberAt exposes one member for a bounded traversal. Mutating the set or
+// drawing distinct random members can reorder these positions.
+func (s *Set) MemberAt(i int) (string, bool) {
+	if i < 0 || i >= len(s.order) {
+		return "", false
+	}
+	return s.order[i], true
+}
+
 // Members lists every member, in no particular order.
 func (s *Set) Members() []string {
 	out := make([]string, len(s.order))

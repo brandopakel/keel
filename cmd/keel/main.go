@@ -82,6 +82,7 @@ func parseFlags() {
 	flag.Uint64Var(&lcsMaxCells, "lcs-max-cells", config.LCSMaxCells,
 		"largest len(key1)*len(key2) LCS will attempt; 0 is unbounded")
 	flag.BoolVar(&config.AOFAsyncAppend, "aof-async-append", false, "experimental: append on a worker with one-batch command backpressure")
+	flag.BoolVar(&config.AOFConcurrentAppend, "aof-concurrent-append", false, "experimental: overlap bounded string commands with worker appends; requires -aof-async-append")
 	flag.BoolVar(&appendOnly, "appendonly", config.AOFEnabled,
 		"log every write to an append-only file and replay it at startup")
 	flag.StringVar(&appendFilename, "appendfilename", config.AOFFileName,
@@ -129,6 +130,9 @@ func parseFlags() {
 	case config.FsyncAlways, config.FsyncEverySec, config.FsyncNever:
 	default:
 		log.Fatalf("unknown -appendfsync %q (want always, everysec or no)", appendFsync)
+	}
+	if config.AOFConcurrentAppend && !config.AOFAsyncAppend {
+		log.Fatal("-aof-concurrent-append requires -aof-async-append")
 	}
 	if config.AOFAsyncAppend && !appendOnly {
 		log.Fatal("-aof-async-append requires -appendonly")

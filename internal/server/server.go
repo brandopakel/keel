@@ -126,13 +126,15 @@ func (b *connBuffer) commit(n int) { b.data = b.data[:len(b.data)+n] }
 // its own, and both are dropped at the end of the cycle. An idle connection
 // holds the struct and nothing else.
 type client struct {
-	fd              int
-	lastProgress    time.Time
-	closeAfterWrite bool
-	authenticated   bool
-	accounted       int
-	outBytes        int
-	frames          []int
+	fd                         int
+	lastProgress               time.Time
+	closeAfterWrite            bool
+	authenticated              bool
+	accounted                  int
+	outBytes                   int
+	frames                     []int
+	appendOffset               uint64
+	appendHeld, appendDeferred bool
 
 	// buf holds the bytes of a command that arrived split across reads, and is
 	// nil the rest of the time.
@@ -469,6 +471,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 	nextMaintenance := time.Now()
 	var heldReplies []*client
 	paused := make(map[int]*client)
+	var ordered orderedAppend
 
 	// The connections taking part in each phase of the current cycle, and the
 	// arena their replies are staged in. Kept across cycles and truncated
@@ -574,7 +577,16 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 			continue
 		}
 
-		if config.AOFAsyncAppend && core.AppendPending() {
+		var deferred []*client
+		if config.AOFConcurrentAppend {
+			var err error
+			deferred, err = ordered.begin(pool, ioMultiplexer)
+			if err != nil {
+				requestShutdown()
+				return err
+			}
+		}
+		if config.AOFAsyncAppend && !config.AOFConcurrentAppend && core.AppendPending() {
 			ready, err := core.FlushAOFAsync(wake)
 			if err != nil {
 				requestShutdown()
@@ -645,15 +657,17 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 			continue
 		}
 
-		select {
-		case update := <-replicaUpdates:
-			err := core.ApplyReplication(update.frame)
-			update.applied <- err
-			if err != nil {
-				requestShutdown()
-				return err
+		if !core.AppendPending() && core.AppendBufferedBytes() == 0 {
+			select {
+			case update := <-replicaUpdates:
+				err := core.ApplyReplication(update.frame)
+				update.applied <- err
+				if err != nil {
+					requestShutdown()
+					return err
+				}
+			default:
 			}
-		default:
 		}
 
 		// Set when the wakeup pipe fires. The batch in hand is served to
@@ -706,6 +720,9 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 				// the whole ready set is collected first so the read phase can
 				// be handed out across threads in one go.
 				if c := clients[ev.Fd]; c != nil {
+					if c.appendHeld || c.appendDeferred || len(c.cmds) > 0 {
+						continue
+					}
 					if len(c.out) > 0 {
 						writable = append(writable, c)
 					} else {
@@ -717,6 +734,9 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 
 		// Phase one: read and parse, in parallel when there is enough of it.
 		pool.run(readable, false)
+		if len(deferred) > 0 {
+			readable = append(deferred, readable...)
+		}
 
 		// Phase two: execute. On this thread only, and in the order the
 		// multiplexer reported the connections, so the stores stay unsynchronised
@@ -738,7 +758,11 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 				continue
 			}
 
+			if config.AOFConcurrentAppend && !ordered.admit(c, ioMultiplexer) {
+				continue
+			}
 			if executeRun(c, &arena) {
+				c.appendOffset = core.AppendOffset()
 				if !accountClient(c) {
 					if c.inArena {
 						arena.buf = arena.buf[:c.outStart]
@@ -753,7 +777,9 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 		}
 
 		// Reap idle keys before flushing their removal records.
-		core.ExpireCycle()
+		if !config.AOFConcurrentAppend || (!core.AppendPending() && core.AppendBufferedBytes() == 0) {
+			core.ExpireCycle()
+		}
 
 		// The log is written and synced here, after every command has run and
 		// before a single reply goes out. Under appendfsync always that
@@ -772,7 +798,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 			requestShutdown()
 			return flushErr
 		}
-		if !ready {
+		if !ready && !config.AOFConcurrentAppend {
 			for _, c := range writable {
 				if c.inArena {
 					c.out = append([]byte(nil), arena.buf[c.outStart:c.outEnd]...)
@@ -803,6 +829,13 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 			wake()
 		}
 
+		if config.AOFConcurrentAppend {
+			writable = ordered.gate(writable, &arena, ioMultiplexer)
+			if len(ordered.deferred) > 0 && !core.AppendPending() {
+				wake()
+			}
+		}
+
 		// Offsets into the arena become slices only now: until the last reply
 		// was appended, another append could have moved the array underneath
 		// any slice taken earlier.
@@ -819,7 +852,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 		if !now.Before(nextMaintenance) {
 			nextMaintenance = now.Add(time.Second)
 			for _, c := range clients {
-				if (len(c.out) > 0 || c.buf != nil) && now.Sub(c.lastProgress) > 30*time.Second {
+				if (len(c.out) > 0 || c.buf != nil || c.appendDeferred) && now.Sub(c.lastProgress) > 30*time.Second {
 					closeClient(c)
 				}
 			}
@@ -961,6 +994,7 @@ func accountClient(c *client) bool {
 	}
 	c.outBytes = used
 	used += cap(c.frames) * 8
+	used += parsedBytes(c.cmds)
 	if c.buf != nil {
 		used += cap(c.buf.data)
 	}

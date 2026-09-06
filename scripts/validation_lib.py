@@ -1,5 +1,6 @@
 """Owned-process helpers for release and operational checks; no external service."""
 import hashlib
+import math
 import os
 import resource
 import secrets
@@ -19,7 +20,10 @@ def sha256(path):
 
 class Server:
     def __init__(self, binary, directory, *, policy='always', async_append=False,
-                 port=None, extra=(), file_limit=None, password=None):
+                 port=None, extra=(), file_limit=None, password=None, startup_timeout=10):
+        if not math.isfinite(startup_timeout) or startup_timeout <= 0:
+            raise ValueError("startup_timeout must be finite and positive")
+        self.startup_timeout = startup_timeout
         self.binary = str(Path(binary).resolve())
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
@@ -52,7 +56,7 @@ class Server:
             self.process = subprocess.Popen(
                 self.args, env=self.env, stdout=self.log, stderr=self.log,
                 preexec_fn=set_limit if limit is not None else None)
-            deadline = time.monotonic() + 10
+            deadline = time.monotonic() + self.startup_timeout
             while time.monotonic() < deadline:
                 if self.process.poll() is not None:
                     raise RuntimeError(f'server exited during startup; see {self.directory}/server.log')
@@ -62,7 +66,7 @@ class Server:
                     return self
                 except OSError:
                     time.sleep(.02)
-            raise TimeoutError('server did not become ready')
+            raise TimeoutError(f'server did not become ready within {self.startup_timeout}s; AOF bytes={(self.directory / "store.aof").stat().st_size}')
         except BaseException:
             self.stop(check=False)
             raise
