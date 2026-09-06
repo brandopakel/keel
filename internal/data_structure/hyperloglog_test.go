@@ -207,7 +207,12 @@ func TestPatLenStaysInRange(t *testing.T) {
 	}
 }
 
-func TestMemoryFootprintIsTwelveKB(t *testing.T) {
+func TestMemoryFootprintPromotesToTwelveKB(t *testing.T) {
 	h := CreateHLL()
+	assert.Nil(t, h.regs)
+	for i := 0; i <= hllSparseLimit; i++ {
+		h.setRegister(i, 1)
+	}
 	assert.Equal(t, 12*1024+1, len(h.regs), "16384 six-bit registers, plus the spare window byte")
+	assert.Nil(t, h.sparse)
 }

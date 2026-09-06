@@ -92,9 +92,9 @@ const (
 	morrisBaseBytes    = 64
 	// A dense HyperLogLog's 12289-byte register array does not land on a size
 	// class, so the allocator rounds it up to 13568. Measured, 200 sketches
-	// cost 13616 bytes each, so the difference is charged here rather than
+	// plus its 64-byte object costs 13632 bytes; charge the difference rather than
 	// leaving the estimate 9% light.
-	hllBaseBytes     = 1327
+	hllBaseBytes     = 1343
 	sbChainBaseBytes = 64
 	bloomBaseBytes   = 96
 )
