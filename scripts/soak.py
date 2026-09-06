@@ -3,6 +3,7 @@
 import argparse
 import errno
 import json
+import math
 import os
 import platform
 import statistics
@@ -183,7 +184,8 @@ def run(args, report):
             if now >= next_cycle:
                 recovery_start = time.monotonic()
                 cycles += 1
-                if cycles % 3 == 0:
+                crash_primary = args.primary_crash_every > 0 and cycles % args.primary_crash_every == 0
+                if crash_primary:
                     primary.stop(crash=True)
                     time.sleep(6)
                     try:
@@ -204,7 +206,7 @@ def run(args, report):
                 verify(replica.client, expected, events)
                 verify_collections(replica.client, hashes, members, scores, large)
                 with (root/'recoveries.jsonl').open('a') as output:
-                    output.write(json.dumps({'cycle': cycles, 'primary_crash': cycles % 3 == 0,
+                    output.write(json.dumps({'cycle': cycles, 'primary_crash': crash_primary,
                         'seconds': time.monotonic()-recovery_start, 'acknowledged_cache_values_lost': 0})+'\n')
                 next_cycle = time.monotonic() + args.cycle_seconds
             time.sleep(.002)
@@ -237,20 +239,26 @@ if __name__ == '__main__':
     parser.add_argument('--out', required=True)
     parser.add_argument('--seconds', type=float, default=900)
     parser.add_argument('--cycle-seconds', type=float, default=60)
+    parser.add_argument('--primary-crash-every', type=int, default=3,
+                        help='crash primary every N recovery cycles; 0 keeps it alive to measure long-uptime growth')
     parser.add_argument('--fault-only', action='store_true')
     parser.add_argument('--disk-root')
     args = parser.parse_args()
-    if args.seconds <= 0 or args.cycle_seconds <= 0:
-        parser.error('durations must be positive')
+    if (not math.isfinite(args.seconds) or not math.isfinite(args.cycle_seconds) or
+            args.seconds <= 0 or args.cycle_seconds <= 0 or args.primary_crash_every < 0):
+        parser.error('durations must be finite and positive; primary-crash-every must be nonnegative')
     os.umask(0o077)
     root = Path(args.out).resolve()
     assert not root.exists(), 'use a fresh evidence directory'
     root.mkdir(parents=True)
     report = {'status': 'running', 'platform': platform.platform(), 'binary_sha256': sha256(args.bin),
               'harness_sha256': sha256(__file__), 'seconds_requested': args.seconds,
+              'started_utc': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+              'primary_crash_every': args.primary_crash_every,
               'checkpoint_count': 0,
               'acknowledged_writes': 0, 'primary_crash_recoveries': 0,
               'replica_crash_recoveries': 0, 'checkpoints': [], 'faults': [], 'passed': False}
+    (root / 'progress.json').write_text(json.dumps(report, indent=2) + '\n')
     try:
         if not args.fault_only:
             run(args, report)

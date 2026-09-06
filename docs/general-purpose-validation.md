@@ -114,7 +114,7 @@ python3 scripts/differential.py --bin dist/keel-candidate \
 python3 scripts/operational-matrix.py --bin dist/keel-candidate \
   --out dist/general/operations
 python3 scripts/soak.py --bin dist/keel-candidate --seconds 172800 \
-  --cycle-seconds 300 --out dist/general/soak-48h
+  --cycle-seconds 300 --primary-crash-every 0 --out dist/general/soak-48h
 ```
 
 `-profile-dir` creates a fresh private directory with CPU, allocation and heap
@@ -144,6 +144,10 @@ contains running status and a bounded recent window, and `report.json` is the
 terminal result. A running or interrupted soak is not a pass. The laptop must
 remain awake and running for its requested elapsed duration to be exercised.
 CPU and latency samples during this diagnostic soak are not matched benchmarks.
+With `--primary-crash-every 0`, the primary stays up for the full run, allowing
+long-uptime memory growth to be observed while replicas restart. The default
+crashes the primary every third recovery cycle and exercises outage handling;
+use that separately from the uninterrupted-primary measurement.
 
 The next persistence/replication stages have concrete ownership, visibility,
 admission, recovery and testing contracts in
