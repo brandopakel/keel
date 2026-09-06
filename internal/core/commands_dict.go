@@ -289,8 +289,8 @@ func increment(args []string, sign int64, explicit bool) []byte {
 	}
 	delta := sign
 	if explicit {
-		n, err := strconv.ParseInt(args[1], 10, 64)
-		if err != nil {
+		n, valid := counterInteger(args[1])
+		if !valid {
 			return Encode(errNotAnInteger, false)
 		}
 		if sign == -1 && n == math.MinInt64 {
@@ -302,9 +302,9 @@ func increment(args []string, sign int64, explicit bool) []byte {
 	obj := dictStore.Get(key)
 	current := int64(0)
 	if obj != nil {
-		var err error
-		current, err = strconv.ParseInt(obj.Value.(string), 10, 64)
-		if err != nil || strconv.FormatInt(current, 10) != obj.Value.(string) {
+		var valid bool
+		current, valid = canonicalInteger(obj.Value.(string))
+		if !valid {
 			return Encode(errNotAnInteger, false)
 		}
 	}

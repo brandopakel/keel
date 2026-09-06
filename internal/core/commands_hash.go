@@ -201,8 +201,8 @@ func cmdHINCRBY(args []string) []byte {
 	}
 	key, field := args[0], args[1]
 
-	delta, err := strconv.ParseInt(args[2], 10, 64)
-	if err != nil {
+	delta, valid := counterInteger(args[2])
+	if !valid {
 		return Encode(errors.New("ERR value is not an integer or out of range"), false)
 	}
 
@@ -215,8 +215,8 @@ func cmdHINCRBY(args []string) []byte {
 	current := int64(0)
 	if existed {
 		if existing, has := h.Get(field); has {
-			current, err = strconv.ParseInt(existing, 10, 64)
-			if err != nil {
+			current, valid = counterInteger(existing)
+			if !valid {
 				return Encode(errors.New("ERR hash value is not an integer"), false)
 			}
 		}

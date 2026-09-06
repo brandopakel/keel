@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"strconv"
 
 	"github.com/brandopakel/keel/internal/constant"
 )
@@ -40,23 +41,39 @@ func assertEncoding(te uint8, e uint8) error {
 // one; Redis draws the line in the same place, which is why INCR on "007"
 // is refused there and here.
 func deduceTypeString(v string) (uint8, uint8) {
+	if _, ok := canonicalInteger(v); ok {
+		return constant.ObjTypeString, constant.ObjEncodingInt
+	}
+	return constant.ObjTypeString, constant.ObjEncodingRaw
+}
+
+func canonicalInteger(v string) (int64, bool) {
 	// A canonical int64 is at most 20 bytes. ParseInt's error includes a copy
 	// of its input, which needlessly copied every nonnumeric cached value.
 	if v == "0" {
-		return constant.ObjTypeString, constant.ObjEncodingInt
+		return 0, true
 	}
 	if len(v) == 0 || len(v) > 20 {
-		return constant.ObjTypeString, constant.ObjEncodingRaw
+		return 0, false
 	}
 	digits := v
 	if v[0] == '-' {
 		digits = v[1:]
 	}
 	if len(digits) == 0 || digits[0] < '1' || digits[0] > '9' {
-		return constant.ObjTypeString, constant.ObjEncodingRaw
+		return 0, false
 	}
-	if _, ok := parseDecimal([]byte(v)); ok {
-		return constant.ObjTypeString, constant.ObjEncodingInt
+	return parseDecimal([]byte(v))
+}
+
+// counterInteger preserves previously accepted AOF operations while enforcing
+// canonical integer spelling on new requests. Older releases accepted +1/007
+// counter arguments and noncanonical hash fields; refusing their historical
+// commands during replay would make an otherwise valid upgrade fail.
+func counterInteger(v string) (int64, bool) {
+	if aof.replaying {
+		n, err := strconv.ParseInt(v, 10, 64)
+		return n, err == nil
 	}
-	return constant.ObjTypeString, constant.ObjEncodingRaw
+	return canonicalInteger(v)
 }
