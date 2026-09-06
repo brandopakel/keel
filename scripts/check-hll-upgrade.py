@@ -12,7 +12,7 @@ from soak import synchronized
 
 
 def state(client):
-    return {key: (client.call('DUMP', key), client.call('PFCOUNT', key))
+    return {key: (client.call('KEEL.DUMP', key), client.call('PFCOUNT', key))
             for key in sorted(client.call('KEYS', '*'))}
 
 
