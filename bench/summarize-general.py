@@ -51,8 +51,8 @@ def summarize(root):
                'repetitions': expected, 'report_sha256': hashes, 'cases': results,
                'limits': 'Local sequential closed-loop measurements; medians and observed range, not confidence intervals. No aggregate speedup or deployment-capacity claim. RSS includes runtime and buffers; pipelining changes latency interpretation.'}
     (root/'summary.json').write_text(json.dumps(summary, indent=2)+'\n')
-    rows = ['| Workload | Arm | Ops/s median (range) | p99 ms median | RSS MiB median |',
-            '| --- | --- | ---: | ---: | ---: |']
+    rows = ['| Workload | Arm | Ops/s median (range) | p99 ms median | RSS MiB median | Client CPU warnings |',
+            '| --- | --- | ---: | ---: | ---: | ---: |']
     for name, arms in results.items():
         for arm, metrics in arms.items():
             if arm == 'candidate_baseline_throughput_ratio':
@@ -60,7 +60,7 @@ def summarize(root):
             ops = metrics.get('ops_per_second')
             ops_text = f"{ops['median']:,.0f} ({ops['min']:,.0f}–{ops['max']:,.0f})" if ops else '—'
             tail = f"{metrics['p99_ms']['median']:.3f}" if ops else '—'
-            rows.append(f"| {name} | {arm} | {ops_text} | {tail} | {metrics['rss_mib']['median']:.2f} |")
+            rows.append(f"| {name} | {arm} | {ops_text} | {tail} | {metrics['rss_mib']['median']:.2f} | {metrics['client_cpu_warnings']} |")
     (root/'summary.md').write_text('\n'.join(rows)+'\n')
     print(root/'summary.md')
 

@@ -25,6 +25,7 @@ def execute(client, command):
         if command[0] in ('SMEMBERS', 'HKEYS', 'HVALS', 'KEYS'):
             value = sorted(value)
         if command[0] == 'HGETALL':
+            assert len(value) % 2 == 0, 'truncated HGETALL response'
             value = sorted(zip(value[::2], value[1::2]))
         return ('ok', value)
     except RuntimeError as exc:

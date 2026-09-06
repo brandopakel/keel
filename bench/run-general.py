@@ -40,6 +40,8 @@ def scenarios():
         ('hash', {'kind': 'hash'}), ('set', {'kind': 'set'}),
         ('sorted-set', {'kind': 'zset'}), ('queue', {'kind': 'list'}),
         ('counter', {'kind': 'counter'}), ('hll', {'kind': 'hll'}),
+        ('hll-dense', {'kind': 'hll', 'keys': 64, 'hll_items': 4096}),
+        ('hll-union', {'kind': 'hll-union', 'keys': 64, 'hll_items': 32}),
         ('large-list-read', {'kind': 'large-list', 'keys': 1, 'size': 1024}),
         ('reconnect', {'reconnect': 100}),
     ]
@@ -52,7 +54,7 @@ def wire(parts):
 
 
 def sample_rss(pid):
-    fields = subprocess.check_output(['ps', '-o', 'rss=,pcpu=', '-p', str(pid)], text=True).split()
+    fields = subprocess.check_output(['ps', '-o', 'rss=,pcpu=', '-p', str(pid)], text=True, timeout=2).split()
     if len(fields) != 2:
         raise RuntimeError('owned process disappeared during telemetry')
     return int(fields[0]), float(fields[1])
@@ -78,8 +80,9 @@ def preload(client, case):
             command = ['SADD', key, 'member']
         elif kind == 'zset':
             command = ['ZADD', key, 1, 'member']
-        elif kind == 'hll':
-            command = ['PFADD', key, 'member']
+        elif kind in ('hll', 'hll-union'):
+            items = case.get('hll_items', 1)
+            command = ['PFADD', key] + (['member'] if items == 1 else [f'member:{index}:{item}' for item in range(items)])
         else:
             command = ['SET', key, b'0' if kind == 'counter' else payload]
         encoded = wire(command)
@@ -112,6 +115,7 @@ def traffic_options(case):
         'list': [('RPUSH bench:queue __data__', 1), ('LPOP bench:queue', 1)],
         'counter': [('INCR __key__', 1)],
         'hll': [('PFADD __key__ member', 1), ('PFCOUNT __key__', 19)],
+        'hll-union': [('PFCOUNT bench:1 bench:2 bench:3 bench:4', 1)],
         'large-list': [('LRANGE bench:list 0 -1', 1)],
     }
     if kind in commands:
@@ -260,7 +264,9 @@ def run_arm(args, arm, binary, case, repetition, directory):
     finally:
         stopped.set()
         if sampler:
-            sampler.join(timeout=3)
+            # Each sample has a two-second subprocess deadline. Join fully so
+            # the telemetry series cannot still change while it is written.
+            sampler.join()
         if load is not None and load.poll() is None:
             load.kill()
             load.wait()

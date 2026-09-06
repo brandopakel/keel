@@ -23,6 +23,7 @@ def verify(client, expected, events):
 
 def verify_collections(client, hashes, members, scores, large):
     raw = client.call('HGETALL', 'hash')
+    assert len(raw) == 2 * len(hashes)
     assert dict(zip(raw[::2], raw[1::2])) == hashes
     assert set(client.call('SMEMBERS', 'set')) == members
     ranked = sorted(scores, key=lambda member: (scores[member], member))
