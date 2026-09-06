@@ -157,6 +157,10 @@ See the [engineering review](docs/engineering-review-2026-09-04.md),
 [delivery checklist](docs/engineering-delivery.md), and
 [historical design narrative](docs/architecture-history.md). History records prior
 measurements and behavior; this README defines the current integration contract.
+The [general-purpose validation program](docs/general-purpose-validation.md)
+provides native workload comparisons, live heap/CPU profiles, seeded Redis
+differential tests and extended operational checks. Application pilots are one
+part of this coverage; Keel is the optimization target.
 Embedding, partitioning, and replication are separate future decisions driven by
 application requirements, not features implied by I/O threads.
 
