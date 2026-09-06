@@ -188,6 +188,14 @@ def run_arm(args, arm, binary, case, repetition, directory):
                 connection = Client('127.0.0.1', port)
                 idle_clients.append(connection)
                 assert connection.call('PING') == b'PONG'
+            if args.profiles:
+                process.send_signal(signal.SIGUSR1)
+                deadline = time.monotonic()+10
+                while not (directory/'profiles/live-1-runtime.json').exists():
+                    assert process.poll() is None, 'server exited during live memory capture'
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError('live memory profile capture missing')
+                    time.sleep(.02)
             for _ in range(10):
                 samples.append([time.monotonic()-began, *sample_rss(process.pid)])
                 time.sleep(.05)
@@ -318,7 +326,7 @@ def main():
         cases = [dict(name=f'keys-{keys}-value-{size}-clients-{clients}', keys=max(keys, 1), size=size,
                       clients=clients, pipeline=1, ratio='0:1', pattern='R:R', kind='cache' if keys else 'miss')
                  for keys, size, clients in [(0,64,1),(0,64,256),(2500,64,1),(2500,64,256),
-                     (25000,64,1),(100000,64,1),(2500,1024,1),(25000,1024,1)]]
+                     (25000,64,1),(100000,64,1),(1000000,64,1),(2500,1024,1),(25000,1024,1)]]
     if args.cases:
         names = set(args.cases.split(','))
         cases = [case for case in cases if case['name'] in names]
