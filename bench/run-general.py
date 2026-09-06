@@ -329,7 +329,7 @@ def main():
     if args.suite == 'smoke':
         cases = [case for case in cases if case['name'] in ('cache-read-64', 'hash', 'pipeline-16')]
     elif args.suite == 'memory':
-        cases = [dict(name=f'keys-{keys}-value-{size}-clients-{clients}', keys=max(keys, 1), size=size,
+        cases = [dict(name=f'keys-{keys}-value-{size}-clients-{clients}', keys=keys, size=size,
                       clients=clients, pipeline=1, ratio='0:1', pattern='R:R', kind='cache' if keys else 'miss')
                  for keys, size, clients in [(0,64,1),(0,64,256),(2500,64,1),(2500,64,256),
                      (25000,64,1),(100000,64,1),(1000000,64,1),(2500,1024,1),(25000,1024,1)]]

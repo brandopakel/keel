@@ -60,6 +60,7 @@ archive and verifies its SHA-256. Redis's actual binary hash/version are recorde
 because the local and Ubuntu package versions can differ.
 
 ```sh
+mkdir -p dist
 go build -trimpath -o dist/keel-candidate ./cmd/keel
 python3 bench/run-general.py --candidate dist/keel-candidate \
   --baseline /path/to/keel-baseline --redis /path/to/redis-server \
@@ -71,9 +72,9 @@ python3 bench/run-general.py --candidate dist/keel-candidate \
 python3 bench/summarize-general.py dist/general/memory
 ```
 
-The standard suite has 22 scenarios: read/balanced/write caches, 64 B through
+The standard suite has 24 scenarios: read/balanced/write caches, 64 B through
 1 MiB values, misses, skew, TTL writes, 1/16/256 connections, pipelines 1/16/64,
-100k keys, hashes, sets, rankings, queues, counters, HLL, a large list and
+100k keys, hashes, sets, rankings, queues, counters, small/dense/union HLLs, a large list and
 reconnections. The memory suite reaches one million keys and holds verified idle
 connections open while sampling. A control connection is additional to the
 reported workload/idle client count.
@@ -94,9 +95,10 @@ harnesses to exercise rewrites and recovery separately.
 These cases are deliberately reproducible, not exhaustive. The TTL throughput
 case measures TTL metadata writes with a 300-second expiry, not an expiry storm.
 The collection cases initially use small collections; the large-list case covers
-one larger response. Dense, low-cardinality HLL storage is a known Keel memory
-cost. Broader collection cardinalities, mixed tenants and offered-load sweeps are
-additional dimensions, not implied by a passing 22-case run. All load/server
+one larger response. The original 22-case run exposed dense storage for tiny
+HLLs; the compact candidate adds explicit dense and union cases to test both
+sides of that change. Broader collection cardinalities, mixed tenants and
+offered-load sweeps are additional dimensions. All load/server
 processes currently share a host. Native memtier reduces generator overhead, but
 closed-loop traffic can conceal overload queueing. Report its CPU warnings and
 do not interpret short-run p99.9 as a stable deployment SLO.

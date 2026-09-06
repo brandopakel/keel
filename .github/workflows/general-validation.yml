@@ -33,6 +33,13 @@ jobs:
           make -j2
       - name: Build Keel
         run: go build -trimpath -o /tmp/keel-general ./cmd/keel
+      - name: HLL legacy persistence, rollback and replication
+        run: |
+          git fetch --depth 1 origin 87cea7140ade84b64e7a9afb20ec9f26bea71d3e
+          mkdir /tmp/keel-hll-baseline
+          git archive FETCH_HEAD | tar -x -C /tmp/keel-hll-baseline
+          (cd /tmp/keel-hll-baseline && go build -trimpath -o /tmp/keel-hll-baseline-bin ./cmd/keel)
+          python3 scripts/check-hll-upgrade.py --baseline /tmp/keel-hll-baseline-bin --candidate /tmp/keel-general --out dist/general-ci/hll-upgrade
       - name: Differential replies, rewrite and two restarts
         run: |
           python3 scripts/differential.py --bin /tmp/keel-general --redis /usr/bin/redis-server --out dist/general-ci/differential --steps 20000
