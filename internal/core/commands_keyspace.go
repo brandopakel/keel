@@ -138,8 +138,7 @@ func cmdMSET(args []string) []byte {
 
 	for i := 0; i < len(args); i += 2 {
 		key, value := args[i], args[i+1]
-		oType, oEnc := deduceTypeString(value)
-		dictStore.Put(key, dictStore.NewObj(value, oType, oEnc))
+		dictStore.Put(key, dictStore.NewObj(value))
 	}
 	return constant.RespOk
 }

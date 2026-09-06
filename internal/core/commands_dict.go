@@ -118,8 +118,7 @@ func cmdSET(args []string) []byte {
 			at, expiry = int64(old), true
 		}
 	}
-	t, enc := deduceTypeString(value)
-	dictStore.Put(key, dictStore.NewObj(value, t, enc))
+	dictStore.Put(key, dictStore.NewObj(value))
 	aofRecord("SET", key, value)
 	if expiry {
 		dictStore.SetExpiryAt(key, uint64(at))
@@ -315,7 +314,7 @@ func increment(args []string, sign int64, explicit bool) []byte {
 	current := int64(0)
 	if obj != nil {
 		var valid bool
-		current, valid = canonicalInteger(obj.Value.(string))
+		current, valid = canonicalInteger(obj.Value)
 		if !valid {
 			return Encode(errNotAnInteger, false)
 		}
@@ -326,7 +325,7 @@ func increment(args []string, sign int64, explicit bool) []byte {
 	current += delta
 	value := strconv.FormatInt(current, 10)
 	if obj == nil {
-		dictStore.Put(key, dictStore.NewObj(value, constant.ObjTypeString, constant.ObjEncodingInt))
+		dictStore.Put(key, dictStore.NewObj(value))
 	} else {
 		dictStore.UpdateValue(key, value)
 	}

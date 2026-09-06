@@ -372,13 +372,7 @@ func emitKey(dst []byte, key string) []byte {
 
 func emitValue(dst []byte, key string) []byte {
 	if obj := dictStore.Peek(key); obj != nil {
-		value, ok := obj.Value.(string)
-		if !ok {
-			return dst
-		}
-		dst = appendCommand(dst, "SET", key, value)
-
-		return dst
+		return appendCommand(dst, "SET", key, obj.Value)
 	}
 	if set, ok := setStore.Peek(key); ok {
 		return appendCommand(dst, append([]string{"SADD", key}, set.Members()...)...)

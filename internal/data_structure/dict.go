@@ -2,28 +2,12 @@ package data_structure
 
 import "time"
 
-// Obj is a value in the main dictionary: the string itself, and a byte saying
-// how it is typed and encoded.
+// Obj holds a string and its eviction metadata. Collection values live in
+// separate typed keyspaces. Keeping the string header here avoids an interface
+// box per value; there is no redundant type/encoding byte or its padding.
 type Obj struct {
-	Value interface{}
-
-	// TypeEncoding packs the object's type into the high four bits and its
-	// encoding into the low four - whether a string holds an integer, for
-	// instance, which is what lets INCR skip a parse it knows would fail.
-	TypeEncoding uint8
-
-	// Access carries whatever bookkeeping the eviction policy needs, and what
-	// it means depends on the policy in force:
-	//
-	//	LRU  the logical clock value at the last access
-	//	LFU  a decay timestamp in the high 56 bits, and a logarithmic
-	//	     frequency counter in the low 8
-	//
-	// One overloaded field rather than three honest ones because this is per
-	// key, so its width is multiplied by the size of the keyspace: separate
-	// fields measured 48 bytes per object against 32, which is 76MB at the
-	// default five million key limit. Redis overloads its own lru field the
-	// same way and for the same reason.
+	Value string
+	// Access is the LRU clock or the packed LFU decay/frequency word.
 	Access uint64
 }
 
@@ -61,11 +45,10 @@ func CreateDict() *Dict {
 // does not know its own name until it is put somewhere - so a caller that wants
 // one sets it after the Put, which is also the order that makes SET clear a
 // previous expiry and then apply the new one.
-func (d *Dict) NewObj(value interface{}, oType uint8, oEnc uint8) *Obj {
+func (d *Dict) NewObj(value string) *Obj {
 	return &Obj{
-		Value:        value,
-		TypeEncoding: oType | oEnc,
-		Access:       NewAccess(),
+		Value:  value,
+		Access: NewAccess(),
 	}
 }
 

@@ -8,40 +8,18 @@ package data_structure
 // bytes means knowing what a key costs, and Go gives no way to ask the
 // allocator, so the cost is estimated.
 //
-// The estimate is calibrated against real heap growth rather than derived from
-// struct sizes. Adding 200,000 entries and measuring HeapAlloc either side:
-//
-//	key len   value len   bytes/entry   minus key+value
-//	     16           8         115.1              91.1
-//	     16          64         179.0              99.0
-//	     32          64         194.9              98.9
-//	     64          64         226.9              98.9
-//	    128          64         290.9              98.9
-//
-// Key and value bytes are charged one for one, and everything else - the map
-// bucket slot, the string headers, the Obj, the pointer - comes to a constant
-// just under 100 bytes.
-//
-// The constant holds from Go 1.22 onwards, which is why go.mod requires it. On
-// Go 1.21 the same workload holds substantially more heap, and since the
-// overhead is per entry the error is worst where the value is smallest.
-// Measured on linux/amd64 by TestEstimateTracksRealHeap, as estimate/actual:
-//
-//	Go        val=8    val=64   val=512   val=4096
-//	1.21.13   0.611     0.723     0.904      0.984
-//	1.22.12   0.977     1.031     1.008      1.001
-//	1.23.12   0.978     1.032     1.009      1.001
-//	1.24.9    1.017     1.061     1.016      1.002
-//	1.26.6    1.017     1.061     1.016      1.002
-//
-// Under-counting by 39% is not a cosmetic drift: -maxmemory is enforced against
-// this number, so a budget set on Go 1.21 admits far more than it was asked to
-// and the bound stops bounding. Requiring 1.22 is the fix rather than widening
-// the test, because the accounting either describes the heap or it does not.
+// String entries use a typed 24-byte Obj. The former interface-based object
+// needed 32 bytes plus a separately allocated 16-byte string header. Removing
+// those 24 bytes changes the calibrated overhead from 100 to 76 bytes per key.
+// This includes the map slot and allocator slack; TestEstimateTracksRealHeap
+// checks the estimate against live heap growth on every supported Go version.
+const stringEntryOverhead = 76
+
+// Collection keyspaces still use their existing entry representation.
 const entryOverhead = 100
 
 // expiryOverhead is the additional cost of a key with a TTL, which lives in a
-// second map keyed by object pointer.
+// second map keyed by key name.
 const expiryOverhead = 48
 
 // Per-member and per-structure costs for the collection types, measured the
@@ -99,38 +77,15 @@ const (
 	bloomBaseBytes   = 96
 )
 
-// entryBytes estimates what one key costs.
-//
-// It ignores the allocator rounding each allocation up to a size class, since
-// modelling that would mean hard-coding a table the runtime is free to change.
-// Checked against HeapAlloc over 100,000 entries, the estimate lands within 6%
-// and slightly high - 1.014, 1.061, 1.016 and 1.002 times the real figure at
-// value lengths of 8, 64, 512 and 4096 bytes. Erring high is the safe
-// direction for a bound: it evicts a little early rather than overshooting.
-//
-// It is still an estimate, so a memory bound is a target rather than a
-// guarantee. Redis, which can ask its allocator directly, says much the same
-// about maxmemory. There is a test comparing the two so this comment cannot
-// quietly go out of date.
+// entryBytes estimates the retained string entry and optional expiry record.
+// Allocator rounding and map occupancy vary; a maxmemory budget is an estimated
+// keyspace target, not a process RSS bound.
 func (d *Dict) entryBytes(key string, obj *Obj) uint64 {
-	n := uint64(entryOverhead) + uint64(len(key)) + valueBytes(obj.Value)
+	n := uint64(stringEntryOverhead) + uint64(len(key)) + uint64(len(obj.Value))
 	if _, hasTTL := d.expiredDictStore[key]; hasTTL {
 		n += expiryOverhead
 	}
 	return n
-}
-
-func valueBytes(v interface{}) uint64 {
-	switch t := v.(type) {
-	case string:
-		return uint64(len(t))
-	case []byte:
-		return uint64(len(t))
-	default:
-		// Everything the dictionary stores today is a string. Anything else is
-		// counted at its overhead only, which is honest about not knowing.
-		return 0
-	}
 }
 
 // EntryBytes exposes the per-key estimate, for MEMORY USAGE.

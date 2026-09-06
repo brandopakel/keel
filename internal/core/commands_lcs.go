@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/brandopakel/keel/internal/constant"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
@@ -129,12 +128,5 @@ func lcsValue(key string) (string, error) {
 	if dictStore.HasExpired(key) {
 		return "", nil
 	}
-	if err := assertType(obj.TypeEncoding, constant.ObjTypeString); err != nil {
-		return "", err
-	}
-	s, ok := obj.Value.(string)
-	if !ok {
-		return "", errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
-	}
-	return s, nil
+	return obj.Value, nil
 }
