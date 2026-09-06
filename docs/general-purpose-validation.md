@@ -9,11 +9,11 @@ not counted as Keel improvements. Spending remains capped at $0.
 
 | Work | Implementation and evidence required | Status |
 | --- | --- | --- |
-| Baseline and profiles | Fixed seeds, exact executables, CPU/allocation/live-heap profiles, baseline RSS and growth with keys/clients | In progress |
-| Broad performance | Read-heavy/balanced/write-heavy caches; value and working-set sizes; pipelines and connections; hashes, lists, sets, sorted sets, counters and sketches | In progress |
-| Memory/CPU optimization | Direct typed RESP command parsing; avoid copying nonnumeric values during integer classification; retain matched results | Implemented; comparative validation running |
+| Baseline and profiles | Fixed seeds, exact executables, CPU/allocation/live-heap profiles, baseline RSS and growth with keys/clients | Initial sweeps complete through 1M keys |
+| Broad performance | Read-heavy/balanced/write-heavy caches; values, key counts, pipelines, connections and data structures | 396 local comparative runs; 24-case CI smoke |
+| Memory/CPU optimization | Direct RESP command parsing; avoid nonnumeric copies; compact small HLLs | Implemented and measured |
 | Persistence latency | Profile append, rewrite and large-key serialization; bounded work and acknowledgement-preserving changes | Pending |
-| Operational validation | Sustained churn, TTL, eviction, slow clients, rewrite, disk errors, disconnect/reconnect, primary/replica restarts; overnight and multi-day reports | Pending |
+| Operational validation | Churn, TTL, eviction, slow clients, rewrite, disk errors, primary/replica recovery | Short suites pass; 8h and 48h runs active |
 | Replication development | Larger bounded snapshots, efficient large-key changes and durable resumable recovery, with explicit protocol/version compatibility | Pending |
 | Availability design | Election/quorum, durable terms, fencing and acknowledgement semantics before automatic failover implementation | Pending design |
 | Compatibility | Seeded Redis reply/state differential, rewrite and two crash/restarts; canonical counters; SETEX/PSETEX | Initial suite passes; wider command surface remains |
@@ -51,6 +51,9 @@ correctness and recovery intact across this broader suite. Dedicated load/server
 hosts and deployment filesystem tests require suitable available infrastructure;
 account login alone does not establish a zero-cost compute allocation.
 
+The [September 6 measured results](general-performance-2026-09-06.md) record the
+first milestone, its regressions and limitations, and the remaining engineering.
+
 ## Run the broad suite
 
 Build the baseline and candidate from clean commits with the same Go toolchain
@@ -82,7 +85,7 @@ reported workload/idle client count.
 Every arm starts a fresh loopback server and uses the same seeded fixture.
 Comparative runs disable authentication for all arms; the differential and
 operational tests use authenticated servers. Baseline and loaded RSS are recorded
-separately from RSS during traffic. Native JSON, HDR histograms, GC logs,
+separately from RSS during traffic. Native JSON, HDR histograms, server logs,
 telemetry and tool/build provenance are retained. A failure remains a failure;
 fresh output directories prevent accidentally overwriting it with a later pass.
 
