@@ -575,11 +575,14 @@ func TestRewriteSliceIsSmallEnoughToNotBeAStall(t *testing.T) {
 	assert.NoError(t, StartRewrite())
 	slices, worstWalk, final := 0, time.Duration(0), time.Duration(0)
 	for {
+		before := rewrite.pos
 		start := time.Now()
 		more := stepRewrite(t)
 		took := time.Since(start)
 		slices++
 		if more {
+			assert.LessOrEqual(t, rewrite.pos-before, rewriteChunk,
+				"one walk slice must obey its key budget even with race instrumentation")
 			if took > worstWalk {
 				worstWalk = took
 			}
@@ -594,9 +597,18 @@ func TestRewriteSliceIsSmallEnoughToNotBeAStall(t *testing.T) {
 	t.Logf("200,000 keys: %d slices, worst walk slice %v, final slice %v",
 		slices, worstWalk, final)
 	assert.Greater(t, slices, 50, "the walk must be spread over many cycles")
-	assert.Less(t, worstWalk, 50*time.Millisecond,
-		"and no slice may be anything like the whole rewrite")
+	if !raceEnabled {
+		assert.Less(t, worstWalk, 50*time.Millisecond,
+			"and no slice may be anything like the whole rewrite")
+	} // Keep bounded-work and replay assertions under -race; timing measures its instrumentation.
 	assert.NoError(t, CloseAOF())
+	ResetStores()
+	_, err := LoadAOF(path)
+	assert.NoError(t, err)
+	assert.Equal(t, 200000, dictStore.Len())
+	for i := 0; i < 200000; i++ {
+		assert.Equal(t, "some value of a realistic length", run(t, "GET", "k"+strconv.Itoa(i)))
+	}
 }
 
 // TestCancelledRewriteLeavesTheOldLogIntact. A server stopping mid-rewrite must
