@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import platform
 import signal
+import shutil
 import socket
 import statistics
 import subprocess
@@ -57,6 +58,13 @@ def sample_rss(pid):
     return int(fields[0]), float(fields[1])
 
 
+def provenance(binary, go_binary=False):
+    result = {'path': str(binary), 'sha256': sha256(binary)}
+    command = ['go', 'version', '-m', str(binary)] if go_binary else [str(binary), '--version']
+    result['build'] = subprocess.check_output(command, text=True).strip()
+    return result
+
+
 def preload(client, case):
     payload = b'x' * case['size']
     commands = []
@@ -97,6 +105,7 @@ def preload(client, case):
 def traffic_options(case):
     kind = case['kind']
     commands = {
+        'ttl': [('SET __key__ __data__ EX 300', 1), ('GET __key__', 1)],
         'hash': [('HGET __key__ field', 19), ('HSET __key__ field __data__', 1)],
         'set': [('SISMEMBER __key__ member', 19), ('SADD __key__ member', 1)],
         'zset': [('ZRANGE __key__ 0 9 WITHSCORES', 19), ('ZADD __key__ 2 member', 1)],
@@ -111,8 +120,6 @@ def traffic_options(case):
             options += ['--command='+command, '--command-ratio='+str(ratio)]
         return options
     options = ['--ratio='+case['ratio'], '--key-pattern='+case['pattern']]
-    if kind == 'ttl':
-        options += ['--expiry-range=300-300']
     if case.get('reconnect'):
         options += ['--reconnect-interval='+str(case['reconnect'])]
     return options
@@ -201,6 +208,8 @@ def run_arm(args, arm, binary, case, repetition, directory):
                       '--data-size='+str(case['size']), '--hide-histogram', '--distinct-client-seed'] + traffic_options(case)
             with (directory / 'warmup.log').open('w') as output:
                 subprocess.run(common + ['--test-time=1'], stdout=output, stderr=subprocess.STDOUT, env=env, check=True, timeout=30)
+            assert 'error response' not in (directory / 'warmup.log').read_text().lower(), 'warmup returned command errors'
+            report['load_command'] = common + ['--test-time='+str(args.seconds)]
             sampler = threading.Thread(target=sample)
             sampler.start()
             with (directory / 'load.log').open('w') as output:
@@ -279,7 +288,7 @@ def main():
     parser.add_argument('--candidate', type=Path, required=True)
     parser.add_argument('--baseline', type=Path)
     parser.add_argument('--redis', type=Path)
-    parser.add_argument('--memtier', type=Path, default=Path('/opt/homebrew/bin/memtier_benchmark'))
+    parser.add_argument('--memtier', type=Path, default=Path(shutil.which('memtier_benchmark') or 'memtier_benchmark'))
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--suite', choices=['smoke', 'standard', 'memory'], default='standard')
     parser.add_argument('--cases', help='comma-separated case names; default all cases in suite')
@@ -316,15 +325,13 @@ def main():
             parser.error('unknown case name for selected suite')
     metadata = {'status': 'running', 'platform': platform.platform(), 'python': platform.python_version(),
                 'harness_sha256': sha256(__file__), 'arguments': {key: str(value) if isinstance(value, Path) else value for key,value in vars(args).items()},
-                'tools': {'memtier': subprocess.check_output([str(args.memtier), '--version'], text=True).strip()},
-                'binaries': {name: {'path': str(binary), 'sha256': sha256(binary)} for name,binary in arms},
+                'tools': {'memtier': provenance(args.memtier), 'go': subprocess.check_output(['go','version'],text=True).strip()},
+                'binaries': {name: provenance(binary, name != 'redis') for name,binary in arms},
                 'method': 'Fixed memtier default seeds, sequential fresh servers, rotated arms, one-second warmup, closed-loop. No concurrent profiling in comparative runs.',
                 'runs': []}
     try:
         for repetition in range(1, args.reps+1):
             order = arms[(repetition-1)%len(arms):] + arms[:(repetition-1)%len(arms)]
-            if repetition % 2 == 0:
-                order.reverse()
             for case in cases:
                 for arm,binary in order:
                     name = f'r{repetition}-{case["name"]}-{arm}'

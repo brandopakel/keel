@@ -56,6 +56,7 @@ def operation(rng):
             ['SET', key, value, 'GET', 'KEEPTTL'], ['GET', key], ['INCRBY', key, rng.randrange(-4,5)],
             ['DECRBY', key, rng.randrange(-4,5)], ['MGET', key, 'missing', 'hash:0'],
             ['MSET', key, value, 'string:other', value], ['INCR', key],
+            ['SETEX', key, 3600, value], ['PSETEX', key, 3600000, value],
         ])
     if kind == 'hash':
         return rng.choice([

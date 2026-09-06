@@ -20,6 +20,18 @@ var (
 	errIncrOverflow = errors.New("ERR increment or decrement would overflow")
 )
 
+// SETEX/PSETEX share SET's validation and canonical SET/PEXPIREAT persistence.
+// Like SET here, they refuse a key already holding another data type.
+func cmdSETEX(args []string) []byte  { return setWithTTL(args, "EX") }
+func cmdPSETEX(args []string) []byte { return setWithTTL(args, "PX") }
+
+func setWithTTL(args []string, unit string) []byte {
+	if len(args) != 3 {
+		return Encode(errors.New("ERR wrong number of arguments for expiring SET command"), false)
+	}
+	return cmdSET([]string{args[0], args[2], unit, args[1]})
+}
+
 // cmdSET implements SET key value [EX seconds | PX milliseconds].
 //
 // The expiry keyword used to be skipped over entirely: whatever sat in args[2]
