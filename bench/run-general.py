@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import signal
 import socket
 import statistics
 import subprocess
@@ -206,6 +207,9 @@ def run_arm(args, arm, binary, case, repetition, directory):
                 load = subprocess.Popen(common + ['--test-time='+str(args.seconds),
                     '--json-out-file='+str(directory / 'memtier.json'),
                     '--hdr-file-prefix='+str(directory / 'latency')], stdout=output, stderr=subprocess.STDOUT, env=env)
+                if args.profiles:
+                    time.sleep(min(.5, args.seconds / 2))
+                    process.send_signal(signal.SIGUSR1)
                 assert load.wait(timeout=args.seconds+45) == 0, 'load generator failed'
             stopped.set()
             sampler.join()
@@ -214,6 +218,8 @@ def run_arm(args, arm, binary, case, repetition, directory):
             totals = raw['ALL STATS']['Totals']
             report['totals'] = totals
             assert float(totals['Ops/sec']) > 0
+            assert 'Connection Errors' in totals and totals['Connection Errors'] == 0
+            report['operation_count'] = int(totals['Count'])
             # The raw report and logs retain command errors, misses and tool
             # warnings. Misses are intentional in the explicit miss scenario.
             for name, stats in raw['ALL STATS'].items():
@@ -225,6 +231,8 @@ def run_arm(args, arm, binary, case, repetition, directory):
             assert 'error response' not in log_text.lower(), 'server returned command errors'
             report['client_cpu_warning'] = 'CPU' in log_text and 'bottleneck' in log_text
             assert client.call('PING') == b'PONG'
+            if args.profiles:
+                assert (directory / 'profiles/live-1-runtime.json').exists(), 'live profile capture missing'
         report['rss_kib'] = {'median': statistics.median(row[1] for row in samples),
                              'minimum': min(row[1] for row in samples), 'maximum': max(row[1] for row in samples)}
         report['status'] = 'passed'

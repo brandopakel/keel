@@ -2,7 +2,6 @@ package core
 
 import (
 	"errors"
-	"strconv"
 
 	"github.com/brandopakel/keel/internal/constant"
 )
@@ -41,7 +40,22 @@ func assertEncoding(te uint8, e uint8) error {
 // one; Redis draws the line in the same place, which is why INCR on "007"
 // is refused there and here.
 func deduceTypeString(v string) (uint8, uint8) {
-	if n, err := strconv.ParseInt(v, 10, 64); err == nil && strconv.FormatInt(n, 10) == v {
+	// A canonical int64 is at most 20 bytes. ParseInt's error includes a copy
+	// of its input, which needlessly copied every nonnumeric cached value.
+	if v == "0" {
+		return constant.ObjTypeString, constant.ObjEncodingInt
+	}
+	if len(v) == 0 || len(v) > 20 {
+		return constant.ObjTypeString, constant.ObjEncodingRaw
+	}
+	digits := v
+	if v[0] == '-' {
+		digits = v[1:]
+	}
+	if len(digits) == 0 || digits[0] < '1' || digits[0] > '9' {
+		return constant.ObjTypeString, constant.ObjEncodingRaw
+	}
+	if _, ok := parseDecimal([]byte(v)); ok {
 		return constant.ObjTypeString, constant.ObjEncodingInt
 	}
 	return constant.ObjTypeString, constant.ObjEncodingRaw
