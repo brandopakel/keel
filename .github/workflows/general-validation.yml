@@ -39,6 +39,10 @@ jobs:
       - name: All workload smoke cases
         run: |
           python3 bench/run-general.py --candidate /tmp/keel-general --memtier /tmp/memtier_benchmark-2.5.1/memtier_benchmark --out dist/general-ci/workloads --reps 1 --seconds 1
+      - name: Eviction, replication recovery and slow readers
+        run: python3 scripts/operational-matrix.py --bin /tmp/keel-general --out dist/general-ci/operations
+      - name: Mixed-data soak and storage error recovery
+        run: python3 scripts/soak.py --bin /tmp/keel-general --out dist/general-ci/soak --seconds 120 --cycle-seconds 15
       - name: Preserve raw evidence even on failure
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
