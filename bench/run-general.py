@@ -135,7 +135,8 @@ def run_arm(args, arm, binary, case, repetition, directory):
         reservation.bind(('127.0.0.1', 0))
         port = reservation.getsockname()[1]
     env = {key: os.environ[key] for key in ('PATH', 'HOME', 'TMPDIR') if key in os.environ}
-    env['GODEBUG'] = 'gctrace=1'
+    if args.profiles or args.gc_trace:
+        env['GODEBUG'] = 'gctrace=1'
     configuration = None
     if arm == 'redis':
         command = [str(binary), '-']
@@ -160,6 +161,7 @@ def run_arm(args, arm, binary, case, repetition, directory):
     report = {'status': 'running', 'arm': arm, 'case': case, 'repetition': repetition,
               'binary_sha256': sha256(binary), 'policy': args.policy, 'worker': args.worker and arm != 'redis',
               'profiles_enabled': args.profiles, 'server_command': command}
+    report['gc_trace_enabled'] = (args.profiles or args.gc_trace) and arm != 'redis'
     log = (directory / 'server.log').open('w')
     sampler = None
     try:
@@ -311,6 +313,7 @@ def main():
     parser.add_argument('--policy', choices=['off', 'no', 'everysec', 'always'], default='off')
     parser.add_argument('--worker', action='store_true')
     parser.add_argument('--profiles', action='store_true')
+    parser.add_argument('--gc-trace', action='store_true', help='diagnostic Go GC logging; disabled by default in comparisons')
     args = parser.parse_args()
     if not 1 <= args.reps <= 20 or not 1 <= args.seconds <= 3600:
         parser.error('reps must be 1..20 and seconds 1..3600')
