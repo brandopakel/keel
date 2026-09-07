@@ -1,10 +1,12 @@
 package core
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -74,6 +76,22 @@ func TestDumpAcceptedPayloadUsesOneSizedBuffer(t *testing.T) {
 	t.Logf("reply bytes=%d allocated=%d", len(reply), after.TotalAlloc-before.TotalAlloc)
 	require.Greater(t, len(reply), 4<<20)
 	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(len(reply)+(256<<10)))
+	header := bytes.Index(reply, []byte("\r\n"))
+	require.Positive(t, header)
+	require.Equal(t, byte('$'), reply[0])
+	length, err := strconv.Atoi(string(reply[1:header]))
+	require.NoError(t, err)
+	require.Equal(t, header+2+length+2, len(reply))
+	require.Equal(t, []byte("\r\n"), reply[len(reply)-2:])
+	require.NoError(t, restoreKey("restored", reply[header+2:len(reply)-2]))
+	restored, ok := listStore.Peek("restored")
+	require.True(t, ok)
+	require.Equal(t, 4, restored.Len())
+	for i := 0; i < restored.Len(); i++ {
+		actual, ok := restored.Index(i)
+		require.True(t, ok)
+		require.Equal(t, value, actual)
+	}
 }
 
 func TestDumpLargeSketchRejectsBeforeMarshalling(t *testing.T) {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 )
 
 // Serialising the structures that no command can rebuild.
@@ -202,7 +203,9 @@ func (h *HLL) AppendMarshal(dst []byte) []byte {
 	// Keep the alpha dense wire format byte-for-byte, without expanding the
 	// live sketch or allocating an intermediate dense buffer.
 	start := len(dst)
-	dst = append(dst, make([]byte, h.MarshalSize())...)
+	dst = slices.Grow(dst, h.MarshalSize())
+	dst = dst[:start+h.MarshalSize()]
+	clear(dst[start:])
 	body := dst[start:]
 	binary.LittleEndian.PutUint64(body, hllDenseSize)
 	if h.regs != nil {
