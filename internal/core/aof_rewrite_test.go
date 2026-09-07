@@ -3,6 +3,7 @@ package core
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -666,4 +667,26 @@ func TestRestartDoesNotRatchetAutomaticRewriteBaseline(t *testing.T) {
 	_, err = LoadAOF(path)
 	assert.NoError(t, err)
 	assert.Equal(t, "199", run(t, "GET", "hot"))
+}
+
+func TestRewriteStartDoesNotCopyKeyNames(t *testing.T) {
+	for _, n := range []int{1000, 100000} {
+		t.Run(strconv.Itoa(n), func(t *testing.T) {
+			ResetStores()
+			require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "start.aof")))
+			t.Cleanup(func() { CancelRewrite(); assert.NoError(t, CloseAOF()) })
+			for i := 0; i < n; i++ {
+				dictStore.Put("key:"+strconv.Itoa(i), dictStore.NewObj("v"))
+			}
+			var before, after runtime.MemStats
+			runtime.ReadMemStats(&before)
+			require.NoError(t, StartRewrite())
+			runtime.ReadMemStats(&after)
+			require.Empty(t, rewrite.keys, "start retains slot limits, not every name")
+			require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(256<<10), "startup must not allocate an O(N) name slice")
+			require.NoError(t, AdvanceRewrite())
+			require.LessOrEqual(t, len(rewrite.keys), data_structure.ScanMaxWork)
+			require.LessOrEqual(t, rewrite.pos, data_structure.ScanMaxWork)
+		})
+	}
 }

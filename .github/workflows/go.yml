@@ -79,6 +79,7 @@ jobs:
           go test ./internal/core -run '^$' -fuzz '^FuzzCommandParserMatchesValueDecoder$' -fuzztime=10s -parallel=2
           go test ./internal/core -run '^$' -fuzz '^FuzzStringEncodingMatchesCanonicalInteger$' -fuzztime=10s -parallel=2
           go test ./internal/data_structure -run '^$' -fuzz '^FuzzSparseHLLMatchesDense$' -fuzztime=10s -parallel=2
+          go test ./internal/data_structure -run '^$' -fuzz '^FuzzPagedKeyspaceMatchesMap$' -fuzztime=10s -parallel=2
 
   docker:
     name: docker image

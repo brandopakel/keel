@@ -305,3 +305,58 @@ func TestKeyspaceWalkFreezesLimitsWithoutSnapshottingNames(t *testing.T) {
 	_, _, err = stale.Next(5, nil)
 	require.Error(t, err)
 }
+
+func FuzzPagedKeyspaceMatchesMap(f *testing.F) {
+	f.Add([]byte{0, 0, 0, 1, 0, 2, 2, 0, 3, 1, 1, 5})
+	f.Add([]byte{1, 0, 0, 1, 0, 2, 2, 0, 3, 1, 1, 5})
+	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) == 0 {
+			return
+		}
+		if len(data) > 1024 {
+			data = data[:1024]
+		}
+		m := &shardedMap[int]{}
+		if data[0]&1 != 0 {
+			m.hashOverride = func(string) uint64 { return 7 }
+		}
+		model := map[string]int{}
+		for i := 1; i+2 < len(data); i += 3 {
+			key := string([]byte{data[i+1]})
+			value := int(data[i+2])
+			switch data[i] % 3 {
+			case 0:
+				_, exists := model[key]
+				require.Equal(t, exists, m.set(key, value))
+				model[key] = value
+			case 1:
+				_, exists := model[key]
+				require.Equal(t, exists, m.del(key))
+				delete(model, key)
+			case 2:
+				want, exists := model[key]
+				got, ok := m.get(key)
+				require.Equal(t, exists, ok)
+				require.Equal(t, want, got)
+			}
+			require.Equal(t, len(model), m.len())
+		}
+		seen := map[string]int{}
+		cursor := uint64(0)
+		for calls := 0; ; calls++ {
+			require.Less(t, calls, 10000)
+			keys, examined, next := m.scan(cursor, 3, nil, nil)
+			require.LessOrEqual(t, examined, 3)
+			for _, key := range keys {
+				value, ok := m.get(key)
+				require.True(t, ok)
+				seen[key] = value
+			}
+			if next == 0 {
+				break
+			}
+			cursor = next
+		}
+		require.Equal(t, model, seen)
+	})
+}
