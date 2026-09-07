@@ -352,3 +352,19 @@ func EachKeyspaceFrom(start int, fn func(Keyspace)) int {
 	}
 	return (start + 1) % len(keyspaces)
 }
+
+// VisitKeyspacesFrom stops after the first callback returning false. The cursor
+// resumes after the last visited store; a full pass rotates the starting store.
+func VisitKeyspacesFrom(start int, fn func(Keyspace) bool) int {
+	if len(keyspaces) == 0 {
+		return 0
+	}
+	start %= len(keyspaces)
+	for i := 0; i < len(keyspaces); i++ {
+		index := (start + i) % len(keyspaces)
+		if !fn(keyspaces[index]) {
+			return (index + 1) % len(keyspaces)
+		}
+	}
+	return (start + 1) % len(keyspaces)
+}

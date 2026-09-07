@@ -3,6 +3,7 @@ package core
 import (
 	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/data_structure"
+	"time"
 )
 
 // ExpireCycle removes keys whose TTL has passed, without waiting for anyone to
@@ -74,3 +75,23 @@ func KeysWithExpiry() int {
 }
 
 var _ = data_structure.TotalKeys
+
+// MaintainMemory advances physical table compaction without deleting logical
+// keys or emitting persistence records. It is safe between event-loop phases
+// on both primaries and replicas, including while an immutable append is pending.
+func MaintainMemory() int {
+	work := 0
+	deadline := time.Now().Add(time.Millisecond)
+	memoryCursor = data_structure.VisitKeyspacesFrom(memoryCursor, func(ks data_structure.Keyspace) bool {
+		if work >= data_structure.ScanMaxWork || time.Now().After(deadline) {
+			return false
+		}
+		if compact, ok := ks.(interface{ CompactExpiry(int) int }); ok {
+			work += compact.CompactExpiry(data_structure.ScanMaxWork - work)
+		}
+		return work < data_structure.ScanMaxWork && time.Now().Before(deadline)
+	})
+	return work
+}
+
+var memoryCursor int

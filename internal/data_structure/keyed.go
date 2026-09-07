@@ -12,11 +12,12 @@ type Sized interface{ MemUsage() uint64 }
 // stores were bare maps, invisible to both the memory budget and to eviction,
 // so a keyspace full of 12KB sketches could run past maxmemory unchecked.
 type Keyed[T Sized] struct {
-	name       string
-	items      keyMap[keyedEntry[T]]
-	memUsed    uint64
-	expiries   map[string]uint64
-	expiryPeak int
+	name             string
+	items            keyMap[keyedEntry[T]]
+	memUsed          uint64
+	expiries         map[string]uint64
+	expiryPeak       int
+	expiryCompaction *expiryCompaction
 }
 
 type keyedEntry[T Sized] struct {
@@ -192,6 +193,9 @@ func (k *Keyed[T]) SetExpiryAt(key string, at uint64) {
 		k.expiries = make(map[string]uint64)
 	}
 	k.expiries[key] = at
+	if k.expiryCompaction != nil {
+		k.expiryCompaction.next[key] = at
+	}
 	k.expiryPeak = max(k.expiryPeak, len(k.expiries))
 	EnforceLimits()
 }
@@ -228,8 +232,12 @@ func (k *Keyed[T]) ActiveExpire(samples int) (examined, expired int) {
 
 func (k *Keyed[T]) dropExpiry(key string) {
 	delete(k.expiries, key)
+	if k.expiryCompaction != nil {
+		delete(k.expiryCompaction.next, key)
+	}
 	if len(k.expiries) == 0 && k.expiryPeak >= expiryReleaseThreshold {
 		k.expiries = nil
 		k.expiryPeak = 0
+		k.expiryCompaction = nil
 	}
 }
