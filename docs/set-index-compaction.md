@@ -24,3 +24,33 @@ local tests/vet pass. Raw baseline failures and candidate evidence are in
 `bench/results/set-index-compaction-2026-09-07.json.gz`. Hosted compatibility,
 small-set memory and throughput adoption remain pending. Hash/ sorted-set maps
 and partially occupied key pages are separate remaining memory work.
+
+Review closeout strengthens the serving-maintenance test: the fixture must
+start with a pending rebuild, and the scheduled hook must finish it. This fails
+if the collection hook is removed. The live member sequence is checked exactly
+before/after maintenance. Replay deliberately checks unordered membership;
+set iteration order across restarts is not a client contract. A further large
+shrink restarts the shadow map to avoid retaining its own high-water capacity.
+
+Matched run 34127226459 completes three ten-second repetitions at 790844e
+against 66f8ceb3. Small-read, TTL, many-client and ordinary-set throughput ratios
+are 0.998, 0.993, 1.005 and 1.001, respectively; ordinary-set p99 is 0.343 ms
+in both arms. Large-set reads are 0.998 with equal p99, but all six large-set
+arms hit generator CPU warnings. That case cannot establish server capacity.
+Raw matched evidence is in `bench/results/set-compaction-matched-2026-09-07.json.gz`.
+
+The scheduled native generator now also supports set and sorted-set whole-key
+reads, retaining its nonallocating reply discard and bounded admission queue.
+Preload verifies all 4,096 members; distinct set/zset members add a numeric
+prefix to the 64-byte payload. A four-arm local smoke passes at 1,000 requests/s;
+these are harness checks, not performance evidence. Hosted targeted capacity
+checks follow to address the memtier saturation limitation.
+
+An Intel Mac check in 34128161010 failed while draining the existing 16 MiB
+pending-reply fixture. The other client’s PINGs had completed; the timeout was
+in `reply(t, reader)`, and the captured server stack was in nonblocking socket
+write. This string-only test does not exercise set compaction. The cause is
+unresolved, and the failed run remains in
+`bench/results/set-intel-pending-reply-failure-2026-09-07.json.gz`. A same-runner
+baseline/candidate diagnostic repeats the exact test thirty times per arm and
+three full suites per arm at package concurrency four, without widening deadlines.

@@ -23,6 +23,8 @@ def cases():
         'large-1m': [dict(size=1048576, keys=32, writes=5, share=1)],
         'large-hash': [dict(size=64, keys=4096, writes=0, share=1, collection='hash')],
         'large-list': [dict(size=64, keys=4096, writes=0, share=1, collection='list')],
+        'large-set': [dict(size=64, keys=4096, writes=0, share=1, collection='set')],
+        'large-zset': [dict(size=64, keys=4096, writes=0, share=1, collection='zset')],
         # Separate processes/queues/connections prevent one generator queue
         # from masquerading as interference between tenants inside the server.
         'mixed-tenants': [dict(size=64, keys=10000, writes=5, share=.8),
@@ -98,6 +100,9 @@ def run_arm(args, name, specs, rate, repetition, arm, binary, directory):
             load = pin(load, args.client_cpus)
             subprocess.run([*load, '-preload'], env=env, check=True, stdout=subprocess.DEVNULL,
                            stderr=subprocess.PIPE, timeout=180)
+            if spec.get('collection'):
+                count_command = {'hash': 'HLEN', 'list': 'LLEN', 'set': 'SCARD', 'zset': 'ZCARD'}[spec['collection']]
+                assert client.call(count_command, f'capacity:{tenant}:') == spec['keys'], 'incorrect preloaded collection cardinality'
             load_commands.append(load)
         report['before_stats'] = info(client, 'stats')
         report['before_memory'] = info(client, 'memory')

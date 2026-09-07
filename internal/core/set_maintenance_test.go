@@ -27,9 +27,11 @@ func TestSetMaintenancePreservesOrderAndPersistence(t *testing.T) {
 	s, ok := setStore.Peek("set")
 	require.True(t, ok)
 	order := s.Members()
+	require.Equal(t, 1, s.CompactIndex(1), "fixture must have a pending membership rebuild")
 	for i := 0; i < 100; i++ {
 		require.LessOrEqual(t, MaintainMemory(), data_structure.ScanMaxWork)
 	}
+	require.Zero(t, s.CompactIndex(1), "scheduled maintenance must finish the pending rebuild")
 	require.Equal(t, order, s.Members())
 	require.NoError(t, FlushAOF())
 	after, err := os.ReadFile(path)
@@ -41,5 +43,7 @@ func TestSetMaintenancePreservesOrderAndPersistence(t *testing.T) {
 	require.NoError(t, err)
 	s, ok = setStore.Peek("set")
 	require.True(t, ok)
+	// Set reply order is unspecified across replay. Maintenance itself must
+	// preserve the live sequence (asserted above); replay preserves membership.
 	require.ElementsMatch(t, order, s.Members())
 }
