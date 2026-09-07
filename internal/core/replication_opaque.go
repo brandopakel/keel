@@ -29,7 +29,7 @@ func opaqueReplicationBody() ([]byte, bool) {
 		if !ok {
 			return nil, false
 		}
-		if replicationKeyExpiry(key) > 0 {
+		if replicationKeyExpiry(key, plan.tag) > 0 {
 			// Twenty digits safely cover any persisted uint64 deadline.
 			size, ok = replicationRecordSize(size, len("PEXPIREAT"), len(key), 20)
 			if !ok {
@@ -55,7 +55,7 @@ func opaqueReplicationBody() ([]byte, bool) {
 		body = append(body, '\r', '\n')
 		body = appendDump(body, plan)
 		body = append(body, '\r', '\n')
-		if expiry := replicationKeyExpiry(key); expiry > 0 {
+		if expiry := replicationKeyExpiry(key, plan.tag); expiry > 0 {
 			body = appendCommand(body, "PEXPIREAT", key, strconv.FormatUint(expiry, 10))
 		}
 	}
@@ -77,12 +77,34 @@ func replicationRecordSize(size int, lengths ...int) (int, bool) {
 	return size, true
 }
 
-func replicationKeyExpiry(key string) uint64 {
-	var expiry uint64
-	data_structure.EachKeyspace(func(ks data_structure.Keyspace) {
-		if at, present := ks.GetExpiry(key); present {
-			expiry = at
-		}
-	})
+func replicationKeyExpiry(key string, tag byte) uint64 {
+	// Bind expiry to the value selected by planDump, even if an internal caller
+	// bypassed command ownership checks and populated the same name twice.
+	var ks data_structure.Keyspace
+	switch tag {
+	case dumpTagString:
+		ks = dictStore
+	case dumpTagHash:
+		ks = hashStore
+	case dumpTagList:
+		ks = listStore
+	case dumpTagSet:
+		ks = setStore
+	case dumpTagZSet:
+		ks = zsetStore
+	case dumpTagBloom:
+		ks = sbStore
+	case dumpTagCMS:
+		ks = cmsStore
+	case dumpTagMorris:
+		ks = morrisStore
+	case dumpTagHLL:
+		ks = hllStore
+	case dumpTagCuckoo:
+		ks = cfStore
+	default:
+		return 0
+	}
+	expiry, _ := ks.GetExpiry(key)
 	return expiry
 }

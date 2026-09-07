@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/brandopakel/keel/internal/data_structure"
 	"github.com/stretchr/testify/require"
@@ -57,7 +58,7 @@ func TestOpaqueReplicationReplacementReplaysEveryTypeAndExpiry(t *testing.T) {
 	run(t, "HSET", "hash", "field", "value")
 	run(t, "RPUSH", "list", "first", "second")
 	want := snapshotEverything(t)
-	expiry := replicationKeyExpiry("living")
+	expiry := replicationKeyExpiry("living", dumpTagString)
 	keys := []string{"str", "num", "living", "set", "z", "geo", "hll", "bf", "cf", "cms", "mor", "hash", "list", "absent"}
 	for _, key := range keys {
 		replication.dirty[key] = struct{}{}
@@ -73,11 +74,35 @@ func TestOpaqueReplicationReplacementReplaysEveryTypeAndExpiry(t *testing.T) {
 		_, err := LoadAOF(path)
 		require.NoError(t, err)
 		require.Equal(t, want, snapshotEverything(t))
-		require.Equal(t, expiry, replicationKeyExpiry("living"))
+		require.Equal(t, expiry, replicationKeyExpiry("living", dumpTagString))
 		require.Equal(t, "value", run(t, "HGET", "hash", "field"))
 		require.Equal(t, []interface{}{"first", "second"}, run(t, "LRANGE", "list", "0", "-1"))
 		require.Equal(t, int64(0), run(t, "EXISTS", "absent"))
 	}
+}
+
+func TestOpaqueReplicationExpiryBelongsToSelectedValue(t *testing.T) {
+	setupReplicationV2(t)
+	hash := data_structure.NewHash()
+	hash.Set("field", "value")
+	hashStore.Put("overlap", hash)
+	cmsStore.Put("overlap", data_structure.CreateCMS(16, 1))
+	wantExpiry := uint64(time.Now().UnixMilli() + 600000)
+	hashStore.SetExpiryAt("overlap", wantExpiry)
+	cmsStore.SetExpiryAt("overlap", 1)
+	replication.dirty["overlap"] = struct{}{}
+	body, fits := opaqueReplicationBody()
+	require.True(t, fits)
+	require.NoError(t, CloseAOF())
+	ResetStores()
+	path := filepath.Join(t.TempDir(), "replacement.aof")
+	require.NoError(t, os.WriteFile(path, body, 0600))
+	_, err := LoadAOF(path)
+	require.NoError(t, err)
+	require.Equal(t, "value", run(t, "HGET", "overlap", "field"))
+	expiry, exists := hashStore.GetExpiry("overlap")
+	require.True(t, exists)
+	require.Equal(t, wantExpiry, expiry)
 }
 
 func TestOpaqueReplicationSizesAggregateBeforeAllocating(t *testing.T) {
