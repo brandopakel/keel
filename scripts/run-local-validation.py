@@ -71,12 +71,22 @@ def run(args):
     previous_limit = resource.getrlimit(resource.RLIMIT_FSIZE)
     started = time.monotonic()
     previous_handlers = {}
+    def check_limits():
+        used = directory_bytes(root)
+        report['peak_output_bytes'] = max(used, report.get('peak_output_bytes', 0))
+        if time.monotonic()-started >= args.seconds:
+            raise TimeoutError('local validation time budget exhausted')
+        if used > report['output_limit_bytes']:
+            raise RuntimeError('local validation output budget exhausted')
+        if shutil.disk_usage(root).free < report['minimum_free_bytes']:
+            raise RuntimeError('local validation minimum free-space reserve reached')
     try:
         # Set only the soft limit and restore it afterward. Children inherit it
         # without preexec_fn, which is unsafe in a multithreaded parent.
         ceiling = args.max_file_mib*2**20
-        if previous_limit[1] != resource.RLIM_INFINITY:
-            ceiling = min(ceiling, previous_limit[1])
+        for inherited in previous_limit:
+            if inherited != resource.RLIM_INFINITY:
+                ceiling = min(ceiling, inherited)
         resource.setrlimit(resource.RLIMIT_FSIZE, (ceiling, previous_limit[1]))
         report['effective_file_limit_bytes'] = ceiling
         def interrupted(signum, frame):
@@ -94,21 +104,13 @@ def run(args):
                                        start_new_session=True)
             report['pid'] = process.pid
             while True:
-                elapsed = time.monotonic()-started
-                used = directory_bytes(root)
-                report['peak_output_bytes'] = max(used, report.get('peak_output_bytes', 0))
-                if elapsed >= args.seconds:
-                    raise TimeoutError('local validation time budget exhausted')
-                if used > report['output_limit_bytes']:
-                    raise RuntimeError('local validation output budget exhausted')
-                if shutil.disk_usage(root).free < report['minimum_free_bytes']:
-                    raise RuntimeError('local validation minimum free-space reserve reached')
+                check_limits()
                 code = process.poll()
                 if code is not None:
                     report['command_exit_code'] = code
                     if code != 0:
                         raise RuntimeError(f'validation command exited with {code}')
-                    report['status'] = 'passed'
+                    report['status'] = 'command_completed'
                     break
                 time.sleep(.25)
     except BaseException as exc:
@@ -120,6 +122,12 @@ def run(args):
         try:
             if process is not None:
                 stop_group(process)
+            if report['status'] == 'command_completed':
+                # The command (or a child) may have written after the last
+                # sample. Check again after exit/descendant cleanup, before
+                # success and before deleting caches or temporary evidence.
+                check_limits()
+                report['status'] = 'passed'
         except Exception as exc:
             report.update(status='failed', cleanup_failure=repr(exc))
         finally:
