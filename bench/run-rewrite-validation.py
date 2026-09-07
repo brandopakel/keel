@@ -157,12 +157,14 @@ def arm(args, binary, name, policy, writes, repetition, root):
         out.flush(); err.flush()
         traffic = json.loads((root/'traffic.json').read_text())
         report['traffic'] = traffic
+        # Keep filesystem timing counters even when the offered workload did
+        # not complete. Those failed arms are the ones that most need them.
+        report['after'] = info(client, 'persistence')
         require_complete_traffic(traffic, int(args.rate*args.seconds))
         assert len(report['rewrites']) == 3, 'all three rewrites must complete during measured traffic'
         assert all(row['requested_at_seconds']+row['elapsed_seconds'] < args.seconds
                    for row in report['rewrites']), 'rewrite outlasted measured traffic'
         report['traffic'] = traffic
-        report['after'] = info(client, 'persistence')
         # Verify the entire untouched snapshot dataset, outside measurement.
         if args.dataset_kind == 'strings':
             for first in range(0, keys, 64):

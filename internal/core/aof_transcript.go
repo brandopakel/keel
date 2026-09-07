@@ -20,7 +20,7 @@ func writeAOFBuffer() error {
 		return nil
 	}
 	if len(aof.buf) > 0 {
-		n, err := aofWrite(aof.file, aof.buf)
+		n, err := timedPersistenceWrite(&appendWriteStats, aof.file, aof.buf, aofWrite)
 		recordAOFDigest(aof.buf[:n])
 		aof.written += int64(n)
 		appendStarted += uint64(n)
