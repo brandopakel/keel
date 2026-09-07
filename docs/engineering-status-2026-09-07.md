@@ -35,6 +35,7 @@ Evidence: [closeout](engineering-closeout.md), [traversal](keyspace-traversal.md
 | Storage and appends | PR #20: typed strings, ordered concurrent appends, collection rewrites, restart compaction, protocol 2 and sorted-set commands | Command execution remains serial; no universal throughput gain |
 | Traversal/rewrite resources | PR #28: immutable string/member fragments, 64 KiB stream slices, dirty-name count/byte/duration budgets | Opaque image construction and filesystem writes/finalization still stall |
 | Client fairness | PR #37: bounded pipeline turns, output-drain scheduling and safe command resumption | Individual commands remain atomic; no hard latency SLA |
+| Rewrite sync | PR #43: one background snapshot preflush, explicit completion notifications and safe waker detachment | Final dirty-tail sync, writes, rename and directory sync remain synchronous |
 | Opaque rewrites | PR #44: retain one binary image and emit 64 KiB fragments | Constructing that immutable image still requires full serialization |
 | Churn memory | PR #29/#36/#38/#45: release large empty TTL tables and incrementally rebuild sparsely occupied TTL, lookup and set membership maps | Partially occupied pages and hash/sorted-set maps still retain capacity; no RSS guarantee |
 | Allocation admission | PR #32/#35/#42: preflight amplified replies and destructive canonical records; encode accepted dumps once | Aggregate transient reservations and some opaque persistence construction remain incomplete |
@@ -44,8 +45,9 @@ Evidence: [closeout](engineering-closeout.md), [traversal](keyspace-traversal.md
 | Soak reporting | PR #40: stale-progress detection and a stack-producing watchdog for new soaks | The old 48-hour harness stalled; its cause is unresolved |
 | Heap validation | PR #41: larger sparse-HLL measurement population, unchanged tolerance | Process-wide heap deltas remain measurements with noise |
 
-Rewrite preflush (PR #43) remains a candidate until its final review and checks
-finish. Fairness, opaque-record copy reduction and set compaction have merged.
+Rewrite preflush (PR #43), fairness, opaque-record copy reduction and set
+compaction have merged. The serving runtime matches the frozen b14ffe0 candidate;
+subsequent changes strengthen diagnostics, upgrade validation and documentation.
 
 ## What the measurements establish
 
@@ -68,6 +70,15 @@ finish. Fairness, opaque-record copy reduction and set compaction have merged.
 - Opaque rewrite startup for a 4 MiB count-min sketch falls from about 12.6 MB
   to 4.27 MB allocated, and first-cycle output is limited to 64 KiB. Serialization
   CPU remains synchronous.
+- Rewrite preflush passes 36 matched arms with 108 rewrites, 1,080,000 completed
+  requests and no dropped or failed requests. Scheduled p99.9 falls from about
+  9.4–11.0 ms to 3.9–4.9 ms across the six tested persistence/write mixtures.
+  Ordinary qualified workloads remain near baseline; the generator-limited final
+  many-connection row is excluded from capacity evidence.
+- Set membership compaction recovers about 3.44 MB of heap in the
+  100,000-to-1,000-member fixture. Matched ordinary workloads remain near baseline;
+  saturated large-set and sorted-set sweeps retain their drops and do not establish
+  a throughput gain.
 - Scheduled capacity includes 140 corrected initial arms and 32 collection-parser
   follow-ups. Above saturation, drops remain in the results. Removing generator
   allocation overhead improved the harness; that is not a Keel speedup.
@@ -80,7 +91,9 @@ Each statement has its exact source, settings, raw attempts and limitations in
 [readiness](readiness-registration.md), [append diagnostics](append-cost-validation.md),
 [DUMP admission](dump-allocation-admission.md), [capacity](capacity-validation.md),
 [fairness](client-fairness.md), [opaque records](opaque-rewrite-records.md),
-and [client compatibility](client-library-compatibility.md).
+[client compatibility](client-library-compatibility.md),
+[rewrite sync](rewrite-preflush.md), and
+[set compaction](set-index-compaction.md).
 
 ## Long-run and release gates
 
@@ -106,10 +119,12 @@ predate the final rewrite wakeup fixes and do not qualify the final revision.
 Combined archive validation run 34128192062 failed on Linux in the latency
 diagnostic's insertion sort. The rewrite loop had already finished. The diagnostic
 now separates worker waits and uses O(n log n) sorting; PR #43 also fixes a
-reproduced idle wakeup loop while waiting for original-log sync. Combined archive validation 34130106439 passes Linux AMD64/ARM64 and macOS
+reproduced idle wakeup loop while waiting for original-log sync. Combined archive
+validation 34130106439 passes Linux AMD64/ARM64 and macOS
 Intel/ARM64 native execution, archive/checksum/installation checks and all nine
 alpha.2 upgrade cases on each platform (36 total). The exact source is
-`b14ffe093ff8a17f4b7a031ef6f66e383694af4c`; no tag or publication was performed. An Intel pending-reply timeout in
+`b14ffe093ff8a17f4b7a031ef6f66e383694af4c`; no tag or publication was performed.
+An Intel pending-reply timeout in
 PR #45 remains unexplained after thirty focused repetitions per arm and three
 full suites per arm pass on a matched host. Both failed attempts are preserved.
 
@@ -131,18 +146,27 @@ external; the fairness observation remains unexplained after the same-runner dia
 now records the missing counter and client state if it recurs. These runs do not erase the
 passed archive evidence, nor does archive success resolve those failures.
 
-Before another release: close the remaining candidate reviews, validate the
-combined revision, run guarded long workloads, repeat persistence upgrade/restart
-and rollback preparation, then build the final tag and verify downloaded archives,
-checksums and installation. Native ARM64/Intel CI exercises development binaries;
-it does not by itself validate an unpublished release archive.
+Final combined archive validation 34134709336 also passes all four native
+platforms and all 36 alpha.2 upgrade/rewrite/restart/backup rollback cases. Each
+concurrent case now exercises four simultaneous authenticated writers and verifies
+their acknowledgments and recovered values. Source
+`6fb1ed6308d997b5f23ad08ac5c74af8b005613e` has the same serving code as the frozen
+`b14ffe0` candidate. The archives pass checksum and installation checks, and the
+workflow's publication job is skipped. Full native reports are retained in
+`bench/results/combined-native-writers-2026-09-07.json.gz`.
+
+Before another release: finish the guarded long workloads and ensure all release
+candidate reviews are closed, then build the final tag and verify its downloaded
+archives, checksums and installation. Repeat candidate validation if serving code
+changes. Native development-archive checks do not validate a future tagged release.
 
 ## Work still requiring engineering or deployment evidence
 
-1. Close the final rewrite review and all final integration checks. Matched rewrite
-   validation now passes on the final runtime: 36 arms and 1,080,000 completed
-   requests with improved paired p99/p99.9 throughout. Guarded long soaks remain
-   pending; neither successful short checks nor earlier eight-hour runs replace them.
+1. Finish guarded long soaks. Expanded native upgrade validation and the rewrite
+   review/adoption gate are complete: final ordinary matched evidence is recorded
+   alongside 36 rewrite arms and 1,080,000 completed requests. Historical Mac
+   observations remain unexplained after matched repeats; investigate any recurrence
+   before making stronger release or availability claims.
 2. Bound aggregate transient allocations before construction, reduce remaining
    opaque serialization pauses, and address final filesystem handoff stalls.
 3. Implement and validate hash/sorted-set map compaction and address partially
@@ -171,8 +195,8 @@ The concurrent upgrade cases now launch four authenticated writers after loading
 the alpha.2 file. They verify all 400 increment replies exactly once, 400 SET
 acknowledgments, and all resulting values after rewrite and restart. All nine
 local cases pass. The earlier four-platform archive reports exercised each
-configuration with sequential traffic; the expanded concurrent-traffic cases
-will also run in final native archive validation. Neither test establishes
+configuration with sequential traffic; final native run 34134709336 passes the
+expanded concurrent-traffic cases on all four platforms. Neither test establishes
 physical append overlap or a durability guarantee beyond its configured policy.
 
 Retention diagnostics now assert the grown and surviving collection sizes before

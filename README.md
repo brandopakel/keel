@@ -117,8 +117,10 @@ collection members and their key names stream in at most 64 KiB fragments.
 Partly written records finish before dirty-key reconciliation replaces their old
 state. A rewrite is abandoned after 30 seconds, 100,000 dirty keys or an 8 MiB
 dirty-name accounting budget; the original log remains authoritative. Snapshot
-creation refuses more than one million keys. Opaque sketch serialization, disk
-writes and final sync can still stall. There is no hard rewrite latency SLA.
+creation refuses more than one million keys. Bulk snapshot sync runs on a worker
+while commands continue; dirty-tail reconciliation precedes the final synchronous
+handoff. Opaque sketch serialization, disk writes and final sync can still stall.
+There is no hard rewrite latency SLA.
 
 Keep Keel on a private network. AUTH does not encrypt traffic and grants access to
 all commands, including destructive ones. Use a TLS proxy for untrusted network hops,
