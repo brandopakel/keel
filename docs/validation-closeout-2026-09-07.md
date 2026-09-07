@@ -49,7 +49,7 @@ preserves the prior stale progress and explains the interruption. Neither run
 was restarted. Their reports, checkpoints, recovery records and diagnostic logs
 are archived in `bench/results/frozen-continuous-soak-stop-2026-09-07.json.gz`.
 They are separate evidence. The
-heartbeat proposal does not establish its root cause; see
+merged multiplexer timeout does not establish its root cause; see
 [the diagnostic assessment](soak-diagnostics-2026-09-07.md).
 
 ## Engineering completed and candidates
@@ -69,13 +69,49 @@ heartbeat proposal does not establish its root cause; see
   passes 810,000 scheduled requests and 324 rewrites; string tails improve in that
   run while sketch effects remain mixed, including a slower CMS write cell.
 - PR 55 adds aggregate reservations for covered reply/workspace paths and passes
-  correctness, slow-reader recovery, race and matched workload checks. It remains
-  open at this snapshot. Large-string/list throughput costs and CPU-limited
+  correctness, slow-reader recovery, race and matched workload checks. It is merged. Large-string/list throughput costs and CPU-limited
   collection cells are documented; it does not cover every process allocation.
 - Draft PR 58 bounds encoded primary AOF transcripts and removes accumulated
   eviction-record arrays. Correctness, replication, torn-tail and race checks
-  pass locally. Its controlled policy/mode matrix and review remain pending;
-  local large-write probes showed a possible throughput cost, so adoption is held.
+  pass locally and in hosted race/native recovery suites. The first matched matrix
+  completed off/always policies but failed baseline shutdowns for no/everysec.
+  Large-write and pipeline throughput costs were observed. A corrected framing
+  and admission candidate is undergoing a fresh matched comparison; adoption is held.
+
+- PR 59 records protocol-2 replica acknowledgments and reports lag. This improves
+  observability; it does not add automatic promotion or change acknowledged-write
+  durability guarantees.
+- PR 60 makes unavailable memory-monitoring samples diagnostic errors instead of
+  immediately ending the workload. It addresses the newer soak harness failure
+  mode without retroactively passing that run.
+- PR 61 adds a local validation wrapper with a two-minute maximum, default 512 MiB
+  output budget, inherited per-file limits, reserved free space and child cleanup.
+  Successful benchmark AOFs are hashed/reported and removed by default. Review
+  findings have regression checks; the final review is pending.
+- PR 62 adds an explicit shutdown grace while retaining the five-second default.
+  All six hosted large-write reproductions pass with a 30-second grace. Original
+  failures captured final fsync blocking cleanup and remain archived. This does
+  not establish faster storage or explain the older stalled soak.
+
+## Local retention
+
+The [compact archive index](../bench/results/local-evidence-archive-2026-09-07.json)
+records verified SHA-256 digests and asset IDs for the owner-accessible GitHub
+**draft evidence archive**. It is not a software release. Bulk evidence stays out
+of ordinary source clones. Failed/unclassified AOFs retain exact compressed
+contents; successful AOFs retain hashes. Bulk latency traces retain compact
+histograms, error counts, extrema and worst rows, with approximate quantiles
+identified. Existing exact result summaries are preserved. Reproducible binaries,
+images and download caches are removed. Uncommitted review probes and source
+commits missing remote branch refs were archived before removing 35 old worktrees.
+
+This batch removed 10.66 GiB of archived evidence and another 1.25 GiB of generated
+files/upload copies, in addition to obsolete checkout contents. Small terminal
+reports keep both local soak-status commands usable. Five orphaned September 3
+test listeners were also stopped after checking their temporary test directory,
+PPID 1 and absence of connected clients. No local soak is restarted. Full/race,
+large-dataset and operational testing now belongs on hosted runners within $0.
+The local figures exclude unrelated applications and their active build output.
 
 ## Work still open
 

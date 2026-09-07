@@ -1,0 +1,11 @@
+{
+  "archive_release_id": 384356108,
+  "archived_files_removed": 37890,
+  "archived_bytes_removed": 11442894540,
+  "generated_and_upload_copy_bytes_removed": 1340059636,
+  "obsolete_worktrees_removed": 35,
+  "changed_evidence_skipped": [],
+  "orphaned_september3_test_listeners_stopped": 5,
+  "local_policy": "No detached or long local tests. Brief guarded checks only; full matrices and operational tests on free hosted runners.",
+  "note": "Does not attribute unrelated machine storage or combine earlier cleanup with this batch. Unique probes and non-remote branch commits preserved in the draft archive."
+}

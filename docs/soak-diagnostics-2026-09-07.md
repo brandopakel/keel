@@ -29,8 +29,8 @@ or user-interrupted run. The two completed eight-hour runs remain passed.
 All continuous-run diagnostic records are archived in
 `bench/results/frozen-continuous-soak-stop-2026-09-07.json.gz`.
 
-PR 57 proposes a 20 ms multiplexer wait as defense in depth. Its description
-currently overstates the evidence and recovery behavior. Both `b9a97e0` and the
+PR 57 merged a 20 ms multiplexer wait as defense in depth. The source comments
+are corrected here to avoid overstating the evidence and recovery behavior. Both `b9a97e0` and the
 current server already start a `CronIntervalMs` ticker that writes the wake pipe,
 so periodic work does not inherently require external client traffic. A timeout
 also does not itself restore an unregistered descriptor: empty event batches do
@@ -38,7 +38,7 @@ not re-register every client. Some queued/ordered-append paths may progress on
 another loop turn, and the maintenance sweep may eventually close a stuck
 client, but neither establishes a universal one-interval recovery guarantee.
 A lost-registration root cause needs a captured registration/queue state or a
-reproducer. The proposed timer needs that narrower contract and a measured
+reproducer. The merged timer has that narrower contract and still needs a measured
 idle/ordinary workload cost. The original stalled run remains unexplained.
 
 The historical Intel pending-reply timeout recurred in CI 34158319335. The later
@@ -56,3 +56,8 @@ and ordinary startup are unchanged. Matched run 34163584482 passes 24 restarts,
 266–332 ms baseline and 293–353 ms candidate. It did not reproduce the original
 startup delay and does not establish its exact cause. Raw evidence remains in
 the AOF-retention and command-allocation result archives.
+
+PR 60 now records failed memory-monitoring samples and lets the workload continue;
+a missing `ps` sample alone no longer ends a soak. It preserves a count and bounded
+recent diagnostic errors. This addresses the newer harness failure mode, and does
+not change either historical run to passed or explain the old runtime stall.
