@@ -34,6 +34,7 @@ func TestLargeCollectionRewriteYieldsAndReconcilesMutation(t *testing.T) {
 				run(t, "PEXPIRE", "large", "60000")
 				require.NoError(t, StartRewrite())
 				require.NoError(t, AdvanceRewrite())
+				waitForRewriteSync(t)
 				require.True(t, rewrite.collectionActive)
 				require.LessOrEqual(t, rewrite.collectionPos, 256)
 				switch mutation {
@@ -70,6 +71,7 @@ func TestLargeCollectionRewriteYieldsAndReconcilesMutation(t *testing.T) {
 				}
 				for i := 0; rewrite.active && i < 100; i++ {
 					require.NoError(t, FlushAOF())
+					waitForRewriteSync(t)
 				}
 				require.False(t, rewrite.active)
 				require.Equal(t, 1, aof.rewrites)
@@ -136,6 +138,7 @@ func TestCollectionRewriteHonorsByteBudgetAndOversizedMemberMakesProgress(t *tes
 			for rewrite.active && chunks < 50 {
 				before := rewrite.written
 				require.NoError(t, AdvanceRewrite())
+				waitForRewriteSync(t)
 				if rewrite.active {
 					require.LessOrEqual(t, rewrite.written-before, int64(len(huge)+256))
 				}

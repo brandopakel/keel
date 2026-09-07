@@ -72,6 +72,7 @@ func TestOpaqueRewriteReconcilesMutationWithValidHistoricalPayload(t *testing.T)
 				}
 				want, present := dumpKey(key)
 				for cycles := 0; RewriteActive(); cycles++ {
+					waitForRewriteSync(t)
 					require.Less(t, cycles, 100)
 					before := rewrite.written
 					require.NoError(t, FlushAOF())

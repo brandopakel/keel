@@ -224,6 +224,8 @@ func OpenAOF(path string) error {
 // one kind of loss a client has no way to detect.
 func CloseAOF() error {
 	closeReplicationSnapshot()
+	CancelRewrite()
+	_, _ = pollRewriteSync(true)
 	if aof.file == nil {
 		return nil
 	}
