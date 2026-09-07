@@ -470,6 +470,10 @@ func executeRun(c *client, arena *replyArena) bool {
 
 func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 	defer wg.Done()
+	core.ClientBuffers = func() core.ClientBufferStats {
+		return core.ClientBufferStats{Connected: len(clients), InputBytes: retainedInputBytes, ReplyBytes: retainedReplyBytes, TotalBytes: retainedClientBytes}
+	}
+	defer func() { core.ClientBuffers = nil }()
 	defer func() {
 		core.CancelRewrite()
 		for _, c := range clients {
