@@ -690,3 +690,34 @@ func TestRewriteStartDoesNotCopyKeyNames(t *testing.T) {
 		})
 	}
 }
+
+func TestRewriteRetainsBoundedNameBatches(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a large keyspace")
+	}
+	ResetStores()
+	assert.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "held.aof")))
+	defer func() { assert.NoError(t, CloseAOF()) }()
+
+	const keys = 200000
+	for i := 0; i < keys; i++ {
+		run(t, "SET", "key:"+strconv.Itoa(i), "value-of-some-length")
+	}
+	assert.NoError(t, FlushAOF())
+	assert.NoError(t, StartRewrite())
+
+	// Nothing is collected up front, so the walk starts holding nothing at all.
+	assert.Zero(t, len(rewrite.keys), "starting a rewrite must not enumerate the keyspace")
+
+	worst := 0
+	for stepRewrite(t) {
+		worst = max(worst, cap(rewrite.keys))
+	}
+	assert.Equal(t, 1, aof.rewrites, "the rewrite must commit")
+
+	// Slice capacity may round above the work limit, but never scales with N.
+	assert.LessOrEqual(t, worst, 2*data_structure.ScanMaxWork,
+		"retained batch capacity must follow the fixed traversal budget")
+
+	t.Logf("%d keys: walk retained at most %d names, %d walked", keys, worst, rewrite.pos)
+}

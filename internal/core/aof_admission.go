@@ -3,6 +3,29 @@ package core
 import "github.com/brandopakel/keel/internal/data_structure"
 import "github.com/brandopakel/keel/internal/config"
 
+// The rule that decides whether a command can be admitted alongside a pending
+// append is not "is it a write" but: can its canonical log record and its reply
+// be bounded from the arguments and the current keyspace, without running it?
+//
+// Most commands can. The ones that cannot are those whose record depends on a
+// result only execution produces - SPOP and ZPOPMIN stage the members they
+// happened to remove, and nothing preflight knows which those are, or how long
+// their names are. Those keep the drained barrier, which is not a limitation to
+// be worked around: admitting a run and then discovering its transcript is
+// larger than the budget is precisely the failure this exists to prevent.
+//
+// Everything here over-estimates. A bound that is too generous costs a barrier
+// that was not strictly needed; a bound that is too tight is a violated budget.
+
+// collectionEntryOverhead is charged per element added to a collection, for the
+// slot, header and per-entry bookkeeping the stores keep. It is deliberately
+// larger than any of them actually use.
+const collectionEntryOverhead = 128
+
+// replyFraming is charged per element in a reply, for the bulk-string header
+// and terminator around it.
+const replyFraming = 32
+
 // AppendAdmission bounds the transcript, replies and keyspace growth BEFORE a
 // parsed run executes alongside an append. Unmodelled commands use the drained
 // barrier path. These conservative bounds cover errors, lazy expiry, SET's
@@ -10,6 +33,11 @@ import "github.com/brandopakel/keel/internal/config"
 // No store is touched: Peek and TotalMemUsed do not reap or update access state.
 func AppendAdmission(commands []*Command) (logBytes, replyBytes int, ok bool) {
 	growth, newKeys, largestWrite := uint64(0), 0, 0
+	// Collections accumulate, and preflight runs before any of this executes,
+	// so a read of a collection later in the run can return everything written
+	// to any collection earlier in it. A string cannot: GET returns one value,
+	// which is why largestWrite is enough there and this is needed here.
+	collectionWritten := 0
 	for _, cmd := range commands {
 		a := cmd.Args
 		switch cmd.Cmd {
@@ -38,7 +66,72 @@ func AppendAdmission(commands []*Command) (logBytes, replyBytes int, ok bool) {
 			growth += uint64(len(a[0]) + 256)
 			largestWrite = max(largestWrite, 20)
 			newKeys++
-		case "GET", "MGET", "PING", "EXISTS", "TYPE", "TTL", "PTTL":
+
+		// Collection writes whose log record is the command as it arrived, so
+		// the transcript is the arguments and the growth is the elements.
+		case "HSET", "HSETNX":
+			// HSET key field value [field value ...]
+			if len(a) < 3 || (len(a)-1)%2 != 0 {
+				return 0, 0, false
+			}
+			growth += uint64(len(a[0]) + 256)
+			for _, s := range a[1:] {
+				largestWrite = max(largestWrite, len(s))
+				collectionWritten += len(s) + replyFraming
+				growth += uint64(len(s) + collectionEntryOverhead)
+			}
+			newKeys++
+		case "SADD", "LPUSH", "RPUSH":
+			if len(a) < 2 {
+				return 0, 0, false
+			}
+			growth += uint64(len(a[0]) + 256)
+			for _, s := range a[1:] {
+				largestWrite = max(largestWrite, len(s))
+				collectionWritten += len(s) + replyFraming
+				growth += uint64(len(s) + collectionEntryOverhead)
+			}
+			newKeys++
+		case "ZADD":
+			// Flags are rejected rather than modelled: NX/XX/CH change which
+			// members land, and GT/LT/INCR change the record. Score-member
+			// pairs only, which is the shape that matters here.
+			if len(a) < 3 || (len(a)-1)%2 != 0 {
+				return 0, 0, false
+			}
+			growth += uint64(len(a[0]) + 256)
+			for i := 1; i < len(a); i += 2 {
+				if _, err := parseZScore(a[i]); err != nil {
+					return 0, 0, false
+				}
+				largestWrite = max(largestWrite, len(a[i+1]))
+				collectionWritten += len(a[i]) + len(a[i+1]) + 2*replyFraming
+				growth += uint64(len(a[i+1]) + collectionEntryOverhead)
+			}
+			newKeys++
+
+		// Removals cannot grow the keyspace, so only the transcript is charged.
+		// LPOP and RPOP are absent: with a count they may empty the key, and an
+		// emptied collection is deleted, which is a removal record this cannot
+		// size without knowing how many elements are actually there.
+		case "HDEL", "SREM", "ZREM":
+			if len(a) < 2 {
+				return 0, 0, false
+			}
+
+		// Reads whose reply is a fixed size or a single element.
+		case "GET", "MGET", "PING", "EXISTS", "TYPE", "TTL", "PTTL",
+			"HLEN", "HEXISTS", "LLEN", "SCARD", "SISMEMBER", "SMISMEMBER",
+			"ZCARD", "ZSCORE", "ZRANK":
+
+		// Reads that can return a whole key, so the bound needs the key name.
+		// SRANDMEMBER is absent on purpose: a negative count may repeat members
+		// and so is not bounded by what the set holds.
+		case "HGET", "HMGET", "HGETALL", "HKEYS", "HVALS",
+			"SMEMBERS", "LINDEX", "LRANGE", "ZRANGE":
+			if len(a) == 0 {
+				return 0, 0, false
+			}
 		default:
 			return 0, 0, false
 		}
@@ -71,11 +164,18 @@ func AppendAdmission(commands []*Command) (logBytes, replyBytes int, ok bool) {
 				if obj := dictStore.Peek(key); obj != nil {
 					size = max(size, len(obj.Value))
 				}
-				replyBytes += size + 32
+				replyBytes += size + replyFraming
 			}
+		case "HGET", "HMGET", "HGETALL", "HKEYS", "HVALS",
+			"SMEMBERS", "LINDEX", "LRANGE":
+			replyBytes += collectionReplyBound(cmd.Args[0], collectionWritten)
+		case "ZRANGE":
+			// WITHSCORES doubles the elements, and a score is short beside the
+			// member it belongs to, so twice the bound covers both forms.
+			replyBytes += 2 * collectionReplyBound(cmd.Args[0], collectionWritten)
 		case "PING":
 			for _, s := range cmd.Args {
-				replyBytes += len(s) + 32
+				replyBytes += len(s) + replyFraming
 			}
 		}
 		if replyBytes > maxAsyncAppendBytes {
@@ -83,6 +183,27 @@ func AppendAdmission(commands []*Command) (logBytes, replyBytes int, ok bool) {
 		}
 	}
 	return logBytes, replyBytes, true
+}
+
+// collectionReplyBound is what a reply reading the whole of one key can come to.
+//
+// MemUsage already counts the element bytes the store holds, so the reply is
+// that plus framing for each element, plus everything written to any collection
+// earlier in this run. Charging the run's whole collection growth to every such
+// read assumes it all went to this key, which is the safe direction: preflight
+// runs before any of it has executed and cannot know where it landed.
+func collectionReplyBound(key string, writtenThisRun int) int {
+	held, elements := uint64(0), 0
+	if h, ok := hashStore.Peek(key); ok {
+		held, elements = h.MemUsage(), 2*h.Len()
+	} else if s, ok := setStore.Peek(key); ok {
+		held, elements = s.MemUsage(), s.Len()
+	} else if l, ok := listStore.Peek(key); ok {
+		held, elements = l.MemUsage(), l.Len()
+	} else if z, ok := zsetStore.Peek(key); ok {
+		held, elements = z.MemUsage(), z.Len()
+	}
+	return int(held) + elements*replyFraming + writtenThisRun + replyFraming
 }
 
 // AppendOffset is a logical encoded prefix, independent of rewrite file sizes.

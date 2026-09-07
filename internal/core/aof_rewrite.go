@@ -116,7 +116,7 @@ func StartRewrite() error {
 	}
 
 	if data_structure.TotalKeys() > 1000000 {
-		return fmt.Errorf("rewrite snapshot limit: at most 1000000 keys")
+		return fmt.Errorf("rewrite limit: at most 1000000 keys")
 	}
 	path := aof.path
 	tmpPath := path + ".rewrite"
