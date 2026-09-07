@@ -69,8 +69,13 @@ func (q *orderedAppend) admit(c *client, mux io_multiplexing.IOMultiplexer) bool
 		return true
 	}
 	logBytes, replyBytes, bounded := core.AppendAdmission(c.cmds)
+	// Three budgets, each of which can refuse on its own: the encoded log, the
+	// aggregate of everything retained, and the replies alone. The last is what
+	// stops a run being admitted whose replies would crowd out the requests
+	// that have to be read for the queue to drain at all.
 	fits := bounded && core.AppendHasRoom(logBytes) &&
-		retainedClientBytes+core.AppendRetainedBytes()+2*logBytes+3*replyBytes <= maxRetainedClientBytes
+		retainedClientBytes+core.AppendRetainedBytes()+2*logBytes+3*replyBytes <= maxRetainedClientBytes &&
+		retainedReplyBytes+3*replyBytes <= maxRetainedClassBytes
 	if !q.drain && !q.exclusive {
 		if fits {
 			return true

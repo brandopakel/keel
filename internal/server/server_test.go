@@ -48,8 +48,11 @@ func TestFlushClientRepliesReleasesAccountingOnMonitorFailure(t *testing.T) {
 			}
 			require.Equal(t, want, monitor.operation)
 			require.NotContains(t, clients, r)
-			require.Zero(t, c.accounted)
+			require.Zero(t, c.accountedInput)
+			require.Zero(t, c.accountedReply)
 			require.Equal(t, before, retainedClientBytes, "closed clients must release their retained buffers")
+			require.Zero(t, retainedInputBytes, "and release them from each class, not only the total")
+			require.Zero(t, retainedReplyBytes)
 		})
 	}
 }
