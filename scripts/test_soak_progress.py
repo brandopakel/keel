@@ -2,9 +2,12 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
+from types import SimpleNamespace
+from unittest.mock import patch
 import unittest
 
-from soak_status import classify
+from soak_status import classify, inspect
 
 
 class ProgressTests(unittest.TestCase):
@@ -21,6 +24,17 @@ class ProgressTests(unittest.TestCase):
                          'invalid_pass_report')
         self.assertEqual(classify({'status': 'passed'}, True, False, 0, 120), 'invalid_pass_report')
         self.assertEqual(classify({'status': 'failed'}, True, False, 999, 120), 'failed')
+
+    def test_reused_pid_is_not_the_owned_process(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/'progress.json').write_text(json.dumps(dict(status='running')))
+            (root/'launch.json').write_text(json.dumps(dict(runs=[dict(
+                name='test', output=str(root), pid=123, pid_identity='old start /owned/keel')])) )
+            with patch('soak_status.subprocess.run', return_value=SimpleNamespace(stdout='new start /different/process')):
+                row = inspect(root/'launch.json')['runs'][0]
+            self.assertEqual(row['status'], 'interrupted_or_missing_process')
+            self.assertFalse(row['owned_process_alive'])
 
     def test_watchdog_interrupts_sleep_and_runs_cleanup(self):
         code = '''
