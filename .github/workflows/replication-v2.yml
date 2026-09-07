@@ -58,6 +58,16 @@ jobs:
         run: python3 scripts/check-ordered-append.py --bin /tmp/keel-native --out dist/native/ordered --clients 16 --iterations 200
       - name: Mixed workload and storage failures
         run: python3 scripts/soak.py --bin /tmp/keel-native --out dist/native/soak --seconds 120 --cycle-seconds 15 --concurrent --replication-protocol 2
+      - name: Real ENOSPC with concurrent appends on an owned bounded mount
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          task_fault_mount="$RUNNER_TEMP/keel-native-fault"
+          mkdir "$task_fault_mount"
+          sudo mount -t tmpfs -o size=16m,mode=0777 tmpfs "$task_fault_mount"
+          trap 'sudo umount "$task_fault_mount"' EXIT
+          python3 scripts/soak.py --bin /tmp/keel-native --fault-only --concurrent --disk-root "$task_fault_mount" --out dist/native/enospc
       - name: Preserve reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

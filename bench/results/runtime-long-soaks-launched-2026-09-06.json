@@ -1,0 +1,48 @@
+{
+  "snapshot_only": true,
+  "status": "running, not passed",
+  "observed_utc": "2026-09-07T04:19:13.990343+00:00",
+  "started_utc": "2026-09-07T04:17:00.461278+00:00",
+  "source_revision": "b9a97e002e5f6edb7fef54c7100ab9f7fd162e09",
+  "file_sha256": {
+    "scripts/soak.py": "7f08eed72a5396c7f477ab51641d6f865793c41930bcad371b7c569f43695f07",
+    "scripts/validation_lib.py": "2f19d0ed8ee495ecfa08f4455739c994fc46cd25d807b6555cf0e95655f50e1e",
+    "bench/external/aws/resp_client.py": "0b74d3be54b7eb4d0c0a9ca71a982ef9d7a3c3b5df7ea46f7e5aa5685ec6e642",
+    "keel": "aeed3178e90e12664f8f715a7adb2889c6bffcdf36fbba076cbe9d64862c8b31",
+    "build.txt": "aff2d0c9ace246947924fdef472ebe33ba09130e2f4c5f4be8496bd070fcc00f"
+  },
+  "runs": [
+    {
+      "name": "recovery-v1-8h",
+      "requested_hours": 8,
+      "protocol": 1,
+      "concurrent": false,
+      "primary_crash_every": 3,
+      "observed_status": "running",
+      "acknowledged_writes_at_observation": 7110
+    },
+    {
+      "name": "recovery-v2-concurrent-8h",
+      "requested_hours": 8,
+      "protocol": 2,
+      "concurrent": true,
+      "primary_crash_every": 3,
+      "observed_status": "running",
+      "acknowledged_writes_at_observation": 7089
+    },
+    {
+      "name": "continuous-primary-v2-concurrent-48h",
+      "requested_hours": 48,
+      "protocol": 2,
+      "concurrent": true,
+      "primary_crash_every": 0,
+      "observed_status": "running",
+      "acknowledged_writes_at_observation": 7150
+    }
+  ],
+  "limits": [
+    "All three runs share the local Mac and APFS filesystem; latency is not a dedicated-host benchmark.",
+    "Original failed runs are preserved separately.",
+    "Consult terminal report.json and owned process identity for actual completion; this launch snapshot does not prove a pass."
+  ]
+}
