@@ -187,6 +187,9 @@ In order of distance, not size.
   that has learned of a higher term stops writing - a stale-generation guard, not
   a fence. A partitioned node learns nothing and keeps writing, so exclusivity
   still has to come from outside; see [the design](docs/failover-design.md).
+  A nonzero-term process restarts without write authority and requires a fresh
+  externally assigned higher term. Nonzero terms require protocol 2 throughout
+  the replication path; see [restart and upgrade rules](docs/term-guard-recovery.md).
 - **Command surface outside the contract.** Transactions, Lua, Pub/Sub, blocking list
   commands, RESP3, ACL roles, and cluster routing are absent. `ZRANGE` lacks
   `BYSCORE`, `BYLEX`, and `LIMIT`; `ZADD` lacks `GT`, `LT`, and `INCR`. Unreleased development
