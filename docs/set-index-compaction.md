@@ -84,3 +84,9 @@ regression and correctness tests support adopting the memory change; deployment
 capacity and transient shadow-map memory remain separate limits. Raw results and
 all Intel diagnostic logs are in
 `bench/results/set-native-and-intel-diagnostic-2026-09-07.json.gz`.
+
+The native generator now refuses hash/zset populations above 524,288 before
+preload, matching its 1,048,576-element reply parser ceiling for paired
+field/value or member/score arrays. The boundary reply is fully consumed in
+regression tests; one additional pair is refused at the header. The measured
+4,096-member workloads are unchanged.
