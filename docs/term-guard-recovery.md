@@ -32,10 +32,22 @@ At term zero, protocol 2 retains its old four-argument pull request and omits
 the zero term from frames and checksums. Old and new processes can replicate in
 either direction, including replica checkpoint recovery and primary restart.
 Upgrade the entire replication path before assigning nonzero terms. Nonzero
-terms use the extended protocol-2 request/frame; protocol 1 refuses them because
+terms use the extended protocol-2 request/frame. A nonzero-term primary rejects
+a legacy four-argument pull with REPLTERM before sending an incompatible frame.
+A new term-zero replica recognizes that capability signal and retries once with
+an explicit fifth argument; the ordinary term-zero path keeps old syntax.
+Protocol 1 refuses nonzero terms because
 it cannot convey the caller's observed term. An older process must not be used
 as a rollback target for a deployment with nonzero terms: it does not implement
 these guards. Prepare rollback data and external isolation before enabling them.
+
+Authorization remains the documented alpha contract: AUTH grants every command,
+including FLUSHDB, PROMOTE, FENCE and replication pulls. There are no separate
+application, replication-peer or administrator ACL roles. An authenticated caller
+can therefore intentionally fence a primary directly or by advertising a higher
+term. Treat every credential holder as an administrator and keep the service on
+a private trusted network. Command-level replication authorization is future
+ACL work, not a protection this implementation supplies.
 
 The regression suite reproduces the original restart defect, transport read
 race, failed-persistence retry and legacy request incompatibility. The process

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -74,6 +75,12 @@ func startReplicaTransport() (<-chan replicaUpdate, func()) {
 						}
 					}
 					body, err = replicaExchange(conn, reader, parts)
+					if protocol == 2 && len(parts) == 5 && errors.Is(err, errReplicationTermRequired) {
+						// A term-zero new replica can discover a promoted primary
+						// without sending new syntax to old term-zero primaries.
+						parts = append(parts, strconv.FormatUint(core.CurrentTerm(), 10))
+						body, err = replicaExchange(conn, reader, parts)
+					}
 					if err != nil {
 						break
 					}
@@ -134,6 +141,8 @@ func startReplicaTransport() (<-chan replicaUpdate, func()) {
 	return updates, func() { cancel(); <-done }
 }
 
+var errReplicationTermRequired = errors.New("primary requires a term-aware protocol 2 request")
+
 func replicaExchange(conn net.Conn, reader *bufio.Reader, parts []string) ([]byte, error) {
 	body := core.Encode(parts, false)
 	if n, err := conn.Write(body); err != nil {
@@ -151,6 +160,9 @@ func replicaExchange(conn net.Conn, reader *bufio.Reader, parts []string) ([]byt
 	}
 	if line == "+OK\r\n" {
 		return []byte("OK"), nil
+	}
+	if line == core.ReplicationTermRequiredReply {
+		return nil, errReplicationTermRequired
 	}
 	if !strings.HasPrefix(line, "$") {
 		return nil, fmt.Errorf("primary rejected replication request")

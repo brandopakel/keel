@@ -77,12 +77,14 @@ func TestNonzeroTermsCannotUseProtocol1(t *testing.T) {
 func TestCurrentTermCanBeReadByTransport(t *testing.T) {
 	setupFailover(t)
 	ready, stop, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	observed := make(chan uint64, 1)
 	go func() {
 		defer close(done)
 		close(ready)
 		for {
 			select {
 			case <-stop:
+				observed <- CurrentTerm()
 				return
 			default:
 				_ = CurrentTerm()
@@ -100,6 +102,7 @@ func TestCurrentTermCanBeReadByTransport(t *testing.T) {
 	}
 	close(stop)
 	<-done
+	require.Equal(t, uint64(20), <-observed)
 }
 
 func TestProtocol2TermZeroAcceptsLegacyPull(t *testing.T) {
@@ -109,4 +112,14 @@ func TestProtocol2TermZeroAcceptsLegacyPull(t *testing.T) {
 	t.Cleanup(func() { failover = old })
 	reply := run(t, "KEEL.REPL.PULL2", "", "0", "", "0")
 	require.Contains(t, reply, `"version":2`, "term-zero peers retain the existing protocol-2 request shape")
+}
+
+func TestProtocol2NonzeroTermRequiresExplicitCapability(t *testing.T) {
+	setupReplicationV2(t)
+	old := failover
+	failover = failoverState{term: 1, persisted: 1, held: 1}
+	t.Cleanup(func() { failover = old })
+	require.Equal(t, []byte(ReplicationTermRequiredReply), cmdReplicationPullV2([]string{"", "0", "", "0"}))
+	require.Contains(t, run(t, "KEEL.REPL.PULL2", "", "0", "", "0", "0"), `"term":1`)
+	require.True(t, Writable())
 }
