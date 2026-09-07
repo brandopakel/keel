@@ -238,6 +238,7 @@ func CloseAOF() error {
 	}
 	aof.file = nil
 	aof.path = ""
+	aof.buf, aof.staged, aof.extra = nil, nil, nil
 	data_structure.OnRemove = nil
 	return err
 }
@@ -259,7 +260,9 @@ func aofRecord(parts ...string) {
 func aofBegin() {
 	aof.commandStart = len(aof.buf)
 	aof.skip = false
+	clear(aof.staged)
 	aof.staged = aof.staged[:0]
+	clear(aof.extra)
 	aof.extra = aof.extra[:0]
 }
 
@@ -309,6 +312,7 @@ func aofCommit(cmd *Command, reply []byte) {
 	// be dropped after that write, not before it - and under a policy that can
 	// choose any key, the one evicted is occasionally the one just written.
 	aofCommitExtras()
+	clear(aof.staged)
 	aof.staged = aof.staged[:0]
 }
 
@@ -321,12 +325,14 @@ func aofCommit(cmd *Command, reply []byte) {
 // already expired.
 func aofCommitExtras() {
 	if aof.file == nil || aof.replaying {
+		clear(aof.extra)
 		aof.extra = aof.extra[:0]
 		return
 	}
 	for _, parts := range aof.extra {
 		aof.buf = appendCommand(aof.buf, parts...)
 	}
+	clear(aof.extra)
 	aof.extra = aof.extra[:0]
 }
 
