@@ -41,6 +41,8 @@ def scenarios():
         ('cache-write-64', {'ratio': '19:1'}), ('cache-read-1k', {'size': 1024}),
         ('cache-read-16k', {'size': 16384, 'keys': 1024}),
         ('cache-read-1m', {'size': 1048576, 'keys': 32, 'clients': 4}),
+        ('cache-write-1m', {'size': 1048576, 'keys': 32, 'clients': 4, 'ratio': '19:1'}),
+        ('cache-write-pipeline-64', {'pipeline': 64, 'ratio': '19:1'}),
         ('cache-miss', {'ratio': '0:1', 'kind': 'miss'}),
         ('cache-hot', {'pattern': 'G:G'}), ('cache-ttl', {'kind': 'ttl', 'ratio': '1:1'}),
         ('one-client', {'clients': 1}), ('many-clients', {'clients': 256}),
@@ -214,7 +216,7 @@ def run_arm(args, arm, binary, case, repetition, directory):
             command += ['-appendonly', '-appendfsync', args.policy, '-appendfilename', str(directory / 'store.aof')]
         if args.worker:
             command += ['-aof-async-append']
-        if args.candidate_concurrent and arm == 'candidate':
+        if args.concurrent or (args.candidate_concurrent and arm == 'candidate'):
             command += ['-aof-concurrent-append']
         if args.profiles:
             command += ['-profile-dir', str(directory / 'profiles')]
@@ -226,7 +228,7 @@ def run_arm(args, arm, binary, case, repetition, directory):
     began = time.monotonic()
     report = {'status': 'running', 'arm': arm, 'case': case, 'repetition': repetition,
               'binary_sha256': sha256(binary), 'policy': args.policy, 'worker': args.worker and arm != 'redis',
-              'concurrent': args.candidate_concurrent and arm == 'candidate',
+              'concurrent': arm != 'redis' and (args.concurrent or (args.candidate_concurrent and arm == 'candidate')),
               'profiles_enabled': args.profiles, 'server_command': command}
     report['gc_trace_enabled'] = (args.profiles or args.gc_trace) and arm != 'redis'
     log = (directory / 'server.log').open('w')
@@ -376,6 +378,25 @@ def run_arm(args, arm, binary, case, repetition, directory):
             writer.writerow(['elapsed_seconds', 'rss_kib', 'lifetime_cpu_percent'])
             writer.writerows(samples)
         report['elapsed_seconds'] = time.monotonic()-began
+        if args.discard_passed_aof and arm != 'redis' and args.policy != 'off' and report['status'] == 'passed':
+            # This fresh disposable server is stopped. Keep failures intact;
+            # hash successful logs before reclaiming disk between large arms.
+            path = directory / 'store.aof'
+            try:
+                assert path.is_file() and not path.is_symlink(), 'expected owned regular AOF'
+                digest = hashlib.sha256()
+                with path.open('rb') as persisted:
+                    while chunk := persisted.read(1 << 20):
+                        digest.update(chunk)
+                report['discarded_aof'] = {'bytes': path.stat().st_size, 'sha256': digest.hexdigest()}
+                # Save evidence before unlink, including an explicit pending
+                # action if interruption occurs between these two operations.
+                report['discarded_aof']['removed'] = False
+                (directory / 'report.json').write_text(json.dumps(report, indent=2)+'\n')
+                path.unlink()
+                report['discarded_aof']['removed'] = True
+            except Exception as exc:
+                report.update(status='failed', aof_cleanup_failure=repr(exc))
         (directory / 'report.json').write_text(json.dumps(report, indent=2)+'\n')
     assert report['status'] == 'passed', report
     return report
@@ -394,7 +415,14 @@ def main():
     parser.add_argument('--seconds', type=int, default=5)
     parser.add_argument('--policy', choices=['off', 'no', 'everysec', 'always'], default='off')
     parser.add_argument('--worker', action='store_true')
-    parser.add_argument('--candidate-concurrent', action='store_true', help='enable bounded concurrent appends on candidate only; requires --worker')
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument('--candidate-concurrent', action='store_true', help='enable bounded concurrent appends on candidate only; requires --worker')
+    modes.add_argument('--concurrent', action='store_true', help='enable bounded concurrent appends on both Keel arms; requires --worker')
+    retention = parser.add_mutually_exclusive_group()
+    retention.add_argument('--discard-passed-aof', dest='discard_passed_aof', action='store_true', default=True,
+                           help='default: hash then remove successfully stopped disposable Keel logs; preserve failures')
+    retention.add_argument('--retain-passed-aof', dest='discard_passed_aof', action='store_false',
+                           help='explicit diagnostic opt-in to retaining successful generated persistence files')
     parser.add_argument('--profiles', action='store_true')
     parser.add_argument('--gc-trace', action='store_true', help='diagnostic Go GC logging; disabled by default in comparisons')
     parser.add_argument('--server-cpus', help='Linux CPU numbers separated by commas')
@@ -403,8 +431,8 @@ def main():
     args = parser.parse_args()
     if not 1 <= args.reps <= 20 or not 1 <= args.seconds <= 3600:
         parser.error('reps must be 1..20 and seconds 1..3600')
-    if args.candidate_concurrent and not args.worker:
-        parser.error('candidate-concurrent requires --worker')
+    if (args.candidate_concurrent or args.concurrent) and not args.worker:
+        parser.error('concurrent append modes require --worker')
     if args.worker and args.policy == 'off':
         parser.error('worker requires AOF')
     if args.profiles and (args.baseline or args.redis):
