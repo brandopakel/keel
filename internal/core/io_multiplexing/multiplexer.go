@@ -5,6 +5,8 @@
 // blocking on any of them.
 package io_multiplexing
 
+import "time"
+
 // Operation is the readiness a caller wants to hear about.
 type Operation uint32
 
@@ -30,9 +32,18 @@ type IOMultiplexer interface {
 	// operation. Registration is level-triggered: a descriptor stays
 	// reported for as long as it stays ready.
 	Monitor(event Event) error
-	// Check blocks until at least one monitored descriptor is ready and
-	// returns those that are. The slice belongs to the multiplexer and is
-	// overwritten by the next call, so a caller keeps nothing from it.
+	// Check blocks until at least one monitored descriptor is ready, or until
+	// CheckInterval passes, and returns those that are ready - which may be
+	// none. The slice belongs to the multiplexer and is overwritten by the next
+	// call, so a caller keeps nothing from it.
 	Check() ([]Event, error)
 	Close() error
 }
+
+// CheckInterval bounds how long Check waits with nothing ready.
+//
+// It is the loop's heartbeat: short enough that the periodic work it gates -
+// idle-client sweeps, the ordered-append maintenance tick - keeps to its own
+// schedule, and long enough that an idle server is not paying for wakeups it
+// has no use for.
+const CheckInterval = 20 * time.Millisecond
