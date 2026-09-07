@@ -1,5 +1,6 @@
 import json
 import importlib.util
+import os
 from pathlib import Path
 import resource
 import subprocess
@@ -113,6 +114,31 @@ class LocalValidationTests(unittest.TestCase):
             self.assertEqual(report['command_exit_code'], 0)
             self.assertIn('output budget', report.get('failure', '')+report.get('cleanup_failure', ''))
             self.assertGreater(report['peak_output_bytes'], 2<<20)
+
+    @unittest.skipIf(os.geteuid() == 0, 'root can traverse mode-000 directories')
+    def test_unreadable_output_directory_cannot_pass(self):
+        # Keep this deliberately unreadable 3 MiB fixture outside an enclosing
+        # wrapper's monitored TMPDIR, so only the guard under test sees it.
+        with tempfile.TemporaryDirectory(dir='/tmp', prefix='keel-unreadable-guard-') as temp:
+            root = Path(temp)/'run'
+            try:
+                result = self.invoke(root, "from pathlib import Path; import sys; p=Path(sys.argv[1])/'hidden'; p.mkdir(); [(p/str(i)).write_bytes(b'x'*(1<<20)) for i in range(3)]; p.chmod(0)")
+                self.assertEqual(result.returncode, 1)
+                report = json.loads((root/'local-resource-report.json').read_text())
+                self.assertEqual(report['status'], 'failed')
+                self.assertIn('PermissionError', report.get('failure', '')+report.get('cleanup_failure', ''))
+            finally:
+                if (root/'hidden').exists():
+                    (root/'hidden').chmod(0o700)
+
+    def test_report_headroom_is_included_in_budget(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)/'run'
+            result = self.invoke(root, "from pathlib import Path; import sys; (Path(sys.argv[1])/'payload').write_bytes(b'x'*((1<<20)-1))", '--max-output-mib', '1')
+            self.assertEqual(result.returncode, 1)
+            report = json.loads((root/'local-resource-report.json').read_text())
+            self.assertEqual(report['status'], 'failed')
+            self.assertIn('output budget', report.get('failure', '')+report.get('cleanup_failure', ''))
 
 
 if __name__ == '__main__':

@@ -19,6 +19,10 @@ python3 scripts/run-local-validation.py --out dist/local-smoke --seconds 60 -- \
 The wrapper creates a fresh directory, captures stdout/stderr and writes a
 `local-resource-report.json`. Its default command deadline is 120 seconds, output
 budget 512 MiB, per-file limit 256 MiB and free-space reserve 10 GiB. It refuses
+unreadable output directories and reserves 64 KiB inside the output budget for
+its final status report. Inherited soft and hard file limits are never raised.
+After command and descendant exit, it rechecks all limits before recording a pass.
+It refuses
 deadlines above two minutes or output budgets above 1 GiB. Go caches and temporary
 directories are redirected inside that directory. The compilation cache is
 removed after every run; other temporary files are removed on success and kept

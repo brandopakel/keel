@@ -7,6 +7,7 @@ limit. Completed output stays available for publication; this tool never deletes
 evidence. Long validation belongs on hosted runners.
 """
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -18,10 +19,14 @@ import subprocess
 import sys
 import time
 
+REPORT_RESERVE_BYTES = 64 << 10
+
 
 def directory_bytes(root):
     total = 0
-    for folder, directories, files in os.walk(root, followlinks=False):
+    def traversal_failed(error):
+        raise error
+    for folder, directories, files in os.walk(root, followlinks=False, onerror=traversal_failed):
         directories[:] = [name for name in directories if not (Path(folder)/name).is_symlink()]
         for name in files:
             try:
@@ -66,6 +71,7 @@ def run(args):
     report = dict(status='running', command=command, seconds_limit=args.seconds,
                   output_limit_bytes=args.max_output_mib*2**20,
                   file_limit_bytes=args.max_file_mib*2**20,
+                  status_report_reserve_bytes=REPORT_RESERVE_BYTES,
                   minimum_free_bytes=int(args.min_free_gib*2**30))
     process = None
     previous_limit = resource.getrlimit(resource.RLIMIT_FSIZE)
@@ -76,7 +82,7 @@ def run(args):
         report['peak_output_bytes'] = max(used, report.get('peak_output_bytes', 0))
         if time.monotonic()-started >= args.seconds:
             raise TimeoutError('local validation time budget exhausted')
-        if used > report['output_limit_bytes']:
+        if used + REPORT_RESERVE_BYTES > report['output_limit_bytes']:
             raise RuntimeError('local validation output budget exhausted')
         if shutil.disk_usage(root).free < report['minimum_free_bytes']:
             raise RuntimeError('local validation minimum free-space reserve reached')
@@ -147,7 +153,12 @@ def run(args):
             except OSError as exc:
                 report.update(status='failed', cache_cleanup_failure=repr(exc))
             report['elapsed_seconds'] = time.monotonic()-started
-            (root/'local-resource-report.json').write_text(json.dumps(report, indent=2)+'\n')
+            body = (json.dumps(report, indent=2)+'\n').encode()
+            if len(body) > REPORT_RESERVE_BYTES:
+                report = dict(status='failed', failure='resource report exceeded its reserved size',
+                              oversized_report_sha256=hashlib.sha256(body).hexdigest())
+                body = (json.dumps(report, indent=2)+'\n').encode()
+            (root/'local-resource-report.json').write_bytes(body)
     print(json.dumps(report, indent=2))
     return 0 if report['status'] == 'passed' else 1
 
