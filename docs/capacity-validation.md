@@ -137,7 +137,7 @@ include both completed batches and completed commands, and batch latency waits
 for every response. Expected overload drops remain recorded separately. Request
 replication refuses more than 64 MiB before allocation. Full-reply draining,
 truncated batch refusal, bounds, race and vet checks pass; both local cases
-completed. Hosted matched measurements are pending. This specifically tests
+completed. Hosted matched runs 34115181646 and guarded repeat 34115851887 passed. This specifically tests
 interference, rather than averaging the ordinary reader into total throughput.
 
 Review closeout adds a pass/fail guard against per-member parser allocation and
@@ -153,3 +153,16 @@ a protocol error or invalid workload setup is not the default. Individual cases
 and rates can be rerun explicitly after assessment. The review suggestion to
 continue the entire sweep (PRRT_kwDOT3tkR86f4s4l) is declined for that reason;
 ordinary expected overload queue drops already continue normally.
+
+
+The guarded repeat prepared all 24 tenant processes more than 1,996 ms before
+its common start, balanced every arrival, and reported zero protocol failures.
+Across three 15-second repetitions, the fairness candidate's ordinary-reader
+scheduled p99 improved from 69.21 to 1.36 ms (64 KiB pipeline adversary) and
+73.40 to 10.35 ms (1 MiB pipeline adversary). Observer admission drops decreased
+from 65.52% to zero and 71.30% to 0.43%, respectively. Aggregate generator CPU
+stayed below 0.74 cores. This is a controlled competing-client observation on a
+free shared runner, with deliberately overloaded adversaries and AOF disabled.
+The approximately 3% ordinary pipeline throughput cost is documented separately
+in docs/client-fairness.md. Both raw runs and exact revisions are retained in
+`bench/results/fairness-competing-clients-2026-09-07.json.gz`.
