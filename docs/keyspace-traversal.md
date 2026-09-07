@@ -58,31 +58,35 @@ or as a read of the wrong store, so a stale cursor cannot make SCAN lie.
 
 ## Choosing the shard count
 
-The count is the one tuning decision, and it was settled by measurement rather
-than by picking a round number. It trades two costs that pull opposite ways.
+The count is the one tuning decision, and it was settled by measurement. It
+trades two costs that pull opposite ways.
 
 Too many shards pays the fixed cost of a map holding almost nothing, over and
-over. The first implementation used 1024, which under **Go 1.22 added 21.8 bytes
-per key at 100,000 keys** — enough that the keyspace estimate stopped bounding
-the real heap and `TestEstimateTracksRealHeap` failed on the Go 1.22 CI jobs.
+over. Too few makes a shard a large piece to take whole, because a call emits one
+and cannot stop inside it.
 
-That failure did not reproduce on Go 1.24 or later, whose maps are laid out
-differently and where the same partition *saves* memory. **The floor in go.mod is
-what a structure like this has to be sized against, not the newest toolchain**,
-and a measurement taken only on the newest one is not evidence about the floor.
-Measuring on Go 1.26 alone is what let 1024 look free.
+The first implementation used 1024 and CI rejected it — not on the newest
+toolchain, but on the Go 1.22 floor `go.mod` then declared, where it cost **21.8
+bytes per key at 100,000 keys** and the keyspace estimate stopped bounding the
+real heap. Go 1.24 replaced the map implementation and the cost disappeared, so
+the number a measurement gives depends on which toolchain took it, and the floor
+is what a structure like this has to be sized against.
 
 | Shards | Go 1.22 estimate/heap at 100k, 8-byte values |
 | ---: | ---: |
 | 1024 | 0.825 — fails the 0.90 bound |
 | 512 | 0.865 — fails |
-| 256 | **0.925** |
+| 256 | 0.925 |
 | 128 | 0.950 |
 
-256 was chosen: it clears the bound on the floor toolchain with margin, and it
-halves the largest reply a single call can produce compared with 128. At the five
-million keys `KeyNumberLimit` allows, a shard is about 19,500 keys, and that is
-the worst case for both the reply and the pause.
+That constraint is now gone. Raising the floor to Go 1.25, the oldest release
+still receiving security fixes, means every supported toolchain has the newer map
+layout, and 1024 measures 0.982 on the floor and 0.980 on current Go. **1024 is
+therefore what the floor allows rather than what it forces**: while `go.mod`
+claimed 1.22 this had to be 256, at four times the reply and pause per call.
+
+At 1024, the five million keys `KeyNumberLimit` allows come to about 4,900 per
+shard, and that is the worst case for both the reply and the pause.
 
 ## Measurements
 
@@ -96,43 +100,43 @@ Per-key memory, the same keys in one map against the partition:
 
 | Keys | Toolchain | One map | Sharded | Difference |
 | ---: | --- | ---: | ---: | ---: |
-| 100,000 | Go 1.22 | 3.75 MiB | 2.60 MiB | −12.0 bytes per key |
-| 1,000,000 | Go 1.22 | 55.25 MiB | 40.75 MiB | −15.2 bytes per key |
-| 100,000 | Go 1.26 | 3.29 MiB | 1.80 MiB | −15.6 bytes per key |
-| 1,000,000 | Go 1.26 | 53.12 MiB | 38.02 MiB | −15.8 bytes per key |
+| 100,000 | Go 1.25 | 3.29 MiB | 2.14 MiB | −12.1 bytes per key |
+| 1,000,000 | Go 1.25 | 53.23 MiB | 37.99 MiB | −16.0 bytes per key |
+| 100,000 | Go 1.26 | 3.29 MiB | 2.13 MiB | −12.2 bytes per key |
+| 1,000,000 | Go 1.26 | 53.21 MiB | 37.94 MiB | −16.0 bytes per key |
 
-At 256 the partition **saves** memory on both toolchains, because a Go map grows
-by doubling and one large map carries the slack of its last double alone, while
-many smaller maps round up individually and waste less in aggregate.
+The partition **saves** memory on both supported toolchains, because a Go map
+grows by doubling and one large map carries the slack of its last double alone,
+while many smaller maps round up individually and waste less in aggregate.
 
-That isolated figure is not the whole story, and the difference is worth stating:
-against the real dictionary, whose expiry table is not sharded and whose values
-are separately allocated, the same change *adds* about 6.4 bytes per key at
-100,000 keys on Go 1.22 (heap 11.99 MiB before, 12.63 MiB after). A benchmark on
-a bare `map[string]int` is a guide to the partition, not a substitute for
-measuring the structure that actually ships.
+That isolated figure is not the whole story. Against the real dictionary, whose
+expiry table is not sharded and whose values are separately allocated, the
+estimate/heap ratio moves from 0.975 to 0.982 — the accounting still bounds the
+heap, which is what the test is for. A benchmark on a bare `map[string]int` is a
+guide to the partition, not a substitute for measuring the structure that ships.
 
 Mutation and lookup overhead, isolated store operations:
 
 | Operation | Keys | One map | Sharded | Change |
 | --- | ---: | ---: | ---: | ---: |
-| get | 100,000 | 9.0 ns | 15.4 ns | +71% |
-| get | 1,000,000 | 23.5 ns | 38.3 ns | +63% |
-| set | 100,000 | 15.2 ns | 24.1 ns | +59% |
-| set | 1,000,000 | 57.9 ns | 103.5 ns | +79% |
+| get | 100,000 | 9.8 ns | 18.0 ns | +84% |
+| get | 1,000,000 | 26.3 ns | 41.8 ns | +59% |
+| set | 100,000 | 15.4 ns | 27.7 ns | +80% |
+| set | 1,000,000 | 58.2 ns | 107.6 ns | +85% |
 
 This is the real cost: a hash of the key name that every store operation now pays
 before reaching a map that hashes it again. It is a large proportion of a bare
 map operation and a much smaller proportion of a command — a whole `GET` through
 dispatch, expiry and reply encoding measured 110 ns and a whole `SET` 162 ns, so
-at 100k keys the added hash is roughly 6% of a command rather than 71% of one.
+at 100k keys the added hash is roughly 7% of a command rather than 84% of one.
 
-The existing full walk, which `KEYS` and rewrite still take, is unaffected:
+The existing full walk, which `KEYS` and rewrite still take, is close to
+unchanged, and unchanged at the size where it matters:
 
 | Full key-name walk | One map | Sharded | Change |
 | ---: | ---: | ---: | ---: |
-| 100,000 keys | 0.63 ms | 0.66 ms | +4.5% |
-| 1,000,000 keys | 7.73 ms | 7.77 ms | +0.5% |
+| 100,000 keys | 0.72 ms | 0.79 ms | +11% |
+| 1,000,000 keys | 8.06 ms | 8.22 ms | +2% |
 
 That matters because rewrite begins by collecting every key name, so sharding had
 to add a bounded walk without taxing the unbounded one beside it.
@@ -141,11 +145,11 @@ What the cursor buys against that walk:
 
 | | 100,000 keys | 1,000,000 keys |
 | --- | ---: | ---: |
-| One `SCAN` call | 1.9 µs | 27 µs |
-| Full key-name walk | 0.66 ms | 7.77 ms |
+| One `SCAN` call | 0.56 µs | 6.9 µs |
+| Full key-name walk | 0.79 ms | 8.22 ms |
 
-A `SCAN` call is bounded by one shard whatever the keyspace size: nearly three
-orders of magnitude below the walk, and it stays there as the keyspace grows.
+A `SCAN` call is bounded by one shard whatever the keyspace size: three orders of
+magnitude below the walk, and it stays there as the keyspace grows.
 
 ## What this does not establish
 
@@ -155,11 +159,11 @@ orders of magnitude below the walk, and it stays there as the keyspace grows.
   not been run. Whether an 8% share of a command is acceptable for bounded
   enumeration is a judgement to make against that measurement, not this one.
 - Every figure here was taken under three concurrent soaks.
-- `shardCount` was sized against the Go 1.22 memory bound and the reply a single
-  call can produce. It was not tuned against throughput, and the sweep above
-  covered four values, not a search.
+- `shardCount` was sized against the memory bound on the floor toolchain and the
+  reply a single call can produce. It was not tuned against throughput, and the
+  sweep covered four values, not a search.
 - A call emits a whole shard, so at the key limit a default `SCAN 0` can return
-  about 19,500 keys where Redis would return about ten. Bounding that further
+  about 4,900 keys where Redis would return about ten. Bounding that further
   would need a second level of hash bits inside a shard, which is possible
   without extra maps and is not done here.
 - Rewrite and full synchronization still take the whole key-name slice. Sharing

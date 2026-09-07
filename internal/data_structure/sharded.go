@@ -28,18 +28,23 @@ import "hash/maphash"
 // measuring both rather than by picking a round number.
 //
 // Too many shards and the fixed cost of a map holding almost nothing is paid
-// over and over. That is not hypothetical: at 1024 shards and 100,000 keys this
-// added 21.8 bytes per key under Go 1.22, enough that the keyspace estimate
-// stopped bounding the real heap and TestEstimateTracksRealHeap failed. It does
-// not appear under Go 1.24 and later, whose maps are laid out differently and
-// where the partition instead saves memory - so the floor in go.mod, not the
-// newest toolchain, is what this has to be sized against.
+// over and over. That is not hypothetical, and it is why this constant is sized
+// against the floor go.mod declares rather than against the newest toolchain:
+// at 1024 shards and 100,000 keys it cost 21.8 bytes per key under Go 1.22,
+// enough that the keyspace estimate stopped bounding the real heap and
+// TestEstimateTracksRealHeap failed. Go 1.24 replaced the map implementation
+// and the cost went away, so the number a measurement gives depends on which
+// toolchain took it.
 //
 // Too few and a shard is a large piece to take whole, because a call emits one
-// and cannot stop inside it. At 256, the five million keys KeyNumberLimit
-// allows come to about 19,500 per shard, and that is the largest reply and the
+// and cannot stop inside it. Five million keys, which is what KeyNumberLimit
+// allows, come to about 4,900 per shard here - the largest reply and the
 // longest pause a single call can produce.
-const shardCount = 256
+//
+// 1024 is therefore what the floor allows rather than what it forces: while
+// go.mod claimed Go 1.22 this had to be 256, and raising the floor to a release
+// that still gets security fixes is what bought back the finer granularity.
+const shardCount = 1024
 
 // shardSeed is per process. Shard membership only has to be stable for as long
 // as a cursor is live, which is within one process: a cursor does not survive a
