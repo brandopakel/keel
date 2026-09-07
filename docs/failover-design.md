@@ -1,7 +1,9 @@
 # Automatic failover: external fencing before activation
 
-Status: proposed contract, September 7, 2026. Automatic failover and
-`KEEL.PROMOTE` are not implemented. The executable model in
+Status: proposed external-fencing contract, September 7, 2026. Automatic failover
+is not implemented. Unreleased development includes local `KEEL.PROMOTE` and
+`KEEL.FENCE` term guards; they do not implement this contract. See the
+[term-guard restart and upgrade contract](term-guard-recovery.md). The executable model in
 `scripts/test_failover_model.py` tests this contract's ordering assumptions; it
 is not an implementation or a test of a real fencing provider.
 
