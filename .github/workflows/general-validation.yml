@@ -47,8 +47,8 @@ on:
         default: ''
       rewrite_rate:
         description: Scheduled requests per second for matched rewrite interference
-        type: number
-        default: 2000
+        type: string
+        default: '2000'
 
 permissions:
   contents: read

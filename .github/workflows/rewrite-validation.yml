@@ -7,8 +7,8 @@ on:
         type: string
         required: true
       rate:
-        type: number
-        default: 2000
+        type: string
+        default: '2000'
 
 permissions:
   contents: read
