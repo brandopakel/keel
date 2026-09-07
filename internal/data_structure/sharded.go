@@ -23,7 +23,23 @@ import "hash/maphash"
 // The cursor is the next shard index, so it is a small integer the client hands
 // back verbatim and the server holds no per-cursor state at all. Nothing has to
 // expire an abandoned cursor, and a client that walks away costs nothing.
-const shardCount = 1024
+//
+// The count balances two costs that pull opposite ways, and was chosen by
+// measuring both rather than by picking a round number.
+//
+// Too many shards and the fixed cost of a map holding almost nothing is paid
+// over and over. That is not hypothetical: at 1024 shards and 100,000 keys this
+// added 21.8 bytes per key under Go 1.22, enough that the keyspace estimate
+// stopped bounding the real heap and TestEstimateTracksRealHeap failed. It does
+// not appear under Go 1.24 and later, whose maps are laid out differently and
+// where the partition instead saves memory - so the floor in go.mod, not the
+// newest toolchain, is what this has to be sized against.
+//
+// Too few and a shard is a large piece to take whole, because a call emits one
+// and cannot stop inside it. At 256, the five million keys KeyNumberLimit
+// allows come to about 19,500 per shard, and that is the largest reply and the
+// longest pause a single call can produce.
+const shardCount = 256
 
 // shardSeed is per process. Shard membership only has to be stable for as long
 // as a cursor is live, which is within one process: a cursor does not survive a

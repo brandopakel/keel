@@ -124,9 +124,9 @@ func TestShardedSetReportsOverwrite(t *testing.T) {
 	assert.Equal(t, 2, v)
 }
 
-// Sampling has to find candidates when a handful of keys are spread across a
-// thousand shards, because that is exactly when eviction needs them: a policy
-// with no candidates cannot free anything while the budget is already over.
+// Sampling has to find candidates when a handful of keys are spread across all
+// the shards, because that is exactly when eviction needs them: a policy with no
+// candidates cannot free anything while the budget is already over.
 func TestShardedSampleFindsKeysInASparseKeyspace(t *testing.T) {
 	for _, keys := range []int{1, 3, 20} {
 		m := &shardedMap[int]{}
@@ -188,5 +188,10 @@ func TestShardOfSpreadsKeysAcrossShards(t *testing.T) {
 			worst = n
 		}
 	}
-	assert.Less(t, worst, 60, "no shard may take a large share of 10,000 keys")
+	// Relative to the mean, not a fixed count, so the bound follows shardCount
+	// and does not have to be retuned when it changes. The seed is per process,
+	// so this is a distribution check: three times the mean leaves ordinary
+	// variation alone while still catching a hash that genuinely piles up.
+	mean := 10000 / shardCount
+	assert.Less(t, worst, 3*mean, "no shard may take a large share of 10,000 keys")
 }
