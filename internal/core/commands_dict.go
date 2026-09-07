@@ -102,7 +102,10 @@ func cmdSET(args []string) []byte {
 	if get {
 		reply = constant.RespNil
 		if obj != nil {
-			reply = Encode(obj.Value, false)
+			reply = encodeBoundedString(obj.Value)
+			if len(reply) > 0 && reply[0] == '-' {
+				return reply
+			}
 		}
 	}
 	if (nx && obj != nil) || (xx && obj == nil) {
@@ -147,7 +150,7 @@ func cmdGET(args []string) []byte {
 	if obj == nil {
 		return constant.RespNil
 	}
-	return Encode(obj.Value, false)
+	return encodeBoundedString(obj.Value)
 }
 
 // remainingTTL is how long a key has left, in milliseconds. The two negative

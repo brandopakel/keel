@@ -190,6 +190,9 @@ func cmdDUMP(args []string) []byte {
 	if !fits {
 		return replyTooLarge
 	}
+	if !reserveReplyMemory(size) {
+		return allocationPressure
+	}
 	out := make([]byte, 0, size)
 	out = append(out, '$')
 	out = strconv.AppendInt(out, int64(plan.size+9), 10)

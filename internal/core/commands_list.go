@@ -146,7 +146,7 @@ func cmdLINDEX(args []string) []byte {
 	if !found {
 		return constant.RespNil
 	}
-	return Encode(value, false)
+	return encodeBoundedString(value)
 }
 
 func cmdLSET(args []string) []byte {
