@@ -186,3 +186,7 @@ func (l *List) MemUsage() uint64 {
 		uint64(l.count)*listElemOverhead +
 		l.elemBytes
 }
+
+// ReservedSlotBytes is the ring capacity already retained. Admission reserves
+// this again before pushes because crossing capacity can double the ring.
+func (l *List) ReservedSlotBytes() uint64 { return uint64(len(l.buf)) * listSlotOverhead }

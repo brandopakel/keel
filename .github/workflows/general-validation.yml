@@ -4,6 +4,35 @@ on:
   pull_request:
     branches: [develop]
   workflow_dispatch:
+    inputs:
+      matched:
+        description: Run the matched traversal adoption matrix on this runner
+        type: boolean
+        default: false
+      baseline:
+        description: Exact baseline commit
+        type: string
+        default: 40fb7e505176054b18098d70e5f7d8e79264a4a9
+      cases:
+        description: Optional comma-separated standard workload names
+        type: string
+        default: ''
+      repetitions:
+        description: Repetitions per arm
+        type: number
+        default: 3
+      seconds:
+        description: Seconds per measurement
+        type: number
+        default: 5
+      memory:
+        description: Include the nine-case memory matrix
+        type: boolean
+        default: true
+      profiles:
+        description: Run separate candidate CPU/heap diagnostics after comparison
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -57,3 +86,86 @@ jobs:
           name: general-cache-validation
           path: dist/general-ci
           retention-days: 14
+
+  matched:
+    name: Matched keyspace adoption matrix
+    if: github.event_name == 'workflow_dispatch' && inputs.matched
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version: '1.27.1' }
+      - name: Build pinned generator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential autoconf automake libtool pkg-config libevent-dev libssl-dev zlib1g-dev redis-server lsof
+          curl -fL --retry 3 https://github.com/redis/memtier_benchmark/archive/refs/tags/2.5.1.tar.gz -o /tmp/memtier.tar.gz
+          echo '9b34e17a0d1d7e70b152eb442c6362161b5b764ce2ea98e97b7c74815bdd90b7  /tmp/memtier.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/memtier.tar.gz -C /tmp
+          cd /tmp/memtier_benchmark-2.5.1
+          autoreconf -fi
+          ./configure
+          make -j2
+      - name: Build exact source pair and record host
+        env:
+          BASELINE_REVISION: ${{ inputs.baseline }}
+          CGO_ENABLED: '0'
+        run: |
+          [[ "$BASELINE_REVISION" =~ ^[0-9a-f]{40}$ ]]
+          git worktree add --detach "$RUNNER_TEMP/keel-baseline" "$BASELINE_REVISION"
+          go -C "$RUNNER_TEMP/keel-baseline" build -trimpath -o /tmp/keel-baseline ./cmd/keel
+          go build -trimpath -o /tmp/keel-candidate ./cmd/keel
+          mkdir -p dist/matched
+          lscpu > dist/matched/lscpu.txt
+          df -T . > dist/matched/filesystem.txt
+          uname -a > dist/matched/uname.txt
+          go version > dist/matched/go.txt
+          git rev-parse HEAD > dist/matched/candidate-source.txt
+          git -C "$RUNNER_TEMP/keel-baseline" rev-parse HEAD > dist/matched/baseline-source.txt
+          cp /proc/stat dist/matched/proc-stat-before.txt
+          ps -eo pid,comm,pcpu,pmem > dist/matched/processes-before.txt
+      - name: Sequential paired workloads and memory with disjoint CPU masks
+        env:
+          SELECTED_CASES: ${{ inputs.cases }}
+          REPETITIONS: ${{ inputs.repetitions }}
+          MEASURE_SECONDS: ${{ inputs.seconds }}
+          INCLUDE_MEMORY: ${{ inputs.memory }}
+          DIAGNOSE_PROFILES: ${{ inputs.profiles }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          cpus = sorted(os.sched_getaffinity(0))
+          assert len(cpus) >= 2, 'two disjoint CPU masks required'
+          # Keep all exposed SMT siblings on the same side of the measurement.
+          topology = {}
+          for cpu in cpus:
+              base = Path(f'/sys/devices/system/cpu/cpu{cpu}/topology')
+              topology[cpu] = tuple((base/name).read_text().strip() for name in ('physical_package_id','core_id'))
+          server_set = [cpu for cpu in cpus if topology[cpu] == topology[cpus[0]]]
+          client_set = [cpu for cpu in cpus if cpu not in server_set]
+          assert client_set, 'two exposed physical cores required'
+          server, clients = ','.join(map(str,server_set)), ','.join(map(str,client_set))
+          Path('dist/matched/affinity.json').write_text(json.dumps({'server':server,'generator':clients,'topology':topology,'limitation':'Disjoint exposed core groups on one hosted VM; host scheduling and underlying tenancy are uncontrolled.'},indent=2))
+          common = ['python3','bench/run-general.py','--candidate','/tmp/keel-candidate','--memtier','/tmp/memtier_benchmark-2.5.1/memtier_benchmark','--server-cpus',server,'--client-cpus',clients,'--load-threads','2']
+          compare = common+['--baseline','/tmp/keel-baseline','--reps',os.environ['REPETITIONS'],'--seconds',os.environ['MEASURE_SECONDS']]
+          suites = ['standard'] + (['memory'] if os.environ['INCLUDE_MEMORY'] == 'true' else [])
+          for suite in suites:
+              selected = ['--cases',os.environ['SELECTED_CASES']] if suite == 'standard' and os.environ['SELECTED_CASES'] else []
+              subprocess.run(compare+selected+['--suite',suite,'--out','dist/matched/'+suite],check=True)
+              subprocess.run(['python3','bench/summarize-general.py','dist/matched/'+suite],check=True)
+          if os.environ['DIAGNOSE_PROFILES'] == 'true':
+              selected = ['--cases',os.environ['SELECTED_CASES']] if os.environ['SELECTED_CASES'] else ['--cases','working-set-100k']
+              subprocess.run(common+selected+['--profiles','--reps','1','--seconds','30','--out','dist/matched/profiles'],check=True)
+          PY
+      - name: Record final host state
+        if: always()
+        run: |
+          mkdir -p dist/matched
+          cp /proc/stat dist/matched/proc-stat-after.txt
+          ps -eo pid,comm,pcpu,pmem > dist/matched/processes-after.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with: { name: matched-keyspace-adoption, path: dist/matched, retention-days: 30 }

@@ -6,7 +6,7 @@
 # toolchain it was not calibrated for stops bounding - see
 # internal/data_structure/memory.go. Under Go 1.21 it under-counted by up to 39%.
 # An image built on an older toolchain would be quietly wrong in that way.
-FROM golang:1.25-alpine AS build
+FROM golang:1.27.1-alpine AS build
 
 WORKDIR /src
 

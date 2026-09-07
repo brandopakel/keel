@@ -172,10 +172,19 @@ func cmdReplicationPull(args []string) []byte {
 			return Encode(errors.New("ERR replication snapshot limit"), false)
 		}
 		frame.Body = appendCommand(nil, "FLUSHDB")
-		for _, key := range allKeyNames() {
-			frame.Body = emitKey(frame.Body, key)
-			if len(frame.Body) > replicationLimit {
-				return Encode(errors.New("ERR replication snapshot exceeds 8 MiB"), false)
+		walk := data_structure.NewKeyspaceWalk()
+		var keys []string
+		for !walk.Done() {
+			var err error
+			keys, _, err = walk.Next(1024, keys[:0])
+			if err != nil {
+				return Encode(err, false)
+			}
+			for _, key := range keys {
+				frame.Body = emitKey(frame.Body, key)
+				if len(frame.Body) > replicationLimit {
+					return Encode(errors.New("ERR replication snapshot exceeds 8 MiB"), false)
+				}
 			}
 		}
 		frame.To = replication.offset

@@ -10,10 +10,9 @@
 # maps out. Testing only the newest Go would let that floor rot without anyone
 # noticing.
 #
-# The floor is the oldest Go still receiving security fixes, not the oldest that
-# happens to compile. It was 1.22 until it was raised: 1.22 had been unsupported
-# upstream since 1.24 shipped, and honouring it meant sizing internal structures
-# against a map implementation Go had already replaced.
+# The source floor is Go 1.26. Build with the latest patch of a supported Go
+# release; upstream supports the two newest major lines. Revisit the floor and
+# Docker builder when a new major ships: https://go.dev/doc/devel/release.
 name: Go
 
 on:
@@ -32,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: ['1.25', 'stable']
+        go: ['1.26', 'stable']
         os: [ubuntu-latest, macos-latest]
     steps:
       # Actions are pinned to commit SHAs rather than tags: a tag is mutable and
@@ -66,6 +65,10 @@ jobs:
           /tmp/keel-client-venv/bin/python -m pip install 'redis==5.2.1'
           BIN=/tmp/keel-client-test /tmp/keel-client-venv/bin/python examples/test_client.py
 
+      - name: Failover authority model
+        if: matrix.os == 'ubuntu-latest' && matrix.go == 'stable'
+        run: python3 -m unittest discover -s scripts -p test_failover_model.py -v
+
       - name: Restore fuzz smoke
         if: matrix.go == 'stable'
         run: go test ./internal/core -run '^$' -fuzz '^FuzzRestoreValidation$' -fuzztime=10s -parallel=2
@@ -76,6 +79,7 @@ jobs:
           go test ./internal/core -run '^$' -fuzz '^FuzzCommandParserMatchesValueDecoder$' -fuzztime=10s -parallel=2
           go test ./internal/core -run '^$' -fuzz '^FuzzStringEncodingMatchesCanonicalInteger$' -fuzztime=10s -parallel=2
           go test ./internal/data_structure -run '^$' -fuzz '^FuzzSparseHLLMatchesDense$' -fuzztime=10s -parallel=2
+          go test ./internal/data_structure -run '^$' -fuzz '^FuzzPagedKeyspaceMatchesMap$' -fuzztime=10s -parallel=2
 
   docker:
     name: docker image

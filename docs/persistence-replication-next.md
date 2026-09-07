@@ -60,8 +60,9 @@ sets need resumable traversal with mutation generations; a changed key restarts
 with canonical deletion/replacement so historical fragments cannot win at
 finalization. A single element larger than a chunk needs explicit size handling.
 
-Whole-key name enumeration is another synchronous operation. Evaluate a stable
-traversal/index abstraction shared by rewrite, full synchronization and SCAN.
+The current traversal candidate uses stable paged slots shared by SCAN, rewrite
+and full synchronization; see [its contract and validation](keyspace-traversal.md).
+Continue measuring the traversal/index abstraction before adopting it broadly.
 Measure its per-key memory cost and mutation overhead at 100k and 1M keys before
 adopting it. Copying every key for every SCAN request would hide an O(N) pause
 behind a cursor-shaped API. An index or bounded cursor mechanism must specify
@@ -93,8 +94,10 @@ positions because rewrite changes them.
 
 ## Automatic failover
 
-Manual promotion still requires external fencing. Automatic promotion is a
-separate protocol: durable terms/votes, quorum membership and reconfiguration,
+Manual promotion still requires external fencing. The [automatic failover
+proposal](failover-design.md) requires a trusted authority to verify external
+fencing before granting activation. Local matching terms alone cannot revoke an
+isolated primary. Automatic promotion is a separate protocol: durable terms/votes, quorum membership and reconfiguration,
 leader fencing, partition behavior and an explicit acknowledgement/loss policy.
 No pair of independently writable nodes should infer authority from connection
 loss alone. Acceptance includes old-primary reappearance, asymmetric partitions,

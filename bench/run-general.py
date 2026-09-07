@@ -25,6 +25,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from validation_lib import Client, sha256
 
 
+def compatible_load_threads(requested, clients):
+    # Use the maximum allowed divisor, not gcd(requested, clients): the maximum
+    # need not itself divide the client count (e.g. six threads, sixteen clients).
+    for threads in range(min(requested, clients), 0, -1):
+        if clients % threads == 0:
+            return threads
+    raise ValueError('clients and requested threads must be positive')
+
+
 def scenarios():
     base = dict(keys=2500, size=64, clients=16, pipeline=1, ratio='1:19', pattern='R:R', kind='cache')
     changes = [
@@ -129,6 +138,10 @@ def traffic_options(case):
     return options
 
 
+def pin_command(command, cpus):
+    return ['taskset', '-c', cpus] + command if cpus else command
+
+
 def run_arm(args, arm, binary, case, repetition, directory):
     directory.mkdir()
     with socket.socket() as reservation:
@@ -155,6 +168,7 @@ def run_arm(args, arm, binary, case, repetition, directory):
             command += ['-aof-concurrent-append']
         if args.profiles:
             command += ['-profile-dir', str(directory / 'profiles')]
+    command = pin_command(command, args.server_cpus)
     process = client = load = None
     idle_clients, samples = [], []
     stopped = threading.Event()
@@ -219,10 +233,13 @@ def run_arm(args, arm, binary, case, repetition, directory):
                         return
                     stopped.wait(.1)
 
+            load_threads = compatible_load_threads(args.load_threads, case['clients'])
             common = [str(args.memtier), '-s', '127.0.0.1', '-p', str(port), '-P', 'redis',
-                      '-t', '1', '-c', str(case['clients']), '--pipeline='+str(case['pipeline']),
+                      '-t', str(load_threads),
+                      '-c', str(case['clients']//load_threads), '--pipeline='+str(case['pipeline']),
                       '--key-prefix=bench:', '--key-minimum=1', '--key-maximum='+str(max(2, case['keys'])),
                       '--data-size='+str(case['size']), '--hide-histogram', '--distinct-client-seed'] + traffic_options(case)
+            common = pin_command(common, args.client_cpus)
             with (directory / 'warmup.log').open('w') as output:
                 subprocess.run(common + ['--test-time=1'], stdout=output, stderr=subprocess.STDOUT, env=env, check=True, timeout=30)
             assert 'error response' not in (directory / 'warmup.log').read_text().lower(), 'warmup returned command errors'
@@ -318,6 +335,9 @@ def main():
     parser.add_argument('--candidate-concurrent', action='store_true', help='enable bounded concurrent appends on candidate only; requires --worker')
     parser.add_argument('--profiles', action='store_true')
     parser.add_argument('--gc-trace', action='store_true', help='diagnostic Go GC logging; disabled by default in comparisons')
+    parser.add_argument('--server-cpus', help='Linux CPU numbers separated by commas')
+    parser.add_argument('--client-cpus', help='disjoint Linux CPU numbers for memtier')
+    parser.add_argument('--load-threads', type=int, default=1, help='maximum generator threads; total client count stays fixed')
     args = parser.parse_args()
     if not 1 <= args.reps <= 20 or not 1 <= args.seconds <= 3600:
         parser.error('reps must be 1..20 and seconds 1..3600')
@@ -327,6 +347,21 @@ def main():
         parser.error('worker requires AOF')
     if args.profiles and (args.baseline or args.redis):
         parser.error('profiles are diagnostic candidate-only runs, separate from comparisons')
+    if not 1 <= args.load_threads <= 64:
+        parser.error('load-threads must be 1..64')
+    if args.server_cpus or args.client_cpus:
+        if not hasattr(os, 'sched_getaffinity') or not shutil.which('taskset'):
+            parser.error('CPU pinning requires Linux taskset')
+        if not (args.server_cpus and args.client_cpus):
+            parser.error('supply both server-cpus and client-cpus')
+        try:
+            server_cpus = {int(v) for v in args.server_cpus.split(',')}
+            client_cpus = {int(v) for v in args.client_cpus.split(',')}
+        except ValueError:
+            parser.error('CPU masks must contain comma-separated integers')
+        available = os.sched_getaffinity(0)
+        if server_cpus & client_cpus or not (server_cpus | client_cpus) <= available:
+            parser.error('CPU masks must be disjoint and inside the available affinity set')
     os.umask(0o077)
     args.out = args.out.resolve()
     args.out.mkdir(parents=True, exist_ok=False)

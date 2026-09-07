@@ -3,6 +3,7 @@ package core
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -568,13 +569,13 @@ func TestRewriteSlicesObeyKeyBudgetAndReplay(t *testing.T) {
 	assert.NoError(t, StartRewrite())
 	slices, worstWalk, final := 0, time.Duration(0), time.Duration(0)
 	for {
-		before := rewrite.walked
+		before := rewrite.pos
 		start := time.Now()
 		more := stepRewrite(t)
 		took := time.Since(start)
 		slices++
-		assert.GreaterOrEqual(t, rewrite.walked-before, 0)
-		assert.LessOrEqual(t, rewrite.walked-before, rewriteChunk,
+		assert.GreaterOrEqual(t, rewrite.pos-before, 0)
+		assert.LessOrEqual(t, rewrite.pos-before, rewriteChunk,
 			"every walk slice must obey its key budget, including the final slice")
 		if more {
 			if took > worstWalk {
@@ -668,11 +669,29 @@ func TestRestartDoesNotRatchetAutomaticRewriteBaseline(t *testing.T) {
 	assert.Equal(t, "199", run(t, "GET", "hot"))
 }
 
-// The walk used to hold a string header for every key from the moment a rewrite
-// started until it committed. This checks what it holds now is a shard of names
-// rather than the keyspace, which is the point of the cursor: the retained cost
-// stops scaling with how much data the server has.
-func TestRewriteHoldsAShardOfNamesNotTheKeyspace(t *testing.T) {
+func TestRewriteStartDoesNotCopyKeyNames(t *testing.T) {
+	for _, n := range []int{1000, 100000} {
+		t.Run(strconv.Itoa(n), func(t *testing.T) {
+			ResetStores()
+			require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "start.aof")))
+			t.Cleanup(func() { CancelRewrite(); assert.NoError(t, CloseAOF()) })
+			for i := 0; i < n; i++ {
+				dictStore.Put("key:"+strconv.Itoa(i), dictStore.NewObj("v"))
+			}
+			var before, after runtime.MemStats
+			runtime.ReadMemStats(&before)
+			require.NoError(t, StartRewrite())
+			runtime.ReadMemStats(&after)
+			require.Empty(t, rewrite.keys, "start retains slot limits, not every name")
+			require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(256<<10), "startup must not allocate an O(N) name slice")
+			require.NoError(t, AdvanceRewrite())
+			require.LessOrEqual(t, len(rewrite.keys), data_structure.ScanMaxWork)
+			require.LessOrEqual(t, rewrite.pos, data_structure.ScanMaxWork)
+		})
+	}
+}
+
+func TestRewriteRetainsBoundedNameBatches(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a large keyspace")
 	}
@@ -688,17 +707,17 @@ func TestRewriteHoldsAShardOfNamesNotTheKeyspace(t *testing.T) {
 	assert.NoError(t, StartRewrite())
 
 	// Nothing is collected up front, so the walk starts holding nothing at all.
-	assert.Zero(t, len(rewrite.batch), "starting a rewrite must not enumerate the keyspace")
+	assert.Zero(t, len(rewrite.keys), "starting a rewrite must not enumerate the keyspace")
 
 	worst := 0
 	for stepRewrite(t) {
-		worst = max(worst, cap(rewrite.batch))
+		worst = max(worst, cap(rewrite.keys))
 	}
 	assert.Equal(t, 1, aof.rewrites, "the rewrite must commit")
 
-	// A batch is whole shards up to the slice budget, so it is bounded by that
-	// and by the shard size - never by the number of keys in the server.
-	assert.Less(t, worst, keys/10,
-		"the walk retained %d names for %d keys, which is the snapshot it replaced", worst, keys)
-	t.Logf("%d keys: walk retained at most %d names, %d walked", keys, worst, rewrite.walked)
+	// Slice capacity may round above the work limit, but never scales with N.
+	assert.LessOrEqual(t, worst, 2*data_structure.ScanMaxWork,
+		"retained batch capacity must follow the fixed traversal budget")
+
+	t.Logf("%d keys: walk retained at most %d names, %d walked", keys, worst, rewrite.pos)
 }

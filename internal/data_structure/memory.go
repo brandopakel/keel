@@ -90,7 +90,7 @@ func (d *Dict) entryBytes(key string, obj *Obj) uint64 {
 
 // EntryBytes exposes the per-key estimate, for MEMORY USAGE.
 func (d *Dict) EntryBytes(key string) (uint64, bool) {
-	obj, exists := d.dictStore.get(key)
+	obj, exists := d.dictStore.getPtr(key)
 	if !exists {
 		return 0, false
 	}
