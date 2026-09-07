@@ -31,9 +31,24 @@ names and individual commands can still exceed the time target.
 Tests cover deletion/rescoring of the live cursor, insertions, equal and infinite
 scores, regrowth, further shrink, empty-map reuse, bounded work under continuous
 churn, small-collection overhead, and scheduled maintenance with exact rank,
-score and two-file-read persistence/replay checks. Three focused race repetitions,
-the full local suite and vet pass. Matched ordinary workload adoption and hosted
-platform/filesystem validation are required before merging the candidate.
+score and unchanged AOF bytes with exact replay checks. Three focused race
+repetitions, the full local suite and vet pass.
+
+Matched public Linux run 34150340348 compares candidate
+`abec4345f098a422648d56836b5667d5f4a6edf3` against
+`a7c6600cece5d21a78794e40e2f59be0e55028d4` on the same host, alternating arms for
+five 15-second repetitions per workload. All 40 arms pass without generator CPU
+warnings. Paired median throughput ratios are 0.998 for small reads, 0.997 for
+256 connections, 1.008 for pipeline 64 and 1.004 for sorted sets. Recorded p99
+medians are respectively 0.215/0.215, 2.543/2.527, 1.255/1.263 and 0.231/0.239 ms
+(baseline/candidate). This satisfies the ordinary-workload adoption gate but
+does not establish a throughput gain. These source revisions predate the new
+term guards; integration with their corrected runtime requires fresh CI.
+
+Initial candidate CI passes Go/race, differential clients, Docker, native Linux
+ARM64/Intel macOS recovery and ext4/xfs checks. Local diagnostics and complete
+matched raw reports are retained in
+`bench/results/zset-index-compaction-2026-09-07.json.gz`.
 
 Hash map retention, aggregate temporary reservations and partially occupied key
 pages remain separate work. Existing frozen long soaks validate their recorded
