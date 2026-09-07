@@ -97,3 +97,12 @@ The branch also integrates the separately validated opaque-record change. Its
 20 mutation cases, existing rewrite/replication tests, focused race and full
 combined suite pass together. Later harness review changes leave the measured
 normal-path runtime unchanged.
+
+The final lifecycle review reproduced an existing wakeup callback/descriptor
+teardown race. Detaching the waker now waits for an active callback to finish
+before descriptors can close or be reused. The baseline fails a blocked-callback
+regression; the candidate passes focused shutdown/wakeup/pipeline race checks,
+full tests and vet. Raw evidence is in `bench/results/waker-lifecycle-2026-09-07.json.gz`.
+The callback must not register another waker. Integration now includes merged
+client fairness as well as opaque records; final matched checks use that same
+combined baseline on both sides.
