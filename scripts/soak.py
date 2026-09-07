@@ -14,6 +14,7 @@ from collections import deque
 from pathlib import Path
 
 from validation_lib import Client, Server, info, rewrite, sha256
+from progress_watchdog import ProgressWatchdog
 
 
 def capture_failed_process(server):
@@ -141,7 +142,7 @@ def write_failure(binary, root, worker, disk_root=None, concurrent=False):
     return {'worker': worker, 'concurrent': worker and concurrent, 'fault': 'ENOSPC' if disk_root else 'RLIMIT_FSIZE', 'passed': True}
 
 
-def run(args, report):
+def run(args, report, watchdog):
     root = Path(args.out).resolve()
     replication_flags = ['-replication-protocol', str(args.replication_protocol)]
     primary = Server(args.bin, root / 'primary', async_append=True,
@@ -222,8 +223,9 @@ def run(args, report):
                           'primary': info(primary.client, 'persistence'),
                           'replica': info(replica.client, 'replication'),
                           'ps': subprocess.check_output(['ps', '-o', 'pid=,rss=,pcpu=', '-p',
-                                f'{primary.process.pid},{replica.process.pid}'], text=True)}
+                                f'{primary.process.pid},{replica.process.pid}'], text=True, timeout=2)}
                 checkpoint(root, report, sample)
+                watchdog.beat("workload after checkpoint")
                 pair_latencies.clear()
                 next_check = time.monotonic() + min(30, args.cycle_seconds)
                 print('checkpoint', round(now-started, 1), report['acknowledged_writes'], flush=True)
@@ -255,7 +257,9 @@ def run(args, report):
                     output.write(json.dumps({'cycle': cycles, 'primary_crash': crash_primary,
                         'seconds': time.monotonic()-recovery_start, 'acknowledged_cache_values_lost': 0})+'\n')
                 next_cycle = time.monotonic() + args.cycle_seconds
+                watchdog.beat("workload after recovery")
             time.sleep(.002)
+        watchdog.beat("final verification and promotion")
         # Quiesce and fence the primary before promoting the fully applied replica.
         time.sleep(.08)
         assert primary.client.call('GET', 'expiring') is None
@@ -295,11 +299,14 @@ if __name__ == '__main__':
     parser.add_argument('--cycle-seconds', type=float, default=60)
     parser.add_argument('--primary-crash-every', type=int, default=3,
                         help='crash primary every N recovery cycles; 0 keeps it alive to measure long-uptime growth')
+    parser.add_argument('--progress-timeout', type=float, default=120,
+                        help='fail with diagnostics if checkpoints/recovery stop progressing')
     parser.add_argument('--fault-only', action='store_true')
     parser.add_argument('--disk-root')
     args = parser.parse_args()
     if (not math.isfinite(args.seconds) or not math.isfinite(args.cycle_seconds) or
-            args.seconds <= 0 or args.cycle_seconds <= 0 or args.primary_crash_every < 0):
+            args.seconds <= 0 or args.cycle_seconds <= 0 or args.primary_crash_every < 0 or
+            not math.isfinite(args.progress_timeout) or args.progress_timeout <= 0):
         parser.error('durations must be finite and positive; primary-crash-every must be nonnegative')
     os.umask(0o077)
     root = Path(args.out).resolve()
@@ -310,15 +317,18 @@ if __name__ == '__main__':
               'started_utc': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
               'primary_crash_every': args.primary_crash_every, 'concurrent': args.concurrent,
               'replication_protocol': args.replication_protocol,
+              'progress_timeout_seconds': args.progress_timeout,
               'checkpoint_count': 0,
               'acknowledged_writes': 0, 'primary_crash_recoveries': 0,
               'replica_crash_recoveries': 0, 'checkpoints': [], 'faults': [], 'passed': False}
     (root / 'progress.json').write_text(json.dumps(report, indent=2) + '\n')
     try:
-        if not args.fault_only:
-            run(args, report)
-        for worker in [False, True]:
-            report['faults'].append(write_failure(args.bin, root, worker, args.disk_root, args.concurrent))
+        with (root/'watchdog.log').open('w') as trace, ProgressWatchdog(args.progress_timeout, trace) as watchdog:
+            if not args.fault_only:
+                run(args, report, watchdog)
+            for worker in [False, True]:
+                watchdog.beat(f'write failure worker={worker}')
+                report['faults'].append(write_failure(args.bin, root, worker, args.disk_root, args.concurrent))
         report['passed'] = True
         report['status'] = 'passed'
     except BaseException as exc:
