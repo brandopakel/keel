@@ -47,6 +47,7 @@ func TestEveryRegisteredCommandIsTypeCheckedOrDeliberatelyNot(t *testing.T) {
 	// the type table on purpose; everything else in the dispatch table has to
 	// be in it, or a name held by another type would slip through.
 	exempt := map[string]bool{
+		"KEEL.PROMOTE": true, "KEEL.FENCE": true, // a term, not a key
 		"KEEL.REPL.PULL":  true, // protocol cursor, not key arguments
 		"KEEL.REPL.PULL2": true,
 		"PING":            true, "DEL": true, "EXISTS": true, "TYPE": true, "KEYS": true, "MGET": true,

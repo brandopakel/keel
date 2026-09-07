@@ -14,9 +14,11 @@ architecture/filesystem and matched traversal validation:
 1. The failover design requires an external authority to verify isolation of the
    old process/incarnation before activating another writer. A local term is not
    fencing. Finite models and counterexamples exercise the design; a provider,
-   election system and automatic promotion are not implemented. Separate PR #31
-   still has a reproduced restart counterexample and must not be implemented as
-   a safe failover protocol. See [the review](failover-31-review.md).
+   election system and automatic promotion are not implemented. PR #31 merged
+   local term guards on September 7. The subsequent [restart correction](term-guard-recovery.md)
+   prevents a restarted process from claiming an observed successor's term and
+   restores term-zero rolling compatibility. These guards do not provide safe
+   failover by themselves. See [the original review](failover-31-review.md).
 2. Go 1.26 is the source/CI floor, current stable Go is tested, and Docker pins
    Go 1.27.1. The README support statement now matches the supported 1.26/1.27 lines.
 3. SCAN handles empty MATCH, empty TYPE and case-insensitive TYPE with regression
@@ -46,8 +48,9 @@ Evidence: [closeout](engineering-closeout.md), [traversal](keyspace-traversal.md
 | Heap validation | PR #41: larger sparse-HLL measurement population, unchanged tolerance | Process-wide heap deltas remain measurements with noise |
 
 Rewrite preflush (PR #43), fairness, opaque-record copy reduction and set
-compaction have merged. The serving runtime matches the frozen b14ffe0 candidate;
-subsequent changes strengthen diagnostics, upgrade validation and documentation.
+compaction have merged. PR #31 subsequently changed the serving runtime. The
+frozen b14ffe0 soaks and native archives therefore do not qualify the term guards
+or their restart corrections; those changes require their own validation.
 
 ## What the measurements establish
 

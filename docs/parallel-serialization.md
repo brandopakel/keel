@@ -1,29 +1,29 @@
 # Parallel rewrite and snapshot serialization
 
-Status: costed and **not recommended yet**, September 7, 2026. Nothing here is
-implemented. This exists because the question was worth answering properly
-rather than left as a vague "we could thread that."
+Status: architecture options, September 7, 2026. Parallel keyspace serialization
+and command execution are not implemented. Adoption requires ownership and
+allocation contracts plus matched measurements against the current runtime.
 
 ## What is already asynchronous
 
-More than the "single-threaded server" description suggests. Only one thing on
-this list is not off the event loop:
+Command execution and mutable keyspace state have one event-loop owner.
+Offloading is conditional on configuration and admission:
 
 | | Where it runs |
 | --- | --- |
 | Socket read and write, RESP parsing | `-io-threads N` worker pool, with the loop thread taking a share rather than supervising idle |
-| AOF append, and `always` fsync | append worker, handed an immutable batch |
+| AOF append, and `always` fsync | optional append worker, handed an immutable batch |
 | `everysec` fsync | its own worker |
-| Command execution during an append | overlapped by `-aof-concurrent-append`, replies gated by the durable prefix |
+| Command execution during an append | bounded admitted runs overlap with `-aof-concurrent-append`; other runs drain the barrier. Replies follow the configured persistence boundary, not always a durable prefix |
 | Rewrite | sliced across loop cycles, but the work runs **on** the loop |
+| Bulk snapshot preflush | worker; dirty-tail reconciliation and final filesystem handoff remain on the loop |
 | **Keyspace mutation** | **the loop, serially** |
 
 ## Why sharding does not make execution parallel
 
-The keyspace is now partitioned, and partitioning is the usual precondition for
-parallel execution, so the question follows naturally. It is a precondition and
-nothing more. Five things serialize execution regardless of how the data is
-split:
+Lookup tables are sharded internally. That is not an application partitioning
+feature or a concurrency protocol. Parallel execution must address these
+shared contracts:
 
 1. **The AOF is one totally ordered log.** Parallel execution needs a
    deterministic record order that replay reproduces exactly. Per-shard logs
@@ -39,18 +39,17 @@ split:
    runtime aborts the process. Every shard would need a lock taken on every
    `GET`.
 
-The last is the decisive one, and it is worth being precise about because it
-also governs the idea that *is* worth considering.
+All five require a design; mutable-value ownership also governs background
+serialization.
 
 ## The one real opportunity
 
-Rewrite and snapshot serialization is CPU work over independent shards, which is
-the shape that parallelizes. Better still, the correctness argument is already
-made: any key written during a rewrite is marked dirty and re-emitted from its
-current value at the end, so a worker that reads a stale or half-written value
-produces bytes that are later replaced. **Logical correctness is not the
-blocker.** The blocker is only that touching a Go map while the loop writes it
-aborts the process.
+Rewrite encoding may be parallelizable after a safe snapshot is captured.
+Dirty reconciliation can repair a coherent earlier value by replacing it with
+the final value. It cannot repair a data race, torn header, invalid pointer,
+panic or malformed record from concurrently reading mutable state. Every worker
+input needs an immutable snapshot or explicit ownership protocol, with memory
+reserved before capture and bounded queues, cancellation and cleanup.
 
 Three ways round it, and their costs are not close.
 
@@ -58,10 +57,10 @@ Three ways round it, and their costs are not close.
 
 `RWMutex` on each shard, read-locked by workers and write-locked by the loop.
 
-Simple, and wrong for this. An uncontended `RLock`/`RUnlock` pair is on the order
-of 20 ns; a whole `GET` through dispatch, expiry and reply encoding measures
-110 ns. That is a permanent tax approaching a fifth of the read path, paid by
-every client on every command, to make a background job finish sooner.
+Locks can protect access, but long serialization reads can block writers.
+Isolated lock and dispatch timings do not establish an end-to-end throughput
+cost. Measure contention, normal command latency and memory before choosing
+this design.
 
 ### B. Copy each shard under the loop, serialize it on a worker
 
@@ -76,37 +75,37 @@ case where a rewrite is slow, this helps least where it is needed most.
 
 ### C. Serialize from the log instead of the keyspace
 
-Already what protocol 2 does. Its snapshot streams the rewritten AOF rather than
-walking the keyspace, so for snapshots this problem is solved and the remaining
-walk is the rewrite itself.
+Protocol 2 retains an immutable rewritten-file descriptor and streams its byte
+ranges after rewrite handoff. This avoids a second mutable-keyspace walk; it
+does not eliminate snapshot construction or filesystem finalization costs.
 
 ## Recommendation: not yet, and measure first
 
-Not because it cannot be done, but because the benefit has not been shown to
-exist.
+Parallel serialization has not demonstrated an adoption benefit. Current
+traversal walks bounded stable slots; large records stream in at most 64 KiB
+fragments. The rewrite uses cooperative key, byte and 1 ms targets, but opaque
+image construction, writes, final dirty-tail sync, rename and directory sync
+can still block command execution. See [resource limits](rewrite-resource-limits.md),
+[opaque records](opaque-rewrite-records.md) and
+[matched preflush measurements](rewrite-preflush.md). Shorter rewrite duration
+and lower command stalls are distinct outcomes to measure.
 
-**The rewrite does not stall the server.** It is sliced across loop cycles with a
-budget of 2048 keys, 1 MiB or 1 ms per slice, and the walk now holds a shard of
-names rather than the keyspace. Parallelism would make it *finish sooner*, not
-stop it blocking — it does not block.
+Finishing sooner may also help the million-key snapshot ceiling, 30-second
+duration limit and dirty-name count/byte budgets. Compare alternatives rather
+than assuming which one is cheaper:
 
-The one place finishing sooner has a concrete value is the ceiling: rewrite
-refuses above a million keys, as a fail-fast against the 30-second duration and
-100,000-key dirty budgets. If the goal is to raise that ceiling, parallelism is
-an expensive way to buy it, and there are cheaper ones to try first:
-
-- Where does rewrite time actually go — traversal, RESP encoding, or writes? No
-  profile has been taken. It is possible the encoding is a small share, in which
-  case parallelizing it buys almost nothing.
+- Profile traversal, capture, encoding, writes and finalization separately on
+  the target workload. Existing preflush measurements do not establish that
+  encoding dominates every dataset.
 - The slice budgets and the abort window are constants that were chosen, not
   derived. Raising them may lift the ceiling for the cost of a longer tail.
-- The dirty-key budget is what actually fails on a hot keyspace, and no amount
-  of parallel serialization changes how many keys are being written meanwhile.
+- Faster completion may reduce dirty-key accumulation. Test that effect with
+  controlled write mixtures instead of assuming the dirty budget is invariant.
 
-**Do the profile before buying anything.** If it shows serialization dominating,
-option B for strings is the shape to take, because it is the only one that puts
-no cost on the read path — and its weakness for collections can be measured
-rather than assumed.
+Compare any candidate against current bounded streaming and preflush with the
+same host, durability, dataset and offered load. Retain overload, allocation
+peaks, errors and failed attempts. Test mutation, expiry, replacement,
+cancellation, storage failures and crash recovery while work is outstanding.
 
 ## What would change the answer
 
