@@ -46,7 +46,7 @@ jobs:
           TEST_MODE: ${{ matrix.mode }}
         run: |
           python3 scripts/check-large-write-shutdown.py --bin /tmp/keel-shutdown \
-            --out dist/shutdown/run --policy "$TEST_POLICY" --mode "$TEST_MODE"
+            --out dist/shutdown/run --policy "$TEST_POLICY" --mode "$TEST_MODE" --shutdown-seconds 30
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:

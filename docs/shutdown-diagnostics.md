@@ -52,5 +52,9 @@ unique sequence, and a fresh process must recover every final acknowledged value
 from the closed AOF before the run passes. The pre-replay AOF is preserved in a
 compressed failure archive because replay can repair a torn tail. Successful raw
 AOFs and that temporary backup are pruned after reports are written. This stronger
-recovery gate is pending a new hosted run; the prior six passes covered shutdown.
+recovery gate passes all six arms in [run 34170889997](https://github.com/brandopakel/keel/actions/runs/34170889997)
+on `91ed3b0`. Replay readiness ranged from 0.814 to 1.098 seconds; the exact
+final acknowledged sequences matched in every arm. Reports and build identities
+are in `bench/results/shutdown-replay-diagnostic-2026-09-07.tar.gz`.
+The prior six passes covered shutdown alone.
 The workflow now runs for relevant runtime, persistence and helper changes.
