@@ -18,6 +18,7 @@ import signal
 import subprocess
 import sys
 import time
+import tempfile
 
 REPORT_RESERVE_BYTES = 64 << 10
 
@@ -63,10 +64,11 @@ def run(args):
     if root.exists() or root.is_symlink():
         raise ValueError('output directory must be fresh')
     root.parent.mkdir(parents=True, exist_ok=True)
-    if shutil.disk_usage(root.parent).free < args.min_free_gib * 2**30:
+    if shutil.disk_usage(root.parent).free < args.min_free_gib * 2**30 + REPORT_RESERVE_BYTES:
         raise ValueError('insufficient free disk space before validation')
     root.mkdir(mode=0o700)
     root = root.resolve()
+    root_identity = (root.stat().st_dev, root.stat().st_ino)
     command = [arg.replace('{out}', str(root)) for arg in command]
     report = dict(status='running', command=command, seconds_limit=args.seconds,
                   output_limit_bytes=args.max_output_mib*2**20,
@@ -84,7 +86,7 @@ def run(args):
             raise TimeoutError('local validation time budget exhausted')
         if used + REPORT_RESERVE_BYTES > report['output_limit_bytes']:
             raise RuntimeError('local validation output budget exhausted')
-        if shutil.disk_usage(root).free < report['minimum_free_bytes']:
+        if shutil.disk_usage(root).free < report['minimum_free_bytes'] + REPORT_RESERVE_BYTES:
             raise RuntimeError('local validation minimum free-space reserve reached')
     try:
         # Set only the soft limit and restore it afterward. Children inherit it
@@ -143,6 +145,10 @@ def run(args):
             # Compilation caches are reproducible, including after a failure.
             # Preserve other temporary failure files for diagnosis/publication.
             try:
+                current = root.lstat()
+                if root.is_symlink() or (current.st_dev, current.st_ino) != root_identity:
+                    raise RuntimeError('validation output root identity changed')
+                root.chmod(0o700)
                 shutil.rmtree(root/'go-cache', ignore_errors=False)
                 report['go_cache_pruned'] = True
                 if report['status'] == 'passed':
@@ -158,7 +164,25 @@ def run(args):
                 report = dict(status='failed', failure='resource report exceeded its reserved size',
                               oversized_report_sha256=hashlib.sha256(body).hexdigest())
                 body = (json.dumps(report, indent=2)+'\n').encode()
-            (root/'local-resource-report.json').write_bytes(body)
+            try:
+                current = root.lstat()
+                if root.is_symlink() or (current.st_dev, current.st_ino) != root_identity:
+                    raise RuntimeError('validation output root identity changed')
+                # Never follow or overwrite a command-created report path.
+                with (root/'local-resource-report.json').open('xb') as output:
+                    output.write(body)
+            except Exception as exc:
+                report.update(status='failed', report_persistence_failure=repr(exc))
+                try:
+                    # Preserve command-created paths and write beside the run.
+                    # This is a cooperative resource guard, not a filesystem sandbox.
+                    with tempfile.NamedTemporaryFile(mode='w', dir=root.parent,
+                            prefix=root.name+'-resource-failure-', suffix='.json', delete=False) as output:
+                        report['fallback_report_path'] = output.name
+                        output.write(json.dumps(report, indent=2)+'\n')
+                except Exception as fallback_exc:
+                    report['fallback_persistence_failure'] = repr(fallback_exc)
+                # Always reach the stdout report even if disk persistence fails.
     print(json.dumps(report, indent=2))
     return 0 if report['status'] == 'passed' else 1
 

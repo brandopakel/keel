@@ -15,6 +15,13 @@ from unittest.mock import patch
 SCRIPT = Path(__file__).with_name('run-local-validation.py')
 
 
+def permission_fixture_parent():
+    # A nested resource guard must not see a fixture made unreadable on purpose.
+    enclosing = os.environ.get('KEEL_LOCAL_VALIDATION_ROOT')
+    return Path(enclosing).parent if enclosing else None
+
+
+
 class LocalValidationTests(unittest.TestCase):
     def invoke(self, root, code, *flags):
         return subprocess.run([sys.executable, str(SCRIPT), '--out', str(root),
@@ -118,8 +125,8 @@ class LocalValidationTests(unittest.TestCase):
     @unittest.skipIf(os.geteuid() == 0, 'root can traverse mode-000 directories')
     def test_unreadable_output_directory_cannot_pass(self):
         # Keep this deliberately unreadable 3 MiB fixture outside an enclosing
-        # wrapper's monitored TMPDIR, so only the guard under test sees it.
-        with tempfile.TemporaryDirectory(dir='/tmp', prefix='keel-unreadable-guard-') as temp:
+        # wrapper's monitored root, so only the guard under test sees it.
+        with tempfile.TemporaryDirectory(dir=permission_fixture_parent(), prefix='keel-unreadable-guard-') as temp:
             root = Path(temp)/'run'
             try:
                 result = self.invoke(root, "from pathlib import Path; import sys; p=Path(sys.argv[1])/'hidden'; p.mkdir(); [(p/str(i)).write_bytes(b'x'*(1<<20)) for i in range(3)]; p.chmod(0)")
@@ -130,6 +137,60 @@ class LocalValidationTests(unittest.TestCase):
             finally:
                 if (root/'hidden').exists():
                     (root/'hidden').chmod(0o700)
+
+    def test_free_space_reserves_final_report_before_launch(self):
+        spec = importlib.util.spec_from_file_location('free_guard', SCRIPT)
+        guard = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(guard)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)/'run'
+            args = SimpleNamespace(out=root, seconds=3, max_output_mib=2, max_file_mib=1,
+                min_free_gib=2, command=[sys.executable, '-c', 'pass'])
+            with patch.object(guard.shutil, 'disk_usage', return_value=SimpleNamespace(free=(2<<30)+guard.REPORT_RESERVE_BYTES-1)):
+                with self.assertRaisesRegex(ValueError, 'insufficient free disk'):
+                    guard.run(args)
+            self.assertFalse(root.exists())
+
+    def test_sampled_free_space_includes_report_reserve(self):
+        spec = importlib.util.spec_from_file_location('sample_guard', SCRIPT)
+        guard = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(guard)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)/'run'
+            args = SimpleNamespace(out=root, seconds=3, max_output_mib=2, max_file_mib=1,
+                min_free_gib=2, command=[sys.executable, '-c', 'pass'])
+            checks = 0
+            def disk_usage(path):
+                nonlocal checks
+                checks += 1
+                return SimpleNamespace(free=(3<<30) if checks == 1 else (2<<30)+guard.REPORT_RESERVE_BYTES-1)
+            with patch.object(guard.shutil, 'disk_usage', disk_usage):
+                self.assertEqual(guard.run(args), 1)
+            self.assertGreaterEqual(checks, 2)
+            report = json.loads((root/'local-resource-report.json').read_text())
+            self.assertIn('minimum free-space reserve', report['failure'])
+
+    @unittest.skipIf(os.geteuid() == 0, 'root can traverse mode-000 directories')
+    def test_unreadable_root_preserves_failure_report(self):
+        with tempfile.TemporaryDirectory(dir=permission_fixture_parent()) as temp:
+            root = Path(temp)/'run'
+            try:
+                result = self.invoke(root, "from pathlib import Path; import sys; Path(sys.argv[1]).chmod(0)")
+                self.assertEqual(result.returncode, 1, result.stdout+result.stderr)
+                self.assertEqual(json.loads((root/'local-resource-report.json').read_text())['status'], 'failed')
+            finally:
+                if root.exists(): root.chmod(0o700)
+
+    def test_command_created_report_directory_uses_fallback(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)/'run'
+            result = self.invoke(root, "from pathlib import Path; import sys; (Path(sys.argv[1])/'local-resource-report.json').mkdir()")
+            self.assertEqual(result.returncode, 1, result.stdout+result.stderr)
+            report = json.loads(result.stdout)
+            fallback = Path(report['fallback_report_path'])
+            self.assertEqual(fallback.parent, root.parent)
+            self.assertEqual(json.loads(fallback.read_text())['status'], 'failed')
+            self.assertTrue((root/'local-resource-report.json').is_dir())
 
     def test_report_headroom_is_included_in_budget(self):
         with tempfile.TemporaryDirectory() as temp:

@@ -62,3 +62,11 @@ Do not publish credentials, environment dumps, personal disk inventories, unrela
 application data, build caches or raw multi-gigabyte logs. Keep spending at $0;
 existing free public GitHub runners provide validation, not dedicated-host
 capacity guarantees. A long local soak is not part of the remaining plan.
+
+The free-space preflight and final checks include 64 KiB for the final report. If
+a command makes its output root unreadable, the wrapper restores access to the
+original directory before cleanup. It never overwrites a command-created report
+path; a collision is a failed run with a sibling fallback report and JSON on
+stdout. Filesystem errors can prevent any on-disk report, so stdout remains useful.
+This cooperative guard cannot prevent unrelated processes consuming disk or a
+command intentionally escaping its process group/output directory.
