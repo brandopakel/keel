@@ -59,6 +59,9 @@ def scenarios():
         ('hash-field-churn', {'kind': 'hash-field-churn', 'keys': 100000}),
         ('large-set-read', {'kind': 'large-set', 'keys': 1, 'size': 64}),
         ('large-zset-read', {'kind': 'large-zset', 'keys': 1, 'size': 64}),
+        ('geo-nearest', {'kind': 'geo-nearest', 'keys': 1, 'geo_members': 50000}),
+        ('geo-nearest-100', {'kind': 'geo-nearest-100', 'keys': 1, 'geo_members': 50000}),
+        ('geo-any', {'kind': 'geo-any', 'keys': 1, 'geo_members': 50000}),
         ('reconnect', {'reconnect': 100}),
     ]
     return [dict(base, name=name, **change) for name, change in changes]
@@ -88,6 +91,17 @@ def preload(client, case):
     commands = []
     digest = hashlib.sha256()
     kind = case['kind']
+    if kind.startswith('geo-'):
+        for first in range(0, case['geo_members'], 64):
+            command = ['GEOADD', 'bench:geo']
+            for index in range(first, min(first+64, case['geo_members'])):
+                command += [index/10000, 0, f'member:{index:05d}']
+            digest.update(wire(command))
+            assert client.call(*command) == (len(command)-2)//3
+        assert client.call('ZCARD', 'bench:geo') == case['geo_members']
+        assert client.call('GEOSEARCH', 'bench:geo', 'FROMLONLAT', 0, 0,
+                           'BYRADIUS', 1000, 'km', 'COUNT', 1) == [b'member:00000']
+        return digest.hexdigest()
     if kind in ('large-hash', 'large-set', 'large-zset'):
         command = [{'large-hash':'HSET','large-set':'SADD','large-zset':'ZADD'}[kind], 'bench:collection']
         for i in range(4096):
@@ -159,6 +173,9 @@ def traffic_options(case):
         'large-hash': [('HGETALL bench:collection', 1)],
         'large-set': [('SMEMBERS bench:collection', 1)],
         'large-zset': [('ZRANGE bench:collection 0 -1 WITHSCORES', 1)],
+        'geo-nearest': [('GEOSEARCH bench:geo FROMLONLAT 0 0 BYRADIUS 1000 km COUNT 1', 1)],
+        'geo-nearest-100': [('GEOSEARCH bench:geo FROMLONLAT 0 0 BYRADIUS 1000 km COUNT 100', 1)],
+        'geo-any': [('GEOSEARCH bench:geo FROMLONLAT 0 0 BYRADIUS 1000 km COUNT 1 ANY', 1)],
     }
     if kind in commands:
         options = []
@@ -307,6 +324,12 @@ def run_arm(args, arm, binary, case, repetition, directory):
             assert 'error response' not in log_text.lower(), 'server returned command errors'
             report['client_cpu_warning'] = 'CPU' in log_text and 'bottleneck' in log_text
             assert client.call('PING') == b'PONG'
+            if case['kind'].startswith('geo-'):
+                assert client.call('ZCARD', 'bench:geo') == case['geo_members']
+                count = 100 if case['kind'] == 'geo-nearest-100' else 1
+                members = client.call('GEOSEARCH', 'bench:geo', 'FROMLONLAT', 0, 0,
+                                      'BYRADIUS', 1000, 'km', 'COUNT', count)
+                assert members == [f'member:{i:05d}'.encode() for i in range(count)]
             if case['kind'].startswith('hash-field-'):
                 report['final_hash_fields'] = client.call('HLEN', 'bench:collection')
                 if case['kind'] == 'hash-field-churn':

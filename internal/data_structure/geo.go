@@ -91,32 +91,6 @@ func geoWithinShape(shape *GeoShape, score float64) (longitude, latitude, distan
 	return longitude, latitude, distance, ok
 }
 
-// geoPointsInRange appends to out every member whose score is in [min, max)
-// and whose position is inside the shape. When limit is positive it stops once
-// out holds that many points.
-//
-// Appending to a slice the caller keeps across boxes is what makes a search a
-// handful of range walks rather than a merge, and rejecting points outside the
-// shape here means only the points actually returned are ever collected.
-func (zs *ZSet) geoPointsInRange(min, max float64, shape *GeoShape, out []GeoPoint, limit int) []GeoPoint {
-	r := rangeSpec{min: min, max: max, maxEx: true}
-	for n := zs.sl.firstInRange(r); n != nil && r.lteMax(n.score); n = n.next() {
-		if longitude, latitude, distance, ok := geoWithinShape(shape, n.score); ok {
-			out = append(out, GeoPoint{
-				Longitude: longitude,
-				Latitude:  latitude,
-				Dist:      distance,
-				Score:     n.score,
-				Member:    n.ele,
-			})
-		}
-		if limit > 0 && len(out) >= limit {
-			break
-		}
-	}
-	return out
-}
-
 // scoresOfGeoHashBox is the interval of scores that lie inside a box: from the
 // hash aligned to 52 bits, up to but not including the next hash at the same
 // step aligned the same way. Every finer hash inside the box shares the box's
@@ -132,6 +106,17 @@ func scoresOfGeoHashBox(hash GeoHashBits) (min, max uint64) {
 // nine boxes a search has to look in. When limit is positive it stops once
 // that many have been found.
 func (zs *ZSet) GeoMembersOfAllNeighbors(radius GeoHashRadius, shape *GeoShape, limit int) []GeoPoint {
+	var out []GeoPoint
+	zs.VisitGeoNeighbors(radius, shape, func(point GeoPoint) bool {
+		out = append(out, point)
+		return limit <= 0 || len(out) < limit
+	})
+	return out
+}
+
+// VisitGeoNeighbors walks matching points without first collecting them. The
+// owner must not mutate the sorted set from yield; false stops the whole walk.
+func (zs *ZSet) VisitGeoNeighbors(radius GeoHashRadius, shape *GeoShape, yield func(GeoPoint) bool) {
 	n := radius.Neighbors
 	boxes := [9]GeoHashBits{
 		radius.Hash,
@@ -139,7 +124,6 @@ func (zs *ZSet) GeoMembersOfAllNeighbors(radius GeoHashRadius, shape *GeoShape, 
 		n.NorthEast, n.NorthWest, n.SouthEast, n.SouthWest,
 	}
 
-	var out []GeoPoint
 	lastProcessed := -1
 	for i, box := range boxes {
 		// A zero box was dropped because the shape does not reach it.
@@ -151,14 +135,17 @@ func (zs *ZSet) GeoMembersOfAllNeighbors(radius GeoHashRadius, shape *GeoShape, 
 		if lastProcessed >= 0 && box == boxes[lastProcessed] {
 			continue
 		}
-		if limit > 0 && len(out) >= limit {
-			break
-		}
 		min, max := scoresOfGeoHashBox(box)
-		out = zs.geoPointsInRange(float64(min), float64(max), shape, out, limit)
+		r := rangeSpec{min: float64(min), max: float64(max), maxEx: true}
+		for node := zs.sl.firstInRange(r); node != nil && r.lteMax(node.score); node = node.next() {
+			if longitude, latitude, distance, ok := geoWithinShape(shape, node.score); ok {
+				if !yield(GeoPoint{Longitude: longitude, Latitude: latitude, Dist: distance, Score: node.score, Member: node.ele}) {
+					return
+				}
+			}
+		}
 		lastProcessed = i
 	}
-	return out
 }
 
 // geoAlphabet is the base32 alphabet of the geohash standard.

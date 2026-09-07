@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -256,48 +255,7 @@ func cmdGEOSEARCH(args []string) []byte {
 	}
 
 	radius := data_structure.GeohashCalculateAreasByShapeWGS84(&s.shape)
-	limit := 0
-	if s.any {
-		limit = s.count
-	}
-	points := zs.GeoMembersOfAllNeighbors(radius, &s.shape, limit)
-	if len(points) == 0 {
-		return constant.RespEmptyArray
-	}
-
-	switch s.order {
-	case "ASC":
-		sort.Slice(points, func(i, j int) bool { return points[i].Dist < points[j].Dist })
-	case "DESC":
-		sort.Slice(points, func(i, j int) bool { return points[i].Dist > points[j].Dist })
-	}
-	if s.count > 0 && len(points) > s.count {
-		points = points[:s.count]
-	}
-
-	if !s.withDist && !s.withHash && !s.withCoord {
-		members := make([]string, len(points))
-		for i, p := range points {
-			members[i] = p.Member
-		}
-		return Encode(members, false)
-	}
-
-	out := make([]interface{}, 0, len(points))
-	for _, p := range points {
-		entry := []interface{}{p.Member}
-		if s.withDist {
-			entry = append(entry, formatDistance(p.Dist/s.shape.Conversion))
-		}
-		if s.withHash {
-			entry = append(entry, int64(p.Score))
-		}
-		if s.withCoord {
-			entry = append(entry, []string{formatCoordinate(p.Longitude), formatCoordinate(p.Latitude)})
-		}
-		out = append(out, entry)
-	}
-	return Encode(out, false)
+	return geoSearchReply(zs, radius, s)
 }
 
 // parseGeoSearch reads everything after the key.
