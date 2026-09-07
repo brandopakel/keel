@@ -18,6 +18,7 @@ type Keyed[T Sized] struct {
 	expiries         map[string]uint64
 	expiryPeak       int
 	expiryCompaction *expiryCompaction
+	valueCursor      uint64
 }
 
 type keyedEntry[T Sized] struct {

@@ -82,23 +82,32 @@ var _ = data_structure.TotalKeys
 func MaintainMemory() int {
 	work := 0
 	deadline := time.Now().Add(time.Millisecond)
-	// Alternate the first table family so continuing TTL churn cannot starve
-	// lookup rebuilding (or vice versa). Both share the same total work budget.
-	memoryLookupFirst = !memoryLookupFirst
+	// Rotate the first table family so continuous churn in one cannot starve
+	// another. TTL, key lookup and set membership all share the same budget.
+	memoryFirstPhase = (memoryFirstPhase + 1) % 3
 	memoryCursor = data_structure.VisitKeyspacesFrom(memoryCursor, func(ks data_structure.Keyspace) bool {
 		if work >= data_structure.ScanMaxWork || time.Now().After(deadline) {
 			return false
 		}
-		for phase := 0; phase < 2; phase++ {
+		for phase := 0; phase < 3; phase++ {
 			if work >= data_structure.ScanMaxWork || time.Now().After(deadline) {
 				return false
 			}
-			if (phase == 0) == memoryLookupFirst {
+			switch (phase + memoryFirstPhase) % 3 {
+			case 0:
 				if compact, ok := ks.(interface{ CompactLookup(int) int }); ok {
 					work += compact.CompactLookup(data_structure.ScanMaxWork - work)
 				}
-			} else if compact, ok := ks.(interface{ CompactExpiry(int) int }); ok {
-				work += compact.CompactExpiry(data_structure.ScanMaxWork - work)
+			case 1:
+				if compact, ok := ks.(interface{ CompactExpiry(int) int }); ok {
+					work += compact.CompactExpiry(data_structure.ScanMaxWork - work)
+				}
+			case 2:
+				// Other value families have no collection compactor yet. Avoid
+				// scanning their keys merely to discover that at every value.
+				if sets, ok := ks.(*data_structure.Keyed[*data_structure.Set]); ok {
+					work += sets.CompactValues(data_structure.ScanMaxWork - work)
+				}
 			}
 		}
 		return work < data_structure.ScanMaxWork && time.Now().Before(deadline)
@@ -107,4 +116,4 @@ func MaintainMemory() int {
 }
 
 var memoryCursor int
-var memoryLookupFirst bool
+var memoryFirstPhase int

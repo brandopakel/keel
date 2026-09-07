@@ -20,6 +20,15 @@ import (
 	"time"
 )
 
+const maxReplyElements = 1 << 20
+
+func maxCollectionKeys(kind string) int {
+	if kind == "hash" || kind == "zset" {
+		return maxReplyElements / 2 // field/value or member/score pairs
+	}
+	return 1000000
+}
+
 type histogram struct {
 	buckets [4096]uint64
 	count   uint64
@@ -158,7 +167,7 @@ func readReply(r *bufio.Reader, depth int) (byte, error) {
 		}
 		return kind, nil
 	}
-	if kind == '*' && n <= 1<<20 {
+	if kind == '*' && n <= maxReplyElements {
 		for i := int64(0); i < n; i++ {
 			if _, err := readReply(r, depth+1); err != nil {
 				return 0, err
@@ -242,10 +251,15 @@ func preload(o options) error {
 	if o.Collection != "" {
 		for i := 0; i < o.Keys; i++ {
 			var request []byte
-			if o.Collection == "hash" {
+			switch o.Collection {
+			case "hash":
 				request = wire("HSET", o.Prefix, "field:"+strconv.Itoa(i), value)
-			} else {
+			case "list":
 				request = wire("RPUSH", o.Prefix, value)
+			case "set":
+				request = wire("SADD", o.Prefix, strconv.Itoa(i)+":"+value)
+			case "zset":
+				request = wire("ZADD", o.Prefix, strconv.Itoa(i), strconv.Itoa(i)+":"+value)
 			}
 			if err := exchange(c, r, request, o.Timeout); err != nil {
 				return err
@@ -321,6 +335,10 @@ func measure(o options) (map[string]any, error) {
 					request = wire("HGETALL", o.Prefix)
 				} else if o.Collection == "list" {
 					request = wire("LRANGE", o.Prefix, "0", "-1")
+				} else if o.Collection == "set" {
+					request = wire("SMEMBERS", o.Prefix)
+				} else if o.Collection == "zset" {
+					request = wire("ZRANGE", o.Prefix, "0", "-1", "WITHSCORES")
 				} else {
 					// Deterministic mixed key order, identical for each comparison arm.
 					key := requestKey(o, job.sequence, job.due)
@@ -445,17 +463,17 @@ func main() {
 	flag.IntVar(&o.Connections, "connections", 32, "independent client connections")
 	flag.IntVar(&o.Pipeline, "pipeline", 1, "commands per scheduled batch; all replies finish before batch completion")
 	flag.IntVar(&o.Queue, "queue", 64, "bounded pending arrival slots")
-	flag.IntVar(&o.Keys, "keys", 10000, "working-set keys or collection members")
+	flag.IntVar(&o.Keys, "keys", 10000, "working-set keys or members; hash/zset max 524288, other max 1000000")
 	flag.IntVar(&o.Size, "size", 64, "value size in bytes")
 	flag.IntVar(&o.Writes, "writes", 5, "SET percentage")
 	flag.StringVar(&o.Prefix, "prefix", "arrival:", "owned dataset namespace")
 	flag.BoolVar(&o.CohortExpiry, "cohort-expiry", false, "group written key expiry at whole-second boundaries")
-	flag.StringVar(&o.Collection, "collection", "", "hash or list whole-collection reads")
+	flag.StringVar(&o.Collection, "collection", "", "hash, list, set or zset whole-collection reads")
 	flag.DurationVar(&o.Timeout, "timeout", 3*time.Second, "request and queue age ceiling")
 	flag.Int64Var(&o.StartNS, "start-ns", 0, "optional common scheduled start for independent tenant generators")
 	flag.BoolVar(&prepare, "preload", false, "populate then exit before measurement")
 	flag.Parse()
-	if o.Pipeline < 1 || o.Pipeline > 4096 || o.Rate <= 0 || o.Rate > 10000000 || !(o.Seconds > 0 && o.Seconds <= 300) || o.Connections < 1 || o.Connections > 4096 || o.Queue < 0 || o.Queue > 65536 || o.Keys < 1 || o.Keys > 1000000 || o.Size < 0 || o.Size > 1<<20 || o.Writes < 0 || o.Writes > 100 || o.Timeout <= 0 || o.Timeout > time.Minute || (o.Collection != "" && o.Collection != "hash" && o.Collection != "list") {
+	if o.Pipeline < 1 || o.Pipeline > 4096 || o.Rate <= 0 || o.Rate > 10000000 || !(o.Seconds > 0 && o.Seconds <= 300) || o.Connections < 1 || o.Connections > 4096 || o.Queue < 0 || o.Queue > 65536 || o.Keys < 1 || o.Keys > maxCollectionKeys(o.Collection) || o.Size < 0 || o.Size > 1<<20 || o.Writes < 0 || o.Writes > 100 || o.Timeout <= 0 || o.Timeout > time.Minute || (o.Collection != "" && o.Collection != "hash" && o.Collection != "list" && o.Collection != "set" && o.Collection != "zset") {
 		fmt.Fprintln(os.Stderr, "invalid workload bounds")
 		os.Exit(2)
 	}
