@@ -111,6 +111,10 @@ func TestPipelineContinuationWaitsForAppendAndReplyDrain(t *testing.T) {
 	var arena replyArena
 	require.Empty(t, q.gate([]*client{c}, &arena, mux))
 	require.True(t, c.appendHeld)
+	savedReply := c.out
+	queueClientRead(c)
+	require.True(t, c.readQueued)
+	c.out = nil // Isolate appendHeld from the independent reply-drain guard.
 	require.Empty(t, takeQueuedReads(nil), "no continuation before the persistence offset is ready")
 	var buf [16]byte
 	_, err := syscall.Read(w, buf[:])
@@ -118,6 +122,7 @@ func TestPipelineContinuationWaitsForAppendAndReplyDrain(t *testing.T) {
 	// Simulate completion of the offset: only its subsequent reply drain queues
 	// the continuation. The real worker's offset transition has separate tests.
 	c.appendHeld = false
+	c.out = savedReply
 	pool := newIOPool(1)
 	t.Cleanup(pool.stop)
 	flushClientReplies(pool, mux, []*client{c})
@@ -125,4 +130,25 @@ func TestPipelineContinuationWaitsForAppendAndReplyDrain(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "+OK\r\n", string(buf[:n]))
 	require.Equal(t, []*client{c}, takeQueuedReads(nil))
+}
+
+func TestPipelineContinuationCoalescesWakeups(t *testing.T) {
+	oldClients, oldQueue, oldWake := clients, queuedClientReads, wakeFn
+	clients, queuedClientReads = make(map[int]*client), nil
+	wakes := 0
+	setWaker(func() { wakes++ })
+	t.Cleanup(func() {
+		clients, queuedClientReads = oldClients, oldQueue
+		setWaker(oldWake)
+	})
+	for fd := 1; fd <= 512; fd++ {
+		c := &client{fd: fd, bufferedReady: true}
+		clients[fd] = c
+		queueClientRead(c)
+		queueClientRead(c)
+	}
+	require.Equal(t, 1, wakes)
+	require.Len(t, takeQueuedReads(nil), 512)
+	queueClientRead(clients[1])
+	require.Equal(t, 2, wakes, "a newly nonempty queue needs a fresh wakeup")
 }

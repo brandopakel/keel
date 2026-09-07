@@ -18,7 +18,9 @@ func queueClientRead(c *client) {
 	}
 	c.readQueued = true
 	queuedClientReads = append(queuedClientReads, c)
-	wake()
+	if len(queuedClientReads) == 1 {
+		wake()
+	}
 }
 
 func takeQueuedReads(dst []*client) []*client {

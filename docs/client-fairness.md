@@ -81,3 +81,14 @@ exchange for the measured competing-client progress and tail-latency benefit.
 The fairness runtime was measured at 745ff7c4 against 2a34ce59. Later integration
 adds independently validated maintenance fixes and Linux-only readiness caching;
 final combined correctness checks remain required before release.
+
+The final review adds a process-level overlap regression for 1/4 I/O threads
+and off/barrier/concurrent persistence. A slow reader leaves 33 INCR/large-GET
+pairs pending; another client observes retained replies and a counter strictly
+below 33 before receiving PONG. All six cases fail the unbounded baseline
+(counter 33), and pass three candidate repetitions plus race. This establishes
+pending-command progress separately from the 1,025-command ordering/restart test.
+Queue tests now isolate append-held gating and verify one wake per newly nonempty
+continuation queue across 512 clients. Full tests and vet pass; raw before/after
+logs are in `bench/results/fairness-review-regressions-2026-09-07.json.gz`. The wake
+coalescing runtime delta still requires a matched performance repeat.
