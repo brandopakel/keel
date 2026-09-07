@@ -93,6 +93,26 @@ def operation(rng):
                        ['PERSIST', key], ['PEXPIREAT', key, 4102444800000]])
 
 
+def scan_all(client, *options):
+    cursor, keys = b'0', set()
+    for _ in range(1000000):
+        cursor, batch = client.call('SCAN', cursor, *options)
+        assert isinstance(cursor, bytes) and isinstance(batch, list)
+        keys.update(batch)
+        if cursor == b'0':
+            return sorted(keys)
+    raise AssertionError('SCAN did not terminate')
+
+
+def check_scan(candidate, reference):
+    options = [(), ('MATCH', ''), ('TYPE', ''), ('TYPE', 'STRING'),
+               ('TYPE', 'SeT'), ('MATCH', 'string:*', 'COUNT', '1'),
+               ('MATCH', '*[0-9]', 'COUNT', '10'), ('TYPE', 'unknown')]
+    for option in options:
+        assert scan_all(candidate,*option) == scan_all(reference,*option), ('SCAN', option)
+    return len(options)
+
+
 def run(args):
     os.umask(0o077)
     root = args.out.resolve()
@@ -132,6 +152,9 @@ def run(args):
                 if time.monotonic() > deadline:
                     raise
                 time.sleep(.02)
+        for client in (server.client,reference):
+            assert client.call('SET', b'', b'empty-key') == b'OK'
+        report['scan_checks'] = check_scan(server.client, reference)
         rng = random.Random(args.seed)
         for index in range(args.steps):
             command = operation(rng)
@@ -143,6 +166,7 @@ def run(args):
                 assert snapshot(server.client) == snapshot(reference), ('state', index)
                 report['state_checks'] += 1
                 (root/'progress.json').write_text(json.dumps(report,indent=2)+'\n')
+        report['scan_checks'] += check_scan(server.client, reference)
         expected = snapshot(reference)
         assert snapshot(server.client) == expected
         rewrite(server.client)

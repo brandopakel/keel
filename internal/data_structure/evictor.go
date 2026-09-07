@@ -27,7 +27,8 @@ var (
 	evictionRNG uint64 = 0x2545F4914F6CDD1D
 
 	// keyspaces is every store eviction may draw from.
-	keyspaces []Keyspace
+	keyspaces       []Keyspace
+	keyspaceVersion uint64
 
 	evictedCount uint64
 )
@@ -52,6 +53,8 @@ type Keyspace interface {
 	// and returns how many it examined and the cursor to resume from - zero
 	// once there is nothing left. budget bounds keys examined, not returned.
 	Scan(cursor uint64, budget int, keep func(string) bool, dst []string) ([]string, int, uint64)
+	ScanEnd() uint64
+	ScanUntil(cursor, end uint64, budget int, keep func(string) bool, dst []string) ([]string, int, uint64)
 	// SampleKeys appends up to n randomly chosen candidates.
 	SampleKeys(dst []Candidate, n int) []Candidate
 	// ScoreOf reports a key's current score and whether it is still present.
@@ -91,6 +94,7 @@ func RegisterKeyspace(ks Keyspace) { keyspaces = append(keyspaces, ks) }
 // build fresh stores and must not inherit the previous test's keyspaces.
 func ResetKeyspaces() {
 	keyspaces = nil
+	keyspaceVersion++
 	evictionPool = nil
 	evictionClock = 0
 	evictedCount = 0

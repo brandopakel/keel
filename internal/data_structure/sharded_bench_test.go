@@ -139,7 +139,7 @@ func BenchmarkShardedScanOneCall(b *testing.B) {
 			dst := make([]string, 0, 4096)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_, _, _ = m.scan(uint64(i%shardCount), 10, nil, dst[:0])
+				_, _, _ = m.scan(uint64(i%n), 10, nil, dst[:0])
 			}
 		})
 	}
@@ -171,14 +171,14 @@ func TestShardedMemoryOverhead(t *testing.T) {
 			return m
 		})
 
-		// Signed: many small maps can hold less than one large one, because a
-		// Go map grows by doubling and a single huge one carries the slack of
-		// its last double alone.
+		// The bare int fixture pays an inline key/value slot. Real stores
+		// offset that cost by eliminating their separately allocated entry.
+		// The real-dictionary heap tests remain the adoption gate.
 		perKey := float64(int64(sharded)-int64(plain)) / float64(n)
 		t.Logf("%d keys: plain %.2f MiB, sharded %.2f MiB, %+.1f bytes per key",
 			n, float64(plain)/(1<<20), float64(sharded)/(1<<20), perKey)
 		if perKey > 16 {
-			t.Errorf("%d keys: %.1f bytes per key of partition overhead is more than expected", n, perKey)
+			t.Errorf("%d keys: %.1f bytes per key of slot-directory overhead is more than expected", n, perKey)
 		}
 	}
 }

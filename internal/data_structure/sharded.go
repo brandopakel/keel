@@ -1,242 +1,322 @@
 package data_structure
 
-import "hash/maphash"
+import (
+	"fmt"
+	"hash/maphash"
+	"math/bits"
+	"time"
+)
 
-// A keyspace is stored as a fixed number of shards rather than one Go map, so
-// that walking it can stop and resume at a shard boundary.
+// Pages give each live key a stable slot. Growing the lookup map or page table
+// does not move slots. A cursor is a slot number, so it resumes without retaining
+// an iterator or copying the keyspace. Deleted slots are reused; a key present
+// throughout an iteration keeps its position and is visited exactly once.
 //
-// Redis can resume a walk because its own hash table exposes buckets, and its
-// SCAN cursor is a bucket index visited in reverse-binary order. A Go map
-// exposes nothing of the sort and randomises its iteration order on every
-// range, so an offset into one is meaningless the moment the range ends. The
-// choice is therefore between copying every key name to index into, keeping a
-// sorted index updated on every write, and partitioning the keys so that a
-// bounded part of them can be taken whole.
-//
-// This is the third. The shard a key belongs to is a hash of its name, so it
-// never changes while the key exists, which is what makes the partition a
-// usable cursor: each shard is emitted exactly once, so a key present for the
-// whole walk is reported exactly once - no duplicates, which is stronger than
-// what Redis's SCAN promises. Keys created or removed mid-walk may or may not
-// be seen, which is the same as Redis.
-//
-// The cursor is the next shard index, so it is a small integer the client hands
-// back verbatim and the server holds no per-cursor state at all. Nothing has to
-// expire an abandoned cursor, and a client that walks away costs nothing.
-//
-// The count balances two costs that pull opposite ways, and was chosen by
-// measuring both rather than by picking a round number.
-//
-// Too many shards and the fixed cost of a map holding almost nothing is paid
-// over and over. That is not hypothetical, and it is why this constant is sized
-// against the floor go.mod declares rather than against the newest toolchain:
-// at 1024 shards and 100,000 keys it cost 21.8 bytes per key under Go 1.22,
-// enough that the keyspace estimate stopped bounding the real heap and
-// TestEstimateTracksRealHeap failed. Go 1.24 replaced the map implementation
-// and the cost went away, so the number a measurement gives depends on which
-// toolchain took it.
-//
-// Too few and a shard is a large piece to take whole, because a call emits one
-// and cannot stop inside it. Five million keys, which is what KeyNumberLimit
-// allows, come to about 4,900 per shard here - the largest reply and the
-// longest pause a single call can produce.
-//
-// 1024 is therefore what the floor allows rather than what it forces: while
-// go.mod claimed Go 1.22 this had to be 256, and raising the floor to a release
-// that still gets security fixes is what bought back the finer granularity.
-const shardCount = 1024
+// Values are stored inline in pages. The lookup map holds slot numbers rather
+// than pointers to separately allocated entries. Empty pages release their keys
+// and values immediately; the small directory remains reusable until the store
+// empties. There is no allocation or abandoned-state budget per SCAN cursor.
+const keyPageSlots = 64
+const scanStoreShift = 48
+const scanSlotMask = (uint64(1) << scanStoreShift) - 1
+const ScanMaxWork = 1024
+const ScanByteTarget = 64 << 10
+const scanTimeTarget = time.Millisecond
 
-// shardSeed is per process. Shard membership only has to be stable for as long
-// as a cursor is live, which is within one process: a cursor does not survive a
-// restart in Redis either. A fresh seed each start also means key names cannot
-// be chosen ahead of time to pile into one shard.
-var shardSeed = maphash.MakeSeed()
-
-func shardOf(key string) int {
-	return int(maphash.String(shardSeed, key) & (shardCount - 1))
+type keySlot[V any] struct {
+	key   string
+	value V
+}
+type keyPage[V any] struct {
+	slots [keyPageSlots]keySlot[V]
+	used  uint64
+}
+type keyPageRef[V any] struct {
+	page     *keyPage[V]
+	nextFree int
 }
 
-// shardedMap is a map[string]V split across shards, with the operations the
-// keyspaces need. Shards are allocated on first write, so an empty keyspace
-// costs one nil pointer per shard rather than an empty map per shard.
+// The historical name is retained for the isolated comparison benchmarks.
+// Traversal no longer depends on hash shards or hash distribution.
+var keyLookupSeed = maphash.MakeSeed()
+
 type shardedMap[V any] struct {
-	shards [shardCount]map[string]V
-	count  int
+	collisions   map[uint64][]uint64
+	hashOverride func(string) uint64 // collision injection in tests; nil in production
+	lookup       map[uint64]uint64
+	pages        []keyPageRef[V]
+	free         int // page index plus one; zero means no page with available slots
+	end          uint64
+	count        int
 }
 
+func (m *shardedMap[V]) position(key string) (uint64, uint64, bool) {
+	h := uint64(0)
+	if m.hashOverride != nil {
+		h = m.hashOverride(key)
+	} else {
+		h = maphash.String(keyLookupSeed, key)
+	}
+	pos, ok := m.lookup[h]
+	if ok {
+		if m.pages[pos/keyPageSlots].page.slots[pos%keyPageSlots].key == key {
+			return pos, h, true
+		}
+		for _, other := range m.collisions[h] {
+			if m.pages[other/keyPageSlots].page.slots[other%keyPageSlots].key == key {
+				return other, h, true
+			}
+		}
+	}
+	return 0, h, false
+}
+func (m *shardedMap[V]) getPtr(key string) (*V, bool) {
+	pos, _, ok := m.position(key)
+	if !ok {
+		return nil, false
+	}
+	return &m.pages[pos/keyPageSlots].page.slots[pos%keyPageSlots].value, true
+}
 func (m *shardedMap[V]) get(key string) (V, bool) {
-	v, ok := m.shards[shardOf(key)][key]
-	return v, ok
-}
-
-// set stores v at key. It reports whether the key was already present, which is
-// what the callers need in order to account an overwrite as a replacement
-// rather than as growth.
-func (m *shardedMap[V]) set(key string, v V) (existed bool) {
-	i := shardOf(key)
-	shard := m.shards[i]
-	if shard == nil {
-		shard = make(map[string]V)
-		m.shards[i] = shard
+	p, ok := m.getPtr(key)
+	if !ok {
+		var zero V
+		return zero, false
 	}
-	_, existed = shard[key]
-	shard[key] = v
-	if !existed {
-		m.count++
-	}
-	return existed
+	return *p, true
 }
-
+func (m *shardedMap[V]) set(key string, value V) bool {
+	existing, hash, exists := m.position(key)
+	if exists {
+		m.pages[existing/keyPageSlots].page.slots[existing%keyPageSlots].value = value
+		return true
+	}
+	if m.lookup == nil {
+		m.lookup = make(map[uint64]uint64)
+	}
+	if m.free == 0 {
+		m.pages = append(m.pages, keyPageRef[V]{})
+		m.free = len(m.pages)
+	}
+	index := m.free - 1
+	ref := &m.pages[index]
+	if ref.page == nil {
+		ref.page = new(keyPage[V])
+	}
+	p := ref.page
+	slot := bits.TrailingZeros64(^p.used)
+	pos := uint64(index)*keyPageSlots + uint64(slot)
+	p.slots[slot] = keySlot[V]{key: key, value: value}
+	p.used |= uint64(1) << slot
+	if p.used == ^uint64(0) {
+		m.free = ref.nextFree
+		ref.nextFree = 0
+	}
+	if _, exists := m.lookup[hash]; exists {
+		if m.collisions == nil {
+			m.collisions = make(map[uint64][]uint64)
+		}
+		m.collisions[hash] = append(m.collisions[hash], pos)
+	} else {
+		m.lookup[hash] = pos
+	}
+	m.end = max(m.end, pos+1)
+	m.count++
+	return false
+}
 func (m *shardedMap[V]) del(key string) bool {
-	i := shardOf(key)
-	shard := m.shards[i]
-	if _, ok := shard[key]; !ok {
+	pos, hash, ok := m.position(key)
+	if !ok {
 		return false
 	}
-	delete(shard, key)
+	extra := m.collisions[hash]
+	if m.lookup[hash] == pos {
+		if len(extra) == 0 {
+			delete(m.lookup, hash)
+		} else {
+			m.lookup[hash] = extra[len(extra)-1]
+			extra = extra[:len(extra)-1]
+		}
+	} else {
+		for i, p := range extra {
+			if p == pos {
+				extra[i] = extra[len(extra)-1]
+				extra = extra[:len(extra)-1]
+				break
+			}
+		}
+	}
+	if len(extra) == 0 {
+		delete(m.collisions, hash)
+	} else {
+		m.collisions[hash] = extra
+	}
+	index := int(pos / keyPageSlots)
+	ref := &m.pages[index]
+	p := ref.page
+	if p.used == ^uint64(0) {
+		ref.nextFree = m.free
+		m.free = index + 1
+	}
+	p.used &^= uint64(1) << (pos % keyPageSlots)
+	var zero keySlot[V]
+	p.slots[pos%keyPageSlots] = zero
+	if p.used == 0 {
+		ref.page = nil
+	}
 	m.count--
-	// An emptied shard gives its map back rather than holding the buckets a
-	// burst of keys grew. Re-creating one is a single allocation on the next
-	// write to it.
-	if len(shard) == 0 {
-		m.shards[i] = nil
+	if m.count == 0 {
+		*m = shardedMap[V]{hashOverride: m.hashOverride}
 	}
 	return true
 }
-
-// len is maintained rather than summed, because a budget check consults it on
-// every write and summing would make that proportional to the shard count.
-func (m *shardedMap[V]) len() int { return m.count }
-
+func (m *shardedMap[V]) len() int        { return m.count }
+func (m *shardedMap[V]) scanEnd() uint64 { return m.end }
 func (m *shardedMap[V]) keys() []string {
 	keys := make([]string, 0, m.count)
-	for _, shard := range m.shards {
-		for key := range shard {
-			keys = append(keys, key)
+	for _, ref := range m.pages {
+		if ref.page == nil {
+			continue
+		}
+		used := ref.page.used
+		for used != 0 {
+			i := bits.TrailingZeros64(used)
+			used &^= uint64(1) << i
+			keys = append(keys, ref.page.slots[i].key)
 		}
 	}
 	return keys
 }
 
-// scan walks whole shards from cursor, appending the keys keep accepts to dst,
-// and returns how many it examined and the cursor to pass back - zero once the
-// walk is complete.
-//
-// budget bounds keys examined rather than keys returned, which is what makes
-// the work per call bounded whatever the filter rejects. A selective filter
-// therefore yields short or empty batches with a cursor still to follow, the
-// same way a Redis SCAN with MATCH does.
-//
-// Shards are taken whole because a shard is the unit that can be resumed, so a
-// call overruns its budget by at most the size of one shard. An empty shard
-// costs a nil check, so a small keyspace finishes in one call rather than
-// making the client ask a thousand times for nothing.
+// scan charges one unit per live slot examined or empty page skipped, including
+// filtered-out keys. It never exceeds the requested work or ScanMaxWork. Byte
+// and time targets are checked between names; one oversized name is processed
+// alone to make progress. This is cooperative scheduling, not a real-time SLA.
 func (m *shardedMap[V]) scan(cursor uint64, budget int, keep func(string) bool, dst []string) ([]string, int, uint64) {
-	if cursor >= shardCount {
-		// Not an error. A cursor from another keyspace, or from before a
-		// restart, has simply run past the end of this one.
+	return m.scanUntil(cursor, m.end, budget, keep, dst)
+}
+func (m *shardedMap[V]) scanUntil(cursor, end uint64, budget int, keep func(string) bool, dst []string) ([]string, int, uint64) {
+	end = min(end, m.end)
+	if cursor >= end {
 		return dst, 0, 0
 	}
-	if budget < 1 {
-		budget = 1
-	}
-	examined := 0
-	for i := int(cursor); i < shardCount; i++ {
-		// keep may reap the key it is shown, and deleting from a map while
-		// ranging over it is defined; the range holds this shard's map even if
-		// emptying it clears the slot.
-		for key := range m.shards[i] {
+	budget = min(max(budget, 1), ScanMaxWork)
+	deadline := time.Now().Add(scanTimeTarget)
+	examined, bytes := 0, 0
+	for cursor < end && examined < budget {
+		p := m.pages[cursor/keyPageSlots].page
+		if p == nil || p.used>>(cursor%keyPageSlots) == 0 {
+			cursor = (cursor/keyPageSlots + 1) * keyPageSlots
 			examined++
+		} else {
+			cursor += uint64(bits.TrailingZeros64(p.used >> (cursor % keyPageSlots)))
+			if cursor >= end {
+				break
+			}
+			key := p.slots[cursor%keyPageSlots].key
+			if examined > 0 && bytes+len(key)+16 > ScanByteTarget {
+				break
+			}
+			cursor++
+			examined++
+			bytes += len(key) + 16
 			if keep == nil || keep(key) {
 				dst = append(dst, key)
 			}
 		}
-		if examined >= budget {
-			// i+1 is the next shard, and equals shardCount when this was the
-			// last one, which the caller reads as complete.
-			if i+1 >= shardCount {
-				return dst, examined, 0
-			}
-			return dst, examined, uint64(i + 1)
+		if bytes >= ScanByteTarget || time.Now().After(deadline) {
+			break
 		}
 	}
-	return dst, examined, 0
-}
-
-// sampleState advances a shard start between calls. A generator of its own
-// keeps eviction sampling off the lock inside math/rand, which is the same
-// reason skiplist.go carries one.
-var sampleState = uint64(0x9e3779b97f4a7c15)
-
-func nextSampleStart() int {
-	sampleState ^= sampleState << 13
-	sampleState ^= sampleState >> 7
-	sampleState ^= sampleState << 17
-	return int(sampleState & (shardCount - 1))
-}
-
-// sample visits up to n entries, starting from a shard chosen by that generator
-// and walking forward over shards until it has enough.
-//
-// Starting at a moving shard rather than choosing shards at random is what
-// makes this work when the keyspace is small: a few keys spread over a thousand
-// shards would leave independent shard draws finding nothing almost every time,
-// and eviction would then have no candidates to weigh while the budget was
-// already exceeded.
-func (m *shardedMap[V]) sample(n int, visit func(key string, value V)) {
-	if m.count == 0 || n < 1 {
-		return
+	if cursor >= end {
+		cursor = 0
 	}
-	taken := 0
-	start := nextSampleStart()
-	for offset := 0; offset < shardCount; offset++ {
-		for key, value := range m.shards[(start+offset)&(shardCount-1)] {
-			visit(key, value)
-			if taken++; taken >= n {
+	return dst, examined, cursor
+}
+func (m *shardedMap[V]) sample(n int, visit func(string, V)) {
+	for hash, pos := range m.lookup {
+		if n <= 0 {
+			return
+		}
+		entry := m.pages[pos/keyPageSlots].page.slots[pos%keyPageSlots]
+		visit(entry.key, entry.value)
+		n--
+		for _, pos := range m.collisions[hash] {
+			if n <= 0 {
 				return
 			}
+			entry := m.pages[pos/keyPageSlots].page.slots[pos%keyPageSlots]
+			visit(entry.key, entry.value)
+			n--
 		}
 	}
 }
 
-// ScanKeyspaces walks every registered keyspace under a single cursor.
-//
-// A key name belongs to exactly one keyspace, so a client scanning the server
-// has to be walked across all of them without having to know they exist. The
-// cursor therefore carries which store it is in as well as where in it, packed
-// as index*shardCount + shard. That stays a small integer, and a cursor from a
-// keyspace layout that no longer matches simply runs off the end and reports
-// the walk as finished rather than reading the wrong store.
-//
-// keep is given the keyspace as well as the key, so a caller can reject a whole
-// store by name, or ask that store whether the key is still live, without
-// having to search every store for the one that owns the name.
+// ScanKeyspaces packs a store index and stable slot into an opaque cursor.
+// Empty stores consume work too. A caller that filters everything out still
+// receives a resumable cursor without an unbounded traversal.
 func ScanKeyspaces(cursor uint64, budget int, keep func(Keyspace, string) bool, dst []string) ([]string, uint64) {
-	if budget < 1 {
-		budget = 1
+	index, slot := int(cursor>>scanStoreShift), cursor&scanSlotMask
+	for index < len(keyspaces) && keyspaces[index].Len() == 0 {
+		index++
+		slot = 0
 	}
-	index, shard := int(cursor/shardCount), cursor%shardCount
-	examined := 0
-	for ; index < len(keyspaces); index++ {
-		ks := keyspaces[index]
-		var (
-			n    int
-			next uint64
-		)
-		filter := func(key string) bool { return keep == nil || keep(ks, key) }
-		dst, n, next = ks.Scan(shard, budget-examined, filter, dst)
-		examined += n
-		if next != 0 {
-			return dst, uint64(index)*shardCount + next
-		}
-		// This store is exhausted. Resume in the next one, at its first shard.
-		shard = 0
-		if examined >= budget {
-			if index+1 >= len(keyspaces) {
-				return dst, 0
-			}
-			return dst, uint64(index+1) * shardCount
+	if index >= len(keyspaces) {
+		return dst, 0
+	}
+	ks := keyspaces[index]
+	var next uint64
+	dst, _, next = ks.Scan(slot, budget, func(key string) bool { return keep == nil || keep(ks, key) }, dst)
+	if next != 0 {
+		return dst, uint64(index)<<scanStoreShift | next
+	}
+	index++
+	for index < len(keyspaces) && keyspaces[index].Len() == 0 {
+		index++
+	}
+	if index >= len(keyspaces) {
+		return dst, 0
+	}
+	return dst, uint64(index) << scanStoreShift
+}
+
+// KeyspaceWalk freezes slot high-water marks, not the key names or values.
+// Mutations are permitted; rewrite's dirty reconciliation supplies the final
+// state. Keys that survive the whole walk cannot move behind its cursor.
+type KeyspaceWalk struct {
+	ends    []uint64
+	index   int
+	cursor  uint64
+	version uint64
+}
+
+func NewKeyspaceWalk() *KeyspaceWalk {
+	w := &KeyspaceWalk{ends: make([]uint64, len(keyspaces)), version: keyspaceVersion}
+	for i, ks := range keyspaces {
+		w.ends[i] = ks.ScanEnd()
+	}
+	return w
+}
+func (w *KeyspaceWalk) Done() bool { return w.index >= len(w.ends) }
+func (w *KeyspaceWalk) Next(budget int, dst []string) ([]string, int, error) {
+	if w.version != keyspaceVersion {
+		return dst, 0, fmt.Errorf("keyspace registry changed during traversal")
+	}
+	for !w.Done() && w.ends[w.index] == 0 {
+		w.index++
+	}
+	if w.Done() {
+		return dst, 0, nil
+	}
+	var examined int
+	var next uint64
+	dst, examined, next = keyspaces[w.index].ScanUntil(w.cursor, w.ends[w.index], budget, nil, dst)
+	w.cursor = next
+	if next == 0 {
+		w.index++
+		for !w.Done() && w.ends[w.index] == 0 {
+			w.index++
 		}
 	}
-	return dst, 0
+	return dst, examined, nil
 }

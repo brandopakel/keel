@@ -11,11 +11,11 @@ not imply that every Redis client feature or application works unchanged.
 
 ## Run locally
 
-Requires Go 1.25 or newer; Linux and macOS are supported. The floor is the
-oldest Go still receiving security fixes rather than the oldest that compiles,
-because the memory accounting is calibrated against real heap growth and so
-depends on the runtime it is built with. CI tests that floor alongside current
-Go; release builds use current Go.
+Requires Go 1.26 or newer; Linux and macOS are supported. Build with the latest
+patch of a [supported Go release](https://go.dev/doc/devel/release). The supported
+major lines in September 2026 are 1.26 and 1.27. CI tests the source floor and
+current Go, including heap-accounting calibration; release archives use current
+Go and the Docker builder pins a supported patch release.
 
 ```sh
 go build -o keel ./cmd/keel
@@ -46,7 +46,7 @@ populate the variable; avoid putting secrets in process arguments or shell histo
 | Hashes | `HSET`, `HSETNX`, `HGET`, `HMGET`, `HDEL`, `HEXISTS`, `HLEN`, `HKEYS`, `HVALS`, `HGETALL`, `HINCRBY` |
 | Lists | `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LLEN`, `LINDEX`, `LSET`, `LRANGE`, `LTRIM`; pops accept an optional count |
 | Sets | `SADD`, `SREM`, `SCARD`, `SMEMBERS`, `SISMEMBER`, `SMISMEMBER`, `SPOP`, `SRANDMEMBER` |
-| Sorted sets | `ZADD` with `NX`/`XX`/`CH`, `ZRANK`, `ZREM`, `ZSCORE`, `ZCARD`; `ZRANGE` rank ranges with `REV`/`WITHSCORES` |
+| Sorted sets | `ZADD` with `NX`/`XX`/`CH`, `ZRANK`, `ZREM`, `ZSCORE`, `ZCARD`, `ZCOUNT`, `ZINCRBY`, `ZPOPMIN`/`ZPOPMAX`; `ZRANGEBYSCORE`/`ZREVRANGEBYSCORE`; `ZRANGE` rank ranges with `REV`/`WITHSCORES` |
 | Geo | `GEOADD`, `GEODIST`, `GEOHASH`, `GEOSEARCH`, `GEOPOS` |
 | Approximate analytics | Bloom `BF.*`, Count-Min `CMS.*`, Morris `MORRIS.*`, Cuckoo `CF.*`, and `PFADD`/`PFCOUNT`/`PFMERGE`; see the [command registry](internal/core/eval.go) for exact names |
 | Operations | `PING`, `AUTH`, `INFO`, `MEMORY USAGE key`, `MEMORY STATS`, `BGREWRITEAOF`, `KEEL.DUMP`, `KEEL.RESTORE` |
@@ -111,7 +111,7 @@ Rewrites advance in slices of at most 2048 keys, targeting 1 MiB or 1 ms between
 keys. Large lists additionally yield every 256 elements or about 64 KiB; one large
 element can exceed that byte target. Mutations restart the list copy. Dirty keys are also processed in slices. A rewrite is abandoned if it exceeds
 30 seconds or 100,000 dirty keys; the original log remains authoritative. Snapshot
-creation refuses more than one million keys. Snapshot enumeration, individual large
+creation refuses more than one million keys. Key-name enumeration now uses bounded batches. Individual large
 keys, disk writes, and final sync remain synchronous. There is no hard rewrite latency SLA.
 
 Keep Keel on a private network. AUTH does not encrypt traffic and grants access to
@@ -182,8 +182,7 @@ In order of distance, not size.
   `LREM`, `LINSERT`, `GEOSEARCHSTORE`, the `GEORADIUS` family, `CMS.INFO`, `CMS.MERGE`,
   and `BF.CARD` are also missing.
 - **Persistence without a latency bound.** The `everysec` window stretches on slow storage.
-  A rewrite abandons itself past thirty seconds or 100,000 dirty keys, and snapshot
-  enumeration, individual large keys, disk writes, and the final sync still run on the
+  A rewrite abandons itself past thirty seconds or 100,000 dirty keys, and individual large keys, disk writes, and the final sync still run on the
   command thread. Dumps carry no TTL and are not Redis RDB.
 - **Scaling, deliberately deferred.** Embedding, partitioning, and replication for failure
   recovery each wait on a pilot that shows which constraint is real; the
@@ -222,3 +221,14 @@ See the [next-stage engineering contract](docs/async-scaling.md) for
 acceptance criteria and the [pilot plan](docs/pilot-plan.md) for application evidence.
 
 Runnable [Bencher, k6 and AWS DLT adapters](bench/external/README.md) are available for external testing.
+
+### Current development status
+
+The latest published release is alpha.3. Merged development includes typed
+string storage, bounded concurrent string runs during appends, collection rewrite
+slices, replication protocol 2 and additional sorted-set operations. The review
+closeout candidate adds stable paged traversal/SCAN and shared snapshot enumeration.
+These development changes are not part of the published alpha.3 archives.
+[Closeout tracking](docs/engineering-closeout.md) records validation and remaining
+work; [the failover proposal](docs/failover-design.md) is a design, not automatic
+promotion support.

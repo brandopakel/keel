@@ -1,174 +1,100 @@
-# Bounded keyspace traversal and SCAN
+# Stable keyspace traversal
 
-Status: implemented candidate, September 6, 2026. Unreleased. The measurements
-below were taken on a machine running three long soaks and are directional, not
-capacity results; the end-to-end gate is not yet met. See
-[the gate](#what-this-does-not-establish).
+Status: implementation under validation, September 7, 2026. This supersedes the
+fixed 1,024-shard proposal in PR #21. The original proposal reduced average pause
+size but could not stop inside a shard. Its approximately 4,900 keys per shard at
+five million keys was an average, not a maximum.
 
-`persistence-replication-next.md` asks for a stable traversal abstraction shared
-by rewrite, full synchronization and SCAN, and requires per-key memory and
-mutation overhead at 100k and 1M keys before adopting one. This records the
-design that was chosen, why, and what it measured.
+## Representation
 
-## Why the obvious cursor is unavailable
+Each keyspace has pages of 64 stable slots. A slot contains the key name and its
+typed entry value. A keyed, process-random 64-bit hash maps to a slot number;
+full-hash collisions retain distinct slot numbers and verify the complete key.
+Collisions are tested with an injected constant hash. They never merge keys.
 
-Redis resumes a walk because its hash table exposes buckets: a SCAN cursor is a
-bucket index visited in reverse-binary order, so a rehash cannot lose an entry.
-Every Keel keyspace was a Go map, which exposes no buckets and randomises its
-iteration order on every range. An offset into one is meaningless the moment the
-range ends, so the cursor Redis uses cannot be ported.
+Live entries do not move when the lookup map or page directory grows. Empty
+slots are reused before allocating another page. Empty pages release their
+backing allocation, and an empty store releases its directory and lookup map.
+Entry metadata lives inline in pages, replacing per-entry allocations. This
+avoids a separate string-keyed lookup table plus another full key header for
+traversal. No unsafe runtime/map access is used.
 
-That leaves four options, and each was costed before one was chosen.
+Partially occupied pages and lookup-map capacity can retain memory after churn;
+this representation does not imply an RSS ceiling. The keyspace memory estimate
+and process memory must be assessed separately. Compaction cannot move live
+slots casually because their positions are the public cursor contract.
 
-| Option | Pause | Memory | Write path | Blast radius |
-| --- | --- | --- | --- | --- |
-| Snapshot key names per scan | O(N) at scan start | O(N) per live cursor | unchanged | small |
-| Sorted index beside each map | O(1) | per-key index entry | +O(log n) per write | medium |
-| Partition into fixed shards | O(N/shards) | none retained | +one hash per op | medium |
-| Replace the map with a bucket-exposing table | O(bucket) | O(1) | unchanged | every store |
+## SCAN contract
 
-The partition was chosen. It is the only one of the first three that keeps both
-the pause and the retained memory bounded, and unlike the fourth it does not
-require hand-writing a hash table with its own rehash and correctness burden.
+The cursor encodes a store index and a stable slot number. It retains no server
+iterator, copied key list, or per-client state. Abandoned cursors therefore need
+no timeout or retained-memory cleanup. Cursors apply within one process; clients
+restart a walk after reconnect/restart when continuity is required.
 
-## What the partition buys
+A key that remains in the same keyspace throughout a complete walk is returned
+once. Newly created or deleted keys may or may not appear. There is no consistent
+snapshot promise. Cross-type replacement is a deletion/new entry for this
+contract; callers should tolerate duplicates as they do with Redis.
 
-Each keyspace is `shardCount` maps, and a key's shard is a hash of its name, so
-membership never changes while the key exists. That makes a shard index a usable
-cursor, and it makes the cursor a small integer the client hands back verbatim.
+COUNT is a requested work budget, clamped to 1,024 work units per call. One unit
+is a live slot examined or an empty page skipped; filters and vacant pages cannot
+hide an unbounded traversal. One call visits at most one nonempty keyspace, so
+the work/byte targets do not multiply across types. Stop only on cursor zero,
+including when a filtered call returns no names.
 
-The server therefore keeps **no per-cursor state at all**. Nothing has to expire
-an abandoned cursor, nothing caps concurrent scans, and a client that walks away
-mid-scan costs nothing. The lifetime, cleanup and retained-memory questions the
-design note raised about a cursor mechanism do not arise, because there is no
-cursor object to manage.
+Names have a 64 KiB processing target per call, including framing allowance. One
+name larger than the target is handled alone to preserve progress. A one-ms
+time target is checked between names. These are cooperative scheduling targets;
+one oversized name, response encoding, runtime scheduling and GC can exceed the
+time target. There is no real-time latency guarantee.
 
-Because each shard is emitted exactly once, a key present for the whole walk is
-returned **exactly once**. Redis's SCAN can return the same key more than once
-after a rehash; this cannot. Keys created or removed mid-walk may or may not
-appear, which is the same as Redis.
+MATCH consumes at most 1,048,576 matcher transitions/class bytes per command.
+Exhaustion returns an explicit error, never an incomplete successful result.
+Use a simpler pattern or smaller COUNT. Matching is byte-based with Redis-style
+wildcards; explicit empty MATCH matches only an empty key. TYPE values are
+case-insensitive and an explicit empty/unknown type matches nothing. Expired
+keys are filtered without changing their eviction scores or reaping keys during
+SCAN. The fixed matcher budget is a documented Keel resource limit beyond
+Redis's COUNT hint.
 
-`COUNT` bounds keys *examined*, not keys returned, so `MATCH` and `TYPE` filter
-what has already been paid for. A selective filter yields short or empty batches
-with a cursor still to follow, so a client must stop on a zero cursor and not on
-an empty reply. That is Redis's rule as well.
+## Rewrite and full synchronization
 
-A cursor past the end of the keyspace reads as finished rather than as an error
-or as a read of the wrong store, so a stale cursor cannot make SCAN lie.
+A rewrite captures one slot high-water mark per keyspace. Startup allocation and
+key enumeration do not scale with key count. Each advance fetches a bounded name
+batch through the same traversal and serializes it in existing collection/key
+slices. Changed keys are reconciled with deletion/replacement as before, including
+keys inserted into previously visited vacancies or beyond the captured limits.
+A registry replacement invalidates a walk explicitly rather than silently
+traversing a different set of stores.
 
-## Choosing the shard count
+Protocol 2 snapshots are made from this incremental rewrite. Protocol 1 uses the
+same small name batches to avoid an all-key name allocation, but still constructs
+its legacy single response synchronously within the existing 8 MiB/100k-key
+limits. Its wire format does not provide incremental snapshot responses; protocol
+2 is the streamed alternative.
 
-The count is the one tuning decision, and it was settled by measurement. It
-trades two costs that pull opposite ways.
+Individual large values, opaque collection images, file writes and final sync
+still need separate latency work. Removing initial key enumeration does not
+remove those stalls.
 
-Too many shards pays the fixed cost of a map holding almost nothing, over and
-over. Too few makes a shard a large piece to take whole, because a call emits one
-and cannot stop inside it.
+## Validation and adoption gate
 
-The first implementation used 1024 and CI rejected it — not on the newest
-toolchain, but on the Go 1.22 floor `go.mod` then declared, where it cost **21.8
-bytes per key at 100,000 keys** and the keyspace estimate stopped bounding the
-real heap. Go 1.24 replaced the map implementation and the cost disappeared, so
-the number a measurement gives depends on which toolchain took it, and the floor
-is what a structure like this has to be sized against.
+Focused tests cover exact scan work limits, empty/filter/type cases, hash
+collisions, stable slots across insertion/deletion/map growth, freed-page reuse,
+large names, expensive patterns, frozen rewrite limits and registry invalidation.
+Existing rewrite mutation/replay and replication tests exercise final-state
+correctness using the new traversal.
 
-| Shards | Go 1.22 estimate/heap at 100k, 8-byte values |
-| ---: | ---: |
-| 1024 | 0.825 — fails the 0.90 bound |
-| 512 | 0.865 — fails |
-| 256 | 0.925 |
-| 128 | 0.950 |
+Initial local Go 1.26.6 heap-accounting checks passed with estimate/live-heap
+ratios 0.945, 1.019, 1.005 and 1.001 for 100k string keys with 8/64/512/4096-byte
+values. These are accounting checks taken during active soaks, not performance
+claims or a replacement for the complete memory comparison.
 
-That constraint is now gone. Raising the floor to Go 1.25, the oldest release
-still receiving security fixes, means every supported toolchain has the newer map
-layout, and 1024 measures 0.982 on the floor and 0.980 on current Go. **1024 is
-therefore what the floor allows rather than what it forces**: while `go.mod`
-claimed 1.22 this had to be 256, at four times the reply and pause per call.
-
-At 1024, the five million keys `KeyNumberLimit` allows come to about 4,900 per
-shard, and that is the worst case for both the reply and the pause.
-
-## Measurements
-
-Apple M4 Pro, 12 logical CPUs, macOS 26.5.1/APFS. Three long replication soaks
-were running throughout, so absolute figures are inflated and only the paired
-comparisons carry meaning. Each arm is the median of three runs in the same
-binary, back to back, so load moves both arms together. Timings are Go 1.26.6;
-memory is reported for both the floor and the current toolchain.
-
-Per-key memory, the same keys in one map against the partition:
-
-| Keys | Toolchain | One map | Sharded | Difference |
-| ---: | --- | ---: | ---: | ---: |
-| 100,000 | Go 1.25 | 3.29 MiB | 2.14 MiB | −12.1 bytes per key |
-| 1,000,000 | Go 1.25 | 53.23 MiB | 37.99 MiB | −16.0 bytes per key |
-| 100,000 | Go 1.26 | 3.29 MiB | 2.13 MiB | −12.2 bytes per key |
-| 1,000,000 | Go 1.26 | 53.21 MiB | 37.94 MiB | −16.0 bytes per key |
-
-The partition **saves** memory on both supported toolchains, because a Go map
-grows by doubling and one large map carries the slack of its last double alone,
-while many smaller maps round up individually and waste less in aggregate.
-
-That isolated figure is not the whole story. Against the real dictionary, whose
-expiry table is not sharded and whose values are separately allocated, the
-estimate/heap ratio moves from 0.975 to 0.982 — the accounting still bounds the
-heap, which is what the test is for. A benchmark on a bare `map[string]int` is a
-guide to the partition, not a substitute for measuring the structure that ships.
-
-Mutation and lookup overhead, isolated store operations:
-
-| Operation | Keys | One map | Sharded | Change |
-| --- | ---: | ---: | ---: | ---: |
-| get | 100,000 | 9.8 ns | 18.0 ns | +84% |
-| get | 1,000,000 | 26.3 ns | 41.8 ns | +59% |
-| set | 100,000 | 15.4 ns | 27.7 ns | +80% |
-| set | 1,000,000 | 58.2 ns | 107.6 ns | +85% |
-
-This is the real cost: a hash of the key name that every store operation now pays
-before reaching a map that hashes it again. It is a large proportion of a bare
-map operation and a much smaller proportion of a command — a whole `GET` through
-dispatch, expiry and reply encoding measured 110 ns and a whole `SET` 162 ns, so
-at 100k keys the added hash is roughly 7% of a command rather than 84% of one.
-
-The existing full walk, which `KEYS` and rewrite still take, is close to
-unchanged, and unchanged at the size where it matters:
-
-| Full key-name walk | One map | Sharded | Change |
-| ---: | ---: | ---: | ---: |
-| 100,000 keys | 0.72 ms | 0.79 ms | +11% |
-| 1,000,000 keys | 8.06 ms | 8.22 ms | +2% |
-
-That matters because rewrite begins by collecting every key name, so sharding had
-to add a bounded walk without taxing the unbounded one beside it.
-
-What the cursor buys against that walk:
-
-| | 100,000 keys | 1,000,000 keys |
-| --- | ---: | ---: |
-| One `SCAN` call | 0.56 µs | 6.9 µs |
-| Full key-name walk | 0.79 ms | 8.22 ms |
-
-A `SCAN` call is bounded by one shard whatever the keyspace size: three orders of
-magnitude below the walk, and it stays there as the keyspace grows.
-
-## What this does not establish
-
-- **The end-to-end gate is not met.** The per-operation figures are isolated
-  store benchmarks. The authoritative number is the standard memtier harness
-  comparing this candidate against its parent on a quiet machine, and that has
-  not been run. Whether an 8% share of a command is acceptable for bounded
-  enumeration is a judgement to make against that measurement, not this one.
-- Every figure here was taken under three concurrent soaks.
-- `shardCount` was sized against the memory bound on the floor toolchain and the
-  reply a single call can produce. It was not tuned against throughput, and the
-  sweep covered four values, not a search.
-- A call emits a whole shard, so at the key limit a default `SCAN 0` can return
-  about 4,900 keys where Redis would return about ten. Bounding that further
-  would need a second level of hash bits inside a shard, which is possible
-  without extra maps and is not done here.
-- Rewrite and full synchronization still take the whole key-name slice. Sharing
-  this cursor with them is the follow-up that makes the abstraction shared
-  rather than merely available, and it is deliberately not in this change
-  because it collides with the rewrite work under review in PR #20.
-- SCAN does not guarantee a consistent snapshot, and never can: keys added or
-  removed during a walk may or may not be reported.
+The end-to-end adoption matrix is pending. It compares develop `40fb7e5` with the
+candidate using one Go compiler, fixed workloads, fresh servers, rotated arms,
+three repetitions and disjoint server/generator logical CPUs on one Linux hosted
+VM. The standard 24-case suite and nine memory cases retain binary hashes,
+fixture hashes, native generator output, latency histograms and host metadata.
+A hosted VM is not a dedicated physical machine or an application deployment.
+Results must be reviewed per workload; a passing harness alone is not evidence
+that the performance tradeoff is acceptable.

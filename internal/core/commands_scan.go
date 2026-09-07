@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/brandopakel/keel/internal/data_structure"
 )
@@ -17,6 +18,7 @@ const scanDefaultCount = 10
 // budget, and a server that lets a client set it to a billion has given away
 // the pause that SCAN exists to avoid.
 const scanMaxCount = 1 << 20
+const scanMatchWork = 1 << 20
 
 // cmdSCAN walks the keyspace a bounded piece at a time.
 //
@@ -26,10 +28,9 @@ const scanMaxCount = 1 << 20
 // has to keep is that a key present for the whole walk is returned, without
 // the walk holding a copy of the keyspace or pinning it against writes.
 //
-// The cursor is a shard index rather than an offset. What that does and does
-// not promise is set out in data_structure/sharded.go; the part that matters
-// here is that it is a small integer, so the server keeps no per-cursor state
-// and a client that abandons a walk costs nothing.
+// The cursor encodes a stable slot and keyspace index. It holds no server
+// iterator or snapshot and survives mutation of other entries. The work,
+// oversized-name and matcher limits are documented in keyspace-traversal.md.
 //
 // COUNT bounds keys examined, so MATCH and TYPE filter what has already been
 // paid for. A selective filter therefore returns short or empty batches with a
@@ -48,6 +49,7 @@ func cmdSCAN(args []string) []byte {
 
 	count := scanDefaultCount
 	pattern, keyspace := "", ""
+	matchSet, typeSet := false, false
 	for i := 1; i < len(args); {
 		switch strings.ToUpper(args[i]) {
 		case "MATCH":
@@ -55,6 +57,7 @@ func cmdSCAN(args []string) []byte {
 				return Encode(errSyntax, false)
 			}
 			pattern, i = args[i+1], i+2
+			matchSet = true
 		case "COUNT":
 			if i+1 >= len(args) {
 				return Encode(errSyntax, false)
@@ -71,28 +74,41 @@ func cmdSCAN(args []string) []byte {
 			if i+1 >= len(args) {
 				return Encode(errSyntax, false)
 			}
-			keyspace, i = args[i+1], i+2
+			keyspace, i = strings.ToLower(args[i+1]), i+2
+			typeSet = true
 		default:
 			return Encode(errSyntax, false)
 		}
 	}
 
+	remainingMatchWork := scanMatchWork
+	matchExhausted := false
 	keep := func(ks data_structure.Keyspace, key string) bool {
 		// Cheapest test first, and rejecting by store name skips whole
 		// keyspaces rather than asking each of their keys.
-		if keyspace != "" && ks.KeyspaceName() != keyspace {
+		if typeSet && ks.KeyspaceName() != keyspace {
 			return false
 		}
-		if pattern != "" && !globMatch(pattern, key) {
-			return false
+		if matchSet {
+			if matchExhausted {
+				return false
+			}
+			matched, exhausted := globMatchBounded(pattern, key, &remainingMatchWork)
+			matchExhausted = exhausted
+			if !matched {
+				return false
+			}
 		}
-		// Has settles a key whose TTL has passed, and reaps it on the way, so
-		// SCAN never shows a key GET would say was gone. KEYS filters the same
-		// way, for the same reason.
-		return ks.Has(key)
+		// The slot already establishes presence. Check expiry without a
+		// second key lookup or mutation; active/lazy expiry handles removal.
+		at, expires := ks.GetExpiry(key)
+		return !expires || at > uint64(time.Now().UnixMilli())
 	}
 
 	keys, next := data_structure.ScanKeyspaces(cursor, count, keep, nil)
+	if matchExhausted {
+		return Encode(errors.New("ERR SCAN pattern work limit exceeded; use a simpler MATCH or smaller COUNT"), false)
+	}
 	if keys == nil {
 		keys = []string{}
 	}

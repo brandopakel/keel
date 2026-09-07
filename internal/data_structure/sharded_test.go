@@ -2,6 +2,7 @@ package data_structure
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -18,7 +19,7 @@ func drain(t *testing.T, m *shardedMap[int], budget int) ([]string, int) {
 		var next uint64
 		seen, _, next = m.scan(cursor, budget, nil, seen)
 		calls++
-		require.Less(t, calls, 4*shardCount+16, "the walk must terminate")
+		require.Less(t, calls, 20000, "the walk must terminate")
 		if next == 0 {
 			return seen, calls
 		}
@@ -80,7 +81,7 @@ func TestShardedScanBudgetsExaminedKeysNotReturnedKeys(t *testing.T) {
 		if examined > worst {
 			worst = examined
 		}
-		require.Less(t, calls, 4*shardCount, "the walk must terminate")
+		require.Less(t, calls, 20000, "the walk must terminate")
 		if next == 0 {
 			break
 		}
@@ -89,14 +90,13 @@ func TestShardedScanBudgetsExaminedKeysNotReturnedKeys(t *testing.T) {
 	assert.Empty(t, kept, "the filter rejected every key")
 	assert.Equal(t, 4000, totalExamined, "but every key was still examined")
 	assert.Greater(t, calls, 1, "and it took more than one call to do it")
-	// One shard of overrun past the budget is the documented bound.
-	assert.Less(t, worst, 100+4000/shardCount+64, "no call may examine far past its budget")
+	assert.LessOrEqual(t, worst, 100, "COUNT is an actual work ceiling")
 }
 
 func TestShardedScanRejectsCursorsPastTheEnd(t *testing.T) {
 	m := &shardedMap[int]{}
 	m.set("a", 1)
-	keys, examined, next := m.scan(shardCount, 10, nil, nil)
+	keys, examined, next := m.scan(m.scanEnd()+1, 10, nil, nil)
 	assert.Empty(t, keys, "a cursor past the end reads as finished, not as an error")
 	assert.Zero(t, examined)
 	assert.Zero(t, next)
@@ -105,12 +105,13 @@ func TestShardedScanRejectsCursorsPastTheEnd(t *testing.T) {
 func TestShardedDeleteReleasesEmptiedShards(t *testing.T) {
 	m := &shardedMap[int]{}
 	m.set("only", 1)
-	i := shardOf("only")
-	require.NotNil(t, m.shards[i])
+	pos, _, _ := m.position("only")
+	i := pos / keyPageSlots
+	require.NotNil(t, m.pages[i].page)
 
 	assert.True(t, m.del("only"))
 	assert.False(t, m.del("only"), "deleting twice reports nothing removed")
-	assert.Nil(t, m.shards[i], "an emptied shard gives its map back")
+	assert.Empty(t, m.pages, "an empty store releases its page directory too")
 	assert.Zero(t, m.len())
 }
 
@@ -160,38 +161,147 @@ func TestShardedSampleMovesItsStartingPoint(t *testing.T) {
 	assert.Greater(t, len(first), 1, "consecutive samples must not start in the same place")
 }
 
-func TestShardOfIsStableForAKey(t *testing.T) {
-	// Membership has to hold still for as long as a cursor is live, which is
-	// the whole basis for treating a shard index as a resumable position.
-	for i := 0; i < 200; i++ {
-		key := "key:" + strconv.Itoa(i)
-		want := shardOf(key)
-		for repeat := 0; repeat < 5; repeat++ {
-			assert.Equal(t, want, shardOf(key), "%s must not move between calls", key)
+func TestPagedScanSurvivesGrowthDeletionAndSlotReuse(t *testing.T) {
+	m := &shardedMap[int]{}
+	for i := 0; i < 300; i++ {
+		m.set("stable:"+strconv.Itoa(i), i)
+	}
+	stable := make(map[string]uint64)
+	for _, key := range m.keys() {
+		pos, _, _ := m.position(key)
+		stable[key] = pos
+	}
+	cursor := uint64(0)
+	seen := make(map[string]int)
+	for call := 0; ; call++ {
+		keys, examined, next := m.scan(cursor, 7, nil, nil)
+		require.LessOrEqual(t, examined, 7)
+		for _, key := range keys {
+			seen[key]++
 		}
-		assert.Less(t, want, shardCount)
-		assert.GreaterOrEqual(t, want, 0)
+		for i := 0; i < 23; i++ {
+			key := "new:" + strconv.Itoa(call*23+i)
+			m.set(key, i)
+		}
+		for i := 0; i < 23; i++ {
+			m.del("new:" + strconv.Itoa(call*23+i))
+		}
+		for key, pos := range stable {
+			got, _, ok := m.position(key)
+			require.True(t, ok)
+			require.Equal(t, pos, got)
+		}
+		require.Less(t, call, 1000)
+		if next == 0 {
+			break
+		}
+		cursor = next
+	}
+	for key := range stable {
+		assert.Equal(t, 1, seen[key], key)
 	}
 }
 
-func TestShardOfSpreadsKeysAcrossShards(t *testing.T) {
-	used := map[int]int{}
-	for i := 0; i < 10000; i++ {
-		used[shardOf("key:"+strconv.Itoa(i))]++
+func TestPagedDeleteReleasesValuesAndReusesSparseSlots(t *testing.T) {
+	m := &shardedMap[*int]{}
+	for i := 0; i < 3*keyPageSlots; i++ {
+		n := i
+		m.set(strconv.Itoa(i), &n)
 	}
-	// A hash that piled keys into a few shards would make the cursor useless,
-	// because a shard is taken whole and so bounds the work of one call.
-	assert.Greater(t, len(used), shardCount/2, "keys must reach most shards")
-	worst := 0
-	for _, n := range used {
-		if n > worst {
-			worst = n
+	end := m.end
+	for i := keyPageSlots; i < 2*keyPageSlots; i++ {
+		m.del(strconv.Itoa(i))
+	}
+	require.Nil(t, m.pages[1].page)
+	for i := 0; i < keyPageSlots; i++ {
+		n := i
+		m.set("replacement:"+strconv.Itoa(i), &n)
+	}
+	assert.Equal(t, end, m.end, "vacancies are reused before growing the directory")
+	require.NotNil(t, m.pages[1].page)
+}
+
+func TestPagedScanHardWorkAndByteTargets(t *testing.T) {
+	m := &shardedMap[int]{}
+	for i := 0; i < 5000; i++ {
+		m.set(strconv.Itoa(i), i)
+	}
+	_, examined, next := m.scan(0, 1<<20, nil, nil)
+	require.LessOrEqual(t, examined, ScanMaxWork)
+	require.NotZero(t, next)
+	large := &shardedMap[int]{}
+	large.set(strings.Repeat("x", ScanByteTarget+1), 1)
+	large.set("small", 2)
+	keys, examined, next := large.scan(0, 100, nil, nil)
+	require.Len(t, keys, 1, "one oversized name is handled alone")
+	require.Equal(t, 1, examined)
+	require.NotZero(t, next)
+	keys, _, next = large.scan(next, 100, nil, nil)
+	require.Equal(t, []string{"small"}, keys)
+	require.Zero(t, next)
+}
+
+func TestPagedHashCollisionsPreserveDistinctKeysAndBoundScan(t *testing.T) {
+	m := &shardedMap[int]{hashOverride: func(string) uint64 { return 42 }}
+	for i := 0; i < 2000; i++ {
+		m.set(strconv.Itoa(i), i)
+	}
+	for i := 0; i < 2000; i++ {
+		got, ok := m.get(strconv.Itoa(i))
+		require.True(t, ok)
+		require.Equal(t, i, got)
+	}
+	cursor := uint64(0)
+	seen := map[string]bool{}
+	for {
+		keys, examined, next := m.scan(cursor, 3, nil, nil)
+		require.LessOrEqual(t, examined, 3)
+		for _, key := range keys {
+			seen[key] = true
 		}
+		if next == 0 {
+			break
+		}
+		cursor = next
 	}
-	// Relative to the mean, not a fixed count, so the bound follows shardCount
-	// and does not have to be retuned when it changes. The seed is per process,
-	// so this is a distribution check: three times the mean leaves ordinary
-	// variation alone while still catching a hash that genuinely piles up.
-	mean := 10000 / shardCount
-	assert.Less(t, worst, 3*mean, "no shard may take a large share of 10,000 keys")
+	require.Len(t, seen, 2000)
+	// Remove an overflow entry and the primary entry, then overwrite another.
+	require.True(t, m.del("19"))
+	require.True(t, m.del("0"))
+	require.True(t, m.set("20", 9000))
+	got, ok := m.get("20")
+	require.True(t, ok)
+	require.Equal(t, 9000, got)
+	for _, i := range []int{1, 18, 21, 1999} {
+		got, ok = m.get(strconv.Itoa(i))
+		require.True(t, ok)
+		require.Equal(t, i, got)
+	}
+}
+
+func TestKeyspaceWalkFreezesLimitsWithoutSnapshottingNames(t *testing.T) {
+	ResetKeyspaces()
+	defer ResetKeyspaces()
+	d := CreateDict()
+	RegisterKeyspace(d)
+	for i := 0; i < 200; i++ {
+		d.Put(strconv.Itoa(i), d.NewObj("v"))
+	}
+	w := NewKeyspaceWalk()
+	require.Len(t, w.ends, 1)
+	keys, examined, err := w.Next(5, nil)
+	require.NoError(t, err)
+	require.LessOrEqual(t, examined, 5)
+	for i := 200; i < 2000; i++ {
+		d.Put(strconv.Itoa(i), d.NewObj("new"))
+	}
+	for !w.Done() {
+		keys, _, err = w.Next(5, keys)
+		require.NoError(t, err)
+	}
+	require.Len(t, keys, 200, "new high slots are left for dirty reconciliation")
+	stale := NewKeyspaceWalk()
+	ResetKeyspaces()
+	_, _, err = stale.Next(5, nil)
+	require.Error(t, err)
 }

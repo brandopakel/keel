@@ -13,7 +13,7 @@ type Sized interface{ MemUsage() uint64 }
 // so a keyspace full of 12KB sketches could run past maxmemory unchecked.
 type Keyed[T Sized] struct {
 	name     string
-	items    shardedMap[*keyedEntry[T]]
+	items    shardedMap[keyedEntry[T]]
 	memUsed  uint64
 	expiries map[string]uint64
 }
@@ -41,7 +41,7 @@ func (k *Keyed[T]) entryBytes(key string, value T) uint64 {
 
 // Get returns the value at key and records the access.
 func (k *Keyed[T]) Get(key string) (T, bool) {
-	e, ok := k.items.get(key)
+	e, ok := k.items.getPtr(key)
 	if ok && k.expired(key) {
 		k.Delete(key)
 		noteRemoval(k, key)
@@ -58,7 +58,7 @@ func (k *Keyed[T]) Get(key string) (T, bool) {
 // Peek returns the value without recording an access, for reads that should not
 // count as use - reporting on a key is not using it.
 func (k *Keyed[T]) Peek(key string) (T, bool) {
-	e, ok := k.items.get(key)
+	e, ok := k.items.getPtr(key)
 	if !ok || k.expired(key) {
 		var zero T
 		return zero, false
@@ -68,7 +68,7 @@ func (k *Keyed[T]) Peek(key string) (T, bool) {
 
 // Exists reports whether a key is present, without recording an access.
 func (k *Keyed[T]) Exists(key string) bool {
-	_, ok := k.items.get(key)
+	_, ok := k.items.getPtr(key)
 	if ok && k.expired(key) {
 		k.Delete(key)
 		noteRemoval(k, key)
@@ -90,7 +90,7 @@ func (k *Keyed[T]) Has(key string) bool { return k.Exists(key) }
 
 // Put stores a value, replacing whatever was there.
 func (k *Keyed[T]) Put(key string, value T) {
-	if old, ok := k.items.get(key); ok {
+	if old, ok := k.items.getPtr(key); ok {
 		// An overwrite replaces the old cost rather than adding to it. Without
 		// the refund the estimate climbs forever on a key that is only updated.
 		k.memUsed -= old.bytes
@@ -99,10 +99,10 @@ func (k *Keyed[T]) Put(key string, value T) {
 	delete(k.expiries, key)
 	e := &keyedEntry[T]{value: value, access: NewAccess()}
 	e.bytes = k.entryBytes(key, value)
-	k.items.set(key, e)
+	Touch(&e.access)
+	k.items.set(key, *e)
 	k.memUsed += e.bytes
 
-	Touch(&e.access)
 	EnforceLimits()
 }
 
@@ -113,7 +113,7 @@ func (k *Keyed[T]) Put(key string, value T) {
 // Missing a Resize does not corrupt anything; it just leaves the budget
 // believing the key is smaller than it is, which is the quiet kind of wrong.
 func (k *Keyed[T]) Resize(key string) {
-	e, ok := k.items.get(key)
+	e, ok := k.items.getPtr(key)
 	if !ok {
 		return
 	}
@@ -136,10 +136,14 @@ func (k *Keyed[T]) Len() int             { return k.items.len() }
 func (k *Keyed[T]) Scan(cursor uint64, budget int, keep func(string) bool, dst []string) ([]string, int, uint64) {
 	return k.items.scan(cursor, budget, keep, dst)
 }
+func (k *Keyed[T]) ScanEnd() uint64 { return k.items.scanEnd() }
+func (k *Keyed[T]) ScanUntil(cursor, end uint64, budget int, keep func(string) bool, dst []string) ([]string, int, uint64) {
+	return k.items.scanUntil(cursor, end, budget, keep, dst)
+}
 func (k *Keyed[T]) MemUsed() uint64 { return k.memUsed }
 
 func (k *Keyed[T]) ScoreOf(key string) (uint64, bool) {
-	e, ok := k.items.get(key)
+	e, ok := k.items.getPtr(key)
 	if !ok {
 		return 0, false
 	}
@@ -148,7 +152,7 @@ func (k *Keyed[T]) ScoreOf(key string) (uint64, bool) {
 
 // SampleKeys appends up to n keys chosen at random.
 func (k *Keyed[T]) SampleKeys(dst []Candidate, n int) []Candidate {
-	k.items.sample(n, func(key string, e *keyedEntry[T]) {
+	k.items.sample(n, func(key string, e keyedEntry[T]) {
 		dst = append(dst, Candidate{Space: k, Key: key, Score: Score(e.access)})
 	})
 	return dst
@@ -156,7 +160,7 @@ func (k *Keyed[T]) SampleKeys(dst []Candidate, n int) []Candidate {
 
 // EntryBytes reports what one key costs, for MEMORY USAGE.
 func (k *Keyed[T]) EntryBytes(key string) (uint64, bool) {
-	e, ok := k.items.get(key)
+	e, ok := k.items.getPtr(key)
 	if !ok {
 		return 0, false
 	}
@@ -164,7 +168,7 @@ func (k *Keyed[T]) EntryBytes(key string) (uint64, bool) {
 }
 
 func (k *Keyed[T]) Delete(key string) bool {
-	e, ok := k.items.get(key)
+	e, ok := k.items.getPtr(key)
 	if !ok {
 		return false
 	}
@@ -177,7 +181,7 @@ func (k *Keyed[T]) Delete(key string) bool {
 func (k *Keyed[T]) expired(key string) bool             { at, ok := k.expiries[key]; return ok && at <= nowMs() }
 func (k *Keyed[T]) GetExpiry(key string) (uint64, bool) { at, ok := k.expiries[key]; return at, ok }
 func (k *Keyed[T]) SetExpiryAt(key string, at uint64) {
-	e, ok := k.items.get(key)
+	e, ok := k.items.getPtr(key)
 	if !ok {
 		return
 	}
@@ -193,7 +197,7 @@ func (k *Keyed[T]) ClearExpiry(key string) bool {
 		return false
 	}
 	delete(k.expiries, key)
-	if e, ok := k.items.get(key); ok {
+	if e, ok := k.items.getPtr(key); ok {
 		e.bytes -= expiryOverhead
 	}
 	k.memUsed -= expiryOverhead

@@ -48,7 +48,7 @@ import (
 // than a copy of the keyspace.
 //
 // Slices stop between keys after 2048 keys, 1 MiB or 1 ms. Dirty-key
-// reconciliation uses the same budgets. Snapshot enumeration, a single key,
+// reconciliation uses the same budgets. A single key,
 // filesystem writes and the final sync can exceed the time target. Admission
 // and duration limits prevent an unbounded snapshot or endlessly growing walk.
 
@@ -73,11 +73,13 @@ var rewrite struct {
 	hashCursor *data_structure.HashCursor
 	written    int64
 
-	// keys is every name that existed when the rewrite started. A Go map
-	// cannot be iterated across cycles - there is no resumable iterator - so
-	// the names are collected up front and walked as a list.
-	keys []string
-	pos  int
+	// The walker retains only one slot limit per store. keys is one bounded
+	// name batch, not a snapshot of the whole keyspace.
+	walk        *data_structure.KeyspaceWalk
+	keys        []string
+	batchPos    int
+	pos         int
+	initialKeys int
 
 	// dirty is every key written since the rewrite started. These are the keys
 	// the walk may have recorded wrongly, and they are all rewritten at the end
@@ -92,7 +94,9 @@ var rewrite struct {
 // RewriteActive reports whether a rewrite is part-way through.
 func RewriteActive() bool { return rewrite.active }
 
-// StartRewrite begins one, collecting the key names it will walk.
+func rewriteWalkDone() bool { return rewrite.walk.Done() && rewrite.batchPos == len(rewrite.keys) }
+
+// StartRewrite begins one, capturing a slot limit per keyspace.
 func StartRewrite() error {
 	if aof.file == nil {
 		return fmt.Errorf("appendonly is off")
@@ -132,10 +136,13 @@ func StartRewrite() error {
 	}
 	rewrite.written = 0
 	rewrite.pos = 0
+	rewrite.batchPos = 0
+	rewrite.initialKeys = data_structure.TotalKeys()
+	rewrite.walk = data_structure.NewKeyspaceWalk()
 	rewrite.collectionActive = false
 	rewrite.hashCursor = nil
 	rewrite.dirty = make(map[string]struct{})
-	rewrite.keys = allKeyNames()
+	rewrite.keys = nil
 	return nil
 }
 
@@ -160,7 +167,7 @@ func AdvanceRewrite() error {
 	// Once the snapshot walk is done, retain changed key names until the sync
 	// worker releases the old descriptor. Re-emitting hot keys every cycle
 	// while replacement is blocked can make the rewrite larger than the log.
-	if rewrite.pos == len(rewrite.keys) && !rewrite.collectionActive && aof.syncPending != nil {
+	if rewriteWalkDone() && !rewrite.collectionActive && aof.syncPending != nil {
 		return nil
 	}
 	if rewrite.collectionActive {
@@ -171,11 +178,21 @@ func AdvanceRewrite() error {
 		}
 		return nil
 	}
+	if rewrite.batchPos == len(rewrite.keys) && !rewrite.walk.Done() {
+		var err error
+		rewrite.keys, _, err = rewrite.walk.Next(rewriteChunk, rewrite.keys[:0])
+		rewrite.batchPos = 0
+		if err != nil {
+			abortRewrite(err)
+			return err
+		}
+	}
 	deadline := time.Now().Add(time.Millisecond)
 	var body []byte
 	count := 0
-	for rewrite.pos < len(rewrite.keys) && count < rewriteChunk {
-		key := rewrite.keys[rewrite.pos]
+	for rewrite.batchPos < len(rewrite.keys) && count < rewriteChunk {
+		key := rewrite.keys[rewrite.batchPos]
+		rewrite.batchPos++
 		rewrite.pos++
 		count++
 		if _, touched := rewrite.dirty[key]; !touched {
@@ -185,7 +202,7 @@ func AdvanceRewrite() error {
 			break
 		}
 	}
-	if rewrite.pos == len(rewrite.keys) && !rewrite.collectionActive {
+	if rewriteWalkDone() && !rewrite.collectionActive {
 		for key := range rewrite.dirty {
 			if rewrite.collectionActive || count >= rewriteChunk || len(body) >= 1<<20 || time.Now().After(deadline) {
 				break
@@ -200,7 +217,7 @@ func AdvanceRewrite() error {
 		abortRewrite(err)
 		return err
 	}
-	if rewrite.collectionActive || rewrite.pos < len(rewrite.keys) || len(rewrite.dirty) > 0 {
+	if rewrite.collectionActive || !rewriteWalkDone() || len(rewrite.dirty) > 0 {
 		return nil
 	}
 
@@ -375,10 +392,11 @@ func finishRewrite() error {
 	appendSynced = max(appendSynced, appendCompleted)
 	aof.written = 0
 	aof.rewrites++
-	aof.lastKeys = len(rewrite.keys)
+	aof.lastKeys = rewrite.initialKeys
 
 	rewrite.active = false
 	rewrite.keys = nil
+	rewrite.walk = nil
 	rewrite.dirty = nil
 	return captureReplicationSnapshot()
 }
@@ -395,6 +413,7 @@ func abortRewrite(cause error) {
 	os.Remove(rewrite.tmpPath)
 	rewrite.active = false
 	rewrite.keys = nil
+	rewrite.walk = nil
 	rewrite.dirty = nil
 	rewrite.file = nil
 	if cause != nil {
@@ -422,23 +441,6 @@ func rewriteWrite(body []byte) error {
 		return io.ErrShortWrite
 	}
 	return err
-}
-
-// allKeyNames collects every key in every keyspace.
-// allKeyNames collects every key the rewrite has to consider.
-//
-// Asked of the keyspace registry rather than of each store by name. The list of
-// stores written out by hand was one entry short the first time a type was
-// added after it - hashes - and the walk silently wrote nothing for them, so a
-// rewrite dropped every hash in the keyspace. That is the same shape as DBSIZE
-// counting only strings: a list of the stores that has to be kept in step with
-// the stores, in a file that has no reason to notice when it is not.
-func allKeyNames() []string {
-	keys := make([]string, 0, data_structure.TotalKeys())
-	data_structure.EachKeyspace(func(ks data_structure.Keyspace) {
-		keys = append(keys, ks.Keys()...)
-	})
-	return keys
 }
 
 // emitKey appends the commands that recreate one key, or nothing if no

@@ -27,12 +27,22 @@ package core
 // server runs every command on one thread - a client able to make matching take
 // a second is a client able to stall every other client for a second.
 func globMatch(pattern, s string) bool {
+	matched, _ := globMatchBounded(pattern, s, nil)
+	return matched
+}
+
+// globMatchBounded charges matcher transitions and class bytes. Exhaustion is
+// distinct from a non-match so callers never silently omit a matching key.
+func globMatchBounded(pattern, s string, remaining *int) (bool, bool) {
 	var (
 		p, i         int
 		starP, starI = -1, -1
 	)
 
 	for i < len(s) {
+		if !globStep(remaining) {
+			return false, true
+		}
 		matched := false
 
 		if p < len(pattern) {
@@ -49,7 +59,11 @@ func globMatch(pattern, s string) bool {
 				continue
 			case '[':
 				var next int
-				next, matched = matchClass(pattern, p, s[i])
+				var exhausted bool
+				next, matched, exhausted = matchClassBounded(pattern, p, s[i], remaining)
+				if exhausted {
+					return false, true
+				}
 				if matched {
 					p = next
 					i++
@@ -85,15 +99,18 @@ func globMatch(pattern, s string) bool {
 			p = starP + 1
 			continue
 		}
-		return false
+		return false, false
 	}
 
 	// The key is exhausted; the pattern matches only if what is left of it can
 	// match nothing at all, which is to say it is all stars.
 	for p < len(pattern) && pattern[p] == '*' {
+		if !globStep(remaining) {
+			return false, true
+		}
 		p++
 	}
-	return p == len(pattern)
+	return p == len(pattern), false
 }
 
 // matchClass matches one byte against the bracket expression starting at
@@ -103,7 +120,21 @@ func globMatch(pattern, s string) bool {
 // An unterminated class - "[abc" - stops at the end of the pattern rather than
 // being an error, which is what Redis does. Refusing it would be defensible,
 // but not while claiming to accept Redis's patterns.
+func globStep(remaining *int) bool {
+	if remaining == nil {
+		return true
+	}
+	if *remaining <= 0 {
+		return false
+	}
+	*remaining--
+	return true
+}
 func matchClass(pattern string, at int, c byte) (int, bool) {
+	next, matched, _ := matchClassBounded(pattern, at, c, nil)
+	return next, matched
+}
+func matchClassBounded(pattern string, at int, c byte, remaining *int) (int, bool, bool) {
 	p := at + 1
 
 	negate := p < len(pattern) && pattern[p] == '^'
@@ -113,13 +144,16 @@ func matchClass(pattern string, at int, c byte) (int, bool) {
 
 	match := false
 	for {
+		if !globStep(remaining) {
+			return p, false, true
+		}
 		switch {
 		case p >= len(pattern):
 			// Unterminated. Everything seen so far still counts.
 			if negate {
 				match = !match
 			}
-			return p, match
+			return p, match, false
 
 		case pattern[p] == '\\' && p+1 < len(pattern):
 			p++
@@ -132,7 +166,7 @@ func matchClass(pattern string, at int, c byte) (int, bool) {
 			if negate {
 				match = !match
 			}
-			return p, match
+			return p, match, false
 
 		// A range is any three bytes with a '-' in the middle, and the third
 		// is not exempted for being ']'. That is what makes "[a-]" match "a"

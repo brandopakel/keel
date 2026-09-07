@@ -2,6 +2,7 @@ package core
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -102,6 +103,18 @@ func TestScanTypeSelectsOneKeyspace(t *testing.T) {
 	assert.Empty(t, mustScan(t, "TYPE", "nosuchtype"), "an unknown type matches nothing")
 }
 
+func TestScanExplicitEmptyAndCaseInsensitiveFilters(t *testing.T) {
+	ResetStores()
+	run(t, "SET", "", "empty-name")
+	run(t, "SET", "ordinary", "v")
+	run(t, "SADD", "members", "v")
+	assert.Equal(t, []string{""}, mustScan(t, "MATCH", ""))
+	assert.Empty(t, mustScan(t, "TYPE", ""))
+	assert.ElementsMatch(t, []string{"", "ordinary"}, mustScan(t, "TYPE", "STRING"))
+	assert.Equal(t, []string{"members"}, mustScan(t, "TYPE", "SeT"))
+	assert.Empty(t, mustScan(t, "MATCH", "", "TYPE", "set"))
+}
+
 func mustScan(t *testing.T, options ...string) []string {
 	t.Helper()
 	keys, _ := scanAll(t, options...)
@@ -184,4 +197,12 @@ func TestScanOnAnEmptyKeyspaceFinishesImmediately(t *testing.T) {
 	keys, calls := scanAll(t)
 	assert.Empty(t, keys)
 	assert.Equal(t, 1, calls, "an empty server must answer in one call")
+}
+
+func TestScanPatternExhaustionIsAnErrorNotAnEmptyMatch(t *testing.T) {
+	ResetStores()
+	run(t, "SET", strings.Repeat("a", 10000), "v")
+	reply := run(t, "SCAN", "0", "MATCH", "*"+strings.Repeat("a", 1000)+"b")
+	assert.Contains(t, reply, "ERR SCAN pattern work limit exceeded")
+	assert.Len(t, mustScan(t, "MATCH", "a*"), 1)
 }
