@@ -1,0 +1,67 @@
+name: Controlled append costs
+on:
+  workflow_call:
+    inputs:
+      candidate:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version: '1.27.1' }
+      - name: Build exact runtime and pinned native generator
+        env:
+          CANDIDATE_REV: ${{ inputs.candidate }}
+          CGO_ENABLED: '0'
+        run: |
+          [[ "$CANDIDATE_REV" =~ ^[0-9a-f]{40}$ ]]
+          git worktree add --detach "$RUNNER_TEMP/candidate" "$CANDIDATE_REV"
+          go -C "$RUNNER_TEMP/candidate" build -trimpath -o /tmp/keel-append ./cmd/keel
+          mkdir -p dist/append-costs
+          go version -m /tmp/keel-append > dist/append-costs/build.log
+          lscpu > dist/append-costs/lscpu.log
+          df -T . > dist/append-costs/filesystem.log
+          sudo apt-get update
+          sudo apt-get install -y build-essential autoconf automake libtool pkg-config libevent-dev libssl-dev zlib1g-dev lsof
+          curl -fL --retry 3 https://github.com/redis/memtier_benchmark/archive/refs/tags/2.5.1.tar.gz -o /tmp/memtier.tar.gz
+          echo '9b34e17a0d1d7e70b152eb442c6362161b5b764ce2ea98e97b7c74815bdd90b7  /tmp/memtier.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/memtier.tar.gz -C /tmp
+          cd /tmp/memtier_benchmark-2.5.1
+          autoreconf -fi
+          ./configure
+          make -j2
+      - name: Matched policies and separate CPU/heap profiles
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          cpus=sorted(os.sched_getaffinity(0))
+          topology={}
+          for cpu in cpus:
+              base=Path(f'/sys/devices/system/cpu/cpu{cpu}/topology')
+              topology[cpu]=tuple((base/name).read_text().strip() for name in ('physical_package_id','core_id'))
+          server=[cpu for cpu in cpus if topology[cpu]==topology[cpus[0]]]
+          generator=[cpu for cpu in cpus if cpu not in server]
+          assert generator, 'two exposed physical core groups required'
+          server,generator=','.join(map(str,server)),','.join(map(str,generator))
+          Path('dist/append-costs/affinity.json').write_text(json.dumps({'server':server,'generator':generator,'topology':topology,'limitation':'Public VM tenancy and host scheduling are uncontrolled.'},indent=2))
+          subprocess.run(['python3','bench/run-append-diagnostics.py','--binary','/tmp/keel-append','--memtier','/tmp/memtier_benchmark-2.5.1/memtier_benchmark','--out','dist/append-costs/results','--server-cpus',server,'--client-cpus',generator],check=True)
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: controlled-append-costs
+          path: |
+            dist/append-costs/**/*.json
+            dist/append-costs/**/*.log
+            dist/append-costs/**/*.csv
+            dist/append-costs/**/*.md
+            dist/append-costs/**/*.pprof
+          retention-days: 30

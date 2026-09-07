@@ -1,0 +1,60 @@
+Source: d7bf73ef7aa3570c3ffeec5ec982e04a5bae7b87
+
+package core
+
+import (
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+func TestReviewSuccessorPromotionMustFenceIsolatedPrimary(t *testing.T) {
+	setupFailover(t)
+	require.Equal(t, "OK", run(t, "KEEL.PROMOTE", "1"))
+	isolatedPrimary := failover
+	// A separate node is promoted without any delivery to the isolated one.
+	require.NoError(t, LoadTerm(filepath.Join(t.TempDir(), "successor.aof")))
+	require.Equal(t, "OK", run(t, "KEEL.PROMOTE", "2"))
+	require.True(t, Writable())
+	failover = isolatedPrimary
+	require.False(t, Writable(), "the isolated old primary still accepts writes alongside its successor")
+}
+
+func TestReviewFenceMustSurvivePrimaryRestart(t *testing.T) {
+	path := setupFailover(t)
+	require.Equal(t, "OK", run(t, "KEEL.PROMOTE", "1"))
+	require.Equal(t, "OK", run(t, "KEEL.FENCE", "2"))
+	require.False(t, Writable())
+	require.NoError(t, CloseAOF())
+	require.NoError(t, LoadTerm(path))
+	require.False(t, Writable(), "restart must not turn the observed successor term into this node's held authority")
+}
+
+Result:
+--- FAIL: TestReviewSuccessorPromotionMustFenceIsolatedPrimary (0.19s)
+    failover_partition_review_test.go:19: 
+        	Error Trace:	/Users/brandopakel/keel-fencing-review/internal/core/failover_partition_review_test.go:19
+        	Error:      	Should be false
+        	Test:       	TestReviewSuccessorPromotionMustFenceIsolatedPrimary
+        	Messages:   	the isolated old primary still accepts writes alongside its successor
+--- FAIL: TestReviewFenceMustSurvivePrimaryRestart (0.20s)
+    failover_partition_review_test.go:29: 
+        	Error Trace:	/Users/brandopakel/keel-fencing-review/internal/core/failover_partition_review_test.go:29
+        	Error:      	Should be false
+        	Test:       	TestReviewFenceMustSurvivePrimaryRestart
+        	Messages:   	restart must not turn the observed successor term into this node's held authority
+FAIL
+FAIL	github.com/brandopakel/keel/internal/core	0.664s
+FAIL
+
+Revised source 815a40f4e9d9d8deb8d8586263cda1f6a50c1416 (claim narrowed):
+--- FAIL: TestReviewFenceMustSurvivePrimaryRestart (0.12s)
+    failover_partition_review_test.go:29: 
+        	Error Trace:	/Users/brandopakel/keel-fencing-review/internal/core/failover_partition_review_test.go:29
+        	Error:      	Should be false
+        	Test:       	TestReviewFenceMustSurvivePrimaryRestart
+        	Messages:   	restart must not turn the observed successor term into this node's held authority
+FAIL
+FAIL	github.com/brandopakel/keel/internal/core	0.494s
+FAIL
