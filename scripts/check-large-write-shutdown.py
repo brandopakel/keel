@@ -17,12 +17,14 @@ def run(args):
     root.mkdir(parents=True, exist_ok=False)
     report = dict(status='running', binary_sha256=sha256(args.bin),
                   policy=args.policy, mode=args.mode, seconds=args.seconds,
+                  shutdown_grace_seconds=args.shutdown_seconds,
                   purpose='shutdown diagnosis, not a capacity or comparative benchmark')
-    flags = ['-auto-aof-rewrite-percentage', '0']
+    flags = ['-auto-aof-rewrite-percentage', '0', '-shutdown-timeout', f'{args.shutdown_seconds}s']
     if args.mode == 'concurrent':
         flags.append('-aof-concurrent-append')
     server = Server(args.bin, root/'server', policy=args.policy,
-                    async_append=args.mode != 'sync', extra=flags)
+                    async_append=args.mode != 'sync', extra=flags,
+                    shutdown_timeout=args.shutdown_seconds+10)
     stop = threading.Event()
     value = b'v' * (1 << 20)
     counts = [0]*4
@@ -87,9 +89,12 @@ if __name__ == '__main__':
     parser.add_argument('--policy', choices=['no', 'everysec'], required=True)
     parser.add_argument('--mode', choices=['sync', 'barrier', 'concurrent'], required=True)
     parser.add_argument('--seconds', type=int, default=10)
+    parser.add_argument('--shutdown-seconds', type=int, default=30)
     args = parser.parse_args()
     if os.environ.get('GITHUB_ACTIONS') != 'true':
         parser.error('this large-file diagnostic runs only on hosted GitHub Actions')
     if not 1 <= args.seconds <= 20:
         parser.error('seconds must be 1..20')
+    if not 1 <= args.shutdown_seconds <= 60:
+        parser.error('shutdown-seconds must be 1..60')
     raise SystemExit(run(args))
