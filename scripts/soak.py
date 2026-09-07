@@ -142,6 +142,26 @@ def write_failure(binary, root, worker, disk_root=None, concurrent=False):
     return {'worker': worker, 'concurrent': worker and concurrent, 'fault': 'ENOSPC' if disk_root else 'RLIMIT_FSIZE', 'passed': True}
 
 
+def process_sample(*pids):
+    """RSS and CPU for the servers under test, as a diagnostic.
+
+    Never raises. A measurement that can end the run it is measuring is worse
+    than a missing measurement, and this one did: a 48-hour soak died at 8.1
+    hours because ps took longer than its timeout on a loaded machine. The
+    servers were healthy and the eight hours were thrown away.
+
+    Failures of the servers themselves still end the run. The INFO calls beside
+    this one are deliberately not guarded, because a primary that cannot answer
+    INFO is a result rather than a missing sample.
+    """
+    try:
+        return subprocess.check_output(
+            ['ps', '-o', 'pid=,rss=,pcpu=', '-p', ','.join(str(pid) for pid in pids)],
+            text=True, timeout=15)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return f'unavailable: {exc!r}'
+
+
 def run(args, report, watchdog):
     root = Path(args.out).resolve()
     replication_flags = ['-replication-protocol', str(args.replication_protocol)]
@@ -222,8 +242,7 @@ def run(args, report, watchdog):
                           'maintenance_seconds': time.monotonic()-maintenance_start,
                           'primary': info(primary.client, 'persistence'),
                           'replica': info(replica.client, 'replication'),
-                          'ps': subprocess.check_output(['ps', '-o', 'pid=,rss=,pcpu=', '-p',
-                                f'{primary.process.pid},{replica.process.pid}'], text=True, timeout=2)}
+                          'ps': process_sample(primary.process.pid, replica.process.pid)}
                 checkpoint(root, report, sample)
                 watchdog.beat("workload after checkpoint")
                 pair_latencies.clear()

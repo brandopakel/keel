@@ -392,7 +392,12 @@ def run_arm(args, arm, binary, case, repetition, directory):
                     while chunk := persisted.read(1 << 20):
                         digest.update(chunk)
                 report['discarded_aof'] = {'bytes': path.stat().st_size, 'sha256': digest.hexdigest()}
+                # Save evidence before unlink, including an explicit pending
+                # action if interruption occurs between these two operations.
+                report['discarded_aof']['removed'] = False
+                (directory / 'report.json').write_text(json.dumps(report, indent=2)+'\n')
                 path.unlink()
+                report['discarded_aof']['removed'] = True
             except Exception as exc:
                 report.update(status='failed', aof_cleanup_failure=repr(exc))
         (directory / 'report.json').write_text(json.dumps(report, indent=2)+'\n')
@@ -417,7 +422,11 @@ def main():
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument('--candidate-concurrent', action='store_true', help='enable bounded concurrent appends on candidate only; requires --worker')
     modes.add_argument('--concurrent', action='store_true', help='enable bounded concurrent appends on both Keel arms; requires --worker')
-    parser.add_argument('--discard-passed-aof', action='store_true', help='hash then remove each successfully shut-down disposable Keel log; failed logs stay intact')
+    retention = parser.add_mutually_exclusive_group()
+    retention.add_argument('--discard-passed-aof', dest='discard_passed_aof', action='store_true', default=True,
+                           help='default: hash then remove successfully stopped disposable Keel logs; preserve failures')
+    retention.add_argument('--retain-passed-aof', dest='discard_passed_aof', action='store_false',
+                           help='explicit diagnostic opt-in to retaining successful generated persistence files')
     parser.add_argument('--profiles', action='store_true')
     parser.add_argument('--gc-trace', action='store_true', help='diagnostic Go GC logging; disabled by default in comparisons')
     parser.add_argument('--server-cpus', help='Linux CPU numbers separated by commas')
