@@ -42,10 +42,9 @@ func shuttingDown() bool {
 // A running server registers a waker: something that makes its loop return
 // promptly from whatever call it is parked in.
 //
-// Setting the flag is not enough on its own. Both loops block indefinitely by
-// design - Check passes no timeout to EpollWait or Kevent, and Accept waits for
-// a client - so without a waker a stop would not be noticed until some client
-// happened to do something, which on an idle server is never.
+// The net loop may block in Accept. The event loop has a bounded Check wait,
+// but a wake notification avoids waiting for that interval on shutdown. Every
+// registered callback must return promptly and must not replace the waker.
 var (
 	wakeMu sync.Mutex
 	wakeFn func()

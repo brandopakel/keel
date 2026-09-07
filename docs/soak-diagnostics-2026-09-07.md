@@ -61,3 +61,12 @@ PR 60 now records failed memory-monitoring samples and lets the workload continu
 a missing `ps` sample alone no longer ends a soak. It preserves a count and bounded
 recent diagnostic errors. This addresses the newer harness failure mode, and does
 not change either historical run to passed or explain the old runtime stall.
+
+A separate [Linux Go 1.26 failure in run 34170979396](https://github.com/brandopakel/keel/actions/runs/34170979396)
+reported `interrupted system call` in the new idle multiplexer test. The production
+loop already retries `EINTR`; the test now follows that same API contract. A two-
+second watchdog writes the monitored pipe so an accidental infinite wait fails
+without hanging the suite. Twenty local package repetitions pass in a guarded
+5.42-second invocation, with its cache removed afterward. The original hosted
+failure and local repeat are in `bench/results/multiplexer-eintr-regression-2026-09-07.json.gz`.
+This test correction is separate from the unresolved historical soak and Mac cases.

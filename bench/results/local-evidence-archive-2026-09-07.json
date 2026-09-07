@@ -11,6 +11,12 @@
       "digest": "sha256:51281d6099e0bcdbb9dc788e97d6daa10c7bb9856738add00e09c004fc9e76bc"
     },
     {
+      "id": 549540880,
+      "name": "pruned-local-2026-09-07-command-reservations.tar.xz",
+      "bytes": 1476780,
+      "digest": "sha256:548a9ffb2afa81c74b48555a22a1242fa776a4a7e8f4d599bc4897f1084ddf23"
+    },
+    {
       "id": 549512833,
       "name": "pruned-local-2026-09-07-manifest.json.gz",
       "bytes": 1709065,
@@ -83,7 +89,7 @@
       "digest": "sha256:aec7039c774c59bcda94f623a8b9528d06207e2dc9282879d42f39e600e3b2eb"
     }
   ],
-  "verified_files": 13,
+  "verified_files": 14,
   "note": "Owner-accessible draft evidence archive; compact conclusions and runtime source remain in ordinary repository history.",
   "source_probes_verified": true
 }
