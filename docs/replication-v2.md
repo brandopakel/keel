@@ -37,8 +37,8 @@ rate under arbitrary load.
 Snapshots are limited to 1 GiB of encoded AOF and the existing rewrite limit of
 one million keys. The receiver buffers at most 64 MiB for incomplete canonical
 operations. These bounds are experimental limits, not measured capacity claims.
-A single value or opaque image still requires synchronous serialization and
-may exceed the command limit. Such a transfer cannot establish a readable
+Opaque image construction remains synchronous. A complete value record can
+exceed the receiver command limit even when emitted in fragments; such a transfer cannot establish a readable
 replica. Hash/list/set/sorted-set rewrites yield after at most 256 entries, a
 roughly 64 KiB encoding target or a one-millisecond work slice. One oversized
 entry streams in 64 KiB fragments. Hash traversal keeps one map cursor,

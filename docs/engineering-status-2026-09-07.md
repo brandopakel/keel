@@ -36,7 +36,7 @@ Evidence: [closeout](engineering-closeout.md), [traversal](keyspace-traversal.md
 | Traversal/rewrite resources | PR #28: immutable string/member fragments, 64 KiB stream slices, dirty-name count/byte/duration budgets | Opaque image construction and filesystem writes/finalization still stall |
 | Client fairness | PR #37: bounded pipeline turns, output-drain scheduling and safe command resumption | Individual commands remain atomic; no hard latency SLA |
 | Opaque rewrites | PR #44: retain one binary image and emit 64 KiB fragments | Constructing that immutable image still requires full serialization |
-| Churn memory | PR #29/#36/#38: release large empty TTL tables and incrementally rebuild sparsely occupied TTL and lookup maps | Partially occupied pages and maps inside individual collections still retain capacity; no RSS guarantee |
+| Churn memory | PR #29/#36/#38/#45: release large empty TTL tables and incrementally rebuild sparsely occupied TTL, lookup and set membership maps | Partially occupied pages and hash/sorted-set maps still retain capacity; no RSS guarantee |
 | Allocation admission | PR #32/#35/#42: preflight amplified replies and destructive canonical records; encode accepted dumps once | Aggregate transient reservations and some opaque persistence construction remain incomplete |
 | Linux throughput | PR #30: avoid unchanged readiness registrations on Linux | Darwin optimization was deferred after unresolved Intel test failures |
 | Client compatibility | PR #39: go-redis, Redigo, redis-py, node-redis and ioredis; 35 invocations across persistence modes and two restarts | Tested RESP2 subset only; no RESP3, transactions, cluster or every library API claim |
@@ -44,9 +44,8 @@ Evidence: [closeout](engineering-closeout.md), [traversal](keyspace-traversal.md
 | Soak reporting | PR #40: stale-progress detection and a stack-producing watchdog for new soaks | The old 48-hour harness stalled; its cause is unresolved |
 | Heap validation | PR #41: larger sparse-HLL measurement population, unchanged tolerance | Process-wide heap deltas remain measurements with noise |
 
-Rewrite preflush (PR #43) and set membership-map compaction (PR #45) remain
-candidates until their final reviews and checks finish. Fairness and opaque-record
-copy reduction have merged.
+Rewrite preflush (PR #43) remains a candidate until its final review and checks
+finish. Fairness, opaque-record copy reduction and set compaction have merged.
 
 ## What the measurements establish
 
@@ -127,7 +126,9 @@ native reports are retained in
 
 Later PR #43 CI recorded a Go 1.26 Apple Silicon fairness-backpressure observation
 failure and an Intel HTTP 504 while downloading alpha.3. The download failure is
-external; the fairness observation needs diagnosis. These runs do not erase the
+external; the fairness observation remains unexplained after the same-runner diagnostic
+34131652665 passed 600 focused subcases and six complete suites. The regression
+now records the missing counter and client state if it recurs. These runs do not erase the
 passed archive evidence, nor does archive success resolve those failures.
 
 Before another release: close the remaining candidate reviews, validate the
@@ -138,13 +139,17 @@ it does not by itself validate an unpublished release archive.
 
 ## Work still requiring engineering or deployment evidence
 
-1. Complete the rewrite and set-compaction candidates, validate the final combined
-   revision and start fresh guarded long soaks. Fairness is merged; paired rewrite
-   evidence is favorable, but the final sync wakeup correction still needs validation.
+1. Close the final rewrite review and all final integration checks. Matched rewrite
+   validation now passes on the final runtime: 36 arms and 1,080,000 completed
+   requests with improved paired p99/p99.9 throughout. Guarded long soaks remain
+   pending; neither successful short checks nor earlier eight-hour runs replace them.
 2. Bound aggregate transient allocations before construction, reduce remaining
    opaque serialization pauses, and address final filesystem handoff stalls.
-3. Profile memory held inside large collections and partially occupied pages under
-   churn; preserve stable cursors and validate any compaction tradeoff.
+3. Implement and validate hash/sorted-set map compaction and address partially
+   occupied pages. The new [retention profile](collection-retention-profile.md)
+   isolates about 5.17 MB and 3.44 MB of reclaimable map capacity after a
+   100,000-to-1,000-entry shrink. These are measured targets, not shipped savings;
+   small-collection overhead and bounded traversal still need a design.
 4. Extend sustained overload, expiry/eviction/rewrite mixtures and multiple lagging
    replicas on larger deployments. Interrupted in-memory snapshots resume over a
    connection; a process crash during a snapshot still requires a new snapshot.

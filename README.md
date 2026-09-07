@@ -234,7 +234,7 @@ Runnable [Bencher, k6 and AWS DLT adapters](bench/external/README.md) are availa
 The latest published release is alpha.3. Merged development includes typed string
 storage, ordered concurrent appends, stable paged traversal/SCAN, streamed large
 collection records, replication protocol 2, additional sorted-set operations,
-TTL/lookup-map compaction, reply admission and Linux readiness optimization.
+TTL/lookup/set-map compaction, client fairness, reply admission and Linux readiness optimization.
 Five real RESP2 client libraries, scheduled capacity sweeps and larger recovery
 tests extend validation. These changes are absent from published alpha.3 archives.
 
