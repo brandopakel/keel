@@ -9,7 +9,6 @@ import argparse
 import csv
 import hashlib
 import json
-import math
 import os
 from pathlib import Path
 import platform
@@ -24,6 +23,15 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from validation_lib import Client, sha256
+
+
+def compatible_load_threads(requested, clients):
+    # Use the maximum allowed divisor, not gcd(requested, clients): the maximum
+    # need not itself divide the client count (e.g. six threads, sixteen clients).
+    for threads in range(min(requested, clients), 0, -1):
+        if clients % threads == 0:
+            return threads
+    raise ValueError('clients and requested threads must be positive')
 
 
 def scenarios():
@@ -225,9 +233,10 @@ def run_arm(args, arm, binary, case, repetition, directory):
                         return
                     stopped.wait(.1)
 
+            load_threads = compatible_load_threads(args.load_threads, case['clients'])
             common = [str(args.memtier), '-s', '127.0.0.1', '-p', str(port), '-P', 'redis',
-                      '-t', str(math.gcd(args.load_threads, case['clients'])),
-                      '-c', str(case['clients']//math.gcd(args.load_threads, case['clients'])), '--pipeline='+str(case['pipeline']),
+                      '-t', str(load_threads),
+                      '-c', str(case['clients']//load_threads), '--pipeline='+str(case['pipeline']),
                       '--key-prefix=bench:', '--key-minimum=1', '--key-maximum='+str(max(2, case['keys'])),
                       '--data-size='+str(case['size']), '--hide-histogram', '--distinct-client-seed'] + traffic_options(case)
             common = pin_command(common, args.client_cpus)

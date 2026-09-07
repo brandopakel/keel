@@ -1,0 +1,240 @@
+cache-read-1m / cpu
+File: keel-candidate
+Build ID: b3142ed193db09eabe4b40add9c3fcef5cd11426
+Type: cpu
+Time: 2026-09-07 01:15:01 PDT
+Duration: 32.29s, Total samples = 26.39s (81.72%)
+Showing nodes accounting for 24.68s, 93.52% of 26.39s total
+Dropped 209 nodes (cum <= 0.13s)
+Showing top 18 nodes out of 65
+      flat  flat%   sum%        cum   cum%
+    12.62s 47.82% 47.82%     12.62s 47.82%  internal/runtime/syscall/linux.Syscall6
+     6.48s 24.55% 72.38%      6.48s 24.55%  runtime.memmove
+     3.56s 13.49% 85.87%      3.56s 13.49%  runtime.memclrNoHeapPointers
+     1.40s  5.31% 91.17%      1.40s  5.31%  runtime.madvise
+     0.15s  0.57% 91.74%      0.25s  0.95%  runtime.typePointers.next
+     0.13s  0.49% 92.23%      0.46s  1.74%  runtime.scanObject
+     0.11s  0.42% 92.65%      0.17s  0.64%  runtime.scanblock
+     0.06s  0.23% 92.88%      0.16s  0.61%  runtime.pcvalue
+     0.04s  0.15% 93.03%      0.14s  0.53%  runtime.(*unwinder).resolveInternal
+     0.02s 0.076% 93.10%      1.44s  5.46%  runtime.(*pageAlloc).scavengeOne
+     0.02s 0.076% 93.18%      1.14s  4.32%  runtime.gcDrain
+     0.02s 0.076% 93.26%      3.09s 11.71%  runtime.systemstack
+     0.02s 0.076% 93.33%      0.16s  0.61%  runtime.tracebackPCs
+     0.01s 0.038% 93.37%      0.32s  1.21%  github.com/brandopakel/keel/internal/core.ParseCmd
+     0.01s 0.038% 93.41%      5.92s 22.43%  github.com/brandopakel/keel/internal/core.appendBulkString
+     0.01s 0.038% 93.44%      2.11s  8.00%  github.com/brandopakel/keel/internal/server.(*client).readCommands
+     0.01s 0.038% 93.48%     12.06s 45.70%  github.com/brandopakel/keel/internal/server.flushClientReplies
+     0.01s 0.038% 93.52%      1.45s  5.49%  runtime.(*pageAlloc).scavenge
+
+cache-read-1m / live-1-heap
+File: keel-candidate
+Build ID: b3142ed193db09eabe4b40add9c3fcef5cd11426
+Type: inuse_space
+Time: 2026-09-07 01:15:03 PDT
+Showing nodes accounting for 38439.13kB, 100% of 38439.13kB total
+Showing top 18 nodes out of 23
+      flat  flat%   sum%        cum   cum%
+33159.67kB 86.27% 86.27% 33159.67kB 86.27%  github.com/brandopakel/keel/internal/core.(*frameReader).bulkString
+ 1847.80kB  4.81% 91.07%  1847.80kB  4.81%  github.com/brandopakel/keel/internal/server.(*connBuffer).reserve (inline)
+ 1190.64kB  3.10% 94.17%  1190.64kB  3.10%  github.com/brandopakel/keel/internal/core.encodeString (inline)
+ 1184.27kB  3.08% 97.25%  1184.27kB  3.08%  runtime/pprof.StartCPUProfile
+  544.67kB  1.42% 98.67%   544.67kB  1.42%  github.com/brandopakel/keel/internal/server.newIOPool
+  512.08kB  1.33%   100%   512.08kB  1.33%  compress/gzip.NewWriterLevel
+         0     0%   100%  1190.64kB  3.10%  github.com/brandopakel/keel/internal/core.Encode
+         0     0%   100%  1190.64kB  3.10%  github.com/brandopakel/keel/internal/core.EvalAndResponse
+         0     0%   100% 33159.67kB 86.27%  github.com/brandopakel/keel/internal/core.ParseCmd
+         0     0%   100%  1190.64kB  3.10%  github.com/brandopakel/keel/internal/core.cmdGET
+         0     0%   100% 35007.47kB 91.07%  github.com/brandopakel/keel/internal/server.(*client).readCommands
+         0     0%   100%  1190.64kB  3.10%  github.com/brandopakel/keel/internal/server.(*client).respond
+         0     0%   100% 35007.47kB 91.07%  github.com/brandopakel/keel/internal/server.(*ioPool).run
+         0     0%   100% 35007.47kB 91.07%  github.com/brandopakel/keel/internal/server.(*ioPool).serve
+         0     0%   100% 36742.77kB 95.59%  github.com/brandopakel/keel/internal/server.RunAsyncTCPServer
+         0     0%   100%  1190.64kB  3.10%  github.com/brandopakel/keel/internal/server.executeRun
+         0     0%   100%  1190.64kB  3.10%  github.com/brandopakel/keel/internal/server.responseRw
+         0     0%   100%  1184.27kB  3.08%  main.main
+
+cache-read-1m / live-1-allocs
+File: keel-candidate
+Build ID: b3142ed193db09eabe4b40add9c3fcef5cd11426
+Type: alloc_space
+Time: 2026-09-07 01:15:03 PDT
+Showing nodes accounting for 3009.57MB, 99.93% of 3011.76MB total
+Dropped 9 nodes (cum <= 15.06MB)
+      flat  flat%   sum%        cum   cum%
+ 2323.14MB 77.14% 77.14%  2323.14MB 77.14%  github.com/brandopakel/keel/internal/core.encodeString (inline)
+  525.68MB 17.45% 94.59%   525.68MB 17.45%  github.com/brandopakel/keel/internal/server.(*connBuffer).reserve (inline)
+  160.76MB  5.34% 99.93%   160.76MB  5.34%  github.com/brandopakel/keel/internal/core.(*frameReader).bulkString
+         0     0% 99.93%  2323.14MB 77.14%  github.com/brandopakel/keel/internal/core.Encode
+         0     0% 99.93%  2323.14MB 77.14%  github.com/brandopakel/keel/internal/core.EvalAndResponse
+         0     0% 99.93%   160.76MB  5.34%  github.com/brandopakel/keel/internal/core.ParseCmd
+         0     0% 99.93%  2323.14MB 77.14%  github.com/brandopakel/keel/internal/core.cmdGET
+         0     0% 99.93%   686.43MB 22.79%  github.com/brandopakel/keel/internal/server.(*client).readCommands
+         0     0% 99.93%  2323.14MB 77.14%  github.com/brandopakel/keel/internal/server.(*client).respond
+         0     0% 99.93%   686.43MB 22.79%  github.com/brandopakel/keel/internal/server.(*ioPool).run
+         0     0% 99.93%   686.43MB 22.79%  github.com/brandopakel/keel/internal/server.(*ioPool).serve
+         0     0% 99.93%  3010.10MB 99.94%  github.com/brandopakel/keel/internal/server.RunAsyncTCPServer
+         0     0% 99.93%  2323.14MB 77.14%  github.com/brandopakel/keel/internal/server.executeRun
+         0     0% 99.93%  2323.14MB 77.14%  github.com/brandopakel/keel/internal/server.responseRw
+         0     0% 99.93%  3010.10MB 99.94%  main.runServer.func1
+
+pipeline-16 / cpu
+File: keel-candidate
+Build ID: b3142ed193db09eabe4b40add9c3fcef5cd11426
+Type: cpu
+Time: 2026-09-07 01:15:33 PDT
+Duration: 32.25s, Total samples = 32.72s (101.46%)
+Showing nodes accounting for 23.85s, 72.89% of 32.72s total
+Dropped 242 nodes (cum <= 0.16s)
+Showing top 18 nodes out of 97
+      flat  flat%   sum%        cum   cum%
+    15.87s 48.50% 48.50%     15.87s 48.50%  internal/runtime/syscall/linux.Syscall6
+     0.71s  2.17% 50.67%      0.71s  2.17%  memeqbody
+     0.68s  2.08% 52.75%      3.07s  9.38%  github.com/brandopakel/keel/internal/data_structure.(*keyMap[go.shape.struct { Value string; Access uint64 }]).position
+     0.67s  2.05% 54.80%      0.67s  2.05%  internal/runtime/maps.memHashAES
+     0.64s  1.96% 56.75%      0.64s  1.96%  runtime.memmove
+     0.60s  1.83% 58.59%      1.49s  4.55%  bytes.Index
+     0.60s  1.83% 60.42%      0.60s  1.83%  internal/runtime/maps.ctrlGroup.matchH2 (inline)
+     0.56s  1.71% 62.13%      1.39s  4.25%  runtime.mapaccess2_fast64
+     0.45s  1.38% 63.51%      1.52s  4.65%  runtime.mapaccess2_faststr
+     0.44s  1.34% 64.85%      0.47s  1.44%  github.com/brandopakel/keel/internal/data_structure.TotalKeys
+     0.44s  1.34% 66.20%      0.44s  1.34%  indexbytebody
+     0.35s  1.07% 67.27%      0.64s  1.96%  runtime.mallocgcSmallScanNoHeaderSC4
+     0.33s  1.01% 68.28%      4.98s 15.22%  github.com/brandopakel/keel/internal/core.ParseCmd
+     0.33s  1.01% 69.28%      0.69s  2.11%  runtime.mallocgcTinySC2
+     0.33s  1.01% 70.29%      0.43s  1.31%  runtime.tryDeferToSpanScan
+     0.32s  0.98% 71.27%      0.57s  1.74%  runtime.mallocgcSmallScanNoHeaderSC5
+     0.27s  0.83% 72.10%      0.37s  1.13%  runtime.typePointers.next
+     0.26s  0.79% 72.89%      0.42s  1.28%  internal/runtime/maps.(*Map).getWithoutKeySmallFastStr
+
+pipeline-16 / live-1-heap
+File: keel-candidate
+Build ID: b3142ed193db09eabe4b40add9c3fcef5cd11426
+Type: inuse_space
+Time: 2026-09-07 01:15:36 PDT
+Showing nodes accounting for 2787.04kB, 100% of 2787.04kB total
+      flat  flat%   sum%        cum   cum%
+ 1762.94kB 63.25% 63.25%  1762.94kB 63.25%  runtime/pprof.StartCPUProfile
+  512.08kB 18.37% 81.63%   512.08kB 18.37%  compress/gzip.NewWriterLevel
+  512.02kB 18.37%   100%   512.02kB 18.37%  github.com/brandopakel/keel/internal/core.ParseCmd
+         0     0%   100%   512.02kB 18.37%  github.com/brandopakel/keel/internal/server.(*client).readCommands
+         0     0%   100%   512.02kB 18.37%  github.com/brandopakel/keel/internal/server.(*ioPool).run
+         0     0%   100%   512.02kB 18.37%  github.com/brandopakel/keel/internal/server.(*ioPool).serve
+         0     0%   100%   512.02kB 18.37%  github.com/brandopakel/keel/internal/server.RunAsyncTCPServer
+         0     0%   100%  1762.94kB 63.25%  main.main
+         0     0%   100%   512.02kB 18.37%  main.runServer.func1
+         0     0%   100%  1762.94kB 63.25%  main.startProfiles
+         0     0%   100%  1762.94kB 63.25%  runtime.main
+         0     0%   100%   512.08kB 18.37%  runtime/pprof.newProfileBuilder
+         0     0%   100%   512.08kB 18.37%  runtime/pprof.profileWriter
+
+pipeline-16 / live-1-allocs
+File: keel-candidate
+Build ID: b3142ed193db09eabe4b40add9c3fcef5cd11426
+Type: alloc_space
+Time: 2026-09-07 01:15:36 PDT
+Showing nodes accounting for 252.73MB, 99.80% of 253.23MB total
+Dropped 3 nodes (cum <= 1.27MB)
+Showing top 18 nodes out of 19
+      flat  flat%   sum%        cum   cum%
+   93.01MB 36.73% 36.73%    93.01MB 36.73%  github.com/brandopakel/keel/internal/core.encodeString (inline)
+   92.50MB 36.53% 73.26%      117MB 46.20%  github.com/brandopakel/keel/internal/core.ParseCmd
+   24.50MB  9.68% 82.93%    24.50MB  9.68%  github.com/brandopakel/keel/internal/core.(*frameReader).bulkString
+      19MB  7.50% 90.43%   112.01MB 44.23%  github.com/brandopakel/keel/internal/core.cmdGET
+   18.50MB  7.31% 97.74%   135.51MB 53.51%  github.com/brandopakel/keel/internal/server.(*client).readCommands
+    3.50MB  1.38% 99.12%     3.50MB  1.38%  github.com/brandopakel/keel/internal/core.cmdSET
+    1.72MB  0.68% 99.80%     1.72MB  0.68%  runtime/pprof.StartCPUProfile
+         0     0% 99.80%    93.01MB 36.73%  github.com/brandopakel/keel/internal/core.Encode
+         0     0% 99.80%   115.51MB 45.61%  github.com/brandopakel/keel/internal/core.EvalAndResponse
+         0     0% 99.80%   115.51MB 45.61%  github.com/brandopakel/keel/internal/server.(*client).respond
+         0     0% 99.80%   135.51MB 53.51%  github.com/brandopakel/keel/internal/server.(*ioPool).run
+         0     0% 99.80%   135.51MB 53.51%  github.com/brandopakel/keel/internal/server.(*ioPool).serve
+         0     0% 99.80%   251.01MB 99.12%  github.com/brandopakel/keel/internal/server.RunAsyncTCPServer
+         0     0% 99.80%   115.51MB 45.61%  github.com/brandopakel/keel/internal/server.executeRun
+         0     0% 99.80%   115.51MB 45.61%  github.com/brandopakel/keel/internal/server.responseRw
+         0     0% 99.80%     1.72MB  0.68%  main.main
+         0     0% 99.80%   251.01MB 99.12%  main.runServer.func1
+         0     0% 99.80%     1.72MB  0.68%  main.startProfiles
+
+working-set-100k / cpu
+File: keel-candidate
+Build ID: b3142ed193db09eabe4b40add9c3fcef5cd11426
+Type: cpu
+Time: 2026-09-07 01:16:05 PDT
+Duration: 32.65s, Total samples = 31.13s (95.36%)
+Showing nodes accounting for 28.40s, 91.23% of 31.13s total
+Dropped 118 nodes (cum <= 0.16s)
+Showing top 18 nodes out of 51
+      flat  flat%   sum%        cum   cum%
+    25.86s 83.07% 83.07%     25.86s 83.07%  internal/runtime/syscall/linux.Syscall6
+     0.37s  1.19% 84.26%      0.37s  1.19%  time.runtimeNow
+     0.34s  1.09% 85.35%      0.34s  1.09%  runtime.memmove
+     0.30s  0.96% 86.32%      0.87s  2.79%  github.com/brandopakel/keel/internal/data_structure.(*keyMap[go.shape.struct { Value string; Access uint64 }]).position
+     0.20s  0.64% 86.96%      0.20s  0.64%  memeqbody
+     0.16s  0.51% 87.47%      0.16s  0.51%  internal/runtime/maps.ctrlGroup.matchH2 (inline)
+     0.14s  0.45% 87.92%      0.38s  1.22%  runtime.mapaccess2_fast64
+     0.14s  0.45% 88.37%      0.29s  0.93%  runtime.mapaccess2_faststr
+     0.13s  0.42% 88.79%      0.16s  0.51%  github.com/brandopakel/keel/internal/server.accountClient
+     0.13s  0.42% 89.21%     25.99s 83.49%  syscall.RawSyscall6
+     0.10s  0.32% 89.53%      5.43s 17.44%  github.com/brandopakel/keel/internal/server.(*client).readCommands
+     0.09s  0.29% 89.82%     24.69s 79.31%  github.com/brandopakel/keel/internal/server.(*ioPool).serve
+     0.09s  0.29% 90.11%     30.84s 99.07%  github.com/brandopakel/keel/internal/server.RunAsyncTCPServer
+     0.08s  0.26% 90.36%      0.51s  1.64%  runtime.mallocgc
+     0.07s  0.22% 90.59%      2.06s  6.62%  github.com/brandopakel/keel/internal/core.EvalAndResponse
+     0.07s  0.22% 90.81%      0.78s  2.51%  github.com/brandopakel/keel/internal/core.ParseCmd
+     0.07s  0.22% 91.04%      2.77s  8.90%  github.com/brandopakel/keel/internal/core/io_multiplexing.(*Epoll).Monitor
+     0.06s  0.19% 91.23%     24.75s 79.51%  github.com/brandopakel/keel/internal/server.(*ioPool).run
+
+working-set-100k / live-1-heap
+File: keel-candidate
+Build ID: b3142ed193db09eabe4b40add9c3fcef5cd11426
+Type: inuse_space
+Time: 2026-09-07 01:16:08 PDT
+Showing nodes accounting for 18205.82kB, 100% of 18205.82kB total
+Showing top 18 nodes out of 22
+      flat  flat%   sum%        cum   cum%
+ 7738.40kB 42.51% 42.51%  7738.40kB 42.51%  github.com/brandopakel/keel/internal/data_structure.(*keyMap[go.shape.struct { Value string; Access uint64 }]).set
+ 7680.40kB 42.19% 84.69%  7680.40kB 42.19%  github.com/brandopakel/keel/internal/core.(*frameReader).bulkString
+ 1762.94kB  9.68% 94.37%  1762.94kB  9.68%  runtime/pprof.StartCPUProfile
+  512.08kB  2.81% 97.19%   512.08kB  2.81%  compress/gzip.NewWriterLevel
+  512.01kB  2.81%   100%   512.01kB  2.81%  github.com/brandopakel/keel/internal/core.cmdGET
+         0     0%   100%  8250.41kB 45.32%  github.com/brandopakel/keel/internal/core.EvalAndResponse
+         0     0%   100%  7680.40kB 42.19%  github.com/brandopakel/keel/internal/core.ParseCmd
+         0     0%   100%  7738.40kB 42.51%  github.com/brandopakel/keel/internal/core.cmdSET
+         0     0%   100%  7738.40kB 42.51%  github.com/brandopakel/keel/internal/data_structure.(*Dict).Put
+         0     0%   100%  7680.40kB 42.19%  github.com/brandopakel/keel/internal/server.(*client).readCommands
+         0     0%   100%  8250.41kB 45.32%  github.com/brandopakel/keel/internal/server.(*client).respond
+         0     0%   100%  7680.40kB 42.19%  github.com/brandopakel/keel/internal/server.(*ioPool).run
+         0     0%   100%  7680.40kB 42.19%  github.com/brandopakel/keel/internal/server.(*ioPool).serve
+         0     0%   100% 15930.80kB 87.50%  github.com/brandopakel/keel/internal/server.RunAsyncTCPServer
+         0     0%   100%  8250.41kB 45.32%  github.com/brandopakel/keel/internal/server.executeRun
+         0     0%   100%  8250.41kB 45.32%  github.com/brandopakel/keel/internal/server.responseRw
+         0     0%   100%  1762.94kB  9.68%  main.main
+         0     0%   100% 15930.80kB 87.50%  main.runServer.func1
+
+working-set-100k / live-1-allocs
+File: keel-candidate
+Build ID: b3142ed193db09eabe4b40add9c3fcef5cd11426
+Type: alloc_space
+Time: 2026-09-07 01:16:08 PDT
+Showing nodes accounting for 69.83MB, 100% of 69.83MB total
+Showing top 18 nodes out of 24
+      flat  flat%   sum%        cum   cum%
+   22.50MB 32.22% 32.22%       35MB 50.13%  github.com/brandopakel/keel/internal/core.ParseCmd
+   12.50MB 17.90% 50.13%    12.50MB 17.90%  github.com/brandopakel/keel/internal/core.(*frameReader).bulkString
+   10.10MB 14.47% 64.59%    10.10MB 14.47%  github.com/brandopakel/keel/internal/data_structure.(*keyMap[go.shape.struct { Value string; Access uint64 }]).set
+      10MB 14.32% 78.92%       10MB 14.32%  github.com/brandopakel/keel/internal/core.encodeString (inline)
+    4.50MB  6.44% 85.36%    30.60MB 43.83%  github.com/brandopakel/keel/internal/server.executeRun
+       4MB  5.73% 91.09%    14.10MB 20.20%  github.com/brandopakel/keel/internal/core.cmdSET
+       2MB  2.86% 93.95%       37MB 52.99%  github.com/brandopakel/keel/internal/server.(*client).readCommands
+       2MB  2.86% 96.82%       12MB 17.19%  github.com/brandopakel/keel/internal/core.cmdGET
+    1.72MB  2.47% 99.28%     1.72MB  2.47%  runtime/pprof.StartCPUProfile
+    0.50MB  0.72%   100%     0.50MB  0.72%  compress/gzip.NewWriterLevel
+         0     0%   100%       10MB 14.32%  github.com/brandopakel/keel/internal/core.Encode
+         0     0%   100%    26.10MB 37.38%  github.com/brandopakel/keel/internal/core.EvalAndResponse
+         0     0%   100%    10.10MB 14.47%  github.com/brandopakel/keel/internal/data_structure.(*Dict).Put
+         0     0%   100%    26.10MB 37.38%  github.com/brandopakel/keel/internal/server.(*client).respond
+         0     0%   100%       37MB 52.99%  github.com/brandopakel/keel/internal/server.(*ioPool).run
+         0     0%   100%       37MB 52.99%  github.com/brandopakel/keel/internal/server.(*ioPool).serve
+         0     0%   100%    67.60MB 96.82%  github.com/brandopakel/keel/internal/server.RunAsyncTCPServer
+         0     0%   100%    26.10MB 37.38%  github.com/brandopakel/keel/internal/server.responseRw

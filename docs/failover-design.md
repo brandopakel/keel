@@ -127,7 +127,7 @@ recovery and promotion protocol that preserves the committed prefix.
 | Two coordinators propose different successors | Authority serializes grants and fences any former holder before the next activates |
 | Fence request fails or confirmation is lost | No successor activates; retry reconciles durable authority state |
 | Authority crashes before/after fence or grant persistence | Recovery cannot create overlapping authority; incomplete transitions fail closed |
-| Old grant delayed until after a newer grant | Old incarnation remains fenced; stale grant cannot activate |
+| Old grant delayed until after a newer grant | Old incarnation remains externally fenced and cannot serve, even if delayed local activation runs |
 | Term/data directory restored from backup | New boot starts non-serving and cannot reuse a previous activation grant |
 | Authority durable state rolls back | Authority refuses grants until an externally fenced recovery establishes fresh state |
 | Coordinator or authority unavailable | Existing unfenced primary can serve; no unverified promotion |
@@ -143,3 +143,12 @@ fault injection around each real external action and persistence boundary.
 No cloud resources are needed to review or test the model. Provisioning a fencing
 provider, native HA deployment, multi-primary operation, cluster sharding and
 consensus over the data path are not implemented by this design change.
+
+
+The finite model deliberately permits a node with an old, authentic grant to
+set its local active flag after it has lost authority. It does not give nodes an
+instantaneous oracle for the authority's current holder: a stale message or a
+process paused after validation can still reach that local instruction. The
+asserted safety property is that externally unfenced writers never overlap.
+Local stale-generation checks remain useful defense in depth once a node learns
+new state, but they do not replace the external fence.
