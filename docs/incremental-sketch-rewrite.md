@@ -68,4 +68,21 @@ Full raw reports and host records are retained in
 `bench/results/incremental-sketch-rewrite-hosted-2026-09-07.json.gz`. Public VM
 storage/tenancy remains uncontrolled, and the paired baseline predates term
 guards. No release or frozen-soak success is attributed to this candidate. It
-still needs review, the outstanding CMS gate and integrated native validation.
+still needs integrated native validation and assessment of the failed arms below.
+
+Run 34157654209 measures 500 requests/s at the same serving runtime (`c4481b7`
+changes only harness inputs). CMS and strings each complete 36 arms, 108 rewrites
+and 270,000 scheduled requests without errors or drops. CMS median scheduled
+p99.9 improves from 15.20–16.38 ms to 1.26–2.62 ms across the six combinations.
+The Morris matrix drops 1,203 requests in seven always-sync arms across both
+versions. The affected observed service-time maxima reach 146–395 ms while
+scheduler-lag maxima remain around 1–2 ms; this distinguishes waiting for service
+from generator scheduling, but does not identify the responsible filesystem or
+runtime call. Those arms fail the stricter gate and remain open operational
+evidence. The earlier complete Morris matrix is retained alongside this failure.
+Repeatedly lowering offered load until a public VM passes would not explain it.
+
+Run 34156908649 never started the rewrite jobs: GitHub rejected the numeric input
+passed through the reusable workflow. The rate is now a string, parsed and bounded
+by the harness; 34157654209 confirms all three matrices execute. Full evidence is
+in `bench/results/incremental-sketch-rewrite-500-2026-09-07.json.gz`.

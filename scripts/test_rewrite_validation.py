@@ -16,6 +16,8 @@ class RewriteCompatibilityTests(unittest.TestCase):
                 validation.require_complete_traffic(dict(complete, completed=99, **{failure: 1}), 100)
         with self.assertRaises(AssertionError):
             validation.require_complete_traffic(dict(complete, completed=99), 100)
+        with self.assertRaises(AssertionError):
+            validation.require_complete_traffic(dict(complete, scheduled=99, completed=99), 100)
 
     def test_missing_append_flag_fails_before_measurement(self):
         flags = ('host', 'port', 'appendonly', 'appendfsync', 'appendfilename',
