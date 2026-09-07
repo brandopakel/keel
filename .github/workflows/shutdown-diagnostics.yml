@@ -1,0 +1,50 @@
+name: Large-write shutdown diagnostics
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [develop]
+    paths:
+      - scripts/check-large-write-shutdown.py
+      - .github/workflows/shutdown-diagnostics.yml
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        policy: ['no', everysec]
+        mode: [sync, barrier, concurrent]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.27.1'
+      - name: Build and record exact runtime
+        run: |
+          go build -trimpath -o /tmp/keel-shutdown ./cmd/keel
+          mkdir -p dist/shutdown
+          git rev-parse HEAD > dist/shutdown/source.txt
+          go version -m /tmp/keel-shutdown > dist/shutdown/build.txt
+          df -T . > dist/shutdown/filesystem.txt
+      - name: Exercise large writes and preserve actual shutdown outcome
+        env:
+          TEST_POLICY: ${{ matrix.policy }}
+          TEST_MODE: ${{ matrix.mode }}
+        run: |
+          python3 scripts/check-large-write-shutdown.py --bin /tmp/keel-shutdown \
+            --out dist/shutdown/run --policy "$TEST_POLICY" --mode "$TEST_MODE"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: shutdown-${{ matrix.policy }}-${{ matrix.mode }}
+          path: |
+            dist/shutdown/**/*.json
+            dist/shutdown/**/*.log
+            dist/shutdown/**/*.txt
+            dist/shutdown/**/*.aof.gz
+          retention-days: 7

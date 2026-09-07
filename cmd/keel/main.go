@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -303,6 +304,12 @@ func runServer() error {
 	case <-signals:
 		return fmt.Errorf("second termination signal")
 	case <-timer.C:
+		// Capture the blocked shutdown phase before main exits. A timeout
+		// alone cannot distinguish a parked event loop from slow persistence.
+		// Bound the diagnostic allocation/output even with many connections.
+		stack := make([]byte, 1<<20)
+		n := runtime.Stack(stack, true)
+		log.Printf("shutdown timeout goroutine dump (truncated=%t):\n%s", n == len(stack), stack[:n])
 		return fmt.Errorf("shutdown exceeded five seconds")
 	}
 }
