@@ -66,7 +66,7 @@ func startReplicaTransport() (<-chan replicaUpdate, func()) {
 					var body []byte
 					parts := []string{"KEEL.REPL.PULL", epoch, strconv.FormatUint(offset, 10)}
 					if protocol == 2 {
-						parts = []string{"KEEL.REPL.PULL2", epoch, strconv.FormatUint(offset, 10), snapshotID, strconv.FormatUint(snapshotOffset, 10)}
+						parts = []string{"KEEL.REPL.PULL2", epoch, strconv.FormatUint(offset, 10), snapshotID, strconv.FormatUint(snapshotOffset, 10), strconv.FormatUint(core.CurrentTerm(), 10)}
 					}
 					body, err = replicaExchange(conn, reader, parts)
 					if err != nil {

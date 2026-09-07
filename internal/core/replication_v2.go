@@ -181,8 +181,24 @@ func cmdReplicationPullV2(args []string) []byte {
 	if !config.ReplicationFeed || config.ReplicationProtocol != 2 {
 		return Encode(errors.New("ERR replication protocol 2 is disabled"), false)
 	}
-	if len(args) != 4 {
+	if len(args) != 5 {
 		return Encode(errSyntax, false)
+	}
+	// The caller's term arrives on every pull, so a primary that has been
+	// replaced finds out from the first replica that has moved on, without
+	// waiting for a coordinator to remember to tell it.
+	callerTerm, termErr := strconv.ParseUint(args[4], 10, 64)
+	if termErr != nil {
+		return Encode(errNotAnInteger, false)
+	}
+	if err := observeTerm(callerTerm); err != nil {
+		return Encode(fmt.Errorf("ERR recording term: %w", err), false)
+	}
+	if !Writable() {
+		// A deposed primary must stop feeding replicas as well as stop taking
+		// writes: serving its own history would hand a replica a past the
+		// cluster has left.
+		return Encode(errFenced, false)
 	}
 	offset, e1 := strconv.ParseUint(args[1], 10, 64)
 	part, e2 := strconv.ParseUint(args[3], 10, 64)
@@ -192,7 +208,7 @@ func cmdReplicationPullV2(args []string) []byte {
 	if replicationV2.failed != nil {
 		return Encode(replicationV2.failed, false)
 	}
-	frame := ReplicationFrame{Version: 2, Epoch: replication.epoch, From: offset, To: offset}
+	frame := ReplicationFrame{Version: 2, Epoch: replication.epoch, From: offset, To: offset, Term: failover.term}
 	full := args[2] != "" || args[0] != replication.epoch || !historyV2Contains(offset)
 	if !full {
 		if part != 0 {

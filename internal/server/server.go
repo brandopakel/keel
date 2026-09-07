@@ -964,6 +964,12 @@ func StartAOF() error {
 	if !config.AOFEnabled {
 		return nil
 	}
+	// Before the log is read, because a node that cannot establish which term it
+	// is in must not reach the point of serving anything at that term.
+	if err := core.LoadTerm(config.AOFFileName); err != nil {
+		return err
+	}
+
 	readFrom := aofReadPath(config.AOFFileName, config.LegacyAOFFileName)
 	if readFrom != config.AOFFileName {
 		log.Printf("appendonly: reading %s, written before the rename; "+
