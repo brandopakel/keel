@@ -47,6 +47,7 @@ func closeReplicationSnapshot() {
 	replicationV2.snapshotBase = 0
 }
 func resetReplicationV2() {
+	resetReplicaAcknowledgement()
 	closeReplicationSnapshot()
 	replicationV2.end = 0
 	replicationV2.history = nil
@@ -212,6 +213,12 @@ func cmdReplicationPullV2(args []string) []byte {
 	part, e2 := strconv.ParseUint(args[3], 10, 64)
 	if e1 != nil || e2 != nil {
 		return Encode(errNotAnInteger, false)
+	}
+	// Asking to resume from an offset says everything before it has been
+	// applied. Only meaningful within this primary's own epoch: an offset from
+	// another history names a position in a stream this one never produced.
+	if args[0] == replication.epoch {
+		noteReplicaAcknowledged(offset)
 	}
 	if replicationV2.failed != nil {
 		return Encode(replicationV2.failed, false)
