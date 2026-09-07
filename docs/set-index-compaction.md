@@ -45,3 +45,12 @@ Preload verifies all 4,096 members; distinct set/zset members add a numeric
 prefix to the 64-byte payload. A four-arm local smoke passes at 1,000 requests/s;
 these are harness checks, not performance evidence. Hosted targeted capacity
 checks follow to address the memtier saturation limitation.
+
+An Intel Mac check in 34128161010 failed while draining the existing 16 MiB
+pending-reply fixture. The other client’s PINGs had completed; the timeout was
+in `reply(t, reader)`, and the captured server stack was in nonblocking socket
+write. This string-only test does not exercise set compaction. The cause is
+unresolved, and the failed run remains in
+`bench/results/set-intel-pending-reply-failure-2026-09-07.json.gz`. A same-runner
+baseline/candidate diagnostic repeats the exact test thirty times per arm and
+three full suites per arm at package concurrency four, without widening deadlines.
