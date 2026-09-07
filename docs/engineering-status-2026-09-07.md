@@ -107,10 +107,28 @@ predate the final rewrite wakeup fixes and do not qualify the final revision.
 Combined archive validation run 34128192062 failed on Linux in the latency
 diagnostic's insertion sort. The rewrite loop had already finished. The diagnostic
 now separates worker waits and uses O(n log n) sorting; PR #43 also fixes a
-reproduced idle wakeup loop while waiting for original-log sync. Final combined
-archive validation is running as 34130106439. An Intel pending-reply timeout in
+reproduced idle wakeup loop while waiting for original-log sync. Combined archive validation 34130106439 passes Linux AMD64/ARM64 and macOS
+Intel/ARM64 native execution, archive/checksum/installation checks and all nine
+alpha.2 upgrade cases on each platform (36 total). The exact source is
+`b14ffe093ff8a17f4b7a031ef6f66e383694af4c`; no tag or publication was performed. An Intel pending-reply timeout in
 PR #45 remains unexplained after thirty focused repetitions per arm and three
 full suites per arm pass on a matched host. Both failed attempts are preserved.
+
+Fresh frozen guarded runs began at 14:03 UTC on that combined source: eight-hour
+protocol-1 recovery, eight-hour concurrent protocol-2 recovery, and 48-hour
+continuous-primary protocol-2 recovery. Each is running, not passed. Binary
+SHA-256 is `227517de61bb5a9423ad6a62d337d727331166b89e1f7554743b88e859b6351d`.
+The local command `~/.local/bin/keel-current-soak-status` verifies progress and
+process identity. The Mac must remain running. The initial frozen-bundle launch
+failed before workloads because a Python dependency was omitted; the corrected
+bundle includes it and passed import preflight. Both launch attempts and all
+native reports are retained in
+`bench/results/combined-native-validation-2026-09-07.json.gz`.
+
+Later PR #43 CI recorded a Go 1.26 Apple Silicon fairness-backpressure observation
+failure and an Intel HTTP 504 while downloading alpha.3. The download failure is
+external; the fairness observation needs diagnosis. These runs do not erase the
+passed archive evidence, nor does archive success resolve those failures.
 
 Before another release: close the remaining candidate reviews, validate the
 combined revision, run guarded long workloads, repeat persistence upgrade/restart
