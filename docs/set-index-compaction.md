@@ -24,3 +24,10 @@ local tests/vet pass. Raw baseline failures and candidate evidence are in
 `bench/results/set-index-compaction-2026-09-07.json.gz`. Hosted compatibility,
 small-set memory and throughput adoption remain pending. Hash/ sorted-set maps
 and partially occupied key pages are separate remaining memory work.
+
+Review closeout strengthens the serving-maintenance test: the fixture must
+start with a pending rebuild, and the scheduled hook must finish it. This fails
+if the collection hook is removed. The live member sequence is checked exactly
+before/after maintenance. Replay deliberately checks unordered membership;
+set iteration order across restarts is not a client contract. A further large
+shrink restarts the shadow map to avoid retaining its own high-water capacity.
