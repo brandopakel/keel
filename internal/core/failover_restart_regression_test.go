@@ -47,6 +47,20 @@ func TestReplicaIsNeverReportedWritable(t *testing.T) {
 	require.False(t, Writable())
 }
 
+func TestPromotionWithoutTermStorageDoesNotFenceVolatileCache(t *testing.T) {
+	setupFailover(t)
+	require.NoError(t, CloseAOF())
+	failover = failoverState{}
+	require.Contains(t, run(t, "KEEL.PROMOTE", "42"), "requires an append-only log")
+	require.Zero(t, CurrentTerm())
+	require.True(t, Writable())
+	require.Equal(t, "OK", run(t, "SET", "still-available", "value"))
+	// FENCE conveys an observation, so it still stops the live node even when
+	// it cannot promise durable recovery of that observation.
+	require.Contains(t, run(t, "KEEL.FENCE", "42"), "recording term")
+	require.False(t, Writable())
+}
+
 func TestNonzeroTermsCannotUseProtocol1(t *testing.T) {
 	setupFailover(t)
 	oldProtocol, oldFeed := config.ReplicationProtocol, config.ReplicationFeed

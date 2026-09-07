@@ -192,6 +192,11 @@ func cmdPROMOTE(args []string) []byte {
 	if term <= failover.term {
 		return Encode(fmt.Errorf("ERR term %d is not above the current term %d", term, failover.term), false)
 	}
+	// A volatile cache cannot enable this feature. Reject the unavailable
+	// operation before treating its proposed term as an authority observation.
+	if failover.path == "" {
+		return Encode(errors.New("ERR no term file: promotion requires an append-only log"), false)
+	}
 	// On disk before a single write is taken at it.
 	if err := observeTerm(term); err != nil {
 		return Encode(fmt.Errorf("ERR persisting term: %w", err), false)

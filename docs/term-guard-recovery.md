@@ -22,6 +22,12 @@ update; it cannot falsely acknowledge an earlier failed update. A promotion
 grants local authority only after persistence succeeds. Term changes are
 published atomically to the replication transport reader.
 
+Promotion requires an append-only log and its adjacent term file. Requesting
+promotion on a volatile cache returns an error without fencing that cache: the
+unsupported request is not an authority observation. An explicit FENCE still
+stops live writes when persistence is unavailable and returns a persistence
+error. The focused race suite covers both cases.
+
 At term zero, protocol 2 retains its old four-argument pull request and omits
 the zero term from frames and checksums. Old and new processes can replicate in
 either direction, including replica checkpoint recovery and primary restart.
