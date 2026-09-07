@@ -94,3 +94,12 @@ These are public VM measurements, not dedicated-host evidence or proof of a
 general speedup. GEO is already optimized in both arms. Later reply-class,
 canonical-log growth and peak-accounting fixes require final integrated checks.
 Raw output is in `command-allocation-matched-2026-09-07.json.gz`.
+
+Matched Intel replay diagnostic 34163584482 passes six process-test runs (three
+per runtime), including 24 large-file restarts with exact membership checks.
+Identical assertions measure baseline readiness at 266–332 ms (median 303 ms)
+and candidate readiness at 293–353 ms (median 320 ms). The candidate includes
+reservations and the merged staging-release/opaque-replication changes. This
+isolated runner did not reproduce the five-second startup observation; its
+success does not establish that observation's cause. Raw logs and binary build
+metadata are retained in `command-allocation-native-replay-2026-09-07.json.gz`.
