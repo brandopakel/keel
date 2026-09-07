@@ -115,3 +115,21 @@ func TestReadWriteChoiceDoesNotPartitionTheKeyspace(t *testing.T) {
 		}
 	}
 }
+
+// Large collection replies must not allocate one discard reader per member;
+// otherwise the load generator, rather than the server, sets the plateau.
+func BenchmarkDiscardLargeCollectionReply(b *testing.B) {
+	payload := "*8192\r\n" + strings.Repeat("$64\r\n"+strings.Repeat("x", 64)+"\r\n", 8192)
+	src := strings.NewReader(payload)
+	r := bufio.NewReaderSize(src, 16<<10)
+	b.ReportAllocs()
+	b.SetBytes(int64(len(payload)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		src.Reset(payload)
+		r.Reset(src)
+		if _, err := readReply(r, 0); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

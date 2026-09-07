@@ -139,7 +139,8 @@ func readReply(r *bufio.Reader, depth int) (byte, error) {
 		return 0, errors.New("reply length limit")
 	}
 	if kind == '$' {
-		if _, err := io.CopyN(io.Discard, r, n); err != nil {
+		// Discard in-place: io.CopyN creates one LimitedReader per member.
+		if _, err := r.Discard(int(n)); err != nil {
 			return 0, err
 		}
 		a, err := r.ReadByte()
