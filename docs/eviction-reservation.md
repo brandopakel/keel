@@ -1,8 +1,8 @@
 # Reserving a transcript for eviction
 
-Status: costed and **not recommended**, September 7, 2026. Nothing here is
-implemented. The current behaviour is correct; this records why the obvious
-improvement to it is worse than it looks.
+Status: design options, September 7, 2026. Eviction reservations are not
+implemented. Keep the current drained append barrier until another path has a
+complete reservation/recovery contract and demonstrates a measured benefit.
 
 ## What happens today
 
@@ -17,9 +17,10 @@ if data_structure.TotalKeys()+newKeys > config.KeyNumberLimit ||
 }
 ```
 
-Refused means the drained barrier: correct, and slower than it might be. The
-comment invites the improvement, so it deserves an answer rather than standing
-open indefinitely.
+Refused means draining pending appends and executing this run exclusively.
+That supplies ordering; it does not prove that every temporary allocation is
+reserved before construction. The barrier's cost under sustained eviction
+still needs measurement.
 
 ## Why the reservation is hard
 
@@ -58,20 +59,19 @@ prevent.
 Free the space on the loop first, recording the actual transcript, then admit the
 run with no eviction expected.
 
-Sound, and it moves the work rather than removing it. The eviction still happens
-on the loop; the run that follows overlaps with the append instead of waiting for
-it. The gain is real but small, and it is bought with a preflight pass over the
-keyspace that runs whether or not the estimate was needed.
-
-It also does not fully close the case: `growth` is a conservative
-over-estimate, so a run admitted this way can still find itself short and evict
-anyway.
+This needs an ordered removal transcript and a proven growth bound before
+admission. A conservative bound is sufficient only if it includes every source
+of growth; omitted map, collection or metadata allocation is a defect in the
+model. Pre-eviction may remove more useful data than the command ultimately
+needs. Measure cache misses, bytes, latency and throughput before claiming a
+gain or deciding its size.
 
 ### C. Reserve the worst case
 
-`bytesToFree / smallestKeyBytes × maxDelRecord`. Correct and useless: on a
-keyspace of small keys the reservation exceeds any sane budget, so every run
-that might evict is refused — which is what happens now, with more arithmetic.
+A useful bound needs both victim count and name bytes, including lazy expiry
+and canonical side effects. A bound larger than the queue budget safely falls
+back to the barrier. Whether a tighter bound is worthwhile depends on the
+workload and eviction policy; the simple size-ratio estimate is not a proof.
 
 ### D. Keep the barrier
 
@@ -79,15 +79,11 @@ What the code does.
 
 ## Recommendation: D
 
-The condition this optimises is a server *at* its memory limit. Such a server is
-evicting on a large share of writes, which means it is already doing the work of
-choosing victims, writing removal records and updating accounting on the loop.
-The append barrier is not what is limiting it, and removing the barrier would not
-make it fast — it would make it slightly less slow while it is in trouble.
-
-The honest framing: **concurrent append is an optimisation for a healthy server,
-and a server at its eviction limit is not one.** Effort is better spent on making
-that state rarer or more visible than on shaving a barrier out of it.
+Running a cache at `maxmemory` is normal. No evidence in this proposal shows
+that victim selection dominates the append barrier or that eliminating the
+barrier would have only a small benefit. Retaining the barrier is a correctness
+fallback pending a complete alternative, not a conclusion that full-cache
+workloads are unhealthy or unimportant.
 
 ## What would change the answer
 
@@ -102,3 +98,10 @@ that state rarer or more visible than on shaving a barrier out of it.
 Either would make option B worth building. Neither is established today, and the
 comment in `aof_admission.go` should point here rather than imply the work is
 merely pending.
+
+Compare tiny keys, mixed sizes, skewed access and large collections under
+identical no/everysec/always policies. Record eviction time, transcript bytes,
+queue/barrier occupancy, acknowledgment latency, cache misses, allocation peaks,
+dropped and failed requests. Correctness gates include refused admission without
+partial command effects, long victim names, expiry, ordered replies, storage
+failure, rewrite and restart/replica recovery.
