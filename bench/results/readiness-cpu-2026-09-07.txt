@@ -1,0 +1,203 @@
+File: keel-candidate
+Build ID: 780cc483ac259efb54efa1bdafb7bd707e6d57cf
+Type: cpu
+Time: 2026-09-07 01:52:04 PDT
+Duration: 32.69s, Total samples = 31.25s (95.60%)
+Showing nodes accounting for 31.25s, 100% of 31.25s total
+      flat  flat%   sum%        cum   cum%
+    25.51s 81.63% 81.63%     25.51s 81.63%  internal/runtime/syscall/linux.Syscall6
+     0.52s  1.66% 83.30%      1.49s  4.77%  github.com/brandopakel/keel/internal/data_structure.(*keyMap[go.shape.struct { Value string; Access uint64 }]).position
+     0.46s  1.47% 84.77%      0.46s  1.47%  time.runtimeNow
+     0.42s  1.34% 86.11%      0.42s  1.34%  runtime.memmove
+     0.37s  1.18% 87.30%      0.37s  1.18%  internal/runtime/maps.ctrlGroup.matchH2 (inline)
+     0.34s  1.09% 88.38%      0.34s  1.09%  memeqbody
+     0.25s   0.8% 89.18%      0.64s  2.05%  runtime.mapaccess2_fast64
+     0.12s  0.38% 89.57%      5.26s 16.83%  github.com/brandopakel/keel/internal/server.(*client).readCommands
+     0.10s  0.32% 89.89%      0.12s  0.38%  runtime.mallocgcSmallScanNoHeaderSC3
+     0.10s  0.32% 90.21%      0.15s  0.48%  runtime.mallocgcTinySC2
+     0.09s  0.29% 90.50%      0.84s  2.69%  github.com/brandopakel/keel/internal/core.ParseCmd
+     0.09s  0.29% 90.78%      0.09s  0.29%  github.com/brandopakel/keel/internal/data_structure.TotalKeys (inline)
+     0.09s  0.29% 91.07%     26.83s 85.86%  github.com/brandopakel/keel/internal/server.(*ioPool).serve
+     0.09s  0.29% 91.36%     30.88s 98.82%  github.com/brandopakel/keel/internal/server.RunAsyncTCPServer
+     0.09s  0.29% 91.65%      0.09s  0.29%  internal/runtime/maps.memHashAES
+     0.09s  0.29% 91.94%      0.22s   0.7%  runtime.mapaccess2_faststr
+     0.09s  0.29% 92.22%     25.05s 80.16%  syscall.Syscall
+     0.08s  0.26% 92.48%     26.91s 86.11%  github.com/brandopakel/keel/internal/server.(*ioPool).run
+     0.08s  0.26% 92.74%      0.16s  0.51%  runtime.tryDeferToSpanScan
+     0.08s  0.26% 92.99%      0.54s  1.73%  time.Now
+     0.07s  0.22% 93.22%     25.58s 81.86%  syscall.RawSyscall6
+     0.06s  0.19% 93.41%      0.51s  1.63%  runtime.mallocgc
+     0.06s  0.19% 93.60%      0.07s  0.22%  runtime.mallocgcSmallScanNoHeaderSC2
+     0.06s  0.19% 93.79%      0.11s  0.35%  runtime.mallocgcSmallScanNoHeaderSC5
+     0.06s  0.19% 93.98%      0.26s  0.83%  runtime.scanObject
+     0.06s  0.19% 94.18%     21.13s 67.62%  syscall.write
+     0.05s  0.16% 94.34%      0.08s  0.26%  github.com/brandopakel/keel/internal/server.accountClient
+     0.05s  0.16% 94.50%      0.05s  0.16%  indexbody
+     0.05s  0.16% 94.66%      0.10s  0.32%  runtime.reentersyscall
+     0.05s  0.16% 94.82%      0.26s  0.83%  runtime.slicebytetostring
+     0.05s  0.16% 94.98%     21.18s 67.78%  syscall.Write (inline)
+     0.04s  0.13% 95.10%      0.13s  0.42%  bytes.Index
+     0.04s  0.13% 95.23%      0.45s  1.44%  github.com/brandopakel/keel/internal/core.(*frameReader).bulkString
+     0.04s  0.13% 95.36%      0.04s  0.13%  github.com/brandopakel/keel/internal/core.parseDecimal
+     0.04s  0.13% 95.49%      0.06s  0.19%  internal/runtime/maps.(*Map).getWithoutKeySmallFastStr
+     0.04s  0.13% 95.62%      0.09s  0.29%  runtime.mallocgcSmallNoScanSC7
+     0.04s  0.13% 95.74%      0.04s  0.13%  runtime.mallocgcSmallScanNoHeaderSC1
+     0.04s  0.13% 95.87%      0.08s  0.26%  runtime.mallocgcSmallScanNoHeaderSC4
+     0.04s  0.13% 96.00%      0.08s  0.26%  runtime.memhash
+     0.04s  0.13% 96.13%      0.04s  0.13%  runtime.spanClass.sizeclass (inline)
+     0.04s  0.13% 96.26%      0.04s  0.13%  time.now
+     0.03s 0.096% 96.35%      0.16s  0.51%  github.com/brandopakel/keel/internal/core.(*frameReader).line
+     0.03s 0.096% 96.45%      0.57s  1.82%  github.com/brandopakel/keel/internal/core.Encode
+     0.03s 0.096% 96.54%     21.63s 69.22%  github.com/brandopakel/keel/internal/server.flushClientReplies
+     0.03s 0.096% 96.64%      0.03s 0.096%  github.com/brandopakel/keel/internal/server.parsedBytes
+     0.03s 0.096% 96.74%      0.03s 0.096%  internal/runtime/atomic.(*Uint32).CompareAndSwap
+     0.03s 0.096% 96.83%      0.04s  0.13%  internal/strconv.AppendUint
+     0.03s 0.096% 96.93%      0.05s  0.16%  runtime.(*mheap).initSpan
+     0.03s 0.096% 97.02%      0.03s 0.096%  runtime.acquirem
+     0.03s 0.096% 97.12%      0.04s  0.13%  runtime.exitsyscall
+     0.03s 0.096% 97.22%      0.03s 0.096%  runtime.futex
+     0.03s 0.096% 97.31%      0.03s 0.096%  runtime.heapArenaOf
+     0.03s 0.096% 97.41%      0.03s 0.096%  runtime.newArenaMayUnlock
+     0.03s 0.096% 97.50%      4.01s 12.83%  syscall.read
+     0.02s 0.064% 97.57%      2.61s  8.35%  github.com/brandopakel/keel/internal/core.EvalAndResponse
+     0.02s 0.064% 97.63%      1.61s  5.15%  github.com/brandopakel/keel/internal/core.checkKeyTypes
+     0.02s 0.064% 97.70%      0.83s  2.66%  github.com/brandopakel/keel/internal/core/io_multiplexing.(*Epoll).Check
+     0.02s 0.064% 97.76%      0.02s 0.064%  github.com/brandopakel/keel/internal/data_structure.EachKeyspace
+     0.02s 0.064% 97.82%      0.02s 0.064%  github.com/brandopakel/keel/internal/data_structure.Touch
+     0.02s 0.064% 97.89%      0.02s 0.064%  github.com/brandopakel/keel/internal/server.(*captureWriter).Write
+     0.02s 0.064% 97.95%      2.77s  8.86%  github.com/brandopakel/keel/internal/server.executeRun
+     0.02s 0.064% 98.02%      2.63s  8.42%  github.com/brandopakel/keel/internal/server.responseRw
+     0.02s 0.064% 98.08%      0.10s  0.32%  hash/maphash.rthashString
+     0.02s 0.064% 98.14%      0.02s 0.064%  internal/runtime/atomic.(*Bool).Load
+     0.02s 0.064% 98.21%      0.02s 0.064%  internal/runtime/maps.(*groupReference).key
+     0.02s 0.064% 98.27%      0.02s 0.064%  runtime.asyncPreempt
+     0.02s 0.064% 98.34%      0.02s 0.064%  runtime.getMCache
+     0.02s 0.064% 98.40%      0.02s 0.064%  runtime.getcallerfp
+     0.02s 0.064% 98.46%      0.22s   0.7%  runtime.makeslice
+     0.02s 0.064% 98.53%      0.02s 0.064%  strings.ToUpper
+     0.01s 0.032% 98.56%      0.01s 0.032%  errors.Is
+     0.01s 0.032% 98.59%      0.21s  0.67%  github.com/brandopakel/keel/internal/core.(*frameReader).integer
+     0.01s 0.032% 98.62%      0.03s 0.096%  github.com/brandopakel/keel/internal/core.ExpireCycle
+     0.01s 0.032% 98.66%      0.01s 0.032%  github.com/brandopakel/keel/internal/core.aofBegin
+     0.01s 0.032% 98.69%      0.43s  1.38%  github.com/brandopakel/keel/internal/core.appendBulkString
+     0.01s 0.032% 98.72%      0.01s 0.032%  github.com/brandopakel/keel/internal/core.maybeRewrite
+     0.01s 0.032% 98.75%      0.01s 0.032%  github.com/brandopakel/keel/internal/core.replicaCommandError
+     0.01s 0.032% 98.78%      1.49s  4.77%  github.com/brandopakel/keel/internal/data_structure.(*keyMap[go.shape.struct { Value string; Access uint64 }]).getPtr
+     0.01s 0.032% 98.82%      1.40s  4.48%  github.com/brandopakel/keel/internal/data_structure.OwnerOf (inline)
+     0.01s 0.032% 98.85%      0.01s 0.032%  github.com/brandopakel/keel/internal/server.(*client).setInterest
+     0.01s 0.032% 98.88%      0.01s 0.032%  github.com/brandopakel/keel/internal/server.(*replyArena).reset
+     0.01s 0.032% 98.91%      0.01s 0.032%  indexbytebody
+     0.01s 0.032% 98.94%      0.01s 0.032%  internal/bytealg.Index
+     0.01s 0.032% 98.98%      0.01s 0.032%  internal/bytealg.IndexByte
+     0.01s 0.032% 99.01%      0.01s 0.032%  internal/runtime/maps.(*Map).directoryIndex
+     0.01s 0.032% 99.04%      0.01s 0.032%  internal/runtime/maps.h1
+     0.01s 0.032% 99.07%      0.01s 0.032%  internal/runtime/maps.memHash64AES
+     0.01s 0.032% 99.10%      0.01s 0.032%  runtime.(*gcBits).bytep
+     0.01s 0.032% 99.14%      0.01s 0.032%  runtime.(*gcControllerState).update
+     0.01s 0.032% 99.17%      0.13s  0.42%  runtime.(*mcache).nextFree
+     0.01s 0.032% 99.20%      0.01s 0.032%  runtime.(*mspan).initHeapBits
+     0.01s 0.032% 99.23%      0.02s 0.064%  runtime.(*mspan).nextFreeIndex
+     0.01s 0.032% 99.26%      0.02s 0.064%  runtime.(*mspan).refillAllocCache
+     0.01s 0.032% 99.30%      0.01s 0.032%  runtime.(*pageCache).alloc
+     0.01s 0.032% 99.33%      0.01s 0.032%  runtime.(*pallocBits).summarize
+     0.01s 0.032% 99.36%      0.01s 0.032%  runtime.(*scavengeIndex).free
+     0.01s 0.032% 99.39%      0.01s 0.032%  runtime.(*spanSet).push
+     0.01s 0.032% 99.42%      0.01s 0.032%  runtime.arenaIndex
+     0.01s 0.032% 99.46%      0.01s 0.032%  runtime.chanrecv
+     0.01s 0.032% 99.49%      0.08s  0.26%  runtime.convTstring
+     0.01s 0.032% 99.52%      0.13s  0.42%  runtime.entersyscall
+     0.01s 0.032% 99.55%      0.01s 0.032%  runtime.findRunnable
+     0.01s 0.032% 99.58%      0.01s 0.032%  runtime.getGCMaskOnDemand
+     0.01s 0.032% 99.62%      0.02s 0.064%  runtime.mallocgcSmallNoScanSC6
+     0.01s 0.032% 99.65%      0.01s 0.032%  runtime.mallocgcSmallScanSlowPath
+     0.01s 0.032% 99.68%      0.01s 0.032%  runtime.pcvalue
+     0.01s 0.032% 99.71%      0.01s 0.032%  runtime.publicationBarrier
+     0.01s 0.032% 99.74%      0.01s 0.032%  runtime.releasem
+     0.01s 0.032% 99.78%      0.01s 0.032%  runtime.roundupsize
+     0.01s 0.032% 99.81%      0.01s 0.032%  runtime.save
+     0.01s 0.032% 99.84%      0.01s 0.032%  runtime.spanClass.noscan
+     0.01s 0.032% 99.87%      0.04s  0.13%  runtime.sweepone
+     0.01s 0.032% 99.90%      0.03s 0.096%  runtime.typePointers.next
+     0.01s 0.032% 99.94%      0.01s 0.032%  runtime.typePointers.nextFast
+     0.01s 0.032%   100%      0.81s  2.59%  syscall.EpollWait
+     0.01s 0.032%   100%      0.80s  2.56%  syscall.Syscall6
+         0     0%   100%      0.02s 0.064%  bytes.IndexByte
+         0     0%   100%      0.01s 0.032%  github.com/brandopakel/keel/internal/core.FlushAOF
+         0     0%   100%      0.02s 0.064%  github.com/brandopakel/keel/internal/core.KeysWithExpiry
+         0     0%   100%      0.80s  2.56%  github.com/brandopakel/keel/internal/core.cmdGET
+         0     0%   100%      0.02s 0.064%  github.com/brandopakel/keel/internal/core.cmdSET
+         0     0%   100%      0.07s  0.22%  github.com/brandopakel/keel/internal/core.commandKeys
+         0     0%   100%      0.54s  1.73%  github.com/brandopakel/keel/internal/core.encodeString (inline)
+         0     0%   100%      0.15s  0.48%  github.com/brandopakel/keel/internal/data_structure.(*Dict).Get
+         0     0%   100%      1.37s  4.38%  github.com/brandopakel/keel/internal/data_structure.(*Dict).Has
+         0     0%   100%      0.01s 0.032%  github.com/brandopakel/keel/internal/data_structure.(*Dict).HasExpired
+         0     0%   100%      0.02s 0.064%  github.com/brandopakel/keel/internal/data_structure.(*Dict).Put
+         0     0%   100%      0.02s 0.064%  github.com/brandopakel/keel/internal/data_structure.(*Keyed[go.shape.*uint8]).Exists
+         0     0%   100%      0.02s 0.064%  github.com/brandopakel/keel/internal/data_structure.(*Keyed[go.shape.*uint8]).Has
+         0     0%   100%      0.02s 0.064%  github.com/brandopakel/keel/internal/data_structure.(*keyMap[go.shape.struct { Value string; Access uint64 }]).set
+         0     0%   100%      0.02s 0.064%  github.com/brandopakel/keel/internal/data_structure.(*keyMap[go.shape.struct { github.com/brandopakel/keel/internal/data_structure.value go.shape.*uint8; github.com/brandopakel/keel/internal/data_structure.access uint64; github.com/brandopakel/keel/internal/data_structure.bytes uint64 }]).getPtr
+         0     0%   100%      0.02s 0.064%  github.com/brandopakel/keel/internal/data_structure.(*keyMap[go.shape.struct { github.com/brandopakel/keel/internal/data_structure.value go.shape.*uint8; github.com/brandopakel/keel/internal/data_structure.access uint64; github.com/brandopakel/keel/internal/data_structure.bytes uint64 }]).position
+         0     0%   100%      0.09s  0.29%  github.com/brandopakel/keel/internal/data_structure.EnforceLimits
+         0     0%   100%      0.09s  0.29%  github.com/brandopakel/keel/internal/data_structure.overLimit
+         0     0%   100%      2.63s  8.42%  github.com/brandopakel/keel/internal/server.(*client).respond
+         0     0%   100%      0.01s 0.032%  github.com/brandopakel/keel/internal/server.shuttingDown
+         0     0%   100%      0.10s  0.32%  hash/maphash.String
+         0     0%   100%      0.08s  0.26%  hash/maphash.rthash (inline)
+         0     0%   100%      0.04s  0.13%  internal/runtime/maps.MemHash
+         0     0%   100%      0.04s  0.13%  internal/strconv.AppendInt
+         0     0%   100%     30.88s 98.82%  main.runServer.func1
+         0     0%   100%      0.10s  0.32%  runtime.(*mcache).refill
+         0     0%   100%      0.08s  0.26%  runtime.(*mcentral).cacheSpan
+         0     0%   100%      0.07s  0.22%  runtime.(*mcentral).grow
+         0     0%   100%      0.01s 0.032%  runtime.(*mcentral).uncacheSpan
+         0     0%   100%      0.06s  0.19%  runtime.(*mheap).alloc
+         0     0%   100%      0.06s  0.19%  runtime.(*mheap).alloc.func1
+         0     0%   100%      0.06s  0.19%  runtime.(*mheap).allocSpan
+         0     0%   100%      0.02s 0.064%  runtime.(*mheap).freeSpan
+         0     0%   100%      0.02s 0.064%  runtime.(*mheap).freeSpan.func1
+         0     0%   100%      0.02s 0.064%  runtime.(*mheap).freeSpanLocked
+         0     0%   100%      0.02s 0.064%  runtime.(*pageAlloc).free
+         0     0%   100%      0.01s 0.032%  runtime.(*pageAlloc).update
+         0     0%   100%      0.03s 0.096%  runtime.(*sweepLocked).sweep
+         0     0%   100%      0.01s 0.032%  runtime.(*unwinder).next
+         0     0%   100%      0.01s 0.032%  runtime.(*unwinder).resolveInternal
+         0     0%   100%      0.04s  0.13%  runtime.bgsweep
+         0     0%   100%      0.01s 0.032%  runtime.callers
+         0     0%   100%      0.01s 0.032%  runtime.callers.func1
+         0     0%   100%      0.01s 0.032%  runtime.funcspdelta
+         0     0%   100%      0.03s 0.096%  runtime.futexwakeup
+         0     0%   100%      0.01s 0.032%  runtime.gcAssistAlloc
+         0     0%   100%      0.01s 0.032%  runtime.gcAssistAlloc.func2
+         0     0%   100%      0.01s 0.032%  runtime.gcAssistAlloc1
+         0     0%   100%      0.25s   0.8%  runtime.gcBgMarkWorker
+         0     0%   100%      0.25s   0.8%  runtime.gcBgMarkWorker.func2
+         0     0%   100%      0.25s   0.8%  runtime.gcDrain
+         0     0%   100%      0.04s  0.13%  runtime.gcDrainMarkWorkerFractional (inline)
+         0     0%   100%      0.21s  0.67%  runtime.gcDrainMarkWorkerIdle (inline)
+         0     0%   100%      0.01s 0.032%  runtime.gcDrainN
+         0     0%   100%      0.01s 0.032%  runtime.getGCMask
+         0     0%   100%      0.03s 0.096%  runtime.gopreempt_m
+         0     0%   100%      0.04s  0.13%  runtime.goschedImpl
+         0     0%   100%      0.01s 0.032%  runtime.gosched_m
+         0     0%   100%      0.01s 0.032%  runtime.greyobject
+         0     0%   100%      0.07s  0.22%  runtime.growslice
+         0     0%   100%      0.01s 0.032%  runtime.mProf_Malloc
+         0     0%   100%      0.02s 0.064%  runtime.mallocgcSmallNoScanSlowPath
+         0     0%   100%      0.07s  0.22%  runtime.mapaccess1_fast64
+         0     0%   100%      0.03s 0.096%  runtime.mapaccess1_faststr
+         0     0%   100%      0.01s 0.032%  runtime.mapassign_fast64
+         0     0%   100%      0.01s 0.032%  runtime.mcall
+         0     0%   100%      0.03s 0.096%  runtime.morestack
+         0     0%   100%      0.03s 0.096%  runtime.newMarkBits
+         0     0%   100%      0.03s 0.096%  runtime.newstack
+         0     0%   100%      0.03s 0.096%  runtime.notewakeup
+         0     0%   100%      0.01s 0.032%  runtime.pageIndexOf
+         0     0%   100%      0.01s 0.032%  runtime.profilealloc
+         0     0%   100%      0.01s 0.032%  runtime.schedule
+         0     0%   100%      0.01s 0.032%  runtime.selectnbrecv
+         0     0%   100%      0.03s 0.096%  runtime.startm
+         0     0%   100%      0.35s  1.12%  runtime.systemstack
+         0     0%   100%      0.01s 0.032%  runtime.tracebackPCs
+         0     0%   100%      0.03s 0.096%  runtime.wakep
+         0     0%   100%      0.04s  0.13%  strconv.AppendInt (inline)
+         0     0%   100%      4.01s 12.83%  syscall.Read (inline)
