@@ -1,0 +1,136 @@
+Baseline: 2a34ce5900692d83a78f0e0a2782b4f5f47f6414
+Candidate: this commit
+
+/tmp/keel-fairness-valid-before.txt
+=== RUN   TestExecuteRunYieldsDeepPipelines
+    fairness_before_test.go:20: 
+        	Error Trace:	/Users/brandopakel/keel-fairness-baseline/internal/server/fairness_before_test.go:20
+        	Error:      	"0" is not greater than or equal to "193"
+        	Test:       	TestExecuteRunYieldsDeepPipelines
+        	Messages:   	at most 64 commands per turn
+--- FAIL: TestExecuteRunYieldsDeepPipelines (0.00s)
+=== RUN   TestReadCommandsBoundsDecodedPipelines
+    fairness_before_test.go:41: 
+        	Error Trace:	/Users/brandopakel/keel-fairness-baseline/internal/server/fairness_before_test.go:41
+        	Error:      	"129" is not less than or equal to "64"
+        	Test:       	TestReadCommandsBoundsDecodedPipelines
+--- FAIL: TestReadCommandsBoundsDecodedPipelines (0.00s)
+=== RUN   TestLargeFirstReplyYieldsWithoutArenaCopy
+    fairness_before_test.go:62: 
+        	Error Trace:	/Users/brandopakel/keel-fairness-baseline/internal/server/fairness_before_test.go:62
+        	Error:      	"[]" should have 1 item(s), but has 0
+        	Test:       	TestLargeFirstReplyYieldsWithoutArenaCopy
+--- FAIL: TestLargeFirstReplyYieldsWithoutArenaCopy (0.00s)
+FAIL
+FAIL	github.com/brandopakel/keel/internal/server	0.282s
+FAIL
+
+/tmp/keel-fairness-valid-after.txt
+=== RUN   TestExecuteRunYieldsDeepPipelines
+    fairness_test.go:27: client struct bytes=200
+--- PASS: TestExecuteRunYieldsDeepPipelines (0.00s)
+=== RUN   TestReadCommandsBoundsDecodedPipelines
+--- PASS: TestReadCommandsBoundsDecodedPipelines (0.00s)
+=== RUN   TestLargeFirstReplyYieldsWithoutArenaCopy
+--- PASS: TestLargeFirstReplyYieldsWithoutArenaCopy (0.00s)
+=== RUN   TestQueuedReadsRejectClosedReusedAndBlockedConnections
+--- PASS: TestQueuedReadsRejectClosedReusedAndBlockedConnections (0.00s)
+=== RUN   TestPipelineContinuationWaitsForAppendAndReplyDrain
+--- PASS: TestPipelineContinuationWaitsForAppendAndReplyDrain (0.00s)
+PASS
+ok  	github.com/brandopakel/keel/internal/server	0.359s
+
+/tmp/keel-fairness-partial-fixed.txt
+=== RUN   TestSlowReaderDoesNotBlockOtherClients
+=== RUN   TestSlowReaderDoesNotBlockOtherClients/1
+=== RUN   TestSlowReaderDoesNotBlockOtherClients/4
+--- PASS: TestSlowReaderDoesNotBlockOtherClients (0.03s)
+    --- PASS: TestSlowReaderDoesNotBlockOtherClients/1 (0.01s)
+    --- PASS: TestSlowReaderDoesNotBlockOtherClients/4 (0.01s)
+=== RUN   TestPendingRepliesSurviveOtherTraffic
+=== RUN   TestPendingRepliesSurviveOtherTraffic/kqueue
+=== RUN   TestPendingRepliesSurviveOtherTraffic/kqueue-nobuf
+--- PASS: TestPendingRepliesSurviveOtherTraffic (0.14s)
+    --- PASS: TestPendingRepliesSurviveOtherTraffic/kqueue (0.07s)
+    --- PASS: TestPendingRepliesSurviveOtherTraffic/kqueue-nobuf (0.07s)
+=== RUN   TestDeepPipelineProgressOrderAndRestart
+=== RUN   TestDeepPipelineProgressOrderAndRestart/1/off
+=== RUN   TestDeepPipelineProgressOrderAndRestart/1/barrier
+=== RUN   TestDeepPipelineProgressOrderAndRestart/1/concurrent
+=== RUN   TestDeepPipelineProgressOrderAndRestart/4/off
+=== RUN   TestDeepPipelineProgressOrderAndRestart/4/barrier
+=== RUN   TestDeepPipelineProgressOrderAndRestart/4/concurrent
+--- PASS: TestDeepPipelineProgressOrderAndRestart (1.00s)
+    --- PASS: TestDeepPipelineProgressOrderAndRestart/1/off (0.01s)
+    --- PASS: TestDeepPipelineProgressOrderAndRestart/1/barrier (0.24s)
+    --- PASS: TestDeepPipelineProgressOrderAndRestart/1/concurrent (0.24s)
+    --- PASS: TestDeepPipelineProgressOrderAndRestart/4/off (0.01s)
+    --- PASS: TestDeepPipelineProgressOrderAndRestart/4/barrier (0.24s)
+    --- PASS: TestDeepPipelineProgressOrderAndRestart/4/concurrent (0.25s)
+=== RUN   TestSlowReaderDoesNotBlockOtherClients
+=== RUN   TestSlowReaderDoesNotBlockOtherClients/1
+=== RUN   TestSlowReaderDoesNotBlockOtherClients/4
+--- PASS: TestSlowReaderDoesNotBlockOtherClients (0.03s)
+    --- PASS: TestSlowReaderDoesNotBlockOtherClients/1 (0.01s)
+    --- PASS: TestSlowReaderDoesNotBlockOtherClients/4 (0.02s)
+=== RUN   TestPendingRepliesSurviveOtherTraffic
+=== RUN   TestPendingRepliesSurviveOtherTraffic/kqueue
+=== RUN   TestPendingRepliesSurviveOtherTraffic/kqueue-nobuf
+--- PASS: TestPendingRepliesSurviveOtherTraffic (0.14s)
+    --- PASS: TestPendingRepliesSurviveOtherTraffic/kqueue (0.07s)
+    --- PASS: TestPendingRepliesSurviveOtherTraffic/kqueue-nobuf (0.07s)
+=== RUN   TestDeepPipelineProgressOrderAndRestart
+=== RUN   TestDeepPipelineProgressOrderAndRestart/1/off
+=== RUN   TestDeepPipelineProgressOrderAndRestart/1/barrier
+=== RUN   TestDeepPipelineProgressOrderAndRestart/1/concurrent
+=== RUN   TestDeepPipelineProgressOrderAndRestart/4/off
+=== RUN   TestDeepPipelineProgressOrderAndRestart/4/barrier
+=== RUN   TestDeepPipelineProgressOrderAndRestart/4/concurrent
+--- PASS: TestDeepPipelineProgressOrderAndRestart (0.98s)
+    --- PASS: TestDeepPipelineProgressOrderAndRestart/1/off (0.01s)
+    --- PASS: TestDeepPipelineProgressOrderAndRestart/1/barrier (0.24s)
+    --- PASS: TestDeepPipelineProgressOrderAndRestart/1/concurrent (0.21s)
+    --- PASS: TestDeepPipelineProgressOrderAndRestart/4/off (0.01s)
+    --- PASS: TestDeepPipelineProgressOrderAndRestart/4/barrier (0.25s)
+    --- PASS: TestDeepPipelineProgressOrderAndRestart/4/concurrent (0.25s)
+=== RUN   TestSlowReaderDoesNotBlockOtherClients
+=== RUN   TestSlowReaderDoesNotBlockOtherClients/1
+=== RUN   TestSlowReaderDoesNotBlockOtherClients/4
+--- PASS: TestSlowReaderDoesNotBlockOtherClients (0.03s)
+    --- PASS: TestSlowReaderDoesNotBlockOtherClients/1 (0.02s)
+    --- PASS: TestSlowReaderDoesNotBlockOtherClients/4 (0.02s)
+=== RUN   TestPendingRepliesSurviveOtherTraffic
+=== RUN   TestPendingRepliesSurviveOtherTraffic/kqueue
+=== RUN   TestPendingRepliesSurviveOtherTraffic/kqueue-nobuf
+--- PASS: TestPendingRepliesSurviveOtherTraffic (0.14s)
+    --- PASS: TestPendingRepliesSurviveOtherTraffic/kqueue (0.07s)
+    --- PASS: TestPendingRepliesSurviveOtherTraffic/kqueue-nobuf (0.07s)
+=== RUN   TestDeepPipelineProgressOrderAndRestart
+=== RUN   TestDeepPipelineProgressOrderAndRestart/1/off
+=== RUN   TestDeepPipelineProgressOrderAndRestart/1/barrier
+=== RUN   TestDeepPipelineProgressOrderAndRestart/1/concurrent
+=== RUN   TestDeepPipelineProgressOrderAndRestart/4/off
+=== RUN   TestDeepPipelineProgressOrderAndRestart/4/barrier
+=== RUN   TestDeepPipelineProgressOrderAndRestart/4/concurrent
+--- PASS: TestDeepPipelineProgressOrderAndRestart (1.11s)
+    --- PASS: TestDeepPipelineProgressOrderAndRestart/1/off (0.01s)
+    --- PASS: TestDeepPipelineProgressOrderAndRestart/1/barrier (0.27s)
+    --- PASS: TestDeepPipelineProgressOrderAndRestart/1/concurrent (0.27s)
+    --- PASS: TestDeepPipelineProgressOrderAndRestart/4/off (0.01s)
+    --- PASS: TestDeepPipelineProgressOrderAndRestart/4/barrier (0.27s)
+    --- PASS: TestDeepPipelineProgressOrderAndRestart/4/concurrent (0.28s)
+PASS
+ok  	github.com/brandopakel/keel/cmd/keel	3.886s
+
+/tmp/keel-fairness-full-fixed.txt
+ok  	github.com/brandopakel/keel/cmd/keel	20.925s
+?   	github.com/brandopakel/keel/internal/config	[no test files]
+?   	github.com/brandopakel/keel/internal/constant	[no test files]
+ok  	github.com/brandopakel/keel/internal/core	(cached)
+ok  	github.com/brandopakel/keel/internal/core/io_multiplexing	(cached)
+ok  	github.com/brandopakel/keel/internal/data_structure	(cached)
+ok  	github.com/brandopakel/keel/internal/server	0.622s
+
+/tmp/keel-fairness-race.txt
+ok  	github.com/brandopakel/keel/internal/server	1.643s
+ok  	github.com/brandopakel/keel/cmd/keel	21.066s
