@@ -225,7 +225,7 @@ func OpenAOF(path string) error {
 func CloseAOF() error {
 	closeReplicationSnapshot()
 	CancelRewrite()
-	_, _ = pollRewriteSync(true)
+	_, _ = pollRewriteIO(true)
 	if aof.file == nil {
 		return nil
 	}
@@ -406,7 +406,8 @@ func flushAOF(closing bool) error {
 		return aof.failed
 	}
 	if len(aof.buf) > 0 {
-		n, err := aof.file.Write(aof.buf)
+		n, err := timedPersistenceWrite(&appendWriteStats, aof.file, aof.buf,
+			func(f *os.File, body []byte) (int, error) { return f.Write(body) })
 		recordAOFDigest(aof.buf[:n])
 		aof.written += int64(n)
 		appendStarted += uint64(n)
@@ -437,7 +438,7 @@ func flushAOF(closing bool) error {
 			// Writes during this Sync stay dirty and require another sync.
 			aof.dirty = false
 			go func() {
-				result <- syncFile(file)
+				result <- timedPersistenceSync(&appendSyncStats, file, syncFile)
 				if wake != nil {
 					wake()
 				}
@@ -445,7 +446,7 @@ func flushAOF(closing bool) error {
 			appendCompleted = appendWritten
 			return nil
 		}
-		if err := aofSync(aof.file); err != nil {
+		if err := timedPersistenceSync(&appendSyncStats, aof.file, aofSync); err != nil {
 			aof.failed = err
 			return err
 		}

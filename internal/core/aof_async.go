@@ -98,13 +98,13 @@ func FlushAOFAsync(wake func()) (ready bool, err error) {
 	appendStarted += uint64(len(body))
 	end := appendStarted
 	go func() {
-		n, err := writeFile(file, body)
+		n, err := timedPersistenceWrite(&appendWriteStats, file, body, writeFile)
 		if err == nil && n != len(body) {
 			err = io.ErrShortWrite
 		}
 		synced := false
 		if err == nil && always {
-			err = syncFile(file)
+			err = timedPersistenceSync(&appendSyncStats, file, syncFile)
 			synced = err == nil
 		}
 		result <- appendResult{n: n, err: err, synced: synced, end: end, body: body}
