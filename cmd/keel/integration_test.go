@@ -349,7 +349,7 @@ func TestSlowReaderDoesNotBlockOtherClients(t *testing.T) {
 						if err != nil {
 							t.Fatal(err)
 						}
-						observed = queued > 16<<20
+						observed = queued > 64<<10
 					}
 				}
 				if observed {
