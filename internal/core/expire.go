@@ -82,13 +82,14 @@ var _ = data_structure.TotalKeys
 func MaintainMemory() int {
 	work := 0
 	deadline := time.Now().Add(time.Millisecond)
-	memoryCursor = data_structure.EachKeyspaceFrom(memoryCursor, func(ks data_structure.Keyspace) {
+	memoryCursor = data_structure.VisitKeyspacesFrom(memoryCursor, func(ks data_structure.Keyspace) bool {
 		if work >= data_structure.ScanMaxWork || time.Now().After(deadline) {
-			return
+			return false
 		}
 		if compact, ok := ks.(interface{ CompactExpiry(int) int }); ok {
 			work += compact.CompactExpiry(data_structure.ScanMaxWork - work)
 		}
+		return work < data_structure.ScanMaxWork && time.Now().Before(deadline)
 	})
 	return work
 }
