@@ -69,14 +69,16 @@ var nextAutoRewrite time.Time
 
 // rewrite is the state of the walk in progress, if there is one.
 var rewrite struct {
-	active     bool
-	started    time.Time
-	path       string
-	tmpPath    string
-	file       *os.File
-	digest     hash.Hash
-	hashCursor *data_structure.HashCursor
-	written    int64
+	active          bool
+	started         time.Time
+	path            string
+	tmpPath         string
+	file            *os.File
+	digest          hash.Hash
+	hashCursor      *data_structure.HashCursor
+	written         int64
+	syncedBytes     int64
+	preSyncComplete bool
 
 	// The walker retains only one slot limit per store. keys is one bounded
 	// name batch, not a snapshot of the whole keyspace.
@@ -112,6 +114,9 @@ func StartRewrite() error {
 	if rewrite.active {
 		return fmt.Errorf("a rewrite is already running")
 	}
+	if ready, _ := pollRewriteSync(false); !ready {
+		return fmt.Errorf("previous rewrite sync is still releasing its file")
+	}
 	if AppendPending() || (config.AOFAsyncAppend && len(aof.buf) > 0) {
 		return fmt.Errorf("rewrite waits for pending append; retry after the write reply")
 	}
@@ -143,6 +148,8 @@ func StartRewrite() error {
 		rewrite.digest = sha256.New()
 	}
 	rewrite.written = 0
+	rewrite.syncedBytes = -1
+	rewrite.preSyncComplete = false
 	rewrite.pos = 0
 	rewrite.batchPos = 0
 	rewrite.initialKeys = data_structure.TotalKeys()
@@ -174,6 +181,12 @@ func AdvanceRewrite() error {
 		rewriteBudgetAborts++
 		abortRewrite(fmt.Errorf("rewrite exceeded duration or dirty-key budget"))
 		return nil // the original log continues to contain every write
+	}
+	if ready, err := pollRewriteSync(false); err != nil {
+		abortRewrite(err)
+		return err
+	} else if !ready {
+		return nil
 	}
 	// Once the snapshot walk is done, retain changed key names until the sync
 	// worker releases the old descriptor. Re-emitting hot keys every cycle
@@ -417,9 +430,19 @@ func finishRewrite() error {
 		return nil
 	}
 
-	if err := rewrite.file.Sync(); err != nil {
-		abortRewrite(err)
-		return err
+	if !rewrite.preSyncComplete {
+		startRewriteSync()
+		return nil
+	}
+	if rewrite.syncedBytes != rewrite.written {
+		// Preflush the bulk snapshot once, then synchronize only the dirty
+		// suffix at the existing atomic handoff. Repeated asynchronous retries
+		// could otherwise starve forever under a continuous write stream.
+		if err := rewriteFileSync(rewrite.file); err != nil {
+			abortRewrite(err)
+			return err
+		}
+		rewrite.syncedBytes = rewrite.written
 	}
 	if err := rewrite.file.Close(); err != nil {
 		abortRewrite(err)
@@ -479,10 +502,14 @@ func finishRewrite() error {
 func abortRewrite(cause error) {
 	rewrite.hashCursor = nil
 	nextAutoRewrite = time.Now().Add(time.Minute)
-	if rewrite.file != nil {
+	workerOwnsFile := pendingRewriteSync != nil && pendingRewriteSync.abandon()
+	if !workerOwnsFile && rewrite.file != nil {
 		rewrite.file.Close()
 	}
-	os.Remove(rewrite.tmpPath)
+	if !workerOwnsFile {
+		os.Remove(rewrite.tmpPath)
+		pendingRewriteSync = nil
+	}
 	rewrite.active = false
 	rewrite.keys = nil
 	rewrite.walk = nil
@@ -584,6 +611,12 @@ func RewriteAOF() error {
 	}
 	for rewrite.active {
 		if err := AdvanceRewrite(); err != nil {
+			return err
+		}
+		// This helper is deliberately synchronous and is never the serving
+		// loop. Waiting here also avoids spinning while the worker owns Sync.
+		if _, err := pollRewriteSync(true); err != nil {
+			abortRewrite(err)
 			return err
 		}
 	}

@@ -37,6 +37,7 @@ func TestRewriteStreamsOversizedRecordsAcrossMutation(t *testing.T) {
 				expected := emitKey(nil, key)
 				require.NoError(t, StartRewrite())
 				require.NoError(t, AdvanceRewrite())
+				waitForRewriteSync(t)
 				require.NotNil(t, rewrite.stream, "a large record must yield before completion")
 				require.LessOrEqual(t, rewrite.written, int64(rewriteRecordSlice))
 				switch mutation {
@@ -50,6 +51,7 @@ func TestRewriteStreamsOversizedRecordsAcrossMutation(t *testing.T) {
 					require.Less(t, cycles, 100)
 					before := rewrite.written
 					require.NoError(t, AdvanceRewrite())
+					waitForRewriteSync(t)
 					require.LessOrEqual(t, rewrite.written-before, int64(rewriteRecordSlice), "one-key records must be emitted in bounded slices")
 				}
 				require.NoError(t, CloseAOF())
@@ -81,6 +83,7 @@ func TestCancelPartialRewriteKeepsOriginalLog(t *testing.T) {
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
 	require.NoError(t, AdvanceRewrite())
+	waitForRewriteSync(t)
 	runtime.ReadMemStats(&after)
 	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(256<<10), "starting a large record must not allocate a whole encoded copy")
 	require.NotNil(t, rewrite.stream)

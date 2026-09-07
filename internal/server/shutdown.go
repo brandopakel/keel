@@ -59,10 +59,11 @@ func setWaker(f func()) {
 
 func wake() {
 	wakeMu.Lock()
-	f := wakeFn
-	wakeMu.Unlock()
-	if f != nil {
-		f()
+	defer wakeMu.Unlock()
+	// Detaching waits for the active callback before its owner closes/reuses
+	// descriptors. Registered callbacks must not register another waker.
+	if wakeFn != nil {
+		wakeFn()
 	}
 }
 
