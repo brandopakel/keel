@@ -78,20 +78,47 @@ func TestCheckIsLevelTriggered(t *testing.T) {
 	var buf [1]byte
 	syscall.Read(r, buf[:])
 
-	// Drained, the pipe is no longer reported; a write from elsewhere is
-	// what ends the wait. The writer records that it has written before it
-	// writes, so Check returning proves the write happened first - without a
-	// measured duration, which a slow scheduler could make wrong either way.
+	// Drained, the pipe is no longer reported. Check may now return empty when
+	// its interval passes, so the property is that it never reports a
+	// descriptor that is not ready - not that it only returns when one is.
+	// The writer records that it has written before it writes, so an event
+	// proves the write happened first, without measuring a duration that a
+	// slow scheduler could make wrong either way.
 	var written atomic.Bool
 	go func() {
 		time.Sleep(20 * time.Millisecond)
 		written.Store(true)
 		syscall.Write(w, []byte{2})
 	}()
+	for {
+		events, err := mux.Check()
+		assert.NoError(t, err)
+		if len(events) == 0 {
+			continue // the interval passed with nothing ready
+		}
+		assert.Len(t, events, 1)
+		assert.True(t, written.Load(), "Check reported a descriptor before anything was written")
+		return
+	}
+}
+
+// The bounded wait is what lets the event loop keep to its own schedule and
+// recover if a descriptor is ever left unregistered while a reply is owed.
+// Without it an idle loop parks in the syscall and never turns again.
+func TestCheckReturnsWithoutAnyDescriptorBecomingReady(t *testing.T) {
+	mux, err := CreateIOMultiplexer()
+	assert.NoError(t, err)
+	defer mux.Close()
+
+	r, _ := pipe(t)
+	assert.NoError(t, mux.Monitor(Event{Fd: r, Op: OpRead}))
+
+	start := time.Now()
 	events, err := mux.Check()
 	assert.NoError(t, err)
-	assert.Len(t, events, 1)
-	assert.True(t, written.Load(), "Check returned before anything was written")
+	assert.Empty(t, events, "nothing was written, so nothing is ready")
+	assert.Less(t, time.Since(start), 20*CheckInterval,
+		"an idle Check must return on its own rather than parking forever")
 }
 
 func TestClosedWriteEndReadsAsReadable(t *testing.T) {

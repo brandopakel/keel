@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRejectedCollectionPopsPreservePipelineAndRestart(t *testing.T) {
@@ -66,7 +67,11 @@ func TestRejectedCollectionPopsPreservePipelineAndRestart(t *testing.T) {
 			s.stop(t)
 			if mode != "off" {
 				for i := 0; i < 2; i++ {
-					s = startTestServer(t, flags...)
+					// Replaying this roughly 195 MiB fixture exceeded the generic
+					// five-second startup deadline on Intel CI. Record recovery time
+					// and give this large-file correctness check an explicit budget.
+					s = startTestServerWithin(t, 30*time.Second, flags...)
+					t.Logf("large collection replay %d ready in %s", i+1, s.startupElapsed)
 					c, r = connectTest(t, s)
 					verify()
 					if err := c.Close(); err != nil {

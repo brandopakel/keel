@@ -125,8 +125,8 @@ func zpop(args []string, reverse bool) []byte {
 	count = min(count, z.Len())
 	walk := func(yield func(string, float64) bool) { z.VisitRangeByRank(0, count-1, reverse, yield) }
 	names := replyWalk(func(yield func(string) bool) { walk(func(member string, _ float64) bool { return yield(member) }) })
-	if !removalFits("ZREM", args[0], count, names) {
-		return replyTooLarge
+	if refusal := reserveRemoval("ZREM", args[0], count, names); refusal != nil {
+		return refusal
 	}
 	out := scoredReply(walk, true)
 	if len(out) > 0 && out[0] == '-' {

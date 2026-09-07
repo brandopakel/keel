@@ -29,6 +29,9 @@ func encodeWalkReply(walk replyWalk, scalar bool) []byte {
 		}
 		size += header
 	}
+	if !reserveReplyMemory(size) {
+		return allocationPressure
+	}
 	out := make([]byte, 0, size)
 	if !scalar {
 		out = appendArrayHeader(out, count)
@@ -56,22 +59,41 @@ func scoredReply(walk func(func(string, float64) bool), withScores bool) []byte 
 	}, false)
 }
 
-// removalFits bounds the canonical SREM/ZREM record and its member-index array
+// reserveRemoval bounds the canonical SREM/ZREM record and its member-index array
 // before destructive pops. The record has a separate 64 MiB ceiling.
-func removalFits(command, key string, count int, walk replyWalk) bool {
+func reserveRemoval(command, key string, count int, walk replyWalk) []byte {
 	if count > MaxReplyBytes/16-2 {
-		return false
+		return replyTooLarge
 	}
 	size := decimalDigits(count+2) + 3
 	var fits bool
 	size, fits = addBulkSize(size, len(command))
 	if !fits {
-		return false
+		return replyTooLarge
 	}
 	size, fits = addBulkSize(size, len(key))
 	if !fits {
-		return false
+		return replyTooLarge
 	}
 	walk(func(value string) bool { size, fits = addBulkSize(size, len(value)); return fits })
-	return fits
+	// The removal member array and canonical log are constructed only after
+	// output admission succeeds. Reserve both now, before membership changes.
+	if !fits {
+		return replyTooLarge
+	}
+	logCharge := 0
+	if aof.file != nil && !aof.replaying {
+		// Appending can replace a partially filled backing array. Charge the
+		// whole future log, including growth overlap, rather than just the new
+		// record. The original buffer is already in the transport's base charge.
+		maxInt := int(^uint(0) >> 1)
+		if len(aof.buf) > maxInt/3-size-8192 {
+			return allocationPressure
+		}
+		logCharge = 3 * (len(aof.buf) + size + 8192)
+	}
+	if !reserveCommandMemory((count+2)*16 + logCharge + 8192) {
+		return allocationPressure
+	}
+	return nil
 }

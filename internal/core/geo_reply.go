@@ -38,6 +38,9 @@ func geoSearchReply(z *data_structure.ZSet, radius data_structure.GeoHashRadius,
 			}
 		}
 		limit = min(limit, z.Len())
+		if !reserveCommandMemory(limit*48 + 4096) {
+			return allocationPressure
+		}
 		points := make([]data_structure.GeoPoint, 0, limit)
 		better := func(a, b data_structure.GeoPoint) bool {
 			if s.order == "DESC" {
@@ -100,6 +103,9 @@ func geoSearchReply(z *data_structure.ZSet, radius data_structure.GeoHashRadius,
 	header := decimalDigits(count) + 3
 	if !fits || size > MaxReplyBytes-header {
 		return replyTooLarge
+	}
+	if !reserveReplyMemory(size + header) {
+		return allocationPressure
 	}
 	out := appendArrayHeader(make([]byte, 0, size+header), count)
 	walk(func(p data_structure.GeoPoint) bool { out = appendGeoPoint(out, p, s); return true })

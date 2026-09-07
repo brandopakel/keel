@@ -178,8 +178,8 @@ func cmdSPOP(args []string) []byte {
 			}
 		}
 	})
-	if !removalFits("SREM", key, int(count), walk) {
-		return replyTooLarge
+	if refusal := reserveRemoval("SREM", key, int(count), walk); refusal != nil {
+		return refusal
 	}
 	out := encodeWalkReply(walk, !given)
 	if len(out) > 0 && out[0] == '-' {
