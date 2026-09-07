@@ -38,6 +38,14 @@ term zero and candidate-to-candidate nonzero-term restart/regrant. Native CI run
 it on Linux ARM64 and Intel macOS using pinned pre-term source
 `a7c6600cece5d21a78794e40e2f59be0e55028d4` built with the same toolchain.
 
+Native run 34153273202 passes those mixed-version and nonzero-term checks on
+both platforms at candidate `4170b73bd6bed8f1e4d4c172e5f0eed6cabefcce`. The same
+run passes streaming snapshots, checkpoint recovery, ordered append replies,
+alpha.3 upgrade/rollback preparation, short mixed failure workloads and Linux
+ENOSPC, plus ext4/xfs recovery. Full reports are retained in
+`bench/results/term-guard-native-2026-09-07.json.gz`. These short native checks
+do not replace long deployment soaks.
+
 The frozen eight-hour and 48-hour soaks started before these term guards merged.
 They cannot establish the correctness of this new runtime. No automatic failover
 or new release is claimed by this correction.
