@@ -110,6 +110,10 @@ func cmdINFO(args []string) []byte {
 		stats := ClientBuffers()
 		fmt.Fprintf(&b, "# Clients\r\nconnected_clients:%d\r\nretained_input_bytes:%d\r\nretained_reply_bytes:%d\r\nretained_client_bytes:%d\r\n\r\n", stats.Connected, stats.InputBytes, stats.ReplyBytes, stats.TotalBytes)
 	}
+	if want("clients") && CommandAllocations != nil {
+		stats := CommandAllocations
+		fmt.Fprintf(&b, "command_allocation_limit_bytes:%d\r\ncommand_allocation_reserved_bytes:%d\r\ncommand_allocation_peak_bytes:%d\r\ncommand_allocation_refusals:%d\r\n", stats.Limit, stats.Reserved, stats.Peak, stats.Refusals)
+	}
 
 	if want("replication") {
 		role := "primary"
@@ -129,6 +133,12 @@ func cmdINFO(args []string) []byte {
 		if config.ReplicationProtocol == 2 {
 			offset, history = replicationV2.end, replicationV2.bytes
 			fmt.Fprintf(&b, "replication_snapshot_bytes:%d\r\nreplica_checkpoint_resumed:%t\r\nreplica_snapshot_received:%d\r\n", replicationV2.snapshotBytes, replicaV2.resumed, replicaV2.snapshotReceived)
+			// What the primary knows about its replicas. Lag is the distance
+			// a promotion would lose right now; age says whether replication
+			// is alive at all. Neither is a quorum signal - see
+			// replication_ack.go for why.
+			ackOffset, ackBehind, ackAge := ReplicationAcknowledged()
+			fmt.Fprintf(&b, "replication_acked_offset:%d\r\nreplication_lag_bytes:%d\r\nreplication_acked_age_ms:%d\r\n", ackOffset, ackBehind, ackAge)
 		}
 		fmt.Fprintf(&b, "failover_term:%d\r\nfailover_held_term:%d\r\nfailover_fenced:%t\r\nwritable:%t\r\n", CurrentTerm(), HeldTerm(), Fenced(), Writable())
 		fmt.Fprintf(&b, "replication_protocol:%d\r\nrole:%s\r\nreplica_ready:%d\r\nreplica_offset:%d\r\nreplica_last_update_ms:%d\r\nprimary_offset:%d\r\nreplication_history_bytes:%d\r\n\r\n", config.ReplicationProtocol, role, ready, replicaOffset, age, offset, history)

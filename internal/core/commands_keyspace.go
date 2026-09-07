@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"time"
 
 	"github.com/brandopakel/keel/internal/constant"
 	"github.com/brandopakel/keel/internal/data_structure"
@@ -69,27 +70,36 @@ func cmdKEYS(args []string) []byte {
 	}
 	pattern := args[0]
 
-	var matches []string
-	data_structure.EachKeyspace(func(ks data_structure.Keyspace) {
-		for _, key := range ks.Keys() {
-			// Pattern first: it is the cheap test, and Has can reap, which is
-			// work worth doing only for a key that would otherwise be reported.
-			if !globMatch(pattern, key) {
-				continue
-			}
-			// Keys may include a key whose TTL has passed. Has settles it, and
-			// reaps it on the way past, so KEYS never shows a key that GET
-			// would say was gone.
-			if ks.Has(key) {
-				matches = append(matches, key)
-			}
-		}
-	})
-
-	if len(matches) == 0 {
-		return constant.RespEmptyArray
+	if !reserveCommandMemory(8192) {
+		return allocationPressure
 	}
-	return Encode(matches, false)
+	now := uint64(time.Now().UnixMilli())
+	var scratch [256]string
+	walk := replyWalk(func(yield func(string) bool) {
+		more := true
+		data_structure.EachKeyspace(func(ks data_structure.Keyspace) {
+			if !more {
+				return
+			}
+			end, cursor := ks.ScanEnd(), uint64(0)
+			for {
+				batch, _, next := ks.ScanUntil(cursor, end, len(scratch), nil, scratch[:0])
+				for _, key := range batch {
+					at, expires := ks.GetExpiry(key)
+					if (!expires || at > now) && globMatch(pattern, key) && !yield(key) {
+						more = false
+						break
+					}
+				}
+				clear(batch)
+				if !more || next == 0 {
+					break
+				}
+				cursor = next
+			}
+		})
+	})
+	return encodeWalkReply(walk, false)
 }
 
 // cmdMGET reads several string keys at once.

@@ -462,6 +462,13 @@ func (r *replyBuffer) Write(p []byte) (int, error) { return r.buf.Write(p) }
 // copy of the whole value - which matters because a large value is nearly
 // always a batch of one, since it fills a read on its own.
 func executeRun(c *client, arena *replyArena) bool {
+	if budget := core.CommandAllocations; budget != nil {
+		// Arena capacity may overlap already-accounted reply windows; charging
+		// it again is conservative and also covers unused backing capacity.
+		budget.Begin(retainedClientBytes + core.AppendRetainedBytes() + cap(arena.buf))
+		budget.ReplyRetained = retainedReplyBytes
+		defer budget.End()
+	}
 	c.out, c.inArena = nil, false
 	c.outBytes = 0
 	consumed := 0
@@ -490,6 +497,10 @@ func executeRun(c *client, arena *replyArena) bool {
 	deadline := time.Now().Add(runTimeTarget)
 	c.outStart = len(arena.buf)
 	for _, cmd := range c.cmds {
+		if budget := core.CommandAllocations; budget != nil {
+			budget.ObserveRetained(retainedClientBytes + core.AppendRetainedBytes() + cap(arena.buf))
+			budget.ReplyRetained = retainedReplyBytes
+		}
 		capture.p = nil
 		c.respond(cmd, &capture)
 		consumed++
@@ -524,6 +535,8 @@ func executeRun(c *client, arena *replyArena) bool {
 
 func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 	defer wg.Done()
+	core.CommandAllocations = &core.CommandAllocationBudget{Limit: maxRetainedClientBytes, ReplyLimit: maxRetainedClassBytes}
+	defer func() { core.CommandAllocations = nil }()
 	core.ClientBuffers = func() core.ClientBufferStats {
 		return core.ClientBufferStats{Connected: len(clients), InputBytes: retainedInputBytes, ReplyBytes: retainedReplyBytes, TotalBytes: retainedClientBytes}
 	}
@@ -577,11 +590,11 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 
 	// A pipe whose read end is monitored alongside the client sockets.
 	//
-	// Check blocks with no timeout, so an idle server is parked in a syscall
-	// that no flag can interrupt. Writing one byte here makes the multiplexer
-	// return immediately. The byte also persists in the pipe, so a signal that
-	// arrives before the loop parks is not lost - it is reported on the next
-	// Check rather than missed.
+	// Check waits a bounded interval, so a signal is noticed within it even
+	// with nothing else happening. Writing one byte here makes the multiplexer
+	// return immediately rather than after that interval. The byte also
+	// persists in the pipe, so a signal that arrives before the loop parks is
+	// not lost - it is reported on the next Check rather than missed.
 	var wakeupFDs [2]int
 	if err = syscall.Pipe(wakeupFDs[:]); err != nil {
 		return err

@@ -105,15 +105,34 @@ func cmdSCAN(args []string) []byte {
 		return !expires || at > uint64(time.Now().UnixMilli())
 	}
 
+	if !reserveCommandMemory(4*min(count, data_structure.ScanMaxWork)*16 + 8192) {
+		return allocationPressure
+	}
 	keys, next := data_structure.ScanKeyspaces(cursor, count, keep, nil)
 	if matchExhausted {
 		return Encode(errors.New("ERR SCAN pattern work limit exceeded; use a simpler MATCH or smaller COUNT"), false)
 	}
-	if keys == nil {
-		keys = []string{}
+	position := strconv.FormatUint(next, 10)
+	size := 4 + decimalDigits(len(keys)) + 3
+	var fits bool
+	size, fits = addBulkSize(size, len(position))
+	for _, key := range keys {
+		if !fits {
+			break
+		}
+		size, fits = addBulkSize(size, len(key))
 	}
-	// A two-element array of the cursor and the batch. The cursor is a bulk
-	// string, not an integer: it is opaque to the client, which hands back
-	// whatever it was given.
-	return Encode([]interface{}{strconv.FormatUint(next, 10), keys}, false)
+	if !fits {
+		return replyTooLarge
+	}
+	if !reserveReplyMemory(size) {
+		return allocationPressure
+	}
+	out := appendArrayHeader(make([]byte, 0, size), 2)
+	out = appendBulkString(out, position)
+	out = appendArrayHeader(out, len(keys))
+	for _, key := range keys {
+		out = appendBulkString(out, key)
+	}
+	return out
 }

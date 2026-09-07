@@ -79,7 +79,7 @@ func cmdPING(args []string) []byte {
 	case 0:
 		return Encode("PONG", true)
 	case 1:
-		return Encode(args[0], false)
+		return encodeBoundedString(args[0])
 	}
 	return Encode(errors.New("ERR wrong number of arguments for 'PING' command"), false)
 }
