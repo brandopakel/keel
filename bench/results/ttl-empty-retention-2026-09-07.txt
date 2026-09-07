@@ -1,0 +1,88 @@
+Local Go 1.26.6 darwin/arm64 heap regression, 100000 keys per case.
+Full-GC live heap, not process RSS or matched throughput. Concurrent external soaks do not share this test process heap.
+Baseline source: 1d63d8c; candidate changes: expiry peak and empty-table release.
+
+BEFORE (all six regression cases failed):
+=== RUN   TestEmptyExpiryTableReleasesRetainedHeap
+=== RUN   TestEmptyExpiryTableReleasesRetainedHeap/string/persist
+    expiry_retention_test.go:62: loaded=9953016 withTTL=13448040 after=13448136 retained_above_base=3495120
+    expiry_retention_test.go:63: 
+        	Error Trace:	/Users/brandopakel/keel-memory-retention/internal/data_structure/expiry_retention_test.go:63
+        	Error:      	"13448136" is not less than "10477304"
+        	Test:       	TestEmptyExpiryTableReleasesRetainedHeap/string/persist
+        	Messages:   	removing the last TTL must release its old map capacity
+=== RUN   TestEmptyExpiryTableReleasesRetainedHeap/string/overwrite
+    expiry_retention_test.go:62: loaded=9953240 withTTL=13448280 after=13448280 retained_above_base=3495040
+    expiry_retention_test.go:63: 
+        	Error Trace:	/Users/brandopakel/keel-memory-retention/internal/data_structure/expiry_retention_test.go:63
+        	Error:      	"13448280" is not less than "10477528"
+        	Test:       	TestEmptyExpiryTableReleasesRetainedHeap/string/overwrite
+        	Messages:   	removing the last TTL must release its old map capacity
+=== RUN   TestEmptyExpiryTableReleasesRetainedHeap/string/delete
+    expiry_retention_test.go:62: loaded=9953400 withTTL=13448440 after=6841544 retained_above_base=3495040
+    expiry_retention_test.go:63: 
+        	Error Trace:	/Users/brandopakel/keel-memory-retention/internal/data_structure/expiry_retention_test.go:63
+        	Error:      	"6841544" is not less than "3870792"
+        	Test:       	TestEmptyExpiryTableReleasesRetainedHeap/string/delete
+        	Messages:   	removing the last TTL must release its old map capacity
+=== RUN   TestEmptyExpiryTableReleasesRetainedHeap/collection/persist
+    expiry_retention_test.go:62: loaded=9953640 withTTL=13448680 after=13448680 retained_above_base=3495040
+    expiry_retention_test.go:63: 
+        	Error Trace:	/Users/brandopakel/keel-memory-retention/internal/data_structure/expiry_retention_test.go:63
+        	Error:      	"13448680" is not less than "10477928"
+        	Test:       	TestEmptyExpiryTableReleasesRetainedHeap/collection/persist
+        	Messages:   	removing the last TTL must release its old map capacity
+=== RUN   TestEmptyExpiryTableReleasesRetainedHeap/collection/overwrite
+    expiry_retention_test.go:62: loaded=9953704 withTTL=13448744 after=13448744 retained_above_base=3495040
+    expiry_retention_test.go:63: 
+        	Error Trace:	/Users/brandopakel/keel-memory-retention/internal/data_structure/expiry_retention_test.go:63
+        	Error:      	"13448744" is not less than "10477992"
+        	Test:       	TestEmptyExpiryTableReleasesRetainedHeap/collection/overwrite
+        	Messages:   	removing the last TTL must release its old map capacity
+=== RUN   TestEmptyExpiryTableReleasesRetainedHeap/collection/delete
+    expiry_retention_test.go:62: loaded=9954088 withTTL=13449128 after=6842232 retained_above_base=3495040
+    expiry_retention_test.go:63: 
+        	Error Trace:	/Users/brandopakel/keel-memory-retention/internal/data_structure/expiry_retention_test.go:63
+        	Error:      	"6842232" is not less than "3871480"
+        	Test:       	TestEmptyExpiryTableReleasesRetainedHeap/collection/delete
+        	Messages:   	removing the last TTL must release its old map capacity
+--- FAIL: TestEmptyExpiryTableReleasesRetainedHeap (0.22s)
+    --- FAIL: TestEmptyExpiryTableReleasesRetainedHeap/string/persist (0.04s)
+    --- FAIL: TestEmptyExpiryTableReleasesRetainedHeap/string/overwrite (0.03s)
+    --- FAIL: TestEmptyExpiryTableReleasesRetainedHeap/string/delete (0.04s)
+    --- FAIL: TestEmptyExpiryTableReleasesRetainedHeap/collection/persist (0.04s)
+    --- FAIL: TestEmptyExpiryTableReleasesRetainedHeap/collection/overwrite (0.03s)
+    --- FAIL: TestEmptyExpiryTableReleasesRetainedHeap/collection/delete (0.04s)
+FAIL
+FAIL	github.com/brandopakel/keel/internal/data_structure	0.586s
+FAIL
+
+AFTER (six heap cases and hot-key allocation checks passed):
+=== RUN   TestEmptyExpiryTableReleasesRetainedHeap
+=== RUN   TestEmptyExpiryTableReleasesRetainedHeap/string/persist
+    expiry_retention_test.go:62: loaded=9947768 withTTL=13442856 after=9947896 retained_above_base=128
+=== RUN   TestEmptyExpiryTableReleasesRetainedHeap/string/overwrite
+    expiry_retention_test.go:62: loaded=9948024 withTTL=13443112 after=9948024 retained_above_base=0
+=== RUN   TestEmptyExpiryTableReleasesRetainedHeap/string/delete
+    expiry_retention_test.go:62: loaded=9948168 withTTL=13443256 after=3341272 retained_above_base=0
+=== RUN   TestEmptyExpiryTableReleasesRetainedHeap/collection/persist
+    expiry_retention_test.go:62: loaded=9948424 withTTL=13443512 after=9948424 retained_above_base=0
+=== RUN   TestEmptyExpiryTableReleasesRetainedHeap/collection/overwrite
+    expiry_retention_test.go:62: loaded=9948488 withTTL=13443576 after=9948488 retained_above_base=0
+=== RUN   TestEmptyExpiryTableReleasesRetainedHeap/collection/delete
+    expiry_retention_test.go:62: loaded=9948856 withTTL=13443944 after=3341960 retained_above_base=0
+--- PASS: TestEmptyExpiryTableReleasesRetainedHeap (0.21s)
+    --- PASS: TestEmptyExpiryTableReleasesRetainedHeap/string/persist (0.04s)
+    --- PASS: TestEmptyExpiryTableReleasesRetainedHeap/string/overwrite (0.03s)
+    --- PASS: TestEmptyExpiryTableReleasesRetainedHeap/string/delete (0.04s)
+    --- PASS: TestEmptyExpiryTableReleasesRetainedHeap/collection/persist (0.04s)
+    --- PASS: TestEmptyExpiryTableReleasesRetainedHeap/collection/overwrite (0.03s)
+    --- PASS: TestEmptyExpiryTableReleasesRetainedHeap/collection/delete (0.04s)
+=== RUN   TestSingleKeyTTLChurnAvoidsMapReallocation
+=== RUN   TestSingleKeyTTLChurnAvoidsMapReallocation/string
+=== RUN   TestSingleKeyTTLChurnAvoidsMapReallocation/collection
+--- PASS: TestSingleKeyTTLChurnAvoidsMapReallocation (0.00s)
+    --- PASS: TestSingleKeyTTLChurnAvoidsMapReallocation/string (0.00s)
+    --- PASS: TestSingleKeyTTLChurnAvoidsMapReallocation/collection (0.00s)
+PASS
+ok  	github.com/brandopakel/keel/internal/data_structure	0.532s

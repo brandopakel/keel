@@ -6,13 +6,54 @@ import json
 import math
 import os
 import platform
+import signal
 import statistics
 import subprocess
 import time
 from collections import deque
 from pathlib import Path
 
-from validation_lib import Server, info, rewrite, sha256
+from validation_lib import Client, Server, info, rewrite, sha256
+
+
+def capture_failed_process(server):
+    """Collect evidence before tearing down an already failed owned test run."""
+    process = server.process
+    if process is None:
+        return {'running': False}
+    evidence = {'pid': process.pid, 'exit_code': process.poll()}
+    if process.poll() is not None:
+        return evidence
+    probe = None
+    try:
+        probe = Client('127.0.0.1', server.port)
+        probe.socket.settimeout(.5)
+        assert probe.call('AUTH', server.password) == b'OK'
+        evidence['persistence'] = info(probe, 'persistence')
+        evidence['replication'] = info(probe, 'replication')
+    except Exception as exc:
+        evidence['probe_failure'] = repr(exc)
+    finally:
+        if probe is not None:
+            try:
+                probe.close()
+            except OSError as exc:
+                evidence['probe_close_failure'] = repr(exc)
+    try:
+        evidence['process'] = subprocess.check_output(
+            ['ps', '-o', 'pid,ppid,state,wchan,pcpu,rss', '-p', str(process.pid)],
+            text=True, timeout=2)
+    except (OSError, subprocess.SubprocessError) as exc:
+        evidence['process_failure'] = repr(exc)
+    try:
+        # SIGQUIT writes Go goroutine stacks to the existing server log and
+        # terminates this disposable process. Successful runs never take it.
+        process.send_signal(signal.SIGQUIT)
+        process.wait(timeout=3)
+        evidence['stack_dump'] = str(server.directory / 'server.log')
+    except (OSError, subprocess.SubprocessError) as exc:
+        evidence['stack_failure'] = repr(exc)
+    return evidence
 
 
 def verify(client, expected, events):
@@ -233,6 +274,12 @@ def run(args, report):
             verify_collections(restarted.client, hashes, members, scores, large)
         report['manual_promotion'] = True
         report['elapsed_seconds'] = time.monotonic() - started
+    except BaseException:
+        report['failure_diagnostics'] = {
+            'primary': capture_failed_process(primary),
+            'replica': capture_failed_process(replica),
+        }
+        raise
     finally:
         primary.stop(check=False)
         replica.stop(check=False)
