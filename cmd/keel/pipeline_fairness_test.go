@@ -83,7 +83,9 @@ func TestPipelineYieldsWithCommandsStillPending(t *testing.T) {
 					t.Fatal(got)
 				}
 				c, r := connectTest(t, s)
-				if err := c.(*idleConn).Conn.(*net.TCPConn).SetReadBuffer(1024); err != nil {
+				idle := c.(*idleConn)
+				tcp := idle.Conn.(*net.TCPConn)
+				if err := tcp.SetReadBuffer(1024); err != nil {
 					t.Fatal(err)
 				}
 				const count = 33
