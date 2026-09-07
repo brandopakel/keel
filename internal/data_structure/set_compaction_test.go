@@ -18,11 +18,11 @@ func TestSetChurnReleasesSparseMembershipMap(t *testing.T) {
 		s.Remove(strconv.Itoa(i))
 	}
 	before := heapBytes()
-	if compact, ok := any(s).(interface{ CompactIndex(int) int }); ok {
-		for i := 0; i < 100; i++ {
-			require.LessOrEqual(t, compact.CompactIndex(37), 37)
-		}
+	require.NotNil(t, s.compaction)
+	for i := 0; i < 100; i++ {
+		require.LessOrEqual(t, s.CompactIndex(37), 37)
 	}
+	require.Nil(t, s.compaction)
 	after := heapBytes()
 	t.Logf("retained=%d after=%d recovered=%d", before, after, int64(before)-int64(after))
 	require.Greater(t, int64(before)-int64(after), int64(1<<20))
