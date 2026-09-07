@@ -6,6 +6,38 @@ on:
 permissions:
   contents: read
 jobs:
+  clients:
+    name: Go, Python and Node RESP2 clients
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version-file: go.mod }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: '24' }
+      - name: Build server and pinned clients
+        run: |
+          go build -trimpath -o /tmp/keel-clients ./cmd/keel
+          (cd bench/clients/go && go test ./... && go vet ./... && go build -trimpath -o /tmp/keel-go-clients .)
+          npm ci --ignore-scripts --no-audit --no-fund --prefix bench/clients/node
+          python3 -m venv /tmp/keel-client-env
+          /tmp/keel-client-env/bin/python -m pip install -r bench/clients/requirements.txt
+          mkdir -p dist/clients
+          go version -m /tmp/keel-clients > dist/clients/build.log
+          go version -m /tmp/keel-go-clients >> dist/clients/build.log
+          git rev-parse HEAD >> dist/clients/build.log
+          node --version >> dist/clients/build.log
+          /tmp/keel-client-env/bin/python --version >> dist/clients/build.log
+      - name: Authenticated pipelines and two persistence restarts
+        run: python3 bench/clients/run.py --bin /tmp/keel-clients --go-clients /tmp/keel-go-clients --python /tmp/keel-client-env/bin/python --out dist/clients/matrix
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: client-library-compatibility
+          path: dist/clients
+          retention-days: 14
   smoke:
     name: RESP adapters and provider packages
     runs-on: ubuntu-latest
