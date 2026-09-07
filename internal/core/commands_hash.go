@@ -148,7 +148,7 @@ func cmdHKEYS(args []string) []byte {
 	if !ok {
 		return constant.RespEmptyArray
 	}
-	return Encode(h.Fields(), false)
+	return hashReply(h, true, false)
 }
 
 func cmdHVALS(args []string) []byte {
@@ -159,7 +159,7 @@ func cmdHVALS(args []string) []byte {
 	if !ok {
 		return constant.RespEmptyArray
 	}
-	return Encode(h.Values(), false)
+	return hashReply(h, false, true)
 }
 
 // cmdHGETALL answers a flat array of field, value, field, value.
@@ -175,12 +175,7 @@ func cmdHGETALL(args []string) []byte {
 		return constant.RespEmptyArray
 	}
 
-	fields, values := h.Entries()
-	flat := make([]string, 0, 2*len(fields))
-	for i, f := range fields {
-		flat = append(flat, f, values[i])
-	}
-	return Encode(flat, false)
+	return hashReply(h, true, true)
 }
 
 // cmdHINCRBY adds to a field, treating a missing key or field as zero.

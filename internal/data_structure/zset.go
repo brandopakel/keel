@@ -155,6 +155,42 @@ func (zs *ZSet) RangeByRank(start, stop int, reverse bool) ([]string, []float64)
 	return members, scores
 }
 
+// VisitRangeByRank visits without materializing arrays. Stop by returning false;
+// mutations are forbidden while the visitor is active.
+func (zs *ZSet) VisitRangeByRank(start, stop int, reverse bool, yield func(string, float64) bool) {
+	n := zs.Len()
+	if start < 0 {
+		start += n
+	}
+	if stop < 0 {
+		stop += n
+	}
+	if start < 0 {
+		start = 0
+	}
+	if stop >= n {
+		stop = n - 1
+	}
+	if start > stop || start >= n {
+		return
+	}
+	rank := start + 1
+	if reverse {
+		rank = n - start
+	}
+	node := zs.sl.nodeAtRank(uint64(rank))
+	for i := start; i <= stop && node != nil; i++ {
+		if !yield(node.ele, node.score) {
+			return
+		}
+		if reverse {
+			node = node.backward
+		} else {
+			node = node.level[0].forward
+		}
+	}
+}
+
 // CountByScore uses boundary ranks, so counting a large range stays O(log n).
 func (zs *ZSet) CountByScore(min, max float64, minEx, maxEx bool) int64 {
 	r := rangeSpec{min: min, max: max, minEx: minEx, maxEx: maxEx}
@@ -188,4 +224,31 @@ func (zs *ZSet) RangeByScore(min, max float64, minEx, maxEx bool, offset, count 
 		return zs.RangeByRank(zs.Len()-1-hi+offset, zs.Len()-1-hi+offset+count-1, true)
 	}
 	return zs.RangeByRank(lo+offset, lo+offset+count-1, false)
+}
+
+// VisitRangeByScore uses rank lookup for offsets and obeys VisitRangeByRank's
+// early-stop and no-mutation contract.
+func (zs *ZSet) VisitRangeByScore(min, max float64, minEx, maxEx bool, offset, count int, reverse bool, yield func(string, float64) bool) {
+	if offset < 0 || count == 0 {
+		return
+	}
+	r := rangeSpec{min: min, max: max, minEx: minEx, maxEx: maxEx}
+	first, last := zs.sl.firstInRange(r), zs.sl.lastInRange(r)
+	if first == nil || last == nil {
+		return
+	}
+	lo, hi := int(zs.sl.rank(first.score, first.ele))-1, int(zs.sl.rank(last.score, last.ele))-1
+	available := hi - lo + 1
+	if offset >= available {
+		return
+	}
+	available -= offset
+	if count < 0 || count > available {
+		count = available
+	}
+	if reverse {
+		zs.VisitRangeByRank(zs.Len()-1-hi+offset, zs.Len()-1-hi+offset+count-1, true, yield)
+		return
+	}
+	zs.VisitRangeByRank(lo+offset, lo+offset+count-1, false, yield)
 }
