@@ -16,6 +16,16 @@ INFO persistence exposes `aof_rewrite_pending_write_bytes`, charging the retaine
 slice capacity rather than only its length. Other retained rewrite state remains
 separate; this metric is not a process-wide allocation reservation.
 
+Four timing groups distinguish `aof_write`, `aof_sync`, `aof_rewrite_write` and
+`aof_rewrite_sync`. Each exposes `_inflight`, `_calls`, `_errors`, `_total_usec`,
+`_max_usec` and `_last_usec`. Fixed atomic counters span the process lifetime;
+individual fields are approximate concurrent snapshots. Durations measure elapsed
+wall time inside the filesystem call, not CPU time or reply acknowledgment latency.
+Short writes count as failures. These observations can distinguish write stalls
+from sync stalls in future overload reports; existing reports cannot be assigned
+a cause retroactively. A local empty-call diagnostic measures roughly 53–73 ns per
+timed call and zero allocations, not whole-server throughput overhead.
+
 Cancellation transfers close/remove responsibility to a blocked worker. New
 rewrites refuse the path until cleanup finishes, and shutdown joins outstanding
 work. A short or failed replacement write abandons the rewrite and leaves the

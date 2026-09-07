@@ -76,9 +76,9 @@ func startRewriteIO(body []byte) {
 			}
 		}()
 		if job.body == nil {
-			job.err = syncFile(job.file)
+			job.err = timedPersistenceSync(&rewriteSyncStats, job.file, syncFile)
 		} else {
-			job.n, job.err = writeFile(job.file, job.body)
+			job.n, job.err = timedPersistenceWrite(&rewriteWriteStats, job.file, job.body, writeFile)
 			if job.err == nil && job.n != len(job.body) {
 				job.err = io.ErrShortWrite
 			}

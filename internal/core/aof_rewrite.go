@@ -446,7 +446,7 @@ func finishRewrite() error {
 		// Preflush the bulk snapshot once, then synchronize only the dirty
 		// suffix at the existing atomic handoff. Repeated asynchronous retries
 		// could otherwise starve forever under a continuous write stream.
-		if err := rewriteFileSync(rewrite.file); err != nil {
+		if err := timedPersistenceSync(&rewriteSyncStats, rewrite.file, rewriteFileSync); err != nil {
 			abortRewrite(err)
 			return err
 		}
@@ -546,7 +546,7 @@ func rewriteWrite(body []byte) error {
 	if rewrite.preSyncComplete {
 		// The existing dirty-tail/handoff barrier remains synchronous. Moving
 		// this phase requires ordered dual writes and a separate commit cut.
-		n, err := rewriteFileWrite(rewrite.file, body)
+		n, err := timedPersistenceWrite(&rewriteWriteStats, rewrite.file, body, rewriteFileWrite)
 		if rewrite.digest != nil {
 			rewrite.digest.Write(body[:n])
 		}
