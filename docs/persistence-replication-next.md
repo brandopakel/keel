@@ -102,6 +102,13 @@ paused processes, concurrent elections, delayed messages and storage rollback.
 Zero acknowledged-write loss would require a stronger replication acknowledgement
 contract; asynchronous copies do not establish it.
 
+A design for this is now written down in [failover-design.md](failover-design.md).
+It proposes providing durable terms and fencing inside Keel while leaving the
+election to an external coordinator, on the grounds that a consensus protocol
+bolted onto an asynchronous data path spends the largest budget in the project
+on the smaller half of the problem. Its first stage makes manual promotion safe
+rather than merely documented as dangerous, and is worth having on its own.
+
 ## Evidence and deployment
 
 Local APFS and public Linux CI provide useful correctness and diagnostic evidence.
