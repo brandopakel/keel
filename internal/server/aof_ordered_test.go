@@ -161,3 +161,15 @@ func TestRetainedBytesAreBoundedPerClassAndInAggregate(t *testing.T) {
 	require.Zero(t, in.accountedReply)
 	require.Less(t, retainedClientBytes, maxRetainedClientBytes)
 }
+
+func TestReplyFramesUseReplyBudget(t *testing.T) {
+	oldClient, oldInput, oldReply := retainedClientBytes, retainedInputBytes, retainedReplyBytes
+	t.Cleanup(func() { retainedClientBytes, retainedInputBytes, retainedReplyBytes = oldClient, oldInput, oldReply })
+	retainedClientBytes, retainedInputBytes, retainedReplyBytes = maxRetainedClassBytes-4, 0, maxRetainedClassBytes-4
+	c := &client{frames: []int{1}, out: []byte("x")}
+	require.False(t, accountClient(c), "reply framing must count against the reply ceiling")
+	require.Zero(t, c.accountedInput)
+	require.Equal(t, 9, c.accountedReply)
+	require.False(t, accountClient(c))
+	require.Equal(t, 9, c.accountedReply, "re-accounting must not count frames twice")
+}

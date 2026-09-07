@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -67,8 +68,13 @@ func startTestServer(t *testing.T, args ...string) *testServer {
 	}
 	t.Cleanup(func() {
 		if !s.stopped {
-			s.cmd.Process.Kill()
-			s.cmd.Wait()
+			if t.Failed() {
+				s.captureFailure(t)
+			} else {
+				_ = s.cmd.Process.Kill()
+				_ = s.cmd.Wait()
+			}
+			s.stopped = true
 		}
 	})
 	deadline := time.Now().Add(5 * time.Second)
@@ -83,6 +89,28 @@ func startTestServer(t *testing.T, args ...string) *testServer {
 	t.Fatal("server did not listen")
 	return nil
 }
+
+// captureFailure terminates only the test's owned server and reads its log
+// after Wait has joined the output copier. Register it after client cleanups
+// when a failure needs the sockets to remain open in the captured state.
+func (s *testServer) captureFailure(t *testing.T) {
+	t.Helper()
+	if s.stopped {
+		return
+	}
+	_ = s.cmd.Process.Signal(syscall.SIGQUIT)
+	done := make(chan struct{})
+	go func() { _ = s.cmd.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		_ = s.cmd.Process.Kill()
+		<-done
+	}
+	s.stopped = true
+	t.Logf("failed server diagnostics:\n%s", s.log.String())
+}
+
 func (s *testServer) stop(t *testing.T) {
 	t.Helper()
 	s.cmd.Process.Signal(syscall.SIGTERM)
@@ -128,30 +156,62 @@ func connectTest(t *testing.T, s *testServer) (net.Conn, *bufio.Reader) {
 // would quietly delete the assertion.
 type idleConn struct {
 	net.Conn
-	idle  time.Duration
-	fixed bool
+	idle                  time.Duration
+	mu                    sync.Mutex
+	readFixed, writeFixed bool
 }
 
 func (c *idleConn) SetDeadline(at time.Time) error {
-	c.fixed = true
-	return c.Conn.SetDeadline(at)
-}
-
-func (c *idleConn) refresh() {
-	if !c.fixed {
-		c.Conn.SetDeadline(time.Now().Add(c.idle))
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := c.Conn.SetDeadline(at); err != nil {
+		return err
 	}
+	c.readFixed, c.writeFixed = true, true
+	return nil
 }
-
+func (c *idleConn) SetReadDeadline(at time.Time) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := c.Conn.SetReadDeadline(at); err != nil {
+		return err
+	}
+	c.readFixed = true
+	return nil
+}
+func (c *idleConn) SetWriteDeadline(at time.Time) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := c.Conn.SetWriteDeadline(at); err != nil {
+		return err
+	}
+	c.writeFixed = true
+	return nil
+}
+func (c *idleConn) refresh(read bool) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if read && !c.readFixed {
+		return c.Conn.SetReadDeadline(time.Now().Add(c.idle))
+	}
+	if !read && !c.writeFixed {
+		return c.Conn.SetWriteDeadline(time.Now().Add(c.idle))
+	}
+	return nil
+}
 func (c *idleConn) Read(b []byte) (int, error) {
-	c.refresh()
+	if err := c.refresh(true); err != nil {
+		return 0, err
+	}
 	return c.Conn.Read(b)
 }
-
 func (c *idleConn) Write(b []byte) (int, error) {
-	c.refresh()
+	if err := c.refresh(false); err != nil {
+		return 0, err
+	}
 	return c.Conn.Write(b)
 }
+
 func request(parts ...string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "*%d\r\n", len(parts))
@@ -245,9 +305,47 @@ func TestSlowReaderDoesNotBlockOtherClients(t *testing.T) {
 				t.Fatal(got)
 			}
 			slow, _ := connectTest(t, s)
-			io.WriteString(slow, strings.Repeat(request("GET", "large"), 32))
-			time.Sleep(100 * time.Millisecond)
-			c.SetDeadline(time.Now().Add(2 * time.Second))
+			tcp := slow.(*idleConn).Conn.(*net.TCPConn)
+			if err := tcp.SetReadBuffer(1024); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				if t.Failed() {
+					s.captureFailure(t)
+				}
+			})
+			if _, err := io.WriteString(slow, strings.Repeat(request("GET", "large"), 32)); err != nil {
+				t.Fatal(err)
+			}
+			// Do not infer backpressure from a sleep. Observe user-space replies
+			// retained after the nonblocking flush, before testing PING.
+			observed := false
+			deadline := time.Now().Add(2 * time.Second)
+			if err := c.SetDeadline(deadline); err != nil {
+				t.Fatal(err)
+			}
+			for time.Now().Before(deadline) {
+				stats := call(t, c, r, "INFO", "clients")
+				for _, line := range strings.Split(stats, "\r\n") {
+					if raw, ok := strings.CutPrefix(line, "retained_reply_bytes:"); ok {
+						queued, err := strconv.Atoi(raw)
+						if err != nil {
+							t.Fatal(err)
+						}
+						observed = queued > 16<<20
+					}
+				}
+				if observed {
+					break
+				}
+				time.Sleep(time.Millisecond)
+			}
+			if !observed {
+				t.Fatal("slow client never retained queued replies")
+			}
+			if err := c.SetDeadline(time.Now().Add(2 * time.Second)); err != nil {
+				t.Fatal(err)
+			}
 			if got := call(t, c, r, "PING"); got != "+PONG" {
 				t.Fatal(got)
 			}

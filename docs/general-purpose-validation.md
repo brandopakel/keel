@@ -12,10 +12,10 @@ not counted as Keel improvements. Spending remains capped at $0.
 | Baseline and profiles | Fixed seeds, exact executables, CPU/allocation/live-heap profiles, baseline RSS and growth with keys/clients | Initial sweeps complete through 1M keys |
 | Broad performance | Read-heavy/balanced/write-heavy caches; values, key counts, pipelines, connections and data structures | 396 local comparative runs; 24-case CI smoke |
 | Memory/CPU optimization | Direct RESP command parsing; avoid nonnumeric copies; compact small HLLs | Implemented and measured |
-| Persistence latency | Profile append, rewrite and large-key serialization; bounded work and acknowledgement-preserving changes | Pending |
+| Persistence latency | Ordered appends and collection rewrite slices merged in PR #20; strict traversal and large-record streaming are follow-ups | Append speedup unproven; follow-up validation in progress |
 | Operational validation | Churn, TTL, eviction, slow clients, rewrite, disk errors, primary/replica recovery | Short suites pass; 8h and 48h runs active |
-| Replication development | Larger bounded snapshots, efficient large-key changes and durable resumable recovery, with explicit protocol/version compatibility | Pending |
-| Availability design | Election/quorum, durable terms, fencing and acknowledgement semantics before automatic failover implementation | Pending design |
+| Replication development | Protocol 2 streamed snapshots, canonical deltas and restart checkpoints merged in PR #20 | Native/filesystem checks pass; larger multi-replica and long-run coverage continues |
+| Availability design | Verified external fencing and incarnation-specific activation before promotion | Corrected proposal/model in PR #27; provider implementation remains future work |
 | Compatibility | Seeded Redis reply/state differential, rewrite and two crash/restarts; canonical counters; SETEX/PSETEX | Initial suite passes; wider command surface remains |
 
 Embedding, partitioning, transactions and broad Redis compatibility require
@@ -135,9 +135,13 @@ class, not wording. It includes binary strings and integer boundaries; it does
 not claim cross-type SET equivalence, identical clocks or all Redis commands.
 Every seed and typed command trace is retained for reproduction.
 
-Operational checks cover each eviction policy under key/byte limits, replica
+Operational checks default to both `v1-async` and `v2-concurrent` modes; select
+one with `--mode`. They cover each eviction policy under key/byte limits, replica
 agreement after eviction, two crash/restarts, and independent-client progress
-while eight clients do not read their large replies. The soak sustains cache,
+while eight clients do not read their large replies. A combined case overlaps
+writes, eviction, expiry, rewrites and four nonreading clients while two replicas
+are offline, then checks each replica and a primary crash/restart against surviving
+acknowledged state. Replica reconnects are sequential in this short case. The soak sustains cache,
 hash, list, set and sorted-set writes, 1 MiB values, expiry, rewrite, primary and
 replica crashes, stale-read rejection, externally fenced manual promotion and
 OS write failures. It checks known acknowledged state after recovery and records
