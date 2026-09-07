@@ -15,6 +15,9 @@ type ZSet struct {
 	// memberBytes tracks the total length of members held, so MemUsage is O(1)
 	// rather than a walk of the set.
 	memberBytes uint64
+	// Large score maps track their high-water population lazily. Small sorted
+	// sets pay one pointer, with no additional allocation or per-member metadata.
+	indexState *zsetIndexState
 }
 
 // Flags for Add. Without either, a member is added if new and rescored if not.
@@ -58,8 +61,10 @@ func (zs *ZSet) Add(score float64, member string, flags int) ZAddResult {
 		if flags&ZAddNX != 0 || current == score {
 			return ZAddNop
 		}
+		zs.advanceIndexCursor(member)
 		zs.sl.updateScore(current, member, score)
 		zs.dict[member] = score
+		zs.indexWritten(member, score)
 		return ZAddUpdated
 	}
 	if flags&ZAddXX != 0 {
@@ -68,6 +73,7 @@ func (zs *ZSet) Add(score float64, member string, flags int) ZAddResult {
 	zs.sl.insert(score, member)
 	zs.dict[member] = score
 	zs.memberBytes += uint64(len(member))
+	zs.indexWritten(member, score)
 	return ZAddAdded
 }
 
@@ -77,9 +83,11 @@ func (zs *ZSet) Remove(member string) bool {
 	if !present {
 		return false
 	}
+	zs.advanceIndexCursor(member)
 	delete(zs.dict, member)
 	zs.sl.remove(score, member)
 	zs.memberBytes -= uint64(len(member))
+	zs.indexRemoved(member)
 	return true
 }
 

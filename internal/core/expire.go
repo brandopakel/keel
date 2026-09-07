@@ -83,7 +83,7 @@ func MaintainMemory() int {
 	work := 0
 	deadline := time.Now().Add(time.Millisecond)
 	// Rotate the first table family so continuous churn in one cannot starve
-	// another. TTL, key lookup and set membership all share the same budget.
+	// another. TTL, key lookup and collection indexes share the same budget.
 	memoryFirstPhase = (memoryFirstPhase + 1) % 3
 	memoryCursor = data_structure.VisitKeyspacesFrom(memoryCursor, func(ks data_structure.Keyspace) bool {
 		if work >= data_structure.ScanMaxWork || time.Now().After(deadline) {
@@ -105,8 +105,11 @@ func MaintainMemory() int {
 			case 2:
 				// Other value families have no collection compactor yet. Avoid
 				// scanning their keys merely to discover that at every value.
-				if sets, ok := ks.(*data_structure.Keyed[*data_structure.Set]); ok {
-					work += sets.CompactValues(data_structure.ScanMaxWork - work)
+				switch values := ks.(type) {
+				case *data_structure.Keyed[*data_structure.Set]:
+					work += values.CompactValues(data_structure.ScanMaxWork - work)
+				case *data_structure.Keyed[*data_structure.ZSet]:
+					work += values.CompactValues(data_structure.ScanMaxWork - work)
 				}
 			}
 		}
