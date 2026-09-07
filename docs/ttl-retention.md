@@ -20,7 +20,12 @@ Hosted validation for c7125f5 passed the
 [Go/race/Docker matrix](https://github.com/brandopakel/keel/actions/runs/34099308703),
 [Redis differential, workloads and operational checks](https://github.com/brandopakel/keel/actions/runs/34099310984),
 and [native ARM64/Intel Mac plus ext4/XFS recovery](https://github.com/brandopakel/keel/actions/runs/34099313025).
-Integration with the merged traversal closeout receives the same checks again.
+The final integrated branch also passed the
+[Go/race/Docker matrix](https://github.com/brandopakel/keel/actions/runs/34105065520),
+[general checks](https://github.com/brandopakel/keel/actions/runs/34105065511),
+and [native/filesystem recovery](https://github.com/brandopakel/keel/actions/runs/34105065532)
+on 70713a0. The earlier failed soak and subsequent diagnostic repetitions are
+recorded below.
 
 The first integrated ARM64 run
 ([34101698050](https://github.com/brandopakel/keel/actions/runs/34101698050))
