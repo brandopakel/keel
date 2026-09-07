@@ -27,7 +27,16 @@ replaced or deleted during a partial record, including TTL preservation/reset an
 replay. Separate tests verify that starting a 4 MiB string record allocates less
 than 256 KiB, cancellation preserves the original log, and a dirty-byte refusal
 keeps later writes recoverable. Full local tests and vet passed, followed by the additional cancellation and
-accounting regression checks. Hosted validation of this follow-up is pending.
+accounting regression checks. Hosted validation of `ff0b6aa` passed: Go 1.26/stable Linux/macOS, race, Docker,
+Redis differential, 24 workload smoke cases, native ARM64/Intel Mac recovery,
+ext4/XFS and ENOSPC. The raw CI runs and compact reports are recorded in
+`bench/results/rewrite-resource-validation-2026-09-07.json`.
+
+Both hosted combined-fault modes completed ten rewrites during 2,500 writes
+while two replicas were offline, expired all 64 short-TTL fixtures and recovered
+the surviving acknowledged values on both replicas and after primary restart.
+Their observed maximum write times were 7.43 and 12.58 ms on that runner; these
+short checks are correctness evidence and do not establish a latency SLO.
 
 Opaque probabilistic structure serialization, file writes and final fsync still
 have synchronous work. This change does not establish a latency SLO, remove all
