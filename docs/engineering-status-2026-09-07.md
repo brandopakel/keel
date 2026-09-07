@@ -148,7 +148,8 @@ it does not by itself validate an unpublished release archive.
 3. Implement and validate hash/sorted-set map compaction and address partially
    occupied pages. The new [retention profile](collection-retention-profile.md)
    isolates about 5.17 MB and 3.44 MB of reclaimable map capacity after a
-   100,000-to-1,000-entry shrink. These are measured targets, not shipped savings;
+   100,000-to-1,000-entry shrink, rising to about 83.68 MB and 55.76 MB after a
+   million-entry high-water population. These are measured targets, not shipped savings;
    small-collection overhead and bounded traversal still need a design.
 4. Extend sustained overload, expiry/eviction/rewrite mixtures and multiple lagging
    replicas on larger deployments. Interrupted in-memory snapshots resume over a
