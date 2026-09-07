@@ -1,0 +1,45 @@
+{
+  "provenance": "Retained native baseline reports from the alpha.3 tag closeout, predating this runtime follow-up. Digests also match current published asset metadata.",
+  "reports": {
+    "keel_v0.1.0-alpha.2_darwin_amd64.tar.gz": {
+      "archive": "keel_v0.1.0-alpha.2_darwin_amd64.tar.gz",
+      "sha256": "205553690961ae8c9301fd296a1fa106a5db8d4d29a7638f31095b6bb93144fc",
+      "binary_sha256": "8298544e99ca44e30dd27c91818360197aaf1018cece0d3bcad1143dfb75241b",
+      "native_machine": "x86_64",
+      "platform": "macOS-15.7.9-x86_64-i386-64bit-Mach-O",
+      "version": "keel v0.1.0-alpha.2 (3596d92d192d)",
+      "files": 13,
+      "passed": true
+    },
+    "keel_v0.1.0-alpha.2_darwin_arm64.tar.gz": {
+      "archive": "keel_v0.1.0-alpha.2_darwin_arm64.tar.gz",
+      "sha256": "4739b633995ac8245da82b42b06c1f29f13139e6f388d9ab4fd590b48b4d4c94",
+      "binary_sha256": "33827ad5e4ccd51d95de6324ec494a6abbc010c32ffce259e4de061c41675d87",
+      "native_machine": "arm64",
+      "platform": "macOS-15.7.9-arm64-arm-64bit-Mach-O",
+      "version": "keel v0.1.0-alpha.2 (3596d92d192d)",
+      "files": 13,
+      "passed": true
+    },
+    "keel_v0.1.0-alpha.2_linux_amd64.tar.gz": {
+      "archive": "keel_v0.1.0-alpha.2_linux_amd64.tar.gz",
+      "sha256": "8886e22a9a0b23e16a3488a78b6d264ef1636cc9ce58c11136360e2d2d38f5ef",
+      "binary_sha256": "a944b685ed1f1cc28cf12f95ff2868efe2bedb7a864811e3d17f2abbc20d01fe",
+      "native_machine": "x86_64",
+      "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+      "version": "keel v0.1.0-alpha.2 (3596d92d192d)",
+      "files": 13,
+      "passed": true
+    },
+    "keel_v0.1.0-alpha.2_linux_arm64.tar.gz": {
+      "archive": "keel_v0.1.0-alpha.2_linux_arm64.tar.gz",
+      "sha256": "aa75536677e99431749e75ab091453ff22adf18c8f2d002ae2a2fc58d32323ba",
+      "binary_sha256": "a36f19abefc2df955880a51874f73a96c73ec62ae8b9048c753558482d7fa1fc",
+      "native_machine": "aarch64",
+      "platform": "Linux-6.17.0-1022-azure-aarch64-with-glibc2.39",
+      "version": "keel v0.1.0-alpha.2 (3596d92d192d)",
+      "files": 13,
+      "passed": true
+    }
+  }
+}
