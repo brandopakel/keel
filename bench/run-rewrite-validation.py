@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import socket
 import subprocess
 import sys
@@ -12,7 +13,33 @@ import threading
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from validation_lib import Client, info, sha256
+from validation_lib import Client, Server, info, sha256
+
+
+def require_flags(help_text):
+    required = ('host', 'port', 'appendonly', 'appendfsync', 'appendfilename',
+                'aof-async-append', 'aof-concurrent-append', 'auto-aof-rewrite-percentage')
+    missing = [flag for flag in required if not re.search(r'(?m)^\s+-'+re.escape(flag)+r'(?:\s|$)', help_text)]
+    if missing: raise ValueError('incompatible runtime flags: '+', '.join(missing))
+
+
+def require_persistence_fields(stats):
+    for field in ('aof_rewrites', 'aof_rewrite_in_progress'):
+        if field not in stats or not stats[field].isdigit():
+            raise ValueError('incompatible INFO persistence field: '+field)
+
+
+def compatibility(binary, name, root):
+    help_result = subprocess.run([str(binary), '-help'], capture_output=True, text=True, timeout=5)
+    help_text = help_result.stdout+help_result.stderr
+    (root/(name+'-help.log')).write_text(help_text)
+    require_flags(help_text)
+    with Server(binary, root/('compatibility-'+name), async_append=True,
+                password='rewrite-probe-fixture',
+                extra=['-aof-concurrent-append', '-auto-aof-rewrite-percentage', '0']) as server:
+        stats = info(server.client, 'persistence')
+        require_persistence_fields(stats)
+    return dict(binary_sha256=sha256(binary), persistence=stats)
 
 
 def pin(command, cpus):
@@ -23,6 +50,7 @@ def arm(args, binary, name, policy, writes, repetition, root):
     root.mkdir()
     report = dict(status='running', arm=name, policy=policy, writes_percent=writes,
                   repetition=repetition, binary_sha256=sha256(binary), rewrites=[])
+    (root/'report.json').write_text(json.dumps(report, indent=2)+'\n')
     env = {key: os.environ[key] for key in ('PATH', 'HOME', 'TMPDIR') if key in os.environ}
     with socket.socket() as reservation:
         reservation.bind(('127.0.0.1', 0))
@@ -168,6 +196,8 @@ if __name__ == '__main__':
                   arguments={key: str(value) if isinstance(value, Path) else value for key, value in vars(args).items()},
                   harness_sha256=sha256(__file__), generator_sha256=sha256(args.load), runs=[])
     try:
+        report['compatibility'] = {name: compatibility(binary, name, args.out)
+                                   for name, binary in [('baseline', args.baseline), ('candidate', args.candidate)]}
         for repetition in range(args.reps):
             arms = [('baseline', args.baseline), ('candidate', args.candidate)]
             if repetition % 2: arms.reverse()
@@ -175,7 +205,17 @@ if __name__ == '__main__':
                 for write in writes:
                     for name, binary in arms:
                         directory = args.out/f'r{repetition+1}-{policy}-writes{write}-{name}'
-                        report['runs'].append(arm(args, binary, name, policy, write, repetition+1, directory))
+                        try:
+                            report['runs'].append(arm(args, binary, name, policy, write, repetition+1, directory))
+                        except Exception as exc:
+                            report.setdefault('arm_failures', []).append(dict(arm=directory.name, failure=repr(exc)))
+                            path = directory/'report.json'
+                            failed = json.loads(path.read_text()) if path.exists() else dict(arm=name)
+                            failed.update(status='failed', failure=repr(exc))
+                            report['runs'].append(failed)
+                        (args.out/'report.json').write_text(json.dumps(report, indent=2)+'\n')
+        if report.get('arm_failures'):
+            raise RuntimeError(f"{len(report['arm_failures'])} rewrite validation arms failed")
         report['status'] = 'completed'
     except BaseException as exc:
         report.update(status='failed', failure=repr(exc))

@@ -36,6 +36,7 @@ jobs:
           lscpu > dist/rewrite-validation/lscpu.log
           df -T . > dist/rewrite-validation/filesystem.log
       - name: Thirty-six rotated arms on disjoint exposed core groups
+        timeout-minutes: 32
         run: |
           python3 - <<'PY'
           import json, os, subprocess
@@ -46,8 +47,13 @@ jobs:
               base=Path(f'/sys/devices/system/cpu/cpu{cpu}/topology')
               topology[cpu]=tuple((base/name).read_text().strip() for name in ('physical_package_id','core_id'))
           server=[cpu for cpu in cpus if topology[cpu]==topology[cpus[0]]]
+          if len(server)<2:
+              groups={group:[cpu for cpu in cpus if topology[cpu]==group] for group in set(topology.values())}
+              server=next((group for group in groups.values() if len(group)==2), [])
+              if not server:
+                  server=[group[0] for group in groups.values() if len(group)==1][:2]
           generator=[cpu for cpu in cpus if cpu not in server]
-          assert generator, 'two exposed physical core groups required'
+          assert len(server)>=2 and len(generator)>=2, f'need two CPUs per side without splitting exposed physical core groups: {server}/{generator}'
           Path('dist/rewrite-validation/affinity.json').write_text(json.dumps({'server':server,'generator':generator,'topology':topology,'limitation':'Public VM tenancy, storage and host scheduling remain uncontrolled.'},indent=2))
           server, generator=','.join(map(str,server)),','.join(map(str,generator))
           subprocess.run(['taskset','-c',generator,'python3','bench/run-rewrite-validation.py','--candidate','/tmp/candidate','--baseline','/tmp/baseline','--load','/tmp/arrival','--out','dist/rewrite-validation/arms','--server-cpus',server,'--client-cpus',generator],check=True)

@@ -61,8 +61,12 @@ func startRewriteSync() {
 			job.mu.Unlock()
 			// Cancellation transfers cleanup to the worker. A new rewrite is
 			// refused until this finishes, so the path cannot name a newer file.
-			_ = job.file.Close()
-			_ = os.Remove(job.path)
+			if err := job.file.Close(); err != nil {
+				aofLog("abandoned rewrite sync close %s: %v", job.path, err)
+			}
+			if err := os.Remove(job.path); err != nil && !os.IsNotExist(err) {
+				aofLog("abandoned rewrite temp file left behind %s: %v", job.path, err)
+			}
 			close(job.done)
 			return
 		}

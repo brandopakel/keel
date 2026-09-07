@@ -56,3 +56,13 @@ for the replacement sync. The worker now captures a shutdown-safe notification;
 the loop self-wakes only while rewrite work can advance. A blocked-sync regression
 checks no runnable cycle until completion and exactly one worker notification.
 This runtime correction requires its own matched repeat before adoption.
+
+Review hardening checks each binary’s required flags and persistence fields
+before the matrix, requires at least two CPUs per disjoint side, and reserves
+eight minutes of job headroom for partial artifact upload. The original hosted
+run already used two CPUs per side. Independent arm errors are now retained and
+remaining arms run before aggregate failure; an injected startup failure produces
+four reports (two baseline passes, two candidate failures) and a nonzero exit.
+A normal two-arm smoke passes. Cleanup failures from abandoned sync jobs are
+logged. Unit compatibility checks, race and workflow lint pass; all attempts
+are retained in `bench/results/rewrite-review-guards-2026-09-07.json.gz`.
