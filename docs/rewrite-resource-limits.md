@@ -60,3 +60,18 @@ Each completed 15 primary and 32 replica crash recoveries. Those runs exercise
 the pre-closeout runtime and do not validate the new rewrite implementation.
 Their differing write counts are not a controlled filesystem performance
 comparison. The Mac eight-hour and 48-hour soaks are still running separately.
+
+`INFO clients` now reports connected clients and retained input, reply and total
+client-buffer bytes for the event-loop transport. These are user-space retained
+buffers, not RSS or kernel queues. The slow-reader test waits until more than
+16 MiB of replies remain retained after a nonblocking flush before asserting
+that another client receives PING within two seconds.
+
+An Intel Mac check of 5127eb4 failed the earlier slow-reader test with a PING
+read timeout in [34106481659](https://github.com/brandopakel/keel/actions/runs/34106481659).
+Thirty Linux and thirty Intel Mac repetitions with unchanged deadlines passed
+in [34107298022](https://github.com/brandopakel/keel/actions/runs/34107298022),
+along with its full native and filesystem checks. The original timeout's cause
+remains unestablished. Failure-time goroutine capture is retained, and the
+subsequent observable-backpressure assertion strengthens the test precondition;
+it is not evidence that a runtime timeout cause was found or repaired.
