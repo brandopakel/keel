@@ -53,6 +53,10 @@ def scenarios():
         ('hll-union', {'kind': 'hll-union', 'keys': 64, 'hll_items': 32}),
         ('large-list-read', {'kind': 'large-list', 'keys': 1, 'size': 1024}),
         ('large-hash-read', {'kind': 'large-hash', 'keys': 1, 'size': 64}),
+        ('hash-field-read', {'kind': 'hash-field-read', 'keys': 100000}),
+        ('hash-field-mixed', {'kind': 'hash-field-mixed', 'keys': 100000}),
+        ('hash-field-write', {'kind': 'hash-field-write', 'keys': 100000}),
+        ('hash-field-churn', {'kind': 'hash-field-churn', 'keys': 100000}),
         ('large-set-read', {'kind': 'large-set', 'keys': 1, 'size': 64}),
         ('large-zset-read', {'kind': 'large-zset', 'keys': 1, 'size': 64}),
         ('geo-nearest', {'kind': 'geo-nearest', 'keys': 1, 'geo_members': 50000}),
@@ -113,7 +117,9 @@ def preload(client, case):
         return digest.hexdigest()
     for index in range(case['keys'] if kind not in ('miss', 'list', 'large-list') else 0):
         key = f'bench:{index+1}'
-        if kind == 'hash':
+        if kind.startswith('hash-field-'):
+            command = ['HSET', 'bench:collection', key, payload]
+        elif kind == 'hash':
             command = ['HSET', key, 'field', payload]
         elif kind == 'set':
             command = ['SADD', key, 'member']
@@ -141,6 +147,10 @@ def preload(client, case):
         command = ['RPUSH', 'bench:list'] + [payload] * 256
         digest.update(wire(command))
         assert client.call(*command) == 256
+    if kind.startswith('hash-field-'):
+        assert client.call('HLEN', 'bench:collection') == case['keys']
+        for index in (1, case['keys']//2, case['keys']):
+            assert client.call('HGET', 'bench:collection', f'bench:{index}') == payload
     return digest.hexdigest()
 
 
@@ -149,6 +159,10 @@ def traffic_options(case):
     commands = {
         'ttl': [('SET __key__ __data__ EX 300', 1), ('GET __key__', 1)],
         'hash': [('HGET __key__ field', 19), ('HSET __key__ field __data__', 1)],
+        'hash-field-read': [('HGET bench:collection __key__', 19), ('HSET bench:collection __key__ __data__', 1)],
+        'hash-field-mixed': [('HGET bench:collection __key__', 1), ('HSET bench:collection __key__ __data__', 1)],
+        'hash-field-write': [('HGET bench:collection __key__', 1), ('HSET bench:collection __key__ __data__', 19)],
+        'hash-field-churn': [('HDEL bench:collection __key__', 1), ('HSET bench:collection __key__ __data__', 1)],
         'set': [('SISMEMBER __key__ member', 19), ('SADD __key__ member', 1)],
         'zset': [('ZRANGE __key__ 0 9 WITHSCORES', 19), ('ZADD __key__ 2 member', 1)],
         'list': [('RPUSH bench:queue __data__', 1), ('LPOP bench:queue', 1)],
@@ -316,6 +330,12 @@ def run_arm(args, arm, binary, case, repetition, directory):
                 members = client.call('GEOSEARCH', 'bench:geo', 'FROMLONLAT', 0, 0,
                                       'BYRADIUS', 1000, 'km', 'COUNT', count)
                 assert members == [f'member:{i:05d}'.encode() for i in range(count)]
+            if case['kind'].startswith('hash-field-'):
+                report['final_hash_fields'] = client.call('HLEN', 'bench:collection')
+                if case['kind'] == 'hash-field-churn':
+                    assert 0 < report['final_hash_fields'] <= case['keys']
+                else:
+                    assert report['final_hash_fields'] == case['keys']
             if args.profiles:
                 assert (directory / 'profiles/live-1-runtime.json').exists(), 'live profile capture missing'
         report['rss_kib'] = {'median': statistics.median(row[1] for row in samples),

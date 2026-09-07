@@ -12,8 +12,11 @@ import (
 
 func TestLargeCollectionRewriteYieldsAndReconcilesMutation(t *testing.T) {
 	for _, kind := range []string{"set", "zset", "hash"} {
-		for _, mutation := range []string{"update", "replace", "delete", "sample"} {
+		for _, mutation := range []string{"update", "replace", "delete", "sample", "shrink-regrow"} {
 			if kind != "set" && mutation == "sample" {
+				continue
+			}
+			if kind != "hash" && mutation == "shrink-regrow" {
 				continue
 			}
 			t.Run(kind+"/"+mutation, func(t *testing.T) {
@@ -56,11 +59,21 @@ func TestLargeCollectionRewriteYieldsAndReconcilesMutation(t *testing.T) {
 					run(t, "DEL", "large")
 				case "sample":
 					run(t, "SRANDMEMBER", "large", "1000")
+				case "shrink-regrow":
+					// Invalidate the active map cursor while bounded hash leaves
+					// merge, demote to one leaf, then split again with new fields.
+					for i := 10; i < 2000; i++ {
+						require.Equal(t, int64(1), run(t, "HDEL", "large", fmt.Sprintf("member-%04d", i)))
+					}
+					for i := 0; i < 2000; i++ {
+						require.Equal(t, int64(1), run(t, "HSET", "large", fmt.Sprintf("new-%04d", i), strconv.Itoa(i)))
+					}
+					require.Equal(t, int64(2010), run(t, "HLEN", "large"))
 				}
 				require.False(t, rewrite.collectionActive)
 				require.Nil(t, rewrite.hashCursor)
 				var want interface{}
-				if mutation == "update" || mutation == "sample" {
+				if mutation == "update" || mutation == "sample" || mutation == "shrink-regrow" {
 					if kind == "set" {
 						want = run(t, "SMEMBERS", "large")
 					} else if kind == "hash" {

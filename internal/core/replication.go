@@ -34,7 +34,8 @@ type ReplicationFrame struct {
 	Pending        bool   `json:"pending,omitempty"`
 	CaughtUp       bool   `json:"caught_up,omitempty"`
 	// Term is the authority the sender believes it has. frameChecksum marshals
-	// the whole struct, so this is authenticated with everything else.
+	// the whole struct, so this is covered by the integrity checksum. Peer
+	// authentication and transport protection are separate requirements.
 	Term uint64 `json:"term,omitempty"`
 }
 type replicationBatch struct {
@@ -155,6 +156,9 @@ func cmdReplicationPull(args []string) []byte {
 	if !config.ReplicationFeed || config.ReplicationProtocol != 1 {
 		return Encode(errors.New("ERR replication protocol 1 is disabled"), false)
 	}
+	if CurrentTerm() != 0 || !Writable() {
+		return Encode(errors.New("ERR nonzero terms require replication protocol 2"), false)
+	}
 	if len(args) != 2 {
 		return Encode(errSyntax, false)
 	}
@@ -217,6 +221,10 @@ func cmdReplicationPull(args []string) []byte {
 func ApplyReplication(frame ReplicationFrame) error {
 	if config.ReplicationProtocol == 2 {
 		return applyReplicationV2(frame)
+	}
+	if CurrentTerm() != 0 || frame.Term != 0 {
+		replicaReady = false
+		return errors.New("nonzero terms require replication protocol 2")
 	}
 	if frame.Version != 1 || len(frame.Epoch) != 32 || len(frame.Body) > replicationLimit || frame.Checksum != frameChecksum(frame) {
 		return errors.New("invalid replication frame")
