@@ -1,0 +1,134 @@
+name: Scheduled capacity and larger recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate:
+        description: Exact candidate runtime commit
+        required: true
+        type: string
+      baseline:
+        description: Exact baseline runtime commit
+        type: string
+        default: 9f155872c60b07c0793e3653bd30d1fe96b8cb59
+      cases:
+        description: Comma-separated workload names
+        type: string
+        default: read-64,balanced-1k,expiry-storm,large-1m,large-hash,large-list,mixed-tenants
+      rates:
+        description: Scheduled requests per second
+        type: string
+        default: 1000,10000,50000,100000,150000
+      seconds:
+        description: Seconds per measurement
+        type: number
+        default: 10
+      repetitions:
+        description: Repetitions per arm
+        type: number
+        default: 2
+      policy:
+        description: Identical AOF fsync policy in both arms
+        type: choice
+        options: ['off', 'no', everysec, always]
+        default: 'off'
+      append_mode:
+        description: Identical append mode in both arms
+        type: choice
+        options: [sync, barrier, concurrent]
+        default: concurrent
+
+permissions:
+  contents: read
+
+jobs:
+  capacity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version: '1.27.1' }
+      - name: Build exact runtimes and independent native generator
+        env:
+          CANDIDATE_REV: ${{ inputs.candidate }}
+          BASELINE_REV: ${{ inputs.baseline }}
+          CGO_ENABLED: '0'
+        run: |
+          [[ "$CANDIDATE_REV" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$BASELINE_REV" =~ ^[0-9a-f]{40}$ ]]
+          git worktree add --detach "$RUNNER_TEMP/candidate" "$CANDIDATE_REV"
+          git worktree add --detach "$RUNNER_TEMP/baseline" "$BASELINE_REV"
+          go -C "$RUNNER_TEMP/candidate" build -trimpath -o /tmp/candidate ./cmd/keel
+          go -C "$RUNNER_TEMP/baseline" build -trimpath -o /tmp/baseline ./cmd/keel
+          go test -race ./bench/arrival
+          go build -trimpath -o /tmp/arrival ./bench/arrival
+          mkdir -p dist/capacity
+          go version -m /tmp/candidate > dist/capacity/candidate-build.log
+          go version -m /tmp/baseline > dist/capacity/baseline-build.log
+          go version -m /tmp/arrival > dist/capacity/generator-build.log
+          lscpu > dist/capacity/lscpu.log
+          df -T . > dist/capacity/filesystem.log
+      - name: Matched offered-load sweeps on disjoint exposed core groups
+        env:
+          CASES: ${{ inputs.cases }}
+          RATES: ${{ inputs.rates }}
+          SECONDS_PER_ARM: ${{ inputs.seconds }}
+          REPETITIONS: ${{ inputs.repetitions }}
+          AOF_POLICY: ${{ inputs.policy }}
+          APPEND_MODE: ${{ inputs.append_mode }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          cpus=sorted(os.sched_getaffinity(0))
+          topology={}
+          for cpu in cpus:
+              base=Path(f'/sys/devices/system/cpu/cpu{cpu}/topology')
+              topology[cpu]=tuple((base/name).read_text().strip() for name in ('physical_package_id','core_id'))
+          server=[cpu for cpu in cpus if topology[cpu]==topology[cpus[0]]]
+          generator=[cpu for cpu in cpus if cpu not in server]
+          assert generator, 'two exposed physical core groups required'
+          server, generator=','.join(map(str,server)),','.join(map(str,generator))
+          Path('dist/capacity/affinity.json').write_text(json.dumps({'server':server,'generator':generator,'topology':topology,'limitation':'Public VM tenancy and host scheduling remain uncontrolled.'},indent=2))
+          subprocess.run(['python3','bench/run-capacity.py','--candidate','/tmp/candidate','--baseline','/tmp/baseline','--load','/tmp/arrival','--out','dist/capacity/sweeps','--server-cpus',server,'--client-cpus',generator,'--cases',os.environ['CASES'],'--rates',os.environ['RATES'],'--seconds',os.environ['SECONDS_PER_ARM'],'--reps',os.environ['REPETITIONS'],'--policy',os.environ['AOF_POLICY'],'--append-mode',os.environ['APPEND_MODE']],check=True)
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: scheduled-capacity
+          path: |
+            dist/capacity/**/*.json
+            dist/capacity/**/*.log
+          retention-days: 30
+
+  large_recovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version: '1.27.1' }
+      - name: Build exact candidate runtime
+        env:
+          CANDIDATE_REV: ${{ inputs.candidate }}
+          CGO_ENABLED: '0'
+        run: |
+          [[ "$CANDIDATE_REV" =~ ^[0-9a-f]{40}$ ]]
+          git worktree add --detach "$RUNNER_TEMP/candidate" "$CANDIDATE_REV"
+          go -C "$RUNNER_TEMP/candidate" build -trimpath -o /tmp/candidate ./cmd/keel
+          mkdir -p dist/large-recovery
+          go version -m /tmp/candidate > dist/large-recovery/build.log
+          lscpu > dist/large-recovery/lscpu.log
+      - name: Two lagging replicas with 128 MiB snapshots and history overflow
+        run: python3 scripts/check-large-recovery.py --bin /tmp/candidate --out dist/large-recovery/run --keys 2048
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: larger-recovery
+          path: |
+            dist/large-recovery/**/*.json
+            dist/large-recovery/**/*.log
+          retention-days: 30
