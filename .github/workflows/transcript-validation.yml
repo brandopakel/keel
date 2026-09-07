@@ -2,6 +2,9 @@ name: Matched AOF transcript validation
 on:
   workflow_call:
     inputs:
+      policies:
+        type: string
+        default: '["off","no","everysec","always"]'
       baseline:
         required: true
         type: string
@@ -20,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        policy: ['off', 'no', 'everysec', 'always']
+        policy: ${{ fromJSON(inputs.policies) }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with: { persist-credentials: false, fetch-depth: 0 }

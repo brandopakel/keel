@@ -145,11 +145,28 @@ func AppendAdmission(commands []*Command) (logBytes, replyBytes int, ok bool) {
 		default:
 			return 0, 0, false
 		}
-		// Each argument can appear in the input record and in canonical SET /
-		// PEXPIREAT or lazy DEL records. The fixed allowance covers framing.
-		logBytes += 512
-		for _, s := range a {
-			logBytes += 3 * (len(s) + 32)
+		if cmd.Cmd == "SET" || cmd.Cmd == "SETEX" || cmd.Cmd == "PSETEX" {
+			value := 1
+			if cmd.Cmd != "SET" {
+				value = 2
+			}
+			if len(a) <= value || len(a[0]) > (maxAsyncAppendBytes-512)/3 {
+				return 0, 0, false
+			}
+			// The value appears once in canonical SET. Lazy DEL and PEXPIREAT
+			// repeat the key, never the value. Keep generous framing/expiry
+			// slack without reserving three copies of a large value.
+			fixed := 512 + 3*len(a[0])
+			if len(a[value]) > maxAsyncAppendBytes-fixed {
+				return 0, 0, false
+			}
+			logBytes += fixed + len(a[value])
+		} else {
+			// Other commands retain their conservative canonical/expiry bound.
+			logBytes += 512
+			for _, s := range a {
+				logBytes += 3 * (len(s) + 32)
+			}
 		}
 		if logBytes > maxAsyncAppendBytes {
 			return 0, 0, false

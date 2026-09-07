@@ -42,6 +42,58 @@ func TestAOFTranscriptLargeValueKeepsBoundedBuffer(t *testing.T) {
 	}
 }
 
+func TestAOFTranscriptAdmitsFourLargeValuesBehindPendingAppend(t *testing.T) {
+	ResetStores()
+	oldWrite, oldMemory, oldKeys := aofWrite, config.MaxMemory, config.KeyNumberLimit
+	config.MaxMemory, config.KeyNumberLimit = 0, 100000
+	release, entered := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	t.Cleanup(func() {
+		once.Do(func() { close(release) })
+		CloseAOF()
+		aofWrite, config.MaxMemory, config.KeyNumberLimit = oldWrite, oldMemory, oldKeys
+		ResetStores()
+	})
+	path := filepath.Join(t.TempDir(), "batch.aof")
+	require.NoError(t, OpenAOF(path))
+	aofWrite = func(f *os.File, body []byte) (int, error) {
+		select {
+		case <-entered:
+		default:
+			close(entered)
+		}
+		<-release
+		return oldWrite(f, body)
+	}
+	run(t, "SET", "first", "safe")
+	ready, err := FlushAOFAsync(nil)
+	require.NoError(t, err)
+	require.False(t, ready)
+	<-entered
+	value := strings.Repeat("v", 1<<20)
+	for i := 0; i < 4; i++ {
+		key := fmt.Sprint("large:", i)
+		commands := []*Command{{Cmd: "SET", Args: []string{key, value, "PX", "60000"}}}
+		reserve, _, bounded := AppendAdmission(commands)
+		require.True(t, bounded)
+		require.True(t, AppendHasRoom(reserve), "four one-MiB values plus framing should fit")
+		before := len(aof.buf)
+		require.Equal(t, "OK", run(t, "SET", commands[0].Args...))
+		require.LessOrEqual(t, len(aof.buf)-before, reserve)
+		require.True(t, AppendPending(), "commands must not synchronously join the paused worker")
+		require.Zero(t, AppendReadyOffset(), "pending writes remain unacknowledged")
+	}
+	require.LessOrEqual(t, cap(aof.buf), maxAOFTranscriptBytes)
+	once.Do(func() { close(release) })
+	require.NoError(t, CloseAOF())
+	for i := 0; i < 2; i++ {
+		restart(t, path)
+		for key := 0; key < 4; key++ {
+			require.Equal(t, value, run(t, "GET", fmt.Sprint("large:", key)))
+		}
+	}
+}
+
 func TestAOFTranscriptDrainsDoNotSyncOrAdvanceRewrite(t *testing.T) {
 	ResetStores()
 	oldSync, oldPolicy := aofSync, config.AOFFsync

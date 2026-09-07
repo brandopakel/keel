@@ -9,11 +9,11 @@ than eight MiB of idle log capacity. Local regression checks reproduce those
 allocations before the change.
 
 The primary now coalesces ordinary commands in a buffer whose length and backing
-capacity cannot exceed four MiB. Large fields borrow the command's existing
+capacity cannot exceed four MiB plus 64 KiB of framing headroom. Large fields borrow the command's existing
 strings and drain fragments directly in order. Eviction and expiry write their
 DEL records directly instead of accumulating a separate removal array. The same
-local fixtures allocate 4.20 MB for the eight-MiB SET and 7.89 MB for mass
-eviction, with 4.19 MB retained log capacity. Two exact restarts
+local fixtures allocate 4.27 MB for the eight-MiB SET and 7.96 MB for mass
+eviction, with 4.26 MB retained log capacity. Two exact restarts
 preserve the resulting state. These are allocation diagnostics, not controlled
 latency or process-RSS measurements.
 
@@ -81,3 +81,37 @@ again. A second one-second local probe records one-MiB writes at roughly 150 to
 short, contended results remain diagnostic; they do not qualify either a gain or
 an acceptable regression. The PR stays a draft until the controlled policy/mode
 matrix and review can assess the memory/throughput tradeoff.
+
+## First hosted matrix and admission correction
+
+Run 34165127082 compares candidate `44b2a58` with baseline `ad18e15`. The
+off-policy matrix and all three always-policy matrices pass. Small-command
+throughput is mostly unchanged. Concurrent one-MiB writes have a median paired
+throughput ratio of 0.852; synchronous pipelined writes are 0.966. Off-policy
+one-MiB writes are 0.952, despite the transcript path being disabled. No completed
+cell reports a generator CPU warning, but public-runner variability still applies.
+These results do not support adopting the original candidate as performance-neutral.
+
+The no/everysec matrices fail on the baseline's first one-MiB write arm in all
+three append modes. Requests complete without reported command errors, followed
+by `shutdown exceeded five seconds` on SIGTERM. These six failures remain failed;
+they do not establish a candidate regression or an acceptable shutdown. A separate
+hosted diagnostic captures the blocked shutdown phase before changing its policy.
+Compressed original artifacts are in `transcript-first-hosted-2026-09-07.tar.gz`.
+
+Inspection found that append admission reserved three copies of each SET value,
+although the canonical log contains it once; only the key can also appear in lazy
+DEL and expiry records. The corrected bound covers the value once, the key three
+times and generous framing/expiry slack for SET/SETEX/PSETEX. Other command bounds
+remain conservative. A small allowance above four MiB accommodates four one-MiB
+values plus RESP framing. The final geometric buffer growth includes this
+allowance, avoiding an extra full backing allocation just for the headers.
+
+A deterministic check holds an older append worker, admits and executes four
+one-MiB expiring SETs without joining that worker, verifies each actual transcript
+fits its reservation and all replies remain gated, then performs two exact
+replays. Existing random-run admission, expiry, replication and torn-tail checks
+also pass. The bounded local check takes approximately 5.5 seconds and prunes its
+compilation cache. The initially reproduced extra-growth allocation failure and
+the corrected result are both archived. This correction requires a fresh matched
+hosted matrix; no throughput gain or neutral result is inferred from the unit test.

@@ -9,7 +9,9 @@ import (
 // A large command borrows its existing strings and drains fragments in order.
 // Drains can block on storage; they neither sync nor advance a rewrite. Only
 // the normal completed-command flush may acknowledge or replace the AOF.
-const maxAOFTranscriptBytes = 4 << 20
+// Leave framing headroom above four one-MiB payloads. An exact power-of-two
+// ceiling otherwise rejects the fourth ordinary record solely for its header.
+const maxAOFTranscriptBytes = (4 << 20) + (64 << 10)
 
 func writeAOFBuffer() error {
 	pollAppend(true)
@@ -57,6 +59,11 @@ func growAOFBuffer(size int) {
 		return
 	}
 	capacity := min(maxAOFTranscriptBytes, max(len(aof.buf)+size, max(4096, 2*cap(aof.buf))))
+	// Include the small framing allowance in the final geometric growth;
+	// growing to exactly four MiB and then again for headers wastes a buffer.
+	if capacity >= 4<<20 {
+		capacity = maxAOFTranscriptBytes
+	}
 	buf := make([]byte, len(aof.buf), capacity)
 	copy(buf, aof.buf)
 	aof.buf = buf
