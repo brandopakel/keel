@@ -590,11 +590,11 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 
 	// A pipe whose read end is monitored alongside the client sockets.
 	//
-	// Check blocks with no timeout, so an idle server is parked in a syscall
-	// that no flag can interrupt. Writing one byte here makes the multiplexer
-	// return immediately. The byte also persists in the pipe, so a signal that
-	// arrives before the loop parks is not lost - it is reported on the next
-	// Check rather than missed.
+	// Check waits a bounded interval, so a signal is noticed within it even
+	// with nothing else happening. Writing one byte here makes the multiplexer
+	// return immediately rather than after that interval. The byte also
+	// persists in the pipe, so a signal that arrives before the loop parks is
+	// not lost - it is reported on the next Check rather than missed.
 	var wakeupFDs [2]int
 	if err = syscall.Pipe(wakeupFDs[:]); err != nil {
 		return err
