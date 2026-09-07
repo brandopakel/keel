@@ -65,3 +65,14 @@ The combined worker, timing counters, borrowed sketch streams and bounded hash
 storage pass the full local suite and focused rewrite/sketch/persistence race
 checks at `6699a8d`. These integrated local checks do not establish hosted
 performance or qualify the frozen soak binaries for the new runtime.
+
+The integrated runtime `f47348e` also includes sorted-set compaction and the final
+sketch documentation. Full local tests, vet and focused rewrite/I/O race tests
+pass. Run 34160469172 measures all three rewrite datasets at 500 requests/s
+against merged baseline `135ccbe87d169b75314223f1c6d2b684e5ab5272`, retaining the
+new filesystem timing counters even when traffic fails its gate. Its separate
+ordinary matrix failed setup because the dispatch supplied three nonexistent
+scenario names; that job did not establish performance. A follow-up dispatch
+34160718591 supplied an incorrect baseline SHA and was canceled. Corrected
+ordinary run 34160763394 uses the verified baseline and existing scenario names.
+These dispatch errors are separate from measured service/traffic failures.
