@@ -9,11 +9,11 @@ Spending remains capped at zero.
 | Unsafe failover proposal | Verified external fencing precedes authenticated incarnation-specific activation; local terms are not fencing | Finite model and counterexample tests pass; real provider implementation remains future work |
 | Unsupported Go builder | Source/CI floor 1.26; Docker builder 1.27.1 | Full local tests/vet and Linux/macOS/native/container CI passed |
 | SCAN compatibility | Option-presence handling, case-insensitive TYPE, explicit regression and differential cases | Focused command tests pass; Linux differential integration passed for the first traversal candidate |
-| Traversal and adoption gate | Stable paged slots, strict scan work limit, bounded pattern work, shared rewrite/snapshot name batches | Traversal, heap-accounting and existing core tests pass; full local Go tests passed; both matched Linux matrices completed; longer targeted run pending |
+| Traversal and adoption gate | Stable paged slots, strict scan work limit, bounded pattern work, shared rewrite/snapshot name batches | Traversal, heap-accounting and existing core tests pass; full local Go tests passed; two broad matched matrices and longer targeted run reviewed; adoption gate satisfied |
 
 A design fix is distinct from implementing automatic failover. Cooperative
-scheduling is distinct from a real-time latency guarantee. The new traversal
-still needs the complete memory/throughput evidence before an adoption decision.
+scheduling is distinct from a real-time latency guarantee. The traversal adoption decision and all measured limitations are recorded in
+[keyspace-traversal.md](keyspace-traversal.md).
 
 Subsequent work remains tracked until validated: dirty/rewrite byte limits and
 large-value handling; retained memory under churn; fair per-client admission;
@@ -57,3 +57,16 @@ clients selects four). Existing comparisons used a maximum of two, for which the
 old and new selection agree. The failover model deliberately retains delayed
 local activation as an adversarial case; its safety invariant is externally
 unfenced writers, not instantly synchronized local role flags.
+
+
+The four initial findings are implemented, tested and reviewed. The traversal
+adoption gate is satisfied with two complete broad matrices plus the longer
+seven-repetition targeted comparison. This closes those findings; it does not
+complete the broader engineering program or the running soaks.
+
+PR #28 adds streamed large rewrite records, dirty-byte admission/metrics and
+combined recovery tests; its frozen runtime passed hosted validation. PR #29
+releases large empty TTL maps while retaining allocation-free single-key TTL
+churn. Neither follow-up is included in the traversal measurements, and neither
+is a published release. The new profiles identify redundant readiness
+registration and large response copies as the next measured optimization targets.
