@@ -391,7 +391,20 @@ func TestPendingRepliesSurviveOtherTraffic(t *testing.T) {
 				t.Fatal(got)
 			}
 			slow, reader := connectTest(t, s)
-			io.WriteString(slow, strings.Repeat(request("GET", "large"), 8))
+			progress := &replyProgressReader{Reader: slow}
+			reader = bufio.NewReader(progress)
+			completed := 0
+			// Capture before connectTest's socket cleanups: a stack collected after
+			// both peers close only shows the server's now-idle event loop.
+			t.Cleanup(func() {
+				if t.Failed() {
+					t.Logf("pending reply progress: complete=%d/8 bytes=%d reads=%d last_read_age=%s buffered=%d", completed, progress.bytes, progress.reads, time.Since(progress.lastRead), reader.Buffered())
+					s.captureFailure(t)
+				}
+			})
+			if _, err := io.WriteString(slow, strings.Repeat(request("GET", "large"), 8)); err != nil {
+				t.Fatal(err)
+			}
 			time.Sleep(50 * time.Millisecond)
 			for i := 0; i < 20; i++ {
 				if got := call(t, c, r, "PING"); got != "+PONG" {
@@ -402,6 +415,7 @@ func TestPendingRepliesSurviveOtherTraffic(t *testing.T) {
 				if got := reply(t, reader); got != value {
 					t.Fatalf("reply %d corrupted", i)
 				}
+				completed++
 			}
 			if got := call(t, slow, reader, "PING"); got != "+PONG" {
 				t.Fatal(got)
@@ -409,6 +423,24 @@ func TestPendingRepliesSurviveOtherTraffic(t *testing.T) {
 			s.stop(t)
 		})
 	}
+}
+
+// replyProgressReader records transport progress without changing read sizes or
+// deadlines. The test and its cleanup use it on the same goroutine.
+type replyProgressReader struct {
+	io.Reader
+	bytes, reads int
+	lastRead     time.Time
+}
+
+func (r *replyProgressReader) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	r.reads++
+	r.bytes += n
+	if n > 0 {
+		r.lastRead = time.Now()
+	}
+	return n, err
 }
 
 func TestAOFWriteFailureDoesNotAcknowledge(t *testing.T) {

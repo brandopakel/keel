@@ -91,8 +91,10 @@ jobs:
         with: { go-version: '1.27.1' }
       - name: Build exact baseline and candidate process tests
         run: |
-          git worktree add --detach "$RUNNER_TEMP/baseline" 66f8ceb34b9df14ac9875c3893b3603d37f36039
+          git worktree add --detach "$RUNNER_TEMP/baseline" 54ed959881ffbe9a1bbe4b90a32d2b9df750f487
+          cp cmd/keel/integration_test.go "$RUNNER_TEMP/baseline/cmd/keel/integration_test.go"
           mkdir -p dist/pending-reply-diagnostic
+          shasum -a 256 cmd/keel/integration_test.go > dist/pending-reply-diagnostic/harness.log
           go test -c -o "$RUNNER_TEMP/candidate.test" ./cmd/keel
           go -C "$RUNNER_TEMP/baseline" test -c -o "$RUNNER_TEMP/baseline.test" ./cmd/keel
           git rev-parse HEAD > dist/pending-reply-diagnostic/candidate-revision.log
@@ -105,7 +107,7 @@ jobs:
         run: |
           failed=0
           for arm in baseline candidate; do
-            "$RUNNER_TEMP/$arm.test" -test.run='^TestPendingRepliesSurviveOtherTraffic$' -test.count=30 > "dist/pending-reply-diagnostic/$arm-focused.log" 2>&1 || failed=1
+            "$RUNNER_TEMP/$arm.test" -test.run='^TestPendingRepliesSurviveOtherTraffic$' -test.count=100 -test.v > "dist/pending-reply-diagnostic/$arm-focused.log" 2>&1 || failed=1
           done
           for repetition in 1 2 3; do
             if [[ "$repetition" == 2 ]]; then arms="candidate baseline"; else arms="baseline candidate"; fi
