@@ -159,7 +159,7 @@ func TestAValueLargerThanTheBudgetDoesNotEmptyTheKeyspaceForever(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("enforceLimits did not terminate on a value larger than the budget")
 	}
-	assert.Contains(t, d.dictStore, "small", "the dictionary must still work afterwards")
+	assert.NotNil(t, d.Peek("small"), "the dictionary must still work afterwards")
 }
 
 // TestOverwritingAKeyWithATTLLeaksNothing.

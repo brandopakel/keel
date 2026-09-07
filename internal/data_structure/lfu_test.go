@@ -123,7 +123,7 @@ func scanResistance(t *testing.T, strategy, limit int) float64 {
 
 	survived := 0
 	for i := 0; i < hot; i++ {
-		if _, ok := d.dictStore["k"+strconv.Itoa(i)]; ok {
+		if d.Peek("k"+strconv.Itoa(i)) != nil {
 			survived++
 		}
 	}
@@ -168,10 +168,10 @@ func TestLFUFollowsAWorkingSetThatMoves(t *testing.T) {
 
 	stale, current := 0, 0
 	for i := 0; i < 500; i++ {
-		if _, ok := d.dictStore["old"+strconv.Itoa(i)]; ok {
+		if d.Peek("old"+strconv.Itoa(i)) != nil {
 			stale++
 		}
-		if _, ok := d.dictStore["new"+strconv.Itoa(i)]; ok {
+		if d.Peek("new"+strconv.Itoa(i)) != nil {
 			current++
 		}
 	}

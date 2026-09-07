@@ -42,11 +42,11 @@ func TestAccessUpdatesRecency(t *testing.T) {
 	d.Put("a", d.NewObj("v"))
 	d.Put("b", d.NewObj("v"))
 
-	first := d.dictStore["a"].Access
-	assert.Greater(t, d.dictStore["b"].Access, first, "a later write is more recent")
+	first := d.Peek("a").Access
+	assert.Greater(t, d.Peek("b").Access, first, "a later write is more recent")
 
 	d.Get("a")
-	assert.Greater(t, d.dictStore["a"].Access, d.dictStore["b"].Access,
+	assert.Greater(t, d.Peek("a").Access, d.Peek("b").Access,
 		"reading a key must make it the most recently used")
 }
 
@@ -75,7 +75,7 @@ func TestOverwritingAnExistingKeyDoesNotEvict(t *testing.T) {
 	}
 	assert.Equal(t, 10, d.Len(), "overwriting must not evict")
 	for i := 0; i < 10; i++ {
-		assert.Contains(t, d.dictStore, "k"+strconv.Itoa(i), "k%d should still be present", i)
+		assert.NotNil(t, d.Peek("k"+strconv.Itoa(i)), "k%d should still be present", i)
 	}
 }
 
@@ -110,7 +110,7 @@ func hotRetention(t *testing.T, strategy, samples, limit int) float64 {
 
 	survived := 0
 	for i := 0; i < hot; i++ {
-		if _, ok := d.dictStore["k"+strconv.Itoa(i)]; ok {
+		if d.Peek("k"+strconv.Itoa(i)) != nil {
 			survived++
 		}
 	}
@@ -167,7 +167,7 @@ func TestEvictionSkipsCandidatesReadSinceSampling(t *testing.T) {
 	evictOne()
 
 	assert.Equal(t, before-1, d.Len(), "an eviction must still remove exactly one key")
-	assert.Contains(t, d.dictStore, "k0",
+	assert.NotNil(t, d.Peek("k0"),
 		"the most recently used key must not be evicted on a stale pool entry")
 }
 

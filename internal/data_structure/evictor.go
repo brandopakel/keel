@@ -48,6 +48,10 @@ type Keyspace interface {
 	// Keys lists every key held. Expired keys may be included, so a caller
 	// showing them to a client has to filter through Has.
 	Keys() []string
+	// Scan appends the keys keep accepts, from a bounded part of the keyspace,
+	// and returns how many it examined and the cursor to resume from - zero
+	// once there is nothing left. budget bounds keys examined, not returned.
+	Scan(cursor uint64, budget int, keep func(string) bool, dst []string) ([]string, int, uint64)
 	// SampleKeys appends up to n randomly chosen candidates.
 	SampleKeys(dst []Candidate, n int) []Candidate
 	// ScoreOf reports a key's current score and whether it is still present.

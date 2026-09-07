@@ -13,7 +13,7 @@ type Sized interface{ MemUsage() uint64 }
 // so a keyspace full of 12KB sketches could run past maxmemory unchecked.
 type Keyed[T Sized] struct {
 	name     string
-	items    map[string]*keyedEntry[T]
+	items    shardedMap[*keyedEntry[T]]
 	memUsed  uint64
 	expiries map[string]uint64
 }
@@ -28,7 +28,7 @@ type keyedEntry[T Sized] struct {
 }
 
 func NewKeyed[T Sized](name string) *Keyed[T] {
-	return &Keyed[T]{name: name, items: make(map[string]*keyedEntry[T]), expiries: make(map[string]uint64)}
+	return &Keyed[T]{name: name, expiries: make(map[string]uint64)}
 }
 
 // entryBytes charges the value, the key, and the same per-entry overhead the
@@ -41,7 +41,7 @@ func (k *Keyed[T]) entryBytes(key string, value T) uint64 {
 
 // Get returns the value at key and records the access.
 func (k *Keyed[T]) Get(key string) (T, bool) {
-	e, ok := k.items[key]
+	e, ok := k.items.get(key)
 	if ok && k.expired(key) {
 		k.Delete(key)
 		noteRemoval(k, key)
@@ -58,7 +58,7 @@ func (k *Keyed[T]) Get(key string) (T, bool) {
 // Peek returns the value without recording an access, for reads that should not
 // count as use - reporting on a key is not using it.
 func (k *Keyed[T]) Peek(key string) (T, bool) {
-	e, ok := k.items[key]
+	e, ok := k.items.get(key)
 	if !ok || k.expired(key) {
 		var zero T
 		return zero, false
@@ -68,7 +68,7 @@ func (k *Keyed[T]) Peek(key string) (T, bool) {
 
 // Exists reports whether a key is present, without recording an access.
 func (k *Keyed[T]) Exists(key string) bool {
-	_, ok := k.items[key]
+	_, ok := k.items.get(key)
 	if ok && k.expired(key) {
 		k.Delete(key)
 		noteRemoval(k, key)
@@ -82,11 +82,7 @@ func (k *Keyed[T]) Exists(key string) bool {
 // which is fine, because a log is replayed as a whole and the keys in it do not
 // interact.
 func (k *Keyed[T]) Keys() []string {
-	keys := make([]string, 0, len(k.items))
-	for key := range k.items {
-		keys = append(keys, key)
-	}
-	return keys
+	return k.items.keys()
 }
 
 // Has is Exists under the name the Keyspace interface uses.
@@ -94,7 +90,7 @@ func (k *Keyed[T]) Has(key string) bool { return k.Exists(key) }
 
 // Put stores a value, replacing whatever was there.
 func (k *Keyed[T]) Put(key string, value T) {
-	if old, ok := k.items[key]; ok {
+	if old, ok := k.items.get(key); ok {
 		// An overwrite replaces the old cost rather than adding to it. Without
 		// the refund the estimate climbs forever on a key that is only updated.
 		k.memUsed -= old.bytes
@@ -103,7 +99,7 @@ func (k *Keyed[T]) Put(key string, value T) {
 	delete(k.expiries, key)
 	e := &keyedEntry[T]{value: value, access: NewAccess()}
 	e.bytes = k.entryBytes(key, value)
-	k.items[key] = e
+	k.items.set(key, e)
 	k.memUsed += e.bytes
 
 	Touch(&e.access)
@@ -117,7 +113,7 @@ func (k *Keyed[T]) Put(key string, value T) {
 // Missing a Resize does not corrupt anything; it just leaves the budget
 // believing the key is smaller than it is, which is the quiet kind of wrong.
 func (k *Keyed[T]) Resize(key string) {
-	e, ok := k.items[key]
+	e, ok := k.items.get(key)
 	if !ok {
 		return
 	}
@@ -135,11 +131,15 @@ func (k *Keyed[T]) Resize(key string) {
 // Keyed is a Keyspace, so eviction can weigh its keys against every other kind.
 
 func (k *Keyed[T]) KeyspaceName() string { return k.name }
-func (k *Keyed[T]) Len() int             { return len(k.items) }
-func (k *Keyed[T]) MemUsed() uint64      { return k.memUsed }
+func (k *Keyed[T]) Len() int             { return k.items.len() }
+
+func (k *Keyed[T]) Scan(cursor uint64, budget int, keep func(string) bool, dst []string) ([]string, int, uint64) {
+	return k.items.scan(cursor, budget, keep, dst)
+}
+func (k *Keyed[T]) MemUsed() uint64 { return k.memUsed }
 
 func (k *Keyed[T]) ScoreOf(key string) (uint64, bool) {
-	e, ok := k.items[key]
+	e, ok := k.items.get(key)
 	if !ok {
 		return 0, false
 	}
@@ -148,19 +148,15 @@ func (k *Keyed[T]) ScoreOf(key string) (uint64, bool) {
 
 // SampleKeys appends up to n keys chosen at random.
 func (k *Keyed[T]) SampleKeys(dst []Candidate, n int) []Candidate {
-	taken := 0
-	for key, e := range k.items {
+	k.items.sample(n, func(key string, e *keyedEntry[T]) {
 		dst = append(dst, Candidate{Space: k, Key: key, Score: Score(e.access)})
-		if taken++; taken >= n {
-			break
-		}
-	}
+	})
 	return dst
 }
 
 // EntryBytes reports what one key costs, for MEMORY USAGE.
 func (k *Keyed[T]) EntryBytes(key string) (uint64, bool) {
-	e, ok := k.items[key]
+	e, ok := k.items.get(key)
 	if !ok {
 		return 0, false
 	}
@@ -168,12 +164,12 @@ func (k *Keyed[T]) EntryBytes(key string) (uint64, bool) {
 }
 
 func (k *Keyed[T]) Delete(key string) bool {
-	e, ok := k.items[key]
+	e, ok := k.items.get(key)
 	if !ok {
 		return false
 	}
 	k.memUsed -= e.bytes
-	delete(k.items, key)
+	k.items.del(key)
 	delete(k.expiries, key)
 	return true
 }
@@ -181,7 +177,7 @@ func (k *Keyed[T]) Delete(key string) bool {
 func (k *Keyed[T]) expired(key string) bool             { at, ok := k.expiries[key]; return ok && at <= nowMs() }
 func (k *Keyed[T]) GetExpiry(key string) (uint64, bool) { at, ok := k.expiries[key]; return at, ok }
 func (k *Keyed[T]) SetExpiryAt(key string, at uint64) {
-	e, ok := k.items[key]
+	e, ok := k.items.get(key)
 	if !ok {
 		return
 	}
@@ -197,7 +193,9 @@ func (k *Keyed[T]) ClearExpiry(key string) bool {
 		return false
 	}
 	delete(k.expiries, key)
-	k.items[key].bytes -= expiryOverhead
+	if e, ok := k.items.get(key); ok {
+		e.bytes -= expiryOverhead
+	}
 	k.memUsed -= expiryOverhead
 	return true
 }

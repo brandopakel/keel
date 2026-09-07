@@ -22,7 +22,7 @@ var commandTable = map[string]func([]string) []byte{
 	"LCS": cmdLCS,
 
 	// Keys and expiry
-	"DEL": cmdDEL, "EXISTS": cmdEXISTS, "TYPE": cmdTYPE, "KEYS": cmdKEYS,
+	"DEL": cmdDEL, "EXISTS": cmdEXISTS, "TYPE": cmdTYPE, "KEYS": cmdKEYS, "SCAN": cmdSCAN,
 	"TTL": cmdTTL, "PTTL": cmdPTTL, "EXPIRE": cmdEXPIRE, "PEXPIREAT": cmdPEXPIREAT,
 	"PEXPIRE": cmdPEXPIRE, "EXPIREAT": cmdEXPIREAT, "PERSIST": cmdPERSIST,
 

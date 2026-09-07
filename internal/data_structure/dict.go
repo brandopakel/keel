@@ -14,7 +14,7 @@ type Obj struct {
 // Dict is the string keyspace: the values, and the expiry of each key that has
 // one.
 type Dict struct {
-	dictStore map[string]*Obj
+	dictStore shardedMap[*Obj]
 
 	// expiredDictStore holds the instant each key with a TTL falls due, keyed
 	// by the key's own name.
@@ -33,10 +33,7 @@ type Dict struct {
 }
 
 func CreateDict() *Dict {
-	return &Dict{
-		dictStore:        map[string]*Obj{},
-		expiredDictStore: map[string]uint64{},
-	}
+	return &Dict{expiredDictStore: map[string]uint64{}}
 }
 
 // NewObj builds a value for the dictionary.
@@ -84,7 +81,7 @@ func (d *Dict) SetExpiry(k string, ttlMs int64) {
 // epoch. Persistence needs this: a relative TTL written to a log becomes a new
 // TTL every time the log is replayed.
 func (d *Dict) SetExpiryAt(k string, atMs uint64) {
-	if _, ok := d.dictStore[k]; !ok {
+	if _, ok := d.dictStore.get(k); !ok {
 		return
 	}
 	// Giving a key an expiry costs a second map entry, and entryBytes charges
@@ -106,7 +103,7 @@ func (d *Dict) SetExpiryAt(k string, atMs uint64) {
 // ExpiryOf reports a key's absolute expiry, for a log that has to record when
 // rather than how much longer.
 func (d *Dict) ExpiryOf(k string) (uint64, bool) {
-	if _, ok := d.dictStore[k]; !ok {
+	if _, ok := d.dictStore.get(k); !ok {
 		return 0, false
 	}
 	at, has := d.expiredDictStore[k]
@@ -120,7 +117,7 @@ func (d *Dict) ExpiryCount() int { return len(d.expiredDictStore) }
 // Get returns the live object at a key and records the access. A key whose
 // TTL has passed is reaped on the way and reads as absent.
 func (d *Dict) Get(k string) *Obj {
-	obj, ok := d.dictStore[k]
+	obj, ok := d.dictStore.get(k)
 	if !ok {
 		return nil
 	}
@@ -142,7 +139,7 @@ func (d *Dict) Put(k string, obj *Obj) {
 	// An overwrite replaces the old value's cost rather than adding to it, so
 	// its bytes are returned first. Under a key-count bound this is also why
 	// overwriting must not evict: the dictionary does not grow.
-	if old, exists := d.dictStore[k]; exists {
+	if old, exists := d.dictStore.get(k); exists {
 		d.memUsed -= d.entryBytes(k, old)
 	}
 	// A write replaces the value and, with it, any expiry the key had. That is
@@ -151,7 +148,7 @@ func (d *Dict) Put(k string, obj *Obj) {
 	delete(d.expiredDictStore, k)
 
 	Touch(&obj.Access)
-	d.dictStore[k] = obj
+	d.dictStore.set(k, obj)
 	d.memUsed += d.entryBytes(k, obj)
 
 	// Enforced after the insert rather than before, because what has to fit is
@@ -167,7 +164,7 @@ func (d *Dict) Put(k string, obj *Obj) {
 // the caller is asking who owns the name and a dead key owns nothing - leaving
 // it would mean refusing to let another type take a name that is in truth free.
 func (d *Dict) Has(k string) bool {
-	if _, ok := d.dictStore[k]; !ok {
+	if _, ok := d.dictStore.get(k); !ok {
 		return false
 	}
 	if d.HasExpired(k) {
@@ -181,18 +178,14 @@ func (d *Dict) Has(k string) bool {
 // Keys lists every key held, expired ones included: a rewrite reads each one
 // through Peek, which is where the expiry is noticed.
 func (d *Dict) Keys() []string {
-	keys := make([]string, 0, len(d.dictStore))
-	for k := range d.dictStore {
-		keys = append(keys, k)
-	}
-	return keys
+	return d.dictStore.keys()
 }
 
 // Peek returns the object at a key without recording an access and without
 // reaping it, for a caller that is reading the keyspace rather than using it.
 // An expired key reads as absent, so a rewrite does not carry it forward.
 func (d *Dict) Peek(k string) *Obj {
-	obj, ok := d.dictStore[k]
+	obj, ok := d.dictStore.get(k)
 	if !ok || d.HasExpired(k) {
 		return nil
 	}
@@ -200,17 +193,23 @@ func (d *Dict) Peek(k string) *Obj {
 }
 
 // Len reports how many keys are stored.
-func (d *Dict) Len() int { return len(d.dictStore) }
+func (d *Dict) Len() int { return d.dictStore.len() }
+
+// Scan hands the walk to the shards. See sharded.go for why the cursor is a
+// shard index and what that does and does not promise.
+func (d *Dict) Scan(cursor uint64, budget int, keep func(string) bool, dst []string) ([]string, int, uint64) {
+	return d.dictStore.scan(cursor, budget, keep, dst)
+}
 
 // Del removes a key, its expiry and its charge against the budget, and reports
 // whether there was anything to remove.
 func (d *Dict) Del(k string) bool {
-	obj, ok := d.dictStore[k]
+	obj, ok := d.dictStore.get(k)
 	if !ok {
 		return false
 	}
 	d.memUsed -= d.entryBytes(k, obj)
-	delete(d.dictStore, k)
+	d.dictStore.del(k)
 	delete(d.expiredDictStore, k)
 	return true
 }
@@ -223,7 +222,7 @@ func (d *Dict) KeyspaceName() string { return "string" }
 func (d *Dict) MemUsed() uint64 { return d.memUsed }
 
 func (d *Dict) ScoreOf(key string) (uint64, bool) {
-	obj, exists := d.dictStore[key]
+	obj, exists := d.dictStore.get(key)
 	if !exists {
 		return 0, false
 	}
@@ -237,13 +236,9 @@ func (d *Dict) ScoreOf(key string) (uint64, bool) {
 // draws - Redis's own dictGetSomeKeys has the same property - but the starting
 // point moves every time, which is what the sampling needs.
 func (d *Dict) SampleKeys(dst []Candidate, n int) []Candidate {
-	taken := 0
-	for key, obj := range d.dictStore {
+	d.dictStore.sample(n, func(key string, obj *Obj) {
 		dst = append(dst, Candidate{Space: d, Key: key, Score: Score(obj.Access)})
-		if taken++; taken >= n {
-			break
-		}
-	}
+	})
 	return dst
 }
 
@@ -251,8 +246,8 @@ func (d *Dict) Delete(key string) bool { return d.Del(key) }
 
 // UpdateValue accounts an in-place value change while preserving its expiry.
 func (d *Dict) UpdateValue(key string, value string) {
-	obj := d.dictStore[key]
-	if obj == nil {
+	obj, ok := d.dictStore.get(key)
+	if !ok || obj == nil {
 		return
 	}
 	d.memUsed -= d.entryBytes(key, obj)
