@@ -21,6 +21,7 @@ Four timing groups distinguish `aof_write`, `aof_sync`, `aof_rewrite_write` and
 `_max_usec` and `_last_usec`. Fixed atomic counters span the process lifetime;
 individual fields are approximate concurrent snapshots. Durations measure elapsed
 wall time inside the filesystem call, not CPU time or reply acknowledgment latency.
+The later finalization group measures its complete handoff phase.
 Short writes count as failures. These observations can distinguish write stalls
 from sync stalls in future overload reports; existing reports cannot be assigned
 a cause retroactively. A local empty-call diagnostic measures roughly 53–73 ns per
@@ -76,3 +77,33 @@ scenario names; that job did not establish performance. A follow-up dispatch
 34160718591 supplied an incorrect baseline SHA and was canceled. Corrected
 ordinary run 34160763394 uses the verified baseline and existing scenario names.
 These dispatch errors are separate from measured service/traffic failures.
+
+Corrected ordinary run 34160763394 completes 50 arms (five pairs, 15 seconds,
+five workloads), with no generator CPU warnings. Paired throughput ratios are
+1.006 for small reads, 1.000 for many clients and hashes, 0.993 for pipeline-64,
+and 0.996 for sorted sets. Median p99 is unchanged except the many-client case
+(4.255 to 4.063 ms). These are near-neutral ordinary results, including a small
+pipeline cost, not a general throughput gain.
+
+The integrated 500-request/s CMS and Morris matrices each complete 36 arms,
+108 rewrites and 270,000 requests with no errors or drops. Adding the worker to
+the already-streaming sketch baseline has mixed tail effects; no additional
+sketch improvement is established. Strings drop 21 baseline and 15 candidate
+requests in the first always-sync/20%-write pair. Other string policy cells have
+median p99.9 4.19–5.05 ms baseline versus 1.62–2.72 ms candidate. The failed cell
+is not adopted on its successful repeats. All raw traffic and timing records
+are retained in `rewrite-worker-integrated-interference-2026-09-07.json.gz`.
+
+In the failed candidate arm, rewrite sync's maximum grows from zero to 148,966
+microseconds, establishing a long rewrite sync during measurement. AOF sync's
+173,890-microsecond maximum is already present before measurement and cannot be
+attributed to that traffic interval. The aggregate counters alone cannot tell
+whether the long rewrite sync was bulk preflush or final handoff. Additional
+counters now distinguish `aof_rewrite_final_sync` (a subset of rewrite sync) and
+`aof_rewrite_finalize` (the complete final synchronous handoff). Do not sum these
+nested durations. Each group also records calls lasting at least 10 ms via
+`_slow_calls`, `_slow_last_usec` and completion time `_slow_last_unix_usec`, so an
+older maximum cannot hide a subsequent slow interval. Fields remain approximate
+independent atomic observations. These new fields pass local full/vet and three
+rewrite/I/O race repetitions; they do not retroactively assign a cause to older
+observations or remove the handoff stall.

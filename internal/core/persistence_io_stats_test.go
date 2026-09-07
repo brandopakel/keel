@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -24,6 +25,7 @@ func TestPersistenceIOStatsExposeBlockedWorkAndCountFailures(t *testing.T) {
 	<-started
 	require.Equal(t, int64(1), stats.active.Load())
 	require.Zero(t, stats.calls.Load(), "completed-call counters must not hide an in-flight stall")
+	time.Sleep(15 * time.Millisecond)
 	close(release)
 	require.NoError(t, <-done)
 	require.Zero(t, stats.active.Load())
@@ -31,6 +33,9 @@ func TestPersistenceIOStatsExposeBlockedWorkAndCountFailures(t *testing.T) {
 	require.Positive(t, stats.lastNS.Load())
 	require.Equal(t, stats.lastNS.Load(), stats.totalNS.Load())
 	require.Equal(t, stats.lastNS.Load(), stats.maxNS.Load())
+	require.Equal(t, uint64(1), stats.slowCalls.Load())
+	require.Equal(t, stats.lastNS.Load(), stats.slowLastNS.Load())
+	require.Positive(t, stats.slowLastUnixUS.Load())
 	errDisk := errors.New("storage failure")
 	_, err := timedPersistenceWrite(&stats, nil, []byte("abc"), func(*os.File, []byte) (int, error) { return 0, errDisk })
 	require.ErrorIs(t, err, errDisk)
@@ -62,8 +67,8 @@ func TestPersistenceIOStatsSupportConcurrentCompletionAndObservation(t *testing.
 	require.Zero(t, stats.errors.Load())
 	var out strings.Builder
 	persistenceIOInfo(&out)
-	for _, prefix := range []string{"aof_write", "aof_sync", "aof_rewrite_write", "aof_rewrite_sync"} {
-		for _, field := range []string{"inflight", "calls", "errors", "total_usec", "max_usec", "last_usec"} {
+	for _, prefix := range []string{"aof_write", "aof_sync", "aof_rewrite_write", "aof_rewrite_sync", "aof_rewrite_final_sync", "aof_rewrite_finalize"} {
+		for _, field := range []string{"inflight", "calls", "errors", "total_usec", "max_usec", "last_usec", "slow_calls", "slow_last_usec", "slow_last_unix_usec"} {
 			require.Contains(t, out.String(), prefix+"_"+field+":")
 		}
 	}

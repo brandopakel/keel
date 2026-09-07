@@ -432,7 +432,7 @@ func noteRewriteDirty(key string) {
 
 // finishRewrite writes the keys that changed during the walk, then swaps the
 // new log in.
-func finishRewrite() error {
+func finishRewrite() (finalErr error) {
 	// Never close or replace a descriptor owned by the worker.
 	if aof.syncPending != nil || pendingRewriteIO != nil {
 		return nil
@@ -442,11 +442,16 @@ func finishRewrite() error {
 		startRewriteSync()
 		return nil
 	}
+	rewriteFinalizeStats.active.Add(1)
+	finalStarted := time.Now()
+	defer func() { rewriteFinalizeStats.finish(finalStarted, finalErr) }()
 	if rewrite.syncedBytes != rewrite.written {
 		// Preflush the bulk snapshot once, then synchronize only the dirty
 		// suffix at the existing atomic handoff. Repeated asynchronous retries
 		// could otherwise starve forever under a continuous write stream.
-		if err := timedPersistenceSync(&rewriteSyncStats, rewrite.file, rewriteFileSync); err != nil {
+		if err := timedPersistenceSync(&rewriteFinalSyncStats, rewrite.file, func(f *os.File) error {
+			return timedPersistenceSync(&rewriteSyncStats, f, rewriteFileSync)
+		}); err != nil {
 			abortRewrite(err)
 			return err
 		}
