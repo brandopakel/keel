@@ -99,6 +99,10 @@ func planDump(key string, limit int) (dumpPlan, bool) {
 			return dst
 		}}, true
 	}
+	return planOpaqueDump(key)
+}
+
+func planOpaqueDump(key string) (dumpPlan, bool) {
 	if v, ok := sbStore.Peek(key); ok {
 		return opaqueDumpPlan(dumpTagBloom, v), true
 	}
