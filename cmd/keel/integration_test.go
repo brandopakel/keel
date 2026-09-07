@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -128,30 +129,53 @@ func connectTest(t *testing.T, s *testServer) (net.Conn, *bufio.Reader) {
 // would quietly delete the assertion.
 type idleConn struct {
 	net.Conn
-	idle  time.Duration
-	fixed bool
+	idle                  time.Duration
+	mu                    sync.Mutex
+	readFixed, writeFixed bool
 }
 
 func (c *idleConn) SetDeadline(at time.Time) error {
-	c.fixed = true
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.readFixed, c.writeFixed = true, true
 	return c.Conn.SetDeadline(at)
 }
-
-func (c *idleConn) refresh() {
-	if !c.fixed {
-		c.Conn.SetDeadline(time.Now().Add(c.idle))
-	}
+func (c *idleConn) SetReadDeadline(at time.Time) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.readFixed = true
+	return c.Conn.SetReadDeadline(at)
 }
-
+func (c *idleConn) SetWriteDeadline(at time.Time) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.writeFixed = true
+	return c.Conn.SetWriteDeadline(at)
+}
+func (c *idleConn) refresh(read bool) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if read && !c.readFixed {
+		return c.Conn.SetReadDeadline(time.Now().Add(c.idle))
+	}
+	if !read && !c.writeFixed {
+		return c.Conn.SetWriteDeadline(time.Now().Add(c.idle))
+	}
+	return nil
+}
 func (c *idleConn) Read(b []byte) (int, error) {
-	c.refresh()
+	if err := c.refresh(true); err != nil {
+		return 0, err
+	}
 	return c.Conn.Read(b)
 }
-
 func (c *idleConn) Write(b []byte) (int, error) {
-	c.refresh()
+	if err := c.refresh(false); err != nil {
+		return 0, err
+	}
 	return c.Conn.Write(b)
 }
+
 func request(parts ...string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "*%d\r\n", len(parts))
