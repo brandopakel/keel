@@ -115,3 +115,30 @@ also pass. The bounded local check takes approximately 5.5 seconds and prunes it
 compilation cache. The initially reproduced extra-growth allocation failure and
 the corrected result are both archived. This correction requires a fresh matched
 hosted matrix; no throughput gain or neutral result is inferred from the unit test.
+
+## Corrected off/always comparison
+
+[Run 34169298573](https://github.com/brandopakel/keel/actions/runs/34169298573)
+compares corrected `3bced0b` against `f1cbab2`, with five alternating pairs per
+case/mode, ten seconds of load, matched durability and disjoint exposed CPU groups.
+All 160 arms pass with no generator CPU warnings. This repeat uses a newer baseline
+than the first matrix, so it is a fresh candidate assessment rather than an isolated
+measurement of the framing fix. The original failures and slower cells remain above.
+
+| Policy / mode | 64B read ratio | 64B write ratio | Pipeline write ratio | 1 MiB write ratio |
+| --- | ---: | ---: | ---: | ---: |
+| off/sync | 0.994 | 0.998 | 0.998 | 0.993 |
+| always/sync | 0.999 | 1.006 | 0.994 | 1.003 |
+| always/barrier | 0.994 | 1.014 | 1.043 | 1.008 |
+| always/concurrent | 0.998 | 1.013 | 1.033 | 1.005 |
+
+Ratios are medians of paired candidate/baseline throughput. Most cells remain near
+parity; this does not establish a general async append speedup. Always/concurrent
+1 MiB write p99 is 45.823 → 46.079 ms; always/barrier 1 MiB p99 is 33.791 → 34.559 ms.
+Always/barrier and concurrent pipeline throughput ratios are 1.043 and 1.033 in this
+run. Shared public VM scheduling and physical storage are uncontrolled. Full compact
+artifacts are `bench/results/transcript-corrected-off-always-2026-09-07.tar.gz`.
+
+The remaining no/everysec comparison must use the same explicit supported shutdown
+grace on both binaries, after integrating the shutdown fix. The harness records the
+grace and preserves failures; it does not silently alter an older baseline binary.

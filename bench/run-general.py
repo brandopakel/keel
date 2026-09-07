@@ -218,6 +218,8 @@ def run_arm(args, arm, binary, case, repetition, directory):
             command += ['-aof-async-append']
         if args.concurrent or (args.candidate_concurrent and arm == 'candidate'):
             command += ['-aof-concurrent-append']
+        if args.shutdown_seconds != 5:
+            command += ['-shutdown-timeout', f'{args.shutdown_seconds}s']
         if args.profiles:
             command += ['-profile-dir', str(directory / 'profiles')]
     command = pin_command(command, args.server_cpus)
@@ -228,6 +230,7 @@ def run_arm(args, arm, binary, case, repetition, directory):
     began = time.monotonic()
     report = {'status': 'running', 'arm': arm, 'case': case, 'repetition': repetition,
               'binary_sha256': sha256(binary), 'policy': args.policy, 'worker': args.worker and arm != 'redis',
+              'shutdown_grace_seconds': args.shutdown_seconds,
               'concurrent': arm != 'redis' and (args.concurrent or (args.candidate_concurrent and arm == 'candidate')),
               'profiles_enabled': args.profiles, 'server_command': command}
     report['gc_trace_enabled'] = (args.profiles or args.gc_trace) and arm != 'redis'
@@ -365,7 +368,7 @@ def run_arm(args, arm, binary, case, repetition, directory):
             if exit_code is None:
                 process.terminate()
                 try:
-                    exit_code = process.wait(timeout=10)
+                    exit_code = process.wait(timeout=args.shutdown_seconds+5)
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait()
@@ -410,6 +413,7 @@ def main():
     parser.add_argument('--seconds', type=int, default=5)
     parser.add_argument('--policy', choices=['off', 'no', 'everysec', 'always'], default='off')
     parser.add_argument('--worker', action='store_true')
+    parser.add_argument('--shutdown-seconds', type=int, default=5, help='same explicit Keel shutdown grace for both arms; non-default requires runtimes supporting -shutdown-timeout')
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument('--candidate-concurrent', action='store_true', help='enable bounded concurrent appends on candidate only; requires --worker')
     modes.add_argument('--concurrent', action='store_true', help='enable bounded concurrent appends on both Keel arms; requires --worker')
@@ -422,6 +426,8 @@ def main():
     args = parser.parse_args()
     if not 1 <= args.reps <= 20 or not 1 <= args.seconds <= 3600:
         parser.error('reps must be 1..20 and seconds 1..3600')
+    if not 1 <= args.shutdown_seconds <= 60:
+        parser.error('shutdown-seconds must be 1..60')
     if (args.candidate_concurrent or args.concurrent) and not args.worker:
         parser.error('concurrent append modes require --worker')
     if args.worker and args.policy == 'off':

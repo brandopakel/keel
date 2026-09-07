@@ -2,6 +2,9 @@ name: Matched AOF transcript validation
 on:
   workflow_call:
     inputs:
+      shutdown_seconds:
+        type: string
+        default: '5'
       policies:
         type: string
         default: '["off","no","everysec","always"]'
@@ -63,12 +66,15 @@ jobs:
           TRANSCRIPT_POLICY: ${{ matrix.policy }}
           TRANSCRIPT_REPETITIONS: ${{ inputs.repetitions }}
           TRANSCRIPT_SECONDS: ${{ inputs.seconds }}
+          SHUTDOWN_SECONDS: ${{ inputs.shutdown_seconds }}
         run: |
           python3 - <<'PYTHON'
           import json, os, subprocess
           from pathlib import Path
           repetitions, seconds = int(os.environ['TRANSCRIPT_REPETITIONS']), int(os.environ['TRANSCRIPT_SECONDS'])
           assert 1 <= repetitions <= 10 and 1 <= seconds <= 30
+          shutdown_seconds = int(os.environ['SHUTDOWN_SECONDS'])
+          assert 1 <= shutdown_seconds <= 60
           cpus = sorted(os.sched_getaffinity(0))
           topology = {}
           for cpu in cpus:
@@ -78,7 +84,7 @@ jobs:
           clients = [cpu for cpu in cpus if cpu not in server]
           assert clients, 'two exposed physical core groups required'
           Path('dist/transcripts/affinity.json').write_text(json.dumps({'server':server,'generator':clients,'topology':topology,'limitation':'Public VM scheduling, host tenancy and physical storage are uncontrolled.'},indent=2))
-          common = ['python3','bench/run-general.py','--candidate','/tmp/keel-candidate','--baseline','/tmp/keel-baseline','--memtier','/tmp/memtier_benchmark-2.5.1/memtier_benchmark','--server-cpus',','.join(map(str,server)),'--client-cpus',','.join(map(str,clients)),'--load-threads','2','--reps',str(repetitions),'--seconds',str(seconds),'--policy',os.environ['TRANSCRIPT_POLICY'],'--cases','cache-read-64,cache-write-64,cache-write-pipeline-64,cache-write-1m','--discard-passed-aof']
+          common = ['python3','bench/run-general.py','--candidate','/tmp/keel-candidate','--baseline','/tmp/keel-baseline','--memtier','/tmp/memtier_benchmark-2.5.1/memtier_benchmark','--server-cpus',','.join(map(str,server)),'--client-cpus',','.join(map(str,clients)),'--load-threads','2','--reps',str(repetitions),'--seconds',str(seconds),'--policy',os.environ['TRANSCRIPT_POLICY'],'--cases','cache-read-64,cache-write-64,cache-write-pipeline-64,cache-write-1m','--discard-passed-aof','--shutdown-seconds',str(shutdown_seconds)]
           modes = {'sync': []} if os.environ['TRANSCRIPT_POLICY'] == 'off' else {'sync': [], 'barrier': ['--worker'], 'concurrent': ['--worker','--concurrent']}
           failed = False
           for mode, flags in modes.items():
