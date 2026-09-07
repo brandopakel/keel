@@ -148,6 +148,7 @@ type client struct {
 	frames                     []int
 	appendOffset               uint64
 	appendHeld, appendDeferred bool
+	bufferedReady, readQueued  bool
 
 	// buf holds the bytes of a command that arrived split across reads, and is
 	// nil the rest of the time.
@@ -180,77 +181,83 @@ var clients = make(map[int]*client)
 // call points into it.
 func (c *client) readCommands(scratch []byte) ([]*core.Command, error) {
 	b := c.buf
-	if b != nil && b.size() >= maxQueryBuffer {
+	if b != nil && !c.bufferedReady && b.size() >= maxQueryBuffer {
 		// Wrap ErrProtocol so the caller replies before hanging up: the client
 		// learns why instead of seeing the connection vanish.
 		return nil, fmt.Errorf("%w: query buffer limit of %d bytes exceeded",
 			core.ErrProtocol, maxQueryBuffer)
 	}
 
-	var (
-		n   int
-		err error
-	)
-	if b == nil {
-		// Nothing half-parsed, so land in the thread's scratch: no
-		// per-connection memory, and no copy at all unless this read ends
-		// mid-frame.
-		n, err = syscall.Read(c.fd, scratch)
-	} else {
-		// A frame is in progress. Read straight into the connection's own
-		// buffer - going via the scratch would only add a copy - and ask for
-		// exactly what the frame still needs rather than a fixed chunk.
-		want := core.FrameShortfall(b.unparsed())
-		if want <= 0 {
-			// Shortfall unknown: the missing bytes are a header whose digits
-			// have not all arrived, so how much follows it is not yet settled.
-			want = readChunkSize
-		}
-		// Never speculate further than the client has already backed up. A
-		// header claiming 512MB must not become a 512MB allocation before any
-		// of the payload shows up; growing with the data still reaches a large
-		// read size within a few doublings.
-		if limit := b.size() + readChunkSize; want > limit {
-			want = limit
-		}
-		if want > maxDirectRead {
-			want = maxDirectRead
-		}
-		want = min(want, maxQueryBuffer-b.size())
-		b.reserve(want)
-		n, err = syscall.Read(c.fd, b.spare(want))
-	}
-
-	if err == syscall.EAGAIN || err == syscall.EINTR {
-		// The socket was reported readable but has nothing for us: a spurious
-		// wakeup, or another path drained it first. That is not a failure, and
-		// the caller must not close the connection over it.
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	if n == 0 {
-		// The socket was reported readable but yielded nothing, which means the
-		// peer has closed its end.
-		return nil, io.EOF
-	}
-
-	// Only one of these is valid: n can exceed len(scratch) when the read went
-	// into the connection's own buffer, so the scratch must not be resliced by
-	// it.
-	c.lastProgress = time.Now()
 	var src []byte
-	if b != nil {
-		b.commit(n)
+	if c.bufferedReady && b != nil {
+		c.bufferedReady = false
 		src = b.unparsed()
 	} else {
-		src = scratch[:n]
+		var (
+			n   int
+			err error
+		)
+		if b == nil {
+			// Nothing half-parsed, so land in the thread's scratch: no
+			// per-connection memory, and no copy at all unless this read ends
+			// mid-frame.
+			n, err = syscall.Read(c.fd, scratch)
+		} else {
+			// A frame is in progress. Read straight into the connection's own
+			// buffer - going via the scratch would only add a copy - and ask for
+			// exactly what the frame still needs rather than a fixed chunk.
+			want := core.FrameShortfall(b.unparsed())
+			if want <= 0 {
+				// Shortfall unknown: the missing bytes are a header whose digits
+				// have not all arrived, so how much follows it is not yet settled.
+				want = readChunkSize
+			}
+			// Never speculate further than the client has already backed up. A
+			// header claiming 512MB must not become a 512MB allocation before any
+			// of the payload shows up; growing with the data still reaches a large
+			// read size within a few doublings.
+			if limit := b.size() + readChunkSize; want > limit {
+				want = limit
+			}
+			if want > maxDirectRead {
+				want = maxDirectRead
+			}
+			want = min(want, maxQueryBuffer-b.size())
+			b.reserve(want)
+			n, err = syscall.Read(c.fd, b.spare(want))
+		}
+
+		if err == syscall.EAGAIN || err == syscall.EINTR {
+			// The socket was reported readable but has nothing for us: a spurious
+			// wakeup, or another path drained it first. That is not a failure, and
+			// the caller must not close the connection over it.
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		if n == 0 {
+			// The socket was reported readable but yielded nothing, which means the
+			// peer has closed its end.
+			return nil, io.EOF
+		}
+
+		// Only one of these is valid: n can exceed len(scratch) when the read went
+		// into the connection's own buffer, so the scratch must not be resliced by
+		// it.
+		c.lastProgress = time.Now()
+		if b != nil {
+			b.commit(n)
+			src = b.unparsed()
+		} else {
+			src = scratch[:n]
+		}
+
 	}
 
 	var cmds []*core.Command
 	used := 0
-	for used < len(src) {
+	for used < len(src) && len(cmds) < maxCommandsPerTurn {
 		cmd, consumed, perr := core.ParseCmd(src[used:])
 		if errors.Is(perr, core.ErrIncompleteFrame) {
 			// The rest of this command has not arrived yet. Keep what we have.
@@ -262,6 +269,8 @@ func (c *client) readCommands(scratch []byte) ([]*core.Command, error) {
 		cmds = append(cmds, cmd)
 		used += consumed
 	}
+
+	c.bufferedReady = len(cmds) == maxCommandsPerTurn && used < len(src)
 
 	switch {
 	case used == len(src):
@@ -455,38 +464,62 @@ func (r *replyBuffer) Write(p []byte) (int, error) { return r.buf.Write(p) }
 func executeRun(c *client, arena *replyArena) bool {
 	c.out, c.inArena = nil, false
 	c.outBytes = 0
-	defer func() { c.cmds = nil }()
-
-	switch len(c.cmds) {
-	case 0:
+	consumed := 0
+	defer func() {
+		remaining := copy(c.cmds, c.cmds[consumed:])
+		clear(c.cmds[remaining:])
+		c.cmds = c.cmds[:remaining]
+		if remaining == 0 {
+			c.cmds = nil
+		}
+	}()
+	if len(c.cmds) == 0 {
 		return false
-	case 1:
-		var w captureWriter
-		c.respond(c.cmds[0], &w)
-		if len(w.p) > maxOutputBuffer {
+	}
+	var capture captureWriter
+	if len(c.cmds) == 1 {
+		c.respond(c.cmds[0], &capture)
+		consumed = 1
+		if len(capture.p) > maxOutputBuffer {
 			c.err = fmt.Errorf("output buffer limit exceeded")
 			return false
 		}
-		c.out = w.p
+		c.out = capture.p
 		return len(c.out) > 0
-	default:
-		c.outStart = len(arena.buf)
-		for _, cmd := range c.cmds {
-			before := len(arena.buf)
-			c.respond(cmd, arenaWriter{arena})
-			if WriteUnbuffered {
-				c.frames = append(c.frames, len(arena.buf)-before)
-			}
-			if len(arena.buf)-c.outStart > maxOutputBuffer {
-				arena.buf = arena.buf[:c.outStart]
-				c.err = fmt.Errorf("output buffer limit exceeded")
-				return false
-			}
-		}
-		c.outEnd = len(arena.buf)
-		c.inArena = c.outEnd > c.outStart
-		return c.inArena
 	}
+	deadline := time.Now().Add(runTimeTarget)
+	c.outStart = len(arena.buf)
+	for _, cmd := range c.cmds {
+		capture.p = nil
+		c.respond(cmd, &capture)
+		consumed++
+		if len(capture.p) > maxOutputBuffer {
+			c.err = fmt.Errorf("output buffer limit exceeded")
+			return false
+		}
+		if consumed == 1 && len(capture.p) >= runReplyTarget {
+			// One large response owns its existing allocation. Yield before copying
+			// it into a shared arena or executing further commands from this client.
+			c.out = capture.p
+			return len(c.out) > 0
+		}
+		arena.buf = append(arena.buf, capture.p...)
+		if WriteUnbuffered {
+			c.frames = append(c.frames, len(capture.p))
+		}
+		if len(arena.buf)-c.outStart > maxOutputBuffer {
+			arena.buf = arena.buf[:c.outStart]
+			c.err = fmt.Errorf("output buffer limit exceeded")
+			return false
+		}
+		if consumed >= maxCommandsPerTurn || len(arena.buf)-c.outStart >= runReplyTarget ||
+			(consumed%8 == 0 && time.Now().After(deadline)) {
+			break
+		}
+	}
+	c.outEnd = len(arena.buf)
+	c.inArena = c.outEnd > c.outStart
+	return c.inArena
 }
 
 func RunAsyncTCPServer(wg *sync.WaitGroup) error {
@@ -500,6 +533,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 		for _, c := range clients {
 			closeClient(c)
 		}
+		queuedClientReads = nil
 		setWaker(nil)
 	}()
 	log.Println("starting an asynchronous TCP server on", config.Host, config.Port)
@@ -758,18 +792,19 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 				// the whole ready set is collected first so the read phase can
 				// be handed out across threads in one go.
 				if c := clients[ev.Fd]; c != nil {
-					if c.appendHeld || c.appendDeferred || len(c.cmds) > 0 {
+					if c.appendHeld || c.appendDeferred || c.readQueued {
 						continue
 					}
 					if len(c.out) > 0 {
 						writable = append(writable, c)
-					} else {
+					} else if len(c.cmds) == 0 {
 						readable = append(readable, c)
 					}
 				}
 			}
 		}
 
+		readable = takeQueuedReads(readable)
 		// Phase one: read and parse, in parallel when there is enough of it.
 		pool.run(readable, false)
 		if len(deferred) > 0 {
@@ -1080,6 +1115,7 @@ func flushClientReplies(pool *ioPool, ioMultiplexer io_multiplexing.IOMultiplexe
 				closeClient(c)
 				continue
 			}
+			queueClientRead(c)
 		}
 		accountClient(c)
 	}

@@ -162,7 +162,9 @@ func (p *ioPool) serve(c *client, write bool, scratch []byte) {
 		return
 	}
 
-	c.cmds, c.err = c.readCommands(scratch)
+	if len(c.cmds) == 0 {
+		c.cmds, c.err = c.readCommands(scratch)
+	}
 }
 
 // run performs one phase over cs, in parallel when that is worth doing.
