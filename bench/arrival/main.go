@@ -4,6 +4,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -79,6 +80,7 @@ type options struct {
 	Rate         int           `json:"scheduled_rate"`
 	Seconds      float64       `json:"seconds"`
 	Connections  int           `json:"connections"`
+	Pipeline     int           `json:"pipeline"`
 	Queue        int           `json:"queue_slots"`
 	Keys         int           `json:"keys"`
 	Size         int           `json:"value_bytes"`
@@ -168,6 +170,16 @@ func readReply(r *bufio.Reader, depth int) (byte, error) {
 }
 
 func exchange(c net.Conn, r *bufio.Reader, request []byte, timeout time.Duration) error {
+	return exchangePipeline(c, r, request, timeout, 1)
+}
+
+func exchangePipeline(c net.Conn, r *bufio.Reader, request []byte, timeout time.Duration, pipeline int) error {
+	if pipeline < 1 || pipeline > 4096 || len(request) > (64<<20)/pipeline {
+		return errors.New("pipeline request size limit")
+	}
+	if pipeline > 1 {
+		request = bytes.Repeat(request, pipeline)
+	}
 	if err := c.SetDeadline(time.Now().Add(timeout)); err != nil {
 		return err
 	}
@@ -181,8 +193,12 @@ func exchange(c net.Conn, r *bufio.Reader, request []byte, timeout time.Duration
 		}
 		request = request[n:]
 	}
-	_, err := readReply(r, 0)
-	return err
+	for i := 0; i < pipeline; i++ {
+		if _, err := readReply(r, 0); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // A mixed index keeps a deterministic workload without coupling key selection
@@ -256,6 +272,7 @@ type workerResult struct {
 }
 
 func measure(o options) (map[string]any, error) {
+	o.Pipeline = max(o.Pipeline, 1)
 	connections := make([]net.Conn, 0, o.Connections)
 	defer func() {
 		for _, c := range connections {
@@ -306,7 +323,7 @@ func measure(o options) (map[string]any, error) {
 					}
 				}
 				result.issued++
-				err := exchange(c, r, request, o.Timeout)
+				err := exchangePipeline(c, r, request, o.Timeout, o.Pipeline)
 				ended := time.Now()
 				result.service.add(ended.Sub(began))
 				result.latency.add(ended.Sub(job.due))
@@ -376,7 +393,9 @@ func measure(o options) (map[string]any, error) {
 	return map[string]any{
 		"options": o, "scheduled": total, "issued": combined.issued, "completed": combined.completed,
 		"failed": combined.failed, "queue_dropped": dropped, "queue_expired": combined.expired,
-		"elapsed_seconds": elapsed.Seconds(), "completed_per_requested_second": float64(combined.completed) / o.Seconds,
+		"completed_commands": combined.completed * uint64(o.Pipeline),
+		"request_unit":       "one pipeline batch; latency includes all replies; failed batches may execute a partial command prefix",
+		"elapsed_seconds":    elapsed.Seconds(), "completed_per_requested_second": float64(combined.completed) / o.Seconds,
 		"completed_per_elapsed_second": float64(combined.completed) / elapsed.Seconds(),
 		"scheduled_latency":            combined.latency.summary(), "service_latency": combined.service.summary(),
 		"queue_latency": combined.queued.summary(), "scheduler_lag": schedule.summary(), "first_error": combined.firstError,
@@ -394,6 +413,7 @@ func main() {
 	flag.IntVar(&o.Rate, "rate", 10000, "scheduled requests per second")
 	flag.Float64Var(&o.Seconds, "seconds", 10, "scheduled workload duration")
 	flag.IntVar(&o.Connections, "connections", 32, "independent client connections")
+	flag.IntVar(&o.Pipeline, "pipeline", 1, "commands per scheduled batch; all replies finish before batch completion")
 	flag.IntVar(&o.Queue, "queue", 64, "bounded pending arrival slots")
 	flag.IntVar(&o.Keys, "keys", 10000, "working-set keys or collection members")
 	flag.IntVar(&o.Size, "size", 64, "value size in bytes")
@@ -405,7 +425,7 @@ func main() {
 	flag.Int64Var(&o.StartNS, "start-ns", 0, "optional common scheduled start for independent tenant generators")
 	flag.BoolVar(&prepare, "preload", false, "populate then exit before measurement")
 	flag.Parse()
-	if o.Rate <= 0 || o.Rate > 10000000 || !(o.Seconds > 0 && o.Seconds <= 300) || o.Connections < 1 || o.Connections > 4096 || o.Queue < 0 || o.Queue > 65536 || o.Keys < 1 || o.Keys > 1000000 || o.Size < 0 || o.Size > 1<<20 || o.Writes < 0 || o.Writes > 100 || o.Timeout <= 0 || o.Timeout > time.Minute || (o.Collection != "" && o.Collection != "hash" && o.Collection != "list") {
+	if o.Pipeline < 1 || o.Pipeline > 4096 || o.Rate <= 0 || o.Rate > 10000000 || !(o.Seconds > 0 && o.Seconds <= 300) || o.Connections < 1 || o.Connections > 4096 || o.Queue < 0 || o.Queue > 65536 || o.Keys < 1 || o.Keys > 1000000 || o.Size < 0 || o.Size > 1<<20 || o.Writes < 0 || o.Writes > 100 || o.Timeout <= 0 || o.Timeout > time.Minute || (o.Collection != "" && o.Collection != "hash" && o.Collection != "list") {
 		fmt.Fprintln(os.Stderr, "invalid workload bounds")
 		os.Exit(2)
 	}

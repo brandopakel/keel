@@ -28,6 +28,12 @@ def cases():
         'mixed-tenants': [dict(size=64, keys=10000, writes=5, share=.8),
                           dict(size=16384, keys=1024, writes=5, share=.1),
                           dict(size=1024, keys=2500, writes=90, share=.1)],
+        # Independent processes/queues: one deep reader competes with ordinary
+        # single-command traffic. Reports distinguish batches from commands.
+        'competing-pipeline-64k': [dict(size=65536, keys=1, writes=0, share=.5, connections=1, pipeline=256),
+                                  dict(size=64, keys=1000, writes=0, share=.5, connections=1)],
+        'competing-pipeline-1m': [dict(size=1048576, keys=1, writes=0, share=.5, connections=1, pipeline=32),
+                                 dict(size=64, keys=1000, writes=0, share=.5, connections=1)],
     }
 
 
@@ -81,12 +87,14 @@ def run_arm(args, name, specs, rate, repetition, arm, binary, directory):
             tenant_rate = rate-assigned if tenant == len(specs)-1 else max(1, int(rate*spec['share']))
             assigned += tenant_rate
             connections = args.connections if len(specs) == 1 else max(2, args.connections//len(specs))
+            connections = spec.get('connections', connections)
             load = [str(args.load), '-address', f'127.0.0.1:{port}', '-rate', str(tenant_rate),
                     '-seconds', str(args.seconds), '-connections', str(connections), '-queue', str(8*connections),
                     '-size', str(spec['size']), '-keys', str(spec['keys']), '-writes', str(spec['writes']),
                     '-prefix', f'capacity:{tenant}:']
             if spec.get('expiry'): load += ['-cohort-expiry']
             if spec.get('collection'): load += ['-collection', spec['collection']]
+            if spec.get('pipeline'): load += ['-pipeline', str(spec['pipeline'])]
             load = pin(load, args.client_cpus)
             subprocess.run([*load, '-preload'], env=env, check=True, stdout=subprocess.DEVNULL,
                            stderr=subprocess.PIPE, timeout=180)

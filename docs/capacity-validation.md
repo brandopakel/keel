@@ -114,3 +114,28 @@ A new targeted hosted sweep is required before using this generator to revise
 the large-collection capacity observations; old and new samples stay separate.
 
 ![Observed load curves, including overload drops](capacity-sweep-2026-09-07.svg)
+
+The allocation-free discard follow-up completed all 32 arms in
+[34113259869](https://github.com/brandopakel/keel/actions/runs/34113259869), with
+the same runtime pair and two ten-second repetitions at 1k/2k/5k/10k offered/s.
+All request accounting balances and no protocol failures occurred. At 1k offered/s,
+candidate hash/list scheduled p99 was 3.523/2.007 ms with no drops. The list case
+also delivered all 2k/s. At 10k offered/s, candidate hash/list completed about
+2,306/4,377 per second, with 76.9%/56.2% queue drops; generator use was about
+1.39/1.38 of the two assigned cores. Baseline was similar (2,299/4,293 per second).
+The original generator had plateaued at roughly 1,440/2,700 per second while
+using both cores. This changes the experiment's limitation, not the Keel binary;
+it must not be reported as a Keel speedup. The complete separate samples are in
+`bench/results/capacity-discard-fixed-2026-09-07.json.gz`. These overloaded
+observations still do not establish lossless capacity or deployment SLOs.
+
+Two optional competing-pipeline cases pair one connection issuing batches of
+256 × 64 KiB GETs or 32 × 1 MiB GETs with a separate ordinary 64-byte reader.
+Each tenant has an independent generator process, connection and bounded queue
+with a common scheduled start. One scheduled request is one batch; reports
+include both completed batches and completed commands, and batch latency waits
+for every response. Expected overload drops remain recorded separately. Request
+replication refuses more than 64 MiB before allocation. Full-reply draining,
+truncated batch refusal, bounds, race and vet checks pass; both local cases
+completed. Hosted matched measurements are pending. This specifically tests
+interference, rather than averaging the ordinary reader into total throughput.

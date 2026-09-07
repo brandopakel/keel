@@ -133,3 +133,40 @@ func BenchmarkDiscardLargeCollectionReply(b *testing.B) {
 		}
 	}
 }
+
+func TestPipelineExchangeDrainsEveryReplyAndRefusesOversizedRequest(t *testing.T) {
+	for _, complete := range []bool{true, false} {
+		client, server := net.Pipe()
+		done := make(chan error, 1)
+		go func() {
+			defer server.Close()
+			r := bufio.NewReader(server)
+			for i := 0; i < 3; i++ {
+				if _, err := readReply(r, 0); err != nil {
+					done <- err
+					return
+				}
+			}
+			replies := 2
+			if complete {
+				replies = 3
+			}
+			_, err := io.WriteString(server, strings.Repeat("+PONG\r\n", replies))
+			done <- err
+		}()
+		err := exchangePipeline(client, bufio.NewReader(client), wire("PING"), time.Second, 3)
+		client.Close()
+		if (err == nil) != complete {
+			t.Fatalf("complete=%t error=%v", complete, err)
+		}
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	}
+	client, server := net.Pipe()
+	defer client.Close()
+	defer server.Close()
+	if err := exchangePipeline(client, bufio.NewReader(client), make([]byte, 17<<10), time.Second, 4096); err == nil {
+		t.Fatal("accepted oversized batch")
+	}
+}
