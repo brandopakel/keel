@@ -68,7 +68,15 @@ func TestSparseHLLMergesAtBothRepresentationBoundaries(t *testing.T) {
 func TestSparseHLLMemoryEstimateTracksHeap(t *testing.T) {
 	for _, cardinality := range []int{0, 1, 128, 800} {
 		t.Run(strconv.Itoa(cardinality), func(t *testing.T) {
-			objects := make([]*HLL, 2000)
+			// HeapAlloc is process-wide. Small populations let unrelated GC
+			// cleanup from preceding tests dominate the measured difference.
+			// Keep at least 1 MiB of objects while preserving the same ±15%
+			// estimate tolerance; dense cases retain their original size.
+			count := 2000
+			if cardinality <= 1 {
+				count = 20000
+			}
+			objects := make([]*HLL, count)
 			runtime.GC()
 			var before, after runtime.MemStats
 			runtime.ReadMemStats(&before)
