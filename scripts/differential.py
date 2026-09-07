@@ -9,6 +9,7 @@ outside this test, not silently accepted mismatches.
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import random
@@ -113,6 +114,52 @@ def check_scan(candidate, reference):
     return len(options)
 
 
+def check_geo(candidate, reference, *, populate=False):
+    """Compare bounded selection, option encoding, and huge-radius membership."""
+    if populate:
+        rng = random.Random(741)
+        for index in range(1000):
+            span = (10, 10) if index < 700 else (360, 170)
+            lon, lat = [(rng.random()-.5)*width for width in span]
+            command = ['GEOADD', 'geo:admission', lon, lat, f'member:{index}']
+            assert candidate.call(*command) == reference.call(*command)
+    checks = 0
+    for radius in (50, 1000, 40000):
+        for order in ('', 'ASC', 'DESC'):
+            for count in (0, 1, 7, 100, 10000000):
+                for flags in range(8):
+                    command = ['GEOSEARCH', 'geo:admission', 'FROMLONLAT', 0, 0,
+                               'BYRADIUS', radius, 'km']
+                    if order:
+                        command.append(order)
+                    if count:
+                        command += ['COUNT', count]
+                    for bit, option in enumerate(('WITHDIST', 'WITHHASH', 'WITHCOORD')):
+                        if flags & (1 << bit):
+                            command.append(option)
+                    actual, expected = candidate.call(*command), reference.call(*command)
+                    if not order and not count:
+                        actual, expected = sorted(actual), sorted(expected)
+                    assert len(actual) == len(expected), (command, len(actual), len(expected))
+                    for got, want in zip(actual, expected):
+                        if not flags:
+                            assert got == want, (command, got, want)
+                            continue
+                        assert got[0] == want[0], (command, got, want)
+                        offset = 1
+                        if flags & 1:
+                            assert abs(float(got[offset])-float(want[offset])) < .00011, (command, got, want)
+                            offset += 1
+                        if flags & 2:
+                            assert got[offset] == want[offset], (command, got, want)
+                            offset += 1
+                        if flags & 4:
+                            assert all(math.isclose(float(a), float(b), rel_tol=0, abs_tol=1e-12)
+                                       for a,b in zip(got[offset], want[offset])), (command, got, want)
+                    checks += 1
+    return checks
+
+
 def run(args):
     os.umask(0o077)
     root = args.out.resolve()
@@ -167,6 +214,7 @@ def run(args):
                 report['state_checks'] += 1
                 (root/'progress.json').write_text(json.dumps(report,indent=2)+'\n')
         report['scan_checks'] += check_scan(server.client, reference)
+        report['geo_checks'] = check_geo(server.client, reference, populate=True)
         expected = snapshot(reference)
         assert snapshot(server.client) == expected
         rewrite(server.client)
@@ -174,6 +222,7 @@ def run(args):
             server.stop(crash=True)
             server.start()
             assert snapshot(server.client) == expected, 'AOF state differs after crash/restart'
+            report['geo_checks'] += check_geo(server.client, reference)
             report['restarts'] += 1
         report.update(status='passed', final_keys=len(expected),
                       state_sha256=hashlib.sha256(repr(expected).encode()).hexdigest())
