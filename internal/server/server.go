@@ -498,7 +498,7 @@ func executeRun(c *client, arena *replyArena) bool {
 	c.outStart = len(arena.buf)
 	for _, cmd := range c.cmds {
 		if budget := core.CommandAllocations; budget != nil {
-			budget.Retained = retainedClientBytes + core.AppendRetainedBytes() + cap(arena.buf)
+			budget.ObserveRetained(retainedClientBytes + core.AppendRetainedBytes() + cap(arena.buf))
 			budget.ReplyRetained = retainedReplyBytes
 		}
 		capture.p = nil

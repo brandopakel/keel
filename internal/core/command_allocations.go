@@ -17,6 +17,16 @@ var CommandAllocations *CommandAllocationBudget
 // Begin starts a serial execution run with buffers retained by earlier runs.
 func (b *CommandAllocationBudget) Begin(retained int) {
 	b.Retained, b.Reserved, b.ReplyReserved = retained, 0, 0
+	b.ObserveRetained(retained)
+}
+
+// ObserveRetained refreshes existing buffer ownership without releasing the
+// current run's reservations. Peak includes runs that allocate no large reply.
+func (b *CommandAllocationBudget) ObserveRetained(retained int) {
+	b.Retained = retained
+	if retained >= 0 && b.Reserved <= int(^uint(0)>>1)-retained {
+		b.Peak = max(b.Peak, retained+b.Reserved)
+	}
 }
 
 // End releases reservations after execution; output ownership passes to the

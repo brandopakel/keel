@@ -30,7 +30,7 @@ reserves reversed inputs, rows, pair/run growth and optional nested index output
 
 INFO clients reports `command_allocation_limit_bytes`,
 `command_allocation_reserved_bytes`, `command_allocation_peak_bytes` and
-`command_allocation_refusals`. Peak is the maximum admitted aggregate charge,
+`command_allocation_refusals`. Peak is the maximum observed retained-plus-reserved charge,
 including retained buffers, rather than measured heap or RSS. Small fixed error
 and control replies remain available on refusal. Disconnecting/draining slow
 readers restores space for a retry.
@@ -65,3 +65,19 @@ before a tiny removal grows an already-full 1 MiB log, reply-class refusal when
 the total budget still fits, and release/retry behavior. Three focused race and
 slow-reader process repetitions, full tests and vet pass with both corrections.
 Evidence: `command-allocation-classes-2026-09-07.json.gz`.
+
+Review corrected peak accounting for execution runs with no successful reservation
+and for later commands observing larger retained buffers. A focused regression
+checks both paths and confirms refused memory is not counted as allocated.
+
+Intel CI run 34162676036 failed the large collection restart fixture at its
+five-second startup deadline. This was `TestRejectedCollectionPopsPreservePipelineAndRestart/barrier`,
+not the historical pending-reply failure. Its log records replay of 195 commands
+(roughly 195 MiB), followed by event-loop startup; the subsequently captured
+stack is idle in kqueue. That is consistent with slow startup but does not show
+the exact deadline state. This large-file fixture now has an explicit 30-second
+recovery budget and records every readiness duration. Ordinary startup remains
+five seconds and command idle deadlines are unchanged. Matched baseline/candidate
+Intel repetitions will measure the recovery cost with identical assertions.
+The original failed log remains in `command-allocation-review-2026-09-07.json.gz`;
+a later pass is not a runtime fix or an explanation of older Mac observations.

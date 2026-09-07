@@ -25,6 +25,21 @@ func TestCommandAllocationBudgetChecksAggregateAndOverflow(t *testing.T) {
 	require.Equal(t, uint64(3), b.Refusals)
 }
 
+func TestCommandAllocationPeakIncludesExistingBuffers(t *testing.T) {
+	b := CommandAllocationBudget{Limit: 100}
+	b.Begin(64)
+	require.Equal(t, 64, b.Peak, "a command need not make a reservation")
+	require.False(t, b.Reserve(37))
+	require.Equal(t, 64, b.Peak, "refused memory was never allocated")
+	require.True(t, b.Reserve(10))
+	b.ObserveRetained(80)
+	require.Equal(t, 90, b.Peak, "refresh preserves current reservations")
+	require.Equal(t, 10, b.Reserved)
+	b.End()
+	b.Begin(20)
+	require.Equal(t, 90, b.Peak, "peak survives release")
+}
+
 func TestCommandAllocationRefusalPreservesWritesAndReplay(t *testing.T) {
 	old := CommandAllocations
 	t.Cleanup(func() { CommandAllocations = old; ResetStores() })
