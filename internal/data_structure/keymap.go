@@ -36,11 +36,10 @@ type keyPageRef[V any] struct {
 	nextFree int
 }
 
-// The historical name is retained for the isolated comparison benchmarks.
-// Traversal no longer depends on hash shards or hash distribution.
+// Lookup identity is independent of traversal; collisions never merge keys.
 var keyLookupSeed = maphash.MakeSeed()
 
-type shardedMap[V any] struct {
+type keyMap[V any] struct {
 	collisions   map[uint64][]uint64
 	hashOverride func(string) uint64 // collision injection in tests; nil in production
 	lookup       map[uint64]uint64
@@ -50,7 +49,7 @@ type shardedMap[V any] struct {
 	count        int
 }
 
-func (m *shardedMap[V]) position(key string) (uint64, uint64, bool) {
+func (m *keyMap[V]) position(key string) (uint64, uint64, bool) {
 	h := uint64(0)
 	if m.hashOverride != nil {
 		h = m.hashOverride(key)
@@ -70,14 +69,14 @@ func (m *shardedMap[V]) position(key string) (uint64, uint64, bool) {
 	}
 	return 0, h, false
 }
-func (m *shardedMap[V]) getPtr(key string) (*V, bool) {
+func (m *keyMap[V]) getPtr(key string) (*V, bool) {
 	pos, _, ok := m.position(key)
 	if !ok {
 		return nil, false
 	}
 	return &m.pages[pos/keyPageSlots].page.slots[pos%keyPageSlots].value, true
 }
-func (m *shardedMap[V]) get(key string) (V, bool) {
+func (m *keyMap[V]) get(key string) (V, bool) {
 	p, ok := m.getPtr(key)
 	if !ok {
 		var zero V
@@ -85,7 +84,7 @@ func (m *shardedMap[V]) get(key string) (V, bool) {
 	}
 	return *p, true
 }
-func (m *shardedMap[V]) set(key string, value V) bool {
+func (m *keyMap[V]) set(key string, value V) bool {
 	existing, hash, exists := m.position(key)
 	if exists {
 		m.pages[existing/keyPageSlots].page.slots[existing%keyPageSlots].value = value
@@ -124,7 +123,7 @@ func (m *shardedMap[V]) set(key string, value V) bool {
 	m.count++
 	return false
 }
-func (m *shardedMap[V]) del(key string) bool {
+func (m *keyMap[V]) del(key string) bool {
 	pos, hash, ok := m.position(key)
 	if !ok {
 		return false
@@ -166,13 +165,13 @@ func (m *shardedMap[V]) del(key string) bool {
 	}
 	m.count--
 	if m.count == 0 {
-		*m = shardedMap[V]{hashOverride: m.hashOverride}
+		*m = keyMap[V]{hashOverride: m.hashOverride}
 	}
 	return true
 }
-func (m *shardedMap[V]) len() int        { return m.count }
-func (m *shardedMap[V]) scanEnd() uint64 { return m.end }
-func (m *shardedMap[V]) keys() []string {
+func (m *keyMap[V]) len() int        { return m.count }
+func (m *keyMap[V]) scanEnd() uint64 { return m.end }
+func (m *keyMap[V]) keys() []string {
 	keys := make([]string, 0, m.count)
 	for _, ref := range m.pages {
 		if ref.page == nil {
@@ -192,10 +191,10 @@ func (m *shardedMap[V]) keys() []string {
 // filtered-out keys. It never exceeds the requested work or ScanMaxWork. Byte
 // and time targets are checked between names; one oversized name is processed
 // alone to make progress. This is cooperative scheduling, not a real-time SLA.
-func (m *shardedMap[V]) scan(cursor uint64, budget int, keep func(string) bool, dst []string) ([]string, int, uint64) {
+func (m *keyMap[V]) scan(cursor uint64, budget int, keep func(string) bool, dst []string) ([]string, int, uint64) {
 	return m.scanUntil(cursor, m.end, budget, keep, dst)
 }
-func (m *shardedMap[V]) scanUntil(cursor, end uint64, budget int, keep func(string) bool, dst []string) ([]string, int, uint64) {
+func (m *keyMap[V]) scanUntil(cursor, end uint64, budget int, keep func(string) bool, dst []string) ([]string, int, uint64) {
 	end = min(end, m.end)
 	if cursor >= end {
 		return dst, 0, 0
@@ -233,7 +232,7 @@ func (m *shardedMap[V]) scanUntil(cursor, end uint64, budget int, keep func(stri
 	}
 	return dst, examined, cursor
 }
-func (m *shardedMap[V]) sample(n int, visit func(string, V)) {
+func (m *keyMap[V]) sample(n int, visit func(string, V)) {
 	for hash, pos := range m.lookup {
 		if n <= 0 {
 			return

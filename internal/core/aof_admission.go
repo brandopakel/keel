@@ -20,7 +20,8 @@ import "github.com/brandopakel/keel/internal/config"
 // collectionEntryOverhead is charged per element added to a collection, for the
 // slot, header and per-entry bookkeeping the stores keep. It is deliberately
 // larger than any of them actually use.
-const collectionEntryOverhead = 128
+const collectionEntryOverhead = 256
+const collectionBaseOverhead = 1024
 
 // replyFraming is charged per element in a reply, for the bulk-string header
 // and terminator around it.
@@ -74,7 +75,7 @@ func AppendAdmission(commands []*Command) (logBytes, replyBytes int, ok bool) {
 			if len(a) < 3 || (len(a)-1)%2 != 0 {
 				return 0, 0, false
 			}
-			growth += uint64(len(a[0]) + 256)
+			growth += uint64(len(a[0]) + collectionBaseOverhead)
 			for _, s := range a[1:] {
 				largestWrite = max(largestWrite, len(s))
 				collectionWritten += len(s) + replyFraming
@@ -85,7 +86,16 @@ func AppendAdmission(commands []*Command) (logBytes, replyBytes int, ok bool) {
 			if len(a) < 2 {
 				return 0, 0, false
 			}
-			growth += uint64(len(a[0]) + 256)
+			growth += uint64(len(a[0]) + collectionBaseOverhead)
+			if cmd.Cmd == "LPUSH" || cmd.Cmd == "RPUSH" {
+				if list, ok := listStore.Peek(a[0]); ok {
+					// A single push at capacity can double a large ring. Reserving its
+					// current slots plus per-added-element slack also covers a threshold
+					// crossed by several pushes later in this unexecuted run.
+					growth += list.ReservedSlotBytes()
+				}
+			}
+
 			for _, s := range a[1:] {
 				largestWrite = max(largestWrite, len(s))
 				collectionWritten += len(s) + replyFraming
@@ -99,7 +109,7 @@ func AppendAdmission(commands []*Command) (logBytes, replyBytes int, ok bool) {
 			if len(a) < 3 || (len(a)-1)%2 != 0 {
 				return 0, 0, false
 			}
-			growth += uint64(len(a[0]) + 256)
+			growth += uint64(len(a[0]) + collectionBaseOverhead)
 			for i := 1; i < len(a); i += 2 {
 				if _, err := parseZScore(a[i]); err != nil {
 					return 0, 0, false
@@ -166,8 +176,11 @@ func AppendAdmission(commands []*Command) (logBytes, replyBytes int, ok bool) {
 				}
 				replyBytes += size + replyFraming
 			}
-		case "HGET", "HMGET", "HGETALL", "HKEYS", "HVALS",
-			"SMEMBERS", "LINDEX", "LRANGE":
+		case "HGET", "HMGET":
+			replyBytes += hashReadReplyBound(cmd.Args[0], cmd.Args[1:], collectionWritten)
+		case "SMISMEMBER":
+			replyBytes += max(0, len(cmd.Args)-1) * replyFraming
+		case "HGETALL", "HKEYS", "HVALS", "SMEMBERS", "LINDEX", "LRANGE":
 			replyBytes += collectionReplyBound(cmd.Args[0], collectionWritten)
 		case "ZRANGE":
 			// WITHSCORES doubles the elements, and a score is short beside the
@@ -183,6 +196,25 @@ func AppendAdmission(commands []*Command) (logBytes, replyBytes int, ok bool) {
 		}
 	}
 	return logBytes, replyBytes, true
+}
+
+// HMGET may request the same field repeatedly. Bound every requested result,
+// including values created by earlier commands in this not-yet-executed run.
+func hashReadReplyBound(key string, fields []string, written int) int {
+	h, exists := hashStore.Peek(key)
+	total := 0
+	for _, field := range fields {
+		size := written
+		if exists {
+			value, _ := h.Get(field)
+			size = max(size, len(value))
+		}
+		total += size + replyFraming
+		if total > maxAsyncAppendBytes {
+			return total
+		}
+	}
+	return total
 }
 
 // collectionReplyBound is what a reply reading the whole of one key can come to.

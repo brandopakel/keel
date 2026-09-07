@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// The sharded keyspace is only worth having if the cursor it buys costs little
+// The paged keyspace is only worth having if the cursor it buys costs little
 // on the paths every command uses. These compare it against the plain Go map it
 // replaced, in the same binary and back to back, so a loaded machine moves both
 // arms together rather than favouring whichever ran first.
@@ -39,11 +39,11 @@ func BenchmarkPlainMapGet(b *testing.B) {
 	}
 }
 
-func BenchmarkShardedGet(b *testing.B) {
+func BenchmarkKeyMapGet(b *testing.B) {
 	for _, n := range []int{100000, 1000000} {
 		b.Run(strconv.Itoa(n), func(b *testing.B) {
 			keys := benchKeys(n)
-			m := &shardedMap[int]{}
+			m := &keyMap[int]{}
 			for i, k := range keys {
 				m.set(k, i)
 			}
@@ -71,11 +71,11 @@ func BenchmarkPlainMapSet(b *testing.B) {
 	}
 }
 
-func BenchmarkShardedSet(b *testing.B) {
+func BenchmarkKeyMapSet(b *testing.B) {
 	for _, n := range []int{100000, 1000000} {
 		b.Run(strconv.Itoa(n), func(b *testing.B) {
 			keys := benchKeys(n)
-			m := &shardedMap[int]{}
+			m := &keyMap[int]{}
 			for i, k := range keys {
 				m.set(k, i)
 			}
@@ -110,11 +110,11 @@ func BenchmarkPlainMapKeys(b *testing.B) {
 	}
 }
 
-func BenchmarkShardedKeys(b *testing.B) {
+func BenchmarkKeyMapKeys(b *testing.B) {
 	for _, n := range []int{100000, 1000000} {
 		b.Run(strconv.Itoa(n), func(b *testing.B) {
 			keys := benchKeys(n)
-			m := &shardedMap[int]{}
+			m := &keyMap[int]{}
 			for i, k := range keys {
 				m.set(k, i)
 			}
@@ -128,11 +128,11 @@ func BenchmarkShardedKeys(b *testing.B) {
 
 // One SCAN call, which is the whole point: bounded work regardless of how large
 // the keyspace is. Compare its cost against the full walk above.
-func BenchmarkShardedScanOneCall(b *testing.B) {
+func BenchmarkKeyMapScanOneCall(b *testing.B) {
 	for _, n := range []int{100000, 1000000} {
 		b.Run(strconv.Itoa(n), func(b *testing.B) {
 			keys := benchKeys(n)
-			m := &shardedMap[int]{}
+			m := &keyMap[int]{}
 			for i, k := range keys {
 				m.set(k, i)
 			}
@@ -145,11 +145,11 @@ func BenchmarkShardedScanOneCall(b *testing.B) {
 	}
 }
 
-// TestShardedMemoryOverhead reports what the partition costs in bytes per key
+// TestKeyMapMemoryOverhead reports what the partition costs in bytes per key
 // against the same keys in one map. It asserts only a loose ceiling: the number
 // to read is the logged one, and it is a measurement, not a threshold anyone
 // should tune against.
-func TestShardedMemoryOverhead(t *testing.T) {
+func TestKeyMapMemoryOverhead(t *testing.T) {
 	if testing.Short() {
 		t.Skip("allocates a million keys")
 	}
@@ -163,8 +163,8 @@ func TestShardedMemoryOverhead(t *testing.T) {
 			}
 			return m
 		})
-		sharded := heldBytes(func() any {
-			m := &shardedMap[int]{}
+		indexed := heldBytes(func() any {
+			m := &keyMap[int]{}
 			for i, k := range keys {
 				m.set(k, i)
 			}
@@ -174,9 +174,9 @@ func TestShardedMemoryOverhead(t *testing.T) {
 		// The bare int fixture pays an inline key/value slot. Real stores
 		// offset that cost by eliminating their separately allocated entry.
 		// The real-dictionary heap tests remain the adoption gate.
-		perKey := float64(int64(sharded)-int64(plain)) / float64(n)
-		t.Logf("%d keys: plain %.2f MiB, sharded %.2f MiB, %+.1f bytes per key",
-			n, float64(plain)/(1<<20), float64(sharded)/(1<<20), perKey)
+		perKey := float64(int64(indexed)-int64(plain)) / float64(n)
+		t.Logf("%d keys: plain %.2f MiB, indexed %.2f MiB, %+.1f bytes per key",
+			n, float64(plain)/(1<<20), float64(indexed)/(1<<20), perKey)
 		if perKey > 16 {
 			t.Errorf("%d keys: %.1f bytes per key of slot-directory overhead is more than expected", n, perKey)
 		}

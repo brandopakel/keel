@@ -14,7 +14,7 @@ type Obj struct {
 // Dict is the string keyspace: the values, and the expiry of each key that has
 // one.
 type Dict struct {
-	dictStore shardedMap[Obj]
+	dictStore keyMap[Obj]
 
 	// expiredDictStore holds the instant each key with a TTL falls due, keyed
 	// by the key's own name.

@@ -13,7 +13,7 @@ type Sized interface{ MemUsage() uint64 }
 // so a keyspace full of 12KB sketches could run past maxmemory unchecked.
 type Keyed[T Sized] struct {
 	name     string
-	items    shardedMap[keyedEntry[T]]
+	items    keyMap[keyedEntry[T]]
 	memUsed  uint64
 	expiries map[string]uint64
 }

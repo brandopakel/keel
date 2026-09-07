@@ -7,9 +7,9 @@ Spending remains capped at zero.
 | Finding | Change | Validation state |
 | --- | --- | --- |
 | Unsafe failover proposal | Verified external fencing precedes authenticated incarnation-specific activation; local terms are not fencing | Finite model and counterexample tests pass; real provider implementation remains future work |
-| Unsupported Go builder | Source/CI floor 1.26; Docker builder 1.27.1 | Local compiler/build checks running; native CI/container validation pending |
-| SCAN compatibility | Option-presence handling, case-insensitive TYPE, explicit regression and differential cases | Focused command tests pass; differential integration pending |
-| Traversal and adoption gate | Stable paged slots, strict scan work limit, bounded pattern work, shared rewrite/snapshot name batches | Traversal, heap-accounting and existing core tests pass; complete correctness and matched Linux matrix pending |
+| Unsupported Go builder | Source/CI floor 1.26; Docker builder 1.27.1 | Full local Go tests and vet passed; native CI/container validation pending |
+| SCAN compatibility | Option-presence handling, case-insensitive TYPE, explicit regression and differential cases | Focused command tests pass; Linux differential integration passed for the first traversal candidate |
+| Traversal and adoption gate | Stable paged slots, strict scan work limit, bounded pattern work, shared rewrite/snapshot name batches | Traversal, heap-accounting and existing core tests pass; full local Go tests passed; matched Linux matrix pending |
 
 A design fix is distinct from implementing automatic failover. Cooperative
 scheduling is distinct from a real-time latency guarantee. The new traversal
@@ -26,3 +26,10 @@ Running soaks count only when their terminal reports complete. They cover their
 recorded frozen source and binary hashes, not arbitrary later changes. Final
 release validation must use the actual combined revision and downloadable
 artifacts. No release has been made by this closeout work.
+
+The branch now integrates develop through PR #26, including collection admission
+and separate retained-input/reply budgets from PR #25. Four newly reproduced
+admission underestimates were corrected: repeated HMGET fields, wide SMISMEMBER
+replies, new sorted-set metadata and list ring growth. Their regression tests and
+the full admission suite pass. These changes require validation of the integrated
+revision in addition to the frozen first traversal matrix.

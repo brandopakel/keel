@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// drain walks a sharded map to completion the way a client would, and reports
+// drain walks a paged map to completion the way a client would, and reports
 // every key it was given along with how many calls it took.
-func drain(t *testing.T, m *shardedMap[int], budget int) ([]string, int) {
+func drain(t *testing.T, m *keyMap[int], budget int) ([]string, int) {
 	t.Helper()
 	var seen []string
 	cursor, calls := uint64(0), 0
@@ -27,9 +27,9 @@ func drain(t *testing.T, m *shardedMap[int], budget int) ([]string, int) {
 	}
 }
 
-func TestShardedScanReturnsEveryKeyExactlyOnce(t *testing.T) {
+func TestKeyMapScanReturnsEveryKeyExactlyOnce(t *testing.T) {
 	for _, keys := range []int{0, 1, 7, 1000, 5000} {
-		m := &shardedMap[int]{}
+		m := &keyMap[int]{}
 		for i := 0; i < keys; i++ {
 			m.set("key:"+strconv.Itoa(i), i)
 		}
@@ -49,10 +49,9 @@ func TestShardedScanReturnsEveryKeyExactlyOnce(t *testing.T) {
 	}
 }
 
-// The cursor is a shard index, so a small keyspace must not cost a call per
-// shard: skipping an empty shard is a nil check, and the walk keeps going.
-func TestShardedScanFinishesSmallKeyspacesQuickly(t *testing.T) {
-	m := &shardedMap[int]{}
+// A small keyspace fits in one page and must not require scanning a directory.
+func TestKeyMapScanFinishesSmallKeyspacesQuickly(t *testing.T) {
+	m := &keyMap[int]{}
 	for i := 0; i < 5; i++ {
 		m.set("k"+strconv.Itoa(i), i)
 	}
@@ -63,8 +62,8 @@ func TestShardedScanFinishesSmallKeyspacesQuickly(t *testing.T) {
 
 // budget bounds keys examined rather than keys returned, so a filter that
 // rejects everything still terminates and still costs bounded work per call.
-func TestShardedScanBudgetsExaminedKeysNotReturnedKeys(t *testing.T) {
-	m := &shardedMap[int]{}
+func TestKeyMapScanBudgetsExaminedKeysNotReturnedKeys(t *testing.T) {
+	m := &keyMap[int]{}
 	for i := 0; i < 4000; i++ {
 		m.set("key:"+strconv.Itoa(i), i)
 	}
@@ -93,8 +92,8 @@ func TestShardedScanBudgetsExaminedKeysNotReturnedKeys(t *testing.T) {
 	assert.LessOrEqual(t, worst, 100, "COUNT is an actual work ceiling")
 }
 
-func TestShardedScanRejectsCursorsPastTheEnd(t *testing.T) {
-	m := &shardedMap[int]{}
+func TestKeyMapScanRejectsCursorsPastTheEnd(t *testing.T) {
+	m := &keyMap[int]{}
 	m.set("a", 1)
 	keys, examined, next := m.scan(m.scanEnd()+1, 10, nil, nil)
 	assert.Empty(t, keys, "a cursor past the end reads as finished, not as an error")
@@ -102,8 +101,8 @@ func TestShardedScanRejectsCursorsPastTheEnd(t *testing.T) {
 	assert.Zero(t, next)
 }
 
-func TestShardedDeleteReleasesEmptiedShards(t *testing.T) {
-	m := &shardedMap[int]{}
+func TestKeyMapDeleteReleasesEmptyPages(t *testing.T) {
+	m := &keyMap[int]{}
 	m.set("only", 1)
 	pos, _, _ := m.position("only")
 	i := pos / keyPageSlots
@@ -115,8 +114,8 @@ func TestShardedDeleteReleasesEmptiedShards(t *testing.T) {
 	assert.Zero(t, m.len())
 }
 
-func TestShardedSetReportsOverwrite(t *testing.T) {
-	m := &shardedMap[int]{}
+func TestKeyMapSetReportsOverwrite(t *testing.T) {
+	m := &keyMap[int]{}
 	assert.False(t, m.set("k", 1), "the first write is an insert")
 	assert.True(t, m.set("k", 2), "the second replaces it")
 	assert.Equal(t, 1, m.len(), "an overwrite does not grow the map")
@@ -128,9 +127,9 @@ func TestShardedSetReportsOverwrite(t *testing.T) {
 // Sampling has to find candidates when a handful of keys are spread across all
 // the shards, because that is exactly when eviction needs them: a policy with no
 // candidates cannot free anything while the budget is already over.
-func TestShardedSampleFindsKeysInASparseKeyspace(t *testing.T) {
+func TestKeyMapSampleFindsKeysInASparseKeyspace(t *testing.T) {
 	for _, keys := range []int{1, 3, 20} {
-		m := &shardedMap[int]{}
+		m := &keyMap[int]{}
 		for i := 0; i < keys; i++ {
 			m.set("k"+strconv.Itoa(i), i)
 		}
@@ -143,8 +142,8 @@ func TestShardedSampleFindsKeysInASparseKeyspace(t *testing.T) {
 	}
 }
 
-func TestShardedSampleMovesItsStartingPoint(t *testing.T) {
-	m := &shardedMap[int]{}
+func TestKeyMapSampleMovesItsStartingPoint(t *testing.T) {
+	m := &keyMap[int]{}
 	for i := 0; i < 500; i++ {
 		m.set("key:"+strconv.Itoa(i), i)
 	}
@@ -162,7 +161,7 @@ func TestShardedSampleMovesItsStartingPoint(t *testing.T) {
 }
 
 func TestPagedScanSurvivesGrowthDeletionAndSlotReuse(t *testing.T) {
-	m := &shardedMap[int]{}
+	m := &keyMap[int]{}
 	for i := 0; i < 300; i++ {
 		m.set("stable:"+strconv.Itoa(i), i)
 	}
@@ -203,7 +202,7 @@ func TestPagedScanSurvivesGrowthDeletionAndSlotReuse(t *testing.T) {
 }
 
 func TestPagedDeleteReleasesValuesAndReusesSparseSlots(t *testing.T) {
-	m := &shardedMap[*int]{}
+	m := &keyMap[*int]{}
 	for i := 0; i < 3*keyPageSlots; i++ {
 		n := i
 		m.set(strconv.Itoa(i), &n)
@@ -222,14 +221,14 @@ func TestPagedDeleteReleasesValuesAndReusesSparseSlots(t *testing.T) {
 }
 
 func TestPagedScanHardWorkAndByteTargets(t *testing.T) {
-	m := &shardedMap[int]{}
+	m := &keyMap[int]{}
 	for i := 0; i < 5000; i++ {
 		m.set(strconv.Itoa(i), i)
 	}
 	_, examined, next := m.scan(0, 1<<20, nil, nil)
 	require.LessOrEqual(t, examined, ScanMaxWork)
 	require.NotZero(t, next)
-	large := &shardedMap[int]{}
+	large := &keyMap[int]{}
 	large.set(strings.Repeat("x", ScanByteTarget+1), 1)
 	large.set("small", 2)
 	keys, examined, next := large.scan(0, 100, nil, nil)
@@ -242,7 +241,7 @@ func TestPagedScanHardWorkAndByteTargets(t *testing.T) {
 }
 
 func TestPagedHashCollisionsPreserveDistinctKeysAndBoundScan(t *testing.T) {
-	m := &shardedMap[int]{hashOverride: func(string) uint64 { return 42 }}
+	m := &keyMap[int]{hashOverride: func(string) uint64 { return 42 }}
 	for i := 0; i < 2000; i++ {
 		m.set(strconv.Itoa(i), i)
 	}
@@ -316,7 +315,7 @@ func FuzzPagedKeyspaceMatchesMap(f *testing.F) {
 		if len(data) > 1024 {
 			data = data[:1024]
 		}
-		m := &shardedMap[int]{}
+		m := &keyMap[int]{}
 		if data[0]&1 != 0 {
 			m.hashOverride = func(string) uint64 { return 7 }
 		}
