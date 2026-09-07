@@ -32,6 +32,11 @@ func RewriteNeedsCycle() bool {
 	if !rewrite.active {
 		return false
 	}
+	// The final handoff also waits for an everysec sync on the original
+	// descriptor. Its completion wakes the loop, just like replacement sync.
+	if rewriteWalkDone() && !rewrite.collectionActive && aof.syncPending != nil {
+		return len(aof.syncPending) > 0
+	}
 	if pendingRewriteSync == nil {
 		return true
 	}

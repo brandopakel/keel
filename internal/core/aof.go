@@ -424,12 +424,18 @@ func flushAOF(closing bool) error {
 		if !closing && config.AOFFsync == config.FsyncEverySec {
 			result := make(chan error, 1)
 			file, syncFile := aof.file, aofSync
+			wake := rewriteWake
 			aof.syncPending = result
 			aof.syncOffset = appendWritten
 			aof.lastSync = time.Now()
 			// Writes during this Sync stay dirty and require another sync.
 			aof.dirty = false
-			go func() { result <- syncFile(file) }()
+			go func() {
+				result <- syncFile(file)
+				if wake != nil {
+					wake()
+				}
+			}()
 			appendCompleted = appendWritten
 			return nil
 		}
