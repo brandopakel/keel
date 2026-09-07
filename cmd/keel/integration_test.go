@@ -305,6 +305,10 @@ func TestSlowReaderDoesNotBlockOtherClients(t *testing.T) {
 				t.Fatal(got)
 			}
 			slow, _ := connectTest(t, s)
+			tcp := slow.(*idleConn).Conn.(*net.TCPConn)
+			if err := tcp.SetReadBuffer(1024); err != nil {
+				t.Fatal(err)
+			}
 			t.Cleanup(func() {
 				if t.Failed() {
 					s.captureFailure(t)
@@ -313,7 +317,32 @@ func TestSlowReaderDoesNotBlockOtherClients(t *testing.T) {
 			if _, err := io.WriteString(slow, strings.Repeat(request("GET", "large"), 32)); err != nil {
 				t.Fatal(err)
 			}
-			time.Sleep(100 * time.Millisecond)
+			// Do not infer backpressure from a sleep. Observe user-space replies
+			// retained after the nonblocking flush, before testing PING.
+			observed := false
+			deadline := time.Now().Add(2 * time.Second)
+			if err := c.SetDeadline(deadline); err != nil {
+				t.Fatal(err)
+			}
+			for time.Now().Before(deadline) {
+				stats := call(t, c, r, "INFO", "clients")
+				for _, line := range strings.Split(stats, "\r\n") {
+					if raw, ok := strings.CutPrefix(line, "retained_reply_bytes:"); ok {
+						queued, err := strconv.Atoi(raw)
+						if err != nil {
+							t.Fatal(err)
+						}
+						observed = queued > 16<<20
+					}
+				}
+				if observed {
+					break
+				}
+				time.Sleep(time.Millisecond)
+			}
+			if !observed {
+				t.Fatal("slow client never retained queued replies")
+			}
 			if err := c.SetDeadline(time.Now().Add(2 * time.Second)); err != nil {
 				t.Fatal(err)
 			}
