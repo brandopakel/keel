@@ -1,0 +1,19 @@
+{
+  "status": "failed",
+  "platform": "Linux-6.17.0-1022-azure-aarch64-with-glibc2.39",
+  "binary_sha256": "a50d08399d8bd2b6141d93fe219c34598f63b479ca1533cf867612d412f399e6",
+  "harness_sha256": "7f08eed72a5396c7f477ab51641d6f865793c41930bcad371b7c569f43695f07",
+  "seconds_requested": 120.0,
+  "started_utc": "2026-09-07T08:42:33Z",
+  "primary_crash_every": 3,
+  "concurrent": true,
+  "replication_protocol": 2,
+  "checkpoint_count": 5,
+  "acknowledged_writes": 23437,
+  "primary_crash_recoveries": 1,
+  "replica_crash_recoveries": 4,
+  "faults": [],
+  "passed": false,
+  "failure": "TimeoutError('timed out')",
+  "workflow_run": "https://github.com/brandopakel/keel/actions/runs/34101698050"
+}
