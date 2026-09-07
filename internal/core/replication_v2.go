@@ -172,21 +172,32 @@ func encodeReplicationFrame(frame ReplicationFrame) []byte {
 	return Encode(string(body), false)
 }
 
-// KEEL.REPL.PULL2 epoch byte-offset snapshot-id snapshot-byte-offset.
+// ReplicationTermRequiredReply is a capability signal, not a term grant. A new
+// peer retries with an explicit fifth argument; old peers fail before frame decode.
+const ReplicationTermRequiredReply = "-REPLTERM term-aware protocol 2 request required\r\n"
+
+// KEEL.REPL.PULL2 epoch byte-offset snapshot-id snapshot-byte-offset [term].
 // An explicit command and version prevent older peers interpreting new frames.
 func cmdReplicationPullV2(args []string) []byte {
 	if !config.ReplicationFeed || config.ReplicationProtocol != 2 {
 		return Encode(errors.New("ERR replication protocol 2 is disabled"), false)
 	}
-	if len(args) != 5 {
+	if len(args) != 4 && len(args) != 5 {
 		return Encode(errSyntax, false)
+	}
+	if len(args) == 4 && CurrentTerm() != 0 {
+		return []byte(ReplicationTermRequiredReply)
 	}
 	// The caller's term arrives on every pull, so a primary that has been
 	// replaced finds out from the first replica that has moved on, without
 	// waiting for a coordinator to remember to tell it.
-	callerTerm, termErr := strconv.ParseUint(args[4], 10, 64)
-	if termErr != nil {
-		return Encode(errNotAnInteger, false)
+	var callerTerm uint64
+	if len(args) == 5 {
+		var termErr error
+		callerTerm, termErr = strconv.ParseUint(args[4], 10, 64)
+		if termErr != nil {
+			return Encode(errNotAnInteger, false)
+		}
 	}
 	if err := observeTerm(callerTerm); err != nil {
 		return Encode(fmt.Errorf("ERR recording term: %w", err), false)

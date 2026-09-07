@@ -56,8 +56,10 @@ func TestPromotionRequiresAHigherTermAndSurvivesRestart(t *testing.T) {
 	failover = failoverState{}
 	require.NoError(t, LoadTerm(path))
 	require.Equal(t, uint64(7), CurrentTerm(), "the term must survive a restart")
-	require.Equal(t, uint64(7), HeldTerm(), "and a primary reclaims what it held")
-	require.True(t, Writable())
+	require.Zero(t, HeldTerm(), "observed terms do not grant authority to a new incarnation")
+	require.False(t, Writable())
+	require.Equal(t, "OK", run(t, "KEEL.PROMOTE", "8"))
+	require.True(t, Writable(), "a fresh externally assigned higher term is required")
 }
 
 // The property the whole design exists for: a node that is not the holder of
@@ -100,15 +102,15 @@ func TestFencingSurvivesRestart(t *testing.T) {
 	require.NoError(t, CloseAOF())
 	failover = failoverState{}
 	require.NoError(t, LoadTerm(path))
-	// Restarting reclaims the durable term, which is 5 - the one it was fenced
-	// to, not the 2 it held. It is writable again only because nothing else
-	// claimed 5; a coordinator that promoted another node at 5 will fence this
-	// one the moment they speak.
+	// A restart retains the observation and must never claim the successor's
+	// authority while waiting for a message that may never arrive.
 	require.Equal(t, uint64(5), CurrentTerm())
-	require.Equal(t, uint64(5), HeldTerm())
+	require.Zero(t, HeldTerm())
+	require.True(t, Fenced())
+	require.False(t, Writable())
 }
 
-func TestADamagedTermFileStopsAPrimaryButNotAReplica(t *testing.T) {
+func TestADamagedTermFileStopsEveryRole(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "term.aof")
 	require.NoError(t, os.WriteFile(path+termFileName, []byte("not-a-term"), 0o600))
@@ -123,10 +125,9 @@ func TestADamagedTermFileStopsAPrimaryButNotAReplica(t *testing.T) {
 	require.Error(t, LoadTerm(path),
 		"a primary must not guess a term the cluster may already have moved past")
 
-	// A replica takes no writes, so it has nothing to be wrong about.
+	// A replica must not forget the floor for rejecting stale histories.
 	config.ReplicaOf = "primary.test:6379"
-	require.NoError(t, LoadTerm(path))
-	require.Equal(t, uint64(0), CurrentTerm())
+	require.Error(t, LoadTerm(path))
 }
 
 func TestAMissingTermFileIsTermZero(t *testing.T) {
@@ -164,7 +165,9 @@ func TestPromotionFailsClosedWhenTheTermCannotBeMadeDurable(t *testing.T) {
 			before := CurrentTerm()
 			reply := run(t, "KEEL.PROMOTE", strconv.FormatUint(before+10, 10))
 			require.Contains(t, reply, "persisting term")
-			require.Equal(t, before, CurrentTerm(), "a term that did not reach disk is not held")
+			require.Equal(t, before+10, CurrentTerm(), "remember the attempted term even on failure")
+			require.False(t, Writable(), "a failed authority update must stop writes")
+			require.NotEqual(t, CurrentTerm(), HeldTerm(), "a term that did not reach disk is not held")
 		})
 	}
 }
