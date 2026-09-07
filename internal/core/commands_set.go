@@ -221,7 +221,7 @@ func cmdSRANDMEMBER(args []string) []byte {
 		if -count > maxRandomMemberCount {
 			return Encode(errIntegerOutOfRange, false)
 		}
-		return Encode(s.RandomMembersWithRepeats(int(-count)), false)
+		return encodeRepeatedMembers(s, int(-count))
 	}
 	if count > maxRandomMemberCount {
 		count = maxRandomMemberCount
