@@ -46,10 +46,20 @@ def pin(command, cpus):
     return ['taskset', '-c', cpus, *command] if cpus else command
 
 
+def require_complete_traffic(traffic, scheduled):
+    """Adoption requires every scheduled request, including queue admission."""
+    assert traffic['scheduled'] == scheduled
+    assert scheduled == sum(traffic[key] for key in
+                            ('completed', 'failed', 'queue_dropped', 'queue_expired'))
+    assert all(traffic[key] == 0 for key in ('failed', 'queue_dropped', 'queue_expired')), \
+        'incomplete offered workload: failed, dropped or expired requests; retain as overload evidence'
+
+
 def arm(args, binary, name, policy, writes, repetition, root):
     root.mkdir()
     report = dict(status='running', arm=name, policy=policy, writes_percent=writes,
-                  repetition=repetition, binary_sha256=sha256(binary), rewrites=[])
+                  repetition=repetition, binary_sha256=sha256(binary), rewrites=[],
+                  dataset_kind=args.dataset_kind, dataset_mib=args.dataset_mib)
     (root/'report.json').write_text(json.dumps(report, indent=2)+'\n')
     env = {key: os.environ[key] for key in ('PATH', 'HOME', 'TMPDIR') if key in os.environ}
     with socket.socket() as reservation:
@@ -81,10 +91,18 @@ def arm(args, binary, name, policy, writes, repetition, root):
         # 64-key MSETs keep preparation bounded even under appendfsync always.
         payload = b'x'*4096
         keys = args.dataset_mib*256
-        for first in range(0, keys, 64):
-            parts = [part for index in range(first, min(first+64, keys))
-                     for part in (f'snapshot:{index}', payload)]
-            assert client.call('MSET', *parts) == b'OK'
+        if args.dataset_kind == 'strings':
+            for first in range(0, keys, 64):
+                parts = [part for index in range(first, min(first+64, keys))
+                         for part in (f'snapshot:{index}', payload)]
+                assert client.call('MSET', *parts) == b'OK'
+        else:
+            prefix = args.dataset_kind.upper()
+            cells = args.dataset_mib*(1<<20)//(4 if prefix == 'CMS' else 1)
+            assert client.call(prefix+'.INITBYDIM', 'snapshot:sketch', cells, 1) == b'OK'
+            # Keep an exact deterministic sentinel query outside measurement.
+            sentinel = client.call(prefix+'.INCRBY', 'snapshot:sketch', 'sentinel', 12345)
+            report['sketch_sentinel'] = [value.decode() if isinstance(value, bytes) else value for value in sentinel]
         load_command = pin([str(args.load), '-address', f'127.0.0.1:{port}',
                             '-rate', str(args.rate), '-seconds', str(args.seconds),
                             '-connections', '8', '-queue', '64', '-keys', '1000',
@@ -138,19 +156,20 @@ def arm(args, binary, name, policy, writes, repetition, root):
         assert load.wait(timeout=1) == 0, 'arrival generator failed'
         out.flush(); err.flush()
         traffic = json.loads((root/'traffic.json').read_text())
-        assert traffic['scheduled'] == int(args.rate*args.seconds)
-        assert traffic['scheduled'] == sum(traffic[key] for key in
-                                           ('completed', 'failed', 'queue_dropped', 'queue_expired'))
-        assert traffic['failed'] == 0
+        report['traffic'] = traffic
+        require_complete_traffic(traffic, int(args.rate*args.seconds))
         assert len(report['rewrites']) == 3, 'all three rewrites must complete during measured traffic'
         assert all(row['requested_at_seconds']+row['elapsed_seconds'] < args.seconds
                    for row in report['rewrites']), 'rewrite outlasted measured traffic'
         report['traffic'] = traffic
         report['after'] = info(client, 'persistence')
         # Verify the entire untouched snapshot dataset, outside measurement.
-        for first in range(0, keys, 64):
-            count = min(64, keys-first)
-            assert client.call('MGET', *(f'snapshot:{i}' for i in range(first, first+count))) == [payload]*count
+        if args.dataset_kind == 'strings':
+            for first in range(0, keys, 64):
+                count = min(64, keys-first)
+                assert client.call('MGET', *(f'snapshot:{i}' for i in range(first, first+count))) == [payload]*count
+        else:
+            assert client.call(args.dataset_kind.upper()+'.QUERY', 'snapshot:sketch', 'sentinel') == sentinel
         report['status'] = 'completed'
     except BaseException as exc:
         report.update(status='failed', failure=repr(exc))
@@ -176,6 +195,7 @@ if __name__ == '__main__':
         parser.add_argument('--'+binary, type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--dataset-mib', type=int, default=32)
+    parser.add_argument('--dataset-kind', choices=('strings', 'cms', 'morris'), default='strings')
     parser.add_argument('--seconds', type=float, default=15)
     parser.add_argument('--rate', type=int, default=2000)
     parser.add_argument('--reps', type=int, default=3)
