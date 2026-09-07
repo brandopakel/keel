@@ -66,7 +66,12 @@ func startReplicaTransport() (<-chan replicaUpdate, func()) {
 					var body []byte
 					parts := []string{"KEEL.REPL.PULL", epoch, strconv.FormatUint(offset, 10)}
 					if protocol == 2 {
-						parts = []string{"KEEL.REPL.PULL2", epoch, strconv.FormatUint(offset, 10), snapshotID, strconv.FormatUint(snapshotOffset, 10), strconv.FormatUint(core.CurrentTerm(), 10)}
+						parts = []string{"KEEL.REPL.PULL2", epoch, strconv.FormatUint(offset, 10), snapshotID, strconv.FormatUint(snapshotOffset, 10)}
+						// Term-zero traffic keeps the original protocol-2 request
+						// shape so rolling upgrades can exchange unchanged frames.
+						if term := core.CurrentTerm(); term != 0 {
+							parts = append(parts, strconv.FormatUint(term, 10))
+						}
 					}
 					body, err = replicaExchange(conn, reader, parts)
 					if err != nil {

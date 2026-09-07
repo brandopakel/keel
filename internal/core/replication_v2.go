@@ -181,15 +181,19 @@ func cmdReplicationPullV2(args []string) []byte {
 	if !config.ReplicationFeed || config.ReplicationProtocol != 2 {
 		return Encode(errors.New("ERR replication protocol 2 is disabled"), false)
 	}
-	if len(args) != 5 {
+	if len(args) != 4 && len(args) != 5 {
 		return Encode(errSyntax, false)
 	}
 	// The caller's term arrives on every pull, so a primary that has been
 	// replaced finds out from the first replica that has moved on, without
 	// waiting for a coordinator to remember to tell it.
-	callerTerm, termErr := strconv.ParseUint(args[4], 10, 64)
-	if termErr != nil {
-		return Encode(errNotAnInteger, false)
+	var callerTerm uint64
+	if len(args) == 5 {
+		var termErr error
+		callerTerm, termErr = strconv.ParseUint(args[4], 10, 64)
+		if termErr != nil {
+			return Encode(errNotAnInteger, false)
+		}
 	}
 	if err := observeTerm(callerTerm); err != nil {
 		return Encode(fmt.Errorf("ERR recording term: %w", err), false)

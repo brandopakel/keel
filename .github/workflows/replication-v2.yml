@@ -252,6 +252,19 @@ jobs:
           git rev-parse HEAD >> dist/native/build.log
       - name: Streaming snapshots, interrupted transfers and restart checkpoints
         run: python3 scripts/check-replication-v2.py --bin /tmp/keel-native --out dist/native/replication --concurrent
+      - name: Mixed-version protocol 2 and nonzero-term restart
+        shell: bash
+        run: |
+          set -euo pipefail
+          task_baseline=a7c6600cece5d21a78794e40e2f59be0e55028d4
+          task_source="$RUNNER_TEMP/keel-preterm-source"
+          mkdir "$task_source"
+          git fetch --depth=1 origin "$task_baseline"
+          git archive "$task_baseline" | tar -x -C "$task_source"
+          go -C "$task_source" build -trimpath -o /tmp/keel-preterm ./cmd/keel
+          printf '%s\n' "$task_baseline" > dist/native/preterm-revision.log
+          go version -m /tmp/keel-preterm > dist/native/preterm-build.log
+          python3 scripts/check-term-upgrade.py --baseline /tmp/keel-preterm --candidate /tmp/keel-native --out dist/native/term-upgrade
       - name: Execute alpha.3 release archive and verify upgrade with rollback
         shell: bash
         run: |
