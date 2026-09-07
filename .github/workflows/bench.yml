@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: Tail smoke, full matrix, closeout, or offline hosted benchmark image
+        description: Benchmarks, closeout, hosted image, or four-hour Linux filesystem soaks
         type: choice
-        options: [tail, full, closeout, hosted, hosted-runtime]
+        options: [tail, full, closeout, hosted, hosted-runtime, soak-runtime-linux]
         default: tail
   push:
     branches: [ develop, experiment/** ]
@@ -32,6 +32,12 @@ jobs:
       candidate_revision: ${{ github.sha }}
       concurrent: true
       artifact_name: hosted-runtime-benchmark-image
+
+  soak_runtime_linux:
+    if: github.event_name == 'workflow_dispatch' && inputs.suite == 'soak-runtime-linux'
+    uses: ./.github/workflows/replication-v2.yml
+    with:
+      long_filesystem_soak: true
 
   closeout:
     if: github.event_name == 'workflow_dispatch' && inputs.suite == 'closeout'
@@ -150,7 +156,7 @@ jobs:
         with: { name: linux-offloopback, path: bench/results/offloopback-linux.csv }
 
   tail-latency:
-    if: github.event_name != 'workflow_dispatch' || (inputs.suite != 'closeout' && inputs.suite != 'hosted' && inputs.suite != 'hosted-runtime')
+    if: github.event_name != 'workflow_dispatch' || (inputs.suite != 'closeout' && inputs.suite != 'hosted' && inputs.suite != 'hosted-runtime' && inputs.suite != 'soak-runtime-linux')
     name: mixed traffic and rewrite (${{ matrix.append }})
     strategy:
       fail-fast: false

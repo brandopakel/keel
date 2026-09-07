@@ -223,6 +223,11 @@ Server race tests and all three 24,000-command TCP ordering/crash tests passed
 again. All twelve CI build/test jobs passed at `b9a97e0`, including the pinned
 native archive checks and ext4/XFS recovery.
 
+The follow-up review found that Python optimization could remove the checksum
+assertions. Archive validation now uses explicit failures, with a native CI
+regression test that rejects a mismatched independent pin or checksum sidecar
+before extraction under both ordinary Python and `python -O`.
+
 At **2026-09-07 04:17 UTC**, three replacement soaks started on a separately
 frozen, clean `b9a97e0` build and copied harness:
 
@@ -238,6 +243,15 @@ controlled performance comparison. **They are running, not passed.** The
 records binary/harness hashes and configuration. Terminal reports, process start
 identities and progress must be inspected for actual completion. The original
 failed runs remain preserved separately.
+
+The Benchmark workflow also has an explicit `soak-runtime-linux` entry point for
+four-hour protocol 2/concurrent recovery runs on separate ext4 and XFS loopback
+filesystems. Each uses an owned 512 MiB image, five-minute crash cycles and a
+270-minute job timeout; normal PR checks retain their three-minute workload and
+15-minute timeout. Standard public-repository Linux runners keep this within the
+$0 budget under [GitHub's billing rules](https://docs.github.com/en/billing/concepts/product-billing/github-actions).
+These are longer temporary-filesystem tests, not reserved deployment hosts or
+power-loss tests. A submitted or running job is not a completed soak.
 
 Before release: complete and assess the replacement long runs, review any new
 findings, and validate the final release candidate. Dedicated deployment hosts,

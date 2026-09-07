@@ -4,12 +4,18 @@ on:
   pull_request:
     branches: [develop]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      long_filesystem_soak:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   native:
+    if: ${{ !inputs.long_filesystem_soak }}
     name: Native recovery / ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -28,6 +34,7 @@ jobs:
       - name: Build and test natively
         run: |
           uname -a
+          python3 -m unittest discover -s scripts -p 'test_check_archive.py'
           go test ./...
           go build -trimpath -o /tmp/keel-native ./cmd/keel
           mkdir -p dist/native
@@ -82,7 +89,7 @@ jobs:
   filesystems:
     name: Recovery on ${{ matrix.fs }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: ${{ inputs.long_filesystem_soak && 270 || 15 }}
     strategy:
       fail-fast: false
       matrix:
@@ -102,6 +109,8 @@ jobs:
       - name: Exercise an owned temporary filesystem
         env:
           KEEL_TEST_FS: ${{ matrix.fs }}
+          KEEL_SOAK_SECONDS: ${{ inputs.long_filesystem_soak && '14400' || '180' }}
+          KEEL_CYCLE_SECONDS: ${{ inputs.long_filesystem_soak && '300' || '20' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -135,7 +144,7 @@ jobs:
           sudo mount "$task_loop" "$task_mount"
           sudo chown "$(id -u):$(id -g)" "$task_mount"
           findmnt "$task_mount" > "$task_reports/mount.log"
-          python3 scripts/soak.py --bin /tmp/keel-filesystem --out "$task_mount/soak" --seconds 180 --cycle-seconds 20 --concurrent --replication-protocol 2
+          python3 scripts/soak.py --bin /tmp/keel-filesystem --out "$task_mount/soak" --seconds "$KEEL_SOAK_SECONDS" --cycle-seconds "$KEEL_CYCLE_SECONDS" --concurrent --replication-protocol 2
       - name: Preserve filesystem reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
