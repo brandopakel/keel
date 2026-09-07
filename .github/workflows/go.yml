@@ -68,7 +68,7 @@ jobs:
 
       - name: Failover authority model
         if: matrix.os == 'ubuntu-latest' && matrix.go == 'stable'
-        run: python3 -m unittest discover -s scripts -p test_failover_model.py -v
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
 
       - name: Restore fuzz smoke
         if: matrix.go == 'stable'
