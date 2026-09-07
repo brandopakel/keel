@@ -35,10 +35,22 @@ Large-value throughput and single-client throughput remained near baseline.
 The 1 MiB median p99 rose from 5.343 to 5.823 ms in this short run, while its
 paired throughput ratio was 1.003 (range 0.972–1.016). Longer five-repetition,
 15-second checks of small values, 1 MiB values, a single client and large-list
-reads are pending in [34103190849](https://github.com/brandopakel/keel/actions/runs/34103190849).
+reads completed in [34103190849](https://github.com/brandopakel/keel/actions/runs/34103190849).
+Small reads improved by a median 13.7% (all pairs 12.5–15.4%), with p99
+0.367/0.319 ms. The 1 MiB p99 was 41.471 ms in both arms; its median throughput
+ratio was 1.017, with a noisy 0.931–1.036 range. One-client throughput was 0.991
+of baseline with identical 0.063 ms p99; large-list throughput was 0.996 with
+6.015/6.143 ms p99. The short run's candidate-specific large-value tail increase
+did not repeat, while both arms retained a substantial large-value tail.
+
+Adoption is supported by the repeated small-workload improvement, preserved
+readiness transitions, full correctness checks and no repeat material regression
+in the other targeted workloads. Individual samples and unchanged/slower cases
+remain in the evidence; they are not averaged into a universal gain.
 The result is a measured gain in these hosted workloads, not a universal
 speedup, append-overlap improvement or deployment capacity/SLO claim.
 
 Raw reports and summaries are retained in
 `bench/results/readiness-matched-2026-09-07.json.gz`. The separate candidate CPU
-profile summary is in `bench/results/readiness-cpu-2026-09-07.txt`.
+profile summary is in `bench/results/readiness-cpu-2026-09-07.txt`, and the longer
+comparison is in `bench/results/readiness-targeted-2026-09-07.json.gz`.
