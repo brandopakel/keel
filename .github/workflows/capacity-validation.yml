@@ -88,7 +88,7 @@ jobs:
           git worktree add --detach "$RUNNER_TEMP/baseline" "$BASELINE_REV"
           go -C "$RUNNER_TEMP/candidate" build -trimpath -o /tmp/candidate ./cmd/keel
           go -C "$RUNNER_TEMP/baseline" build -trimpath -o /tmp/baseline ./cmd/keel
-          go test -race ./bench/arrival
+          CGO_ENABLED=1 go test -race ./bench/arrival
           go build -trimpath -o /tmp/arrival ./bench/arrival
           mkdir -p dist/capacity
           go version -m /tmp/candidate > dist/capacity/candidate-build.log
