@@ -56,6 +56,7 @@ func snapshotV2(t *testing.T) []ReplicationFrame {
 	require.True(t, first.Pending)
 	for n := 0; RewriteActive() && n < 100000; n++ {
 		require.NoError(t, FlushAOF())
+		waitForRewriteSync(t)
 	}
 	require.False(t, RewriteActive())
 	var frames []ReplicationFrame
@@ -120,6 +121,7 @@ func TestReplicationV2LargeSnapshotOperationsAndFrozenFile(t *testing.T) {
 	require.NoError(t, StartRewrite())
 	for RewriteActive() {
 		require.NoError(t, FlushAOF())
+		waitForRewriteSync(t)
 	}
 	got := pullV2(t, epoch, 0, frames[0].SnapshotID, 0)
 	require.Equal(t, frames[0], got)
@@ -184,6 +186,7 @@ func TestReplicationV2CheckpointRestartExpiryAndRewrite(t *testing.T) {
 		require.NoError(t, StartRewrite())
 		for RewriteActive() {
 			require.NoError(t, FlushAOF())
+			waitForRewriteSync(t)
 		}
 		require.NoError(t, saveReplicaCheckpoint())
 		assertCheckpointDigest(t, path)
