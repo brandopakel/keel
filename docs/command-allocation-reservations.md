@@ -103,3 +103,17 @@ reservations and the merged staging-release/opaque-replication changes. This
 isolated runner did not reproduce the five-second startup observation; its
 success does not establish that observation's cause. Raw logs and binary build
 metadata are retained in `command-allocation-native-replay-2026-09-07.json.gz`.
+
+Final-runtime comparison 34163765235 uses `ca48fa7` against the same parent,
+five 15-second pairs in eight scenarios (80 arms). Small reads are neutral
+(1.001 throughput ratio), pipeline 64 is 1.010 and many clients 1.002, with no
+client CPU warnings in those cells. One-MiB reads are 0.983 (range 0.890–1.013),
+large list reads 0.981 and large sorted-set reads 0.995. Median p99 changes are
+5.631 to 6.111 ms for one-MiB reads, 6.239 to 6.303 ms for lists, and 22.527 to
+21.247 ms for sorted sets. These small throughput costs and the large-string
+tail increase remain explicit tradeoffs for pre-allocation refusal under
+aggregate pressure. Every large-hash and large-set arm is client-CPU-limited;
+those cells do not establish server capacity or a neutral performance result.
+The raw records are in `command-allocation-large-matched-2026-09-07.json.gz`.
+The earlier many-client CPU warning remains recorded alongside this new revision's
+clean repetitions. No general speedup is claimed.
