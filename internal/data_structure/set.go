@@ -17,6 +17,7 @@ type Set struct {
 	// memory-budget check proportional to the size of the set, and that check
 	// runs on every write.
 	memberBytes uint64
+	compaction  *setIndexCompaction
 }
 
 func NewSet() *Set {
@@ -30,10 +31,13 @@ func (s *Set) Add(members ...string) int {
 		if _, present := s.index[m]; present {
 			continue
 		}
-		s.index[m] = len(s.order)
+		s.setIndex(m, len(s.order))
 		s.order = append(s.order, m)
 		s.memberBytes += uint64(len(m))
 		added++
+	}
+	if s.compaction != nil && len(s.order) > s.compaction.initialLen*2 {
+		s.compaction = nil // substantial regrowth makes rebuilding unnecessary
 	}
 	return added
 }
@@ -52,11 +56,14 @@ func (s *Set) Remove(members ...string) int {
 		last := len(s.order) - 1
 		if i != last {
 			s.order[i] = s.order[last]
-			s.index[s.order[i]] = i
+			s.setIndex(s.order[i], i)
 		}
 		s.order[last] = ""
 		s.order = s.order[:last]
 		delete(s.index, m)
+		if s.compaction != nil {
+			delete(s.compaction.next, m)
+		}
 		s.memberBytes -= uint64(len(m))
 		removed++
 	}
@@ -68,6 +75,14 @@ func (s *Set) Remove(members ...string) int {
 // set that grew and then emptied does not hold its high-water mark.
 func (s *Set) shrink() {
 	if cap(s.order) > 64 && len(s.order)*4 < cap(s.order) {
+		if cap(s.order) >= 1024 {
+			if len(s.order) == 0 {
+				s.index = make(map[string]int)
+				s.compaction = nil
+			} else if s.compaction == nil || len(s.order)*4 < s.compaction.initialLen {
+				s.compaction = &setIndexCompaction{next: make(map[string]int), initialLen: len(s.order)}
+			}
+		}
 		s.order = append(make([]string, 0, len(s.order)), s.order...)
 	}
 }
@@ -103,8 +118,8 @@ func (s *Set) swap(i, j int) {
 		return
 	}
 	s.order[i], s.order[j] = s.order[j], s.order[i]
-	s.index[s.order[i]] = i
-	s.index[s.order[j]] = j
+	s.setIndex(s.order[i], i)
+	s.setIndex(s.order[j], j)
 }
 
 // Pop removes up to count members chosen at random and returns them.
