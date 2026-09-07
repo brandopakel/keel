@@ -6,6 +6,9 @@ on:
       baseline:
         type: string
         required: true
+      rate:
+        type: number
+        default: 2000
 
 permissions:
   contents: read
@@ -44,6 +47,7 @@ jobs:
         timeout-minutes: 32
         env:
           KEEL_REWRITE_DATASET: ${{ matrix.dataset }}
+          KEEL_REWRITE_RATE: ${{ inputs.rate }}
         run: |
           python3 - <<'PY'
           import json, os, subprocess
@@ -63,7 +67,7 @@ jobs:
           assert len(server)>=2 and len(generator)>=2, f'need two CPUs per side without splitting exposed physical core groups: {server}/{generator}'
           Path('dist/rewrite-validation/affinity.json').write_text(json.dumps({'server':server,'generator':generator,'topology':topology,'limitation':'Public VM tenancy, storage and host scheduling remain uncontrolled.'},indent=2))
           server, generator=','.join(map(str,server)),','.join(map(str,generator))
-          subprocess.run(['taskset','-c',generator,'python3','bench/run-rewrite-validation.py','--candidate','/tmp/candidate','--baseline','/tmp/baseline','--load','/tmp/arrival','--out','dist/rewrite-validation/arms','--server-cpus',server,'--client-cpus',generator,'--dataset-kind',os.environ['KEEL_REWRITE_DATASET']],check=True)
+          subprocess.run(['taskset','-c',generator,'python3','bench/run-rewrite-validation.py','--candidate','/tmp/candidate','--baseline','/tmp/baseline','--load','/tmp/arrival','--out','dist/rewrite-validation/arms','--server-cpus',server,'--client-cpus',generator,'--dataset-kind',os.environ['KEEL_REWRITE_DATASET'],'--rate',os.environ['KEEL_REWRITE_RATE']],check=True)
           PY
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()

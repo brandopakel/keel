@@ -46,6 +46,15 @@ def pin(command, cpus):
     return ['taskset', '-c', cpus, *command] if cpus else command
 
 
+def require_complete_traffic(traffic, scheduled):
+    """Adoption requires every scheduled request, including queue admission."""
+    assert traffic['scheduled'] == scheduled
+    assert scheduled == sum(traffic[key] for key in
+                            ('completed', 'failed', 'queue_dropped', 'queue_expired'))
+    assert all(traffic[key] == 0 for key in ('failed', 'queue_dropped', 'queue_expired')), \
+        'incomplete offered workload: failed, dropped or expired requests; retain as overload evidence'
+
+
 def arm(args, binary, name, policy, writes, repetition, root):
     root.mkdir()
     report = dict(status='running', arm=name, policy=policy, writes_percent=writes,
@@ -147,10 +156,8 @@ def arm(args, binary, name, policy, writes, repetition, root):
         assert load.wait(timeout=1) == 0, 'arrival generator failed'
         out.flush(); err.flush()
         traffic = json.loads((root/'traffic.json').read_text())
-        assert traffic['scheduled'] == int(args.rate*args.seconds)
-        assert traffic['scheduled'] == sum(traffic[key] for key in
-                                           ('completed', 'failed', 'queue_dropped', 'queue_expired'))
-        assert traffic['failed'] == 0
+        report['traffic'] = traffic
+        require_complete_traffic(traffic, int(args.rate*args.seconds))
         assert len(report['rewrites']) == 3, 'all three rewrites must complete during measured traffic'
         assert all(row['requested_at_seconds']+row['elapsed_seconds'] < args.seconds
                    for row in report['rewrites']), 'rewrite outlasted measured traffic'

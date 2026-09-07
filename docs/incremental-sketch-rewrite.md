@@ -1,6 +1,6 @@
 # Incremental CMS and Morris rewrite encoding
 
-Status: candidate awaiting hosted adoption, September 7, 2026.
+Status: candidate with qualified hosted results, September 7, 2026.
 
 CMS and Morris tables have a fixed shape after creation. A rewrite can capture
 their small header and borrow their counter storage, then encode at most 64 KiB
@@ -46,5 +46,26 @@ adoption gate. A benchmark with traffic on other keys does not establish progres
 under constant mutation of the large sketch itself; the bounded abort contract
 and mutation correctness tests cover that separate behavior.
 
-No release or frozen-soak success is attributed to this candidate. It needs
-review, matched interference/adoption results and integrated native validation.
+Hosted run 34155169517 compares `440baca` with `a7c6600`, 108 arms in total.
+The Morris and string datasets each complete 108 rewrites and 1,080,000 requests
+with zero failed, dropped or expired requests. Across the six Morris policy/write
+combinations, median scheduled p99.9 falls from 6.16–9.31 ms to 1.23–4.16 ms.
+String p99.9 varies: the no-write no-fsync case rises 4.10 → 4.46 ms, while the
+always-sync 20%-write case falls 10.62 → 6.49 ms. Ordinary string tail improvement
+is not established by these short three-pair cells.
+
+The CMS runner drops 18,992 scheduled requests in ten arms across both versions.
+There are no server-command errors, but this is not a complete offered workload
+and does not satisfy adoption. Its green workflow conclusion originally meant
+only that all processes and rewrites completed. The harness now preserves traffic
+in failed reports and refuses adoption on any failed, dropped or expired request;
+all 108 retained traffic records check that rule, including the ten overload arms.
+A separately labeled 500-request/s run is requested to measure interference below
+that offered load. It cannot erase the 2,000-request/s overload evidence or
+establish a capacity guarantee.
+
+Full raw reports and host records are retained in
+`bench/results/incremental-sketch-rewrite-hosted-2026-09-07.json.gz`. Public VM
+storage/tenancy remains uncontrolled, and the paired baseline predates term
+guards. No release or frozen-soak success is attributed to this candidate. It
+still needs review, the outstanding CMS gate and integrated native validation.

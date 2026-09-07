@@ -45,6 +45,10 @@ on:
         description: Optional exact baseline SHA for matched rewrite interference
         type: string
         default: ''
+      rewrite_rate:
+        description: Scheduled requests per second for matched rewrite interference
+        type: number
+        default: 2000
 
 permissions:
   contents: read
@@ -55,6 +59,7 @@ jobs:
     uses: ./.github/workflows/rewrite-validation.yml
     with:
       baseline: ${{ inputs.rewrite_validation }}
+      rate: ${{ inputs.rewrite_rate }}
 
   append_costs:
     if: github.event_name == 'workflow_dispatch' && inputs.append_diagnostics != ''
