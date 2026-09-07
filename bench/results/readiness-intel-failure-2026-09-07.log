@@ -1,0 +1,582 @@
+Native recovery / macos-15-intel	UNKNOWN STEP	﻿2026-09-07T10:15:01.0010160Z Current runner version: '2.337.0'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0050980Z ##[group]Runner Image Provisioner
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0052960Z Hosted Compute Agent
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0054090Z Version: 20260819.586
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0055280Z Commit: 3cc4a88dfa507ef76119ad1bb3eccc6378bb2b76
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0056610Z Build Date: 2026-08-18T23:20:18Z
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0057940Z Worker ID: {d7fbc541-e201-4592-8d0e-ef21e87f5e49}
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0059260Z Azure Region: westus
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0060330Z ##[endgroup]
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0063590Z ##[group]Operating System
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0064780Z macOS
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0065760Z 15.7.9
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0066730Z 24G830
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0067710Z ##[endgroup]
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0068780Z ##[group]Runner Image
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0069860Z Image: macos-15
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0070880Z Version: 20260824.0482.1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0074160Z Included Software: https://github.com/actions/runner-images/blob/macos-15/20260824.0482/images/macos/macos-15-Readme.md
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0080590Z Image Release: https://github.com/actions/runner-images/releases/tag/macos-15%2F20260824.0482
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0082640Z ##[endgroup]
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0085090Z ##[group]GITHUB_TOKEN Permissions
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0089950Z Contents: read
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0092080Z Metadata: read
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0093810Z ##[endgroup]
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0098980Z Secret source: Actions
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0101230Z Prepare workflow directory
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.0912180Z Prepare all required actions
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.1033510Z Getting action download info
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:01.4663510Z Download action repository 'actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09' (SHA:fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:02.4743830Z Download action repository 'actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16' (SHA:924ae3a1cded613372ab5595356fb5720e22ba16)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:04.2719170Z Download action repository 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:04.8711740Z Complete job name: Native recovery / macos-15-intel
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:05.0596220Z ##[group]Run actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:05.0602220Z with:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:05.0604740Z   persist-credentials: false
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:05.0608590Z   repository: brandopakel/keel
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:05.0635770Z   token: ***
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:05.0638100Z   ssh-strict: true
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:05.0640420Z   ssh-user: git
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:05.0642810Z   clean: true
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:05.0645840Z   sparse-checkout-cone-mode: true
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:05.0649460Z   fetch-depth: 1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:05.0651820Z   fetch-tags: false
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:05.0654180Z   show-progress: true
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:05.0656450Z   lfs: false
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:05.0659070Z   submodules: false
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:05.0661810Z   set-safe-directory: true
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:05.0664410Z   allow-unsafe-pr-checkout: false
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:05.0668400Z ##[endgroup]
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:06.9863660Z Syncing repository: brandopakel/keel
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:07.0024240Z ##[group]Getting Git version info
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:07.0266370Z Working directory is '/Users/runner/work/keel/keel'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:07.0317770Z [command]/usr/local/bin/git version
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:07.3961320Z git version 2.55.0
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:07.6968380Z ##[endgroup]
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:07.7087230Z Copying '/Users/runner/.gitconfig' to '/Users/runner/work/_temp/34571b90-8cbe-4c07-a579-dfc2556028a4/.gitconfig'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:07.7130300Z Temporarily overriding HOME='/Users/runner/work/_temp/34571b90-8cbe-4c07-a579-dfc2556028a4' before making global git config changes
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:07.7138030Z Adding repository directory to the temporary git global config as a safe directory
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:07.7167690Z [command]/usr/local/bin/git config --global --add safe.directory /Users/runner/work/keel/keel
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:07.7241480Z Deleting the contents of '/Users/runner/work/keel/keel'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:07.7295560Z ##[group]Initializing the repository
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:07.8341720Z [command]/usr/local/bin/git init /Users/runner/work/keel/keel
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:08.0040740Z hint: Using 'master' as the name for the initial branch. This default branch name
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:08.0565020Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:08.0861200Z hint: to use in all of your new repositories, which will suppress this warning,
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:08.1890610Z hint: call:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:08.2698730Z hint:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:08.2846510Z hint: 	git config --global init.defaultBranch <name>
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:08.3008510Z hint:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:08.3182500Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:08.3263060Z hint: 'development'. The just-created branch can be renamed via this command:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:08.3369080Z hint:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:08.3447930Z hint: 	git branch -m <name>
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:08.3462880Z hint:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:08.3634280Z hint: Disable this message with "git config set advice.defaultBranchName false"
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:08.4888180Z Initialized empty Git repository in /Users/runner/work/keel/keel/.git/
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:08.7969580Z [command]/usr/local/bin/git remote add origin https://github.com/brandopakel/keel
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:08.9991410Z ##[endgroup]
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:09.0987410Z ##[group]Disabling automatic garbage collection
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:09.1002960Z [command]/usr/local/bin/git config --local gc.auto 0
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:09.1073370Z ##[endgroup]
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:09.1115880Z ##[group]Setting up auth
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:09.1138620Z [command]/usr/local/bin/git config --local --name-only --get-regexp core\.sshCommand
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:09.1281290Z [command]/usr/local/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:09.1291620Z [command]/usr/local/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:09.1307550Z [command]/usr/local/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:09.4585840Z [command]/usr/local/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:09.4721420Z [command]/usr/local/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:09.7460270Z [command]/usr/local/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:09.7566290Z ##[endgroup]
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:09.7573040Z ##[group]Fetching the repository
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:09.7603650Z [command]/usr/local/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +f3f5c4d5fbc614468e6056adc9de95adf8b61077:refs/remotes/pull/30/merge
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:11.2106840Z From https://github.com/brandopakel/keel
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:11.2110680Z  * [new ref]         f3f5c4d5fbc614468e6056adc9de95adf8b61077 -> pull/30/merge
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:11.2294930Z ##[endgroup]
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:11.2302110Z ##[group]Determining the checkout info
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:11.2307150Z ##[endgroup]
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:11.2311050Z [command]/usr/local/bin/git sparse-checkout disable
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:11.2408970Z [command]/usr/local/bin/git config --local --unset-all extensions.worktreeConfig
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:11.2590060Z ##[group]Checking out the ref
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:11.2608930Z [command]/usr/local/bin/git checkout --progress --force refs/remotes/pull/30/merge
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:11.5370560Z HEAD is now at f3f5c4d Merge 76ec59cfef9217d28c7245dbcaf689d411b8da99 into 64a2d71aae695f4380542078edb43c6fac05db5f
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:11.5406750Z ##[endgroup]
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:11.5607900Z [command]/usr/local/bin/git log -1 --format=%H
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:11.5764180Z f3f5c4d5fbc614468e6056adc9de95adf8b61077
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:11.5798180Z ##[group]Removing auth
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:11.5809160Z [command]/usr/local/bin/git config --local --name-only --get-regexp core\.sshCommand
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:11.5942070Z [command]/usr/local/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:12.0101390Z [command]/usr/local/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:12.0486090Z http.https://github.com/.extraheader
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:12.0664320Z [command]/usr/local/bin/git config --local --unset-all http.https://github.com/.extraheader
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:12.0828980Z [command]/usr/local/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:12.1750610Z [command]/usr/local/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:12.1953380Z [command]/usr/local/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:12.7082980Z ##[endgroup]
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:12.7769790Z ##[group]Run actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:12.7770820Z with:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:12.7771280Z   go-version: stable
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:12.7771810Z   check-latest: false
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:12.7779120Z   token: ***
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:12.7779900Z   cache: true
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:12.7780750Z ##[endgroup]
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:13.1693670Z Setup go version spec stable
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:13.8700700Z stable version resolved as 1.27.1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:13.8722430Z Attempting to download 1.27.1...
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:13.8725360Z matching 1.27.1...
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:13.8799590Z Acquiring 1.27.1 from https://github.com/actions/go-versions/releases/download/1.27.1-33583469715/go-1.27.1-darwin-x64.tar.gz
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:18.1924790Z Extracting Go...
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:18.6116810Z [command]/usr/bin/tar xz -C /Users/runner/work/_temp/9c6a741e-9e9e-4098-ad18-602fd45d9592 -f /Users/runner/work/_temp/f5ff5069-44f5-4485-9888-9e618aa577a3
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:42.5629980Z Successfully extracted go to /Users/runner/work/_temp/9c6a741e-9e9e-4098-ad18-602fd45d9592
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:15:42.5678070Z Adding to the cache ...
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:05.1691770Z Successfully cached go to /Users/runner/hostedtoolcache/go/1.27.1/x64
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:05.1794470Z Added go to the path
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:05.1967860Z Successfully set up Go version stable
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:05.4507120Z [command]/Users/runner/hostedtoolcache/go/1.27.1/x64/bin/go env GOMODCACHE
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:05.4509820Z [command]/Users/runner/hostedtoolcache/go/1.27.1/x64/bin/go env GOCACHE
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:05.4512180Z /Users/runner/go/pkg/mod
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:05.4514590Z /Users/runner/Library/Caches/go-build
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:05.7609600Z Cache hit for: setup-go-macOS-x64-go-1.27.1-7dd5b9a0c0175811d61622f4b35a781c44beb31bf09be9f6adcdf40cb5fbbe80
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:07.1049020Z Received 29360128 of 56449661 (52.0%), 23.9 MBs/sec
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:07.5741040Z Received 56449661 of 56449661 (100.0%), 28.5 MBs/sec
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:07.5956170Z Cache Size: ~54 MB (56449661 B)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:07.6100680Z [command]/usr/local/bin/gtar -xf /Users/runner/work/_temp/c1b8c44a-7131-4a09-8106-5f785ffa4f9f/cache.tzst -P -C /Users/runner/work/keel/keel --delay-directory-restore --use-compress-program unzstd
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:11.2171250Z Cache restored successfully
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:11.2218320Z Cache restored from key: setup-go-macOS-x64-go-1.27.1-7dd5b9a0c0175811d61622f4b35a781c44beb31bf09be9f6adcdf40cb5fbbe80
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:11.2279960Z go version go1.27.1 darwin/amd64
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:11.2280910Z 
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:11.2629540Z ##[group]go env
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6147080Z AR='ar'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6148100Z CC='clang'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6149420Z CGO_CFLAGS='-O2 -g'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6150620Z CGO_CPPFLAGS=''
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6152030Z CGO_CXXFLAGS='-O2 -g'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6154270Z CGO_ENABLED='1'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6155410Z CGO_FFLAGS='-O2 -g'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6156390Z CGO_LDFLAGS='-O2 -g'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6157080Z CXX='clang++'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6158210Z GCCGO='gccgo'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6159330Z GO111MODULE=''
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6159850Z GOAMD64='v1'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6160920Z GOARCH='amd64'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6162230Z GOAUTH='netrc'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6162910Z GOBIN='/Users/runner/go/bin'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6163960Z GOCACHE='/Users/runner/Library/Caches/go-build'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6165140Z GOCACHEPROG=''
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6166050Z GODEBUG=''
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6167020Z GOENV='/Users/runner/Library/Application Support/go/env'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6168420Z GOEXE=''
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6169590Z GOEXPERIMENT=''
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6170530Z GOFIPS140='off'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6171370Z GOFLAGS=''
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6175550Z GOGCCFLAGS='-fPIC -arch x86_64 -m64 -pthread -fno-caret-diagnostics -Qunused-arguments -fmessage-length=0 -ffile-prefix-map=/var/folders/20/jp1_0n3n7kndh6rnbqb5344m0000gn/T/go-build2967606984=/tmp/go-build -gno-record-gcc-switches -fno-common'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6178600Z GOHOSTARCH='amd64'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6179460Z GOHOSTOS='darwin'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6181940Z GOINSECURE=''
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6183600Z GOMOD='/Users/runner/work/keel/keel/go.mod'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6185200Z GOMODCACHE='/Users/runner/go/pkg/mod'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6186300Z GONOPROXY=''
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6187420Z GONOSUMDB=''
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6188510Z GOOS='darwin'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6189640Z GOPACKAGESDRIVER=''
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6190500Z GOPATH='/Users/runner/go'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6191310Z GOPRIVATE=''
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6192160Z GOPROXY='https://proxy.golang.org,direct'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6193550Z GOROOT='/Users/runner/hostedtoolcache/go/1.27.1/x64'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6195100Z GOSUMDB='sum.golang.org'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6195950Z GOTELEMETRY='local'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6196790Z GOTELEMETRYDIR='/Users/runner/Library/Application Support/go/telemetry'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6198000Z GOTMPDIR=''
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6199110Z GOTOOLCHAIN='local'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6200130Z GOTOOLDIR='/Users/runner/hostedtoolcache/go/1.27.1/x64/pkg/tool/darwin_amd64'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6201460Z GOVCS=''
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6202500Z GOVERSION='go1.27.1'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6203100Z GOWORK=''
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6203890Z PKG_CONFIG='pkg-config'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6204250Z 
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6205360Z ##[endgroup]
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6604780Z ##[group]Run uname -a
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6605910Z ^[[36;1muname -a^[[0m
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6607200Z ^[[36;1mpython3 -m unittest discover -s scripts -p 'test_check_archive.py'^[[0m
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6608510Z ^[[36;1mgo test ./...^[[0m
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6609960Z ^[[36;1mgo build -trimpath -o /tmp/keel-native ./cmd/keel^[[0m
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6611760Z ^[[36;1mmkdir -p dist/native^[[0m
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6612890Z ^[[36;1mgo version -m /tmp/keel-native > dist/native/build.log^[[0m
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6613840Z ^[[36;1mgit rev-parse HEAD >> dist/native/build.log^[[0m
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6707630Z shell: /bin/bash -e {0}
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6708230Z env:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6708690Z   GOTOOLCHAIN: local
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.6709320Z ##[endgroup]
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:15.7070000Z Darwin sat12-jr311-1b5dabd3-394f-4acb-91dd-2ca755400c35-9EF3219E8AD4.local 24.6.0 Darwin Kernel Version 24.6.0: Tue Jul 21 20:50:07 PDT 2026; root:xnu-11417.140.69.711.44~1/RELEASE_X86_64 x86_64
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:17.9055280Z .
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:17.9056360Z ----------------------------------------------------------------------
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:17.9057600Z Ran 1 test in 1.810s
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:17.9058100Z 
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:17.9058310Z OK
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:32.9914080Z --- FAIL: TestSlowReaderDoesNotBlockOtherClients (2.48s)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0001110Z     --- FAIL: TestSlowReaderDoesNotBlockOtherClients/4 (2.08s)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0017450Z         integration_test.go:328: read tcp 127.0.0.1:49231->127.0.0.1:49227: i/o timeout
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0067050Z         integration_test.go:314: failed server diagnostics:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0071800Z             starting keel devel ...
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0075610Z             2026/09/07 10:16:23 starting an asynchronous TCP server on 127.0.0.1 49227
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0082400Z             2026/09/07 10:16:23 io threads: 4 (1 loop thread + 3 workers)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0086070Z             2026/09/07 10:16:23 new client: id=1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0091560Z             2026/09/07 10:16:23 new client: id=2
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0094720Z             2026/09/07 10:16:23 new client: id=3
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0096080Z             SIGQUIT: quit
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0103570Z             PC=0x7ff812e926f6 m=0 sigcode=0
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0107160Z             
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0111170Z             goroutine 0 gp=0xf801320 m=0 mp=0xf802500 [idle]:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0113770Z             runtime.pthread_cond_wait(0xf802a68, 0xf802a28)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0120310Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/sys_darwin.go:470 +0x2e fp=0x7ff7b1e83218 sp=0x7ff7b1e831f0 pc=0xf0e834e
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0143880Z             runtime.semasleep(0xffffffffffffffff)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0150560Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/os_darwin.go:72 +0xae fp=0x7ff7b1e83270 sp=0x7ff7b1e83218 pc=0xf0c3ece
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0155460Z             runtime.notesleep(0xf802658)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0161890Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/lock_sema.go:62 +0x7d fp=0x7ff7b1e832a0 sp=0x7ff7b1e83270 pc=0xf09679d
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0171350Z             runtime.mPark(...)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0176150Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:1985
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0195590Z             runtime.stoplockedm()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0201520Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:3278 +0x73 fp=0x7ff7b1e832f8 sp=0x7ff7b1e832a0 pc=0xf0ce7f3
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0207510Z             runtime.schedule()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0214210Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:4158 +0x3a fp=0x7ff7b1e83338 sp=0x7ff7b1e832f8 pc=0xf0d0d7a
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0216910Z             runtime.park_m(0x77c29402780)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0222700Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:4319 +0x279 fp=0x7ff7b1e83398 sp=0x7ff7b1e83338 pc=0xf0d1279
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0226420Z             runtime.mcall()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0234180Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/asm_amd64.s:463 +0x53 fp=0x7ff7b1e833b0 sp=0x7ff7b1e83398 pc=0xf108993
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0237160Z             
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0243070Z             goroutine 1 gp=0x77c292e01e0 m=nil [chan receive]:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0246240Z             runtime.gopark(0x8374ae49?, 0x584f1468?, 0x48?, 0xd9?, 0xf7515a8?)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0251050Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:474 +0xca fp=0x77c29461908 sp=0x77c294618e8 pc=0xf10334a
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0254540Z             runtime.chanrecv(0x77c2945e200, 0x77c2930d9ef, 0x1)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0259280Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/chan.go:667 +0x4ae fp=0x77c29461980 sp=0x77c29461908 pc=0xf090eee
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0262630Z             runtime.chanrecv1(0x18?, 0xf772690?)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0266940Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/chan.go:509 +0x12 fp=0x77c294619a8 sp=0x77c29461980 pc=0xf090a12
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0270750Z             testing.(*T).Run(0x77c294546c8, {0xf40c993?, 0x77c2930daa0?}, 0xf7a12a0)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0275650Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/testing/testing.go:2266 +0x4f2 fp=0x77c29461a80 sp=0x77c294619a8 pc=0xf19a592
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0279120Z             testing.runTests.func1(0x77c294546c8)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0283620Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/testing/testing.go:2742 +0x37 fp=0x77c29461ac0 sp=0x77c29461a80 pc=0xf19ffd7
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0288570Z             testing.tRunner(0x77c294546c8, 0x77c2930dbc8)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0292730Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/testing/testing.go:2193 +0xea fp=0x77c29461b10 sp=0x77c29461ac0 pc=0xf19a02a
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0297780Z             testing.runTests({0xf4118c7, 0x1b}, {0xf416ecc, 0x24}, 0x77c2940e1c8, {0xf7f8c30, 0xc, 0xc}, {0x0, 0x0, ...})
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0304420Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/testing/testing.go:2740 +0x510 fp=0x77c29461bf8 sp=0x77c29461b10 pc=0xf19c5f0
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0307970Z             testing.(*M).Run(0x77c2940ca00)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0312010Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/testing/testing.go:2600 +0x6af fp=0x77c29461e38 sp=0x77c29461bf8 pc=0xf19b1af
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0314170Z             main.main()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0316350Z             	_testmain.go:68 +0x9b fp=0x77c29461eb8 sp=0x77c29461e38 pc=0xf39fe1b
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0318810Z             runtime.main()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0325480Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:302 +0x427 fp=0x77c29461fe0 sp=0x77c29461eb8 pc=0xf0c9927
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0328390Z             runtime.goexit({})
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0332890Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x77c29461fe8 sp=0x77c29461fe0 pc=0xf10a3a1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0336430Z             
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0338860Z             goroutine 2 gp=0x77c292e0780 m=nil [force gc (idle)]:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0341250Z             runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0345980Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:474 +0xca fp=0x77c29328fa8 sp=0x77c29328f88 pc=0xf10334a
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0348650Z             runtime.goparkunlock(...)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0351330Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:480
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0391540Z             runtime.forcegchelper()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0395540Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:387 +0xb3 fp=0x77c29328fe0 sp=0x77c29328fa8 pc=0xf0c9bf3
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0397970Z             runtime.goexit({})
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0401770Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x77c29328fe8 sp=0x77c29328fe0 pc=0xf10a3a1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0405930Z             created by runtime.init.7 in goroutine 1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0409450Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:375 +0x1a
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0410840Z             
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0412350Z             goroutine 3 gp=0x77c292e0d20 m=nil [GC sweep wait]:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0414190Z             runtime.gopark(0x1?, 0x0?, 0x0?, 0x0?, 0x0?)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0418000Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:474 +0xca fp=0x77c29329788 sp=0x77c29329768 pc=0xf10334a
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0420390Z             runtime.goparkunlock(...)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0424250Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:480
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0426700Z             runtime.bgsweep(0x77c29304100)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0434560Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mgcsweep.go:324 +0x151 fp=0x77c293297c8 sp=0x77c29329788 pc=0xf0b2f31
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0437350Z             runtime.gcenable.gowrap1()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0440950Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mgc.go:214 +0x17 fp=0x77c293297e0 sp=0x77c293297c8 pc=0xf0f8f37
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0443390Z             runtime.goexit({})
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0447220Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x77c293297e8 sp=0x77c293297e0 pc=0xf10a3a1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0449970Z             created by runtime.gcenable in goroutine 1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0452830Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mgc.go:214 +0x66
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0455670Z             
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0457220Z             goroutine 4 gp=0x77c292e0f00 m=nil [GC scavenge wait]:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0459400Z             runtime.gopark(0x10000?, 0xf42bd88?, 0x0?, 0x0?, 0x0?)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0463330Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:474 +0xca fp=0x77c29329f78 sp=0x77c29329f58 pc=0xf10334a
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0465740Z             runtime.goparkunlock(...)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0468480Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:480
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0470780Z             runtime.(*scavengerState).park(0xf800d40)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0475070Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mgcscavenge.go:425 +0x49 fp=0x77c29329fa8 sp=0x77c29329f78 pc=0xf0b0a09
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0477710Z             runtime.bgscavenge(0x77c29304100)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0481940Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mgcscavenge.go:658 +0x59 fp=0x77c29329fc8 sp=0x77c29329fa8 pc=0xf0b0f79
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0484680Z             runtime.gcenable.gowrap2()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0488560Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mgc.go:215 +0x17 fp=0x77c29329fe0 sp=0x77c29329fc8 pc=0xf0f8ef7
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0491050Z             runtime.goexit({})
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0494840Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x77c29329fe8 sp=0x77c29329fe0 pc=0xf10a3a1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0497980Z             created by runtime.gcenable in goroutine 1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0500820Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mgc.go:215 +0xa5
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0502490Z             
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0504420Z             goroutine 17 gp=0x77c29402000 m=nil [GOMAXPROCS updater (idle)]:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0506650Z             runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0512360Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:474 +0xca fp=0x77c29324788 sp=0x77c29324768 pc=0xf10334a
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0515890Z             runtime.goparkunlock(...)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0519810Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:480
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0523710Z             runtime.updateMaxProcsGoroutine()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0531650Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:7146 +0xe7 fp=0x77c293247e0 sp=0x77c29324788 pc=0xf0d6f87
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0536360Z             runtime.goexit({})
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0540120Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x77c293247e8 sp=0x77c293247e0 pc=0xf10a3a1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0543210Z             created by runtime.defaultGOMAXPROCSUpdateEnable in goroutine 1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0546070Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:7134 +0x37
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0547780Z             
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0550180Z             goroutine 18 gp=0x77c294021e0 m=nil [finalizer wait]:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0553010Z             runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0557940Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:474 +0xca fp=0x77c29324e20 sp=0x77c29324e00 pc=0xf10334a
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0560960Z             runtime.runFinalizers()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0566040Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mfinal.go:210 +0x107 fp=0x77c29324fe0 sp=0x77c29324e20 pc=0xf0a3f67
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0570250Z             runtime.goexit({})
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0576660Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x77c29324fe8 sp=0x77c29324fe0 pc=0xf10a3a1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0580630Z             created by runtime.createfing in goroutine 1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0586100Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mfinal.go:172 +0x3d
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0587830Z             
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0592140Z             goroutine 19 gp=0x77c294023c0 m=nil [cleanup wait]:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0594260Z             runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0598640Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:474 +0xca fp=0x77c29325768 sp=0x77c29325748 pc=0xf10334a
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0601230Z             runtime.goparkunlock(...)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0605130Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:480
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0607350Z             runtime.(*cleanupQueue).dequeue(0xf801100)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0611710Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mcleanup.go:522 +0xd3 fp=0x77c293257a0 sp=0x77c29325768 pc=0xf0a1153
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0614330Z             runtime.runCleanups()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0618630Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mcleanup.go:718 +0x45 fp=0x77c293257e0 sp=0x77c293257a0 pc=0xf0a17c5
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0621580Z             runtime.goexit({})
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0625440Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x77c293257e8 sp=0x77c293257e0 pc=0xf10a3a1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0628560Z             created by runtime.(*cleanupQueue).createGs in goroutine 1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0631570Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mcleanup.go:672 +0xa5
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0633200Z             
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0634680Z             goroutine 20 gp=0x77c294025a0 m=nil [select]:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0637210Z             runtime.gopark(0x77c29346ca0?, 0x2?, 0x20?, 0x66?, 0x77c29346b9c?)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0642810Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:474 +0xca fp=0x77c29346a10 sp=0x77c293469f0 pc=0xf10334a
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0646820Z             runtime.selectgo(0x77c29346ca0, 0x77c29346b98, 0xf40ea36?, 0x0, 0x77c29346ce0?, 0x1)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0651790Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/select.go:351 +0xa97 fp=0x77c29346b50 sp=0x77c29346a10 pc=0xf0dbe77
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0655140Z             github.com/brandopakel/keel/cmd/keel.runServer()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0659870Z             	/Users/runner/work/keel/keel/cmd/keel/main.go:284 +0xc86 fp=0x77c29346e40 sp=0x77c29346b50 pc=0xf3977e6
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0663150Z             github.com/brandopakel/keel/cmd/keel.main()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0667690Z             	/Users/runner/work/keel/keel/cmd/keel/main.go:207 +0xbd fp=0x77c29346f00 sp=0x77c29346e40 pc=0xf3969bd
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0671030Z             github.com/brandopakel/keel/cmd/keel.TestServerProcess(0x77c29454908?)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0675150Z             	/Users/runner/work/keel/keel/cmd/keel/integration_test.go:41 +0x2b5 fp=0x77c29346f70 sp=0x77c29346f00 pc=0xf398c15
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0679120Z             testing.tRunner(0x77c29454908, 0xf7a12a0)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0686920Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/testing/testing.go:2193 +0xea fp=0x77c29346fc0 sp=0x77c29346f70 pc=0xf19a02a
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0690360Z             testing.(*T).Run.gowrap1()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0693600Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/testing/testing.go:2258 +0x1b fp=0x77c29346fe0 sp=0x77c29346fc0 pc=0xf19fd5b
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0695490Z             runtime.goexit({})
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0699090Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x77c29346fe8 sp=0x77c29346fe0 pc=0xf10a3a1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0702070Z             created by testing.(*T).Run in goroutine 1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0705990Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/testing/testing.go:2258 +0x4d4
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0707700Z             
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0709740Z             goroutine 21 gp=0x77c29402780 m=nil [select, locked to thread]:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0712480Z             runtime.gopark(0x77c29325fa8?, 0x2?, 0x68?, 0x0?, 0x77c29325f98?)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0716490Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:474 +0xca fp=0x77c29325e20 sp=0x77c29325e00 pc=0xf10334a
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0722450Z             runtime.selectgo(0x77c29325fa8, 0x77c29325f94, 0x0?, 0x0, 0xf19f280?, 0x1)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0727940Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/select.go:351 +0xa97 fp=0x77c29325f60 sp=0x77c29325e20 pc=0xf0dbe77
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0731280Z             runtime.ensureSigM.func1()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0735520Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/signal_unix.go:1093 +0x15d fp=0x77c29325fe0 sp=0x77c29325f60 pc=0xf0fdbdd
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0738890Z             runtime.goexit({})
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0744280Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x77c29325fe8 sp=0x77c29325fe0 pc=0xf10a3a1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0749170Z             created by runtime.ensureSigM in goroutine 20
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0752410Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/signal_unix.go:1076 +0xc5
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0753950Z             
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0755240Z             goroutine 5 gp=0x77c292e14a0 m=3 mp=0x77c29380008 [syscall]:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0757010Z             runtime.sigNoteSleep(0x0?)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0762730Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/os_darwin.go:133 +0x18 fp=0x77c293287a0 sp=0x77c29328768 pc=0xf0c41d8
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0766240Z             os/signal.signal_recv()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0769710Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/sigqueue.go:149 +0x85 fp=0x77c293287c0 sp=0x77c293287a0 pc=0xf105165
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0772440Z             os/signal.loop()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0776350Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/os/signal/signal_unix.go:23 +0x13 fp=0x77c293287e0 sp=0x77c293287c0 pc=0xf203333
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0779020Z             runtime.goexit({})
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0783160Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x77c293287e8 sp=0x77c293287e0 pc=0xf10a3a1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0787280Z             created by os/signal.Notify.func2.1 in goroutine 20
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0791490Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/os/signal/signal.go:164 +0x1f
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0793230Z             
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0796970Z             goroutine 22 gp=0x77c29402d20 m=8 mp=0x77c29381008 [running]:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0801960Z             	goroutine running on other thread; stack unavailable
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0804510Z             created by github.com/brandopakel/keel/cmd/keel.runServer in goroutine 20
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0806950Z             	/Users/runner/work/keel/keel/cmd/keel/main.go:283 +0xc1b
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0808330Z             
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0810050Z             goroutine 23 gp=0x77c29402f00 m=nil [chan receive]:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0812190Z             runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0816330Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:474 +0xca fp=0x77c2950fea0 sp=0x77c2950fe80 pc=0xf10334a
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0819660Z             runtime.chanrecv(0x77c29406770, 0x77c2951ff88, 0x1)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0823710Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/chan.go:667 +0x4ae fp=0x77c2950ff18 sp=0x77c2950fea0 pc=0xf090eee
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0826260Z             runtime.chanrecv2(0x0?, 0x0?)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0830070Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/chan.go:514 +0x12 fp=0x77c2950ff40 sp=0x77c2950ff18 pc=0xf090a32
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0834190Z             github.com/brandopakel/keel/internal/server.(*ioPool).worker(0x77c29400300, 0x77c29406770)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0838660Z             	/Users/runner/work/keel/keel/internal/server/iothreads.go:120 +0x95 fp=0x77c2951ffc0 sp=0x77c2950ff40 pc=0xf36b175
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0841930Z             github.com/brandopakel/keel/internal/server.newIOPool.gowrap1()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0846100Z             	/Users/runner/work/keel/keel/internal/server/iothreads.go:110 +0x1b fp=0x77c2951ffe0 sp=0x77c2951ffc0 pc=0xf37333b
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0850690Z             runtime.goexit({})
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0854260Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x77c2951ffe8 sp=0x77c2951ffe0 pc=0xf10a3a1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0858140Z             created by github.com/brandopakel/keel/internal/server.newIOPool in goroutine 22
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0861270Z             	/Users/runner/work/keel/keel/internal/server/iothreads.go:110 +0xd0
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0863400Z             
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0865020Z             goroutine 24 gp=0x77c294030e0 m=nil [chan receive]:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0868490Z             runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0876020Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:474 +0xca fp=0x77c2952fea0 sp=0x77c2952fe80 pc=0xf10334a
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0879190Z             runtime.chanrecv(0x77c294067e0, 0x77c2953ff88, 0x1)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0883170Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/chan.go:667 +0x4ae fp=0x77c2952ff18 sp=0x77c2952fea0 pc=0xf090eee
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0887990Z             runtime.chanrecv2(0x0?, 0x0?)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0893320Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/chan.go:514 +0x12 fp=0x77c2952ff40 sp=0x77c2952ff18 pc=0xf090a32
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0896910Z             github.com/brandopakel/keel/internal/server.(*ioPool).worker(0x77c29400300, 0x77c294067e0)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0903460Z             	/Users/runner/work/keel/keel/internal/server/iothreads.go:120 +0x95 fp=0x77c2953ffc0 sp=0x77c2952ff40 pc=0xf36b175
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0906700Z             github.com/brandopakel/keel/internal/server.newIOPool.gowrap1()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0912140Z             	/Users/runner/work/keel/keel/internal/server/iothreads.go:110 +0x1b fp=0x77c2953ffe0 sp=0x77c2953ffc0 pc=0xf37333b
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0914880Z             runtime.goexit({})
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0919250Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x77c2953ffe8 sp=0x77c2953ffe0 pc=0xf10a3a1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0925310Z             created by github.com/brandopakel/keel/internal/server.newIOPool in goroutine 22
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0927660Z             	/Users/runner/work/keel/keel/internal/server/iothreads.go:110 +0xd0
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0928800Z             
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0930570Z             goroutine 25 gp=0x77c294032c0 m=nil [chan receive]:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0931910Z             runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0936790Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:474 +0xca fp=0x77c2954fea0 sp=0x77c2954fe80 pc=0xf10334a
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0939390Z             runtime.chanrecv(0x77c29406850, 0x77c2955ff88, 0x1)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0943590Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/chan.go:667 +0x4ae fp=0x77c2954ff18 sp=0x77c2954fea0 pc=0xf090eee
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0946690Z             runtime.chanrecv2(0x0?, 0x0?)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0950310Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/chan.go:514 +0x12 fp=0x77c2954ff40 sp=0x77c2954ff18 pc=0xf090a32
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0954420Z             github.com/brandopakel/keel/internal/server.(*ioPool).worker(0x77c29400300, 0x77c29406850)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0959870Z             	/Users/runner/work/keel/keel/internal/server/iothreads.go:120 +0x95 fp=0x77c2955ffc0 sp=0x77c2954ff40 pc=0xf36b175
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0964510Z             github.com/brandopakel/keel/internal/server.newIOPool.gowrap1()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0967820Z             	/Users/runner/work/keel/keel/internal/server/iothreads.go:110 +0x1b fp=0x77c2955ffe0 sp=0x77c2955ffc0 pc=0xf37333b
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0969840Z             runtime.goexit({})
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0974660Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x77c2955ffe8 sp=0x77c2955ffe0 pc=0xf10a3a1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0979060Z             created by github.com/brandopakel/keel/internal/server.newIOPool in goroutine 22
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0981700Z             	/Users/runner/work/keel/keel/internal/server/iothreads.go:110 +0xd0
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0983030Z             
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0984140Z             goroutine 26 gp=0x77c294034a0 m=nil [select]:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0985920Z             runtime.gopark(0x77c29327f98?, 0x2?, 0xa?, 0xa3?, 0x77c29327f84?)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0989160Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:474 +0xca fp=0x77c29327e08 sp=0x77c29327de8 pc=0xf10334a
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0992910Z             runtime.selectgo(0x77c29327f98, 0x77c29327f80, 0x0?, 0x0, 0x0?, 0x1)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.0997680Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/select.go:351 +0xa97 fp=0x77c29327f48 sp=0x77c29327e08 pc=0xf0dbe77
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1000890Z             github.com/brandopakel/keel/internal/server.RunAsyncTCPServer.func5()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1005160Z             	/Users/runner/work/keel/keel/internal/server/server.go:588 +0xb7 fp=0x77c29327fe0 sp=0x77c29327f48 pc=0xf374997
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1008540Z             runtime.goexit({})
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1012870Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x77c29327fe8 sp=0x77c29327fe0 pc=0xf10a3a1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1017660Z             created by github.com/brandopakel/keel/internal/server.RunAsyncTCPServer in goroutine 22
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1023500Z             	/Users/runner/work/keel/keel/internal/server/server.go:584 +0x6b1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1027990Z             
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1030870Z             goroutine 27 gp=0x77c29403680 m=nil [GC worker (idle)]:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1032620Z             runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1036910Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:474 +0xca fp=0x77c294cc740 sp=0x77c294cc720 pc=0xf10334a
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1039370Z             runtime.gcBgMarkWorker(0x77c29406930)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1043820Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mgc.go:1807 +0xeb fp=0x77c294cc7c8 sp=0x77c294cc740 pc=0xf0a73ab
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1046680Z             runtime.gcBgMarkStartWorkers.gowrap1()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1051690Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mgc.go:1711 +0x17 fp=0x77c294cc7e0 sp=0x77c294cc7c8 pc=0xf0f9437
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1053950Z             runtime.goexit({})
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1058290Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x77c294cc7e8 sp=0x77c294cc7e0 pc=0xf10a3a1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1062090Z             created by runtime.gcBgMarkStartWorkers in goroutine 22
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1069420Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mgc.go:1711 +0xfc
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1071180Z             
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1073220Z             goroutine 28 gp=0x77c29403860 m=nil [GC worker (idle)]:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1075510Z             runtime.gopark(0x6de923672f?, 0x3?, 0xd1?, 0xd3?, 0x0?)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1079660Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:474 +0xca fp=0x77c294ccf40 sp=0x77c294ccf20 pc=0xf10334a
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1082820Z             runtime.gcBgMarkWorker(0x77c29406930)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1088970Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mgc.go:1807 +0xeb fp=0x77c294ccfc8 sp=0x77c294ccf40 pc=0xf0a73ab
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1091970Z             runtime.gcBgMarkStartWorkers.gowrap1()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1095810Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mgc.go:1711 +0x17 fp=0x77c294ccfe0 sp=0x77c294ccfc8 pc=0xf0f9437
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1098550Z             runtime.goexit({})
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1103010Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x77c294ccfe8 sp=0x77c294ccfe0 pc=0xf10a3a1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1108320Z             created by runtime.gcBgMarkStartWorkers in goroutine 22
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1111160Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mgc.go:1711 +0xfc
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1112670Z             
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1114590Z             goroutine 29 gp=0x77c29403a40 m=4 mp=0x77c2932d008 [GC worker (active)]:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1116400Z             runtime.systemstack_switch()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1120120Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/asm_amd64.s:481 +0x8 fp=0x77c294cd740 sp=0x77c294cd730 pc=0xf1089a8
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1122780Z             runtime.gcBgMarkWorker(0x77c29406930)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1126470Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mgc.go:1863 +0x1df fp=0x77c294cd7c8 sp=0x77c294cd740 pc=0xf0a749f
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1129540Z             runtime.gcBgMarkStartWorkers.gowrap1()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1133470Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mgc.go:1711 +0x17 fp=0x77c294cd7e0 sp=0x77c294cd7c8 pc=0xf0f9437
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1135880Z             runtime.goexit({})
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1139480Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x77c294cd7e8 sp=0x77c294cd7e0 pc=0xf10a3a1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1141980Z             created by runtime.gcBgMarkStartWorkers in goroutine 22
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1144760Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mgc.go:1711 +0xfc
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1146220Z             
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1147770Z             goroutine 30 gp=0x77c29403c20 m=nil [GC worker (idle)]:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1149860Z             runtime.gopark(0x6dac5c3119?, 0x1?, 0x1e?, 0xca?, 0x0?)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1153700Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/proc.go:474 +0xca fp=0x77c294cdf40 sp=0x77c294cdf20 pc=0xf10334a
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1156170Z             runtime.gcBgMarkWorker(0x77c29406930)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1159810Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mgc.go:1807 +0xeb fp=0x77c294cdfc8 sp=0x77c294cdf40 pc=0xf0a73ab
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1166640Z             runtime.gcBgMarkStartWorkers.gowrap1()
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1170800Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mgc.go:1711 +0x17 fp=0x77c294cdfe0 sp=0x77c294cdfc8 pc=0xf0f9437
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1173640Z             runtime.goexit({})
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1179960Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/asm_amd64.s:1264 +0x1 fp=0x77c294cdfe8 sp=0x77c294cdfe0 pc=0xf10a3a1
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1182840Z             created by runtime.gcBgMarkStartWorkers in goroutine 22
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1185370Z             	/Users/runner/hostedtoolcache/go/1.27.1/x64/src/runtime/mgc.go:1711 +0xfc
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1186880Z             
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1188140Z             rax    0x104
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1189300Z             rbx    0x7ff8548cc180
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1191970Z             rcx    0x7ff7b1e830e8
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1193840Z             rdx    0x300
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1224320Z             rdi    0xf802a68
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1225450Z             rsi    0x30100000400
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1226780Z             rbp    0x7ff7b1e83180
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1228130Z             rsp    0x7ff7b1e830e8
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1229320Z             r8     0x0
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1230280Z             r9     0xa0
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1231360Z             r10    0x0
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1232440Z             r11    0x246
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1233640Z             r12    0x7ff7b1e83100
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1235010Z             r13    0x30100000400
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1236030Z             r14    0xf802a68
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1236920Z             r15    0x300
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1237760Z             rip    0x7ff812e926f6
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1238770Z             rflags 0x247
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1239610Z             cs     0x7
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1240530Z             fs     0x0
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1241280Z             gs     0x0
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1242940Z FAIL
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1243660Z FAIL	github.com/brandopakel/keel/cmd/keel	11.455s
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1244890Z ?   	github.com/brandopakel/keel/internal/config	[no test files]
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:33.1246500Z ?   	github.com/brandopakel/keel/internal/constant	[no test files]
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.4649240Z 2026/09/07 10:16:28 appendonly: rewrite abandoned: rewrite exceeded dirty-key budget
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.4651050Z --- FAIL: TestExpireCycleCostsNothingWhenNothingExpires (0.02s)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.4652320Z     expire_test.go:88: no keys with a TTL: 742ns per cycle
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.4654670Z     expire_test.go:91: 
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.4657790Z         	Error Trace:	/Users/runner/work/keel/keel/internal/core/expire_test.go:91
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.4660930Z         	Error:      	"742ns" is not less than "500ns"
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.4663410Z         	Test:       	TestExpireCycleCostsNothingWhenNothingExpires
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.4665240Z         	Messages:   	a keyspace with no expiries must not be walked
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.4666390Z 2026/09/07 10:16:46 appendonly: rewrite abandoned: test cleanup
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.4667300Z FAIL
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.4669000Z FAIL	github.com/brandopakel/keel/internal/core	18.762s
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.4670090Z ok  	github.com/brandopakel/keel/internal/core/io_multiplexing	(cached)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.4671380Z ok  	github.com/brandopakel/keel/internal/data_structure	(cached)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.4673000Z ok  	github.com/brandopakel/keel/internal/server	0.516s
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.4673710Z FAIL
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.5011390Z ##[error]Process completed with exit code 1.
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.5316330Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.5319870Z ##[group]Run actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.5320790Z with:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.5321360Z   name: native-macos-15-intel
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.5322860Z   path: dist/native/**/*.json
+Native recovery / macos-15-intel	UNKNOWN STEP	dist/native/**/*.jsonl
+Native recovery / macos-15-intel	UNKNOWN STEP	dist/native/**/*.log
+Native recovery / macos-15-intel	UNKNOWN STEP	
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.5323730Z   retention-days: 7
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.5324340Z   if-no-files-found: warn
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.5325180Z   compression-level: 6
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.5325680Z   overwrite: false
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.5326470Z   include-hidden-files: false
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.5327010Z env:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.5327400Z   GOTOOLCHAIN: local
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.5327920Z ##[endgroup]
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.9796010Z (node:6228) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:46.9881210Z (Use `node --trace-deprecation ...` to show where the warning was created)
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:47.0844300Z ##[warning]No files were found with the provided path: dist/native/**/*.json
+Native recovery / macos-15-intel	UNKNOWN STEP	dist/native/**/*.jsonl
+Native recovery / macos-15-intel	UNKNOWN STEP	dist/native/**/*.log. No artifacts will be uploaded.
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:47.1470540Z Post job cleanup.
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:47.3880870Z [command]/usr/local/bin/git version
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:47.4033350Z git version 2.55.0
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:47.4437780Z Copying '/Users/runner/.gitconfig' to '/Users/runner/work/_temp/d59e1980-badd-4f66-8900-8dcf0aa15d94/.gitconfig'
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:47.4480450Z Temporarily overriding HOME='/Users/runner/work/_temp/d59e1980-badd-4f66-8900-8dcf0aa15d94' before making global git config changes
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:47.4511280Z Adding repository directory to the temporary git global config as a safe directory
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:47.4526000Z [command]/usr/local/bin/git config --global --add safe.directory /Users/runner/work/keel/keel
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:47.4580040Z [command]/usr/local/bin/git config --local --name-only --get-regexp core\.sshCommand
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:47.4636540Z [command]/usr/local/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:47.6449170Z [command]/usr/local/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:47.6610430Z [command]/usr/local/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:47.9103410Z [command]/usr/local/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:47.9290490Z [command]/usr/local/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:48.2130450Z Cleaning up orphan processes
+Native recovery / macos-15-intel	UNKNOWN STEP	2026-09-07T10:16:49.0148680Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

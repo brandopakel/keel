@@ -13,6 +13,10 @@ on:
         description: Repeat the existing slow-reader assertion with failure stack capture
         type: boolean
         default: false
+      diagnose_contention:
+        description: Compare full test runs at matched baseline/candidate with package concurrency controlled
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       long_filesystem_soak:
@@ -52,6 +56,49 @@ jobs:
             dist/arm-diagnostic/**/*.jsonl
             dist/arm-diagnostic/**/*.log
           retention-days: 14
+
+  contention_diagnostic:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.diagnose_contention }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arm: [baseline, candidate]
+        parallelism: [1, 4]
+    runs-on: macos-15-intel
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version: '1.27.1' }
+      - name: Preserve matched diagnostic tests and choose runtime
+        env:
+          ARM: ${{ matrix.arm }}
+        run: |
+          cp cmd/keel/integration_test.go /tmp/integration_test.go
+          cp internal/core/expire_test.go /tmp/expire_test.go
+          mkdir -p dist/contention
+          git rev-parse HEAD > dist/contention/harness-revision.log
+          if [[ "$ARM" == baseline ]]; then
+            git checkout --detach ce911d31cae937032af80785e531d17739edc932
+          fi
+          git rev-parse HEAD > dist/contention/runtime-revision.log
+          cp /tmp/integration_test.go cmd/keel/integration_test.go
+          cp /tmp/expire_test.go internal/core/expire_test.go
+          sysctl hw.ncpu hw.memsize > dist/contention/host.log
+      - name: Repeat complete tests under recorded package concurrency
+        env:
+          TEST_PARALLELISM: ${{ matrix.parallelism }}
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -p "$TEST_PARALLELISM" -count=3 ./... 2>&1 | tee dist/contention/test.log
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: contention-${{ matrix.arm }}-p${{ matrix.parallelism }}
+          path: dist/contention
+          retention-days: 30
 
   slow_reader_diagnostic:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.diagnose_slow_reader }}

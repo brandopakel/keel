@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -97,6 +99,21 @@ func (s *testServer) captureFailure(t *testing.T) {
 	t.Helper()
 	if s.stopped {
 		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	state, _ := exec.CommandContext(ctx, "ps", "-o", "pid,pcpu,rss,state,etime", "-p", strconv.Itoa(s.cmd.Process.Pid)).CombinedOutput()
+	cancel()
+	t.Logf("failed server process state:\n%s", state)
+	if runtime.GOOS == "darwin" {
+		// SIGQUIT cannot always unwind the loop's running thread. Sample only
+		// this owned failed process before terminating it; bound diagnostic time.
+		path := filepath.Join(t.TempDir(), "server.sample")
+		ctx, cancel = context.WithTimeout(context.Background(), 3*time.Second)
+		_ = exec.CommandContext(ctx, "/usr/bin/sample", strconv.Itoa(s.cmd.Process.Pid), "1", "1", "-file", path).Run()
+		cancel()
+		if data, err := os.ReadFile(path); err == nil {
+			t.Logf("failed server sample:\n%s", data)
+		}
 	}
 	_ = s.cmd.Process.Signal(syscall.SIGQUIT)
 	done := make(chan struct{})
