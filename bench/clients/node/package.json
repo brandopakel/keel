@@ -1,0 +1,6 @@
+{
+  "name": "keel-client-compatibility",
+  "private": true,
+  "type": "module",
+  "dependencies": {"redis": "6.2.1", "ioredis": "6.0.0"}
+}
