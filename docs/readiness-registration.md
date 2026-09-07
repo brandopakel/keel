@@ -85,3 +85,11 @@ behavior is unchanged from the measured runtime. Tests check both the cached
 Linux sequence and the full Darwin registration sequence, including failed
 registration retries and descriptor reuse. The complete failed diagnostic is
 retained in `bench/results/readiness-contention-failure-2026-09-07.log`.
+
+Final Linux-only automatic checks passed at b6b513bf, including native ARM64/Intel
+and ext4/xfs recovery. The four-arm Intel diagnostic 34115455483 also passed
+three complete suite repetitions in every arm after the platform restriction.
+The optional ARM diagnostic now records a failed repetition and continues all
+three fresh runs, then exits nonzero; its always-run artifact step retains every
+completed result. This addresses the final outside-diff review finding without
+changing server behavior or test deadlines.
