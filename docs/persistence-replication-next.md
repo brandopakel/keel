@@ -1,8 +1,11 @@
 # Persistence and replication implementation sequence
 
-Status: proposed contracts and acceptance gates, September 6, 2026. The current
-release and allocation candidate still use the one-batch append barrier and
-bounded alpha replication. This document does not claim these stages shipped.
+Status: design contracts and acceptance gates, September 6, 2026. The release
+defaults still use the one-batch append barrier and bounded alpha replication.
+The candidate implements opt-in bounded concurrent string runs, incremental
+hash/list/set/sorted-set rewrites, and [protocol 2](replication-v2.md). The limits
+and validation in that guide distinguish the implemented subset from the full
+contracts below. None of these candidate features has been released.
 
 The measured command/allocation work comes first. Further persistence or
 replication changes must preserve the same application workload and configured

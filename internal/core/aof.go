@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"log"
 	"os"
@@ -55,7 +56,9 @@ import (
 //
 // Redis arrives at all five of these rules, by the same route.
 type aofState struct {
-	file *os.File
+	file        *os.File
+	digest      hash.Hash
+	digestBytes int64
 	// path is the file the descriptor above was opened on.
 	//
 	// Kept here rather than read from config when needed. A rewrite that took
@@ -72,7 +75,8 @@ type aofState struct {
 	buf []byte
 	// staged is what the command currently executing wants recorded in its
 	// place, for the commands that must not be replayed as they arrived.
-	staged [][]string
+	staged       [][]string
+	commandStart int
 	// extra is what the server decided on its own while the command ran: keys
 	// dropped by eviction, or reaped because their expiry had passed. These are
 	// additional to the command rather than instead of it - an eviction happens
@@ -175,6 +179,11 @@ func OpenAOF(path string) error {
 	if info, err := f.Stat(); err == nil {
 		aof.baseSize = info.Size()
 	}
+	if err := openAOFDigest(path); err != nil {
+		f.Close()
+		aof.file = nil
+		return err
+	}
 	aof.rewriteBase = aof.baseSize
 	// Frequent restarts must not reset compaction's growth target to the
 	// ever-growing log. Use a conservative live-state estimate until the next
@@ -213,6 +222,7 @@ func OpenAOF(path string) error {
 // this would lose up to a cycle's worth of acknowledged writes, which is the
 // one kind of loss a client has no way to detect.
 func CloseAOF() error {
+	closeReplicationSnapshot()
 	if aof.file == nil {
 		return nil
 	}
@@ -244,6 +254,7 @@ func aofRecord(parts ...string) {
 
 // aofBegin resets the staging areas before a command runs.
 func aofBegin() {
+	aof.commandStart = len(aof.buf)
 	aof.skip = false
 	aof.staged = aof.staged[:0]
 	aof.extra = aof.extra[:0]
@@ -254,6 +265,7 @@ func aofCommit(cmd *Command, reply []byte) {
 	if aof.file == nil || aof.replaying {
 		return
 	}
+	defer recordReplicationV2Commit(cmd)
 
 	// A key written while a rewrite is walking may already have been recorded
 	// at an older value, or not yet reached. Either way the rewrite will write
@@ -386,6 +398,7 @@ func flushAOF(closing bool) error {
 	}
 	if len(aof.buf) > 0 {
 		n, err := aof.file.Write(aof.buf)
+		recordAOFDigest(aof.buf[:n])
 		aof.written += int64(n)
 		appendStarted += uint64(n)
 		appendWritten += uint64(n)
@@ -454,6 +467,10 @@ func LoadAOF(path string) (int, error) {
 		priorRemovalHook := data_structure.OnRemove
 		data_structure.OnRemove = func(_, key string) { aof.recovered = append(aof.recovered, key) }
 		defer func() { data_structure.OnRemove = priorRemovalHook }()
+		if config.ReplicaOf != "" && config.ReplicationProtocol == 2 {
+			aof.replaying = false
+			return // preserve the exact primary-decided prefix for checkpoints
+		}
 		data_structure.SuspendExpiry = false
 		data_structure.EachKeyspace(func(ks data_structure.Keyspace) { ks.ActiveExpire(ks.KeysWithExpiry()) })
 		aof.replaying = false

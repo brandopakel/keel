@@ -59,6 +59,7 @@ var (
 func parseFlags() {
 	flag.StringVar(&profileDir, "profile-dir", "", "diagnostic only: create a fresh private directory for CPU/heap/allocation profiles on shutdown")
 	flag.BoolVar(&config.ReplicationFeed, "replication-feed", false, "experimental: enable bounded canonical replication feed")
+	flag.IntVar(&config.ReplicationProtocol, "replication-protocol", 1, "experimental replication protocol: 1 (alpha images) or 2 (streaming snapshots, operation deltas and recovery checkpoints)")
 	flag.StringVar(&config.ReplicaOf, "replicaof", "", "experimental: read-only replica of host:port")
 	flag.StringVar(&replicaPasswordEnv, "primary-password-env", "", "environment variable holding the primary AUTH password")
 	flag.BoolVar(&config.ReplicaTLS, "primary-tls", false, "verify TLS when connecting to the primary proxy")
@@ -216,6 +217,9 @@ func main() {
 }
 
 func runServer() error {
+	if config.ReplicationProtocol != 1 && config.ReplicationProtocol != 2 {
+		return fmt.Errorf("-replication-protocol must be 1 or 2")
+	}
 	if config.ReplicationFeed || config.ReplicaOf != "" {
 		if !config.AOFEnabled || config.RequirePass == "" || mode != "kqueue" {
 			return fmt.Errorf("replication requires authenticated AOF in kqueue mode")

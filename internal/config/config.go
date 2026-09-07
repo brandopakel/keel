@@ -178,6 +178,7 @@ var RequirePass string
 
 // Experimental replication is opt-in and requires authenticated AOF servers.
 var ReplicationFeed bool
+var ReplicationProtocol = 1
 var ReplicaOf string
 var ReplicaPassword string
 var ReplicaTLS bool

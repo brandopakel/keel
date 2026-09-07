@@ -11,9 +11,9 @@ import (
 )
 
 func TestLargeCollectionRewriteYieldsAndReconcilesMutation(t *testing.T) {
-	for _, kind := range []string{"set", "zset"} {
+	for _, kind := range []string{"set", "zset", "hash"} {
 		for _, mutation := range []string{"update", "replace", "delete", "sample"} {
-			if kind == "zset" && mutation == "sample" {
+			if kind != "set" && mutation == "sample" {
 				continue
 			}
 			t.Run(kind+"/"+mutation, func(t *testing.T) {
@@ -25,6 +25,8 @@ func TestLargeCollectionRewriteYieldsAndReconcilesMutation(t *testing.T) {
 					member := fmt.Sprintf("member-%04d", i)
 					if kind == "set" {
 						run(t, "SADD", "large", member)
+					} else if kind == "hash" {
+						run(t, "HSET", "large", member, strconv.Itoa(i))
 					} else {
 						run(t, "ZADD", "large", strconv.Itoa(i), member)
 					}
@@ -39,6 +41,9 @@ func TestLargeCollectionRewriteYieldsAndReconcilesMutation(t *testing.T) {
 					if kind == "set" {
 						run(t, "SADD", "large", "new")
 						run(t, "SREM", "large", "member-0000")
+					} else if kind == "hash" {
+						run(t, "HSET", "large", "member-0000", "9999")
+						run(t, "HDEL", "large", "member-0001")
 					} else {
 						run(t, "ZADD", "large", "9999", "member-0000")
 						run(t, "ZREM", "large", "member-0001")
@@ -52,10 +57,13 @@ func TestLargeCollectionRewriteYieldsAndReconcilesMutation(t *testing.T) {
 					run(t, "SRANDMEMBER", "large", "1000")
 				}
 				require.False(t, rewrite.collectionActive)
+				require.Nil(t, rewrite.hashCursor)
 				var want interface{}
 				if mutation == "update" || mutation == "sample" {
 					if kind == "set" {
 						want = run(t, "SMEMBERS", "large")
+					} else if kind == "hash" {
+						want = hashRewriteState(t, "large")
 					} else {
 						want = run(t, "ZRANGE", "large", "0", "-1", "WITHSCORES")
 					}
@@ -78,6 +86,8 @@ func TestLargeCollectionRewriteYieldsAndReconcilesMutation(t *testing.T) {
 					default:
 						if kind == "set" {
 							require.ElementsMatch(t, want, run(t, "SMEMBERS", "large"))
+						} else if kind == "hash" {
+							require.Equal(t, want, hashRewriteState(t, "large"))
 						} else {
 							require.Equal(t, want, run(t, "ZRANGE", "large", "0", "-1", "WITHSCORES"))
 						}
@@ -90,7 +100,7 @@ func TestLargeCollectionRewriteYieldsAndReconcilesMutation(t *testing.T) {
 }
 
 func TestCollectionRewriteHonorsByteBudgetAndOversizedMemberMakesProgress(t *testing.T) {
-	for _, kind := range []string{"set", "zset", "list"} {
+	for _, kind := range []string{"set", "zset", "list", "hash"} {
 		t.Run(kind, func(t *testing.T) {
 			ResetStores()
 			require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "log")))
@@ -98,6 +108,8 @@ func TestCollectionRewriteHonorsByteBudgetAndOversizedMemberMakesProgress(t *tes
 			for i := 0; i < 100; i++ {
 				value := strconv.Itoa(i) + strings.Repeat("x", 4096)
 				switch kind {
+				case "hash":
+					run(t, "HSET", "large", strconv.Itoa(i), value)
 				case "set":
 					run(t, "SADD", "large", value)
 				case "list":
@@ -110,6 +122,8 @@ func TestCollectionRewriteHonorsByteBudgetAndOversizedMemberMakesProgress(t *tes
 			// the cursor or silently truncate the value.
 			huge := strings.Repeat("y", 100000)
 			switch kind {
+			case "hash":
+				run(t, "HSET", "large", "huge", huge)
 			case "set":
 				run(t, "SADD", "large", huge)
 			case "list":
@@ -132,4 +146,16 @@ func TestCollectionRewriteHonorsByteBudgetAndOversizedMemberMakesProgress(t *tes
 			require.Equal(t, 1, aof.rewrites)
 		})
 	}
+}
+
+func hashRewriteState(t *testing.T, key string) map[string]string {
+	t.Helper()
+	h, ok := hashStore.Peek(key)
+	require.True(t, ok)
+	fields, values := h.Entries()
+	out := make(map[string]string, len(fields))
+	for i, field := range fields {
+		out[field] = values[i]
+	}
+	return out
 }

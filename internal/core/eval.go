@@ -27,8 +27,9 @@ var commandTable = map[string]func([]string) []byte{
 	"PEXPIRE": cmdPEXPIRE, "EXPIREAT": cmdEXPIREAT, "PERSIST": cmdPERSIST,
 
 	// Server
-	"KEEL.REPL.PULL": cmdReplicationPull,
-	"DBSIZE":         cmdDBSIZE, "FLUSHDB": cmdFLUSHDB, "MEMORY": cmdMEMORY, "INFO": cmdINFO,
+	"KEEL.REPL.PULL":  cmdReplicationPull,
+	"KEEL.REPL.PULL2": cmdReplicationPullV2,
+	"DBSIZE":          cmdDBSIZE, "FLUSHDB": cmdFLUSHDB, "MEMORY": cmdMEMORY, "INFO": cmdINFO,
 	"BGREWRITEAOF": cmdBGREWRITEAOF,
 	"KEEL.DUMP":    cmdDUMP, "KEEL.RESTORE": cmdRESTORE,
 	// The names from before the server was renamed, so a log written then

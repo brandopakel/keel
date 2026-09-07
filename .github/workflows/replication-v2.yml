@@ -1,0 +1,121 @@
+name: Replication v2 and deployment filesystems
+
+on:
+  pull_request:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: Native recovery / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04-arm, macos-15-intel]
+    # Standard runners are free for this public repository. No larger runners.
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: stable
+      - name: Build and test natively
+        run: |
+          uname -a
+          go test ./...
+          go build -trimpath -o /tmp/keel-native ./cmd/keel
+      - name: Streaming snapshots, interrupted transfers and restart checkpoints
+        run: python3 scripts/check-replication-v2.py --bin /tmp/keel-native --out dist/native/replication --concurrent
+      - name: Execute alpha.3 release archive and verify upgrade with rollback
+        shell: bash
+        run: |
+          task_archive="keel_v0.1.0-alpha.3_$(go env GOOS)_$(go env GOARCH).tar.gz"
+          task_url="https://github.com/brandopakel/keel/releases/download/v0.1.0-alpha.3"
+          mkdir -p dist/native/download
+          curl -fL --retry 3 "$task_url/$task_archive" -o "dist/native/download/$task_archive"
+          curl -fL --retry 3 "$task_url/$task_archive.sha256" -o "dist/native/download/$task_archive.sha256"
+          python3 scripts/check-archive.py --archive "dist/native/download/$task_archive" --out dist/native/alpha3
+          python3 scripts/check-upgrade.py --baseline "$PWD/dist/native/alpha3/keel" --candidate /tmp/keel-native --out dist/native/upgrade
+      - name: Ordered append replies and crash recovery
+        run: python3 scripts/check-ordered-append.py --bin /tmp/keel-native --out dist/native/ordered --clients 16 --iterations 200
+      - name: Mixed workload and storage failures
+        run: python3 scripts/soak.py --bin /tmp/keel-native --out dist/native/soak --seconds 120 --cycle-seconds 15 --concurrent --replication-protocol 2
+      - name: Preserve reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: native-${{ matrix.os }}
+          path: |
+            dist/native/**/*.json
+            dist/native/**/*.jsonl
+            dist/native/**/*.log
+          retention-days: 7
+
+  filesystems:
+    name: Recovery on ${{ matrix.fs }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        fs: [ext4, xfs]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: stable
+      - name: Build and prepare filesystem tools
+        run: |
+          go build -trimpath -o /tmp/keel-filesystem ./cmd/keel
+          sudo apt-get update
+          sudo apt-get install -y xfsprogs
+      - name: Exercise an owned temporary filesystem
+        env:
+          KEEL_TEST_FS: ${{ matrix.fs }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          task_image="$RUNNER_TEMP/keel-validation.img"
+          task_mount="$RUNNER_TEMP/keel-validation-mount"
+          task_reports="$GITHUB_WORKSPACE/dist/filesystem"
+          mkdir -p "$task_mount" "$task_reports"
+          truncate -s 512M "$task_image"
+          task_loop=$(sudo losetup --find --show "$task_image")
+          cleanup() {
+            python3 - "$task_mount" "$task_reports" <<'PY'
+          import pathlib, shutil, sys
+          source, target = map(pathlib.Path, sys.argv[1:])
+          for p in source.rglob('*'):
+              if p.is_file() and p.suffix in ('.json', '.jsonl', '.log'):
+                  out = target / p.relative_to(source)
+                  out.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copy2(p, out)
+          PY
+            sudo umount "$task_mount" || true
+            sudo losetup -d "$task_loop"
+          }
+          trap cleanup EXIT
+          if [ "$KEEL_TEST_FS" = ext4 ]; then
+            sudo mkfs.ext4 -F "$task_loop"
+          else
+            sudo mkfs.xfs -f "$task_loop"
+          fi
+          sudo mount "$task_loop" "$task_mount"
+          sudo chown "$(id -u):$(id -g)" "$task_mount"
+          findmnt "$task_mount" > "$task_reports/mount.log"
+          python3 scripts/soak.py --bin /tmp/keel-filesystem --out "$task_mount/soak" --seconds 180 --cycle-seconds 20 --concurrent --replication-protocol 2
+      - name: Preserve filesystem reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: filesystem-${{ matrix.fs }}
+          path: dist/filesystem
+          retention-days: 7

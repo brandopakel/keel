@@ -1,7 +1,9 @@
 package core
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"hash"
 	"io"
 	"os"
 	"path/filepath"
@@ -62,12 +64,14 @@ var nextAutoRewrite time.Time
 
 // rewrite is the state of the walk in progress, if there is one.
 var rewrite struct {
-	active  bool
-	started time.Time
-	path    string
-	tmpPath string
-	file    *os.File
-	written int64
+	active     bool
+	started    time.Time
+	path       string
+	tmpPath    string
+	file       *os.File
+	digest     hash.Hash
+	hashCursor *data_structure.HashCursor
+	written    int64
 
 	// keys is every name that existed when the rewrite started. A Go map
 	// cannot be iterated across cycles - there is no resumable iterator - so
@@ -122,9 +126,14 @@ func StartRewrite() error {
 	rewrite.path = path
 	rewrite.tmpPath = tmpPath
 	rewrite.file = f
+	rewrite.digest = nil
+	if aof.digest != nil {
+		rewrite.digest = sha256.New()
+	}
 	rewrite.written = 0
 	rewrite.pos = 0
 	rewrite.collectionActive = false
+	rewrite.hashCursor = nil
 	rewrite.dirty = make(map[string]struct{})
 	rewrite.keys = allKeyNames()
 	return nil
@@ -198,8 +207,8 @@ func AdvanceRewrite() error {
 	return finishRewrite()
 }
 
-// Lists and sets have O(1) indexed access. Sorted sets seek a bounded rank
-// window in O(log(n)+chunk). Mutations invalidate the cursor; dirty-key
+// Lists and sets have O(1) indexed access. Hashes retain one map cursor; sorted
+// sets seek a bounded rank window in O(log(n)+chunk). Mutations invalidate the cursor; dirty-key
 // reconciliation then replaces every historical fragment with DEL first.
 func emitRewriteKey(dst []byte, key string) []byte {
 	kind := ""
@@ -211,6 +220,10 @@ func emitRewriteKey(dst []byte, key string) []byte {
 	}
 	if z, ok := zsetStore.Peek(key); ok && (z.Len() > 256 || z.MemUsage() > 64<<10) {
 		kind = "zset"
+	}
+	if h, ok := hashStore.Peek(key); ok && (h.Len() > 256 || h.MemUsage() > 64<<10) {
+		kind = "hash"
+		rewrite.hashCursor = h.Cursor()
 	}
 	if kind == "" {
 		return emitKey(dst, key)
@@ -227,6 +240,15 @@ func emitCollectionSlice(dst []byte) []byte {
 	var valueAt func(int) (string, string)
 	var expiry func(string) (uint64, bool)
 	switch rewrite.collectionKind {
+	case "hash":
+		h, ok := hashStore.Peek(key)
+		if !ok || rewrite.hashCursor == nil {
+			rewrite.collectionActive = false
+			rewrite.hashCursor = nil
+			return dst
+		}
+		command, length, expiry = "HSET", h.Len(), hashStore.GetExpiry
+		valueAt = func(int) (string, string) { field, value, _ := rewrite.hashCursor.Entry(); return value, field }
 	case "list":
 		l, ok := listStore.Peek(key)
 		if !ok {
@@ -265,19 +287,23 @@ func emitCollectionSlice(dst []byte) []byte {
 		if count > 0 && (bytes+size > 64<<10 || time.Now().After(deadline)) {
 			break
 		}
-		if command == "ZADD" {
+		if command == "ZADD" || command == "HSET" {
 			parts = append(parts, score)
 		}
 		parts = append(parts, value)
 		bytes += size
 		count++
 		rewrite.collectionPos++
+		if command == "HSET" {
+			rewrite.hashCursor.Advance()
+		}
 	}
 	if count > 0 {
 		dst = appendCommand(dst, parts...)
 	}
 	if rewrite.collectionPos == length {
 		rewrite.collectionActive = false
+		rewrite.hashCursor = nil
 		if at, has := expiry(key); has {
 			dst = appendCommand(dst, "PEXPIREAT", key, strconv.FormatUint(at, 10))
 		}
@@ -293,6 +319,7 @@ func noteRewriteDirty(key string) {
 			// Discard the cursor, not the partial log. Reconciliation starts
 			// with DEL and replaces every already-emitted fragment.
 			rewrite.collectionActive = false
+			rewrite.hashCursor = nil
 		}
 	}
 }
@@ -342,8 +369,10 @@ func finishRewrite() error {
 		return err
 	}
 	aof.file = f
+	aof.digest, aof.digestBytes = rewrite.digest, rewrite.written
 	aof.baseSize = rewrite.written
 	aof.rewriteBase = rewrite.written
+	appendSynced = max(appendSynced, appendCompleted)
 	aof.written = 0
 	aof.rewrites++
 	aof.lastKeys = len(rewrite.keys)
@@ -351,13 +380,14 @@ func finishRewrite() error {
 	rewrite.active = false
 	rewrite.keys = nil
 	rewrite.dirty = nil
-	return nil
+	return captureReplicationSnapshot()
 }
 
 // abortRewrite gives up on a rewrite without touching the log in use. The old
 // file has had every write appended to it throughout, so abandoning the new one
 // loses nothing.
 func abortRewrite(cause error) {
+	rewrite.hashCursor = nil
 	nextAutoRewrite = time.Now().Add(time.Minute)
 	if rewrite.file != nil {
 		rewrite.file.Close()
@@ -384,6 +414,9 @@ func rewriteWrite(body []byte) error {
 		return nil
 	}
 	n, err := rewrite.file.Write(body)
+	if rewrite.digest != nil {
+		rewrite.digest.Write(body[:n])
+	}
 	rewrite.written += int64(n)
 	if err == nil && n != len(body) {
 		return io.ErrShortWrite

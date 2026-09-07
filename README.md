@@ -161,8 +161,9 @@ The [general-purpose validation program](docs/general-purpose-validation.md)
 provides native workload comparisons, live heap/CPU profiles, seeded Redis
 differential tests and extended operational checks. Application pilots are one
 part of this coverage; Keel is the optimization target.
-Embedding, partitioning, and replication are separate future decisions driven by
-application requirements, not features implied by I/O threads.
+Embedding and partitioning remain separate future decisions. The opt-in
+[protocol 2 candidate](docs/replication-v2.md) extends replication beyond the
+initial small-dataset experiment.
 
 ### What remains to build out
 
@@ -170,12 +171,13 @@ In order of distance, not size.
 
 - **Validating the experiments.** Asynchronous appends and bounded primary/read-only
   replication are included in alpha.3 as opt-in experiments with their own contracts and
-  limits. Command execution concurrent with disk appends, automatic failover, and
-  fencing are not started.
+  limits. The candidate adds bounded concurrent string execution during appends
+  and protocol 2 recovery; both require further performance and deployment
+  validation. Automatic failover and distributed fencing remain unimplemented.
 - **Command surface outside the contract.** Transactions, Lua, Pub/Sub, blocking list
   commands, `SCAN`, RESP3, ACL roles, and cluster routing are absent. `ZRANGE` lacks
-  `BYSCORE`, `BYLEX`, and `LIMIT`; `ZADD` lacks `GT`, `LT`, and `INCR`; `ZCOUNT` and
-  `ZINCRBY` do not exist. The skip list already has the range walks these need.
+  `BYSCORE`, `BYLEX`, and `LIMIT`; `ZADD` lacks `GT`, `LT`, and `INCR`. The candidate
+  adds `ZCOUNT`, `ZRANGEBYSCORE`, `ZREVRANGEBYSCORE`, `ZINCRBY`, `ZPOPMIN` and `ZPOPMAX`.
   `LREM`, `LINSERT`, `GEOSEARCHSTORE`, the `GEORADIUS` family, `CMS.INFO`, `CMS.MERGE`,
   and `BF.CARD` are also missing.
 - **Persistence without a latency bound.** The `everysec` window stretches on slow storage.

@@ -19,6 +19,7 @@ type appendResult struct {
 	err    error
 	synced bool
 	end    uint64
+	body   []byte
 }
 
 var appendPending chan appendResult
@@ -50,6 +51,7 @@ func pollAppend(wait bool) {
 	if result.err == nil {
 		appendCompleted = result.end
 	}
+	recordAOFDigest(result.body[:result.n])
 	aof.written += int64(result.n)
 	appendWritten += uint64(result.n)
 	if result.n > 0 {
@@ -105,7 +107,7 @@ func FlushAOFAsync(wake func()) (ready bool, err error) {
 			err = syncFile(file)
 			synced = err == nil
 		}
-		result <- appendResult{n: n, err: err, synced: synced, end: end}
+		result <- appendResult{n: n, err: err, synced: synced, end: end, body: body}
 		if wake != nil {
 			wake()
 		}

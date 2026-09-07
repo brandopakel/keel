@@ -261,7 +261,7 @@ func expireCommand(args []string, scale int64, absolute bool) []byte {
 		aof.skip = true
 		return constant.RespZero
 	}
-	if at <= time.Now().UnixMilli() && !aof.replaying {
+	if at <= time.Now().UnixMilli() && !aof.replaying && !replicaApplying {
 		owner.Delete(args[0])
 		aofRecord("DEL", args[0])
 		return constant.RespOne

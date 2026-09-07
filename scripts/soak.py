@@ -61,10 +61,11 @@ def synchronized(primary, replica):
     raise TimeoutError('replica failed to catch up')
 
 
-def write_failure(binary, root, worker, disk_root=None):
+def write_failure(binary, root, worker, disk_root=None, concurrent=False):
     directory = (Path(disk_root) if disk_root else root) / f'fault-worker-{worker}'
     server = Server(binary, directory, async_append=worker,
-                    file_limit=None if disk_root else 4096)
+                    file_limit=None if disk_root else 4096,
+                    extra=['-aof-concurrent-append'] if worker and concurrent else ())
     filler = directory / 'owned-filler'
     try:
         server.start()
@@ -96,17 +97,18 @@ def write_failure(binary, root, worker, disk_root=None):
         with Server(binary, directory, async_append=worker) as recovered:
             assert recovered.client.call('GET', 'committed') == b'survives'
             assert recovered.client.call('GET', 'must-not-ack') is None
-    return {'worker': worker, 'fault': 'ENOSPC' if disk_root else 'RLIMIT_FSIZE', 'passed': True}
+    return {'worker': worker, 'concurrent': worker and concurrent, 'fault': 'ENOSPC' if disk_root else 'RLIMIT_FSIZE', 'passed': True}
 
 
 def run(args, report):
     root = Path(args.out).resolve()
+    replication_flags = ['-replication-protocol', str(args.replication_protocol)]
     primary = Server(args.bin, root / 'primary', async_append=True,
-                     extra=['-replication-feed'] + (['-aof-concurrent-append'] if args.concurrent else []))
+                     extra=['-replication-feed'] + replication_flags + (['-aof-concurrent-append'] if args.concurrent else []))
     password = primary.password
     replica = Server(args.bin, root / 'replica', async_append=True, password=password,
                      extra=['-replicaof', f'127.0.0.1:{primary.port}',
-                            '-primary-password-env', 'KEEL_VALIDATION_PASSWORD'] +
+                            '-primary-password-env', 'KEEL_VALIDATION_PASSWORD'] + replication_flags +
                            (['-aof-concurrent-append'] if args.concurrent else []))
     for server in [primary, replica]:
         server.env['GODEBUG'] = 'gctrace=1'
@@ -239,6 +241,7 @@ def run(args, report):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--concurrent', action='store_true', help='exercise bounded concurrent appends on both servers')
+    parser.add_argument('--replication-protocol', type=int, choices=[1, 2], default=1)
     parser.add_argument('--bin', required=True)
     parser.add_argument('--out', required=True)
     parser.add_argument('--seconds', type=float, default=900)
@@ -259,6 +262,7 @@ if __name__ == '__main__':
               'harness_sha256': sha256(__file__), 'seconds_requested': args.seconds,
               'started_utc': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
               'primary_crash_every': args.primary_crash_every, 'concurrent': args.concurrent,
+              'replication_protocol': args.replication_protocol,
               'checkpoint_count': 0,
               'acknowledged_writes': 0, 'primary_crash_recoveries': 0,
               'replica_crash_recoveries': 0, 'checkpoints': [], 'faults': [], 'passed': False}
@@ -267,7 +271,7 @@ if __name__ == '__main__':
         if not args.fault_only:
             run(args, report)
         for worker in [False, True]:
-            report['faults'].append(write_failure(args.bin, root, worker, args.disk_root))
+            report['faults'].append(write_failure(args.bin, root, worker, args.disk_root, args.concurrent))
         report['passed'] = True
         report['status'] = 'passed'
     except BaseException as exc:

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"strconv"
 	"strings"
@@ -31,10 +32,14 @@ func startReplicaTransport() (<-chan replicaUpdate, func()) {
 	address, password, useTLS := config.ReplicaOf, config.ReplicaPassword, config.ReplicaTLS
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
+	protocol := config.ReplicationProtocol
+	initialEpoch, initialOffset := core.ReplicaResumeCursor()
 	go func() {
 		defer close(done)
-		epoch := ""
-		var offset uint64
+		epoch, offset := initialEpoch, initialOffset
+		snapshotID := ""
+		var snapshotOffset uint64
+		var lastErrorLog time.Time
 		for ctx.Err() == nil {
 			dialer := net.Dialer{Timeout: 2 * time.Second}
 			conn, err := dialer.DialContext(ctx, "tcp", address)
@@ -59,7 +64,11 @@ func startReplicaTransport() (<-chan replicaUpdate, func()) {
 				for err == nil && ctx.Err() == nil {
 					conn.SetDeadline(time.Now().Add(3 * time.Second))
 					var body []byte
-					body, err = replicaExchange(conn, reader, []string{"KEEL.REPL.PULL", epoch, strconv.FormatUint(offset, 10)})
+					parts := []string{"KEEL.REPL.PULL", epoch, strconv.FormatUint(offset, 10)}
+					if protocol == 2 {
+						parts = []string{"KEEL.REPL.PULL2", epoch, strconv.FormatUint(offset, 10), snapshotID, strconv.FormatUint(snapshotOffset, 10)}
+					}
+					body, err = replicaExchange(conn, reader, parts)
 					if err != nil {
 						break
 					}
@@ -85,7 +94,20 @@ func startReplicaTransport() (<-chan replicaUpdate, func()) {
 					if err != nil {
 						break
 					}
-					epoch, offset = frame.Epoch, frame.To
+					if protocol == 2 && frame.Full {
+						if frame.Pending {
+							epoch, offset, snapshotID, snapshotOffset = "", 0, "", 0
+						} else if frame.SnapshotDone {
+							epoch, offset, snapshotID, snapshotOffset = frame.Epoch, frame.To, "", 0
+						} else {
+							epoch, snapshotID, snapshotOffset = frame.Epoch, frame.SnapshotID, frame.SnapshotOffset+uint64(len(frame.Body))
+						}
+					} else {
+						epoch, offset = frame.Epoch, frame.To
+					}
+					if protocol == 2 && !frame.Pending && (frame.Full || !frame.CaughtUp) {
+						continue
+					}
 					select {
 					case <-time.After(100 * time.Millisecond):
 					case <-ctx.Done():
@@ -93,6 +115,10 @@ func startReplicaTransport() (<-chan replicaUpdate, func()) {
 				}
 				conn.Close()
 				close(disconnected)
+			}
+			if err != nil && time.Since(lastErrorLog) >= 30*time.Second {
+				log.Printf("replication protocol %d: %v", protocol, err)
+				lastErrorLog = time.Now()
 			}
 			select {
 			case <-time.After(200 * time.Millisecond):

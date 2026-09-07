@@ -18,6 +18,7 @@ func ExpireCycle() int {
 		return 0
 	}
 
+	recordStart := len(aof.buf)
 	total := 0
 	for round := 0; round < config.ActiveExpireRounds; round++ {
 		examined, expired := 0, 0
@@ -46,6 +47,11 @@ func ExpireCycle() int {
 		// and nothing else is going to commit them: this happens between
 		// commands, not inside one, so no aofCommit is coming.
 		aofCommitExtras()
+		if replicationV2Enabled() {
+			recordReplicationV2Body(aof.buf[recordStart:])
+			clear(replication.dirty)
+			replication.dirtyBytes = 0
+		}
 		expiredKeys += uint64(total)
 	}
 	return total
