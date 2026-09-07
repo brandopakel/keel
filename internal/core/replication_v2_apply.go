@@ -44,6 +44,15 @@ func applyReplicationV2(frame ReplicationFrame) (err error) {
 	if frame.Version != 2 || len(frame.Epoch) != 32 || len(frame.Body) > replicationChunkBytes || frame.Checksum != frameChecksum(frame) {
 		return errors.New("invalid protocol 2 frame")
 	}
+	// A frame from below the term this replica already knows is a deposed
+	// primary still talking. Following it would rewind the replica onto a
+	// history the cluster has abandoned.
+	if frame.Term < failover.term {
+		return fmt.Errorf("replication frame from term %d, below the known term %d", frame.Term, failover.term)
+	}
+	if err := observeTerm(frame.Term); err != nil {
+		return err
+	}
 	if _, err := hex.DecodeString(frame.Epoch); err != nil {
 		return err
 	}
