@@ -679,6 +679,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 			}
 			if time.Now().After(nextMaintenance) {
 				nextMaintenance = time.Now().Add(time.Second)
+				core.MaintainMemory()
 				for _, c := range clients {
 					if time.Since(c.lastProgress) > 30*time.Second && (len(c.out) > 0 || c.buf != nil) {
 						closeClient(c)
@@ -883,6 +884,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 		now := time.Now()
 		if !now.Before(nextMaintenance) {
 			nextMaintenance = now.Add(time.Second)
+			core.MaintainMemory()
 			for _, c := range clients {
 				if (len(c.out) > 0 || c.buf != nil || c.appendDeferred) && now.Sub(c.lastProgress) > 30*time.Second {
 					closeClient(c)

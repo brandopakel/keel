@@ -27,6 +27,7 @@ type Dict struct {
 	// needs in order to delete one.
 	expiredDictStore map[string]uint64
 	expiryPeak       int
+	expiryCompaction *expiryCompaction
 
 	// memUsed is the estimated bytes held, maintained incrementally: totalling
 	// it on demand would be O(n) and a budget check runs on every write.
@@ -101,6 +102,9 @@ func (d *Dict) SetExpiryAt(k string, atMs uint64) {
 		d.expiredDictStore = make(map[string]uint64)
 	}
 	d.expiredDictStore[k] = atMs
+	if d.expiryCompaction != nil {
+		d.expiryCompaction.next[k] = atMs
+	}
 	d.expiryPeak = max(d.expiryPeak, len(d.expiredDictStore))
 	EnforceLimits()
 }
@@ -278,8 +282,12 @@ func (d *Dict) ClearExpiry(key string) bool {
 // persistent keys remain, so one past expiry burst is not retained forever.
 func (d *Dict) dropExpiry(key string) {
 	delete(d.expiredDictStore, key)
+	if d.expiryCompaction != nil {
+		delete(d.expiryCompaction.next, key)
+	}
 	if len(d.expiredDictStore) == 0 && d.expiryPeak >= expiryReleaseThreshold {
 		d.expiredDictStore = nil
 		d.expiryPeak = 0
+		d.expiryCompaction = nil
 	}
 }
