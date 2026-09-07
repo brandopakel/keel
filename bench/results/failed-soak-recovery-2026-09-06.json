@@ -1,0 +1,35 @@
+{
+  "status": "passed",
+  "original_status": "failed",
+  "original_failure": "TimeoutError('server did not become ready')",
+  "acknowledged_writes": 698540,
+  "baseline_sha256": "38818a3837734ddd4c2f3c93a080fe0d3ec3c4c55e9f5d3813e78e75306a194a",
+  "candidate_sha256": "5509a9d611981fdb968e338679c5d2fae29e7ad7f2bdf03706138037360b1a52",
+  "runs": {
+    "original-primary": {
+      "input_bytes": 2644352,
+      "input_sha256": "109b6d0d94115f8ce4ee25bb9f03865ba31d0d2a58d87f2b7b562f9bf3806837",
+      "startup_seconds": 0.032899666926823556,
+      "state_sha256": "a602f57682b3c892755957cbbe992bf489b07c94c46a4b89048a515b1be851e2"
+    },
+    "original-replica": {
+      "input_bytes": 1590573103,
+      "input_sha256": "1dcba1c0c5d33108f318650bd7d9a0cc4482024e7b288893ea30afe9e75b397f",
+      "startup_seconds": 2.7203943750355393,
+      "state_sha256": "a4fce2058690602e4c2346dc1aaf82ac16f1796fea30498a030732e985567dcd"
+    },
+    "candidate-replica": {
+      "input_bytes": 1590573103,
+      "input_sha256": "1dcba1c0c5d33108f318650bd7d9a0cc4482024e7b288893ea30afe9e75b397f",
+      "startup_seconds": 3.1392602500272915,
+      "state_sha256": "a4fce2058690602e4c2346dc1aaf82ac16f1796fea30498a030732e985567dcd",
+      "rewritten_bytes": 1888028,
+      "rollback_restart_seconds": 0.03023329097777605
+    }
+  },
+  "primary_acknowledged_cache_values_lost": 0,
+  "replica_differing_keys_before_resync": [
+    "cache:538",
+    "cache:539"
+  ]
+}
