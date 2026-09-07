@@ -13,6 +13,26 @@ on:
         description: Exact baseline commit
         type: string
         default: 40fb7e505176054b18098d70e5f7d8e79264a4a9
+      cases:
+        description: Optional comma-separated standard workload names
+        type: string
+        default: ''
+      repetitions:
+        description: Repetitions per arm
+        type: number
+        default: 3
+      seconds:
+        description: Seconds per measurement
+        type: number
+        default: 5
+      memory:
+        description: Include the nine-case memory matrix
+        type: boolean
+        default: true
+      profiles:
+        description: Run separate candidate CPU/heap diagnostics after comparison
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -107,18 +127,38 @@ jobs:
           cp /proc/stat dist/matched/proc-stat-before.txt
           ps -eo pid,comm,pcpu,pmem > dist/matched/processes-before.txt
       - name: Sequential paired workloads and memory with disjoint CPU masks
+        env:
+          SELECTED_CASES: ${{ inputs.cases }}
+          REPETITIONS: ${{ inputs.repetitions }}
+          MEASURE_SECONDS: ${{ inputs.seconds }}
+          INCLUDE_MEMORY: ${{ inputs.memory }}
+          DIAGNOSE_PROFILES: ${{ inputs.profiles }}
         run: |
           python3 - <<'PY'
           import json, os, subprocess
           from pathlib import Path
           cpus = sorted(os.sched_getaffinity(0))
           assert len(cpus) >= 2, 'two disjoint CPU masks required'
-          server, clients = str(cpus[0]), ','.join(map(str,cpus[1:]))
-          Path('dist/matched/affinity.json').write_text(json.dumps({'server':server,'generator':clients,'limitation':'Disjoint logical CPUs on one hosted VM; not a dedicated physical host.'},indent=2))
-          common = ['python3','bench/run-general.py','--baseline','/tmp/keel-baseline','--candidate','/tmp/keel-candidate','--memtier','/tmp/memtier_benchmark-2.5.1/memtier_benchmark','--server-cpus',server,'--client-cpus',clients,'--load-threads','2','--reps','3']
-          for suite in ('standard','memory'):
-              subprocess.run(common+['--suite',suite,'--seconds','5','--out','dist/matched/'+suite],check=True)
+          # Keep all exposed SMT siblings on the same side of the measurement.
+          topology = {}
+          for cpu in cpus:
+              base = Path(f'/sys/devices/system/cpu/cpu{cpu}/topology')
+              topology[cpu] = tuple((base/name).read_text().strip() for name in ('physical_package_id','core_id'))
+          server_set = [cpu for cpu in cpus if topology[cpu] == topology[cpus[0]]]
+          client_set = [cpu for cpu in cpus if cpu not in server_set]
+          assert client_set, 'two exposed physical cores required'
+          server, clients = ','.join(map(str,server_set)), ','.join(map(str,client_set))
+          Path('dist/matched/affinity.json').write_text(json.dumps({'server':server,'generator':clients,'topology':topology,'limitation':'Disjoint exposed core groups on one hosted VM; host scheduling and underlying tenancy are uncontrolled.'},indent=2))
+          common = ['python3','bench/run-general.py','--candidate','/tmp/keel-candidate','--memtier','/tmp/memtier_benchmark-2.5.1/memtier_benchmark','--server-cpus',server,'--client-cpus',clients,'--load-threads','2']
+          compare = common+['--baseline','/tmp/keel-baseline','--reps',os.environ['REPETITIONS'],'--seconds',os.environ['MEASURE_SECONDS']]
+          suites = ['standard'] + (['memory'] if os.environ['INCLUDE_MEMORY'] == 'true' else [])
+          for suite in suites:
+              selected = ['--cases',os.environ['SELECTED_CASES']] if suite == 'standard' and os.environ['SELECTED_CASES'] else []
+              subprocess.run(compare+selected+['--suite',suite,'--out','dist/matched/'+suite],check=True)
               subprocess.run(['python3','bench/summarize-general.py','dist/matched/'+suite],check=True)
+          if os.environ['DIAGNOSE_PROFILES'] == 'true':
+              selected = ['--cases',os.environ['SELECTED_CASES']] if os.environ['SELECTED_CASES'] else ['--cases','working-set-100k']
+              subprocess.run(common+selected+['--profiles','--reps','1','--seconds','30','--out','dist/matched/profiles'],check=True)
           PY
       - name: Record final host state
         if: always()
