@@ -32,6 +32,28 @@ These are per-command payload, record and metadata limits. The output buffer,
 canonical record and parsed input may coexist. Aggregate transient admission,
 per-client execution scheduling and a latency bound for an individual large
 command remain separate work. Size traversal itself is synchronous. Hosted
-correctness and matched workload measurements remain pending. The general
+correctness and matched workload measurements are reported below. The general
 workload harness now includes 4,096-member hash, set and sorted-set reads
 (27 scenarios total); all three new cases passed a local smoke check.
+
+The first hosted comparison completed in
+[34108762206](https://github.com/brandopakel/keel/actions/runs/34108762206),
+b2f1314 against 89857e8, three repetitions of ten seconds per arm. Small reads,
+hashes, sets and sorted-set medians stayed near baseline (ratios 1.010, 1.002,
+1.005 and 0.997). Pipeline-16, queue and large-list medians were 0.978, 0.986 and
+0.964, prompting longer targeted repetitions. Large hash/set measurements
+hit generator CPU warnings and cannot establish server capacity. All raw JSON
+is retained in `bench/results/collection-matched-2026-09-07.json.gz`.
+Hosted Go/race/Docker and native/filesystem checks passed on the runtime commit
+821eadb in runs 34108409719 and 34108411991. The subsequent b2f1314 change only
+adds the three workload fixtures and their documentation.
+
+The longer targeted comparison in [34110805600](https://github.com/brandopakel/keel/actions/runs/34110805600)
+used the same commits, five repetitions of fifteen seconds per arm. Paired
+median ratios for pipeline-16, queue and large-list were 0.992, 0.993 and 0.996
+(ranges 0.979–1.006, 0.951–1.000 and 0.913–1.044). Median p99 values were
+0.695/0.703 ms, 0.367/0.375 ms and 6.271/6.175 ms respectively. No generator
+CPU warnings occurred. The first short-run reductions did not persist at the
+same magnitude; these results support admission safety with near-baseline
+ordinary performance, not a throughput speedup or a strict equivalence bound.
+Raw measurements are in `bench/results/collection-targeted-2026-09-07.json.gz`.
