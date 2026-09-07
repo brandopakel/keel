@@ -67,7 +67,7 @@ A normal two-arm smoke passes. Cleanup failures from abandoned sync jobs are
 logged. Unit compatibility checks, race and workflow lint pass; all attempts
 are retained in `bench/results/rewrite-review-guards-2026-09-07.json.gz`.
 
-## Wakeup-corrected matched comparison
+## Matched comparison after wake-up correction
 
 Run 34126440085 repeats all 36 arms at e4639168 against the same baseline
 66f8ceb3. All 1,080,000 scheduled requests balance and complete, with zero drops,
@@ -132,3 +132,8 @@ race repetitions, full tests and vet. A final matched repeat and archive validat
 are required for this runtime change. Raw hosted results, the original timeout
 stack and both regression outcomes are retained in
 `bench/results/rewrite-integrated-sync-diagnostic-2026-09-07.json.gz`.
+
+The lifecycle regression now checks callback/detachment serialization directly
+with the shared mutex, so a delayed test goroutine cannot make the old
+copy-unlock-call behavior pass a short scheduling window. Timing is used only
+as a generous bound for callback startup, not as evidence of synchronization.
