@@ -248,8 +248,13 @@ func AppendReadyOffset() uint64 { return appendCompleted }
 func AppendBufferedBytes() int  { return len(aof.buf) }
 func AppendRetainedBytes() int  { return appendRetained + cap(aof.buf) }
 func AppendHasRoom(reserve int) bool {
+	// An admitted concurrent run must fit without a synchronous transcript
+	// drain; otherwise it waits at the server's existing append barrier.
+	if reserve < 0 || reserve > maxAOFTranscriptBytes-len(aof.buf) {
+		return false
+	}
 	// Twice the encoded length also reserves slice growth/allocator slack.
-	return reserve >= 0 && appendRetained+2*(len(aof.buf)+reserve) <= maxAsyncAppendBytes
+	return appendRetained+2*(len(aof.buf)+reserve) <= maxAsyncAppendBytes
 }
 
 // AOFPositions are logical positions since open; rewrites never reset them.

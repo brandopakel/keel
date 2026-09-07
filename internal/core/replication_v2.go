@@ -99,7 +99,7 @@ func recordReplicationV2Body(body []byte) {
 	}
 }
 
-func recordReplicationV2Commit(cmd *Command) {
+func recordReplicationV2Commit() {
 	if !replicationV2Enabled() {
 		return
 	}
@@ -108,16 +108,13 @@ func recordReplicationV2Commit(cmd *Command) {
 		invalidateReplicationV2()
 		return
 	}
-	if aof.commandStart >= len(aof.buf) {
+	if !aof.commandChanged {
 		return
 	}
 	body := aof.buf[aof.commandStart:]
 	// Filters/sketches may choose random seeds internally. Preserve exact state
 	// for these commands; common strings/collections use their canonical deltas.
-	opaque := strings.HasPrefix(cmd.Cmd, "BF.") || strings.HasPrefix(cmd.Cmd, "CF.") ||
-		strings.HasPrefix(cmd.Cmd, "CMS.") || strings.HasPrefix(cmd.Cmd, "MORRIS.") ||
-		cmd.Cmd == "PFADD" || cmd.Cmd == "PFMERGE"
-	if opaque {
+	if aof.commandOpaque {
 		var fits bool
 		body, fits = opaqueReplicationBody()
 		if !fits {
@@ -126,6 +123,12 @@ func recordReplicationV2Commit(cmd *Command) {
 		}
 	}
 	recordReplicationV2Body(body)
+}
+
+func isOpaqueReplicationCommand(name string) bool {
+	return strings.HasPrefix(name, "BF.") || strings.HasPrefix(name, "CF.") ||
+		strings.HasPrefix(name, "CMS.") || strings.HasPrefix(name, "MORRIS.") ||
+		name == "PFADD" || name == "PFMERGE"
 }
 
 // captureReplicationSnapshot runs after a rewrite's rename and directory sync,
