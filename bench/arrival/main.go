@@ -273,6 +273,10 @@ type workerResult struct {
 
 func measure(o options) (map[string]any, error) {
 	o.Pipeline = max(o.Pipeline, 1)
+	started, err := scheduledStart(o.StartNS, time.Now())
+	if err != nil {
+		return nil, err
+	}
 	connections := make([]net.Conn, 0, o.Connections)
 	defer func() {
 		for _, c := range connections {
@@ -342,9 +346,14 @@ func measure(o options) (map[string]any, error) {
 			results <- &result
 		}(c)
 	}
-	started := time.Now()
-	if o.StartNS > 0 {
-		started = started.Add(time.Unix(0, o.StartNS).Sub(started))
+	preparedLead := time.Until(started)
+	if o.StartNS > 0 && preparedLead <= 0 {
+		close(jobs)
+		workers.Wait()
+		return nil, errors.New("scheduled start passed during connection/worker preparation")
+	}
+	if o.StartNS == 0 {
+		started = time.Now()
 	}
 	if remaining := time.Until(started); remaining > 0 {
 		time.Sleep(remaining)
@@ -393,9 +402,10 @@ func measure(o options) (map[string]any, error) {
 	return map[string]any{
 		"options": o, "scheduled": total, "issued": combined.issued, "completed": combined.completed,
 		"failed": combined.failed, "queue_dropped": dropped, "queue_expired": combined.expired,
-		"completed_commands": combined.completed * uint64(o.Pipeline),
-		"request_unit":       "one pipeline batch; latency includes all replies; failed batches may execute a partial command prefix",
-		"elapsed_seconds":    elapsed.Seconds(), "completed_per_requested_second": float64(combined.completed) / o.Seconds,
+		"completed_commands":       combined.completed * uint64(o.Pipeline),
+		"request_unit":             "one pipeline batch; latency includes all replies; failed batches may execute a partial command prefix",
+		"prepared_before_start_ms": float64(preparedLead) / float64(time.Millisecond),
+		"elapsed_seconds":          elapsed.Seconds(), "completed_per_requested_second": float64(combined.completed) / o.Seconds,
 		"completed_per_elapsed_second": float64(combined.completed) / elapsed.Seconds(),
 		"scheduled_latency":            combined.latency.summary(), "service_latency": combined.service.summary(),
 		"queue_latency": combined.queued.summary(), "scheduler_lag": schedule.summary(), "first_error": combined.firstError,
@@ -404,6 +414,17 @@ func measure(o options) (map[string]any, error) {
 		"generator_system_seconds":            float64(cpuAfter.Stime.Nano()-cpuBefore.Stime.Nano()) / 1e9,
 		"limitations":                         "Scheduled latency includes generator/queue delay. Queue drops are generator admission drops, not server rejections. Generator CPU and scheduler lag must be assessed before attributing capacity to the server.",
 	}, nil
+}
+
+func scheduledStart(startNS int64, now time.Time) (time.Time, error) {
+	if startNS == 0 {
+		return now, nil
+	}
+	started := now.Add(time.Unix(0, startNS).Sub(now))
+	if !started.After(now) {
+		return time.Time{}, errors.New("scheduled start already passed")
+	}
+	return started, nil
 }
 
 func main() {

@@ -170,3 +170,44 @@ func TestPipelineExchangeDrainsEveryReplyAndRefusesOversizedRequest(t *testing.T
 		t.Fatal("accepted oversized batch")
 	}
 }
+
+func TestLargeCollectionDiscardDoesNotAllocatePerMember(t *testing.T) {
+	payload := "*8192\r\n" + strings.Repeat("$64\r\n"+strings.Repeat("x", 64)+"\r\n", 8192)
+	src := strings.NewReader(payload)
+	r := bufio.NewReaderSize(src, 16<<10)
+	invalid := false
+	allocs := testing.AllocsPerRun(10, func() {
+		src.Reset(payload)
+		r.Reset(src)
+		kind, err := readReply(r, 0)
+		if err != nil || kind != '*' || r.Buffered() != 0 || src.Len() != 0 {
+			invalid = true
+		}
+	})
+	if invalid {
+		t.Fatal("did not consume the complete array reply")
+	}
+	if allocs > 1 {
+		t.Fatalf("per-member discard allocations regressed: %v", allocs)
+	}
+}
+
+func TestScheduledStartRejectsStaleEpochAndKeepsFutureOffset(t *testing.T) {
+	now := time.Now()
+	for _, start := range []int64{now.Add(-time.Second).UnixNano(), now.UnixNano(), -1} {
+		if _, err := scheduledStart(start, now); err == nil {
+			t.Fatal("accepted stale start", start)
+		}
+	}
+	future, err := scheduledStart(now.Add(time.Second).UnixNano(), now)
+	if err != nil || future.Sub(now) != time.Second {
+		t.Fatal(future, err)
+	}
+	immediate, err := scheduledStart(0, now)
+	if err != nil || !immediate.Equal(now) {
+		t.Fatal(immediate, err)
+	}
+	if _, err := measure(options{StartNS: now.Add(-time.Second).UnixNano()}); err == nil {
+		t.Fatal("stale measurement must fail before dialing")
+	}
+}
