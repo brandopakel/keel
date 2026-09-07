@@ -31,7 +31,7 @@ under no/everysec/always fsync, for 36 arms. The bounded queue reports drops,
 expiry, errors, scheduled/service latency and generator CPU. INFO polling every
 10 ms and ps sampling every 250 ms are identical in both arms. Full snapshot
 contents are verified after measurement; crash/restart correctness is covered
-separately. Hosted evidence is pending; local runs validate the harness only.
+separately. Hosted comparisons below provide candidate evidence; local runs validate the harness only.
 
 General cache validation accepts `rewrite_validation=<exact baseline SHA>` to
 run the comparison on a free public Linux runner with separate exposed server
@@ -106,3 +106,29 @@ full tests and vet. Raw evidence is in `bench/results/waker-lifecycle-2026-09-07
 The callback must not register another waker. Integration now includes merged
 client fairness as well as opaque records; final matched checks use that same
 combined baseline on both sides.
+
+## Combined candidate and original-log sync diagnostic
+
+Run 34128657503 compares af1ae853 against the merged fairness/opaque baseline.
+Ordinary matched median ratios are 1.003 (small read), 1.010 (many clients),
+1.017 (pipeline 16) and 1.020 (pipeline 64), with no generator CPU warnings.
+All 36 rewrite arms and 108 rewrites complete; all 1,080,000 scheduled requests
+complete with no drops, expiry or protocol errors. This is paired public-runner
+evidence, not a dedicated-host capacity claim.
+
+Combined archive validation run 34128192062 timed out on Linux inside the
+latency diagnostic's quadratic insertion sort, after its rewrite loop finished.
+The diagnostic could collect idle polls while waiting for the original log's
+background sync. Sorting now uses the standard O(n log n) implementation, and
+worker waits are measured separately from event-loop work. A local million-key
+repeat records 977 work slices and finishes in 0.88 seconds; this is diagnostic
+evidence, not an end-to-end latency guarantee.
+
+A blocked-original-sync regression also reproduces unnecessary runnable rewrite
+cycles on the preceding candidate. The server now waits for that sync's explicit
+completion notification before finalization; ordinary command traffic continues.
+The previous candidate fails the regression; the corrected candidate passes three
+race repetitions, full tests and vet. A final matched repeat and archive validation
+are required for this runtime change. Raw hosted results, the original timeout
+stack and both regression outcomes are retained in
+`bench/results/rewrite-integrated-sync-diagnostic-2026-09-07.json.gz`.

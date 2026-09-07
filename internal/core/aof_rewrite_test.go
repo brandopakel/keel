@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -327,12 +328,9 @@ func TestRewriteWithoutAppendonlyIsAnError(t *testing.T) {
 	assert.Error(t, RewriteAOF(), "there is nothing to rewrite when the log is off")
 }
 
-// TestRewriteStallProfile is the measurement the package comment quotes.
-//
-// A rewrite is three different stalls, and averaging them would hide the one
-// that matters: collecting the key names at the start, the slices of the walk,
-// and the final slice that writes what changed and syncs the file. Only the
-// walk was made incremental, so the other two are what is left to improve.
+// TestRewriteStallProfile measures event-loop work separately from background
+// sync waits. Snapshot traversal is incremental; filesystem calls and atomic
+// value serialization can still exceed cooperative targets.
 func TestRewriteStallProfile(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a million keys")
@@ -357,11 +355,18 @@ func TestRewriteStallProfile(t *testing.T) {
 	collecting := time.Since(start)
 
 	var walk []time.Duration
-	var final time.Duration
+	var final, waiting time.Duration
 	total := collecting
 	for {
+		waitStart := time.Now()
+		for RewriteActive() && !RewriteNeedsCycle() {
+			require.Less(t, time.Since(waitStart), 3*time.Second, "rewrite worker did not finish")
+			time.Sleep(time.Millisecond)
+		}
+		waiting += time.Since(waitStart)
 		t0 := time.Now()
-		more := stepRewrite(t)
+		require.NoError(t, AdvanceRewrite())
+		more := RewriteActive()
 		took := time.Since(t0)
 		total += took
 		if more {
@@ -372,29 +377,19 @@ func TestRewriteStallProfile(t *testing.T) {
 		break
 	}
 
-	sortDurations(walk)
+	slices.Sort(walk)
 	median := walk[len(walk)/2]
 	worst := walk[len(walk)-1]
-	t.Logf("%d keys: collecting %v, %d walk slices median %v worst %v, final %v, total %v",
+	t.Logf("%d keys: collecting %v, %d walk slices median %v worst %v, final %v, loop work %v, worker waits %v",
 		keys, collecting.Round(time.Millisecond), len(walk),
 		median.Round(time.Microsecond), worst.Round(time.Microsecond),
-		final.Round(time.Millisecond), total.Round(time.Millisecond))
+		final.Round(time.Millisecond), total.Round(time.Millisecond), waiting.Round(time.Millisecond))
 
 	// Shared-host scheduling and storage affect even the median. Correctness
 	// uses work bounds; the scheduled-probe harness measures latency separately.
 	assert.Greater(t, len(walk), 100, "the walk must be spread over many cycles")
 	assert.Equal(t, 1, aof.rewrites, "the rewrite must actually commit")
 	assert.NoError(t, CloseAOF())
-}
-
-// sortDurations is an insertion sort, which is plenty for a few hundred
-// samples and avoids pulling in a comparison function for one call.
-func sortDurations(d []time.Duration) {
-	for i := 1; i < len(d); i++ {
-		for j := i; j > 0 && d[j] < d[j-1]; j-- {
-			d[j], d[j-1] = d[j-1], d[j]
-		}
-	}
 }
 
 // BenchmarkRewrite measures the stall a rewrite costs, which is the number the

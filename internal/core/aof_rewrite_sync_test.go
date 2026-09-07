@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/brandopakel/keel/internal/config"
 )
 
 // Existing slice-count tests count emitted slices, not idle sync polls. Wait
@@ -249,4 +251,57 @@ func TestRewriteDirtyTailSyncFailureKeepsAllAcknowledgedWrites(t *testing.T) {
 		require.Equal(t, "survives", run(t, "GET", key))
 	}
 	require.Equal(t, "value", run(t, "GET", "original"))
+}
+
+// Original-log fsync can outlive the snapshot walk. Waiting for it must not
+// self-wake indefinitely, and its completion must resume rewrite finalization.
+func TestRewriteWaitsForOriginalSyncWithoutSpinning(t *testing.T) {
+	ResetStores()
+	oldPolicy, oldSync, oldWake := config.AOFFsync, aofSync, rewriteWake
+	config.AOFFsync = config.FsyncEverySec
+	release := make(chan struct{})
+	woken := make(chan struct{}, 4)
+	aofSync = func(f *os.File) error { <-release; return f.Sync() }
+	SetRewriteWaker(func() { woken <- struct{}{} })
+	released := false
+	t.Cleanup(func() {
+		if !released {
+			close(release)
+		}
+		require.NoError(t, CloseAOF())
+		config.AOFFsync, aofSync, rewriteWake = oldPolicy, oldSync, oldWake
+		ResetStores()
+	})
+	path := filepath.Join(t.TempDir(), "original-sync.aof")
+	require.NoError(t, OpenAOF(path))
+	run(t, "SET", "k", "value")
+	aof.lastSync = time.Time{}
+	require.NoError(t, FlushAOF())
+	require.NotNil(t, aof.syncPending)
+	require.NoError(t, StartRewrite())
+	for i := 0; !rewriteWalkDone() && i < 100; i++ {
+		require.NoError(t, AdvanceRewrite())
+	}
+	require.True(t, rewriteWalkDone())
+	require.True(t, RewriteActive())
+	require.False(t, RewriteNeedsCycle(), "original-file sync must not cause idle polling")
+	close(release)
+	released = true
+	select {
+	case <-woken:
+	case <-time.After(time.Second):
+		t.Fatal("original sync did not wake the event loop")
+	}
+	require.True(t, RewriteNeedsCycle())
+	for i := 0; RewriteActive() && i < 100; i++ {
+		require.NoError(t, AdvanceRewrite())
+		waitForRewriteSync(t)
+	}
+	require.False(t, RewriteActive())
+	require.Equal(t, 1, aof.rewrites)
+	require.NoError(t, CloseAOF())
+	ResetStores()
+	_, err := LoadAOF(path)
+	require.NoError(t, err)
+	require.Equal(t, "value", run(t, "GET", "k"))
 }
