@@ -50,3 +50,18 @@ Worker scheduling can increase whole-rewrite duration; a byte limit is not a
 latency guarantee. Matched hosted interference results and integrated native
 validation are required before adoption. No frozen-soak or release success is
 attributed to this candidate.
+
+Hosted string interference run 34158319501 compares `ec8aa5a` (worker, before the
+new timing counters and sketch integration) with corrected-term baseline
+`ce12e79`. All 36 arms complete 108 rewrites and 1,080,000 scheduled requests with
+zero failed, dropped or expired requests. Across six durability/write cells,
+median scheduled p99.9 is 3.93–4.72 ms in the baseline and 1.59–3.67 ms with the
+worker. Median rewrite duration rises from 46–50 ms to 52–53 ms. This trades a
+slightly longer bulk rewrite for lower measured interference on that public VM;
+it does not bound slow-filesystem latency or remove final handoff stalls.
+Raw records are in `bench/results/rewrite-write-worker-hosted-2026-09-07.json.gz`.
+
+The combined worker, timing counters, borrowed sketch streams and bounded hash
+storage pass the full local suite and focused rewrite/sketch/persistence race
+checks at `6699a8d`. These integrated local checks do not establish hosted
+performance or qualify the frozen soak binaries for the new runtime.
