@@ -100,3 +100,26 @@ cover normal recovery and injected faults. It remains opt-in and asynchronous.
 Long soaks, native architecture/temporary-filesystem CI, and dedicated deployment
 results must be assessed separately before release. No AWS resources or paid
 benchmark hosts have been provisioned for this follow-up.
+
+## Completed follow-up checks
+
+All twelve build/test jobs passed at PR head `fceca50`, including Go 1.22/stable,
+the race detector, the general Redis/workload suite, native Linux ARM64 and Intel
+Mac, and ext4/XFS temporary-filesystem recovery. Both published alpha.3 archives
+executed on their native architectures and passed upgrade/backup-rollback checks.
+The [native and filesystem reports](../bench/results/runtime-native-filesystem-2026-09-06.json)
+retain binary hashes, platforms and per-check outcomes from
+[the workflow](https://github.com/brandopakel/keel/actions/runs/34080321993).
+
+The frozen runtime source `0859160` passed the 32 MiB replication integration
+test: interrupted snapshot transfer, three large-collection mutations using
+401 downstream bytes, and a checkpoint restart using 281 downstream bytes.
+Primary restart, changed AOF and history-overrun full synchronization also passed.
+See [the local report](../bench/results/replication-v2-local-2026-09-06.json).
+
+A preceding protocol 2 build with packed history, before the hash cursor change,
+completed a [15-minute recovery soak](../bench/results/replication-v2-soak-15m-2026-09-06.json):
+105,471 acknowledged cache writes, four primary crash recoveries, ten replica
+crash recoveries, fenced promotion and both OS file-size-limit fault cases. The
+worker fault case enabled concurrent appends. Its distinct binary hash remains
+in the report; it is not a long-duration test of the final candidate.

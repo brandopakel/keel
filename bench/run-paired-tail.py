@@ -24,6 +24,7 @@ parser.add_argument('--out', required=True)
 parser.add_argument('--seconds', type=float, default=15)
 parser.add_argument('--reps', type=int, default=5)
 parser.add_argument('--start-rep', type=int, default=0)
+parser.add_argument('--concurrent', action='store_true', help='add a fourth candidate arm with concurrent worker appends')
 parser.add_argument('--policies', nargs='+', choices=['off', 'everysec', 'always'],
                     default=['off', 'everysec', 'always'])
 args = parser.parse_args()
@@ -37,9 +38,11 @@ root.mkdir(parents=True)
 binaries = {'baseline-sync': str(Path(args.baseline).resolve()),
             'candidate-sync': str(Path(args.candidate).resolve()),
             'candidate-worker': str(Path(args.candidate).resolve())}
+if args.concurrent:
+    binaries['candidate-concurrent'] = str(Path(args.candidate).resolve())
 metadata = {'platform': platform.platform(), 'cpus': os.cpu_count(),
             'python': platform.python_version(), 'seconds': args.seconds, 'reps': args.reps,
-            'start_rep': args.start_rep, 'policies': args.policies,
+            'start_rep': args.start_rep, 'policies': args.policies, 'concurrent': args.concurrent,
             'harness_sha256': hashlib.sha256(Path(spec.origin).read_bytes()).hexdigest(),
             'driver_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             'model': 'same-host loopback; fresh processes; rotated/reversed arm order; closed-loop load and 100Hz scheduled probe',
@@ -52,7 +55,7 @@ failures = 0
 try:
     for rep in range(args.start_rep, args.start_rep + args.reps):
         order = list(binaries)
-        order = order[rep % 3:] + order[:rep % 3]
+        order = order[rep % len(order):] + order[:rep % len(order)]
         if rep % 2:
             order.reverse()
         for policy in args.policies:
@@ -60,7 +63,8 @@ try:
                 metadata['order'].append({'rep': rep, 'policy': policy, 'arm': arm})
                 path = root / f'{arm}-{policy}-{rep}.csv.gz'
                 opts = SimpleNamespace(bin=binaries[arm], out=str(path),
-                                       async_append=arm == 'candidate-worker',
+                                       async_append=arm in ('candidate-worker', 'candidate-concurrent'),
+                                       concurrent_append=arm == 'candidate-concurrent',
                                        seconds=args.seconds, members=10000, telemetry=True)
                 try:
                     rows = tail.run(opts, policy, rep)

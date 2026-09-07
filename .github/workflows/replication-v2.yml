@@ -30,6 +30,9 @@ jobs:
           uname -a
           go test ./...
           go build -trimpath -o /tmp/keel-native ./cmd/keel
+          mkdir -p dist/native
+          go version -m /tmp/keel-native > dist/native/build.log
+          git rev-parse HEAD >> dist/native/build.log
       - name: Streaming snapshots, interrupted transfers and restart checkpoints
         run: python3 scripts/check-replication-v2.py --bin /tmp/keel-native --out dist/native/replication --concurrent
       - name: Execute alpha.3 release archive and verify upgrade with rollback
@@ -87,6 +90,8 @@ jobs:
           task_mount="$RUNNER_TEMP/keel-validation-mount"
           task_reports="$GITHUB_WORKSPACE/dist/filesystem"
           mkdir -p "$task_mount" "$task_reports"
+          go version -m /tmp/keel-filesystem > "$task_reports/build.log"
+          git rev-parse HEAD >> "$task_reports/build.log"
           truncate -s 512M "$task_image"
           task_loop=$(sudo losetup --find --show "$task_image")
           cleanup() {

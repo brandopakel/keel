@@ -1,0 +1,27 @@
+{
+  "status": "passed",
+  "binary_sha256": "e878706cc610259ad7b7680c009bfc6946690be39c477d2a8568a793f87b6c60",
+  "harness_sha256": "92b72db4acf32b70ab320cf22ed3f6980f0ee640ae358fcc2209641979ae07ad",
+  "dataset_value_bytes": 33554432,
+  "protocol": 2,
+  "concurrent_append": true,
+  "checks": {
+    "initial_snapshot": {
+      "seconds": 0.6847813749918714,
+      "downstream_bytes": 45311328,
+      "interrupted_connections": 1
+    },
+    "large_collection_deltas": {
+      "downstream_bytes": 401
+    },
+    "checkpoint_restart": {
+      "seconds": 0.05332737497519702,
+      "downstream_bytes": 281
+    },
+    "rewrite_checkpoint_restart": true,
+    "history_overrun_full_sync": true,
+    "changed_aof_full_sync": true,
+    "primary_epoch_full_sync": true
+  },
+  "runtime_source_revision": "085916097eab32b3c5cc26f942a28c6117d3dcbe"
+}

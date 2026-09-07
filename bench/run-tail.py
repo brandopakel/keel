@@ -52,6 +52,7 @@ def run(args, policy, repetition):
         if policy != 'off':
             argv += ['-appendonly', '-appendfilename', directory+'/log.aof', '-appendfsync', policy]
             if args.async_append: argv += ['-aof-async-append']
+            if getattr(args, 'concurrent_append', False): argv += ['-aof-concurrent-append']
         log_path = str(args.out)+f'.{policy}.{repetition}.server.log'
         with open(log_path, 'w+') as log:
             process = subprocess.Popen(argv, env=env, stdout=log, stderr=log)

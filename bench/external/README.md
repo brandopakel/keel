@@ -172,3 +172,24 @@ before invoking the script. Record the chosen runner binary version and SHA-256.
 This self-hosted entrypoint has been syntax-checked; execution on an owner-selected
 KVM host remains pending host/account access. It is separate from the hosted
 Free-plan jobs above. [Official registration and runner contract](https://bencher.dev/docs/explanation/self-hosted-runners/).
+
+## Runtime follow-up image
+
+Dispatch the Benchmark workflow with `suite=hosted-runtime` on the candidate
+branch to build the PR #19 baseline (`16aaee8`) and the exact dispatched revision
+with one toolchain. The image adds a fourth `candidate-concurrent` arm to the
+existing baseline-sync, candidate-sync and candidate-worker arms. Invoke its
+job with `--concurrent`; the four-arm order rotates and reverses by repetition.
+The offline image smoke uses `always` so it exercises the new flag. With policy
+`off`, persistence flags are omitted for all arms, providing repeat controls.
+
+The `hosted-runtime-benchmark-image` artifact retains checksums, source/build
+metadata and offline smoke evidence. Upload that verified image using private
+local registry credentials, then use its immutable digest with `bencher run`,
+a distinct runtime testbed, one job at a time and a 240-second timeout. This
+keeps execution within the public project's Free-plan limits. It is a short
+mixed-cache/list and scheduled-PING comparison; the native general matrices
+provide broader workload coverage.
+
+The general BMF exporter includes `concurrent` in the benchmark path when that
+mode is enabled, keeping it distinct from the existing worker-barrier series.
