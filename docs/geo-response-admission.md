@@ -1,6 +1,6 @@
 # GEOSEARCH allocation admission
 
-Status: candidate awaiting matched validation and review, September 7, 2026.
+Status: matched candidate awaiting integration and review, September 7, 2026.
 
 GEOSEARCH previously collected all matching points, sorted the full collection
 for COUNT, and encoded replies before applying the output limit. Six 11 MiB
@@ -37,3 +37,24 @@ measurements include ordinary small reads and pipeline traffic to assess costs.
 Raw local evidence is retained in
 `bench/results/geo-response-admission-local-2026-09-07.json.gz`. No release or
 frozen-soak success is attributed to this candidate.
+
+Hosted run 34157080059 compares `e2644b6` with `c235be7`, five alternating
+15-second repetitions per case and disjoint exposed CPU groups. All 50 arms
+complete without client CPU warnings:
+
+| Workload | Paired throughput ratio, median (range) | Median p99 ms, baseline → candidate | Median RSS MiB, baseline → candidate |
+| --- | ---: | ---: | ---: |
+| Small string read | 1.002 (0.991–1.030) | 0.327 → 0.327 | 14.91 → 14.60 |
+| Pipeline 64 | 1.011 (0.998–1.016) | 2.039 → 2.191 | 14.47 → 14.43 |
+| GEO nearest 1 | 2.246 (2.230–2.264) | 327.679 → 131.071 | 39.89 → 19.36 |
+| GEO nearest 100 | 2.234 (2.206–2.271) | 301.055 → 124.415 | 39.25 → 21.37 |
+| GEO ANY 1 | 0.985 (0.973–0.993) | 0.383 → 0.391 | 26.42 → 25.70 |
+
+Nearest selection improves substantially for this 50,000-match case; its command
+work still scales with matches. ANY is roughly 1.5% slower, and pipeline p99 is
+about 7.5% higher despite slightly higher throughput. Those costs are retained,
+not described as improvements. Public VM host scheduling and storage remain
+uncontrolled. The adoption tradeoff favors bounded allocation and the demonstrated
+nearest-search gain while accepting the small ANY throughput cost. The ordinary
+pipeline tail difference needs assessment again in the integrated comparison.
+Raw evidence is in `bench/results/geo-response-admission-matched-2026-09-07.json.gz`.
