@@ -1,0 +1,119 @@
+# Command reply and workspace reservations
+
+Status: candidate, September 7, 2026. Depends on GEO admission in PR 53.
+
+The event loop now reserves covered command allocations against its 256 MiB
+buffer budget and separate 192 MiB reply-class budget before constructing them. The starting charge includes retained
+client input/replies, AOF buffers and arena capacity. Each command in the same
+execution run also sees AOF/arena growth from earlier commands. Reservations
+accumulate for the run and release when it returns; the transport then accounts
+its retained output before another run executes. Large output reserves three
+page-rounded payloads for construction, arena copying and detaching a partial
+reply. This is deliberately conservative; arena windows can be charged twice.
+
+Covered allocations are GET, SET GET, PING echoes, HGET, LINDEX, MGET/HMGET,
+collection traversal replies, destructive pop output/member arrays and canonical
+SREM/ZREM records, repeated random-member indexes, DUMP replies, GEOSEARCH point
+selection/output, LCS computation/output, and KEYS/SCAN name batches/output.
+The per-command 64 MiB encoded reply limit still applies. SET GET reserves and
+encodes the previous value before replacement. Pops reserve before removing
+members. A refusal returns an explicit error and leaves logical membership and
+values unchanged; normal lazy expiry and random-set position shuffling retain
+their existing behavior.
+
+KEYS now traverses bounded name batches twice instead of first materializing all
+key names and matches. It still scans the full dataset and can stall execution.
+SCAN keeps its existing cursor/work semantics but sizes its nested reply before
+encoding directly into one buffer. Both refuse oversized key names before
+constructing a large encoded reply. LCS retains its CPU guard and conservatively
+reserves reversed inputs, rows, pair/run growth and optional nested index output.
+
+INFO clients reports `command_allocation_limit_bytes`,
+`command_allocation_reserved_bytes`, `command_allocation_peak_bytes` and
+`command_allocation_refusals`. Peak is the maximum observed retained-plus-reserved charge,
+including retained buffers, rather than measured heap or RSS. Small fixed error
+and control replies remain available on refusal. Disconnecting/draining slow
+readers restores space for a retry.
+
+This is **not a complete process-wide temporary allocation pool**. Parsing,
+unmodeled write/canonical/eviction growth, replication history and transport
+buffers, rewrite images/retired borrowed values, compaction overlap, alternate
+transports, allocator metadata and kernel memory remain outside this reservation
+contract. Existing append ordering/barrier and class limits still apply. Extending
+coverage requires reserving before mutation or a separate bounded persistence
+stream contract; returning an allocation error after a write is not acceptable.
+
+Validation passes overflow/aggregate checks, before-allocation read refusals,
+joint GEO workspace/output admission, LCS workspace refusal, and two exact AOF
+replays after refused SET GET and list/set/sorted-set pops. A process test leaves
+24 slow readers holding at least 160 MiB of replies, observes refusal of a 32 MiB
+LRANGE, continues small commands, disconnects the readers and receives every
+original list member on retry. Three process repetitions pass. The full local
+suite, vet and three focused race repetitions pass; an initial test constructor
+typo is retained in the evidence archive. Hosted correctness, review and matched
+ordinary/large-output adoption remain required. No frozen-soak or release
+success applies to this candidate.
+
+Raw local evidence: `bench/results/command-allocation-local-2026-09-07.json.gz`.
+
+Further inspection corrected two bounds before adoption: canonical pop records
+reserve growth of the whole existing AOF buffer, including overlapping backing
+allocations, rather than only the newly encoded record; reply reservations also
+check the existing 192 MiB reply-class ceiling before construction. AOF-off pops
+reserve their member arrays without charging an unused log. Tests verify refusal
+before a tiny removal grows an already-full 1 MiB log, reply-class refusal when
+the total budget still fits, and release/retry behavior. Three focused race and
+slow-reader process repetitions, full tests and vet pass with both corrections.
+Evidence: `command-allocation-classes-2026-09-07.json.gz`.
+
+Review corrected peak accounting for execution runs with no successful reservation
+and for later commands observing larger retained buffers. A focused regression
+checks both paths and confirms refused memory is not counted as allocated.
+
+Intel CI run 34162676036 failed the large collection restart fixture at its
+five-second startup deadline. This was `TestRejectedCollectionPopsPreservePipelineAndRestart/barrier`,
+not the historical pending-reply failure. Its log records replay of 195 commands
+(roughly 195 MiB), followed by event-loop startup; the subsequently captured
+stack is idle in kqueue. That is consistent with slow startup but does not show
+the exact deadline state. This large-file fixture now has an explicit 30-second
+recovery budget and records every readiness duration. Ordinary startup remains
+five seconds and command idle deadlines are unchanged. Matched baseline/candidate
+Intel repetitions will measure the recovery cost with identical assertions.
+The original failed log remains in `command-allocation-review-2026-09-07.json.gz`;
+a later pass is not a runtime fix or an explanation of older Mac observations.
+
+Hosted matched run 34161677678 compares runtime `5d86e67` against its verified
+parent `9aa66d1` on one Linux runner, five alternating 15-second repetitions of
+nine scenarios (90 arms). Median paired throughput ratios are: small reads
+1.009, pipeline 64 1.025, 100k working set 1.006, hash 1.013, sorted set 0.997,
+GEO nearest 1 1.001, nearest 100 0.999 and ANY 1.003. Their client CPU gates pass;
+ordinary p99 is unchanged or close (pipeline 2.175 to 2.127 ms, sorted set 0.351
+to 0.359 ms). The many-client ratio is 0.999, but one baseline arm has a client
+CPU warning and that scenario is excluded from a clean capacity conclusion.
+These are public VM measurements, not dedicated-host evidence or proof of a
+general speedup. GEO is already optimized in both arms. Later reply-class,
+canonical-log growth and peak-accounting fixes require final integrated checks.
+Raw output is in `command-allocation-matched-2026-09-07.json.gz`.
+
+Matched Intel replay diagnostic 34163584482 passes six process-test runs (three
+per runtime), including 24 large-file restarts with exact membership checks.
+Identical assertions measure baseline readiness at 266–332 ms (median 303 ms)
+and candidate readiness at 293–353 ms (median 320 ms). The candidate includes
+reservations and the merged staging-release/opaque-replication changes. This
+isolated runner did not reproduce the five-second startup observation; its
+success does not establish that observation's cause. Raw logs and binary build
+metadata are retained in `command-allocation-native-replay-2026-09-07.json.gz`.
+
+Final-runtime comparison 34163765235 uses `ca48fa7` against the same parent,
+five 15-second pairs in eight scenarios (80 arms). Small reads are neutral
+(1.001 throughput ratio), pipeline 64 is 1.010 and many clients 1.002, with no
+client CPU warnings in those cells. One-MiB reads are 0.983 (range 0.890–1.013),
+large list reads 0.981 and large sorted-set reads 0.995. Median p99 changes are
+5.631 to 6.111 ms for one-MiB reads, 6.239 to 6.303 ms for lists, and 22.527 to
+21.247 ms for sorted sets. These small throughput costs and the large-string
+tail increase remain explicit tradeoffs for pre-allocation refusal under
+aggregate pressure. Every large-hash and large-set arm is client-CPU-limited;
+those cells do not establish server capacity or a neutral performance result.
+The raw records are in `command-allocation-large-matched-2026-09-07.json.gz`.
+The earlier many-client CPU warning remains recorded alongside this new revision's
+clean repetitions. No general speedup is claimed.

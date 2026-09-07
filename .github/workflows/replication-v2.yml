@@ -21,6 +21,10 @@ on:
         description: Compare pending-command fairness on an Apple Silicon Go 1.26 runner
         type: boolean
         default: false
+      diagnose_large_replay:
+        description: Measure large collection replay on matched Intel runtimes
+        type: boolean
+        default: false
       diagnose_pending_replies:
         description: Compare the pending-reply regression and full suites on one Intel runner
         type: boolean
@@ -123,6 +127,46 @@ jobs:
         with:
           name: pending-reply-diagnostic
           path: dist/pending-reply-diagnostic
+          retention-days: 30
+
+  large_replay_diagnostic:
+    if: github.event_name == 'workflow_dispatch' && inputs.diagnose_large_replay
+    runs-on: macos-15-intel
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version: '1.27.1' }
+      - name: Build exact runtimes with identical replay assertions
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/baseline" 9aa66d16c644a174b3ce2d229a32466fd6c0df6b
+          cp cmd/keel/integration_test.go cmd/keel/collection_reply_test.go "$RUNNER_TEMP/baseline/cmd/keel/"
+          mkdir -p dist/large-replay-diagnostic
+          shasum -a 256 cmd/keel/integration_test.go cmd/keel/collection_reply_test.go > dist/large-replay-diagnostic/harness.log
+          go test -c -o "$RUNNER_TEMP/candidate.test" ./cmd/keel
+          go -C "$RUNNER_TEMP/baseline" test -c -o "$RUNNER_TEMP/baseline.test" ./cmd/keel
+          git rev-parse HEAD > dist/large-replay-diagnostic/candidate-revision.log
+          go version -m "$RUNNER_TEMP/baseline.test" > dist/large-replay-diagnostic/baseline-build.log
+          go version -m "$RUNNER_TEMP/candidate.test" > dist/large-replay-diagnostic/candidate-build.log
+          sysctl hw.ncpu hw.memsize > dist/large-replay-diagnostic/host.log
+      - name: Preserve all repeated replay outcomes and readiness times
+        timeout-minutes: 18
+        shell: bash
+        run: |
+          failed=0
+          for repetition in 1 2 3; do
+            if [[ "$repetition" == 2 ]]; then arms="candidate baseline"; else arms="baseline candidate"; fi
+            for arm in $arms; do
+              "$RUNNER_TEMP/$arm.test" -test.run='^TestRejectedCollectionPopsPreservePipelineAndRestart$' -test.count=1 -test.timeout=3m -test.v > "dist/large-replay-diagnostic/$arm-$repetition.log" 2>&1 || failed=1
+            done
+          done
+          exit "$failed"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: large-replay-diagnostic
+          path: dist/large-replay-diagnostic
           retention-days: 30
 
   arm_diagnostic:

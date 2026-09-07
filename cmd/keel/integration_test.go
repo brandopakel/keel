@@ -45,13 +45,21 @@ func TestServerProcess(t *testing.T) {
 }
 
 type testServer struct {
-	cmd     *exec.Cmd
-	addr    string
-	log     bytes.Buffer
-	stopped bool
+	cmd            *exec.Cmd
+	addr           string
+	log            bytes.Buffer
+	stopped        bool
+	startupElapsed time.Duration
 }
 
 func startTestServer(t *testing.T, args ...string) *testServer {
+	t.Helper()
+	return startTestServerWithin(t, 5*time.Second, args...)
+}
+
+// startTestServerWithin lets large replay fixtures specify their recovery budget
+// while ordinary startups and all command deadlines keep their existing limits.
+func startTestServerWithin(t *testing.T, startupTimeout time.Duration, args ...string) *testServer {
 	t.Helper()
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
@@ -65,6 +73,7 @@ func startTestServer(t *testing.T, args ...string) *testServer {
 	s.cmd.Env = append(os.Environ(), "KEEL_TEST_SERVER=1", "KEEL_TEST_PASSWORD=integration-secret")
 	s.cmd.Stdout = &s.log
 	s.cmd.Stderr = &s.log
+	started := time.Now()
 	if err := s.cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -79,16 +88,17 @@ func startTestServer(t *testing.T, args ...string) *testServer {
 			s.stopped = true
 		}
 	})
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := started.Add(startupTimeout)
 	for time.Now().Before(deadline) {
 		c, err := net.DialTimeout("tcp", s.addr, 50*time.Millisecond)
 		if err == nil {
 			c.Close()
+			s.startupElapsed = time.Since(started)
 			return s
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatal("server did not listen")
+	t.Fatalf("server did not listen within %s (elapsed %s)", startupTimeout, time.Since(started))
 	return nil
 }
 
