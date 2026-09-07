@@ -60,14 +60,18 @@ func TestRejectedCollectionPopsPreservePipelineAndRestart(t *testing.T) {
 				}
 			}
 			verify()
-			c.Close()
+			if err := c.Close(); err != nil {
+				t.Fatal(err)
+			}
 			s.stop(t)
 			if mode != "off" {
 				for i := 0; i < 2; i++ {
 					s = startTestServer(t, flags...)
 					c, r = connectTest(t, s)
 					verify()
-					c.Close()
+					if err := c.Close(); err != nil {
+						t.Fatal(err)
+					}
 					s.stop(t)
 				}
 			}
