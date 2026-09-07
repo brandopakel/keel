@@ -17,6 +17,10 @@ on:
         description: Compare full test runs at matched baseline/candidate with package concurrency controlled
         type: boolean
         default: false
+      diagnose_pending_replies:
+        description: Compare the pending-reply regression and full suites on one Intel runner
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       long_filesystem_soak:
@@ -27,6 +31,49 @@ permissions:
   contents: read
 
 jobs:
+  pending_reply_diagnostic:
+    if: github.event_name == 'workflow_dispatch' && inputs.diagnose_pending_replies
+    runs-on: macos-15-intel
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version: '1.27.1' }
+      - name: Build exact baseline and candidate process tests
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/baseline" 66f8ceb34b9df14ac9875c3893b3603d37f36039
+          mkdir -p dist/pending-reply-diagnostic
+          go test -c -o "$RUNNER_TEMP/candidate.test" ./cmd/keel
+          go -C "$RUNNER_TEMP/baseline" test -c -o "$RUNNER_TEMP/baseline.test" ./cmd/keel
+          git rev-parse HEAD > dist/pending-reply-diagnostic/candidate-revision.log
+          go version -m "$RUNNER_TEMP/baseline.test" > dist/pending-reply-diagnostic/baseline-build.log
+          go version -m "$RUNNER_TEMP/candidate.test" > dist/pending-reply-diagnostic/candidate-build.log
+          sysctl hw.ncpu hw.memsize > dist/pending-reply-diagnostic/host.log
+      - name: Preserve all repeated regression and full-suite outcomes
+        timeout-minutes: 18
+        shell: bash
+        run: |
+          failed=0
+          for arm in baseline candidate; do
+            "$RUNNER_TEMP/$arm.test" -test.run='^TestPendingRepliesSurviveOtherTraffic$' -test.count=30 > "dist/pending-reply-diagnostic/$arm-focused.log" 2>&1 || failed=1
+          done
+          for repetition in 1 2 3; do
+            if [[ "$repetition" == 2 ]]; then arms="candidate baseline"; else arms="baseline candidate"; fi
+            for arm in $arms; do
+              source="$GITHUB_WORKSPACE"
+              if [[ "$arm" == baseline ]]; then source="$RUNNER_TEMP/baseline"; fi
+              go -C "$source" test -p 4 -count=1 ./... > "dist/pending-reply-diagnostic/$arm-suite-$repetition.log" 2>&1 || failed=1
+            done
+          done
+          exit "$failed"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: pending-reply-diagnostic
+          path: dist/pending-reply-diagnostic
+          retention-days: 30
+
   arm_diagnostic:
     if: github.event_name == 'workflow_dispatch' && inputs.diagnose_arm
     runs-on: ubuntu-24.04-arm
