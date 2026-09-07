@@ -66,7 +66,11 @@ class Server:
                     return self
                 except OSError:
                     time.sleep(.02)
-            raise TimeoutError(f'server did not become ready within {self.startup_timeout}s; AOF bytes={(self.directory / "store.aof").stat().st_size}')
+            try:
+                aof_bytes = (self.directory / 'store.aof').stat().st_size
+            except FileNotFoundError:
+                aof_bytes = 0
+            raise TimeoutError(f'server did not become ready within {self.startup_timeout}s; AOF bytes={aof_bytes}')
         except BaseException:
             self.stop(check=False)
             raise

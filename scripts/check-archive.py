@@ -11,6 +11,7 @@ from pathlib import Path
 parser = argparse.ArgumentParser()
 parser.add_argument('--archive', required=True)
 parser.add_argument('--revision')
+parser.add_argument('--expected-sha256', help='independently pinned digest for a downloaded release')
 parser.add_argument('--out', required=True)
 args = parser.parse_args()
 archive = Path(args.archive).resolve()
@@ -18,6 +19,8 @@ target_os, target_arch = archive.name.removesuffix('.tar.gz').rsplit('_', 2)[1:]
 native_arch = {'x86_64': 'amd64', 'aarch64': 'arm64', 'arm64': 'arm64'}[platform.machine()]
 assert (target_os, target_arch) == (platform.system().lower(), native_arch), 'native runner architecture mismatch'
 digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+if args.expected_sha256:
+    assert digest == args.expected_sha256, 'archive does not match independent digest pin'
 expected, filename = Path(str(archive) + '.sha256').read_text().split()
 assert expected == digest and Path(filename).name == archive.name, 'archive checksum mismatch'
 destination = Path(args.out).resolve()

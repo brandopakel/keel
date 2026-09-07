@@ -38,12 +38,21 @@ jobs:
       - name: Execute alpha.3 release archive and verify upgrade with rollback
         shell: bash
         run: |
-          task_archive="keel_v0.1.0-alpha.3_$(go env GOOS)_$(go env GOARCH).tar.gz"
+          task_platform="$(go env GOOS)_$(go env GOARCH)"
+          task_archive="keel_v0.1.0-alpha.3_$task_platform.tar.gz"
+          # Pinned from the reviewed native archive reports in
+          # bench/results/runtime-native-filesystem-2026-09-06.json.
+          # A mutable release asset/checksum pair cannot change this trust pin.
+          case "$task_platform" in
+            linux_arm64) task_digest=687427234be21d6e05b62ea018895bd92cd0760d02845225a033ffaa17d1cc00 ;;
+            darwin_amd64) task_digest=12785d31c0a3c1b845175eef627cd1d7d9d08ffab8e17c0a8818c4d666a1f0ab ;;
+            *) exit 1 ;;
+          esac
           task_url="https://github.com/brandopakel/keel/releases/download/v0.1.0-alpha.3"
           mkdir -p dist/native/download
           curl -fL --retry 3 "$task_url/$task_archive" -o "dist/native/download/$task_archive"
           curl -fL --retry 3 "$task_url/$task_archive.sha256" -o "dist/native/download/$task_archive.sha256"
-          python3 scripts/check-archive.py --archive "dist/native/download/$task_archive" --out dist/native/alpha3
+          python3 scripts/check-archive.py --archive "dist/native/download/$task_archive" --expected-sha256 "$task_digest" --out dist/native/alpha3
           python3 scripts/check-upgrade.py --baseline "$PWD/dist/native/alpha3/keel" --candidate /tmp/keel-native --out dist/native/upgrade
       - name: Ordered append replies and crash recovery
         run: python3 scripts/check-ordered-append.py --bin /tmp/keel-native --out dist/native/ordered --clients 16 --iterations 200

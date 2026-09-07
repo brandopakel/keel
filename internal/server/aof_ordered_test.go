@@ -24,6 +24,9 @@ func (m *recordingMonitor) Monitor(e io_multiplexing.Event) error {
 
 func TestOrderedRepliesAndDependentReadWaitForPersistence(t *testing.T) {
 	core.ResetStores()
+	oldClients := clients
+	clients = make(map[int]*client)
+	t.Cleanup(func() { clients = oldClients })
 	oldPolicy, oldAsync, oldConcurrent := config.AOFFsync, config.AOFAsyncAppend, config.AOFConcurrentAppend
 	oldRetained := retainedClientBytes
 	config.AOFFsync, config.AOFAsyncAppend, config.AOFConcurrentAppend = config.FsyncAlways, true, true
@@ -63,17 +66,25 @@ func TestOrderedRepliesAndDependentReadWaitForPersistence(t *testing.T) {
 		_, err := syscall.Read(fd, b[:])
 		require.ErrorIs(t, err, syscall.EAGAIN)
 	}
-	require.Eventually(t, func() bool {
+	deadline := time.Now().Add(5 * time.Second)
+	for core.AppendReadyOffset() < c1.appendOffset && time.Now().Before(deadline) {
 		_, err := core.FlushAOFAsync(nil)
 		require.NoError(t, err)
-		return core.AppendReadyOffset() >= c1.appendOffset
-	}, 5*time.Second, time.Millisecond)
+		time.Sleep(time.Millisecond)
+	}
+	require.GreaterOrEqual(t, core.AppendReadyOffset(), c1.appendOffset)
 	require.Less(t, core.AppendReadyOffset(), c2.appendOffset, "the second worker has not been polled yet")
 	// A disconnected writer does not cancel its already executed mutation.
 	closeClient(c1)
 	pool := newIOPool(1)
 	defer pool.stop()
-	require.Eventually(t, func() bool { _, err := q.begin(pool, mux); require.NoError(t, err); return len(q.held) == 0 }, 5*time.Second, time.Millisecond)
+	deadline = time.Now().Add(5 * time.Second)
+	for len(q.held) > 0 && time.Now().Before(deadline) {
+		_, err := q.begin(pool, mux)
+		require.NoError(t, err)
+		time.Sleep(time.Millisecond)
+	}
+	require.Empty(t, q.held)
 	var b [64]byte
 	n, err := syscall.Read(w2, b[:])
 	require.NoError(t, err)
@@ -83,6 +94,9 @@ func TestOrderedRepliesAndDependentReadWaitForPersistence(t *testing.T) {
 
 func TestOrderedAdmissionDrainsForUnknownCommandsAndReplyPressure(t *testing.T) {
 	core.ResetStores()
+	oldClients := clients
+	clients = make(map[int]*client)
+	t.Cleanup(func() { clients = oldClients })
 	old := retainedClientBytes
 	defer func() { core.CloseAOF(); retainedClientBytes = old }()
 	require.NoError(t, core.OpenAOF(filepath.Join(t.TempDir(), "log")))

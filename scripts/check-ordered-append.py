@@ -41,7 +41,10 @@ def run(args):
             finally:c.close()
         began=time.monotonic()
         with concurrent.futures.ThreadPoolExecutor(max_workers=args.clients) as pool:
-            seen=[v for result in pool.map(client_work,range(args.clients)) for v in result]
+            results=list(pool.map(client_work,range(args.clients)))
+        for worker,result in enumerate(results):
+            assert all(a<b for a,b in zip(result,result[1:])), f'worker {worker} saw out-of-order counter results'
+        seen=[v for result in results for v in result]
         total=args.clients*args.iterations
         assert sorted(seen)==list(range(1,total+1)), 'duplicate or missing shared counter result'
         report.update(acknowledged_batches=total,commands=total*3,seconds=time.monotonic()-began)

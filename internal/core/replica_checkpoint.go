@@ -136,7 +136,8 @@ func saveReplicaCheckpoint() error {
 	return nil
 }
 
-// Called before the transport worker starts; it never reads mutable core state.
+// Reads replica cursor state that applyReplicationV2 mutates on the command
+// thread. Callers must invoke this before the replica transport worker starts.
 func ReplicaResumeCursor() (string, uint64) {
 	if config.ReplicationProtocol == 2 && replicaV2.trusted {
 		return replicaEpoch, replicaOffset
