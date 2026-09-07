@@ -66,3 +66,34 @@ four reports (two baseline passes, two candidate failures) and a nonzero exit.
 A normal two-arm smoke passes. Cleanup failures from abandoned sync jobs are
 logged. Unit compatibility checks, race and workflow lint pass; all attempts
 are retained in `bench/results/rewrite-review-guards-2026-09-07.json.gz`.
+
+## Wakeup-corrected matched comparison
+
+Run 34126440085 repeats all 36 arms at e4639168 against the same baseline
+66f8ceb3. All 1,080,000 scheduled requests balance and complete, with zero drops,
+queue expirations or protocol errors. Generator CPU stays below 0.141 cores.
+All 108 rewrites finish inside their measurements, and snapshot contents verify.
+
+| Fsync | Writes | Scheduled p99 ms, before / after | p99.9 ms | Maximum ms across repetitions |
+| --- | --- | --- | --- | --- |
+| no | 0% | 1.556 / 1.180 | 9.044 / 4.850 | 27.643 / 7.146 |
+| no | 20% | 2.458 / 2.081 | 11.534 / 4.588 | 21.397 / 12.063 |
+| everysec | 0% | 1.901 / 1.196 | 12.714 / 5.177 | 28.617 / 8.020 |
+| everysec | 20% | 2.425 / 2.130 | 11.272 / 4.850 | 17.106 / 12.571 |
+| always | 0% | 1.425 / 1.180 | 11.928 / 4.030 | 20.311 / 6.417 |
+| always | 20% | 4.096 / 3.310 | 14.287 / 12.845 | 28.262 / 19.138 |
+
+Both arms ran much faster than on the first runner. Therefore only within-run
+comparisons support the candidate’s latency benefit; the between-run improvement
+cannot be attributed to the wakeup correction. In this repeat, candidate p99
+and p99.9 improve in every tested combination. Rewrite completion medians remain
+roughly 47–56 ms; background preflush improves serving latency rather than
+promising faster rewrite completion. Public storage variability and the first
+run’s mixed p99/overload results remain explicit. The paired evidence supports
+adoption, without a fixed latency or data-loss guarantee. Raw evidence is in
+`bench/results/rewrite-preflush-wakeup-hosted-2026-09-07.json.gz`.
+
+The branch also integrates the separately validated opaque-record change. Its
+20 mutation cases, existing rewrite/replication tests, focused race and full
+combined suite pass together. Later harness review changes leave the measured
+normal-path runtime unchanged.
