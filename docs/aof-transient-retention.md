@@ -39,3 +39,11 @@ hundred local repetitions (both socket modes) pass; those repeats do not explain
 the Intel failure. The dedicated native diagnostic applies identical diagnostic
 tests to the failing runtime and candidate and retains every result. No timeout
 has been widened and this is not yet a server liveness fix.
+
+Native diagnostic run 34159834235 passes 100 focused repetitions per arm (both
+socket modes, 400 subcases total) and three complete suites per arm. The baseline
+is the failing `54ed959` runtime; the candidate `e2f994f` changes only diagnostics
+and evidence. Both use identical diagnostic tests. ARM64, Intel and ext4/xfs
+recovery also pass. These successful repeats remain alongside the original
+failure; the intermittent Intel liveness cause is still unexplained. Raw logs:
+`bench/results/aof-pending-reply-native-2026-09-07.json.gz`.
