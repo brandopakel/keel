@@ -87,9 +87,8 @@ func BenchmarkKeyMapSet(b *testing.B) {
 	}
 }
 
-// Keys is what a rewrite and KEYS still pay: the whole slice at once. The point
-// of comparing it is that sharding must not make the existing O(N) walk worse
-// while it adds a bounded one beside it.
+// KEYS still returns the whole slice at once. Rewrite uses the bounded walker.
+// Keep measuring the explicit O(N) operation alongside the incremental path.
 func BenchmarkPlainMapKeys(b *testing.B) {
 	for _, n := range []int{100000, 1000000} {
 		b.Run(strconv.Itoa(n), func(b *testing.B) {

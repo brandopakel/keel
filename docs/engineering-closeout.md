@@ -7,9 +7,9 @@ Spending remains capped at zero.
 | Finding | Change | Validation state |
 | --- | --- | --- |
 | Unsafe failover proposal | Verified external fencing precedes authenticated incarnation-specific activation; local terms are not fencing | Finite model and counterexample tests pass; real provider implementation remains future work |
-| Unsupported Go builder | Source/CI floor 1.26; Docker builder 1.27.1 | Full local Go tests and vet passed; native CI/container validation pending |
+| Unsupported Go builder | Source/CI floor 1.26; Docker builder 1.27.1 | Full local tests/vet and Linux/macOS/native/container CI passed |
 | SCAN compatibility | Option-presence handling, case-insensitive TYPE, explicit regression and differential cases | Focused command tests pass; Linux differential integration passed for the first traversal candidate |
-| Traversal and adoption gate | Stable paged slots, strict scan work limit, bounded pattern work, shared rewrite/snapshot name batches | Traversal, heap-accounting and existing core tests pass; full local Go tests passed; matched Linux matrix pending |
+| Traversal and adoption gate | Stable paged slots, strict scan work limit, bounded pattern work, shared rewrite/snapshot name batches | Traversal, heap-accounting and existing core tests pass; full local Go tests passed; first matched Linux matrix completed with mixed results; integrated matrix and tail investigation pending |
 
 A design fix is distinct from implementing automatic failover. Cooperative
 scheduling is distinct from a real-time latency guarantee. The new traversal

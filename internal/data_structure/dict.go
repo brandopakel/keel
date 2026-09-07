@@ -195,8 +195,7 @@ func (d *Dict) Peek(k string) *Obj {
 // Len reports how many keys are stored.
 func (d *Dict) Len() int { return d.dictStore.len() }
 
-// Scan hands the walk to the shards. See sharded.go for why the cursor is a
-// shard index and what that does and does not promise.
+// Scan visits stable paged slots under the work limits documented in keymap.go.
 func (d *Dict) Scan(cursor uint64, budget int, keep func(string) bool, dst []string) ([]string, int, uint64) {
 	return d.dictStore.scan(cursor, budget, keep, dst)
 }

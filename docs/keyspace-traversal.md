@@ -90,11 +90,37 @@ ratios 0.945, 1.019, 1.005 and 1.001 for 100k string keys with 8/64/512/4096-byt
 values. These are accounting checks taken during active soaks, not performance
 claims or a replacement for the complete memory comparison.
 
-The end-to-end adoption matrix is pending. It compares develop `40fb7e5` with the
-candidate using one Go compiler, fixed workloads, fresh servers, rotated arms,
+The first end-to-end matrix completed for `40fb7e5` versus `7d863b0`. It compared
+the candidate using one Go compiler, fixed workloads, fresh servers, rotated arms,
 three repetitions and disjoint server/generator logical CPUs on one Linux hosted
 VM. The standard 24-case suite and nine memory cases retain binary hashes,
 fixture hashes, native generator output, latency histograms and host metadata.
 A hosted VM is not a dedicated physical machine or an application deployment.
 Results must be reviewed per workload; a passing harness alone is not evidence
 that the performance tradeoff is acceptable.
+
+
+The [first matched run](https://github.com/brandopakel/keel/actions/runs/34095159507)
+completed all 24 workload and nine memory cases, three repetitions per arm. Its
+summaries, manifests, hashes and host details are retained in
+`bench/results/traversal-first-matched-2026-09-07.json.gz`.
+
+The 100k-key workload had candidate/baseline throughput ratios 0.961, 0.950 and
+0.933; this is an observed regression requiring a tradeoff decision. Pipeline-16
+ratios were 0.934, 1.026 and 0.950. Most other paired medians were within about
+four percent. Large-list reads flagged generator CPU pressure in two repetitions
+per arm. No aggregate speedup is claimed.
+
+The 1 MiB workload's median p99 was 6.111 ms versus 41.215 ms, but both arms
+showed the approximately 41 ms mode in individual repetitions and approximately
+43 ms p99.9. That requires a longer targeted measurement; it does not establish
+a causal regression or justify dismissing the tail difference. Million-key RSS
+medians were 213.82 versus 215.82 MiB (about +0.9%); the empty-process medians were
+7.42 versus 7.55 MiB. The VM exposes two cores with SMT: separate logical CPU
+masks do not isolate physical core resources.
+
+All integrated `cd2b740` PR CI jobs passed, including Go 1.26/stable on Linux and
+macOS, race tests, Docker persistence/restart, Redis differential checks, native
+Linux ARM64/Intel Mac recovery, and ext4/XFS checks. The matched comparison of
+that revision against current develop `db4fd00` is still running. The adoption
+review remains open pending that result and the targeted tail investigation.

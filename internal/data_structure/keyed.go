@@ -77,10 +77,8 @@ func (k *Keyed[T]) Exists(key string) bool {
 	return ok
 }
 
-// Keys lists every key held, for a rewrite that has to walk the whole store.
-// The order is a map's, which is to say arbitrary and different every time -
-// which is fine, because a log is replayed as a whole and the keys in it do not
-// interact.
+// Keys lists every key held for explicit whole-keyspace commands. The order is
+// unspecified. Rewrite uses the bounded walker instead.
 func (k *Keyed[T]) Keys() []string {
 	return k.items.keys()
 }
