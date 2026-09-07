@@ -29,3 +29,18 @@ Old and new lookup tables coexist while rebuilding. Completion may take many
 maintenance ticks; no completion-time or single-command latency SLA is implied.
 Sparse page directories and nonempty payload pages retain their stable layout;
 this change does not compact pages or collection-internal maps.
+
+The hosted a582361 comparison in 34114141204 passed broad differential and
+operational validation and completed three ten-second repetitions of small-read,
+write, TTL and 100k-working-set workloads plus the nine-case memory matrix.
+Paired median throughput ratios were 0.998, 1.012, 1.000 and 1.003; measured
+p99 stayed the same or lower. No generator CPU warnings occurred. Million-key
+RSS was 215.56/217.78 MiB; this static workload does not demonstrate memory
+savings. The demonstrated benefit is releasing unused lookup capacity after
+partial deletion, covered separately by the retained-heap regression. Raw hosted
+measurements are in `bench/results/lookup-matched-2026-09-07.json.gz`.
+
+The integrated maintenance loop includes PR #36's review correction: traversal
+stops when the shared work/deadline budget is reached, rather than invoking
+no-op callbacks for every remaining store. Mutation/cursor/maintenance tests
+pass after this integration; final hosted checks and review remain required.
