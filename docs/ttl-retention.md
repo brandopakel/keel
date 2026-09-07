@@ -29,7 +29,14 @@ timeout. Its last completed checkpoint showed no pending append or write error;
 the existing logs do not establish the cause. This failure remains evidence,
 not a passed run. The harness now records fresh-connection INFO and Go goroutine
 stacks before shutting down an unexpectedly failed owned process. Three fresh
-five-minute ARM64 repetitions with unchanged client deadlines are pending.
+five-minute ARM64 repetitions with unchanged client deadlines completed in
+[34102805554](https://github.com/brandopakel/keel/actions/runs/34102805554): all
+passed, with 289,105 acknowledged writes, 15 primary crash recoveries and 36
+replica crash recoveries in total. The repeated native/upgrade/ext4/XFS checks
+also passed. No runtime or timeout change was made for these diagnostic runs.
+The original timeout did not recur and its root cause remains unestablished;
+failure-time capture is retained for future occurrences. Summary reports are in
+`bench/results/ttl-arm-diagnostic-2026-09-07.json`.
 
 This measures live Go heap, not a process RSS decrease, a throughput improvement
 or a deployment capacity limit. Partly occupied expiry tables, lookup-map
