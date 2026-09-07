@@ -568,6 +568,8 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 	}
 	setWaker(func() { syscall.Write(wakeupFDs[1], []byte{0}) })
 	defer setWaker(nil) // detach callbacks before closing/reusing the pipe descriptors
+	core.SetRewriteWaker(wake)
+	defer core.SetRewriteWaker(nil)
 	replicaUpdates, stopReplica := startReplicaTransport()
 	defer stopReplica()
 
@@ -650,7 +652,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 					}
 					delete(paused, fd)
 				}
-				if core.RewriteActive() {
+				if core.RewriteNeedsCycle() {
 					wake()
 				}
 				// Readiness is level-triggered; re-check after restoring interests.
@@ -863,7 +865,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 		// the next client turned up, so the loop wakes itself until it is done.
 		// Not deferred: a defer inside this loop would fire once the loop had
 		// ended, which is exactly too late to be of use.
-		if core.RewriteActive() {
+		if core.RewriteNeedsCycle() {
 			wake()
 		}
 

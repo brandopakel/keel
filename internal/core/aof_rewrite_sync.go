@@ -20,13 +20,41 @@ type rewriteSyncJob struct {
 
 var pendingRewriteSync *rewriteSyncJob
 var rewriteFileSync = func(f *os.File) error { return f.Sync() }
+var rewriteWake func()
+
+// SetRewriteWaker is called by the event-loop owner. Each job captures the
+// callback before starting; it must be safe during shutdown, like append wakeups.
+func SetRewriteWaker(wake func()) { rewriteWake = wake }
+
+// RewriteNeedsCycle avoids repeatedly waking a loop that cannot advance while
+// the replacement sync is blocked. Worker completion provides the next wakeup.
+func RewriteNeedsCycle() bool {
+	if !rewrite.active {
+		return false
+	}
+	if pendingRewriteSync == nil {
+		return true
+	}
+	select {
+	case <-pendingRewriteSync.done:
+		return true
+	default:
+		return false
+	}
+}
 
 func startRewriteSync() {
 	job := &rewriteSyncJob{file: rewrite.file, path: rewrite.tmpPath,
 		written: rewrite.written, done: make(chan struct{})}
 	pendingRewriteSync = job
 	syncFile := rewriteFileSync
+	wake := rewriteWake
 	go func() {
+		defer func() {
+			if wake != nil {
+				wake()
+			}
+		}()
 		job.err = syncFile(job.file)
 		job.mu.Lock()
 		if job.abandoned {

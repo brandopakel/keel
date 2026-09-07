@@ -31,7 +31,10 @@ func TestRewriteSyncAllowsWritesAndResynchronizesDirtyState(t *testing.T) {
 	require.NoError(t, OpenAOF(path))
 	release := make(chan struct{})
 	started := make(chan struct{})
+	woken := make(chan struct{}, 2)
 	oldSync := rewriteFileSync
+	oldWake := rewriteWake
+	SetRewriteWaker(func() { woken <- struct{}{} })
 	var calls atomic.Int32
 	rewriteFileSync = func(f *os.File) error {
 		if calls.Add(1) == 1 {
@@ -48,6 +51,7 @@ func TestRewriteSyncAllowsWritesAndResynchronizesDirtyState(t *testing.T) {
 		CancelRewrite()
 		require.NoError(t, CloseAOF())
 		rewriteFileSync = oldSync
+		SetRewriteWaker(oldWake)
 		ResetStores()
 	})
 	run(t, "SET", "k", "before")
@@ -59,6 +63,7 @@ func TestRewriteSyncAllowsWritesAndResynchronizesDirtyState(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("sync did not start")
 	}
+	require.False(t, RewriteNeedsCycle(), "a blocked worker must not cause a self-wakeup spin")
 	// The first sync remains blocked while commands execute and the old AOF
 	// accepts their records. None of these calls wait for replacement sync.
 	require.Equal(t, "OK", run(t, "SET", "k", "during"))
@@ -71,12 +76,20 @@ func TestRewriteSyncAllowsWritesAndResynchronizesDirtyState(t *testing.T) {
 	require.True(t, oldFile.Size() > 0)
 	close(release)
 	released = true
+	select {
+	case <-woken:
+	case <-time.After(time.Second):
+		t.Fatal("worker completion did not wake the event loop")
+	}
+	require.True(t, RewriteNeedsCycle())
 	for i := 0; RewriteActive() && i < 100; i++ {
 		waitForRewriteSync(t)
 		require.Equal(t, "OK", run(t, "SET", "continued", "write"))
 		require.NoError(t, FlushAOF())
 	}
 	require.False(t, RewriteActive())
+	require.False(t, RewriteNeedsCycle())
+	require.Empty(t, woken, "only the background preflush needs a wakeup")
 	require.Equal(t, int32(2), calls.Load(), "one preflush plus a final dirty sync; continuous writes cannot cause endless retries")
 	require.NoError(t, CloseAOF())
 	ResetStores()

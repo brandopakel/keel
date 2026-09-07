@@ -41,3 +41,18 @@ Eight local one-MiB smoke arms pass: read-only/20% writes, no/always fsync,
 both binaries, three completed rewrites per arm and zero protocol errors.
 Full combined tests/vet and fault-injection race tests pass. Raw local evidence
 is in `bench/results/rewrite-preflush-smoke-2026-09-07.json.gz`.
+
+The first hosted run 34124960981 completed all 36 arms at runtime 4d5b6b0.
+Median scheduled p99.9 improved in all six policy/workload combinations and
+admission drops fell; everysec with 20% writes regressed at p99 (4.72 to 8.65 ms).
+Always with 20% writes was overloaded in both arms, dropping roughly half the
+offered work, so its completed-request latency alone cannot describe capacity.
+No protocol errors or queue expirations occurred; generator CPU was below
+0.076 cores, and workers prepared at least 1,997 ms before the shared start.
+Raw evidence remains in `bench/results/rewrite-preflush-first-hosted-2026-09-07.json.gz`.
+
+Subsequent inspection found that the loop would repeatedly wake while waiting
+for the replacement sync. The worker now captures a shutdown-safe notification;
+the loop self-wakes only while rewrite work can advance. A blocked-sync regression
+checks no runnable cycle until completion and exactly one worker notification.
+This runtime correction requires its own matched repeat before adoption.
