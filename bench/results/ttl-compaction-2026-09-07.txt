@@ -1,0 +1,59 @@
+Before compaction:
+=== RUN   TestPartlyOccupiedExpiryTableReleasesRetainedHeap
+=== RUN   TestPartlyOccupiedExpiryTableReleasesRetainedHeap/string
+    expiry_compaction_test.go:50: baseline=10009680 retained=13450112 after=13450128 recovered=-16
+    expiry_compaction_test.go:51: 
+        	Error Trace:	/Users/brandopakel/keel-ttl-compaction/internal/data_structure/expiry_compaction_test.go:51
+        	Error:      	"13450128" is not less than "10533968"
+        	Test:       	TestPartlyOccupiedExpiryTableReleasesRetainedHeap/string
+=== RUN   TestPartlyOccupiedExpiryTableReleasesRetainedHeap/collection
+    expiry_compaction_test.go:50: baseline=10009856 retained=13450288 after=13450304 recovered=-16
+    expiry_compaction_test.go:51: 
+        	Error Trace:	/Users/brandopakel/keel-ttl-compaction/internal/data_structure/expiry_compaction_test.go:51
+        	Error:      	"13450304" is not less than "10534144"
+        	Test:       	TestPartlyOccupiedExpiryTableReleasesRetainedHeap/collection
+--- FAIL: TestPartlyOccupiedExpiryTableReleasesRetainedHeap (0.06s)
+    --- FAIL: TestPartlyOccupiedExpiryTableReleasesRetainedHeap/string (0.03s)
+    --- FAIL: TestPartlyOccupiedExpiryTableReleasesRetainedHeap/collection (0.03s)
+FAIL
+FAIL	github.com/brandopakel/keel/internal/data_structure	0.365s
+FAIL
+
+After compaction and mutation regressions:
+=== RUN   TestPartlyOccupiedExpiryTableReleasesRetainedHeap
+=== RUN   TestPartlyOccupiedExpiryTableReleasesRetainedHeap/string
+    expiry_compaction_test.go:50: baseline=10004136 retained=13444568 after=10004344 recovered=3440224
+=== RUN   TestPartlyOccupiedExpiryTableReleasesRetainedHeap/collection
+    expiry_compaction_test.go:50: baseline=10004616 retained=13445048 after=10004616 recovered=3440432
+--- PASS: TestPartlyOccupiedExpiryTableReleasesRetainedHeap (0.07s)
+    --- PASS: TestPartlyOccupiedExpiryTableReleasesRetainedHeap/string (0.04s)
+    --- PASS: TestPartlyOccupiedExpiryTableReleasesRetainedHeap/collection (0.04s)
+=== RUN   TestExpiryCompactionMirrorsMutationsAcrossCursor
+=== RUN   TestExpiryCompactionMirrorsMutationsAcrossCursor/string
+=== RUN   TestExpiryCompactionMirrorsMutationsAcrossCursor/collection
+--- PASS: TestExpiryCompactionMirrorsMutationsAcrossCursor (0.00s)
+    --- PASS: TestExpiryCompactionMirrorsMutationsAcrossCursor/string (0.00s)
+    --- PASS: TestExpiryCompactionMirrorsMutationsAcrossCursor/collection (0.00s)
+=== RUN   TestExpiryCompactionCancelsRegrowthAndEmptyTable
+--- PASS: TestExpiryCompactionCancelsRegrowthAndEmptyTable (0.00s)
+PASS
+ok  	github.com/brandopakel/keel/internal/data_structure	0.376s
+=== RUN   TestMemoryMaintenancePreservesReplicaKeysAndExpiry
+--- PASS: TestMemoryMaintenancePreservesReplicaKeysAndExpiry (0.00s)
+PASS
+ok  	github.com/brandopakel/keel/internal/core	0.270s
+
+Bounded startup:
+=== RUN   TestExpiryCompactionStartDoesNotCopyTheTableOrAllKeyNames
+--- PASS: TestExpiryCompactionStartDoesNotCopyTheTableOrAllKeyNames (0.10s)
+PASS
+ok  	github.com/brandopakel/keel/internal/data_structure	0.425s
+
+Full Go suite:
+ok  	github.com/brandopakel/keel/cmd/keel	9.605s
+?   	github.com/brandopakel/keel/internal/config	[no test files]
+?   	github.com/brandopakel/keel/internal/constant	[no test files]
+ok  	github.com/brandopakel/keel/internal/core	37.010s
+ok  	github.com/brandopakel/keel/internal/core/io_multiplexing	0.286s
+ok  	github.com/brandopakel/keel/internal/data_structure	4.263s
+ok  	github.com/brandopakel/keel/internal/server	0.798s
