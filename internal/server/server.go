@@ -43,7 +43,16 @@ var maxQueryBuffer = 16 * 1024 * 1024
 const maxOutputBuffer = 64 << 20
 const maxRetainedClientBytes = 256 << 20
 
+// One aggregate is not enough on its own. Requests and replies share the same
+// pool, so a flood of either can leave no room for the other: connections
+// holding unparsed input can starve the replies of connections trying to drain,
+// which stalls exactly the traffic that would have freed the memory. Capping
+// each class below the aggregate keeps a share for the other, while the
+// aggregate stays the real limit.
+const maxRetainedClassBytes = 3 * maxRetainedClientBytes / 4
+
 var retainedClientBytes int
+var retainedInputBytes, retainedReplyBytes int
 
 // A read lands in a scratch array rather than one allocated per read.
 //
@@ -130,7 +139,8 @@ type client struct {
 	lastProgress               time.Time
 	closeAfterWrite            bool
 	authenticated              bool
-	accounted                  int
+	accountedInput             int
+	accountedReply             int
 	outBytes                   int
 	frames                     []int
 	appendOffset               uint64
@@ -268,8 +278,10 @@ func (c *client) readCommands(scratch []byte) ([]*core.Command, error) {
 
 // closeClient tears down a connection and drops everything held for it.
 func closeClient(c *client) {
-	retainedClientBytes -= c.accounted
-	c.accounted = 0
+	retainedClientBytes -= c.accountedInput + c.accountedReply
+	retainedInputBytes -= c.accountedInput
+	retainedReplyBytes -= c.accountedReply
+	c.accountedInput, c.accountedReply = 0, 0
 	c.cmds = nil
 	delete(clients, c.fd)
 	c.buf = nil
@@ -988,19 +1000,27 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 // accountClient bounds retained user-space request/reply storage across connections.
 // Command decoding and response construction still need transient headroom.
 func accountClient(c *client) bool {
-	used := max(cap(c.out), c.outBytes)
+	reply := max(cap(c.out), c.outBytes)
 	if c.inArena {
-		used = c.outEnd - c.outStart
+		reply = c.outEnd - c.outStart
 	}
-	c.outBytes = used
-	used += cap(c.frames) * 8
-	used += parsedBytes(c.cmds)
+	c.outBytes = reply
+
+	// Frames index the request, and parsed commands hold slices of it, so both
+	// belong with the query buffer rather than with the reply.
+	input := cap(c.frames) * 8
+	input += parsedBytes(c.cmds)
 	if c.buf != nil {
-		used += cap(c.buf.data)
+		input += cap(c.buf.data)
 	}
-	retainedClientBytes += used - c.accounted
-	c.accounted = used
-	return retainedClientBytes <= maxRetainedClientBytes
+
+	retainedInputBytes += input - c.accountedInput
+	retainedReplyBytes += reply - c.accountedReply
+	retainedClientBytes += (input + reply) - (c.accountedInput + c.accountedReply)
+	c.accountedInput, c.accountedReply = input, reply
+	return retainedClientBytes <= maxRetainedClientBytes &&
+		retainedInputBytes <= maxRetainedClassBytes &&
+		retainedReplyBytes <= maxRetainedClassBytes
 }
 
 func flushClientReplies(pool *ioPool, ioMultiplexer io_multiplexing.IOMultiplexer, writable []*client) {

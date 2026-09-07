@@ -125,3 +125,39 @@ func TestOrderedAdmissionDrainsForUnknownCommandsAndReplyPressure(t *testing.T) 
 	require.Len(t, q.deferred, 2)
 	require.Equal(t, io_multiplexing.OpNone, mux.operations[r3])
 }
+
+// The aggregate alone lets one class take everything. These check that each
+// class refuses on its own, and that the accounting is symmetrical: what a
+// connection adds it also gives back.
+func TestRetainedBytesAreBoundedPerClassAndInAggregate(t *testing.T) {
+	oldClient, oldInput, oldReply := retainedClientBytes, retainedInputBytes, retainedReplyBytes
+	t.Cleanup(func() {
+		retainedClientBytes, retainedInputBytes, retainedReplyBytes = oldClient, oldInput, oldReply
+	})
+	retainedClientBytes, retainedInputBytes, retainedReplyBytes = 0, 0, 0
+
+	// A reply just under the class ceiling is accepted, and lands in the reply
+	// class rather than the input one.
+	c := &client{out: make([]byte, maxRetainedClassBytes-1)}
+	require.True(t, accountClient(c))
+	require.Equal(t, cap(c.out), c.accountedReply)
+	require.Zero(t, c.accountedInput)
+	require.Equal(t, retainedReplyBytes, c.accountedReply)
+	require.Equal(t, retainedClientBytes, c.accountedReply)
+
+	// Past it, the same connection is refused even though the aggregate has
+	// room: three quarters is all one class may hold.
+	c.out = make([]byte, maxRetainedClassBytes+1)
+	c.outBytes = 0
+	require.False(t, accountClient(c))
+	require.Less(t, retainedClientBytes, maxRetainedClientBytes,
+		"the aggregate still had room, so the class ceiling is what refused")
+
+	// Input is bounded by its own ceiling on the same terms.
+	retainedClientBytes, retainedInputBytes, retainedReplyBytes = 0, 0, 0
+	in := &client{buf: &connBuffer{data: make([]byte, maxRetainedClassBytes+1)}}
+	require.False(t, accountClient(in))
+	require.Equal(t, retainedInputBytes, in.accountedInput)
+	require.Zero(t, in.accountedReply)
+	require.Less(t, retainedClientBytes, maxRetainedClientBytes)
+}
