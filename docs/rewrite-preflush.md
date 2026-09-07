@@ -137,3 +137,36 @@ The lifecycle regression now checks callback/detachment serialization directly
 with the shared mutex, so a delayed test goroutine cannot make the old
 copy-unlock-call behavior pass a short scheduling window. Timing is used only
 as a generous bound for callback startup, not as evidence of synchronization.
+
+## Final sync-runtime comparison and subsequent CI diagnostics
+
+Run 34130093393 repeats the final runtime 1adba282 against 3f16dfaa. All 36 arms,
+108 rewrites and 1,080,000 scheduled requests complete, without drops, expiry
+or protocol errors. The paired scheduled p99 / p99.9 medians in milliseconds:
+
+| Fsync | Writes | p99, baseline / candidate | p99.9, baseline / candidate |
+| --- | --- | --- | --- |
+| no | 0% | 1.196 / 1.180 | 11.010 / 4.260 |
+| no | 20% | 2.294 / 1.982 | 10.748 / 3.932 |
+| everysec | 0% | 1.196 / 1.180 | 10.486 / 4.063 |
+| everysec | 20% | 2.130 / 1.999 | 9.699 / 3.998 |
+| always | 0% | 1.212 / 1.180 | 10.879 / 4.096 |
+| always | 20% | 2.753 / 2.064 | 9.437 / 4.915 |
+
+This supports adoption of the final sync runtime under these paired conditions.
+Later changes affect tests, workflow diagnostics and documentation only.
+Combined-source b14ffe0 passes native candidate archive execution, checksums,
+installation and all nine alpha.2 upgrades on Linux AMD64/ARM64 and macOS
+Intel/ARM64 in 34130106439. No release is published.
+
+A subsequent Go 1.26.7 Apple Silicon run fails the fairness test's observation
+that a slow pipeline retained replies (34130598604); its original log omitted
+the counter and last client stats. Those diagnostics are now included, with the
+same deadlines and assertions. Thirty repetitions of all six cases pass locally
+on both Go 1.26.7 and Go 1.27.1, but this does not explain the hosted failure.
+The same-runner workflow compares the merged baseline and candidate with identical
+diagnostic assertions, fifty focused repetitions and three complete suites per arm.
+The Intel failure in 34130598562 is an alpha.3 asset HTTP 504 after all download
+retries, not a native test failure. Raw failed attempts, deterministic waker
+baseline/candidate results and final matched traffic are retained in
+`bench/results/rewrite-final-matched-and-mac-diagnostics-2026-09-07.json.gz`.
