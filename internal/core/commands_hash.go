@@ -95,19 +95,12 @@ func cmdHMGET(args []string) []byte {
 	}
 	h, ok := hashFor(args[0])
 
-	out := make([]interface{}, 0, len(args)-1)
-	for _, field := range args[1:] {
+	return encodeLookupArray(len(args)-1, func(i int) (string, bool) {
 		if !ok {
-			out = append(out, nil)
-			continue
+			return "", false
 		}
-		if value, has := h.Get(field); has {
-			out = append(out, value)
-		} else {
-			out = append(out, nil)
-		}
-	}
-	return Encode(out, false)
+		return h.Get(args[i+1])
+	})
 }
 
 func cmdHDEL(args []string) []byte {

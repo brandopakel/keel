@@ -40,7 +40,7 @@ const maxDirectRead = 1 << 20
 // maxQueryBuffer bounds incomplete request bytes per connection.
 var maxQueryBuffer = 16 * 1024 * 1024
 
-const maxOutputBuffer = 64 << 20
+const maxOutputBuffer = core.MaxReplyBytes
 const maxRetainedClientBytes = 256 << 20
 
 // One aggregate is not enough on its own. Requests and replies share the same
