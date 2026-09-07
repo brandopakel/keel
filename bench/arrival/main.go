@@ -184,6 +184,27 @@ func exchange(c net.Conn, r *bufio.Reader, request []byte, timeout time.Duration
 	return err
 }
 
+// A mixed index keeps a deterministic workload without coupling key selection
+// to sequence%100, which decides read/write type.
+func keyIndex(sequence uint64, keys int) int {
+	x := sequence + 0x9e3779b97f4a7c15
+	x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9
+	x = (x ^ (x >> 27)) * 0x94d049bb133111eb
+	return int((x ^ (x >> 31)) % uint64(keys))
+}
+
+func cohortPrefix(prefix string, second int64) string {
+	return prefix + "cohort:" + strconv.FormatInt(second%4, 10) + ":"
+}
+
+func requestKey(o options, sequence int, due time.Time) string {
+	prefix := o.Prefix
+	if o.CohortExpiry {
+		prefix = cohortPrefix(prefix, due.Unix())
+	}
+	return prefix + strconv.Itoa(keyIndex(uint64(sequence), o.Keys))
+}
+
 func preload(o options) error {
 	c, err := net.DialTimeout("tcp", o.Address, o.Timeout)
 	if err != nil {
@@ -206,9 +227,18 @@ func preload(o options) error {
 		}
 		return nil
 	}
-	for i := 0; i < o.Keys; i++ {
-		if err := exchange(c, r, wire("SET", o.Prefix+strconv.Itoa(i), value), o.Timeout); err != nil {
-			return err
+	prefixes := []string{o.Prefix}
+	if o.CohortExpiry {
+		prefixes = nil
+		for cohort := int64(0); cohort < 4; cohort++ {
+			prefixes = append(prefixes, cohortPrefix(o.Prefix, cohort))
+		}
+	}
+	for _, prefix := range prefixes {
+		for i := 0; i < o.Keys; i++ {
+			if err := exchange(c, r, wire("SET", prefix+strconv.Itoa(i), value), o.Timeout); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -262,7 +292,7 @@ func measure(o options) (map[string]any, error) {
 					request = wire("LRANGE", o.Prefix, "0", "-1")
 				} else {
 					// Deterministic mixed key order, identical for each comparison arm.
-					key := o.Prefix + strconv.Itoa(int((uint64(job.sequence)*2654435761)%uint64(o.Keys)))
+					key := requestKey(o, job.sequence, job.due)
 					if job.sequence%100 < o.Writes {
 						if o.CohortExpiry {
 							at := job.due.Truncate(time.Second).Add(2 * time.Second).UnixMilli()

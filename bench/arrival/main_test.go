@@ -84,3 +84,34 @@ func TestScheduledLoadAccountsForOverloadWithoutWaitingForReplies(t *testing.T) 
 		t.Fatal("scheduled latency omitted service or queue time", report)
 	}
 }
+
+func TestExpiryCohortsDoNotRefreshBeforeTheirDeadline(t *testing.T) {
+	o := options{Prefix: "test:", Keys: 1, CohortExpiry: true}
+	start := time.Unix(100, 0)
+	first := requestKey(o, 0, start)
+	for second := 1; second < 4; second++ {
+		if requestKey(o, 0, start.Add(time.Duration(second)*time.Second)) == first {
+			t.Fatal("cohort reused before expiry")
+		}
+	}
+	if requestKey(o, 0, start.Add(4*time.Second)) != first {
+		t.Fatal("cohort namespace must remain bounded")
+	}
+}
+
+func TestReadWriteChoiceDoesNotPartitionTheKeyspace(t *testing.T) {
+	reads, writes := make([]bool, 100), make([]bool, 100)
+	for i := 0; i < 10000; i++ {
+		k := keyIndex(uint64(i), 100)
+		if i%100 < 50 {
+			writes[k] = true
+		} else {
+			reads[k] = true
+		}
+	}
+	for key := range reads {
+		if !reads[key] || !writes[key] {
+			t.Fatalf("key %d did not receive both reads and writes", key)
+		}
+	}
+}
