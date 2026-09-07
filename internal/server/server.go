@@ -466,6 +466,7 @@ func executeRun(c *client, arena *replyArena) bool {
 		// Arena capacity may overlap already-accounted reply windows; charging
 		// it again is conservative and also covers unused backing capacity.
 		budget.Begin(retainedClientBytes + core.AppendRetainedBytes() + cap(arena.buf))
+		budget.ReplyRetained = retainedReplyBytes
 		defer budget.End()
 	}
 	c.out, c.inArena = nil, false
@@ -498,6 +499,7 @@ func executeRun(c *client, arena *replyArena) bool {
 	for _, cmd := range c.cmds {
 		if budget := core.CommandAllocations; budget != nil {
 			budget.Retained = retainedClientBytes + core.AppendRetainedBytes() + cap(arena.buf)
+			budget.ReplyRetained = retainedReplyBytes
 		}
 		capture.p = nil
 		c.respond(cmd, &capture)
@@ -533,7 +535,7 @@ func executeRun(c *client, arena *replyArena) bool {
 
 func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 	defer wg.Done()
-	core.CommandAllocations = &core.CommandAllocationBudget{Limit: maxRetainedClientBytes}
+	core.CommandAllocations = &core.CommandAllocationBudget{Limit: maxRetainedClientBytes, ReplyLimit: maxRetainedClassBytes}
 	defer func() { core.CommandAllocations = nil }()
 	core.ClientBuffers = func() core.ClientBufferStats {
 		return core.ClientBufferStats{Connected: len(clients), InputBytes: retainedInputBytes, ReplyBytes: retainedReplyBytes, TotalBytes: retainedClientBytes}

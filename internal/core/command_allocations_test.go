@@ -132,3 +132,37 @@ func TestCommandWorkspaceAndReplyShareReservation(t *testing.T) {
 	CommandAllocations.End()
 	require.Equal(t, strings.Repeat("ba", 499)+"b", run(t, "LCS", "a", "b"))
 }
+
+func TestCommandRemovalReservesExistingLogGrowth(t *testing.T) {
+	old := CommandAllocations
+	t.Cleanup(func() { CommandAllocations = old; ResetStores() })
+	path := withAOF(t, func() {
+		run(t, "SADD", "set", "member")
+		run(t, "SET", "padding", strings.Repeat("p", 1<<20))
+		// Fill the current backing allocation so even this tiny removal would
+		// force replacement of a large append buffer.
+		aof.buf = append(make([]byte, 0, len(aof.buf)), aof.buf...)
+		before := len(aof.buf)
+		CommandAllocations = &CommandAllocationBudget{Limit: 2 << 20, Retained: cap(aof.buf)}
+		require.Equal(t, allocationPressure, rawReply(t, "SPOP", "set"))
+		require.Equal(t, before, len(aof.buf), "refused command must not append a partial record")
+		CommandAllocations = nil
+		require.EqualValues(t, 1, run(t, "SCARD", "set"))
+	})
+	restart(t, path)
+	require.Equal(t, []interface{}{"member"}, run(t, "SMEMBERS", "set"))
+}
+
+func TestCommandReplyClassCanRefuseBeforeAggregateLimit(t *testing.T) {
+	ResetStores()
+	old := CommandAllocations
+	t.Cleanup(func() { CommandAllocations = old; ResetStores() })
+	run(t, "SET", "value", strings.Repeat("v", 1<<20))
+	CommandAllocations = &CommandAllocationBudget{Limit: 16 << 20, ReplyLimit: 4 << 20, ReplyRetained: 2 << 20}
+	require.Equal(t, allocationPressure, rawReply(t, "GET", "value"))
+	require.Zero(t, CommandAllocations.Reserved)
+	require.Zero(t, CommandAllocations.ReplyReserved)
+	CommandAllocations.ReplyRetained = 0
+	require.Equal(t, byte('$'), rawReply(t, "GET", "value")[0])
+	require.Positive(t, CommandAllocations.ReplyReserved)
+}

@@ -5,8 +5,9 @@ package core
 // execution returns and the caller accounts retained replies. They include
 // conservative copy headroom, not a measurement of heap or process RSS.
 type CommandAllocationBudget struct {
-	Limit, Retained, Reserved, Peak int
-	Refusals                        uint64
+	Limit, Retained, Reserved, Peak          int
+	ReplyLimit, ReplyRetained, ReplyReserved int
+	Refusals                                 uint64
 }
 
 // CommandAllocations is installed by the event-loop transport. Core-only calls
@@ -15,17 +16,17 @@ var CommandAllocations *CommandAllocationBudget
 
 // Begin starts a serial execution run with buffers retained by earlier runs.
 func (b *CommandAllocationBudget) Begin(retained int) {
-	b.Retained, b.Reserved = retained, 0
+	b.Retained, b.Reserved, b.ReplyReserved = retained, 0, 0
 }
 
 // End releases reservations after execution; output ownership passes to the
 // transport, which accounts that output before starting another run.
-func (b *CommandAllocationBudget) End() { b.Reserved = 0 }
+func (b *CommandAllocationBudget) End() { b.Reserved, b.ReplyReserved = 0, 0 }
 
 // Reserve refuses before allocation and never changes the reserved amount on
 // refusal. Subtraction checks avoid overflow even for untrusted sizes.
 func (b *CommandAllocationBudget) Reserve(n int) bool {
-	if n < 0 || b.Retained < 0 || b.Retained > b.Limit || b.Reserved > b.Limit-b.Retained || n > b.Limit-b.Retained-b.Reserved {
+	if n < 0 || b.Retained < 0 || b.Reserved < 0 || b.Retained > b.Limit || b.Reserved > b.Limit-b.Retained || n > b.Limit-b.Retained-b.Reserved {
 		b.Refusals++
 		return false
 	}
@@ -47,7 +48,20 @@ func reserveReplyMemory(n int) bool {
 	if n < 0 || n > MaxReplyBytes {
 		return false
 	}
-	return reserveCommandMemory(3 * ((n + 4095) &^ 4095))
+	charge := 3 * ((n + 4095) &^ 4095)
+	budget := CommandAllocations
+	if budget == nil {
+		return true
+	}
+	if budget.ReplyLimit > 0 && (budget.ReplyRetained > budget.ReplyLimit || budget.ReplyReserved > budget.ReplyLimit-budget.ReplyRetained || charge > budget.ReplyLimit-budget.ReplyRetained-budget.ReplyReserved) {
+		budget.Refusals++
+		return false
+	}
+	if !budget.Reserve(charge) {
+		return false
+	}
+	budget.ReplyReserved += charge
+	return true
 }
 
 func encodeBoundedString(value string) []byte {

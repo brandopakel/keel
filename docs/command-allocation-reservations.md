@@ -3,7 +3,7 @@
 Status: candidate, September 7, 2026. Depends on GEO admission in PR 53.
 
 The event loop now reserves covered command allocations against its 256 MiB
-buffer budget before constructing them. The starting charge includes retained
+buffer budget and separate 192 MiB reply-class budget before constructing them. The starting charge includes retained
 client input/replies, AOF buffers and arena capacity. Each command in the same
 execution run also sees AOF/arena growth from earlier commands. Reservations
 accumulate for the run and release when it returns; the transport then accounts
@@ -55,3 +55,13 @@ ordinary/large-output adoption remain required. No frozen-soak or release
 success applies to this candidate.
 
 Raw local evidence: `bench/results/command-allocation-local-2026-09-07.json.gz`.
+
+Further inspection corrected two bounds before adoption: canonical pop records
+reserve growth of the whole existing AOF buffer, including overlapping backing
+allocations, rather than only the newly encoded record; reply reservations also
+check the existing 192 MiB reply-class ceiling before construction. AOF-off pops
+reserve their member arrays without charging an unused log. Tests verify refusal
+before a tiny removal grows an already-full 1 MiB log, reply-class refusal when
+the total budget still fits, and release/retry behavior. Three focused race and
+slow-reader process repetitions, full tests and vet pass with both corrections.
+Evidence: `command-allocation-classes-2026-09-07.json.gz`.

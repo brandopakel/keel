@@ -81,7 +81,18 @@ func reserveRemoval(command, key string, count int, walk replyWalk) []byte {
 	if !fits {
 		return replyTooLarge
 	}
-	if !reserveCommandMemory((count+2)*16 + 2*size + 8192) {
+	logCharge := 0
+	if aof.file != nil && !aof.replaying {
+		// Appending can replace a partially filled backing array. Charge the
+		// whole future log, including growth overlap, rather than just the new
+		// record. The original buffer is already in the transport's base charge.
+		maxInt := int(^uint(0) >> 1)
+		if len(aof.buf) > maxInt/3-size-8192 {
+			return allocationPressure
+		}
+		logCharge = 3 * (len(aof.buf) + size + 8192)
+	}
+	if !reserveCommandMemory((count+2)*16 + logCharge + 8192) {
 		return allocationPressure
 	}
 	return nil
