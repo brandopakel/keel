@@ -137,3 +137,18 @@ func TestGlobMatchDoesNotBacktrackExponentially(t *testing.T) {
 		t.Fatal("matching did not finish: the star is backtracking exponentially")
 	}
 }
+
+func TestGlobCharacterClassesChargeAllBytes(t *testing.T) {
+	for _, tc := range []struct{ pattern, value string }{{"[a-z]", "m"}, {"[\\m]", "m"}, {"[^a-z]", "0"}} {
+		budget := len(tc.pattern)
+		matched, exhausted := globMatchBounded(tc.pattern, tc.value, &budget)
+		if !matched || exhausted || budget != 0 {
+			t.Fatalf("%q: matched=%v exhausted=%v remaining=%d", tc.pattern, matched, exhausted, budget)
+		}
+		budget = len(tc.pattern) - 1
+		_, exhausted = globMatchBounded(tc.pattern, tc.value, &budget)
+		if !exhausted {
+			t.Fatalf("%q did not charge every consumed class byte", tc.pattern)
+		}
+	}
+}

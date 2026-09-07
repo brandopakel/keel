@@ -1,6 +1,6 @@
 # Stable keyspace traversal
 
-Status: implementation under validation, September 7, 2026. This supersedes the
+Status: adoption gate satisfied, September 7, 2026. This supersedes the
 fixed 1,024-shard proposal in PR #21. The original proposal reduced average pause
 size but could not stop inside a shard. Its approximately 4,900 keys per shard at
 five million keys was an average, not a maximum.
@@ -121,6 +121,56 @@ masks do not isolate physical core resources.
 
 All integrated `cd2b740` PR CI jobs passed, including Go 1.26/stable on Linux and
 macOS, race tests, Docker persistence/restart, Redis differential checks, native
-Linux ARM64/Intel Mac recovery, and ext4/XFS checks. The matched comparison of
-that revision against current develop `db4fd00` is still running. The adoption
-review remains open pending that result and the targeted tail investigation.
+Linux ARM64/Intel Mac recovery, and ext4/XFS checks. The [matched comparison](https://github.com/brandopakel/keel/actions/runs/34096759453)
+of that revision against develop `db4fd00` completed all 24 workload and nine
+memory cases. Results and hashes are in
+`bench/results/traversal-integrated-matched-2026-09-07.json.gz`.
+
+Integrated paired throughput medians span 0.974–1.037. The 100k-key case was
+0.996 (pairs 1.009/0.975/0.996), pipeline-16 was 1.037
+(1.037/1.047/1.016), and the 1 MiB case was 1.013
+(0.997/1.013/1.051), with median p99 7.839 versus 5.503 ms. The first run's
+100k-key and 1 MiB tail regressions therefore did not repeat in this comparison.
+This does not erase the earlier evidence or establish a universal speedup.
+
+Million-key RSS medians were 219.96 versus 217.65 MiB. The empty-process sample
+went the other direction, 7.37 versus 9.43 MiB, while the 256-idle-client case
+was 7.39 versus 7.45 MiB. These short RSS windows include Go runtime/GC variation;
+they do not measure a stable per-connection increment. Large-list reads again
+flagged generator CPU pressure in one repetition per arm.
+
+The [longer targeted run](https://github.com/brandopakel/keel/actions/runs/34097519300)
+completed seven 30-second repetitions per arm on disjoint exposed core groups:
+
+| Workload | Paired throughput median (range) | Baseline / candidate p99 median |
+| --- | ---: | ---: |
+| 1 MiB values | 1.001 (0.988–1.015) | 5.471 / 5.439 ms |
+| 100k keys | 1.009 (0.974–1.038) | 0.375 / 0.367 ms |
+| Pipeline 16 | 1.012 (1.010–1.024) | 0.751 / 0.687 ms |
+
+No generator CPU warning occurred in those 42 comparative arms. The 1 MiB
+p99.9 stayed around 43 ms in both arms: the tail mode remains a performance
+issue in the underlying workload, but the longer comparison does not attribute
+it to this traversal change. Evidence is retained in
+`bench/results/traversal-targeted-matched-2026-09-07.json.gz`.
+
+**Adoption decision:** retain the stable paged traversal. Correctness/work-bound
+checks, both complete broad matrices and the longer targeted investigation
+satisfy this change's gate. There is no repeatable material throughput/tail
+regression in the investigated cases, and the memory results do not establish a
+material per-key increase. This is a bounded-enumeration improvement; it is not a
+claim of universal throughput gain, hard latency bounds or dedicated-host
+capacity. The initial mixed results remain part of the evidence.
+
+Separate candidate-only CPU/heap/allocation profiles are summarized in
+`bench/results/traversal-diagnostics-2026-09-07.txt`. Socket syscalls dominate the
+100k-key CPU profile (83% flat); multiplexer registration accounts for 8.9%
+cumulatively. The 1 MiB case spends about 25% in copying and 13% clearing memory,
+in addition to socket work. These diagnostics include preload/warmup and support
+follow-up hypotheses, not comparisons of profiled versus unprofiled throughput.
+
+The final review corrections after the measured runtime only affect matcher
+budget accounting and benchmark thread selection. None of the timed cases use
+SCAN/KEYS patterns, and the selected two-thread maximum produces the same
+client count before/after the selector fix. Final commit `ccbbb6a` passed all
+PR CI, including the dedicated matcher regressions and Redis differential suite.
