@@ -114,7 +114,7 @@ Final phase-instrumented run 34163962923 compares `9dd815d` with `e4360ef` at
 zero failed, dropped or expired requests. This successful run supplements the
 previous failed string cell; it does not explain or erase that failure.
 
-Across the six string policy/write cells, median scheduled p99.9 is 3.87–4.78 ms
+Across the six string workload cells (three persistence policies and two write shares), median scheduled p99.9 is 3.87–4.78 ms
 before versus 1.56–3.57 ms with the worker. The sketch baseline already streams
 its tables, and effects remain mixed: CMS always-sync/20%-write p99.9 rises from
 4.78 to 8.32 ms; Morris in that cell rises from 2.59 to 2.75 ms. There is no

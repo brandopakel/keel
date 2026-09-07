@@ -132,3 +132,20 @@ budget. More real application traces require selected applications and workload
 access; GoGIF remains one unchanged pilot. Public Linux/macOS CI, ext4/xfs
 fault/recovery tests and synthetic workload matrices provide useful evidence but
 do not substitute for dedicated deployment or actual application traces.
+
+## Next engineering gates
+
+| Priority | Remaining work | Evidence required to close it |
+| --- | --- | --- |
+| 1 | Finish transcript admission and shutdown integration | Reviewed source; all policy/mode pairs complete with matched settings; no unexplained correctness failures; any throughput/memory tradeoff stated explicitly. |
+| 2 | Complete aggregate temporary-allocation coverage | Bound parsing, mutation, replication, rewrite and compaction overlap before allocation; demonstrate rejection/recovery under mixed slow clients, large requests and persistence pressure. |
+| 3 | Reduce remaining large-command and rewrite finalization stalls | Define ordered publication across final sync/rename/directory sync; fault injection at each phase; paired tail-latency measurements with unchanged durability. |
+| 4 | Extend replication recovery and churn coverage | Larger snapshots, sustained updates, outages and multiple lagging replicas; verify final state and acknowledged offsets, bounded memory, recovery time and failure retention. |
+| 5 | Establish broadly applicable capacity limits | Load sweeps, expiry storms, tenant mixtures, large collections and client reconnect/slow-reader mixes with generator headroom; compare repeated same-host baseline/candidate/Redis runs. |
+| 6 | Resolve deployment and application evidence gaps | Existing suitable dedicated hosts and representative application traces within $0; retain GoGIF as one unchanged pilot. |
+
+Public-runner results cannot establish dedicated-host capacity. Short operational
+runs on ext4/xfs and native Linux ARM64/Intel Mac checks remain useful; extended
+validation runs on hosted runners and does not keep the laptop awake. Automatic
+failover requires enforceable external fencing or a separate election design;
+embedding, partitioning and transactions remain separate architectural commitments.
