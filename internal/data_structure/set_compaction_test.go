@@ -99,10 +99,17 @@ func TestSetCompactionRestartsAfterFurtherLargeShrink(t *testing.T) {
 		s.Remove(strconv.Itoa(i))
 	}
 	require.NotSame(t, previous, s.compaction, "do not retain a mostly empty shadow map after another large shrink")
+	require.Equal(t, 10, s.Len())
+	work := 0
+	// The old high-water limit may be larger; compaction stops at the current
+	// dense length, so only these ten surviving members need copying.
 	for i := 0; s.compaction != nil && i < 10; i++ {
-		require.LessOrEqual(t, s.CompactIndex(3), 3)
+		used := s.CompactIndex(3)
+		require.LessOrEqual(t, used, 3)
+		work += used
 	}
 	require.Nil(t, s.compaction)
+	require.Equal(t, 10, work)
 	requireSetIndex(t, s)
 	require.Equal(t, 10, s.Len())
 }
