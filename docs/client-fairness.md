@@ -41,3 +41,15 @@ Individual commands remain atomic and may take longer than the cooperative
 target. A large command can produce up to the existing 64 MiB reply ceiling;
 small preceding replies can coexist with it. This does not establish a fixed
 latency SLA or a strict whole-process transient-allocation bound.
+
+The first hosted comparison in 34113254376 completed three ten-second
+repetitions of six scenarios plus the nine-case memory matrix. Linux, Go 1.27.1,
+AOF off and separate exposed server/generator core groups were matched. Small
+reads and 1 MiB reads stayed near baseline (paired median ratios 1.009/1.015),
+many-clients was 0.983, and large-list was 1.020. Pipeline-16 and pipeline-64
+were both 0.968, with median p99 0.687/0.703 and 2.207/2.415 ms. No generator
+CPU warnings occurred. The approximately 3% pipelined throughput cost remains
+visible; adoption awaits the competing-client latency comparison. Million-key
+RSS was 217.73/219.93 MiB; the sample does not establish a memory reduction.
+All raw measurements are in `bench/results/fairness-matched-2026-09-07.json.gz`.
+The same commit's hosted Go/race, native/filesystem and broad checks passed.
