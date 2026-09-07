@@ -16,6 +16,12 @@ perform zero allocations per clear/reapply cycle. Existing keyspace accounting,
 expiry, persistence and the complete local Go suite pass. Raw before/after output
 is retained in `bench/results/ttl-empty-retention-2026-09-07.txt`.
 
+Hosted validation for c7125f5 passed the
+[Go/race/Docker matrix](https://github.com/brandopakel/keel/actions/runs/34099308703),
+[Redis differential, workloads and operational checks](https://github.com/brandopakel/keel/actions/runs/34099310984),
+and [native ARM64/Intel Mac plus ext4/XFS recovery](https://github.com/brandopakel/keel/actions/runs/34099313025).
+Integration with the merged traversal closeout receives the same checks again.
+
 This measures live Go heap, not a process RSS decrease, a throughput improvement
 or a deployment capacity limit. Partly occupied expiry tables, lookup-map
 capacity and sparsely occupied key pages can still retain memory. Incremental
