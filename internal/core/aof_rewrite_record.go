@@ -1,15 +1,20 @@
 package core
 
-import "strconv"
+import (
+	"slices"
+	"strconv"
+)
 
-// A record retains immutable string references and emits at most 64 KiB each
-// cycle. It must finish even if the key changes: dirty reconciliation replaces
-// the completed historical record. Cancelling halfway would corrupt RESP.
+// A record retains immutable strings/images or a loop-owned fixed-shape sketch
+// reader and emits at most 64 KiB each cycle. It must finish even if the key
+// changes: dirty reconciliation replaces the completed record. Cancelling a
+// record halfway without aborting the whole rewrite would corrupt RESP.
 type rewriteRecord struct {
 	parts        []string
 	part, offset int
 	payload      []byte
 	payloadPart  int
+	sketch       *sketchDumpStream
 }
 
 func (r *rewriteRecord) appendCommand(command ...string) {
@@ -19,17 +24,21 @@ func (r *rewriteRecord) appendCommand(command ...string) {
 	}
 }
 
-// A mutable sketch needs one immutable encoded image to finish a valid record
-// across intervening mutations. Retain that image directly; converting it to a
-// string and constructing another whole RESP record would triple its storage.
+// Dynamic opaque structures retain one immutable encoded image. CMS and Morris
+// have fixed shapes: the loop can read bounded pieces and checksum the emitted
+// bytes while dirty reconciliation covers every intervening write.
 func appendOpaqueRewriteRecord(dst []byte, key string, reset bool, plan dumpPlan, expiry uint64) []byte {
-	r := &rewriteRecord{payload: appendDump(make([]byte, 0, plan.size+9), plan)}
+	r := &rewriteRecord{sketch: newSketchDumpStream(key)}
+	payloadSize := plan.size + 9
+	if r.sketch == nil {
+		r.payload = appendDump(make([]byte, 0, payloadSize), plan)
+	}
 	if reset {
 		r.appendCommand("DEL", key)
 	}
 	r.appendCommand("KEEL.RESTORE", key, "")
 	r.payloadPart = len(r.parts) - 2
-	r.parts[r.payloadPart-1] = "$" + strconv.Itoa(len(r.payload)) + "\r\n"
+	r.parts[r.payloadPart-1] = "$" + strconv.Itoa(payloadSize) + "\r\n"
 	if expiry > 0 {
 		r.appendCommand("PEXPIREAT", key, strconv.FormatUint(expiry, 10))
 	}
@@ -62,16 +71,26 @@ func appendRewriteRecords(dst []byte, commands [][]string) []byte {
 func emitRewriteRecordSlice(dst []byte) []byte {
 	r := rewrite.stream
 	budget := rewriteRecordSlice
+	// The stream will emit at most this much. Reserve once so per-cell sketch
+	// encoding does not repeatedly grow and copy the current output slice.
+	dst = slices.Grow(dst, budget)
 	for r.part < len(r.parts) && budget > 0 {
 		part := r.parts[r.part]
 		length := len(part)
-		binary := r.payload != nil && r.part == r.payloadPart
+		binary := (r.payload != nil || r.sketch != nil) && r.part == r.payloadPart
 		if binary {
 			length = len(r.payload)
+			if r.sketch != nil {
+				length = r.sketch.size()
+			}
 		}
 		n := min(length-r.offset, budget)
 		if binary {
-			dst = append(dst, r.payload[r.offset:r.offset+n]...)
+			if r.sketch != nil {
+				dst = r.sketch.appendSlice(dst, r.offset, n)
+			} else {
+				dst = append(dst, r.payload[r.offset:r.offset+n]...)
+			}
 		} else {
 			dst = append(dst, part[r.offset:r.offset+n]...)
 		}
@@ -80,6 +99,7 @@ func emitRewriteRecordSlice(dst []byte) []byte {
 		if r.offset == length {
 			if binary {
 				r.payload = nil
+				r.sketch = nil
 			}
 			r.parts[r.part] = ""
 			r.part++

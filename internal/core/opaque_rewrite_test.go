@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestOpaqueRewriteKeepsOnePayloadAndEmitsBoundedRecord(t *testing.T) {
+func TestSketchRewriteStartsWithoutConstructingAWholePayload(t *testing.T) {
 	ResetStores()
 	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "store.aof")))
 	t.Cleanup(func() { CancelRewrite(); require.NoError(t, CloseAOF()); ResetStores() })
@@ -23,9 +23,11 @@ func TestOpaqueRewriteKeepsOnePayloadAndEmitsBoundedRecord(t *testing.T) {
 	require.NoError(t, AdvanceRewrite())
 	runtime.ReadMemStats(&after)
 	t.Logf("payload=%d allocated=%d first_slice=%d", cms.MarshalSize()+9, after.TotalAlloc-before.TotalAlloc, rewrite.written)
-	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(cms.MarshalSize()+(256<<10)))
+	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(256<<10))
 	require.LessOrEqual(t, rewrite.written, int64(rewriteRecordSlice))
 	require.NotNil(t, rewrite.stream)
+	require.Empty(t, rewrite.stream.payload)
+	require.NotNil(t, rewrite.stream.sketch)
 }
 
 func TestOpaqueRewriteReconcilesMutationWithValidHistoricalPayload(t *testing.T) {
