@@ -80,6 +80,16 @@ func evictionPolicyName() string {
 	}
 }
 
+// ClientBufferStats describes retained event-loop buffers, not process RSS or
+// kernel socket buffers. The event loop owns both collection and observation.
+type ClientBufferStats struct {
+	Connected, InputBytes, ReplyBytes, TotalBytes int
+}
+
+// ClientBuffers is installed before accepting event-loop clients and removed
+// after they close. Core-only and alternate transports leave it nil.
+var ClientBuffers func() ClientBufferStats
+
 // cmdINFO reports server state, in the section format redis-cli expects.
 //
 // It exists because eviction is otherwise invisible: without used_memory and
@@ -96,6 +106,10 @@ func cmdINFO(args []string) []byte {
 
 	var b strings.Builder
 	want := func(name string) bool { return section == "" || section == name }
+	if want("clients") && ClientBuffers != nil {
+		stats := ClientBuffers()
+		fmt.Fprintf(&b, "# Clients\r\nconnected_clients:%d\r\nretained_input_bytes:%d\r\nretained_reply_bytes:%d\r\nretained_client_bytes:%d\r\n\r\n", stats.Connected, stats.InputBytes, stats.ReplyBytes, stats.TotalBytes)
+	}
 
 	if want("replication") {
 		role := "primary"
@@ -156,6 +170,7 @@ func cmdINFO(args []string) []byte {
 		encoded, written, synced, ready := AOFPositions()
 		fmt.Fprintf(&b, "aof_encoded_offset:%d\r\naof_appended_offset:%d\r\naof_synced_offset:%d\r\naof_reply_offset:%d\r\n", encoded, written, synced, ready)
 		fmt.Fprintf(&b, "aof_pending_fsync:%d\r\naof_pending_append_bytes:%d\r\n", pending, appendBytes)
+		fmt.Fprintf(&b, "aof_rewrite_dirty_keys:%d\r\naof_rewrite_dirty_bytes:%d\r\naof_rewrite_budget_aborts:%d\r\n", len(rewrite.dirty), rewrite.dirtyBytes, rewriteBudgetAborts)
 		fmt.Fprintf(&b, "aof_rewrites:%d\r\naof_keys_at_last_rewrite:%d\r\n\r\n", rewrites, keys)
 	}
 	if want("keyspace") {

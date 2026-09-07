@@ -1,0 +1,617 @@
+{
+  "source_revision": "ff0b6aa",
+  "runtime_commit": "10cb75e",
+  "runs": {
+    "go": "https://github.com/brandopakel/keel/actions/runs/34098422225",
+    "general": "https://github.com/brandopakel/keel/actions/runs/34098424302",
+    "native_filesystems": "https://github.com/brandopakel/keel/actions/runs/34098426984"
+  },
+  "reports": {
+    "operations": {
+      "status": "passed",
+      "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+      "binary_sha256": "f24bc8d110ce46d2d807913d7da442fc07ab7e3c9ca4baf754651fb21e12c7c8",
+      "harness_sha256": "0aa147330a806a7da44df1fd12ee52060306591fa6afab1f8b9553069699c9f1",
+      "eviction": [
+        {
+          "status": "passed",
+          "mode": "v1-async",
+          "policy": "lru",
+          "limit": "keys",
+          "keys_surviving": 64,
+          "evicted_keys": 448,
+          "estimated_keyspace_bytes": 267648,
+          "recovery_seconds": [
+            0.2945932760000005,
+            0.3171552520000205
+          ],
+          "acknowledged_non_evicted_values_lost": 0
+        },
+        {
+          "status": "passed",
+          "mode": "v1-async",
+          "policy": "lru",
+          "limit": "bytes",
+          "keys_surviving": 31,
+          "evicted_keys": 481,
+          "estimated_keyspace_bytes": 129642,
+          "recovery_seconds": [
+            0.29032866500006094,
+            0.3119179839999333
+          ],
+          "acknowledged_non_evicted_values_lost": 0
+        },
+        {
+          "status": "passed",
+          "mode": "v1-async",
+          "policy": "lfu",
+          "limit": "keys",
+          "keys_surviving": 64,
+          "evicted_keys": 448,
+          "estimated_keyspace_bytes": 267648,
+          "recovery_seconds": [
+            0.2947508199999902,
+            0.31866064400003324
+          ],
+          "acknowledged_non_evicted_values_lost": 0
+        },
+        {
+          "status": "passed",
+          "mode": "v1-async",
+          "policy": "lfu",
+          "limit": "bytes",
+          "keys_surviving": 31,
+          "evicted_keys": 481,
+          "estimated_keyspace_bytes": 129642,
+          "recovery_seconds": [
+            0.29198261900000944,
+            0.312788085999955
+          ],
+          "acknowledged_non_evicted_values_lost": 0
+        },
+        {
+          "status": "passed",
+          "mode": "v1-async",
+          "policy": "random",
+          "limit": "keys",
+          "keys_surviving": 64,
+          "evicted_keys": 448,
+          "estimated_keyspace_bytes": 267648,
+          "recovery_seconds": [
+            0.29673399200009953,
+            0.31750104299999293
+          ],
+          "acknowledged_non_evicted_values_lost": 0
+        },
+        {
+          "status": "passed",
+          "mode": "v1-async",
+          "policy": "random",
+          "limit": "bytes",
+          "keys_surviving": 31,
+          "evicted_keys": 481,
+          "estimated_keyspace_bytes": 129642,
+          "recovery_seconds": [
+            0.2917088630000535,
+            0.31113438199997745
+          ],
+          "acknowledged_non_evicted_values_lost": 0
+        },
+        {
+          "status": "passed",
+          "mode": "v2-concurrent",
+          "policy": "lru",
+          "limit": "keys",
+          "keys_surviving": 64,
+          "evicted_keys": 448,
+          "estimated_keyspace_bytes": 267648,
+          "recovery_seconds": [
+            0.40029265500004385,
+            0.4185601739999356
+          ],
+          "acknowledged_non_evicted_values_lost": 0
+        },
+        {
+          "status": "passed",
+          "mode": "v2-concurrent",
+          "policy": "lru",
+          "limit": "bytes",
+          "keys_surviving": 31,
+          "evicted_keys": 481,
+          "estimated_keyspace_bytes": 129642,
+          "recovery_seconds": [
+            0.41638243900001726,
+            0.3970565759999545
+          ],
+          "acknowledged_non_evicted_values_lost": 0
+        },
+        {
+          "status": "passed",
+          "mode": "v2-concurrent",
+          "policy": "lfu",
+          "limit": "keys",
+          "keys_surviving": 64,
+          "evicted_keys": 448,
+          "estimated_keyspace_bytes": 267648,
+          "recovery_seconds": [
+            0.4223579709999967,
+            0.3991457619999892
+          ],
+          "acknowledged_non_evicted_values_lost": 0
+        },
+        {
+          "status": "passed",
+          "mode": "v2-concurrent",
+          "policy": "lfu",
+          "limit": "bytes",
+          "keys_surviving": 31,
+          "evicted_keys": 481,
+          "estimated_keyspace_bytes": 129642,
+          "recovery_seconds": [
+            0.3943759940000291,
+            0.41414669100004176
+          ],
+          "acknowledged_non_evicted_values_lost": 0
+        },
+        {
+          "status": "passed",
+          "mode": "v2-concurrent",
+          "policy": "random",
+          "limit": "keys",
+          "keys_surviving": 64,
+          "evicted_keys": 448,
+          "estimated_keyspace_bytes": 267648,
+          "recovery_seconds": [
+            0.39989163200004896,
+            0.41801684999995814
+          ],
+          "acknowledged_non_evicted_values_lost": 0
+        },
+        {
+          "status": "passed",
+          "mode": "v2-concurrent",
+          "policy": "random",
+          "limit": "bytes",
+          "keys_surviving": 31,
+          "evicted_keys": 481,
+          "estimated_keyspace_bytes": 129642,
+          "recovery_seconds": [
+            0.4158937629999855,
+            0.39402273799998966
+          ],
+          "acknowledged_non_evicted_values_lost": 0
+        }
+      ],
+      "slow_readers": [
+        {
+          "status": "passed",
+          "mode": "v1-async",
+          "readers": 8,
+          "offered_reply_bytes_per_reader": 16777216,
+          "independent_ping_ms": {
+            "median": 0.09769199999709599,
+            "max": 9.301176000008127
+          },
+          "rss_peak_kib": 235640,
+          "clean_restart_verified": true,
+          "limits": "Responsiveness under bounded non-reading clients, not a hard process RSS guarantee or a latency SLO."
+        },
+        {
+          "status": "passed",
+          "mode": "v2-concurrent",
+          "readers": 8,
+          "offered_reply_bytes_per_reader": 16777216,
+          "independent_ping_ms": {
+            "median": 0.10681850005767046,
+            "max": 11.808809999934056
+          },
+          "rss_peak_kib": 229784,
+          "clean_restart_verified": true,
+          "limits": "Responsiveness under bounded non-reading clients, not a hard process RSS guarantee or a latency SLO."
+        }
+      ],
+      "combined": [
+        {
+          "status": "passed",
+          "mode": "v1-async",
+          "writes_during_replica_outage": 2500,
+          "replicas": 2,
+          "nonreading_clients": 4,
+          "completed_rewrites": 10,
+          "replica_recovery_seconds": [
+            0.026154652999935024,
+            0.024863922000008642
+          ],
+          "evicted_keys": 2441,
+          "expired_keys": 64,
+          "surviving_acknowledged_values_lost": 0,
+          "write_ms": {
+            "median": 0.5796895000571567,
+            "max": 7.428666000009798
+          },
+          "limits": "Short overlapping-fault correctness test; sequential replica reconnects, no deployment capacity or latency SLO claim."
+        },
+        {
+          "status": "passed",
+          "mode": "v2-concurrent",
+          "writes_during_replica_outage": 2500,
+          "replicas": 2,
+          "nonreading_clients": 4,
+          "completed_rewrites": 10,
+          "replica_recovery_seconds": [
+            0.13919535800005178,
+            0.15650971599995955
+          ],
+          "evicted_keys": 2438,
+          "expired_keys": 64,
+          "surviving_acknowledged_values_lost": 0,
+          "write_ms": {
+            "median": 0.578683500009447,
+            "max": 12.580641999988984
+          },
+          "limits": "Short overlapping-fault correctness test; sequential replica reconnects, no deployment capacity or latency SLO claim."
+        }
+      ]
+    },
+    "differential": {
+      "status": "passed",
+      "seed": 20260906,
+      "steps_requested": 20000,
+      "binary_sha256": "f24bc8d110ce46d2d807913d7da442fc07ab7e3c9ca4baf754651fb21e12c7c8",
+      "redis_sha256": "1b2950213684d355e0e49fe6702c7bfb9d40b78f0da9ce289fc0e8f2a295e540",
+      "harness_sha256": "752b2c2e1bfb5bd25bf3b25442ae5d13c09dd552659b4546690747f6443a6e8a",
+      "policy": "always",
+      "concurrent": false,
+      "reply_checks": 20000,
+      "state_checks": 20,
+      "restarts": 2,
+      "limits": "Supported common RESP2 commands; unordered collections normalized; errors compared by class. No timing-based TTL differential or cross-type SET equivalence claim.",
+      "scan_checks": 16,
+      "final_keys": 132,
+      "state_sha256": "bda3d8a5e2191c5abc70189be6a06d6d5a6aca1ab373fe26c9357e2ad36c2021",
+      "commands_sha256": "06da4f74c8e6bc8a00c980ac2d0f32ea23f20fe5dd7283aaaa3adf1a984d44dc"
+    },
+    "soak": {
+      "status": "passed",
+      "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+      "binary_sha256": "f24bc8d110ce46d2d807913d7da442fc07ab7e3c9ca4baf754651fb21e12c7c8",
+      "harness_sha256": "7f08eed72a5396c7f477ab51641d6f865793c41930bcad371b7c569f43695f07",
+      "seconds_requested": 120.0,
+      "started_utc": "2026-09-07T08:05:22Z",
+      "primary_crash_every": 3,
+      "concurrent": false,
+      "replication_protocol": 1,
+      "checkpoint_count": 7,
+      "acknowledged_writes": 34827,
+      "primary_crash_recoveries": 2,
+      "replica_crash_recoveries": 5,
+      "checkpoints": [
+        {
+          "seconds": 15.000569326999994,
+          "writes": 4946,
+          "cache_set_get_pair_ms": {
+            "count": 4946,
+            "p50": 0.6562325000345481,
+            "p99": 2.1224449999408534,
+            "max": 16.030883000098584
+          },
+          "maintenance_seconds": 0.23987799500002893,
+          "primary": {
+            "aof_enabled": "1",
+            "aof_base_size": "1884821",
+            "aof_current_size": "1884848",
+            "aof_rewrite_in_progress": "0",
+            "aof_last_write_status": "ok",
+            "aof_buffer_length": "0",
+            "aof_encoded_offset": "3236724",
+            "aof_appended_offset": "3236724",
+            "aof_synced_offset": "3236724",
+            "aof_reply_offset": "3236724",
+            "aof_pending_fsync": "0",
+            "aof_pending_append_bytes": "0",
+            "aof_rewrite_dirty_keys": "0",
+            "aof_rewrite_dirty_bytes": "0",
+            "aof_rewrite_budget_aborts": "0",
+            "aof_rewrites": "1",
+            "aof_keys_at_last_rewrite": "1007"
+          },
+          "replica": {
+            "primary_epoch": "fb63d36b1dedc18cd73b2f9c1a16e9c2",
+            "replica_epoch": "da95ca34a08cd1d276c624bf412aaa33",
+            "replication_pending_keys": "0",
+            "replication_epoch_invalidated": "false",
+            "replication_protocol": "1",
+            "role": "replica",
+            "replica_ready": "1",
+            "replica_offset": "148",
+            "replica_last_update_ms": "64",
+            "primary_offset": "0",
+            "replication_history_bytes": "0"
+          },
+          "ps": "   9900 40908 11.8\n   9909 19952  2.8\n"
+        },
+        {
+          "seconds": 30.24978588800002,
+          "writes": 9869,
+          "cache_set_get_pair_ms": {
+            "count": 4923,
+            "p50": 0.667475000000195,
+            "p99": 1.763254000024972,
+            "max": 10.635450999984641
+          },
+          "maintenance_seconds": 0.2595331620000252,
+          "primary": {
+            "aof_enabled": "1",
+            "aof_base_size": "1884860",
+            "aof_current_size": "1884887",
+            "aof_rewrite_in_progress": "0",
+            "aof_last_write_status": "ok",
+            "aof_buffer_length": "0",
+            "aof_encoded_offset": "4892559",
+            "aof_appended_offset": "4892559",
+            "aof_synced_offset": "4892559",
+            "aof_reply_offset": "4892559",
+            "aof_pending_fsync": "0",
+            "aof_pending_append_bytes": "0",
+            "aof_rewrite_dirty_keys": "0",
+            "aof_rewrite_dirty_bytes": "0",
+            "aof_rewrite_budget_aborts": "0",
+            "aof_rewrites": "2",
+            "aof_keys_at_last_rewrite": "1007"
+          },
+          "replica": {
+            "primary_epoch": "6512415028f3ad18de8f581c52f11d2a",
+            "replica_epoch": "da95ca34a08cd1d276c624bf412aaa33",
+            "replication_pending_keys": "0",
+            "replication_epoch_invalidated": "false",
+            "replication_protocol": "1",
+            "role": "replica",
+            "replica_ready": "1",
+            "replica_offset": "295",
+            "replica_last_update_ms": "71",
+            "primary_offset": "0",
+            "replication_history_bytes": "0"
+          },
+          "ps": "   9900 55548 11.7\n   9925 18436  3.4\n"
+        },
+        {
+          "seconds": 45.51913621699998,
+          "writes": 14767,
+          "cache_set_get_pair_ms": {
+            "count": 4898,
+            "p50": 0.6631254999547309,
+            "p99": 2.3659639999777937,
+            "max": 11.885293999966962
+          },
+          "maintenance_seconds": 0.18617057299991302,
+          "primary": {
+            "aof_enabled": "1",
+            "aof_base_size": "1886197",
+            "aof_current_size": "1886224",
+            "aof_rewrite_in_progress": "0",
+            "aof_last_write_status": "ok",
+            "aof_buffer_length": "0",
+            "aof_encoded_offset": "6545851",
+            "aof_appended_offset": "6545851",
+            "aof_synced_offset": "6545851",
+            "aof_reply_offset": "6545851",
+            "aof_pending_fsync": "0",
+            "aof_pending_append_bytes": "0",
+            "aof_rewrite_dirty_keys": "0",
+            "aof_rewrite_dirty_bytes": "0",
+            "aof_rewrite_budget_aborts": "0",
+            "aof_rewrites": "3",
+            "aof_keys_at_last_rewrite": "1007"
+          },
+          "replica": {
+            "primary_epoch": "75db536198037b4a31d1336076536f8c",
+            "replica_epoch": "da95ca34a08cd1d276c624bf412aaa33",
+            "replication_pending_keys": "0",
+            "replication_epoch_invalidated": "false",
+            "replication_protocol": "1",
+            "role": "replica",
+            "replica_ready": "1",
+            "replica_offset": "443",
+            "replica_last_update_ms": "55",
+            "primary_offset": "0",
+            "replication_history_bytes": "0"
+          },
+          "ps": "   9900 60764 11.7\n   9940 21628  3.7\n"
+        },
+        {
+          "seconds": 60.714107411999976,
+          "writes": 17685,
+          "cache_set_get_pair_ms": {
+            "count": 2918,
+            "p50": 0.6496254999888151,
+            "p99": 2.309683000021323,
+            "max": 13.198549999970055
+          },
+          "maintenance_seconds": 0.2518242859999873,
+          "primary": {
+            "aof_enabled": "1",
+            "aof_base_size": "1886226",
+            "aof_current_size": "1886253",
+            "aof_rewrite_in_progress": "0",
+            "aof_last_write_status": "ok",
+            "aof_buffer_length": "0",
+            "aof_encoded_offset": "984943",
+            "aof_appended_offset": "984943",
+            "aof_synced_offset": "984943",
+            "aof_reply_offset": "984943",
+            "aof_pending_fsync": "0",
+            "aof_pending_append_bytes": "0",
+            "aof_rewrite_dirty_keys": "0",
+            "aof_rewrite_dirty_bytes": "0",
+            "aof_rewrite_budget_aborts": "0",
+            "aof_rewrites": "1",
+            "aof_keys_at_last_rewrite": "1007"
+          },
+          "replica": {
+            "primary_epoch": "75db536198037b4a31d1336076536f8c",
+            "replica_epoch": "bc78983056b12f2ddb54d0ee4dc00040",
+            "replication_pending_keys": "0",
+            "replication_epoch_invalidated": "false",
+            "replication_protocol": "1",
+            "role": "replica",
+            "replica_ready": "1",
+            "replica_offset": "88",
+            "replica_last_update_ms": "53",
+            "primary_offset": "0",
+            "replication_history_bytes": "0"
+          },
+          "ps": "   9940 21144  3.0\n   9954 30536 12.4\n"
+        },
+        {
+          "seconds": 75.976268302,
+          "writes": 22613,
+          "cache_set_get_pair_ms": {
+            "count": 4928,
+            "p50": 0.6457945000306609,
+            "p99": 1.9124929999634332,
+            "max": 17.88286800001515
+          },
+          "maintenance_seconds": 0.24609221400010028,
+          "primary": {
+            "aof_enabled": "1",
+            "aof_base_size": "1886278",
+            "aof_current_size": "1886305",
+            "aof_rewrite_in_progress": "0",
+            "aof_last_write_status": "ok",
+            "aof_buffer_length": "0",
+            "aof_encoded_offset": "2647945",
+            "aof_appended_offset": "2647945",
+            "aof_synced_offset": "2647945",
+            "aof_reply_offset": "2647945",
+            "aof_pending_fsync": "0",
+            "aof_pending_append_bytes": "0",
+            "aof_rewrite_dirty_keys": "0",
+            "aof_rewrite_dirty_bytes": "0",
+            "aof_rewrite_budget_aborts": "0",
+            "aof_rewrites": "2",
+            "aof_keys_at_last_rewrite": "1007"
+          },
+          "replica": {
+            "primary_epoch": "4f97d06336f6325474c9c76e80d72b5f",
+            "replica_epoch": "bc78983056b12f2ddb54d0ee4dc00040",
+            "replication_pending_keys": "0",
+            "replication_epoch_invalidated": "false",
+            "replication_protocol": "1",
+            "role": "replica",
+            "replica_ready": "1",
+            "replica_offset": "235",
+            "replica_last_update_ms": "72",
+            "primary_offset": "0",
+            "replication_history_bytes": "0"
+          },
+          "ps": "   9954 46192 12.0\n   9970 19632  5.4\n"
+        },
+        {
+          "seconds": 91.23196294800005,
+          "writes": 27474,
+          "cache_set_get_pair_ms": {
+            "count": 4861,
+            "p50": 0.6513739999718382,
+            "p99": 2.4796210000204155,
+            "max": 33.23664999993525
+          },
+          "maintenance_seconds": 0.2181677490000311,
+          "primary": {
+            "aof_enabled": "1",
+            "aof_base_size": "1886322",
+            "aof_current_size": "1886349",
+            "aof_rewrite_in_progress": "0",
+            "aof_last_write_status": "ok",
+            "aof_buffer_length": "0",
+            "aof_encoded_offset": "4284938",
+            "aof_appended_offset": "4284938",
+            "aof_synced_offset": "4284938",
+            "aof_reply_offset": "4284938",
+            "aof_pending_fsync": "0",
+            "aof_pending_append_bytes": "0",
+            "aof_rewrite_dirty_keys": "0",
+            "aof_rewrite_dirty_bytes": "0",
+            "aof_rewrite_budget_aborts": "0",
+            "aof_rewrites": "3",
+            "aof_keys_at_last_rewrite": "1007"
+          },
+          "replica": {
+            "primary_epoch": "13088c3983e369d9c5d0536df5b8fd7f",
+            "replica_epoch": "bc78983056b12f2ddb54d0ee4dc00040",
+            "replication_pending_keys": "0",
+            "replication_epoch_invalidated": "false",
+            "replication_protocol": "1",
+            "role": "replica",
+            "replica_ready": "1",
+            "replica_offset": "382",
+            "replica_last_update_ms": "54",
+            "primary_offset": "0",
+            "replication_history_bytes": "0"
+          },
+          "ps": "   9954 61104 11.9\n   9984 19844  5.7\n"
+        },
+        {
+          "seconds": 106.46017968299998,
+          "writes": 30419,
+          "cache_set_get_pair_ms": {
+            "count": 2945,
+            "p50": 0.6340219999856345,
+            "p99": 1.953538999941884,
+            "max": 15.727316000038627
+          },
+          "maintenance_seconds": 0.17877244399994652,
+          "primary": {
+            "aof_enabled": "1",
+            "aof_base_size": "1886256",
+            "aof_current_size": "1886256",
+            "aof_rewrite_in_progress": "0",
+            "aof_last_write_status": "ok",
+            "aof_buffer_length": "0",
+            "aof_encoded_offset": "334708",
+            "aof_appended_offset": "334708",
+            "aof_synced_offset": "334708",
+            "aof_reply_offset": "334708",
+            "aof_pending_fsync": "0",
+            "aof_pending_append_bytes": "0",
+            "aof_rewrite_dirty_keys": "0",
+            "aof_rewrite_dirty_bytes": "0",
+            "aof_rewrite_budget_aborts": "0",
+            "aof_rewrites": "1",
+            "aof_keys_at_last_rewrite": "1006"
+          },
+          "replica": {
+            "primary_epoch": "13088c3983e369d9c5d0536df5b8fd7f",
+            "replica_epoch": "4ee1d2ea29bae30a7c218527b3c20252",
+            "replication_pending_keys": "0",
+            "replication_epoch_invalidated": "false",
+            "replication_protocol": "1",
+            "role": "replica",
+            "replica_ready": "1",
+            "replica_offset": "29",
+            "replica_last_update_ms": "60",
+            "primary_offset": "0",
+            "replication_history_bytes": "0"
+          },
+          "ps": "   9984 19588  3.7\n   9999 25400 14.7\n"
+        }
+      ],
+      "faults": [
+        {
+          "worker": false,
+          "concurrent": false,
+          "fault": "RLIMIT_FSIZE",
+          "passed": true
+        },
+        {
+          "worker": true,
+          "concurrent": false,
+          "fault": "RLIMIT_FSIZE",
+          "passed": true
+        }
+      ],
+      "passed": true,
+      "manual_promotion": true,
+      "elapsed_seconds": 120.50784660900001
+    }
+  }
+}

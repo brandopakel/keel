@@ -171,6 +171,7 @@ func OpenAOF(path string) error {
 	// start again with it. Carrying them over would make a fresh log report
 	// rewrites it has never had.
 	aof.rewrites = 0
+	rewriteBudgetAborts = 0
 	nextAutoRewrite = time.Time{}
 	aof.lastKeys = 0
 	// Whatever is already on disk is the base the growth trigger measures
