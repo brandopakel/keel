@@ -124,7 +124,7 @@ jobs:
           gh release download v0.1.0-alpha.2 --repo "$GITHUB_REPOSITORY" --pattern "keel_v0.1.0-alpha.2_${TARGET_OS}_${TARGET_ARCH}.tar.gz*" --dir baseline-archive
           python3 scripts/check-archive.py --archive baseline-archive/*.tar.gz --expected-sha256 "$task_digest" --out baseline
       - name: Upgrade, rewrite, restart and backup rollback
-        run: python3 installed/scripts/check-upgrade.py --baseline baseline/keel --candidate installed/keel --out upgrade-evidence
+        run: python3 installed/scripts/check-upgrade.py --baseline baseline/keel --candidate installed/keel --out upgrade-evidence --concurrent
       - name: Documented client installation
         run: |
           python3 -m venv client-venv

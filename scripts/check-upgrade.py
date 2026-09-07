@@ -62,9 +62,12 @@ def check(args):
         'candidate_version': subprocess.check_output([args.candidate, '-version'], text=True).strip(),
         'cases': [],
     }
+    modes = ['sync', 'barrier', 'concurrent'] if args.concurrent else ['sync', 'barrier']
     for policy in ['no', 'everysec', 'always']:
-        for worker in [False, True]:
-            name = f'{policy}-worker-{worker}'
+        for mode in modes:
+            worker = mode != 'sync'
+            extra = ['-aof-concurrent-append'] if mode == 'concurrent' else []
+            name = f'{policy}-append-{mode}'
             directory = root / name
             assert not directory.exists(), f'use a fresh output directory: {directory}'
             directory.mkdir()
@@ -75,7 +78,7 @@ def check(args):
             backup = directory / 'rollback-alpha2.aof'
             shutil.copy2(data / 'store.aof', backup)
             backup_hash = sha256(backup)
-            with Server(args.candidate, data, policy=policy, async_append=worker) as candidate:
+            with Server(args.candidate, data, policy=policy, async_append=worker, extra=extra) as candidate:
                 assert snapshot(candidate.client) == expected, 'upgrade changed persisted state'
                 candidate.client.call('SET', 'string', 'alpha3')
                 candidate.client.call('INCRBY', 'integer', 8)
@@ -83,7 +86,7 @@ def check(args):
                 candidate.client.call('HSET', 'hash', 'field', 'candidate')
                 rewrite(candidate.client)
                 upgraded = snapshot(candidate.client)
-            with Server(args.candidate, data, policy=policy, async_append=worker) as restarted:
+            with Server(args.candidate, data, policy=policy, async_append=worker, extra=extra) as restarted:
                 assert snapshot(restarted.client) == upgraded, 'rewrite/restart changed state'
             rollback = directory / 'rollback'
             rollback.mkdir()
@@ -102,6 +105,7 @@ if __name__ == '__main__':
     parser.add_argument('--baseline', required=True)
     parser.add_argument('--candidate', required=True)
     parser.add_argument('--out', required=True)
+    parser.add_argument('--concurrent', action='store_true', help='also validate ordered concurrent append mode; candidate must support it')
     args = parser.parse_args()
     args.baseline = str(Path(args.baseline).resolve())
     args.candidate = str(Path(args.candidate).resolve())
