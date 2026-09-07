@@ -59,6 +59,52 @@ def fixture(library, verify_only):
                 expiry_key=key('expiry'), scan_keys=[key(x) for x in ('string', 'counter', 'marker')])
 
 
+
+def start_owned(command, env, password, phase_dir, log, attempts):
+    for attempt in range(3):
+        with socket.socket() as reservation:
+            reservation.bind(('127.0.0.1', 0))
+            port = reservation.getsockname()[1]
+        child_env = dict(env, KEEL_COMPAT_ADDR=f'127.0.0.1:{port}', KEEL_COMPAT_PASSWORD=password)
+        offset = log.tell()
+        server = subprocess.Popen(command + ['-port', str(port)], env=child_env, stdout=log, stderr=log)
+        deadline = time.monotonic()+10
+        try:
+            while True:
+                if server.poll() is not None:
+                    log.flush()
+                    with (phase_dir/'server.log').open('rb') as recorded:
+                        recorded.seek(offset)
+                        startup_log = recorded.read().decode(errors='replace').lower()
+                    if 'address already in use' in startup_log and attempt < 2:
+                        attempts.append(dict(port=port, outcome='address_in_use'))
+                        break
+                    raise RuntimeError('owned server exited during startup')
+                client = None
+                try:
+                    client = Client('127.0.0.1', port)
+                    if password:
+                        assert client.call('AUTH', password) == b'OK'
+                    assert client.call('PING') == b'PONG'
+                    if server.poll() is not None:
+                        continue
+                    attempts.append(dict(port=port, outcome='ready'))
+                    return server, child_env
+                except OSError:
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError('owned server did not listen')
+                    time.sleep(.02)
+                finally:
+                    if client is not None:
+                        client.close()
+        except BaseException:
+            if server.poll() is None:
+                server.kill()
+            server.wait()
+            raise
+        server.wait()
+    raise RuntimeError('owned server exhausted port retries')
+
 def run(args):
     args.out.mkdir(parents=True, exist_ok=False)
     report = dict(status='running', binary_sha256=sha256(args.bin), modes=[])
@@ -73,42 +119,22 @@ def run(args):
             mode_report = dict(mode=mode, authenticated=bool(password), phases=[])
             report['modes'].append(mode_report)
             for phase in range(1 if mode == 'off' else 3):
-                with socket.socket() as reservation:
-                    reservation.bind(('127.0.0.1', 0))
-                    port = reservation.getsockname()[1]
                 phase_dir = directory / str(phase)
                 phase_dir.mkdir()
-                command = [str(args.bin), '-host', '127.0.0.1', '-port', str(port)]
+                command = [str(args.bin), '-host', '127.0.0.1']
                 if mode != 'off':
                     command += ['-appendonly', '-aof-async-append', '-appendfsync', 'always',
                                 '-appendfilename', str(directory/'store.aof'),
                                 '-requirepass-env', 'KEEL_COMPAT_PASSWORD']
                     if mode == 'concurrent':
                         command += ['-aof-concurrent-append']
-                child_env = dict(env, KEEL_COMPAT_ADDR=f'127.0.0.1:{port}', KEEL_COMPAT_PASSWORD=password)
-                phase_report = dict(phase=phase, clients=[])
+                phase_report = dict(phase=phase, clients=[], startup_attempts=[])
                 mode_report['phases'].append(phase_report)
                 with (phase_dir/'server.log').open('wb') as log:
-                    server = subprocess.Popen(command, env=child_env, stdout=log, stderr=log)
+                    server = None
                     try:
-                        deadline = time.monotonic()+10
-                        while True:
-                            if server.poll() is not None:
-                                raise RuntimeError('owned server exited')
-                            client = None
-                            try:
-                                client = Client('127.0.0.1', port)
-                                if password:
-                                    assert client.call('AUTH', password) == b'OK'
-                                assert client.call('PING') == b'PONG'
-                                break
-                            except OSError:
-                                if time.monotonic() >= deadline:
-                                    raise TimeoutError('owned server did not listen')
-                                time.sleep(.02)
-                            finally:
-                                if client is not None:
-                                    client.close()
+                        server, child_env = start_owned(command, env, password, phase_dir, log,
+                                                        phase_report['startup_attempts'])
                         for library in LIBRARIES:
                             path = phase_dir/f'{library}.fixture.json'
                             path.write_text(json.dumps(fixture(library, phase > 0)))
@@ -134,7 +160,7 @@ def run(args):
                         if server.wait(timeout=10):
                             raise RuntimeError('owned server failed shutdown')
                     finally:
-                        if server.poll() is None:
+                        if server is not None and server.poll() is None:
                             server.kill()
                             server.wait()
         report['status'] = 'passed'

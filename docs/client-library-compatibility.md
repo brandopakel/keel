@@ -50,3 +50,8 @@ blocking commands, TLS and every high-level client method are outside this
 matrix. Clean restart checks complement the separate crash/failure suites;
 they do not establish application compatibility or a durability guarantee for
 other fsync policies. Other application traces remain useful pilot work.
+
+The final startup review adds up to three attempts for a confirmed address-in-use
+startup exit, recording each port/outcome in the phase report. Other startup
+failures remain errors, and no client commands or partially executed fixtures
+are retried. All 35 invocations pass again with this startup helper.
