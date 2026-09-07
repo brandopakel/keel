@@ -58,10 +58,12 @@ func BenchmarkCollectionMapRetention(b *testing.B) {
 						started := time.Now()
 						if h != nil {
 							next := make(map[string]string, h.Len())
-							for key, value := range h.fields {
+							h.Visit(func(key, value string) bool {
 								next[key] = value
-							}
+								return true
+							})
 							h.fields = next
+							h.large = nil
 						} else {
 							next := make(map[string]float64, z.Len())
 							for key, value := range z.dict {
