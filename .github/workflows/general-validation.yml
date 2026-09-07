@@ -33,11 +33,38 @@ on:
         description: Run separate candidate CPU/heap diagnostics after comparison
         type: boolean
         default: false
+      append_diagnostics:
+        description: Optional exact runtime SHA for matched append-policy comparisons and separate profiles
+        type: string
+        default: ''
+      capacity:
+        description: Optional JSON configuration for scheduled capacity and large recovery
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
 jobs:
+  append_costs:
+    if: github.event_name == 'workflow_dispatch' && inputs.append_diagnostics != ''
+    uses: ./.github/workflows/append-diagnostics.yml
+    with:
+      candidate: ${{ inputs.append_diagnostics }}
+
+  extended:
+    if: github.event_name == 'workflow_dispatch' && inputs.capacity != ''
+    uses: ./.github/workflows/capacity-validation.yml
+    with:
+      candidate: ${{ fromJSON(inputs.capacity).candidate }}
+      baseline: ${{ fromJSON(inputs.capacity).baseline || '9f155872c60b07c0793e3653bd30d1fe96b8cb59' }}
+      cases: ${{ fromJSON(inputs.capacity).cases || 'read-64,balanced-1k,expiry-storm,large-1m,large-hash,large-list,mixed-tenants' }}
+      rates: ${{ fromJSON(inputs.capacity).rates || '1000,10000,50000,100000,150000' }}
+      seconds: ${{ fromJSON(inputs.capacity).seconds || 10 }}
+      repetitions: ${{ fromJSON(inputs.capacity).repetitions || 2 }}
+      policy: ${{ fromJSON(inputs.capacity).policy || 'off' }}
+      append_mode: ${{ fromJSON(inputs.capacity).append_mode || 'concurrent' }}
+
   broad:
     name: Redis differential and native workload smoke
     runs-on: ubuntu-latest

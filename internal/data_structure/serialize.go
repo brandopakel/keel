@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 )
 
 // Serialising the structures that no command can rebuild.
@@ -95,10 +96,28 @@ func (r *cursor) bytes() []byte {
 	return out
 }
 
+// MarshalSize is the exact existing wire size, available before serialization.
+// AppendMarshal appends that representation without an intermediate payload.
+func (c *CMS) MarshalSize() int          { return 16 + 4*len(c.counter) }
+func (m *Morris) MarshalSize() int       { return 24 + len(m.counters) }
+func (h *HLL) MarshalSize() int          { return 8 + hllDenseSize }
+func (c *CuckooFilter) MarshalSize() int { return 48 + 2*len(c.buckets) }
+func (s *SBChain) MarshalSize() int {
+	size := 24
+	for _, link := range s.filters {
+		size += 52 + len(link.bloom.bf)
+	}
+	return size
+}
+
 // --- Count-Min sketch ---
 
 func (c *CMS) Marshal() []byte {
-	w := &buf{}
+	return c.AppendMarshal(make([]byte, 0, c.MarshalSize()))
+}
+
+func (c *CMS) AppendMarshal(dst []byte) []byte {
+	w := &buf{b: dst}
 	w.u32(c.width)
 	w.u32(c.depth)
 	w.u64(c.totalCount)
@@ -127,7 +146,11 @@ func UnmarshalCMS(p []byte) (*CMS, error) {
 // --- Morris counter ---
 
 func (m *Morris) Marshal() []byte {
-	w := &buf{}
+	return m.AppendMarshal(make([]byte, 0, m.MarshalSize()))
+}
+
+func (m *Morris) AppendMarshal(dst []byte) []byte {
+	w := &buf{b: dst}
 	w.u32(m.width)
 	w.u32(m.depth)
 	w.u64(m.totalCount)
@@ -173,9 +196,17 @@ func checkTable(w, d uint64, remaining int, cellBytes uint64) error {
 // --- HyperLogLog ---
 
 func (h *HLL) Marshal() []byte {
+	return h.AppendMarshal(make([]byte, 0, h.MarshalSize()))
+}
+
+func (h *HLL) AppendMarshal(dst []byte) []byte {
 	// Keep the alpha dense wire format byte-for-byte, without expanding the
 	// live sketch or allocating an intermediate dense buffer.
-	body := make([]byte, 8+hllDenseSize)
+	start := len(dst)
+	dst = slices.Grow(dst, h.MarshalSize())
+	dst = dst[:start+h.MarshalSize()]
+	clear(dst[start:])
+	body := dst[start:]
 	binary.LittleEndian.PutUint64(body, hllDenseSize)
 	if h.regs != nil {
 		copy(body[8:], h.regs)
@@ -185,7 +216,7 @@ func (h *HLL) Marshal() []byte {
 			packed.setRegister(int(entry>>hllBits), uint8(entry&hllRegisterMax))
 		}
 	}
-	return body
+	return dst
 }
 
 func UnmarshalHLL(p []byte) (*HLL, error) {
@@ -229,7 +260,11 @@ func UnmarshalHLL(p []byte) (*HLL, error) {
 // --- Cuckoo filter ---
 
 func (c *CuckooFilter) Marshal() []byte {
-	w := &buf{}
+	return c.AppendMarshal(make([]byte, 0, c.MarshalSize()))
+}
+
+func (c *CuckooFilter) AppendMarshal(dst []byte) []byte {
+	w := &buf{b: dst}
 	w.u64(c.numBuckets)
 	w.u64(c.inserted)
 	w.u64(c.deleted)
@@ -283,7 +318,11 @@ func UnmarshalCuckoo(p []byte) (*CuckooFilter, error) {
 // --- Scalable Bloom filter ---
 
 func (s *SBChain) Marshal() []byte {
-	w := &buf{}
+	return s.AppendMarshal(make([]byte, 0, s.MarshalSize()))
+}
+
+func (s *SBChain) AppendMarshal(dst []byte) []byte {
+	w := &buf{b: dst}
 	w.u64(s.size)
 	w.u64(s.growthFactor)
 	w.u64(uint64(len(s.filters)))
