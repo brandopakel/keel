@@ -130,15 +130,14 @@ func globStep(remaining *int) bool {
 	*remaining--
 	return true
 }
-func matchClass(pattern string, at int, c byte) (int, bool) {
-	next, matched, _ := matchClassBounded(pattern, at, c, nil)
-	return next, matched
-}
 func matchClassBounded(pattern string, at int, c byte, remaining *int) (int, bool, bool) {
 	p := at + 1
 
 	negate := p < len(pattern) && pattern[p] == '^'
 	if negate {
+		if !globStep(remaining) {
+			return p, false, true
+		}
 		p++
 	}
 
@@ -156,6 +155,9 @@ func matchClassBounded(pattern string, at int, c byte, remaining *int) (int, boo
 			return p, match, false
 
 		case pattern[p] == '\\' && p+1 < len(pattern):
+			if !globStep(remaining) {
+				return p, false, true
+			}
 			p++
 			if pattern[p] == c {
 				match = true
@@ -175,6 +177,9 @@ func matchClassBounded(pattern string, at int, c byte, remaining *int) (int, boo
 		// shell would call that trailing '-' a literal. Checked against Redis
 		// 8.10.1 rather than reasoned about, because the two disagree.
 		case p+2 < len(pattern) && pattern[p+1] == '-':
+			if !globStep(remaining) || !globStep(remaining) {
+				return p, false, true
+			}
 			lo, hi := pattern[p], pattern[p+2]
 			if lo > hi {
 				lo, hi = hi, lo

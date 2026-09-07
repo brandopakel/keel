@@ -148,6 +148,8 @@ class FailoverModelTests(unittest.TestCase):
         first = s.issued[1]
         s = promote(s, 2)
         s = deliver_activation(s, 1, first, 0)
+        self.assertTrue(s.active[1], 'delayed local work must not assume global knowledge')
+        self.assertTrue(s.fenced[1], 'the old holder remains externally isolated')
         self.assertEqual([2], s.writers())
 
     def test_old_boot_and_partial_snapshot_cannot_activate(self):

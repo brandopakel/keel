@@ -121,6 +121,24 @@ masks do not isolate physical core resources.
 
 All integrated `cd2b740` PR CI jobs passed, including Go 1.26/stable on Linux and
 macOS, race tests, Docker persistence/restart, Redis differential checks, native
-Linux ARM64/Intel Mac recovery, and ext4/XFS checks. The matched comparison of
-that revision against current develop `db4fd00` is still running. The adoption
-review remains open pending that result and the targeted tail investigation.
+Linux ARM64/Intel Mac recovery, and ext4/XFS checks. The [matched comparison](https://github.com/brandopakel/keel/actions/runs/34096759453)
+of that revision against develop `db4fd00` completed all 24 workload and nine
+memory cases. Results and hashes are in
+`bench/results/traversal-integrated-matched-2026-09-07.json.gz`.
+
+Integrated paired throughput medians span 0.974–1.037. The 100k-key case was
+0.996 (pairs 1.009/0.975/0.996), pipeline-16 was 1.037
+(1.037/1.047/1.016), and the 1 MiB case was 1.013
+(0.997/1.013/1.051), with median p99 7.839 versus 5.503 ms. The first run's
+100k-key and 1 MiB tail regressions therefore did not repeat in this comparison.
+This does not erase the earlier evidence or establish a universal speedup.
+
+Million-key RSS medians were 219.96 versus 217.65 MiB. The empty-process sample
+went the other direction, 7.37 versus 9.43 MiB, while the 256-idle-client case
+was 7.39 versus 7.45 MiB. These short RSS windows include Go runtime/GC variation;
+they do not measure a stable per-connection increment. Large-list reads again
+flagged generator CPU pressure in one repetition per arm.
+
+The longer seven-repetition targeted run on disjoint exposed CPU core groups
+is still running. Adoption remains under review until those tail and throughput
+results are assessed.
