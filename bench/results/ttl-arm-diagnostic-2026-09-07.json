@@ -1,0 +1,106 @@
+{
+  "workflow_run": "https://github.com/brandopakel/keel/actions/runs/34102805554",
+  "source_revision": "c1e5d44",
+  "runtime_changed_for_diagnostics": false,
+  "reports": [
+    {
+      "status": "passed",
+      "platform": "Linux-6.17.0-1022-azure-aarch64-with-glibc2.39",
+      "binary_sha256": "99330dcf176f1bca90a47bd122a55f9eed72ddb27a4f4cda27a8446abc4e2f95",
+      "harness_sha256": "3eed130908181abcb4f9c271a0c5d971464c201d26126f888f792c4fa234fc55",
+      "seconds_requested": 300.0,
+      "started_utc": "2026-09-07T08:54:02Z",
+      "primary_crash_every": 3,
+      "concurrent": true,
+      "replication_protocol": 2,
+      "checkpoint_count": 18,
+      "acknowledged_writes": 95413,
+      "primary_crash_recoveries": 5,
+      "replica_crash_recoveries": 12,
+      "faults": [
+        {
+          "worker": false,
+          "concurrent": false,
+          "fault": "RLIMIT_FSIZE",
+          "passed": true
+        },
+        {
+          "worker": true,
+          "concurrent": true,
+          "fault": "RLIMIT_FSIZE",
+          "passed": true
+        }
+      ],
+      "passed": true,
+      "manual_promotion": true,
+      "elapsed_seconds": 300.63511068599996,
+      "run": "run-1"
+    },
+    {
+      "status": "passed",
+      "platform": "Linux-6.17.0-1022-azure-aarch64-with-glibc2.39",
+      "binary_sha256": "99330dcf176f1bca90a47bd122a55f9eed72ddb27a4f4cda27a8446abc4e2f95",
+      "harness_sha256": "3eed130908181abcb4f9c271a0c5d971464c201d26126f888f792c4fa234fc55",
+      "seconds_requested": 300.0,
+      "started_utc": "2026-09-07T08:59:03Z",
+      "primary_crash_every": 3,
+      "concurrent": true,
+      "replication_protocol": 2,
+      "checkpoint_count": 18,
+      "acknowledged_writes": 96811,
+      "primary_crash_recoveries": 5,
+      "replica_crash_recoveries": 12,
+      "faults": [
+        {
+          "worker": false,
+          "concurrent": false,
+          "fault": "RLIMIT_FSIZE",
+          "passed": true
+        },
+        {
+          "worker": true,
+          "concurrent": true,
+          "fault": "RLIMIT_FSIZE",
+          "passed": true
+        }
+      ],
+      "passed": true,
+      "manual_promotion": true,
+      "elapsed_seconds": 300.659833887,
+      "run": "run-2"
+    },
+    {
+      "status": "passed",
+      "platform": "Linux-6.17.0-1022-azure-aarch64-with-glibc2.39",
+      "binary_sha256": "99330dcf176f1bca90a47bd122a55f9eed72ddb27a4f4cda27a8446abc4e2f95",
+      "harness_sha256": "3eed130908181abcb4f9c271a0c5d971464c201d26126f888f792c4fa234fc55",
+      "seconds_requested": 300.0,
+      "started_utc": "2026-09-07T09:04:04Z",
+      "primary_crash_every": 3,
+      "concurrent": true,
+      "replication_protocol": 2,
+      "checkpoint_count": 18,
+      "acknowledged_writes": 96881,
+      "primary_crash_recoveries": 5,
+      "replica_crash_recoveries": 12,
+      "faults": [
+        {
+          "worker": false,
+          "concurrent": false,
+          "fault": "RLIMIT_FSIZE",
+          "passed": true
+        },
+        {
+          "worker": true,
+          "concurrent": true,
+          "fault": "RLIMIT_FSIZE",
+          "passed": true
+        }
+      ],
+      "passed": true,
+      "manual_promotion": true,
+      "elapsed_seconds": 300.678040798,
+      "run": "run-3"
+    }
+  ]
+}

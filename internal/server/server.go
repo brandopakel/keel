@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -40,7 +41,7 @@ const maxDirectRead = 1 << 20
 // maxQueryBuffer bounds incomplete request bytes per connection.
 var maxQueryBuffer = 16 * 1024 * 1024
 
-const maxOutputBuffer = 64 << 20
+const maxOutputBuffer = core.MaxReplyBytes
 const maxRetainedClientBytes = 256 << 20
 
 // One aggregate is not enough on its own. Requests and replies share the same
@@ -139,6 +140,8 @@ type client struct {
 	lastProgress               time.Time
 	closeAfterWrite            bool
 	authenticated              bool
+	interestKnown              bool
+	interest                   io_multiplexing.Operation
 	accountedInput             int
 	accountedReply             int
 	outBytes                   int
@@ -276,6 +279,24 @@ func (c *client) readCommands(scratch []byte) ([]*core.Command, error) {
 	return cmds, nil
 }
 
+// Readiness is level-triggered. Re-register only when the desired operation
+// changes; an unchanged registration otherwise costs two epoll_ctl/kevent calls
+// per successful reply. State belongs to this connection, not its reusable fd.
+// Linux has matched adoption evidence. Darwin keeps forwarding registrations
+// while the Intel liveness discrepancy under concurrent test load is unresolved.
+const cacheClientInterest = runtime.GOOS == "linux"
+
+func (c *client) setInterest(mux io_multiplexing.IOMultiplexer, op io_multiplexing.Operation) error {
+	if cacheClientInterest && c.interestKnown && c.interest == op {
+		return nil
+	}
+	if err := mux.Monitor(io_multiplexing.Event{Fd: c.fd, Op: op}); err != nil {
+		return err
+	}
+	c.interestKnown, c.interest = true, op
+	return nil
+}
+
 // closeClient tears down a connection and drops everything held for it.
 func closeClient(c *client) {
 	retainedClientBytes -= c.accountedInput + c.accountedReply
@@ -398,7 +419,7 @@ func acceptClient(serverFD int, mux io_multiplexing.IOMultiplexer) (*client, boo
 		syscall.Close(connFD)
 		return nil, false
 	}
-	return &client{fd: connFD, lastProgress: time.Now()}, true
+	return &client{fd: connFD, lastProgress: time.Now(), interestKnown: true, interest: io_multiplexing.OpRead}, true
 }
 
 // replyBuffer collects the replies produced from one read so they can be sent
@@ -623,7 +644,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 						if len(c.out) > 0 {
 							op = io_multiplexing.OpWrite
 						}
-						if err := ioMultiplexer.Monitor(io_multiplexing.Event{Fd: fd, Op: op}); err != nil {
+						if err := c.setInterest(ioMultiplexer, op); err != nil {
 							closeClient(c)
 						}
 					}
@@ -653,7 +674,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 					}
 				default:
 					if c := clients[ev.Fd]; c != nil {
-						if err := ioMultiplexer.Monitor(io_multiplexing.Event{Fd: c.fd, Op: io_multiplexing.OpNone}); err != nil {
+						if err := c.setInterest(ioMultiplexer, io_multiplexing.OpNone); err != nil {
 							closeClient(c)
 						} else {
 							paused[c.fd] = c
@@ -663,6 +684,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 			}
 			if time.Now().After(nextMaintenance) {
 				nextMaintenance = time.Now().Add(time.Second)
+				core.MaintainMemory()
 				for _, c := range clients {
 					if time.Since(c.lastProgress) > 30*time.Second && (len(c.out) > 0 || c.buf != nil) {
 						closeClient(c)
@@ -825,7 +847,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 					closeClient(c)
 					continue
 				}
-				if err := ioMultiplexer.Monitor(io_multiplexing.Event{Fd: c.fd, Op: io_multiplexing.OpNone}); err != nil {
+				if err := c.setInterest(ioMultiplexer, io_multiplexing.OpNone); err != nil {
 					closeClient(c)
 					continue
 				}
@@ -867,6 +889,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 		now := time.Now()
 		if !now.Before(nextMaintenance) {
 			nextMaintenance = now.Add(time.Second)
+			core.MaintainMemory()
 			for _, c := range clients {
 				if (len(c.out) > 0 || c.buf != nil || c.appendDeferred) && now.Sub(c.lastProgress) > 30*time.Second {
 					closeClient(c)
@@ -1040,7 +1063,7 @@ func flushClientReplies(pool *ioPool, ioMultiplexer io_multiplexing.IOMultiplexe
 				c.outBytes = cap(c.out)
 				c.inArena = false
 			}
-			if err := ioMultiplexer.Monitor(io_multiplexing.Event{Fd: c.fd, Op: io_multiplexing.OpWrite}); err != nil {
+			if err := c.setInterest(ioMultiplexer, io_multiplexing.OpWrite); err != nil {
 				closeClient(c)
 				continue
 			}
@@ -1053,7 +1076,7 @@ func flushClientReplies(pool *ioPool, ioMultiplexer io_multiplexing.IOMultiplexe
 				closeClient(c)
 				continue
 			}
-			if err := ioMultiplexer.Monitor(io_multiplexing.Event{Fd: c.fd, Op: io_multiplexing.OpRead}); err != nil {
+			if err := c.setInterest(ioMultiplexer, io_multiplexing.OpRead); err != nil {
 				closeClient(c)
 				continue
 			}

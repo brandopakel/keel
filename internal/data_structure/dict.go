@@ -26,6 +26,8 @@ type Dict struct {
 	// belonged to, which is exactly what a cycle sampling for expired keys
 	// needs in order to delete one.
 	expiredDictStore map[string]uint64
+	expiryPeak       int
+	expiryCompaction *expiryCompaction
 
 	// memUsed is the estimated bytes held, maintained incrementally: totalling
 	// it on demand would be O(n) and a budget check runs on every write.
@@ -33,7 +35,7 @@ type Dict struct {
 }
 
 func CreateDict() *Dict {
-	return &Dict{expiredDictStore: map[string]uint64{}}
+	return &Dict{}
 }
 
 // NewObj builds a value for the dictionary.
@@ -96,7 +98,14 @@ func (d *Dict) SetExpiryAt(k string, atMs uint64) {
 	if _, existed := d.expiredDictStore[k]; !existed {
 		d.memUsed += expiryOverhead
 	}
+	if d.expiredDictStore == nil {
+		d.expiredDictStore = make(map[string]uint64)
+	}
 	d.expiredDictStore[k] = atMs
+	if d.expiryCompaction != nil {
+		d.expiryCompaction.next[k] = atMs
+	}
+	d.expiryPeak = max(d.expiryPeak, len(d.expiredDictStore))
 	EnforceLimits()
 }
 
@@ -145,7 +154,7 @@ func (d *Dict) Put(k string, obj *Obj) {
 	// A write replaces the value and, with it, any expiry the key had. That is
 	// Redis's rule for SET without KEEPTTL, and it is also what stops the
 	// expiry table growing an entry per overwrite.
-	delete(d.expiredDictStore, k)
+	d.dropExpiry(k)
 
 	Touch(&obj.Access)
 	d.dictStore.set(k, *obj)
@@ -214,7 +223,7 @@ func (d *Dict) Del(k string) bool {
 	}
 	d.memUsed -= d.entryBytes(k, obj)
 	d.dictStore.del(k)
-	delete(d.expiredDictStore, k)
+	d.dropExpiry(k)
 	return true
 }
 
@@ -264,7 +273,21 @@ func (d *Dict) ClearExpiry(key string) bool {
 	if _, ok := d.expiredDictStore[key]; !ok {
 		return false
 	}
-	delete(d.expiredDictStore, key)
+	d.dropExpiry(key)
 	d.memUsed -= expiryOverhead
 	return true
+}
+
+// Go maps keep capacity after deletion. Release an emptied TTL table even when
+// persistent keys remain, so one past expiry burst is not retained forever.
+func (d *Dict) dropExpiry(key string) {
+	delete(d.expiredDictStore, key)
+	if d.expiryCompaction != nil {
+		delete(d.expiryCompaction.next, key)
+	}
+	if len(d.expiredDictStore) == 0 && d.expiryPeak >= expiryReleaseThreshold {
+		d.expiredDictStore = nil
+		d.expiryPeak = 0
+		d.expiryCompaction = nil
+	}
 }

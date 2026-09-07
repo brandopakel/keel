@@ -95,19 +95,12 @@ func cmdHMGET(args []string) []byte {
 	}
 	h, ok := hashFor(args[0])
 
-	out := make([]interface{}, 0, len(args)-1)
-	for _, field := range args[1:] {
+	return encodeLookupArray(len(args)-1, func(i int) (string, bool) {
 		if !ok {
-			out = append(out, nil)
-			continue
+			return "", false
 		}
-		if value, has := h.Get(field); has {
-			out = append(out, value)
-		} else {
-			out = append(out, nil)
-		}
-	}
-	return Encode(out, false)
+		return h.Get(args[i+1])
+	})
 }
 
 func cmdHDEL(args []string) []byte {
@@ -155,7 +148,7 @@ func cmdHKEYS(args []string) []byte {
 	if !ok {
 		return constant.RespEmptyArray
 	}
-	return Encode(h.Fields(), false)
+	return hashReply(h, true, false)
 }
 
 func cmdHVALS(args []string) []byte {
@@ -166,7 +159,7 @@ func cmdHVALS(args []string) []byte {
 	if !ok {
 		return constant.RespEmptyArray
 	}
-	return Encode(h.Values(), false)
+	return hashReply(h, false, true)
 }
 
 // cmdHGETALL answers a flat array of field, value, field, value.
@@ -182,12 +175,7 @@ func cmdHGETALL(args []string) []byte {
 		return constant.RespEmptyArray
 	}
 
-	fields, values := h.Entries()
-	flat := make([]string, 0, 2*len(fields))
-	for i, f := range fields {
-		flat = append(flat, f, values[i])
-	}
-	return Encode(flat, false)
+	return hashReply(h, true, true)
 }
 
 // cmdHINCRBY adds to a field, treating a missing key or field as zero.

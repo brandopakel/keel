@@ -1,0 +1,55 @@
+Baseline a38d75802e06eade95d6b2c2045ddc9fe8acabf4; candidate this commit
+
+/tmp/keel-lookup-before.txt
+=== RUN   TestLookupCompactionRecoversPartlyOccupiedTable
+=== RUN   TestLookupCompactionRecoversPartlyOccupiedTable/string
+    lookup_compaction_test.go:38: retained=2788448 after=2788448 recovered=0
+    lookup_compaction_test.go:39: 
+        	Error Trace:	/Users/brandopakel/keel-lookup-compaction/internal/data_structure/lookup_compaction_test.go:39
+        	Error:      	"0" is not greater than "1048576"
+        	Test:       	TestLookupCompactionRecoversPartlyOccupiedTable/string
+=== RUN   TestLookupCompactionRecoversPartlyOccupiedTable/collection
+    lookup_compaction_test.go:38: retained=2794056 after=2794056 recovered=0
+    lookup_compaction_test.go:39: 
+        	Error Trace:	/Users/brandopakel/keel-lookup-compaction/internal/data_structure/lookup_compaction_test.go:39
+        	Error:      	"0" is not greater than "1048576"
+        	Test:       	TestLookupCompactionRecoversPartlyOccupiedTable/collection
+--- FAIL: TestLookupCompactionRecoversPartlyOccupiedTable (0.03s)
+    --- FAIL: TestLookupCompactionRecoversPartlyOccupiedTable/string (0.02s)
+    --- FAIL: TestLookupCompactionRecoversPartlyOccupiedTable/collection (0.02s)
+FAIL
+FAIL	github.com/brandopakel/keel/internal/data_structure	0.337s
+FAIL
+
+/tmp/keel-lookup-regressions.txt
+=== RUN   TestLookupCompactionRecoversPartlyOccupiedTable
+=== RUN   TestLookupCompactionRecoversPartlyOccupiedTable/string
+    lookup_compaction_test.go:40: retained=2779656 after=452488 recovered=2327168
+=== RUN   TestLookupCompactionRecoversPartlyOccupiedTable/collection
+    lookup_compaction_test.go:40: retained=2785696 after=458304 recovered=2327392
+--- PASS: TestLookupCompactionRecoversPartlyOccupiedTable (0.04s)
+    --- PASS: TestLookupCompactionRecoversPartlyOccupiedTable/string (0.02s)
+    --- PASS: TestLookupCompactionRecoversPartlyOccupiedTable/collection (0.02s)
+=== RUN   TestLookupCompactionMirrorsMutationsAndPreservesSlots
+--- PASS: TestLookupCompactionMirrorsMutationsAndPreservesSlots (0.00s)
+=== RUN   TestLookupCompactionStartBoundAndRegrowthCancellation
+--- PASS: TestLookupCompactionStartBoundAndRegrowthCancellation (0.02s)
+PASS
+ok  	github.com/brandopakel/keel/internal/data_structure	0.351s
+=== RUN   TestMemoryMaintenancePreservesReplicaKeysAndExpiry
+--- PASS: TestMemoryMaintenancePreservesReplicaKeysAndExpiry (0.00s)
+PASS
+ok  	github.com/brandopakel/keel/internal/core	0.432s
+
+/tmp/keel-lookup-full.txt
+ok  	github.com/brandopakel/keel/cmd/keel	9.006s
+?   	github.com/brandopakel/keel/internal/config	[no test files]
+?   	github.com/brandopakel/keel/internal/constant	[no test files]
+ok  	github.com/brandopakel/keel/internal/core	26.512s
+ok  	github.com/brandopakel/keel/internal/core/io_multiplexing	0.947s
+ok  	github.com/brandopakel/keel/internal/data_structure	4.717s
+ok  	github.com/brandopakel/keel/internal/server	1.478s
+
+/tmp/keel-lookup-race.txt
+ok  	github.com/brandopakel/keel/internal/data_structure	2.212s
+ok  	github.com/brandopakel/keel/internal/core	1.286s

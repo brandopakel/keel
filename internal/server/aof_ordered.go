@@ -88,7 +88,7 @@ func (q *orderedAppend) admit(c *client, mux io_multiplexing.IOMultiplexer) bool
 		}
 	}
 	q.drain = true
-	if err := mux.Monitor(io_multiplexing.Event{Fd: c.fd, Op: io_multiplexing.OpNone}); err != nil {
+	if err := c.setInterest(mux, io_multiplexing.OpNone); err != nil {
 		closeClient(c)
 		return false
 	}
@@ -114,7 +114,7 @@ func (q *orderedAppend) gate(writable []*client, arena *replyArena, mux io_multi
 			closeClient(c)
 			continue
 		}
-		if err := mux.Monitor(io_multiplexing.Event{Fd: c.fd, Op: io_multiplexing.OpNone}); err != nil {
+		if err := c.setInterest(mux, io_multiplexing.OpNone); err != nil {
 			closeClient(c)
 			continue
 		}

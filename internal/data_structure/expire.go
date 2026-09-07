@@ -2,6 +2,10 @@ package data_structure
 
 import "time"
 
+// Keep small TTL tables reusable for hot single-key overwrite workloads. Large
+// emptied tables release their old capacity after a burst.
+const expiryReleaseThreshold = 256
+
 // Active expiry.
 //
 // A key with a TTL used to go away only when something next looked at it. That

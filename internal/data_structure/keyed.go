@@ -12,10 +12,12 @@ type Sized interface{ MemUsage() uint64 }
 // stores were bare maps, invisible to both the memory budget and to eviction,
 // so a keyspace full of 12KB sketches could run past maxmemory unchecked.
 type Keyed[T Sized] struct {
-	name     string
-	items    keyMap[keyedEntry[T]]
-	memUsed  uint64
-	expiries map[string]uint64
+	name             string
+	items            keyMap[keyedEntry[T]]
+	memUsed          uint64
+	expiries         map[string]uint64
+	expiryPeak       int
+	expiryCompaction *expiryCompaction
 }
 
 type keyedEntry[T Sized] struct {
@@ -28,7 +30,7 @@ type keyedEntry[T Sized] struct {
 }
 
 func NewKeyed[T Sized](name string) *Keyed[T] {
-	return &Keyed[T]{name: name, expiries: make(map[string]uint64)}
+	return &Keyed[T]{name: name}
 }
 
 // entryBytes charges the value, the key, and the same per-entry overhead the
@@ -94,7 +96,7 @@ func (k *Keyed[T]) Put(key string, value T) {
 		k.memUsed -= old.bytes
 	}
 
-	delete(k.expiries, key)
+	k.dropExpiry(key)
 	e := &keyedEntry[T]{value: value, access: NewAccess()}
 	e.bytes = k.entryBytes(key, value)
 	Touch(&e.access)
@@ -172,7 +174,7 @@ func (k *Keyed[T]) Delete(key string) bool {
 	}
 	k.memUsed -= e.bytes
 	k.items.del(key)
-	delete(k.expiries, key)
+	k.dropExpiry(key)
 	return true
 }
 
@@ -187,14 +189,21 @@ func (k *Keyed[T]) SetExpiryAt(key string, at uint64) {
 		e.bytes += expiryOverhead
 		k.memUsed += expiryOverhead
 	}
+	if k.expiries == nil {
+		k.expiries = make(map[string]uint64)
+	}
 	k.expiries[key] = at
+	if k.expiryCompaction != nil {
+		k.expiryCompaction.next[key] = at
+	}
+	k.expiryPeak = max(k.expiryPeak, len(k.expiries))
 	EnforceLimits()
 }
 func (k *Keyed[T]) ClearExpiry(key string) bool {
 	if _, ok := k.expiries[key]; !ok {
 		return false
 	}
-	delete(k.expiries, key)
+	k.dropExpiry(key)
 	if e, ok := k.items.getPtr(key); ok {
 		e.bytes -= expiryOverhead
 	}
@@ -219,4 +228,16 @@ func (k *Keyed[T]) ActiveExpire(samples int) (examined, expired int) {
 		}
 	}
 	return
+}
+
+func (k *Keyed[T]) dropExpiry(key string) {
+	delete(k.expiries, key)
+	if k.expiryCompaction != nil {
+		delete(k.expiryCompaction.next, key)
+	}
+	if len(k.expiries) == 0 && k.expiryPeak >= expiryReleaseThreshold {
+		k.expiries = nil
+		k.expiryPeak = 0
+		k.expiryCompaction = nil
+	}
 }
