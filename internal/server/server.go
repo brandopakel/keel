@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -281,8 +282,12 @@ func (c *client) readCommands(scratch []byte) ([]*core.Command, error) {
 // Readiness is level-triggered. Re-register only when the desired operation
 // changes; an unchanged registration otherwise costs two epoll_ctl/kevent calls
 // per successful reply. State belongs to this connection, not its reusable fd.
+// Linux has matched adoption evidence. Darwin keeps forwarding registrations
+// while the Intel liveness discrepancy under concurrent test load is unresolved.
+const cacheClientInterest = runtime.GOOS == "linux"
+
 func (c *client) setInterest(mux io_multiplexing.IOMultiplexer, op io_multiplexing.Operation) error {
-	if c.interestKnown && c.interest == op {
+	if cacheClientInterest && c.interestKnown && c.interest == op {
 		return nil
 	}
 	if err := mux.Monitor(io_multiplexing.Event{Fd: c.fd, Op: op}); err != nil {

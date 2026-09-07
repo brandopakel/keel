@@ -43,7 +43,7 @@ of baseline with identical 0.063 ms p99; large-list throughput was 0.996 with
 6.015/6.143 ms p99. The short run's candidate-specific large-value tail increase
 did not repeat, while both arms retained a substantial large-value tail.
 
-Adoption is supported by the repeated small-workload improvement, preserved
+Linux adoption is supported by the repeated small-workload improvement, preserved
 readiness transitions, full correctness checks and no repeat material regression
 in the other targeted workloads. Individual samples and unchanged/slower cases
 remain in the evidence; they are not averaged into a universal gain.
@@ -74,3 +74,14 @@ The full automatic PR job on the same c3e1049 revision passed. This discrepancy
 remains unresolved and blocks adopting this branch on green status alone.
 The second full failed job is retained in
 `bench/results/readiness-intel-diagnostic-failure-2026-09-07.log`.
+
+The final runtime limits registration caching to Linux. The controlled Intel
+comparison in 34114096159 passed baseline at package parallelism 1 and 4 and
+candidate at 1, but candidate at 4 failed the retained-reply setup again. Sampling
+showed a 146 MiB footprint and the loop later returned to kqueue; these samples
+do not prove the cause. Darwin now forwards registrations through the original
+path, so the unproven Darwin optimization is deferred. Linux compile-time
+behavior is unchanged from the measured runtime. Tests check both the cached
+Linux sequence and the full Darwin registration sequence, including failed
+registration retries and descriptor reuse. The complete failed diagnostic is
+retained in `bench/results/readiness-contention-failure-2026-09-07.log`.
