@@ -13,7 +13,7 @@ heap sample. Three isolated repetitions on an Apple M4 Pro produced the original
 | Sorted set | 1 | 3,494,784 |
 | Sorted set | 1,000 | 3,440,400 |
 
-The full synchronous probe takes roughly 48–95 microseconds on this local
+The synchronous map-rebuild phase takes roughly 48–95 microseconds on this local
 fixture. That is not an event-loop latency bound: larger high-water populations,
 host scheduling, sparse-map traversal, concurrent logical mutations and transient
 replacement-map allocations need separate treatment. Both current collection
@@ -48,7 +48,7 @@ The one-million-entry follow-up leaves much more retained capacity:
 | Sorted set | 1 | 55,783,920 |
 | Sorted set | 1,000 | 55,756,816 |
 
-Full synchronous rebuild probes now take about 1.68–1.90 ms, even when only one
+The synchronous map-rebuild phases now take about 1.68–1.90 ms, even when only one
 entry survives. This exceeds the current cooperative maintenance target and is
 why simply copying a sparse Go map in one maintenance call is insufficient.
 These are retained-heap observations, not RSS, and map growth/randomization causes
@@ -56,5 +56,10 @@ variation. The benchmark's ns/op now covers the complete fixture so normal Go
 benchmark calibration does not multiply expensive untimed population work; the
 logged synchronous-probe interval still excludes population, deletion and GC.
 Use the explicit one-iteration command above for comparable heap samples.
-The 24-case follow-up, source and earlier timing attempt are retained in
+The 24-measurement follow-up, source and earlier timing attempt are retained in
 `bench/results/collection-retention-scale-2026-09-07.json.gz`.
+
+The final benchmark checks both population sizes and every surviving field/score.
+A no-op deletion cannot silently produce a valid-looking retention profile.
+All 24 guarded measurements complete; their logs and source are retained in
+`bench/results/upgrade-writers-and-profile-guards-2026-09-07.json.gz`.

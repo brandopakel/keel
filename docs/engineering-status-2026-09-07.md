@@ -164,3 +164,19 @@ it does not by itself validate an unpublished release archive.
 Embedding, partitioning, transactions and automatic failover remain separate
 architecture commitments. The program is materially further along, but neither
 the remaining long-run evidence nor those architectural features are complete.
+
+## Validation refinements
+
+The concurrent upgrade cases now launch four authenticated writers after loading
+the alpha.2 file. They verify all 400 increment replies exactly once, 400 SET
+acknowledgments, and all resulting values after rewrite and restart. All nine
+local cases pass. The earlier four-platform archive reports exercised each
+configuration with sequential traffic; the expanded concurrent-traffic cases
+will also run in final native archive validation. Neither test establishes
+physical append overlap or a durability guarantee beyond its configured policy.
+
+Retention diagnostics now assert the grown and surviving collection sizes before
+sampling and verify each surviving value/score after the rebuild probe. All 24
+measurements pass those guards. The later ARM CI failure in 34133441575 was an
+alpha.3 download HTTP 504 after retries; it was not a runtime test failure.
+Raw evidence is in `bench/results/upgrade-writers-and-profile-guards-2026-09-07.json.gz`.

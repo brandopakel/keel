@@ -6,9 +6,11 @@ import platform
 import shutil
 import subprocess
 import time
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from pathlib import Path
 
-from validation_lib import Server, rewrite, sha256
+from validation_lib import Client, Server, rewrite, sha256
 
 
 def seed(c):
@@ -52,6 +54,36 @@ def snapshot(c):
     return result
 
 
+def concurrent_snapshot(client):
+    keys = ['upgrade:counter'] + [f'upgrade:writer:{i}' for i in range(4)]
+    return client.call('MGET', *keys)
+
+
+def exercise_concurrent_writers(server):
+    """Concurrent traffic after loading the old AOF, with exact acknowledged state."""
+    writers, iterations = 4, 100
+    barrier = Barrier(writers, timeout=10)
+
+    def write(worker):
+        client = Client('127.0.0.1', server.port, server.password)
+        try:
+            barrier.wait()
+            increments = []
+            for sequence in range(iterations):
+                increments.append(client.call('INCR', 'upgrade:counter'))
+                assert client.call('SET', f'upgrade:writer:{worker}', sequence) == b'OK'
+            return increments
+        finally:
+            client.close()
+
+    with ThreadPoolExecutor(max_workers=writers) as pool:
+        replies = [reply for worker in pool.map(write, range(writers)) for reply in worker]
+    assert sorted(replies) == list(range(1, writers * iterations + 1)), 'concurrent increment replies duplicated or missing'
+    expected = [str(writers * iterations).encode()] + [str(iterations - 1).encode()] * writers
+    assert concurrent_snapshot(server.client) == expected, 'concurrent writers changed acknowledged state'
+    return expected, {'clients': writers, 'increments': len(replies), 'sets': writers * iterations}
+
+
 def check(args):
     root = Path(args.out).resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -68,6 +100,7 @@ def check(args):
             worker = mode != 'sync'
             extra = ['-aof-concurrent-append'] if mode == 'concurrent' else []
             name = f'{policy}-append-{mode}'
+            concurrent_expected, traffic = None, None
             directory = root / name
             assert not directory.exists(), f'use a fresh output directory: {directory}'
             directory.mkdir()
@@ -84,17 +117,24 @@ def check(args):
                 candidate.client.call('INCRBY', 'integer', 8)
                 candidate.client.call('RPUSH', 'list', 'candidate')
                 candidate.client.call('HSET', 'hash', 'field', 'candidate')
+                if mode == 'concurrent':
+                    concurrent_expected, traffic = exercise_concurrent_writers(candidate)
                 rewrite(candidate.client)
+                if concurrent_expected is not None:
+                    assert concurrent_snapshot(candidate.client) == concurrent_expected, 'rewrite changed concurrent writes'
                 upgraded = snapshot(candidate.client)
             with Server(args.candidate, data, policy=policy, async_append=worker, extra=extra) as restarted:
                 assert snapshot(restarted.client) == upgraded, 'rewrite/restart changed state'
+                if concurrent_expected is not None:
+                    assert concurrent_snapshot(restarted.client) == concurrent_expected, 'restart lost concurrent writes'
             rollback = directory / 'rollback'
             rollback.mkdir()
             shutil.copy2(backup, rollback / 'store.aof')
             with Server(args.baseline, rollback, policy=policy) as old:
                 assert snapshot(old.client) == expected, 'backup rollback changed state'
             assert sha256(backup) == backup_hash, 'rollback backup was mutated'
-            report['cases'].append({'name': name, 'passed': True, 'backup_sha256': backup_hash})
+            report['cases'].append({'name': name, 'passed': True, 'backup_sha256': backup_hash,
+                                    'concurrent_traffic': traffic})
             print(name, 'upgrade/rewrite/restart/backup rollback passed', flush=True)
     report['passed'] = True
     (root / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
