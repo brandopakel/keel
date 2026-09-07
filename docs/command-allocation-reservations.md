@@ -81,3 +81,16 @@ five seconds and command idle deadlines are unchanged. Matched baseline/candidat
 Intel repetitions will measure the recovery cost with identical assertions.
 The original failed log remains in `command-allocation-review-2026-09-07.json.gz`;
 a later pass is not a runtime fix or an explanation of older Mac observations.
+
+Hosted matched run 34161677678 compares runtime `5d86e67` against its verified
+parent `9aa66d1` on one Linux runner, five alternating 15-second repetitions of
+nine scenarios (90 arms). Median paired throughput ratios are: small reads
+1.009, pipeline 64 1.025, 100k working set 1.006, hash 1.013, sorted set 0.997,
+GEO nearest 1 1.001, nearest 100 0.999 and ANY 1.003. Their client CPU gates pass;
+ordinary p99 is unchanged or close (pipeline 2.175 to 2.127 ms, sorted set 0.351
+to 0.359 ms). The many-client ratio is 0.999, but one baseline arm has a client
+CPU warning and that scenario is excluded from a clean capacity conclusion.
+These are public VM measurements, not dedicated-host evidence or proof of a
+general speedup. GEO is already optimized in both arms. Later reply-class,
+canonical-log growth and peak-accounting fixes require final integrated checks.
+Raw output is in `command-allocation-matched-2026-09-07.json.gz`.
