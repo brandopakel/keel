@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -80,6 +81,7 @@ func TestRewriteReproducesEveryKeyspace(t *testing.T) {
 	assert.NoError(t, OpenAOF(path))
 	fillOneOfEverything(t)
 	assert.NoError(t, FlushAOF())
+	waitForRewriteSync(t)
 
 	before := snapshotEverything(t)
 	assert.NoError(t, RewriteAOF())
@@ -103,6 +105,7 @@ func TestRewriteShrinksALogOfRepeatedWrites(t *testing.T) {
 		run(t, "SET", "hot", strconv.Itoa(i))
 	}
 	assert.NoError(t, FlushAOF())
+	waitForRewriteSync(t)
 	grown, err := os.Stat(path)
 	assert.NoError(t, err)
 
@@ -190,6 +193,7 @@ func TestWritesAfterARewriteAreAppendedToTheNewLog(t *testing.T) {
 
 	run(t, "SET", "after", "2")
 	assert.NoError(t, FlushAOF())
+	waitForRewriteSync(t)
 	assert.NoError(t, CloseAOF())
 
 	ResetStores()
@@ -259,6 +263,7 @@ func testAutomaticRewriteTriggersOnGrowth(t *testing.T, delayedSync bool) {
 	for i := 0; i < 4000; i++ {
 		run(t, "SET", "hot", strconv.Itoa(i))
 		require.NoError(t, FlushAOF())
+		waitForRewriteSync(t)
 	}
 	if delayedSync {
 		require.True(t, RewriteActive(), "file replacement must wait for the sync worker")
@@ -273,9 +278,11 @@ func testAutomaticRewriteTriggersOnGrowth(t *testing.T, delayedSync bool) {
 	// rewrite has completed, including its idle event-loop turns.
 	pollAOFSync(true)
 	require.NoError(t, FlushAOF())
+	waitForRewriteSync(t)
 	for i := 0; RewriteActive() && i < 100; i++ {
 		pollAOFSync(true)
 		require.NoError(t, FlushAOF())
+		waitForRewriteSync(t)
 	}
 	require.False(t, RewriteActive(), "automatic rewrite must finish after sync completes")
 
@@ -309,6 +316,7 @@ func TestAutomaticRewriteCanBeTurnedOff(t *testing.T) {
 	for i := 0; i < 2000; i++ {
 		run(t, "SET", "hot", strconv.Itoa(i))
 		assert.NoError(t, FlushAOF())
+		waitForRewriteSync(t)
 	}
 	_, _, rewrites, _ := AOFStats()
 	assert.Equal(t, 0, rewrites, "zero percentage must disable automatic rewriting")
@@ -320,12 +328,9 @@ func TestRewriteWithoutAppendonlyIsAnError(t *testing.T) {
 	assert.Error(t, RewriteAOF(), "there is nothing to rewrite when the log is off")
 }
 
-// TestRewriteStallProfile is the measurement the package comment quotes.
-//
-// A rewrite is three different stalls, and averaging them would hide the one
-// that matters: collecting the key names at the start, the slices of the walk,
-// and the final slice that writes what changed and syncs the file. Only the
-// walk was made incremental, so the other two are what is left to improve.
+// TestRewriteStallProfile measures event-loop work separately from background
+// sync waits. Snapshot traversal is incremental; filesystem calls and atomic
+// value serialization can still exceed cooperative targets.
 func TestRewriteStallProfile(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a million keys")
@@ -343,17 +348,25 @@ func TestRewriteStallProfile(t *testing.T) {
 		run(t, "SET", "key:"+strconv.Itoa(i), "value-of-some-length")
 	}
 	assert.NoError(t, FlushAOF())
+	waitForRewriteSync(t)
 
 	start := time.Now()
 	assert.NoError(t, StartRewrite())
 	collecting := time.Since(start)
 
 	var walk []time.Duration
-	var final time.Duration
+	var final, waiting time.Duration
 	total := collecting
 	for {
+		waitStart := time.Now()
+		for RewriteActive() && !RewriteNeedsCycle() {
+			require.Less(t, time.Since(waitStart), 3*time.Second, "rewrite worker did not finish")
+			time.Sleep(time.Millisecond)
+		}
+		waiting += time.Since(waitStart)
 		t0 := time.Now()
-		more := stepRewrite(t)
+		require.NoError(t, AdvanceRewrite())
+		more := RewriteActive()
 		took := time.Since(t0)
 		total += took
 		if more {
@@ -364,29 +377,19 @@ func TestRewriteStallProfile(t *testing.T) {
 		break
 	}
 
-	sortDurations(walk)
+	slices.Sort(walk)
 	median := walk[len(walk)/2]
 	worst := walk[len(walk)-1]
-	t.Logf("%d keys: collecting %v, %d walk slices median %v worst %v, final %v, total %v",
+	t.Logf("%d keys: collecting %v, %d walk slices median %v worst %v, final %v, loop work %v, worker waits %v",
 		keys, collecting.Round(time.Millisecond), len(walk),
 		median.Round(time.Microsecond), worst.Round(time.Microsecond),
-		final.Round(time.Millisecond), total.Round(time.Millisecond))
+		final.Round(time.Millisecond), total.Round(time.Millisecond), waiting.Round(time.Millisecond))
 
 	// Shared-host scheduling and storage affect even the median. Correctness
 	// uses work bounds; the scheduled-probe harness measures latency separately.
 	assert.Greater(t, len(walk), 100, "the walk must be spread over many cycles")
 	assert.Equal(t, 1, aof.rewrites, "the rewrite must actually commit")
 	assert.NoError(t, CloseAOF())
-}
-
-// sortDurations is an insertion sort, which is plenty for a few hundred
-// samples and avoids pulling in a comparison function for one call.
-func sortDurations(d []time.Duration) {
-	for i := 1; i < len(d); i++ {
-		for j := i; j > 0 && d[j] < d[j-1]; j-- {
-			d[j], d[j-1] = d[j-1], d[j]
-		}
-	}
 }
 
 // BenchmarkRewrite measures the stall a rewrite costs, which is the number the
@@ -426,6 +429,7 @@ func BenchmarkRewrite(b *testing.B) {
 func stepRewrite(t *testing.T) bool {
 	t.Helper()
 	assert.NoError(t, AdvanceRewrite())
+	waitForRewriteSync(t)
 	return RewriteActive()
 }
 
@@ -447,6 +451,7 @@ func TestRewriteSeesTheKeyspaceMoveAndStillGetsItRight(t *testing.T) {
 		run(t, "SET", "k"+strconv.Itoa(i), "original")
 	}
 	assert.NoError(t, FlushAOF())
+	waitForRewriteSync(t)
 	assert.NoError(t, StartRewrite())
 
 	// One slice, so the walk is part way through and has certainly recorded
@@ -508,6 +513,7 @@ func TestRewriteOverridesASetRatherThanMergingWithIt(t *testing.T) {
 		run(t, "SET", "pad"+strconv.Itoa(i), "v")
 	}
 	assert.NoError(t, FlushAOF())
+	waitForRewriteSync(t)
 
 	assert.NoError(t, StartRewrite())
 	assert.True(t, stepRewrite(t))
@@ -565,6 +571,7 @@ func TestRewriteSlicesObeyKeyBudgetAndReplay(t *testing.T) {
 		run(t, "SET", "k"+strconv.Itoa(i), "some value of a realistic length")
 	}
 	assert.NoError(t, FlushAOF())
+	waitForRewriteSync(t)
 
 	assert.NoError(t, StartRewrite())
 	slices, worstWalk, final := 0, time.Duration(0), time.Duration(0)
@@ -614,6 +621,7 @@ func TestCancelledRewriteLeavesTheOldLogIntact(t *testing.T) {
 		run(t, "SET", "k"+strconv.Itoa(i), "v")
 	}
 	assert.NoError(t, FlushAOF())
+	waitForRewriteSync(t)
 
 	assert.NoError(t, StartRewrite())
 	assert.True(t, stepRewrite(t))
@@ -658,6 +666,7 @@ func TestRestartDoesNotRatchetAutomaticRewriteBaseline(t *testing.T) {
 	before := aof.baseSize
 	for i := 0; i < 100 && aof.rewrites == 0; i++ {
 		assert.NoError(t, FlushAOF())
+		waitForRewriteSync(t)
 	}
 	assert.Equal(t, 1, aof.rewrites)
 	assert.Less(t, aof.baseSize, before/4)
@@ -685,6 +694,7 @@ func TestRewriteStartDoesNotCopyKeyNames(t *testing.T) {
 			require.Empty(t, rewrite.keys, "start retains slot limits, not every name")
 			require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(256<<10), "startup must not allocate an O(N) name slice")
 			require.NoError(t, AdvanceRewrite())
+			waitForRewriteSync(t)
 			require.LessOrEqual(t, len(rewrite.keys), data_structure.ScanMaxWork)
 			require.LessOrEqual(t, rewrite.pos, data_structure.ScanMaxWork)
 		})
@@ -704,6 +714,7 @@ func TestRewriteRetainsBoundedNameBatches(t *testing.T) {
 		run(t, "SET", "key:"+strconv.Itoa(i), "value-of-some-length")
 	}
 	assert.NoError(t, FlushAOF())
+	waitForRewriteSync(t)
 	assert.NoError(t, StartRewrite())
 
 	// Nothing is collected up front, so the walk starts holding nothing at all.

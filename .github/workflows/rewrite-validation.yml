@@ -1,0 +1,68 @@
+name: Matched rewrite interference
+
+on:
+  workflow_call:
+    inputs:
+      baseline:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  rewrite:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version: '1.27.1' }
+      - name: Build matched runtimes and native scheduled generator
+        env:
+          BASELINE_REV: ${{ inputs.baseline }}
+          CGO_ENABLED: '0'
+        run: |
+          [[ "$BASELINE_REV" =~ ^[0-9a-f]{40}$ ]]
+          git worktree add --detach "$RUNNER_TEMP/baseline" "$BASELINE_REV"
+          go build -trimpath -o /tmp/candidate ./cmd/keel
+          go -C "$RUNNER_TEMP/baseline" build -trimpath -o /tmp/baseline ./cmd/keel
+          go build -trimpath -o /tmp/arrival ./bench/arrival
+          mkdir -p dist/rewrite-validation
+          go version -m /tmp/candidate > dist/rewrite-validation/candidate-build.log
+          go version -m /tmp/baseline > dist/rewrite-validation/baseline-build.log
+          go version -m /tmp/arrival > dist/rewrite-validation/generator-build.log
+          lscpu > dist/rewrite-validation/lscpu.log
+          df -T . > dist/rewrite-validation/filesystem.log
+      - name: Thirty-six rotated arms on disjoint exposed core groups
+        timeout-minutes: 32
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          cpus=sorted(os.sched_getaffinity(0))
+          topology={}
+          for cpu in cpus:
+              base=Path(f'/sys/devices/system/cpu/cpu{cpu}/topology')
+              topology[cpu]=tuple((base/name).read_text().strip() for name in ('physical_package_id','core_id'))
+          server=[cpu for cpu in cpus if topology[cpu]==topology[cpus[0]]]
+          if len(server)<2:
+              groups={group:[cpu for cpu in cpus if topology[cpu]==group] for group in set(topology.values())}
+              server=next((group for group in groups.values() if len(group)==2), [])
+              if not server:
+                  server=[group[0] for group in groups.values() if len(group)==1][:2]
+          generator=[cpu for cpu in cpus if cpu not in server]
+          assert len(server)>=2 and len(generator)>=2, f'need two CPUs per side without splitting exposed physical core groups: {server}/{generator}'
+          Path('dist/rewrite-validation/affinity.json').write_text(json.dumps({'server':server,'generator':generator,'topology':topology,'limitation':'Public VM tenancy, storage and host scheduling remain uncontrolled.'},indent=2))
+          server, generator=','.join(map(str,server)),','.join(map(str,generator))
+          subprocess.run(['taskset','-c',generator,'python3','bench/run-rewrite-validation.py','--candidate','/tmp/candidate','--baseline','/tmp/baseline','--load','/tmp/arrival','--out','dist/rewrite-validation/arms','--server-cpus',server,'--client-cpus',generator],check=True)
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: rewrite-interference
+          path: |
+            dist/rewrite-validation/**/*.json
+            dist/rewrite-validation/**/*.log
+          retention-days: 30

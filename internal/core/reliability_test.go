@@ -140,9 +140,11 @@ func TestIdleFsyncAndStickyFailure(t *testing.T) {
 	aofSync = func(*os.File) error { calls++; return nil }
 	run(t, "SET", "k", "v")
 	require.NoError(t, FlushAOF())
+	waitForRewriteSync(t)
 	require.Zero(t, calls)
 	aof.lastSync = time.Now().Add(-2 * time.Second)
 	require.NoError(t, FlushAOF())
+	waitForRewriteSync(t)
 	pollAOFSync(true)
 	require.Equal(t, 1, calls)
 	require.False(t, aof.dirty)
@@ -302,9 +304,11 @@ func TestBackgroundSyncDoesNotBlockAndPreservesLaterWrites(t *testing.T) {
 	timer := time.AfterFunc(10*time.Second, func() { close(release) })
 	started := time.Now()
 	require.NoError(t, FlushAOF())
+	waitForRewriteSync(t)
 	elapsed := time.Since(started)
 	run(t, "SET", "later", "value")
 	require.NoError(t, FlushAOF())
+	waitForRewriteSync(t)
 	require.True(t, aof.dirty)
 	require.NotNil(t, aof.syncPending)
 	if timer.Stop() {
@@ -331,6 +335,7 @@ func TestLargeListRewriteRestartsAfterMutation(t *testing.T) {
 			run(t, "PEXPIRE", "large", "60000")
 			require.NoError(t, StartRewrite())
 			require.NoError(t, AdvanceRewrite())
+			waitForRewriteSync(t)
 			require.True(t, rewrite.collectionActive, "large list should yield between chunks")
 			switch mutation {
 			case "append":
@@ -344,6 +349,7 @@ func TestLargeListRewriteRestartsAfterMutation(t *testing.T) {
 			require.False(t, rewrite.collectionActive)
 			for i := 0; rewrite.active && i < 100; i++ {
 				require.NoError(t, FlushAOF())
+				waitForRewriteSync(t)
 			}
 			require.False(t, rewrite.active)
 			require.NoError(t, CloseAOF())
@@ -389,9 +395,11 @@ func TestRewriteAndCloseFenceBackgroundSync(t *testing.T) {
 	run(t, "SET", "k", "v")
 	aof.lastSync = time.Now().Add(-2 * time.Second)
 	require.NoError(t, FlushAOF())
+	waitForRewriteSync(t)
 	oldFile := aof.file
 	require.NoError(t, StartRewrite())
 	require.NoError(t, AdvanceRewrite())
+	waitForRewriteSync(t)
 	require.True(t, rewrite.active)
 	require.Same(t, oldFile, aof.file)
 	// Close must join the worker before closing its file descriptor.

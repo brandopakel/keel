@@ -3,6 +3,7 @@ package server
 import (
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -81,6 +82,53 @@ func TestWakeWithoutWakerIsSafe(t *testing.T) {
 	t.Cleanup(func() { setWaker(orig) })
 
 	setWaker(nil)
+	assert.NotPanics(t, wake)
+}
+
+func TestDetachingWakerWaitsForActiveCallback(t *testing.T) {
+	orig := wakeFn
+	entered, release, detached := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var workers sync.WaitGroup
+	var releaseOnce sync.Once
+	t.Cleanup(func() {
+		releaseOnce.Do(func() { close(release) })
+		workers.Wait()
+		setWaker(orig)
+	})
+	setWaker(func() { close(entered); <-release })
+	workers.Add(1)
+	go func() { defer workers.Done(); wake() }()
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("callback did not start")
+	}
+	// The active callback holds the same lock used by descriptor detachment.
+	// This deterministic check catches the old copy-unlock-call behavior even
+	// if the detaching goroutine is delayed by the scheduler.
+	if wakeMu.TryLock() {
+		wakeMu.Unlock()
+		t.Fatal("active callback did not serialize descriptor detachment")
+	}
+	attempting := make(chan struct{})
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		close(attempting)
+		setWaker(nil)
+		close(detached)
+	}()
+	<-attempting
+	early := false
+	select {
+	case <-detached:
+		early = true
+	default:
+	}
+	releaseOnce.Do(func() { close(release) })
+	workers.Wait()
+	assert.False(t, early, "descriptor teardown must wait until the old callback returns")
+	// A detached callback must not be invoked again (it would close entered twice).
 	assert.NotPanics(t, wake)
 }
 
