@@ -1,6 +1,6 @@
 # Bounded map leaves for large hashes
 
-Status: prototype awaiting matched adoption, September 7, 2026.
+Status: measured candidate awaiting integration and final review, September 7, 2026.
 
 Small hashes keep their existing Go map. Above 192 fields, a hash routes fields
 through a seeded hash-bit tree whose leaves each hold at most 192 fields.
@@ -59,6 +59,35 @@ without improving replay correctness. Exact collision chains remain a documented
 worst-case lookup limitation; this candidate bounds individual map capacity,
 not every lookup's work under arbitrarily many exact 64-bit collisions.
 
-This prototype has not merged or been released. The frozen long soaks use their
+Two hosted matched runs compare the same pre-term baseline `a7c6600` against
+this candidate using alternating arms on disjoint exposed CPU groups. Run
+34153539090 covers nine cases at `ca86dff`; run 34155075225 repeats six cases at
+the corrected accounting runtime `62d4285`, five 15-second repetitions each.
+The corrected run has no client CPU warnings in any of its 60 arms:
+
+| Workload | Paired throughput ratio, median (range) | p99 ms, baseline → candidate | RSS MiB, baseline → candidate |
+| --- | ---: | ---: | ---: |
+| Small string read | 0.991 (0.989–1.005) | 0.159 → 0.159 | 14.74 → 14.78 |
+| Many one-field hashes | 1.005 (0.995–1.007) | 0.167 → 0.159 | 14.71 → 13.04 |
+| Large-hash field read | 0.978 (0.964–0.986) | 0.159 → 0.167 | 38.01 → 40.26 |
+| Large-hash mixed read/write | 0.972 (0.947–0.987) | 0.167 → 0.175 | 38.03 → 40.26 |
+| Large-hash field write | 0.983 (0.967–1.014) | 0.167 → 0.175 | 36.12 → 40.28 |
+| Large-hash delete/reinsert | 0.968 (0.963–0.997) | 0.159 → 0.167 | 30.02 → 30.55 |
+
+The initial run likewise shows roughly 2–3% lower large-hash throughput.
+Its ordinary small-read, many-client, pipeline-64 and small-hash median ratios
+are 0.999, 1.002, 1.006 and 0.995. Every HGETALL arm in that run reports client
+CPU pressure and is excluded from capacity conclusions. Public VM tenancy and
+scheduling remain uncontrolled, and these runs predate corrected term guards.
+
+The engineering tradeoff is explicit: accept the repeated roughly 2–3% active
+large-hash throughput cost and larger 100k-field RSS to bound individual map
+copies and release nearly all excess capacity after deep shrinkage. This is a
+retention/maintenance improvement, not a general throughput or memory win.
+Applications dominated by active large-hash lookups should assess that cost.
+Raw reports, histograms in text form, host records and summaries are retained in
+`bench/results/bounded-hash-matched-2026-09-07.json.gz`.
+
+This candidate has not merged or been released. The frozen long soaks use their
 original runtime and cannot validate it. Aggregate temporary reservations,
 partially occupied key pages and filesystem handoff stalls remain separate work.
