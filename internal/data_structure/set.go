@@ -125,18 +125,24 @@ func (s *Set) Pop(count int) []string {
 // random and retried on a collision, which spun forever once count reached the
 // size of the set, and the one after it copied every member before choosing.
 func (s *Set) RandomMembers(count int) []string {
-	if count <= 0 || len(s.order) == 0 {
+	count = s.ShufflePrefix(count)
+	if count == 0 {
 		return nil
-	}
-	if count > len(s.order) {
-		count = len(s.order)
-	}
-	for i := 0; i < count; i++ {
-		s.swap(i, i+rand.Intn(len(s.order)-i))
 	}
 	out := make([]string, count)
 	copy(out, s.order[:count])
 	return out
+}
+
+// ShufflePrefix selects distinct members into the first count positions without
+// allocating a result array. Logical membership is unchanged; active position
+// cursors must be invalidated before calling it.
+func (s *Set) ShufflePrefix(count int) int {
+	count = max(0, min(count, len(s.order)))
+	for i := 0; i < count; i++ {
+		s.swap(i, i+rand.Intn(len(s.order)-i))
+	}
+	return count
 }
 
 // RandomMembersWithRepeats returns exactly count members drawn independently,

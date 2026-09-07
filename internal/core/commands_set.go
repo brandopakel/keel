@@ -91,7 +91,7 @@ func cmdSMEMBERS(args []string) []byte {
 	if !ok {
 		return constant.RespEmptyArray
 	}
-	return Encode(s.Members(), false)
+	return encodeLookupArray(s.Len(), s.MemberAt)
 }
 
 func cmdSISMEMBER(args []string) []byte {
@@ -166,22 +166,34 @@ func cmdSPOP(args []string) []byte {
 	if !given {
 		want = 1
 	}
-	popped := s.Pop(int(want))
-
-	// Replaying SPOP would pop different members, so the log records the
-	// removal that actually happened rather than the request that caused it.
-	if len(popped) > 0 {
-		aofRecord(append([]string{"SREM", key}, popped...)...)
+	count = min(want, int64(s.Len()))
+	// Shuffling positions invalidates a rewrite cursor even if admission fails.
+	noteRewriteDirty(key)
+	count = int64(s.ShufflePrefix(int(count)))
+	walk := replyWalk(func(yield func(string) bool) {
+		for i := 0; i < int(count); i++ {
+			value, _ := s.MemberAt(i)
+			if !yield(value) {
+				return
+			}
+		}
+	})
+	if !removalFits("SREM", key, int(count), walk) {
+		return replyTooLarge
+	}
+	out := encodeWalkReply(walk, !given)
+	if len(out) > 0 && out[0] == '-' {
+		return out
+	}
+	if count > 0 {
+		record := make([]string, 2, int(count)+2)
+		record[0], record[1] = "SREM", key
+		walk(func(value string) bool { record = append(record, value); return true })
+		s.Remove(record[2:]...)
+		aofRecord(record...)
 	}
 	setSettle(key, s)
-
-	if !given {
-		if len(popped) == 0 {
-			return constant.RespNil
-		}
-		return Encode(popped[0], false)
-	}
-	return Encode(popped, false)
+	return out
 }
 
 // cmdSRANDMEMBER implements SRANDMEMBER key [count], and answers SRAND, the
@@ -226,5 +238,6 @@ func cmdSRANDMEMBER(args []string) []byte {
 	if count > maxRandomMemberCount {
 		count = maxRandomMemberCount
 	}
-	return Encode(s.RandomMembers(int(count)), false)
+	count = int64(s.ShufflePrefix(int(count)))
+	return encodeLookupArray(int(count), s.MemberAt)
 }

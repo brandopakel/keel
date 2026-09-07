@@ -1,0 +1,42 @@
+Before guards (four reproduced failures):
+--- FAIL: TestLargeCollectionRepliesRejectBeforeAllocationOrRemoval (0.06s)
+    --- FAIL: TestLargeCollectionRepliesRejectBeforeAllocationOrRemoval/hash-all (0.03s)
+        collection_reply_admission_test.go:67: 
+            	Error Trace:	/Users/brandopakel/keel-collection-reply/internal/core/collection_reply_admission_test.go:67
+            	Error:      	"136316836" is not less than "1024"
+            	Test:       	TestLargeCollectionRepliesRejectBeforeAllocationOrRemoval/hash-all
+            	Messages:   	oversized payload must not be built
+    --- FAIL: TestLargeCollectionRepliesRejectBeforeAllocationOrRemoval/list-pop-front (0.01s)
+        collection_reply_admission_test.go:67: 
+            	Error Trace:	/Users/brandopakel/keel-collection-reply/internal/core/collection_reply_admission_test.go:67
+            	Error:      	"68158420" is not less than "1024"
+            	Test:       	TestLargeCollectionRepliesRejectBeforeAllocationOrRemoval/list-pop-front
+            	Messages:   	oversized payload must not be built
+    --- FAIL: TestLargeCollectionRepliesRejectBeforeAllocationOrRemoval/set-members (0.01s)
+        collection_reply_admission_test.go:67: 
+            	Error Trace:	/Users/brandopakel/keel-collection-reply/internal/core/collection_reply_admission_test.go:67
+            	Error:      	"68158420" is not less than "1024"
+            	Test:       	TestLargeCollectionRepliesRejectBeforeAllocationOrRemoval/set-members
+            	Messages:   	oversized payload must not be built
+    --- FAIL: TestLargeCollectionRepliesRejectBeforeAllocationOrRemoval/zset-score (0.01s)
+        collection_reply_admission_test.go:67: 
+            	Error Trace:	/Users/brandopakel/keel-collection-reply/internal/core/collection_reply_admission_test.go:67
+            	Error:      	"68158420" is not less than "1024"
+            	Test:       	TestLargeCollectionRepliesRejectBeforeAllocationOrRemoval/zset-score
+            	Messages:   	oversized payload must not be built
+FAIL
+FAIL	github.com/brandopakel/keel/internal/core	0.363s
+FAIL
+
+After guards, 14 collection cases, canonical record limits and three-mode process/restart checks:
+ok  	github.com/brandopakel/keel/internal/core	1.739s
+ok  	github.com/brandopakel/keel/cmd/keel	16.674s
+
+Full Go suite:
+ok  	github.com/brandopakel/keel/cmd/keel	22.996s
+?   	github.com/brandopakel/keel/internal/config	[no test files]
+?   	github.com/brandopakel/keel/internal/constant	[no test files]
+ok  	github.com/brandopakel/keel/internal/core	36.546s
+ok  	github.com/brandopakel/keel/internal/core/io_multiplexing	(cached)
+ok  	github.com/brandopakel/keel/internal/data_structure	4.158s
+ok  	github.com/brandopakel/keel/internal/server	0.750s
