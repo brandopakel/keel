@@ -30,7 +30,9 @@ class ProgressTests(unittest.TestCase):
             root = Path(directory)
             (root/'progress.json').write_text(json.dumps(dict(status='running')))
             (root/'launch.json').write_text(json.dumps(dict(runs=[dict(
-                name='test', output=str(root), pid=123, pid_identity='old start /owned/keel')])) )
+                name='test', output=str(root), pid=123,
+                pid_identity='new start /different/process',
+                pid_identity_after_exec='old start /owned/keel')])))
             with patch('soak_status.subprocess.run', return_value=SimpleNamespace(stdout='new start /different/process')):
                 row = inspect(root/'launch.json')['runs'][0]
             self.assertEqual(row['status'], 'interrupted_or_missing_process')
