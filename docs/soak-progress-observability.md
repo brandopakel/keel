@@ -37,3 +37,13 @@ smoke passed, including recovery, promotion and write failures. A deliberately
 short two-second watchdog failed a separate 30-second run before its first
 checkpoint; it produced diagnostics and cleaned up both owned server processes.
 The intentional failure is kept separately from successful evidence.
+
+Both frozen eight-hour runs completed successfully at 12:17 UTC. Protocol 1
+recorded 1,585,893 acknowledged cache writes; protocol 2 with concurrent appends
+recorded 1,574,932. Each completed 951 checkpoints, 31 primary crashes and 64
+replica crashes, plus final promotion/restarts and both RLIMIT_FSIZE write-failure
+modes. Complete checkpoint/recovery series and terminal reports are retained in
+`bench/results/recovery-eight-hours-2026-09-07.json.gz`. Their frozen source is
+b9a97e002e5f6edb7fef54c7100ab9f7fd162e09, binary SHA-256
+`aeed3178e90e12664f8f715a7adb2889c6bffcdf36fbba076cbe9d64862c8b31`.
+These passes do not cover later changes or complete the stalled 48-hour test.
