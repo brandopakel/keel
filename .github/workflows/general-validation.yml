@@ -45,6 +45,10 @@ on:
         description: Optional exact baseline SHA for matched rewrite interference
         type: string
         default: ''
+      transcript_validation:
+        description: Optional exact baseline SHA for matched AOF transcript policies and modes
+        type: string
+        default: ''
       rewrite_rate:
         description: Scheduled requests per second for matched rewrite interference
         type: string
@@ -54,6 +58,12 @@ permissions:
   contents: read
 
 jobs:
+  transcript_interference:
+    if: github.event_name == 'workflow_dispatch' && inputs.transcript_validation != ''
+    uses: ./.github/workflows/transcript-validation.yml
+    with:
+      baseline: ${{ inputs.transcript_validation }}
+
   rewrite_interference:
     if: github.event_name == 'workflow_dispatch' && inputs.rewrite_validation != ''
     uses: ./.github/workflows/rewrite-validation.yml

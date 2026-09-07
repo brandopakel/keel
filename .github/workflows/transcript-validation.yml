@@ -1,0 +1,118 @@
+name: Matched AOF transcript validation
+on:
+  workflow_call:
+    inputs:
+      baseline:
+        required: true
+        type: string
+      repetitions:
+        type: string
+        default: '5'
+      seconds:
+        type: string
+        default: '10'
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        policy: ['off', 'no', 'everysec', 'always']
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version: '1.27.1' }
+      - name: Build pinned generator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential autoconf automake libtool pkg-config libevent-dev libssl-dev zlib1g-dev redis-server lsof
+          curl -fL --retry 3 https://github.com/redis/memtier_benchmark/archive/refs/tags/2.5.1.tar.gz -o /tmp/memtier.tar.gz
+          echo '9b34e17a0d1d7e70b152eb442c6362161b5b764ce2ea98e97b7c74815bdd90b7  /tmp/memtier.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/memtier.tar.gz -C /tmp
+          cd /tmp/memtier_benchmark-2.5.1
+          autoreconf -fi
+          ./configure
+          make -j2
+      - name: Build exact source pair and record host
+        env:
+          BASELINE_REVISION: ${{ inputs.baseline }}
+          CGO_ENABLED: '0'
+        run: |
+          [[ "$BASELINE_REVISION" =~ ^[0-9a-f]{40}$ ]]
+          git worktree add --detach "$RUNNER_TEMP/keel-baseline" "$BASELINE_REVISION"
+          go -C "$RUNNER_TEMP/keel-baseline" build -trimpath -o /tmp/keel-baseline ./cmd/keel
+          go build -trimpath -o /tmp/keel-candidate ./cmd/keel
+          mkdir -p dist/transcripts
+          lscpu > dist/transcripts/lscpu.txt
+          df -T . > dist/transcripts/filesystem.txt
+          uname -a > dist/transcripts/uname.txt
+          go version > dist/transcripts/go.txt
+          git rev-parse HEAD > dist/transcripts/candidate-source.txt
+          git -C "$RUNNER_TEMP/keel-baseline" rev-parse HEAD > dist/transcripts/baseline-source.txt
+          cp /proc/stat dist/transcripts/proc-stat-before.txt
+          ps -eo pid,comm,pcpu,pmem > dist/transcripts/processes-before.txt
+      - name: Match policies and append modes with disjoint CPU groups
+        env:
+          TRANSCRIPT_POLICY: ${{ matrix.policy }}
+          TRANSCRIPT_REPETITIONS: ${{ inputs.repetitions }}
+          TRANSCRIPT_SECONDS: ${{ inputs.seconds }}
+        run: |
+          python3 - <<'PYTHON'
+          import json, os, subprocess
+          from pathlib import Path
+          repetitions, seconds = int(os.environ['TRANSCRIPT_REPETITIONS']), int(os.environ['TRANSCRIPT_SECONDS'])
+          assert 1 <= repetitions <= 10 and 1 <= seconds <= 30
+          cpus = sorted(os.sched_getaffinity(0))
+          topology = {}
+          for cpu in cpus:
+              base = Path(f'/sys/devices/system/cpu/cpu{cpu}/topology')
+              topology[cpu] = tuple((base/name).read_text().strip() for name in ('physical_package_id','core_id'))
+          server = [cpu for cpu in cpus if topology[cpu] == topology[cpus[0]]]
+          clients = [cpu for cpu in cpus if cpu not in server]
+          assert clients, 'two exposed physical core groups required'
+          Path('dist/transcripts/affinity.json').write_text(json.dumps({'server':server,'generator':clients,'topology':topology,'limitation':'Public VM scheduling, host tenancy and physical storage are uncontrolled.'},indent=2))
+          common = ['python3','bench/run-general.py','--candidate','/tmp/keel-candidate','--baseline','/tmp/keel-baseline','--memtier','/tmp/memtier_benchmark-2.5.1/memtier_benchmark','--server-cpus',','.join(map(str,server)),'--client-cpus',','.join(map(str,clients)),'--load-threads','2','--reps',str(repetitions),'--seconds',str(seconds),'--policy',os.environ['TRANSCRIPT_POLICY'],'--cases','cache-read-64,cache-write-64,cache-write-pipeline-64,cache-write-1m','--discard-passed-aof']
+          modes = {'sync': []} if os.environ['TRANSCRIPT_POLICY'] == 'off' else {'sync': [], 'barrier': ['--worker'], 'concurrent': ['--worker','--concurrent']}
+          failed = False
+          for mode, flags in modes.items():
+              directory = 'dist/transcripts/' + mode
+              outcome = subprocess.run(common+flags+['--out',directory])
+              failed |= outcome.returncode != 0
+              # The generator preserves failed arms; the next mode still runs.
+              if outcome.returncode == 0:
+                  subprocess.run(['python3','bench/summarize-general.py',directory],check=True)
+          raise SystemExit(1 if failed else 0)
+          PYTHON
+      - name: Preserve failed persistence files with bounded compression
+        if: always()
+        run: |
+          python3 - <<'PYTHON'
+          import gzip, hashlib, json
+          from pathlib import Path
+          for path in Path('dist/transcripts').rglob('store.aof'):
+              if not path.is_file() or path.is_symlink():
+                  continue
+              digest, size = hashlib.sha256(), 0
+              with path.open('rb') as source, gzip.open(str(path)+'.gz','xb') as output:
+                  while chunk := source.read(1 << 20):
+                      digest.update(chunk)
+                      size += len(chunk)
+                      output.write(chunk)
+              path.with_name('failed-aof.json').write_text(json.dumps({'bytes':size,'sha256':digest.hexdigest(),'artifact':path.name+'.gz'},indent=2))
+          PYTHON
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: aof-transcripts-${{ matrix.policy }}
+          path: |
+            dist/transcripts/**/*.json
+            dist/transcripts/**/*.aof.gz
+            dist/transcripts/**/*.log
+            dist/transcripts/**/*.csv
+            dist/transcripts/**/*.md
+            dist/transcripts/**/*.txt
+          retention-days: 30

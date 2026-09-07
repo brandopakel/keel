@@ -30,8 +30,8 @@ func TestAOFTranscriptLargeValueKeepsBoundedBuffer(t *testing.T) {
 	require.Equal(t, "OK", run(t, "SET", "large", value))
 	runtime.ReadMemStats(&after)
 	t.Logf("large SET allocated %d bytes, retained log capacity %d", after.TotalAlloc-before.TotalAlloc, cap(aof.buf))
-	require.LessOrEqual(t, cap(aof.buf), 1<<20)
-	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(3<<20))
+	require.LessOrEqual(t, cap(aof.buf), maxAOFTranscriptBytes)
+	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(6<<20))
 	require.NoError(t, CloseAOF())
 	encoded, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -54,7 +54,7 @@ func TestAOFTranscriptDrainsDoNotSyncOrAdvanceRewrite(t *testing.T) {
 	syncs := 0
 	aofSync = func(f *os.File) error { syncs++; return oldSync(f) }
 	priorReady, priorRewrite := AppendReadyOffset(), rewrite.written
-	run(t, "SET", "large", strings.Repeat("v", 3<<20))
+	run(t, "SET", "large", strings.Repeat("v", 3*maxAOFTranscriptBytes))
 	require.Zero(t, syncs, "fragments cannot fsync a partial command")
 	require.Equal(t, priorReady, AppendReadyOffset(), "partial command cannot be acknowledged")
 	require.Equal(t, priorRewrite, rewrite.written, "fragment drains cannot advance or replace the rewrite")
@@ -76,7 +76,7 @@ func TestAOFTranscriptPartialWriteNeverAdvancesReplyPrefix(t *testing.T) {
 	require.NoError(t, FlushAOF())
 	ready := AppendReadyOffset()
 	aofWrite = func(f *os.File, body []byte) (int, error) { return f.Write(body[:len(body)/2]) }
-	run(t, "SET", "torn", strings.Repeat("v", 3<<20))
+	run(t, "SET", "torn", strings.Repeat("v", 3*maxAOFTranscriptBytes))
 	require.ErrorIs(t, aof.failed, io.ErrShortWrite)
 	require.Equal(t, ready, AppendReadyOffset())
 	require.ErrorIs(t, FlushAOF(), io.ErrShortWrite)
@@ -145,7 +145,7 @@ func TestAOFTranscriptExpiryAndRecreationKeepCanonicalOrder(t *testing.T) {
 	oldSamples, oldRounds := config.ActiveExpireSamples, config.ActiveExpireRounds
 	config.ActiveExpireSamples, config.ActiveExpireRounds = 64, 4
 	t.Cleanup(func() { config.ActiveExpireSamples, config.ActiveExpireRounds = oldSamples, oldRounds })
-	keys := make([]string, 12)
+	keys := make([]string, 40)
 	for i := range keys {
 		keys[i] = fmt.Sprint(i) + strings.Repeat("e", 128<<10)
 		run(t, "SET", keys[i], "old")
@@ -204,10 +204,10 @@ func TestAOFTranscriptJoinsOlderAppendBeforeDirectDrain(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, ready)
 	<-entered
-	require.False(t, AppendHasRoom(2<<20), "normal server admission must use its barrier")
+	require.False(t, AppendHasRoom(2*maxAOFTranscriptBytes), "normal server admission must use its barrier")
 	timer := time.AfterFunc(20*time.Millisecond, func() { once.Do(func() { close(release) }) })
 	defer timer.Stop()
-	value := strings.Repeat("x", 2<<20)
+	value := strings.Repeat("x", 2*maxAOFTranscriptBytes)
 	run(t, "SET", "second", value) // even a direct core caller must preserve order
 	require.NoError(t, aof.failed)
 	require.NoError(t, CloseAOF())
@@ -240,8 +240,8 @@ func TestAOFTranscriptMassEvictionKeepsBoundedBuffer(t *testing.T) {
 	require.Equal(t, "OK", run(t, "SET", "last", "v"))
 	runtime.ReadMemStats(&after)
 	t.Logf("mass eviction allocated %d bytes, retained log capacity %d", after.TotalAlloc-before.TotalAlloc, cap(aof.buf))
-	require.LessOrEqual(t, cap(aof.buf), 1<<20)
-	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(4<<20))
+	require.LessOrEqual(t, cap(aof.buf), maxAOFTranscriptBytes)
+	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(8<<20))
 	var survivors []string
 	for _, key := range keys {
 		if dictStore.Has(key) {

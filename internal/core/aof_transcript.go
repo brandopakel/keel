@@ -9,7 +9,7 @@ import (
 // A large command borrows its existing strings and drains fragments in order.
 // Drains can block on storage; they neither sync nor advance a rewrite. Only
 // the normal completed-command flush may acknowledge or replace the AOF.
-const maxAOFTranscriptBytes = 1 << 20
+const maxAOFTranscriptBytes = 4 << 20
 
 func writeAOFBuffer() error {
 	pollAppend(true)
