@@ -297,6 +297,15 @@ func emitRewriteKey(dst []byte, key string, reset bool) []byte {
 			}
 			return dst
 		}
+		if plan, ok := planOpaqueDump(key); ok && (plan.size > rewriteRecordSlice || len(key) > rewriteRecordSlice-plan.size-256) {
+			var expiry uint64
+			data_structure.EachKeyspace(func(ks data_structure.Keyspace) {
+				if at, ok := ks.GetExpiry(key); ok {
+					expiry = at
+				}
+			})
+			return appendOpaqueRewriteRecord(dst, key, reset, plan, expiry)
+		}
 		if reset {
 			dst = appendCommand(dst, "DEL", key)
 		}
