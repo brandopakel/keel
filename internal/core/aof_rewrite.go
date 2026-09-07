@@ -59,6 +59,11 @@ import (
 // millisecond at the measured rate, which is under the latency of the disk
 // write that a client's own command may be waiting on anyway.
 const rewriteChunk = 2048
+const rewriteDirtyKeys = 100000
+const rewriteDirtyBytes = 8 << 20
+const rewriteRecordSlice = 64 << 10
+
+var rewriteBudgetAborts uint64
 
 var nextAutoRewrite time.Time
 
@@ -85,6 +90,9 @@ var rewrite struct {
 	// the walk may have recorded wrongly, and they are all rewritten at the end
 	// from whatever they hold then.
 	dirty            map[string]struct{}
+	dirtyBytes       int
+	stream           *rewriteRecord
+	collectionReset  bool
 	collectionActive bool
 	collectionKey    string
 	collectionPos    int
@@ -142,6 +150,8 @@ func StartRewrite() error {
 	rewrite.collectionActive = false
 	rewrite.hashCursor = nil
 	rewrite.dirty = make(map[string]struct{})
+	rewrite.dirtyBytes = 0
+	rewrite.stream = nil
 	rewrite.keys = nil
 	return nil
 }
@@ -160,7 +170,8 @@ func AdvanceRewrite() error {
 		return nil
 	}
 
-	if time.Since(rewrite.started) > 30*time.Second || len(rewrite.dirty) > 100000 {
+	if time.Since(rewrite.started) > 30*time.Second {
+		rewriteBudgetAborts++
 		abortRewrite(fmt.Errorf("rewrite exceeded duration or dirty-key budget"))
 		return nil // the original log continues to contain every write
 	}
@@ -168,6 +179,13 @@ func AdvanceRewrite() error {
 	// worker releases the old descriptor. Re-emitting hot keys every cycle
 	// while replacement is blocked can make the rewrite larger than the log.
 	if rewriteWalkDone() && !rewrite.collectionActive && aof.syncPending != nil {
+		return nil
+	}
+	if rewrite.stream != nil {
+		if err := rewriteWrite(emitRewriteRecordSlice(nil)); err != nil {
+			abortRewrite(err)
+			return err
+		}
 		return nil
 	}
 	if rewrite.collectionActive {
@@ -192,24 +210,25 @@ func AdvanceRewrite() error {
 	count := 0
 	for rewrite.batchPos < len(rewrite.keys) && count < rewriteChunk {
 		key := rewrite.keys[rewrite.batchPos]
+		rewrite.keys[rewrite.batchPos] = ""
 		rewrite.batchPos++
 		rewrite.pos++
 		count++
 		if _, touched := rewrite.dirty[key]; !touched {
-			body = emitRewriteKey(body, key)
+			body = emitRewriteKey(body, key, false)
 		}
-		if rewrite.collectionActive || len(body) >= 1<<20 || time.Now().After(deadline) {
+		if rewrite.stream != nil || rewrite.collectionActive || len(body) >= 1<<20 || time.Now().After(deadline) {
 			break
 		}
 	}
-	if rewriteWalkDone() && !rewrite.collectionActive {
+	if rewriteWalkDone() && !rewrite.collectionActive && rewrite.stream == nil {
 		for key := range rewrite.dirty {
-			if rewrite.collectionActive || count >= rewriteChunk || len(body) >= 1<<20 || time.Now().After(deadline) {
+			if rewrite.stream != nil || rewrite.collectionActive || count >= rewriteChunk || len(body) >= 1<<20 || time.Now().After(deadline) {
 				break
 			}
-			body = appendCommand(body, "DEL", key)
-			body = emitRewriteKey(body, key)
+			body = emitRewriteKey(body, key, true)
 			delete(rewrite.dirty, key)
+			rewrite.dirtyBytes -= len(key) + 64
 			count++
 		}
 	}
@@ -217,7 +236,7 @@ func AdvanceRewrite() error {
 		abortRewrite(err)
 		return err
 	}
-	if rewrite.collectionActive || !rewriteWalkDone() || len(rewrite.dirty) > 0 {
+	if rewrite.stream != nil || rewrite.collectionActive || !rewriteWalkDone() || len(rewrite.dirty) > 0 {
 		return nil
 	}
 
@@ -227,27 +246,53 @@ func AdvanceRewrite() error {
 // Lists and sets have O(1) indexed access. Hashes retain one map cursor; sorted
 // sets seek a bounded rank window in O(log(n)+chunk). Mutations invalidate the cursor; dirty-key
 // reconciliation then replaces every historical fragment with DEL first.
-func emitRewriteKey(dst []byte, key string) []byte {
+func emitRewriteKey(dst []byte, key string, reset bool) []byte {
+	if obj := dictStore.Peek(key); obj != nil {
+		commands := [][]string{{"SET", key, obj.Value}}
+		if reset {
+			commands = append([][]string{{"DEL", key}}, commands...)
+		}
+		if at, ok := dictStore.GetExpiry(key); ok {
+			commands = append(commands, []string{"PEXPIREAT", key, strconv.FormatUint(at, 10)})
+		}
+		return appendRewriteRecords(dst, commands)
+	}
 	kind := ""
-	if l, ok := listStore.Peek(key); ok && (l.Len() > 256 || l.MemUsage() > 64<<10) {
+	if l, ok := listStore.Peek(key); ok && (l.Len() > 256 || l.MemUsage() > 64<<10 || len(key) > rewriteRecordSlice) {
 		kind = "list"
 	}
-	if s, ok := setStore.Peek(key); ok && (s.Len() > 256 || s.MemUsage() > 64<<10) {
+	if s, ok := setStore.Peek(key); ok && (s.Len() > 256 || s.MemUsage() > 64<<10 || len(key) > rewriteRecordSlice) {
 		kind = "set"
 	}
-	if z, ok := zsetStore.Peek(key); ok && (z.Len() > 256 || z.MemUsage() > 64<<10) {
+	if z, ok := zsetStore.Peek(key); ok && (z.Len() > 256 || z.MemUsage() > 64<<10 || len(key) > rewriteRecordSlice) {
 		kind = "zset"
 	}
-	if h, ok := hashStore.Peek(key); ok && (h.Len() > 256 || h.MemUsage() > 64<<10) {
+	if h, ok := hashStore.Peek(key); ok && (h.Len() > 256 || h.MemUsage() > 64<<10 || len(key) > rewriteRecordSlice) {
 		kind = "hash"
 		rewrite.hashCursor = h.Cursor()
 	}
 	if kind == "" {
+		// Deleted keys need only a tombstone, which may itself have a large name.
+		present := false
+		data_structure.EachKeyspace(func(ks data_structure.Keyspace) {
+			_, ok := ks.EntryBytes(key)
+			present = present || ok
+		})
+		if !present {
+			if reset {
+				return appendRewriteRecords(dst, [][]string{{"DEL", key}})
+			}
+			return dst
+		}
+		if reset {
+			dst = appendCommand(dst, "DEL", key)
+		}
 		return emitKey(dst, key)
 	}
 	rewrite.collectionActive, rewrite.collectionKey, rewrite.collectionPos = true, key, 0
 	rewrite.collectionKind = kind
-	return emitCollectionSlice(appendCommand(dst, "DEL", key))
+	rewrite.collectionReset = true
+	return emitCollectionSlice(dst)
 }
 
 func emitCollectionSlice(dst []byte) []byte {
@@ -315,23 +360,37 @@ func emitCollectionSlice(dst []byte) []byte {
 			rewrite.hashCursor.Advance()
 		}
 	}
+	var commands [][]string
+	if rewrite.collectionReset {
+		commands = append(commands, []string{"DEL", key})
+		rewrite.collectionReset = false
+	}
 	if count > 0 {
-		dst = appendCommand(dst, parts...)
+		commands = append(commands, parts)
 	}
 	if rewrite.collectionPos == length {
 		rewrite.collectionActive = false
 		rewrite.hashCursor = nil
 		if at, has := expiry(key); has {
-			dst = appendCommand(dst, "PEXPIREAT", key, strconv.FormatUint(at, 10))
+			commands = append(commands, []string{"PEXPIREAT", key, strconv.FormatUint(at, 10)})
 		}
 	}
-	return dst
+	return appendRewriteRecords(dst, commands)
 }
 
 // noteRewriteDirty records that a key was written while a rewrite is walking.
 func noteRewriteDirty(key string) {
 	if rewrite.active {
-		rewrite.dirty[key] = struct{}{}
+		if _, exists := rewrite.dirty[key]; !exists {
+			charge := len(key) + 64
+			if len(rewrite.dirty) >= rewriteDirtyKeys || charge > rewriteDirtyBytes-rewrite.dirtyBytes {
+				rewriteBudgetAborts++
+				abortRewrite(fmt.Errorf("rewrite exceeded dirty-key budget"))
+				return
+			}
+			rewrite.dirty[key] = struct{}{}
+			rewrite.dirtyBytes += charge
+		}
 		if rewrite.collectionActive && rewrite.collectionKey == key {
 			// Discard the cursor, not the partial log. Reconciliation starts
 			// with DEL and replaces every already-emitted fragment.
@@ -398,6 +457,10 @@ func finishRewrite() error {
 	rewrite.keys = nil
 	rewrite.walk = nil
 	rewrite.dirty = nil
+	rewrite.dirtyBytes = 0
+	rewrite.stream = nil
+	rewrite.collectionKey, rewrite.collectionKind = "", ""
+	rewrite.collectionActive = false
 	return captureReplicationSnapshot()
 }
 
@@ -415,6 +478,10 @@ func abortRewrite(cause error) {
 	rewrite.keys = nil
 	rewrite.walk = nil
 	rewrite.dirty = nil
+	rewrite.dirtyBytes = 0
+	rewrite.stream = nil
+	rewrite.collectionKey, rewrite.collectionKind = "", ""
+	rewrite.collectionActive = false
 	rewrite.file = nil
 	if cause != nil {
 		aofLog("rewrite abandoned: %v", cause)

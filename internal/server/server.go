@@ -40,7 +40,7 @@ const maxDirectRead = 1 << 20
 // maxQueryBuffer bounds incomplete request bytes per connection.
 var maxQueryBuffer = 16 * 1024 * 1024
 
-const maxOutputBuffer = 64 << 20
+const maxOutputBuffer = core.MaxReplyBytes
 const maxRetainedClientBytes = 256 << 20
 
 // One aggregate is not enough on its own. Requests and replies share the same
@@ -470,6 +470,10 @@ func executeRun(c *client, arena *replyArena) bool {
 
 func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 	defer wg.Done()
+	core.ClientBuffers = func() core.ClientBufferStats {
+		return core.ClientBufferStats{Connected: len(clients), InputBytes: retainedInputBytes, ReplyBytes: retainedReplyBytes, TotalBytes: retainedClientBytes}
+	}
+	defer func() { core.ClientBuffers = nil }()
 	defer func() {
 		core.CancelRewrite()
 		for _, c := range clients {
@@ -1008,10 +1012,10 @@ func accountClient(c *client) bool {
 	}
 	c.outBytes = reply
 
-	// Frames index the request, and parsed commands hold slices of it, so both
-	// belong with the query buffer rather than with the reply.
-	input := cap(c.frames) * 8
-	input += parsedBytes(c.cmds)
+	// Frames describe reply write boundaries; parsed commands and the query
+	// buffer belong to input. Keep c.outBytes limited to the payload itself.
+	reply += cap(c.frames) * 8
+	input := parsedBytes(c.cmds)
 	if c.buf != nil {
 		input += cap(c.buf.data)
 	}

@@ -90,7 +90,21 @@ func TestSingleKeyTTLChurnAvoidsMapReallocation(t *testing.T) {
 			}
 			RegisterKeyspace(ks)
 			ks.SetExpiryAt("key", 1<<60)
-			allocs := testing.AllocsPerRun(1000, func() { ks.ClearExpiry("key"); ks.SetExpiryAt("key", 1<<60) })
+			var clearFailed, expiryStillSet bool
+			allocs := testing.AllocsPerRun(1000, func() {
+				if !ks.ClearExpiry("key") {
+					clearFailed = true
+				}
+				if _, ok := ks.GetExpiry("key"); ok {
+					expiryStillSet = true
+				}
+				ks.SetExpiryAt("key", 1<<60)
+			})
+			require.False(t, clearFailed)
+			require.False(t, expiryStillSet)
+			at, ok := ks.GetExpiry("key")
+			require.True(t, ok)
+			require.EqualValues(t, 1<<60, at)
 			require.Zero(t, allocs, "hot single-key TTL churn must reuse a small table")
 		})
 	}
