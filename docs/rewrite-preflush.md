@@ -170,3 +170,15 @@ The Intel failure in 34130598562 is an alpha.3 asset HTTP 504 after all download
 retries, not a native test failure. Raw failed attempts, deterministic waker
 baseline/candidate results and final matched traffic are retained in
 `bench/results/rewrite-final-matched-and-mac-diagnostics-2026-09-07.json.gz`.
+
+The same-runner Go 1.26.7 Apple Silicon diagnostic 34131652665 passes fifty
+focused repetitions of all six cases per arm (600 subcases total) and three
+full suites per arm. The prior observation failure remains unreproduced and
+unexplained; no assertion or deadline was relaxed. The regression now retains
+the missing counter/client-state evidence if it recurs. Raw logs and exact
+runtime/toolchain/host records are in
+`bench/results/fairness-observation-diagnostic-2026-09-07.json.gz`.
+The branch integrates the now-merged set compaction, preserving both independent
+Mac diagnostic workflows. The frozen combined native archives and guarded soaks
+already contain the same runtime changes; subsequent edits affect diagnostics
+and documentation only.
