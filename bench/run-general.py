@@ -88,9 +88,12 @@ def preload(client, case):
         command = [{'large-hash':'HSET','large-set':'SADD','large-zset':'ZADD'}[kind], 'bench:collection']
         for i in range(4096):
             member = f'{i:04d}:'.encode()+payload
-            if kind == 'large-hash': command += [f'field:{i}', payload]
-            elif kind == 'large-set': command += [member]
-            else: command += [i, member]
+            if kind == 'large-hash':
+                command += [f'field:{i}', payload]
+            elif kind == 'large-set':
+                command += [member]
+            else:
+                command += [i, member]
         digest.update(wire(command))
         assert client.call(*command) == 4096
         return digest.hexdigest()
