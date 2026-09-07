@@ -105,8 +105,52 @@ func connectTest(t *testing.T, s *testServer) (net.Conn, *bufio.Reader) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { c.Close() })
-	c.SetDeadline(time.Now().Add(5 * time.Second))
-	return c, bufio.NewReader(c)
+	// The reader has to wrap the same value: bufio over the raw connection
+	// would read past the refresh and keep the deadline that was never set.
+	conn := &idleConn{Conn: c, idle: 5 * time.Second}
+	return conn, bufio.NewReader(conn)
+}
+
+// idleConn gives each read and write its own deadline, so the limit is that no
+// single operation hangs rather than that the whole test finishes in time.
+//
+// One deadline set at connect is a budget for everything the connection goes on
+// to do, which makes every test sharing it a race against one clock.
+// TestAsyncAppendPipelineAndRestart/always spends that budget on a hundred
+// appendfsync-always round trips and a rewrite, and on a slow runner it loses -
+// reporting an i/o timeout that says nothing about the server. A per-operation
+// deadline still catches a server that stops answering, which is what the
+// deadline was for.
+//
+// A caller that sets its own deadline means it, so refreshing stops there:
+// TestSlowReaderDoesNotBlockOtherClients tightens the deadline deliberately to
+// prove another client is not blocked, and a wrapper that kept widening it again
+// would quietly delete the assertion.
+type idleConn struct {
+	net.Conn
+	idle  time.Duration
+	fixed bool
+}
+
+func (c *idleConn) SetDeadline(at time.Time) error {
+	c.fixed = true
+	return c.Conn.SetDeadline(at)
+}
+
+func (c *idleConn) refresh() {
+	if !c.fixed {
+		c.Conn.SetDeadline(time.Now().Add(c.idle))
+	}
+}
+
+func (c *idleConn) Read(b []byte) (int, error) {
+	c.refresh()
+	return c.Conn.Read(b)
+}
+
+func (c *idleConn) Write(b []byte) (int, error) {
+	c.refresh()
+	return c.Conn.Write(b)
 }
 func request(parts ...string) string {
 	var b strings.Builder
