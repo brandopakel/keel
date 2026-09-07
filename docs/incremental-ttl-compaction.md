@@ -34,3 +34,8 @@ can take many maintenance turns, especially when persistent keys greatly
 outnumber TTLs. There is no fixed latency or completion-time guarantee; scheduling,
 GC and an individual map allocation can exceed the cooperative target. Sparse
 key pages, lookup-map capacity and collection-map capacity remain separate work.
+
+Runtime 7387f3b passed dispatched Go/race/Docker (34110267610), general cache
+validation (34110270032), and native/filesystem validation (34110272268).
+Current develop integration is a38d758; its final review and checks must close
+before merging. These shorter runs do not replace the frozen long soaks.
