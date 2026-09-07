@@ -46,7 +46,8 @@ an old immutable value during replacement still requires transient memory.
 Reply frame indices used by unbuffered writes are also charged to retained reply
 memory. Charging them to input left the reply-class admission limit understated;
 the regression test checks both the class boundary and repeated accounting.
-# Integrated validation
+
+## Integrated validation
 
 After integration with merged PR 27, commit 70f253a passed the
 [Go/race/Docker matrix](https://github.com/brandopakel/keel/actions/runs/34101668336),
