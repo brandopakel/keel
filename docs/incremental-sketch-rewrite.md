@@ -60,15 +60,16 @@ and does not satisfy adoption. Its green workflow conclusion originally meant
 only that all processes and rewrites completed. The harness now preserves traffic
 in failed reports and refuses adoption on any failed, dropped or expired request;
 all 108 retained traffic records check that rule, including the ten overload arms.
-A separately labeled 500-request/s run is requested to measure interference below
-that offered load. It cannot erase the 2,000-request/s overload evidence or
+A separately labeled 500-request/s run measured interference below that offered
+load, with the outcomes recorded below. It cannot erase the 2,000-request/s overload evidence or
 establish a capacity guarantee.
 
 Full raw reports and host records are retained in
 `bench/results/incremental-sketch-rewrite-hosted-2026-09-07.json.gz`. Public VM
 storage/tenancy remains uncontrolled, and the paired baseline predates term
 guards. No release or frozen-soak success is attributed to this candidate. It
-still needs integrated native validation and assessment of the failed arms below.
+passes native CI on Linux ARM64 and Intel Mac, plus ext4/xfs recovery. The failed
+interference arms below still need operational investigation.
 
 Run 34157654209 measures 500 requests/s at the same serving runtime (`c4481b7`
 changes only harness inputs). CMS and strings each complete 36 arms, 108 rewrites
@@ -86,3 +87,7 @@ Run 34156908649 never started the rewrite jobs: GitHub rejected the numeric inpu
 passed through the reusable workflow. The rate is now a string, parsed and bounded
 by the harness; 34157654209 confirms all three matrices execute. Full evidence is
 in `bench/results/incremental-sketch-rewrite-500-2026-09-07.json.gz`.
+
+Review note: the Python validation tests use the standard-library unittest runner
+in CI. The suggested pytest-only assertion would add an unnecessary dependency;
+the scheduled-count assertion remains an executable unittest assertion.
