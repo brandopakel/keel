@@ -1,0 +1,12 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/brandopakel/keel/internal/data_structure
+cpu: Apple M4 Pro
+BenchmarkHashTraversal/materialized-12         	    1195	    996526 ns/op	 3211268 B/op	       2 allocs/op
+BenchmarkHashTraversal/materialized-12         	    1225	    981914 ns/op	 3211264 B/op	       2 allocs/op
+BenchmarkHashTraversal/materialized-12         	    1238	    979889 ns/op	 3211264 B/op	       2 allocs/op
+BenchmarkHashTraversal/cursor-12               	     745	   1607839 ns/op	     208 B/op	       1 allocs/op
+BenchmarkHashTraversal/cursor-12               	     751	   1607772 ns/op	     208 B/op	       1 allocs/op
+BenchmarkHashTraversal/cursor-12               	     747	   1607609 ns/op	     208 B/op	       1 allocs/op
+PASS
+ok  	github.com/brandopakel/keel/internal/data_structure	8.252s

@@ -59,6 +59,7 @@ var (
 func parseFlags() {
 	flag.StringVar(&profileDir, "profile-dir", "", "diagnostic only: create a fresh private directory for CPU/heap/allocation profiles on shutdown")
 	flag.BoolVar(&config.ReplicationFeed, "replication-feed", false, "experimental: enable bounded canonical replication feed")
+	flag.IntVar(&config.ReplicationProtocol, "replication-protocol", 1, "experimental replication protocol: 1 (alpha images) or 2 (streaming snapshots, operation deltas and recovery checkpoints)")
 	flag.StringVar(&config.ReplicaOf, "replicaof", "", "experimental: read-only replica of host:port")
 	flag.StringVar(&replicaPasswordEnv, "primary-password-env", "", "environment variable holding the primary AUTH password")
 	flag.BoolVar(&config.ReplicaTLS, "primary-tls", false, "verify TLS when connecting to the primary proxy")
@@ -82,6 +83,7 @@ func parseFlags() {
 	flag.Uint64Var(&lcsMaxCells, "lcs-max-cells", config.LCSMaxCells,
 		"largest len(key1)*len(key2) LCS will attempt; 0 is unbounded")
 	flag.BoolVar(&config.AOFAsyncAppend, "aof-async-append", false, "experimental: append on a worker with one-batch command backpressure")
+	flag.BoolVar(&config.AOFConcurrentAppend, "aof-concurrent-append", false, "experimental: overlap bounded string commands with worker appends; requires -aof-async-append")
 	flag.BoolVar(&appendOnly, "appendonly", config.AOFEnabled,
 		"log every write to an append-only file and replay it at startup")
 	flag.StringVar(&appendFilename, "appendfilename", config.AOFFileName,
@@ -129,6 +131,9 @@ func parseFlags() {
 	case config.FsyncAlways, config.FsyncEverySec, config.FsyncNever:
 	default:
 		log.Fatalf("unknown -appendfsync %q (want always, everysec or no)", appendFsync)
+	}
+	if config.AOFConcurrentAppend && !config.AOFAsyncAppend {
+		log.Fatal("-aof-concurrent-append requires -aof-async-append")
 	}
 	if config.AOFAsyncAppend && !appendOnly {
 		log.Fatal("-aof-async-append requires -appendonly")
@@ -212,6 +217,9 @@ func main() {
 }
 
 func runServer() error {
+	if config.ReplicationProtocol != 1 && config.ReplicationProtocol != 2 {
+		return fmt.Errorf("-replication-protocol must be 1 or 2")
+	}
 	if config.ReplicationFeed || config.ReplicaOf != "" {
 		if !config.AOFEnabled || config.RequirePass == "" || mode != "kqueue" {
 			return fmt.Errorf("replication requires authenticated AOF in kqueue mode")

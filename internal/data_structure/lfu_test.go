@@ -23,16 +23,16 @@ func TestLFUStateRoundTripsThroughOneField(t *testing.T) {
 
 // TestObjStaysOneWordPerPolicyField is why the two policies share a field. The
 // cost is per key, so it is multiplied by the size of the keyspace: separate
-// fields measured 48 bytes against 32, which is 76MB at the default limit.
+// fields would expand the typed string object beyond its three machine words.
 func TestObjStaysOneWordPerPolicyField(t *testing.T) {
-	assert.Equal(t, uintptr(32), unsafe.Sizeof(Obj{}),
+	assert.Equal(t, uintptr(24), unsafe.Sizeof(Obj{}),
 		"adding per-policy state must not grow the per-key object")
 }
 
 func TestNewKeysStartWithCredit(t *testing.T) {
 	withEviction(t, config.LFU, 5, 100)
 	d := newTestDict(t)
-	obj := d.NewObj("v", 0, 0)
+	obj := d.NewObj("v")
 	assert.Equal(t, uint8(lfuInitVal), lfuFreqOf(obj.Access),
 		"a new key needs credit, or it is by definition the least frequently used thing present")
 }
@@ -44,7 +44,7 @@ func TestCounterRiseSlowsDown(t *testing.T) {
 	config.LFUDecayPeriod = 0 // isolate the increment from decay
 	d := newTestDict(t)
 
-	obj := d.NewObj("v", 0, 0)
+	obj := d.NewObj("v")
 	start := lfuFreqOf(obj.Access)
 
 	accessesFor := func(target uint8) int {
@@ -75,7 +75,7 @@ func TestDecayLowersAnIdleCounter(t *testing.T) {
 	config.LFUDecayPeriod = 100
 	d := newTestDict(t)
 
-	obj := d.NewObj("v", 0, 0)
+	obj := d.NewObj("v")
 	obj.Access = packLFU(evictionClock, 50)
 
 	assert.Equal(t, uint8(50), decayedFreq(obj.Access), "no time has passed")
@@ -91,7 +91,7 @@ func TestDecayIsLazyAndDoesNotMutate(t *testing.T) {
 	withEviction(t, config.LFU, 5, 1000000)
 	config.LFUDecayPeriod = 100
 	d := newTestDict(t)
-	obj := d.NewObj("v", 0, 0)
+	obj := d.NewObj("v")
 	obj.Access = packLFU(evictionClock, 50)
 	stored := obj.Access
 
@@ -110,7 +110,7 @@ func scanResistance(t *testing.T, strategy, limit int) float64 {
 	d := newTestDict(t)
 	hot := limit / 2
 	for i := 0; i < limit; i++ {
-		d.Put("k"+strconv.Itoa(i), d.NewObj("v", 0, 0))
+		d.Put("k"+strconv.Itoa(i), d.NewObj("v"))
 	}
 	for round := 0; round < 50; round++ {
 		for i := 0; i < hot; i++ {
@@ -118,7 +118,7 @@ func scanResistance(t *testing.T, strategy, limit int) float64 {
 		}
 	}
 	for i := 0; i < limit*2; i++ {
-		d.Put("scan"+strconv.Itoa(i), d.NewObj("v", 0, 0))
+		d.Put("scan"+strconv.Itoa(i), d.NewObj("v"))
 	}
 
 	survived := 0
@@ -152,7 +152,7 @@ func TestLFUFollowsAWorkingSetThatMoves(t *testing.T) {
 
 	hammer := func(prefix string) {
 		for i := 0; i < 500; i++ {
-			d.Put(prefix+strconv.Itoa(i), d.NewObj("v", 0, 0))
+			d.Put(prefix+strconv.Itoa(i), d.NewObj("v"))
 		}
 		for round := 0; round < 400; round++ {
 			for i := 0; i < 500; i++ {
@@ -163,7 +163,7 @@ func TestLFUFollowsAWorkingSetThatMoves(t *testing.T) {
 	hammer("old")
 	hammer("new")
 	for i := 0; i < 1000; i++ { // pressure: the cache must choose
-		d.Put("filler"+strconv.Itoa(i), d.NewObj("v", 0, 0))
+		d.Put("filler"+strconv.Itoa(i), d.NewObj("v"))
 	}
 
 	stale, current := 0, 0
@@ -183,7 +183,7 @@ func TestLFUHoldsTheDictAtTheLimit(t *testing.T) {
 	withEviction(t, config.LFU, 5, 100)
 	d := newTestDict(t)
 	for i := 0; i < 1000; i++ {
-		d.Put("k"+strconv.Itoa(i), d.NewObj("v", 0, 0))
+		d.Put("k"+strconv.Itoa(i), d.NewObj("v"))
 		assert.LessOrEqual(t, d.Len(), 100)
 	}
 	assert.Equal(t, 100, d.Len())

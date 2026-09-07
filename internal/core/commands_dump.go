@@ -80,9 +80,7 @@ func dumpValue(key string) ([]byte, bool) {
 	// of it recently used and leave eviction with no idea which keys anyone
 	// actually wanted. Dumping a key is not using it.
 	if obj := dictStore.Peek(key); obj != nil {
-		if s, ok := obj.Value.(string); ok {
-			return append([]byte{dumpTagString}, s...), true
-		}
+		return append([]byte{dumpTagString}, obj.Value...), true
 	}
 	if set, ok := setStore.Peek(key); ok {
 		w := &respParts{}
@@ -175,8 +173,7 @@ func decodeRestorePayload(key string, tag byte, body []byte) (store func(), err 
 		return func() { listStore.Put(key, l) }, nil
 	case dumpTagString:
 		value := string(body)
-		oType, oEnc := deduceTypeString(value)
-		return func() { dictStore.Put(key, dictStore.NewObj(value, oType, oEnc)) }, nil
+		return func() { dictStore.Put(key, dictStore.NewObj(value)) }, nil
 	case dumpTagSet:
 		members, err := decodeParts(body)
 		if err != nil {

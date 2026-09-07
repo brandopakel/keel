@@ -1,5 +1,7 @@
 package data_structure
 
+import "reflect"
+
 // Hash is a field-value map under one key, the type behind HSET and HGET.
 //
 // A plain Go map, like the set. The interesting part is not the structure but
@@ -60,6 +62,36 @@ func (h *Hash) Del(fields ...string) int {
 }
 
 func (h *Hash) Len() int { return len(h.fields) }
+
+// HashCursor walks without first copying all field names. It belongs to the
+// event-loop owner and must be discarded on any mutation of the hash. The
+// rewrite owns at most one cursor; hashes retain no additional per-field index.
+type HashCursor struct {
+	iterator             reflect.MapIter
+	valid                bool
+	field, value         string
+	fieldSlot, valueSlot reflect.Value
+}
+
+func (h *Hash) Cursor() *HashCursor {
+	c := &HashCursor{}
+	c.fieldSlot = reflect.ValueOf(&c.field).Elem()
+	c.valueSlot = reflect.ValueOf(&c.value).Elem()
+	c.iterator.Reset(reflect.ValueOf(h.fields))
+	c.Advance()
+	return c
+}
+
+func (c *HashCursor) Entry() (string, string, bool) {
+	if !c.valid {
+		return "", "", false
+	}
+	c.fieldSlot.SetIterKey(&c.iterator)
+	c.valueSlot.SetIterValue(&c.iterator)
+	return c.field, c.value, true
+}
+
+func (c *HashCursor) Advance() { c.valid = c.iterator.Next() }
 
 // Fields, Values and Entries walk the map, so all three are in map order:
 // arbitrary, and different every time. Redis says the same of HKEYS, HVALS and

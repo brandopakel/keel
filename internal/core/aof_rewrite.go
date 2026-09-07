@@ -1,7 +1,9 @@
 package core
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"hash"
 	"io"
 	"os"
 	"path/filepath"
@@ -62,12 +64,14 @@ var nextAutoRewrite time.Time
 
 // rewrite is the state of the walk in progress, if there is one.
 var rewrite struct {
-	active  bool
-	started time.Time
-	path    string
-	tmpPath string
-	file    *os.File
-	written int64
+	active     bool
+	started    time.Time
+	path       string
+	tmpPath    string
+	file       *os.File
+	digest     hash.Hash
+	hashCursor *data_structure.HashCursor
+	written    int64
 
 	// keys is every name that existed when the rewrite started. A Go map
 	// cannot be iterated across cycles - there is no resumable iterator - so
@@ -78,10 +82,11 @@ var rewrite struct {
 	// dirty is every key written since the rewrite started. These are the keys
 	// the walk may have recorded wrongly, and they are all rewritten at the end
 	// from whatever they hold then.
-	dirty      map[string]struct{}
-	listActive bool
-	listKey    string
-	listPos    int
+	dirty            map[string]struct{}
+	collectionActive bool
+	collectionKey    string
+	collectionPos    int
+	collectionKind   string
 }
 
 // RewriteActive reports whether a rewrite is part-way through.
@@ -95,7 +100,7 @@ func StartRewrite() error {
 	if rewrite.active {
 		return fmt.Errorf("a rewrite is already running")
 	}
-	if config.AOFAsyncAppend && (AppendPending() || len(aof.buf) > 0) {
+	if AppendPending() || (config.AOFAsyncAppend && len(aof.buf) > 0) {
 		return fmt.Errorf("rewrite waits for pending append; retry after the write reply")
 	}
 
@@ -121,9 +126,14 @@ func StartRewrite() error {
 	rewrite.path = path
 	rewrite.tmpPath = tmpPath
 	rewrite.file = f
+	rewrite.digest = nil
+	if aof.digest != nil {
+		rewrite.digest = sha256.New()
+	}
 	rewrite.written = 0
 	rewrite.pos = 0
-	rewrite.listActive = false
+	rewrite.collectionActive = false
+	rewrite.hashCursor = nil
 	rewrite.dirty = make(map[string]struct{})
 	rewrite.keys = allKeyNames()
 	return nil
@@ -132,6 +142,9 @@ func StartRewrite() error {
 // AdvanceRewrite emits the next slice of the walk, and finishes if that was the
 // last of it. The event loop calls it once a cycle while a rewrite is active.
 func AdvanceRewrite() error {
+	if AppendPending() {
+		return nil
+	}
 	pollAOFSync(false)
 	if aof.failed != nil {
 		return aof.failed
@@ -147,11 +160,11 @@ func AdvanceRewrite() error {
 	// Once the snapshot walk is done, retain changed key names until the sync
 	// worker releases the old descriptor. Re-emitting hot keys every cycle
 	// while replacement is blocked can make the rewrite larger than the log.
-	if rewrite.pos == len(rewrite.keys) && !rewrite.listActive && aof.syncPending != nil {
+	if rewrite.pos == len(rewrite.keys) && !rewrite.collectionActive && aof.syncPending != nil {
 		return nil
 	}
-	if rewrite.listActive {
-		body := emitListSlice(nil)
+	if rewrite.collectionActive {
+		body := emitCollectionSlice(nil)
 		if err := rewriteWrite(body); err != nil {
 			abortRewrite(err)
 			return err
@@ -168,13 +181,13 @@ func AdvanceRewrite() error {
 		if _, touched := rewrite.dirty[key]; !touched {
 			body = emitRewriteKey(body, key)
 		}
-		if rewrite.listActive || len(body) >= 1<<20 || time.Now().After(deadline) {
+		if rewrite.collectionActive || len(body) >= 1<<20 || time.Now().After(deadline) {
 			break
 		}
 	}
-	if rewrite.pos == len(rewrite.keys) && !rewrite.listActive {
+	if rewrite.pos == len(rewrite.keys) && !rewrite.collectionActive {
 		for key := range rewrite.dirty {
-			if rewrite.listActive || count >= rewriteChunk || len(body) >= 1<<20 || time.Now().After(deadline) {
+			if rewrite.collectionActive || count >= rewriteChunk || len(body) >= 1<<20 || time.Now().After(deadline) {
 				break
 			}
 			body = appendCommand(body, "DEL", key)
@@ -187,42 +200,111 @@ func AdvanceRewrite() error {
 		abortRewrite(err)
 		return err
 	}
-	if rewrite.listActive || rewrite.pos < len(rewrite.keys) || len(rewrite.dirty) > 0 {
+	if rewrite.collectionActive || rewrite.pos < len(rewrite.keys) || len(rewrite.dirty) > 0 {
 		return nil
 	}
 
 	return finishRewrite()
 }
 
-// Large lists have O(1) indexed access, so they can be serialized across
-// turns without copying a snapshot. A mutation invalidates the cursor.
+// Lists and sets have O(1) indexed access. Hashes retain one map cursor; sorted
+// sets seek a bounded rank window in O(log(n)+chunk). Mutations invalidate the cursor; dirty-key
+// reconciliation then replaces every historical fragment with DEL first.
 func emitRewriteKey(dst []byte, key string) []byte {
-	if l, ok := listStore.Peek(key); ok && l.Len() > 256 {
-		rewrite.listActive, rewrite.listKey, rewrite.listPos = true, key, 0
-		return emitListSlice(appendCommand(dst, "DEL", key))
+	kind := ""
+	if l, ok := listStore.Peek(key); ok && (l.Len() > 256 || l.MemUsage() > 64<<10) {
+		kind = "list"
 	}
-	return emitKey(dst, key)
+	if s, ok := setStore.Peek(key); ok && (s.Len() > 256 || s.MemUsage() > 64<<10) {
+		kind = "set"
+	}
+	if z, ok := zsetStore.Peek(key); ok && (z.Len() > 256 || z.MemUsage() > 64<<10) {
+		kind = "zset"
+	}
+	if h, ok := hashStore.Peek(key); ok && (h.Len() > 256 || h.MemUsage() > 64<<10) {
+		kind = "hash"
+		rewrite.hashCursor = h.Cursor()
+	}
+	if kind == "" {
+		return emitKey(dst, key)
+	}
+	rewrite.collectionActive, rewrite.collectionKey, rewrite.collectionPos = true, key, 0
+	rewrite.collectionKind = kind
+	return emitCollectionSlice(appendCommand(dst, "DEL", key))
 }
 
-func emitListSlice(dst []byte) []byte {
-	key := rewrite.listKey
-	l, ok := listStore.Peek(key)
-	if !ok {
-		rewrite.listActive = false
-		return dst
+func emitCollectionSlice(dst []byte) []byte {
+	key := rewrite.collectionKey
+	var command string
+	var length int
+	var valueAt func(int) (string, string)
+	var expiry func(string) (uint64, bool)
+	switch rewrite.collectionKind {
+	case "hash":
+		h, ok := hashStore.Peek(key)
+		if !ok || rewrite.hashCursor == nil {
+			rewrite.collectionActive = false
+			rewrite.hashCursor = nil
+			return dst
+		}
+		command, length, expiry = "HSET", h.Len(), hashStore.GetExpiry
+		valueAt = func(int) (string, string) { field, value, _ := rewrite.hashCursor.Entry(); return value, field }
+	case "list":
+		l, ok := listStore.Peek(key)
+		if !ok {
+			rewrite.collectionActive = false
+			return dst
+		}
+		command, length, expiry = "RPUSH", l.Len(), listStore.GetExpiry
+		valueAt = func(i int) (string, string) { v, _ := l.Index(i); return v, "" }
+	case "set":
+		s, ok := setStore.Peek(key)
+		if !ok {
+			rewrite.collectionActive = false
+			return dst
+		}
+		command, length, expiry = "SADD", s.Len(), setStore.GetExpiry
+		valueAt = func(i int) (string, string) { v, _ := s.MemberAt(i); return v, "" }
+	case "zset":
+		z, ok := zsetStore.Peek(key)
+		if !ok {
+			rewrite.collectionActive = false
+			return dst
+		}
+		command, length, expiry = "ZADD", z.Len(), zsetStore.GetExpiry
+		start := rewrite.collectionPos
+		members, scores := z.RangeByRank(start, start+255, false)
+		valueAt = func(i int) (string, string) { return members[i-start], formatScore(scores[i-start]) }
 	}
-	parts := []string{"RPUSH", key}
-	bytes := 0
-	for rewrite.listPos < l.Len() && len(parts) < 258 && bytes < 64<<10 {
-		value, _ := l.Index(rewrite.listPos)
+	parts := []string{command, key}
+	bytes, count := 0, 0
+	deadline := time.Now().Add(time.Millisecond)
+	for rewrite.collectionPos < length && count < 256 {
+		value, score := valueAt(rewrite.collectionPos)
+		size := len(value) + len(score) + 32
+		// An individual member may exceed the target; emit it alone so a
+		// cursor always advances. Input/per-key limits still bound that case.
+		if count > 0 && (bytes+size > 64<<10 || time.Now().After(deadline)) {
+			break
+		}
+		if command == "ZADD" || command == "HSET" {
+			parts = append(parts, score)
+		}
 		parts = append(parts, value)
-		bytes += len(value)
-		rewrite.listPos++
+		bytes += size
+		count++
+		rewrite.collectionPos++
+		if command == "HSET" {
+			rewrite.hashCursor.Advance()
+		}
 	}
-	dst = appendCommand(dst, parts...)
-	if rewrite.listPos == l.Len() {
-		rewrite.listActive = false
-		if at, has := listStore.GetExpiry(key); has {
+	if count > 0 {
+		dst = appendCommand(dst, parts...)
+	}
+	if rewrite.collectionPos == length {
+		rewrite.collectionActive = false
+		rewrite.hashCursor = nil
+		if at, has := expiry(key); has {
 			dst = appendCommand(dst, "PEXPIREAT", key, strconv.FormatUint(at, 10))
 		}
 	}
@@ -233,10 +315,11 @@ func emitListSlice(dst []byte) []byte {
 func noteRewriteDirty(key string) {
 	if rewrite.active {
 		rewrite.dirty[key] = struct{}{}
-		if rewrite.listActive && rewrite.listKey == key {
+		if rewrite.collectionActive && rewrite.collectionKey == key {
 			// Discard the cursor, not the partial log. Reconciliation starts
 			// with DEL and replaces every already-emitted fragment.
-			rewrite.listActive = false
+			rewrite.collectionActive = false
+			rewrite.hashCursor = nil
 		}
 	}
 }
@@ -286,7 +369,10 @@ func finishRewrite() error {
 		return err
 	}
 	aof.file = f
+	aof.digest, aof.digestBytes = rewrite.digest, rewrite.written
 	aof.baseSize = rewrite.written
+	aof.rewriteBase = rewrite.written
+	appendSynced = max(appendSynced, appendCompleted)
 	aof.written = 0
 	aof.rewrites++
 	aof.lastKeys = len(rewrite.keys)
@@ -294,13 +380,14 @@ func finishRewrite() error {
 	rewrite.active = false
 	rewrite.keys = nil
 	rewrite.dirty = nil
-	return nil
+	return captureReplicationSnapshot()
 }
 
 // abortRewrite gives up on a rewrite without touching the log in use. The old
 // file has had every write appended to it throughout, so abandoning the new one
 // loses nothing.
 func abortRewrite(cause error) {
+	rewrite.hashCursor = nil
 	nextAutoRewrite = time.Now().Add(time.Minute)
 	if rewrite.file != nil {
 		rewrite.file.Close()
@@ -327,6 +414,9 @@ func rewriteWrite(body []byte) error {
 		return nil
 	}
 	n, err := rewrite.file.Write(body)
+	if rewrite.digest != nil {
+		rewrite.digest.Write(body[:n])
+	}
 	rewrite.written += int64(n)
 	if err == nil && n != len(body) {
 		return io.ErrShortWrite
@@ -372,13 +462,7 @@ func emitKey(dst []byte, key string) []byte {
 
 func emitValue(dst []byte, key string) []byte {
 	if obj := dictStore.Peek(key); obj != nil {
-		value, ok := obj.Value.(string)
-		if !ok {
-			return dst
-		}
-		dst = appendCommand(dst, "SET", key, value)
-
-		return dst
+		return appendCommand(dst, "SET", key, obj.Value)
 	}
 	if set, ok := setStore.Peek(key); ok {
 		return appendCommand(dst, append([]string{"SADD", key}, set.Members()...)...)
@@ -456,9 +540,9 @@ func maybeRewrite() {
 	if size < config.AOFAutoRewriteMinSize {
 		return
 	}
-	if aof.baseSize > 0 {
-		grown := (size - aof.baseSize) * 100 / aof.baseSize
-		if grown < int64(config.AOFAutoRewritePercentage) {
+	if aof.rewriteBase > 0 {
+		grown := float64(size-aof.rewriteBase) * 100 / float64(aof.rewriteBase)
+		if grown < float64(config.AOFAutoRewritePercentage) {
 			return
 		}
 	}

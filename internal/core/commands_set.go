@@ -204,6 +204,11 @@ func cmdSRANDMEMBER(args []string) []byte {
 		}
 		return constant.RespNil
 	}
+	if !given || count > 0 {
+		// Distinct sampling shuffles the internal order even though the set's
+		// logical contents do not change. An incremental rewrite must restart.
+		noteRewriteDirty(args[0])
+	}
 	if !given {
 		// One member, for the same reason SPOP takes one.
 		picked := s.RandomMembers(1)

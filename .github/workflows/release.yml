@@ -112,8 +112,17 @@ jobs:
           TARGET_OS: ${{ matrix.goos }}
           TARGET_ARCH: ${{ matrix.goarch }}
         run: |
+          # Retained alpha.3 closeout baseline reports provide these independent
+          # pins: bench/results/alpha2-archive-pins-2026-09-06.json.
+          case "${TARGET_OS}_${TARGET_ARCH}" in
+            linux_amd64) task_digest=8886e22a9a0b23e16a3488a78b6d264ef1636cc9ce58c11136360e2d2d38f5ef ;;
+            linux_arm64) task_digest=aa75536677e99431749e75ab091453ff22adf18c8f2d002ae2a2fc58d32323ba ;;
+            darwin_amd64) task_digest=205553690961ae8c9301fd296a1fa106a5db8d4d29a7638f31095b6bb93144fc ;;
+            darwin_arm64) task_digest=4739b633995ac8245da82b42b06c1f29f13139e6f388d9ab4fd590b48b4d4c94 ;;
+            *) exit 1 ;;
+          esac
           gh release download v0.1.0-alpha.2 --repo "$GITHUB_REPOSITORY" --pattern "keel_v0.1.0-alpha.2_${TARGET_OS}_${TARGET_ARCH}.tar.gz*" --dir baseline-archive
-          python3 scripts/check-archive.py --archive baseline-archive/*.tar.gz --out baseline
+          python3 scripts/check-archive.py --archive baseline-archive/*.tar.gz --expected-sha256 "$task_digest" --out baseline
       - name: Upgrade, rewrite, restart and backup rollback
         run: python3 installed/scripts/check-upgrade.py --baseline baseline/keel --candidate installed/keel --out upgrade-evidence
       - name: Documented client installation
@@ -173,5 +182,7 @@ jobs:
           gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dir downloaded
           cd downloaded
           test "$(find . -name '*.tar.gz' | wc -l)" -eq 4
-          sha256sum -c *.sha256
+          # Compare downloads with this workflow's build manifests, which were
+          # retained before uploading; downloaded sidecars are not trust roots.
+          sha256sum -c ../dist/*.sha256
           gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease

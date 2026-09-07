@@ -151,6 +151,8 @@ def run_arm(args, arm, binary, case, repetition, directory):
             command += ['-appendonly', '-appendfsync', args.policy, '-appendfilename', str(directory / 'store.aof')]
         if args.worker:
             command += ['-aof-async-append']
+        if args.candidate_concurrent and arm == 'candidate':
+            command += ['-aof-concurrent-append']
         if args.profiles:
             command += ['-profile-dir', str(directory / 'profiles')]
     process = client = load = None
@@ -160,6 +162,7 @@ def run_arm(args, arm, binary, case, repetition, directory):
     began = time.monotonic()
     report = {'status': 'running', 'arm': arm, 'case': case, 'repetition': repetition,
               'binary_sha256': sha256(binary), 'policy': args.policy, 'worker': args.worker and arm != 'redis',
+              'concurrent': args.candidate_concurrent and arm == 'candidate',
               'profiles_enabled': args.profiles, 'server_command': command}
     report['gc_trace_enabled'] = (args.profiles or args.gc_trace) and arm != 'redis'
     log = (directory / 'server.log').open('w')
@@ -312,11 +315,14 @@ def main():
     parser.add_argument('--seconds', type=int, default=5)
     parser.add_argument('--policy', choices=['off', 'no', 'everysec', 'always'], default='off')
     parser.add_argument('--worker', action='store_true')
+    parser.add_argument('--candidate-concurrent', action='store_true', help='enable bounded concurrent appends on candidate only; requires --worker')
     parser.add_argument('--profiles', action='store_true')
     parser.add_argument('--gc-trace', action='store_true', help='diagnostic Go GC logging; disabled by default in comparisons')
     args = parser.parse_args()
     if not 1 <= args.reps <= 20 or not 1 <= args.seconds <= 3600:
         parser.error('reps must be 1..20 and seconds 1..3600')
+    if args.candidate_concurrent and not args.worker:
+        parser.error('candidate-concurrent requires --worker')
     if args.worker and args.policy == 'off':
         parser.error('worker requires AOF')
     if args.profiles and (args.baseline or args.redis):

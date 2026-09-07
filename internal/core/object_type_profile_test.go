@@ -4,8 +4,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/brandopakel/keel/internal/constant"
 )
 
 func FuzzStringEncodingMatchesCanonicalInteger(f *testing.F) {
@@ -15,8 +13,8 @@ func FuzzStringEncodingMatchesCanonicalInteger(f *testing.F) {
 	f.Fuzz(func(t *testing.T, value string) {
 		n, err := strconv.ParseInt(value, 10, 64)
 		wantInteger := err == nil && strconv.FormatInt(n, 10) == value
-		kind, encoding := deduceTypeString(value)
-		if kind != constant.ObjTypeString || (encoding == constant.ObjEncodingInt) != wantInteger {
+		got, integer := canonicalInteger(value)
+		if integer != wantInteger || (integer && got != n) {
 			t.Fatalf("incorrect integer classification for %q", value)
 		}
 	})
@@ -29,7 +27,7 @@ func BenchmarkStringClassification(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_, _ = deduceTypeString(value)
+				_, _ = canonicalInteger(value)
 			}
 		})
 	}

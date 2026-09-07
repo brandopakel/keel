@@ -27,7 +27,8 @@ def export(roots):
             assert report['status'] == 'passed' and report['binary_sha256'] == binary['sha256']
             if 'totals' not in report:
                 continue
-            prefix = f"general/v1/{report['policy']}/{'worker' if report['worker'] else 'sync'}/{report['case']['name']}/rep-{report['repetition']}"
+            mode = 'concurrent' if report.get('concurrent', False) else ('worker' if report['worker'] else 'sync')
+            prefix = f"general/v1/{report['policy']}/{mode}/{report['case']['name']}/rep-{report['repetition']}"
             key = prefix+'/throughput'
             assert key not in output, 'duplicate workload/repetition'
             output[key] = {'throughput': {'value': report['totals']['Ops/sec']}}

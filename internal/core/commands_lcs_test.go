@@ -11,8 +11,7 @@ import (
 )
 
 func setString(key, value string) {
-	oType, oEnc := deduceTypeString(value)
-	dictStore.Put(key, dictStore.NewObj(value, oType, oEnc))
+	dictStore.Put(key, dictStore.NewObj(value))
 }
 
 // TestCmdLCSDocumentedExample is the example from the Redis documentation,

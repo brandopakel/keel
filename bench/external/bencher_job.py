@@ -17,8 +17,9 @@ from pathlib import Path
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--baseline', default='/opt/keel/bin/keel-alpha2')
-    parser.add_argument('--candidate', default='/opt/keel/bin/keel-alpha3')
+    parser.add_argument('--baseline', default='/opt/keel/bin/keel-baseline')
+    parser.add_argument('--candidate', default='/opt/keel/bin/keel-candidate')
+    parser.add_argument('--concurrent', action='store_true', help='include a fourth concurrent-append candidate arm')
     parser.add_argument('--policy', choices=['off', 'everysec', 'always'], required=True)
     parser.add_argument('--rep', type=int, required=True)
     parser.add_argument('--seconds', type=float, default=5)
@@ -59,7 +60,8 @@ def main():
             result = subprocess.run([sys.executable, str(driver), '--baseline', args.baseline,
                                      '--candidate', args.candidate, '--out', str(root / 'paired'),
                                      '--seconds', str(args.seconds), '--reps', '1',
-                                     '--start-rep', str(args.rep), '--policies', args.policy],
+                                     '--start-rep', str(args.rep), '--policies', args.policy] +
+                                    (['--concurrent'] if args.concurrent else []),
                                     stdout=log, stderr=subprocess.STDOUT)
         bmf = {}
         summary_path = root / 'paired' / 'summary.json'

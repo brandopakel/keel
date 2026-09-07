@@ -4,6 +4,10 @@ Introduced after v0.1.0-alpha.2.
 Both features are opt-in. This is a bounded first replication implementation for
 small pilot datasets, not a capacity, high-availability or zero-loss guarantee.
 
+The newer opt-in [protocol 2 candidate](replication-v2.md) adds streaming snapshots,
+canonical operation deltas and validated restart checkpoints. This page describes
+the default protocol 1 and original worker mode.
+
 ## Asynchronous append mode
 
 Add `-aof-async-append` to an AOF-enabled event-loop server. One immutable batch
@@ -16,6 +20,13 @@ staged successes. Shutdown joins the worker before closing the descriptor.
 
 This first implementation deliberately has one in-flight batch, not concurrent
 execution against unacknowledged state. A slow disk can still delay all commands.
+
+The candidate additionally accepts `-aof-concurrent-append` with worker appends.
+It admits bounded string command runs while an immutable batch is pending and
+gates replies, including dependent reads, by the required appended/synced prefix.
+Commands without conservative admission bounds use a drained barrier. It remains
+off by default; a general throughput or persistence-stall benefit is not established.
+
 Batches exceeding 64 MiB stop the server without acknowledgement; transient command
 encoding can allocate before that limit. Rewrite serialization/writes/final sync
 remain synchronous. A BGREWRITEAOF issued in the same batch as unflushed writes

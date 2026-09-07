@@ -10,18 +10,23 @@ import (
 )
 
 // One immutable batch crosses the worker boundary. The event loop owns all
-// keyspace/AOF state and stops command execution until this batch completes.
-// This is deliberate backpressure, not an acknowledgement on queue admission.
+// keyspace/AOF state. The optional concurrent mode admits bounded string runs
+// while it is pending and gates their replies by the completed logical prefix.
 const maxAsyncAppendBytes = 64 << 20
 
 type appendResult struct {
 	n      int
 	err    error
 	synced bool
+	end    uint64
+	body   []byte
 }
 
 var appendPending chan appendResult
 var appendBytes int
+var appendRetained int
+var appendStarted, appendCompleted uint64
+var appendWritten, appendSynced uint64
 var aofWrite = func(f *os.File, body []byte) (int, error) { return f.Write(body) }
 
 func AppendPending() bool { return appendPending != nil }
@@ -42,11 +47,18 @@ func pollAppend(wait bool) {
 	}
 	appendPending = nil
 	appendBytes = 0
+	appendRetained = 0
+	if result.err == nil {
+		appendCompleted = result.end
+	}
+	recordAOFDigest(result.body[:result.n])
 	aof.written += int64(result.n)
+	appendWritten += uint64(result.n)
 	if result.n > 0 {
 		aof.dirty = true
 	}
 	if result.synced {
+		appendSynced = result.end
 		aof.dirty = false
 		aof.lastSync = time.Now()
 	}
@@ -56,7 +68,8 @@ func pollAppend(wait bool) {
 }
 
 // FlushAOFAsync starts or polls a batch. ready means its replies may be sent.
-// The caller must not execute commands, expiry, or rewrites while !ready.
+// With !ready, only runs covered by AppendAdmission may execute. Expiry,
+// replication publication and rewrite transitions must wait for the barrier.
 // wake must be safe to call from a worker, including during shutdown.
 func FlushAOFAsync(wake func()) (ready bool, err error) {
 	pollAppend(false)
@@ -81,6 +94,9 @@ func FlushAOFAsync(wake func()) (ready bool, err error) {
 	result := make(chan appendResult, 1)
 	appendPending = result
 	appendBytes = len(body)
+	appendRetained = cap(body)
+	appendStarted += uint64(len(body))
+	end := appendStarted
 	go func() {
 		n, err := writeFile(file, body)
 		if err == nil && n != len(body) {
@@ -91,7 +107,7 @@ func FlushAOFAsync(wake func()) (ready bool, err error) {
 			err = syncFile(file)
 			synced = err == nil
 		}
-		result <- appendResult{n: n, err: err, synced: synced}
+		result <- appendResult{n: n, err: err, synced: synced, end: end, body: body}
 		if wake != nil {
 			wake()
 		}

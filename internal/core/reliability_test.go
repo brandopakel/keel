@@ -331,7 +331,7 @@ func TestLargeListRewriteRestartsAfterMutation(t *testing.T) {
 			run(t, "PEXPIRE", "large", "60000")
 			require.NoError(t, StartRewrite())
 			require.NoError(t, AdvanceRewrite())
-			require.True(t, rewrite.listActive, "large list should yield between chunks")
+			require.True(t, rewrite.collectionActive, "large list should yield between chunks")
 			switch mutation {
 			case "append":
 				run(t, "RPUSH", "large", "last")
@@ -341,7 +341,7 @@ func TestLargeListRewriteRestartsAfterMutation(t *testing.T) {
 			case "delete":
 				run(t, "DEL", "large")
 			}
-			require.False(t, rewrite.listActive)
+			require.False(t, rewrite.collectionActive)
 			for i := 0; rewrite.active && i < 100; i++ {
 				require.NoError(t, FlushAOF())
 			}

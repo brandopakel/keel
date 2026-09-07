@@ -139,12 +139,13 @@ crashes, stale-read rejection, fenced manual promotion and OS write-failure reco
 Linux CI also runs all 24 workload smoke cases, Redis differential checks, HLL
 upgrade/rollback, eviction/slow readers, a two-minute mixed soak and storage faults.
 
-Longer soaks are tracked by their live `progress.json` and eventual `report.json`.
-An eight-hour recovery run and a separate 48-hour continuous-primary run started
-from frozen copies of the binary and harness in
-`dist/validation/general/long-runs-20260906`. They are not passing evidence until their terminal reports
-say so. Process crashes do not simulate power loss or prove zero asynchronous
-replication loss after permanent primary failure.
+The eight-hour recovery run and separate 48-hour continuous-primary run in
+`dist/validation/general/long-runs-20260906` both failed with a replica restart
+readiness timeout. Neither completed its duration. The original evidence is
+preserved; [the runtime follow-up](runtime-validation-2026-09-06.md) documents
+the compaction-threshold defect, cloned-file recovery and replacement validation.
+Process crashes do not simulate power loss or prove zero asynchronous replication
+loss after permanent primary failure.
 
 ## Evidence and next work
 

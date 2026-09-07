@@ -111,7 +111,12 @@ func cmdINFO(args []string) []byte {
 			age = time.Since(replicaUpdated).Milliseconds()
 		}
 		fmt.Fprintf(&b, "# Replication\r\nprimary_epoch:%s\r\nreplica_epoch:%s\r\nreplication_pending_keys:%d\r\nreplication_epoch_invalidated:%t\r\n", replication.epoch, replicaEpoch, len(replication.dirty), replication.invalidated)
-		fmt.Fprintf(&b, "role:%s\r\nreplica_ready:%d\r\nreplica_offset:%d\r\nreplica_last_update_ms:%d\r\nprimary_offset:%d\r\nreplication_history_bytes:%d\r\n\r\n", role, ready, replicaOffset, age, replication.offset, replication.bytes)
+		offset, history := replication.offset, replication.bytes
+		if config.ReplicationProtocol == 2 {
+			offset, history = replicationV2.end, replicationV2.bytes
+			fmt.Fprintf(&b, "replication_snapshot_bytes:%d\r\nreplica_checkpoint_resumed:%t\r\nreplica_snapshot_received:%d\r\n", replicationV2.snapshotBytes, replicaV2.resumed, replicaV2.snapshotReceived)
+		}
+		fmt.Fprintf(&b, "replication_protocol:%d\r\nrole:%s\r\nreplica_ready:%d\r\nreplica_offset:%d\r\nreplica_last_update_ms:%d\r\nprimary_offset:%d\r\nreplication_history_bytes:%d\r\n\r\n", config.ReplicationProtocol, role, ready, replicaOffset, age, offset, history)
 	}
 	if want("server") {
 		fmt.Fprintf(&b, "# Server\r\nkeel_version:%s\r\nresp_version:2\r\n\r\n", config.BuildVersion())
@@ -148,6 +153,8 @@ func cmdINFO(args []string) []byte {
 		if aof.syncPending != nil {
 			pending = 1
 		}
+		encoded, written, synced, ready := AOFPositions()
+		fmt.Fprintf(&b, "aof_encoded_offset:%d\r\naof_appended_offset:%d\r\naof_synced_offset:%d\r\naof_reply_offset:%d\r\n", encoded, written, synced, ready)
 		fmt.Fprintf(&b, "aof_pending_fsync:%d\r\naof_pending_append_bytes:%d\r\n", pending, appendBytes)
 		fmt.Fprintf(&b, "aof_rewrites:%d\r\naof_keys_at_last_rewrite:%d\r\n\r\n", rewrites, keys)
 	}

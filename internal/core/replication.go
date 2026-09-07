@@ -20,13 +20,19 @@ const replicationLimit = 8 << 20
 const replicationHistoryLimit = 16 << 20
 
 type ReplicationFrame struct {
-	Version  int    `json:"version"`
-	Epoch    string `json:"epoch"`
-	From     uint64 `json:"from"`
-	To       uint64 `json:"to"`
-	Full     bool   `json:"full"`
-	Body     []byte `json:"body"`
-	Checksum string `json:"checksum"`
+	Version        int    `json:"version"`
+	Epoch          string `json:"epoch"`
+	From           uint64 `json:"from"`
+	To             uint64 `json:"to"`
+	Full           bool   `json:"full"`
+	Body           []byte `json:"body"`
+	Checksum       string `json:"checksum"`
+	SnapshotID     string `json:"snapshot_id,omitempty"`
+	SnapshotOffset uint64 `json:"snapshot_offset,omitempty"`
+	SnapshotBytes  uint64 `json:"snapshot_bytes,omitempty"`
+	SnapshotDone   bool   `json:"snapshot_done,omitempty"`
+	Pending        bool   `json:"pending,omitempty"`
+	CaughtUp       bool   `json:"caught_up,omitempty"`
 }
 type replicationBatch struct {
 	offset uint64
@@ -49,6 +55,7 @@ var replicaOffset uint64
 var replicaUpdated time.Time
 
 func InitReplication() error {
+	resetReplicationV2()
 	replication.dirty = make(map[string]struct{})
 	replication.history = nil
 	replication.bytes = 0
@@ -67,6 +74,9 @@ func InitReplication() error {
 	if config.ReplicaOf != "" {
 		data_structure.SuspendExpiry = true
 		data_structure.SuspendEviction = true
+	}
+	if config.ReplicaOf != "" && config.ReplicationProtocol == 2 {
+		return loadReplicaCheckpoint()
 	}
 	return nil
 }
@@ -139,8 +149,8 @@ func frameChecksum(f ReplicationFrame) string {
 	return hex.EncodeToString(sum[:])
 }
 func cmdReplicationPull(args []string) []byte {
-	if !config.ReplicationFeed {
-		return Encode(errors.New("ERR replication feed is disabled"), false)
+	if !config.ReplicationFeed || config.ReplicationProtocol != 1 {
+		return Encode(errors.New("ERR replication protocol 1 is disabled"), false)
 	}
 	if len(args) != 2 {
 		return Encode(errSyntax, false)
@@ -193,6 +203,9 @@ func cmdReplicationPull(args []string) []byte {
 // the replica: it must not serve a partially applied frame. Restart requires a
 // fresh full sync before reads are enabled, regardless of local AOF contents.
 func ApplyReplication(frame ReplicationFrame) error {
+	if config.ReplicationProtocol == 2 {
+		return applyReplicationV2(frame)
+	}
 	if frame.Version != 1 || len(frame.Epoch) != 32 || len(frame.Body) > replicationLimit || frame.Checksum != frameChecksum(frame) {
 		return errors.New("invalid replication frame")
 	}

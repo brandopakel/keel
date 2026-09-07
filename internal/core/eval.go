@@ -27,8 +27,9 @@ var commandTable = map[string]func([]string) []byte{
 	"PEXPIRE": cmdPEXPIRE, "EXPIREAT": cmdEXPIREAT, "PERSIST": cmdPERSIST,
 
 	// Server
-	"KEEL.REPL.PULL": cmdReplicationPull,
-	"DBSIZE":         cmdDBSIZE, "FLUSHDB": cmdFLUSHDB, "MEMORY": cmdMEMORY, "INFO": cmdINFO,
+	"KEEL.REPL.PULL":  cmdReplicationPull,
+	"KEEL.REPL.PULL2": cmdReplicationPullV2,
+	"DBSIZE":          cmdDBSIZE, "FLUSHDB": cmdFLUSHDB, "MEMORY": cmdMEMORY, "INFO": cmdINFO,
 	"BGREWRITEAOF": cmdBGREWRITEAOF,
 	"KEEL.DUMP":    cmdDUMP, "KEEL.RESTORE": cmdRESTORE,
 	// The names from before the server was renamed, so a log written then
@@ -52,6 +53,8 @@ var commandTable = map[string]func([]string) []byte{
 	"SRAND": cmdSRANDMEMBER,
 
 	// Sorted sets, and the geospatial index built on them
+	"ZCOUNT": cmdZCOUNT, "ZRANGEBYSCORE": cmdZRANGEBYSCORE, "ZREVRANGEBYSCORE": cmdZREVRANGEBYSCORE,
+	"ZINCRBY": cmdZINCRBY, "ZPOPMIN": cmdZPOPMIN, "ZPOPMAX": cmdZPOPMAX,
 	"ZRANGE": cmdZRANGE, "ZADD": cmdZADD, "ZRANK": cmdZRANK, "ZREM": cmdZREM, "ZSCORE": cmdZSCORE, "ZCARD": cmdZCARD,
 	"GEOADD": cmdGEOADD, "GEODIST": cmdGEODIST, "GEOHASH": cmdGEOHASH,
 	"GEOSEARCH": cmdGEOSEARCH, "GEOPOS": cmdGEOPOS,
