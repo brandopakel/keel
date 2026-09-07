@@ -65,3 +65,12 @@ correctness assertion. No runtime logic or slow-reader deadline changed. The
 complete failed job log is retained in bench/results/readiness-intel-failure-2026-09-07.log.
 A targeted diagnostic repeats the same slow-reader assertion on Linux and Intel
 macOS; passing repetitions do not erase the original unexplained failure.
+
+Diagnostic 34112834578 passed thirty isolated slow-reader repetitions on both
+Linux and Intel macOS, but its separate full Intel job again timed out during
+backpressure setup and in the existing unbuffered partial-reply test. The latter
+captured the event loop in syscall.Write; the former again had no loop stack.
+The full automatic PR job on the same c3e1049 revision passed. This discrepancy
+remains unresolved and blocks adopting this branch on green status alone.
+The second full failed job is retained in
+`bench/results/readiness-intel-diagnostic-failure-2026-09-07.log`.

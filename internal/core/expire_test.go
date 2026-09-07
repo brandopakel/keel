@@ -75,10 +75,16 @@ func TestExpireCycleLeavesLivingKeysAlone(t *testing.T) {
 type expirySamplingProbe struct {
 	data_structure.Keyspace
 	samples int
+	expires bool
 }
 
-func (p *expirySamplingProbe) KeysWithExpiry() int { return 0 }
-func (p *expirySamplingProbe) Len() int            { return 0 }
+func (p *expirySamplingProbe) KeysWithExpiry() int {
+	if p.expires {
+		return 1
+	}
+	return 0
+}
+func (p *expirySamplingProbe) Len() int { return 0 }
 func (p *expirySamplingProbe) ActiveExpire(int) (int, int) {
 	p.samples++
 	return 0, 0
@@ -102,6 +108,9 @@ func TestExpireCycleCostsNothingWhenNothingExpires(t *testing.T) {
 	}
 	assert.Zero(t, probe.samples, "a keyspace with no expiries must not be sampled")
 	assert.Equal(t, before, data_structure.TotalKeys())
+	probe.expires = true
+	ExpireCycle()
+	assert.Equal(t, 1, probe.samples, "the probe must observe sampling once a TTL exists")
 }
 
 // TestExpireCycleIsBoundedPerTurn. A keyspace where everything has fallen due
