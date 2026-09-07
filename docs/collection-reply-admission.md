@@ -32,4 +32,6 @@ These are per-command payload, record and metadata limits. The output buffer,
 canonical record and parsed input may coexist. Aggregate transient admission,
 per-client execution scheduling and a latency bound for an individual large
 command remain separate work. Size traversal itself is synchronous. Hosted
-correctness and matched workload measurements remain pending.
+correctness and matched workload measurements remain pending. The general
+workload harness now includes 4,096-member hash, set and sorted-set reads
+(27 scenarios total); all three new cases passed a local smoke check.

@@ -52,6 +52,9 @@ def scenarios():
         ('hll-dense', {'kind': 'hll', 'keys': 64, 'hll_items': 4096}),
         ('hll-union', {'kind': 'hll-union', 'keys': 64, 'hll_items': 32}),
         ('large-list-read', {'kind': 'large-list', 'keys': 1, 'size': 1024}),
+        ('large-hash-read', {'kind': 'large-hash', 'keys': 1, 'size': 64}),
+        ('large-set-read', {'kind': 'large-set', 'keys': 1, 'size': 64}),
+        ('large-zset-read', {'kind': 'large-zset', 'keys': 1, 'size': 64}),
         ('reconnect', {'reconnect': 100}),
     ]
     return [dict(base, name=name, **change) for name, change in changes]
@@ -81,6 +84,16 @@ def preload(client, case):
     commands = []
     digest = hashlib.sha256()
     kind = case['kind']
+    if kind in ('large-hash', 'large-set', 'large-zset'):
+        command = [{'large-hash':'HSET','large-set':'SADD','large-zset':'ZADD'}[kind], 'bench:collection']
+        for i in range(4096):
+            member = f'{i:04d}:'.encode()+payload
+            if kind == 'large-hash': command += [f'field:{i}', payload]
+            elif kind == 'large-set': command += [member]
+            else: command += [i, member]
+        digest.update(wire(command))
+        assert client.call(*command) == 4096
+        return digest.hexdigest()
     for index in range(case['keys'] if kind not in ('miss', 'list', 'large-list') else 0):
         key = f'bench:{index+1}'
         if kind == 'hash':
@@ -126,6 +139,9 @@ def traffic_options(case):
         'hll': [('PFADD __key__ member', 1), ('PFCOUNT __key__', 19)],
         'hll-union': [('PFCOUNT bench:1 bench:2 bench:3 bench:4', 1)],
         'large-list': [('LRANGE bench:list 0 -1', 1)],
+        'large-hash': [('HGETALL bench:collection', 1)],
+        'large-set': [('SMEMBERS bench:collection', 1)],
+        'large-zset': [('ZRANGE bench:collection 0 -1 WITHSCORES', 1)],
     }
     if kind in commands:
         options = []
