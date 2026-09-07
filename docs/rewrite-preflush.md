@@ -31,7 +31,8 @@ under no/everysec/always fsync, for 36 arms. The bounded queue reports drops,
 expiry, errors, scheduled/service latency and generator CPU. INFO polling every
 10 ms and ps sampling every 250 ms are identical in both arms. Full snapshot
 contents are verified after measurement; crash/restart correctness is covered
-separately. Hosted comparisons below provide candidate evidence; local runs validate the harness only.
+separately. Hosted comparisons below provide candidate evidence; local smoke runs check
+the harness, basic rewrite completion and traffic correctness, without establishing performance.
 
 General cache validation accepts `rewrite_validation=<exact baseline SHA>` to
 run the comparison on a free public Linux runner with separate exposed server
@@ -182,3 +183,28 @@ The branch integrates the now-merged set compaction, preserving both independent
 Mac diagnostic workflows. The frozen combined native archives and guarded soaks
 already contain the same runtime changes; subsequent edits affect diagnostics
 and documentation only.
+
+## Ordinary-workload adoption closeout
+
+Run 34132681515 completes the named Matched keyspace adoption matrix on the
+combined runtime 884eb49 against develop 10694f7, with five 15-second repetitions.
+Small-read, pipeline-16 and pipeline-64 paired median ratios are 1.006, 0.994 and
+1.005; no generator CPU warnings occur in those thirty arms. Their p99 medians
+are 0.223/0.223 ms, 0.623/0.631 ms and 1.511/1.487 ms, respectively.
+
+The many-client ratio is 1.007, but all ten arms flag generator CPU pressure.
+That row is excluded from server-capacity evidence. The earlier valid many-client
+comparison in 34128657503 records 1.010 with no CPU warning. Since that run, the
+sync-specific runtime edits do not execute with AOF and rewriting disabled; the
+set-maintenance integration is present in both final comparison arms. The earlier
+row remains relevant to that unchanged serving path. No comparison is made
+between absolute throughput on different runners.
+
+The final unconstrained rows, the earlier valid many-client row, repeated matched
+rewrite interference and correctness/recovery evidence support adoption. This is
+not a universal capacity or latency guarantee; the generator-limited result and
+unexplained historical Mac observations remain visible. Raw attempts are in
+`bench/results/rewrite-final-adoption-2026-09-07.json.gz`. CodeRabbit reviewed the
+final sync runtime through 53db86c, then automatically paused after repeated
+updates. The later merge of separately reviewed set maintenance, retained reports
+and documentation were inspected manually; a paused status is not a new review.
