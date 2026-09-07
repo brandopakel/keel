@@ -91,32 +91,6 @@ func geoWithinShape(shape *GeoShape, score float64) (longitude, latitude, distan
 	return longitude, latitude, distance, ok
 }
 
-// geoPointsInRange appends to out every member whose score is in [min, max)
-// and whose position is inside the shape. When limit is positive it stops once
-// out holds that many points.
-//
-// Appending to a slice the caller keeps across boxes is what makes a search a
-// handful of range walks rather than a merge, and rejecting points outside the
-// shape here means only the points actually returned are ever collected.
-func (zs *ZSet) geoPointsInRange(min, max float64, shape *GeoShape, out []GeoPoint, limit int) []GeoPoint {
-	r := rangeSpec{min: min, max: max, maxEx: true}
-	for n := zs.sl.firstInRange(r); n != nil && r.lteMax(n.score); n = n.next() {
-		if longitude, latitude, distance, ok := geoWithinShape(shape, n.score); ok {
-			out = append(out, GeoPoint{
-				Longitude: longitude,
-				Latitude:  latitude,
-				Dist:      distance,
-				Score:     n.score,
-				Member:    n.ele,
-			})
-		}
-		if limit > 0 && len(out) >= limit {
-			break
-		}
-	}
-	return out
-}
-
 // scoresOfGeoHashBox is the interval of scores that lie inside a box: from the
 // hash aligned to 52 bits, up to but not including the next hash at the same
 // step aligned the same way. Every finer hash inside the box shares the box's

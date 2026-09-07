@@ -138,3 +138,28 @@ func TestGeoSearchCountDoesNotCollectEveryMatch(t *testing.T) {
 	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(64<<10))
 	require.Equal(t, "*1\r\n$5\r\n00000\r\n", string(reply))
 }
+
+func TestGeoSearchLargeCountWithSparseMatches(t *testing.T) {
+	ResetStores()
+	t.Cleanup(ResetStores)
+	z := data_structure.CreateZSet()
+	far, ok := data_structure.GeoScore(10, 10)
+	require.True(t, ok)
+	for i := 0; i < 50000; i++ {
+		z.Add(float64(far), fmt.Sprintf("far:%d", i), 0)
+	}
+	near, ok := data_structure.GeoScore(0, 0)
+	require.True(t, ok)
+	z.Add(float64(near), "near", 0)
+	zsetStore.Put("geo", z)
+	for _, count := range []string{"50000", "1000000", "10000000"} {
+		runtime.GC()
+		var before, after runtime.MemStats
+		runtime.ReadMemStats(&before)
+		reply := cmdGEOSEARCH([]string{"geo", "FROMLONLAT", "0", "0", "BYRADIUS", "1", "m", "COUNT", count})
+		runtime.ReadMemStats(&after)
+		t.Logf("sparse COUNT %s allocated %d bytes", count, after.TotalAlloc-before.TotalAlloc)
+		require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(128<<10))
+		require.Equal(t, "*1\r\n$4\r\nnear\r\n", string(reply))
+	}
+}

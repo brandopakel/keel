@@ -141,10 +141,11 @@ def check_geo(candidate, reference, *, populate=False):
                     if not order and not count:
                         actual, expected = sorted(actual), sorted(expected)
                     assert len(actual) == len(expected), (command, len(actual), len(expected))
-                    for got, want in zip(actual, expected):
+                    for got, want in zip(actual, expected, strict=True):
                         if not flags:
                             assert got == want, (command, got, want)
                             continue
+                        assert isinstance(got, list) and len(got) == len(want) == 1 + flags.bit_count(), (command, got, want)
                         assert got[0] == want[0], (command, got, want)
                         offset = 1
                         if flags & 1:
@@ -154,9 +155,45 @@ def check_geo(candidate, reference, *, populate=False):
                             assert got[offset] == want[offset], (command, got, want)
                             offset += 1
                         if flags & 4:
+                            assert isinstance(got[offset], list) and len(got[offset]) == len(want[offset]) == 2, (command, got, want)
                             assert all(math.isclose(float(a), float(b), rel_tol=0, abs_tol=1e-12)
-                                       for a,b in zip(got[offset], want[offset])), (command, got, want)
+                                       for a,b in zip(got[offset], want[offset], strict=True)), (command, got, want)
                     checks += 1
+        # ANY may select a different subset on each implementation. Validate
+        # each against the full reference membership and exact option shape.
+        for flags in range(8):
+            base = ['GEOSEARCH', 'geo:admission', 'FROMLONLAT', 0, 0,
+                    'BYRADIUS', radius, 'km']
+            for bit, option in enumerate(('WITHDIST', 'WITHHASH', 'WITHCOORD')):
+                if flags & (1 << bit):
+                    base.append(option)
+            all_rows = reference.call(*base)
+            expected = {(row[0] if flags else row): row for row in all_rows}
+            for count in (1, 7, 10000000):
+                command = base + ['COUNT', count, 'ANY']
+                for client in (candidate, reference):
+                    actual = client.call(*command)
+                    assert isinstance(actual, list) and len(actual) == min(count, len(expected)), (command, actual)
+                    members = [row[0] if flags else row for row in actual]
+                    assert len(members) == len(set(members)), (command, members)
+                    for got, member in zip(actual, members, strict=True):
+                        assert member in expected, (command, got)
+                        if not flags:
+                            continue
+                        want = expected[member]
+                        assert isinstance(got, list) and len(got) == len(want) == 1 + flags.bit_count(), (command, got, want)
+                        offset = 1
+                        if flags & 1:
+                            assert abs(float(got[offset])-float(want[offset])) < .00011, (command, got, want)
+                            offset += 1
+                        if flags & 2:
+                            assert got[offset] == want[offset], (command, got, want)
+                            offset += 1
+                        if flags & 4:
+                            assert isinstance(got[offset], list) and len(got[offset]) == len(want[offset]) == 2, (command, got, want)
+                            assert all(math.isclose(float(a), float(b), rel_tol=0, abs_tol=1e-12)
+                                       for a,b in zip(got[offset], want[offset], strict=True)), (command, got, want)
+                checks += 1
     return checks
 
 

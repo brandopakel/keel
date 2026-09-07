@@ -58,3 +58,18 @@ uncontrolled. The adoption tradeoff favors bounded allocation and the demonstrat
 nearest-search gain while accepting the small ANY throughput cost. The ordinary
 pipeline tail difference needs assessment again in the integrated comparison.
 Raw evidence is in `bench/results/geo-response-admission-matched-2026-09-07.json.gz`.
+
+Review found that a large COUNT within the point limit reserved space before
+filtering the shape. A 50,001-member fixture with one matching location allocated
+2,400,672 bytes for COUNT 50,000. Ordered counts above 1,024 now count matching
+points up to the selection/workspace bound before allocating once. The same
+fixture allocates 488 bytes for COUNT 50,000, 1,000,000 and 10,000,000. This avoids
+slice growth temporarily retaining two large arrays; large-count queries pay an
+additional bounded membership pass. COUNT 1/100 benchmark paths are unchanged.
+
+The unused range collector is removed. Differential checks now enforce option
+and coordinate cardinality and test COUNT ANY by membership, count and encoded
+fields without requiring identical subsets. The expanded 10,000-command run,
+rewrite and two restarts pass, as do the full local suite, vet and three focused
+race repetitions after integrating bounded hash/zset storage and term guards.
+Raw review validation is in `geo-response-review-2026-09-07.json.gz`.

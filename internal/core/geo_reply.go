@@ -23,9 +23,16 @@ func geoSearchReply(z *data_structure.ZSet, radius data_structure.GeoHashRadius,
 	}
 	if s.order != "" {
 		limit := s.count
-		if limit <= 0 || limit > maxGeoPoints {
+		if limit <= 0 || limit > 1024 {
+			// Large COUNT values do not establish how many points match. Count
+			// first, stopping at the selection/workspace bound, so sparse shapes
+			// neither reserve the entire set nor grow overlapping backing arrays.
+			requested := limit
 			limit = 0
-			walk(func(data_structure.GeoPoint) bool { limit++; return limit <= maxGeoPoints })
+			walk(func(data_structure.GeoPoint) bool {
+				limit++
+				return limit <= maxGeoPoints && (requested <= 0 || limit < requested)
+			})
 			if limit > maxGeoPoints {
 				return replyTooLarge
 			}
