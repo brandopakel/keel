@@ -102,6 +102,19 @@ role, readiness, applied offset, update age and retained history bytes.
    enable `-replication-feed` for new followers. Redirect clients only after checking
    the dataset and write behavior. Keep the old writer fenced.
 
+The primary reports what its replicas have confirmed. A pull asks to resume from
+an offset, and asking for it states that everything before it has been applied,
+so `INFO replication` carries `replication_acked_offset`, `replication_lag_bytes`
+and `replication_acked_age_ms`. Lag is how much a promotion would lose right now;
+age says whether replication is alive at all. An age of -1 means nothing has ever
+acknowledged, which is not the same as being caught up.
+
+None of it is a durability guarantee. With more than one replica the recorded
+offset is the furthest any has reached, not the nearest, so it cannot answer
+whether n replicas hold a given write. A `WAIT` that promised that needs
+per-replica offsets keyed by connection, which the command layer cannot supply
+today, and a way to hold a reply until the condition is met or a deadline passes.
+
 There is no election, quorum, automated promotion, conflict resolution, WAIT command,
 or guarantee against split brain after an operator removes fencing. Asynchronous
 replication does not guarantee preservation of every acknowledged primary write.
