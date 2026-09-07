@@ -118,14 +118,11 @@ func recordReplicationV2Commit(cmd *Command) {
 		strings.HasPrefix(cmd.Cmd, "CMS.") || strings.HasPrefix(cmd.Cmd, "MORRIS.") ||
 		cmd.Cmd == "PFADD" || cmd.Cmd == "PFMERGE"
 	if opaque {
-		body = nil
-		for key := range replication.dirty {
-			body = appendCommand(body, "DEL", key)
-			body = emitKey(body, key)
-			if len(body) > replicationCommandBytes {
-				invalidateReplicationV2()
-				return
-			}
+		var fits bool
+		body, fits = opaqueReplicationBody()
+		if !fits {
+			invalidateReplicationV2()
+			return
 		}
 	}
 	recordReplicationV2Body(body)
