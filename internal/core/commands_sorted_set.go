@@ -309,16 +309,5 @@ func cmdZRANGE(args []string) []byte {
 	if !ok {
 		return constant.RespEmptyArray
 	}
-	members, scores := zs.RangeByRank(start, stop, reverse)
-	if len(members) == 0 {
-		return constant.RespEmptyArray
-	}
-	if !withScores {
-		return Encode(members, false)
-	}
-	out := make([]string, 0, len(members)*2)
-	for i, m := range members {
-		out = append(out, m, formatZScore(scores[i]))
-	}
-	return Encode(out, false)
+	return scoredReply(func(yield func(string, float64) bool) { zs.VisitRangeByRank(start, stop, reverse, yield) }, withScores)
 }

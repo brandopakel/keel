@@ -93,6 +93,16 @@ func (c *HashCursor) Entry() (string, string, bool) {
 
 func (c *HashCursor) Advance() { c.valid = c.iterator.Next() }
 
+// Visit walks entries without allocating name/value arrays. The visitor may
+// stop early; it must not mutate the hash during traversal.
+func (h *Hash) Visit(yield func(field, value string) bool) {
+	for field, value := range h.fields {
+		if !yield(field, value) {
+			return
+		}
+	}
+}
+
 // Fields, Values and Entries walk the map, so all three are in map order:
 // arbitrary, and different every time. Redis says the same of HKEYS, HVALS and
 // HGETALL, and the three are consistent with each other only within one call -
