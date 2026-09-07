@@ -79,7 +79,7 @@ func (s *Set) shrink() {
 			if len(s.order) == 0 {
 				s.index = make(map[string]int)
 				s.compaction = nil
-			} else if s.compaction == nil {
+			} else if s.compaction == nil || len(s.order)*4 < s.compaction.initialLen {
 				s.compaction = &setIndexCompaction{next: make(map[string]int), initialLen: len(s.order)}
 			}
 		}

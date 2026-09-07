@@ -91,6 +91,22 @@ func TestSetCompactionCancelsOnRegrowth(t *testing.T) {
 	requireSetIndex(t, s)
 }
 
+func TestSetCompactionRestartsAfterFurtherLargeShrink(t *testing.T) {
+	s := sparseSet(t)
+	require.Equal(t, 1024, s.CompactIndex(1024))
+	previous := s.compaction
+	for i := 10; i < 2048; i++ {
+		s.Remove(strconv.Itoa(i))
+	}
+	require.NotSame(t, previous, s.compaction, "do not retain a mostly empty shadow map after another large shrink")
+	for i := 0; s.compaction != nil && i < 10; i++ {
+		require.LessOrEqual(t, s.CompactIndex(3), 3)
+	}
+	require.Nil(t, s.compaction)
+	requireSetIndex(t, s)
+	require.Equal(t, 10, s.Len())
+}
+
 func TestSetCompactionUsesSharedKeyAndMemberBudget(t *testing.T) {
 	store := NewKeyed[*Set]("sets")
 	sets := []*Set{sparseSet(t), sparseSet(t), sparseSet(t)}
