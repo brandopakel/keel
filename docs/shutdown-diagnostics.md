@@ -38,7 +38,11 @@ signal and the configured deadline with a bounded stack report. They passed loca
 in a guarded 6.26-second invocation; compilation caches were pruned. Evidence is
 `bench/results/shutdown-configured-deadline-2026-09-07.json.gz`.
 
-The hosted matrix repeats with an explicit 30-second grace. Its result is pending.
+The six-arm [hosted repeat 34170236418](https://github.com/brandopakel/keel/actions/runs/34170236418)
+passes with an explicit 30-second grace on candidate `e6b82d9`. Shutdown durations
+range from 4.475 to 11.389 seconds. Full reports and build identities are in
+`bench/results/shutdown-thirty-second-diagnostic-2026-09-07.tar.gz`.
+These runner samples do not establish a universal sufficient grace.
 Comparative throughput tests must give both runtime versions the same supported
 grace, workload and durability settings. A longer grace does not establish a
 persistence speedup or guarantee recovery from storage failure.
