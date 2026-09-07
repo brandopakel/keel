@@ -28,3 +28,14 @@ history and rewrite images still need aggregate admission before construction.
 An accepted opaque image still serializes synchronously, and snapshot fallback
 does not make large-key catch-up efficient. The frozen long soaks predate this
 candidate; local measurements are diagnostics rather than dedicated-host results.
+
+Native CI run 34158319335 at `54ed959` reproduced the historical Intel Mac
+`TestPendingRepliesSurviveOtherTraffic/kqueue` idle-read timeout. The existing
+cleanup closed both test sockets before collecting the server stack; its idle
+kevent stack therefore cannot identify the failure state. The regression now
+records completed replies and transport bytes/reads, and captures the owned
+server before closing those sockets. Request writes are checked as well. One
+hundred local repetitions (both socket modes) pass; those repeats do not explain
+the Intel failure. The dedicated native diagnostic applies identical diagnostic
+tests to the failing runtime and candidate and retains every result. No timeout
+has been widened and this is not yet a server liveness fix.
