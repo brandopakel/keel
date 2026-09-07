@@ -61,8 +61,8 @@ func cmdTYPE(args []string) []byte {
 // It walks the entire keyspace and builds the whole reply before sending any of
 // it, which on a single-threaded server means every other client waits for it.
 // That is Redis's KEYS too, and the reason Redis tells you to use SCAN instead.
-// SCAN is not implemented here, and the note in the README says why rather than
-// leaving it looking like an oversight.
+// SCAN is in commands_scan.go and is the one to reach for; KEYS stays because
+// it is the honest answer when a caller really does want the whole keyspace.
 func cmdKEYS(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(errors.New("ERR wrong number of arguments for 'KEYS' command"), false)
