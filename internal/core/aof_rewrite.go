@@ -73,11 +73,21 @@ var rewrite struct {
 	hashCursor *data_structure.HashCursor
 	written    int64
 
-	// keys is every name that existed when the rewrite started. A Go map
-	// cannot be iterated across cycles - there is no resumable iterator - so
-	// the names are collected up front and walked as a list.
-	keys []string
-	pos  int
+	// The walk is a cursor into the sharded keyspace rather than a list of every
+	// name. Collecting them up front was a pause proportional to the keyspace
+	// on the thread that serves every client - 17 to 76 ms at a million keys -
+	// and it held a string header per key for the whole rewrite.
+	//
+	// The cursor promises what the walk needs: a key present throughout is
+	// returned exactly once. A key created during the walk may or may not be
+	// returned, and either is correct, because a write also marks it dirty and
+	// dirty keys are re-emitted at the end. A key deleted during the walk reads
+	// as absent through Peek and is skipped, exactly as it was before.
+	cursor   uint64
+	batch    []string
+	batchPos int
+	walkDone bool
+	walked   int
 
 	// dirty is every key written since the rewrite started. These are the keys
 	// the walk may have recorded wrongly, and they are all rewritten at the end
@@ -91,6 +101,13 @@ var rewrite struct {
 
 // RewriteActive reports whether a rewrite is part-way through.
 func RewriteActive() bool { return rewrite.active }
+
+// rewriteWalkComplete reports whether the cursor has reached the end and the
+// batch it last returned has been consumed. Both halves matter: the cursor
+// comes back zero on the call that returns the final keys, not after them.
+func rewriteWalkComplete() bool {
+	return rewrite.walkDone && rewrite.batchPos == len(rewrite.batch)
+}
 
 // StartRewrite begins one, collecting the key names it will walk.
 func StartRewrite() error {
@@ -111,8 +128,12 @@ func StartRewrite() error {
 		return err
 	}
 
+	// Not a memory limit any more - the walk no longer holds the keyspace - but
+	// a fail-fast against the duration and dirty-key budgets below. A larger
+	// keyspace would walk for a while and then abort, and refusing up front is
+	// a better answer than that. Raising it means revisiting those budgets.
 	if data_structure.TotalKeys() > 1000000 {
-		return fmt.Errorf("rewrite snapshot limit: at most 1000000 keys")
+		return fmt.Errorf("rewrite limit: at most 1000000 keys")
 	}
 	path := aof.path
 	tmpPath := path + ".rewrite"
@@ -131,11 +152,11 @@ func StartRewrite() error {
 		rewrite.digest = sha256.New()
 	}
 	rewrite.written = 0
-	rewrite.pos = 0
 	rewrite.collectionActive = false
 	rewrite.hashCursor = nil
 	rewrite.dirty = make(map[string]struct{})
-	rewrite.keys = allKeyNames()
+	rewrite.cursor, rewrite.batch, rewrite.batchPos = 0, rewrite.batch[:0], 0
+	rewrite.walkDone, rewrite.walked = false, 0
 	return nil
 }
 
@@ -160,7 +181,7 @@ func AdvanceRewrite() error {
 	// Once the snapshot walk is done, retain changed key names until the sync
 	// worker releases the old descriptor. Re-emitting hot keys every cycle
 	// while replacement is blocked can make the rewrite larger than the log.
-	if rewrite.pos == len(rewrite.keys) && !rewrite.collectionActive && aof.syncPending != nil {
+	if rewriteWalkComplete() && !rewrite.collectionActive && aof.syncPending != nil {
 		return nil
 	}
 	if rewrite.collectionActive {
@@ -174,10 +195,23 @@ func AdvanceRewrite() error {
 	deadline := time.Now().Add(time.Millisecond)
 	var body []byte
 	count := 0
-	for rewrite.pos < len(rewrite.keys) && count < rewriteChunk {
-		key := rewrite.keys[rewrite.pos]
-		rewrite.pos++
+	for count < rewriteChunk {
+		if rewrite.batchPos == len(rewrite.batch) {
+			if rewrite.walkDone {
+				break
+			}
+			// One shard at a time, so what is held is a shard of names rather
+			// than the keyspace, and the cost of a slice stays bounded.
+			rewrite.batch, rewrite.cursor = data_structure.ScanKeyspaces(
+				rewrite.cursor, rewriteChunk, nil, rewrite.batch[:0])
+			rewrite.batchPos = 0
+			rewrite.walkDone = rewrite.cursor == 0
+			continue
+		}
+		key := rewrite.batch[rewrite.batchPos]
+		rewrite.batchPos++
 		count++
+		rewrite.walked++
 		if _, touched := rewrite.dirty[key]; !touched {
 			body = emitRewriteKey(body, key)
 		}
@@ -185,7 +219,7 @@ func AdvanceRewrite() error {
 			break
 		}
 	}
-	if rewrite.pos == len(rewrite.keys) && !rewrite.collectionActive {
+	if rewriteWalkComplete() && !rewrite.collectionActive {
 		for key := range rewrite.dirty {
 			if rewrite.collectionActive || count >= rewriteChunk || len(body) >= 1<<20 || time.Now().After(deadline) {
 				break
@@ -200,7 +234,7 @@ func AdvanceRewrite() error {
 		abortRewrite(err)
 		return err
 	}
-	if rewrite.collectionActive || rewrite.pos < len(rewrite.keys) || len(rewrite.dirty) > 0 {
+	if rewrite.collectionActive || !rewriteWalkComplete() || len(rewrite.dirty) > 0 {
 		return nil
 	}
 
@@ -375,10 +409,10 @@ func finishRewrite() error {
 	appendSynced = max(appendSynced, appendCompleted)
 	aof.written = 0
 	aof.rewrites++
-	aof.lastKeys = len(rewrite.keys)
+	aof.lastKeys = rewrite.walked
 
 	rewrite.active = false
-	rewrite.keys = nil
+	rewrite.batch = nil
 	rewrite.dirty = nil
 	return captureReplicationSnapshot()
 }
@@ -394,7 +428,7 @@ func abortRewrite(cause error) {
 	}
 	os.Remove(rewrite.tmpPath)
 	rewrite.active = false
-	rewrite.keys = nil
+	rewrite.batch = nil
 	rewrite.dirty = nil
 	rewrite.file = nil
 	if cause != nil {
