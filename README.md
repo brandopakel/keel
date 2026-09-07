@@ -11,10 +11,11 @@ not imply that every Redis client feature or application works unchanged.
 
 ## Run locally
 
-Requires Go 1.22 or newer; Linux and macOS are supported. Use current Go on
-recent macOS: older internal linkers omit the LC_UUID load command required by
-macOS 26 ([Go issue](https://github.com/golang/go/issues/68678)). CI tests the
-Go 1.22 source floor on macOS using external linking; release builds use current Go.
+Requires Go 1.25 or newer; Linux and macOS are supported. The floor is the
+oldest Go still receiving security fixes rather than the oldest that compiles,
+because the memory accounting is calibrated against real heap growth and so
+depends on the runtime it is built with. CI tests that floor alongside current
+Go; release builds use current Go.
 
 ```sh
 go build -o keel ./cmd/keel
