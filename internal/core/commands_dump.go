@@ -47,73 +47,13 @@ const (
 	dumpTagList   = byte(10)
 )
 
-// dumpKey serialises whatever holds the key.
+// dumpKey preserves the existing KEL1 envelope for internal persistence callers.
 func dumpKey(key string) ([]byte, bool) {
-	payload, ok := dumpValue(key)
+	plan, ok := planDump(key, math.MaxInt-9)
 	if !ok {
 		return nil, false
 	}
-	out := append([]byte("KEL1"), payload...)
-	out = binary.LittleEndian.AppendUint32(out, crc32.ChecksumIEEE(out))
-	return out, true
-}
-
-func dumpValue(key string) ([]byte, bool) {
-	if h, ok := hashStore.Peek(key); ok {
-		w := &respParts{}
-		fs, vs := h.Entries()
-		for i, f := range fs {
-			w.add(f)
-			w.add(vs[i])
-		}
-		return append([]byte{dumpTagHash}, w.encode()...), true
-	}
-	if l, ok := listStore.Peek(key); ok {
-		w := &respParts{}
-		for _, v := range l.All() {
-			w.add(v)
-		}
-		return append([]byte{dumpTagList}, w.encode()...), true
-	}
-	// Peek, not Get. Get records an access and reaps an expired key, and this
-	// is called for every key of a rewrite: reading the keyspace would mark all
-	// of it recently used and leave eviction with no idea which keys anyone
-	// actually wanted. Dumping a key is not using it.
-	if obj := dictStore.Peek(key); obj != nil {
-		return append([]byte{dumpTagString}, obj.Value...), true
-	}
-	if set, ok := setStore.Peek(key); ok {
-		w := &respParts{}
-		for _, m := range set.Members() {
-			w.add(m)
-		}
-		return append([]byte{dumpTagSet}, w.encode()...), true
-	}
-	if zset, ok := zsetStore.Peek(key); ok {
-		members, scores := zset.Entries()
-		w := &respParts{}
-		for i, m := range members {
-			w.add(formatScore(scores[i]))
-			w.add(m)
-		}
-		return append([]byte{dumpTagZSet}, w.encode()...), true
-	}
-	if sb, ok := sbStore.Peek(key); ok {
-		return append([]byte{dumpTagBloom}, sb.Marshal()...), true
-	}
-	if cms, ok := cmsStore.Peek(key); ok {
-		return append([]byte{dumpTagCMS}, cms.Marshal()...), true
-	}
-	if m, ok := morrisStore.Peek(key); ok {
-		return append([]byte{dumpTagMorris}, m.Marshal()...), true
-	}
-	if h, ok := hllStore.Peek(key); ok {
-		return append([]byte{dumpTagHLL}, h.Marshal()...), true
-	}
-	if cf, ok := cfStore.Peek(key); ok {
-		return append([]byte{dumpTagCuckoo}, cf.Marshal()...), true
-	}
-	return nil, false
+	return appendDump(make([]byte, 0, plan.size+9), plan), true
 }
 
 // restoreKey rebuilds a key from a payload, replacing whatever was there.
@@ -242,11 +182,20 @@ func cmdDUMP(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'KEEL.DUMP' command"), false)
 	}
-	payload, ok := dumpKey(args[0])
+	plan, ok := planDump(args[0], MaxReplyBytes)
 	if !ok {
 		return constant.RespNil
 	}
-	return Encode(string(payload), false)
+	size, fits := addBulkSize(0, plan.size+9)
+	if !fits {
+		return replyTooLarge
+	}
+	out := make([]byte, 0, size)
+	out = append(out, '$')
+	out = strconv.AppendInt(out, int64(plan.size+9), 10)
+	out = append(out, '\r', '\n')
+	out = appendDump(out, plan)
+	return append(out, '\r', '\n')
 }
 
 func cmdRESTORE(args []string) []byte {

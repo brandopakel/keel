@@ -1,0 +1,282 @@
+{
+  "run_url": "https://github.com/brandopakel/keel/actions/runs/34105832356",
+  "candidate": "27cd4ad990994d0d4aeaa8d3f726ed88a8bbbf83",
+  "build": "/tmp/candidate: go1.27.1\n\tpath\tgithub.com/brandopakel/keel/cmd/keel\n\tmod\tgithub.com/brandopakel/keel\tv0.1.0-alpha.3.0.20260907091931-27cd4ad99099\t\n\tdep\tgithub.com/spaolacci/murmur3\tv1.1.0\th1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tDefaultGODEBUG=tracebacklabels=0,x509sslcertoverrideplatform=0\n\tbuild\tCGO_ENABLED=0\n\tbuild\tGOARCH=amd64\n\tbuild\tGOOS=linux\n\tbuild\tGOAMD64=v1\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=27cd4ad990994d0d4aeaa8d3f726ed88a8bbbf83\n\tbuild\tvcs.time=2026-09-07T09:19:31Z\n\tbuild\tvcs.modified=false\n",
+  "report": {
+    "status": "passed",
+    "binary_sha256": "7e6f9e50eaa912ded9ebf2daf4c44a84a26417398d66772641731c244898770f",
+    "harness_sha256": "349f761d75f44066703a395f4b654c72903e586bb3509414590db069df845ca0",
+    "dataset_value_bytes": 134217728,
+    "replicas": 2,
+    "protocol": 2,
+    "concurrent": true,
+    "phases": [
+      {
+        "name": "initial_interrupted_snapshots",
+        "phase_seconds_including_verification": 3.6464554530000015,
+        "replicas": [
+          {
+            "replica": "replica-0",
+            "state": {
+              "primary_epoch": "525d4c8b906c28642e95f14ea1575704",
+              "replica_epoch": "6e58f083d83bcab97f4b32a76d5bf45b",
+              "replication_pending_keys": "0",
+              "replication_epoch_invalidated": "false",
+              "replication_snapshot_bytes": "0",
+              "replica_checkpoint_resumed": "false",
+              "replica_snapshot_received": "134297571",
+              "replication_protocol": "2",
+              "role": "replica",
+              "replica_ready": "1",
+              "replica_offset": "134297571",
+              "replica_last_update_ms": "12",
+              "primary_offset": "0",
+              "replication_history_bytes": "0"
+            },
+            "observed_caught_up_seconds": 2.521201982000008,
+            "transferred_bytes": 179565945,
+            "digest": "6045eaa56ea779a87fadc16765f35d52a23f8781ede7ec6d53cbbd3ca0a81de1"
+          },
+          {
+            "replica": "replica-1",
+            "state": {
+              "primary_epoch": "ac8f004ff85fdc458027e99ba1ed40a1",
+              "replica_epoch": "6e58f083d83bcab97f4b32a76d5bf45b",
+              "replication_pending_keys": "0",
+              "replication_epoch_invalidated": "false",
+              "replication_snapshot_bytes": "0",
+              "replica_checkpoint_resumed": "false",
+              "replica_snapshot_received": "134297571",
+              "replication_protocol": "2",
+              "role": "replica",
+              "replica_ready": "1",
+              "replica_offset": "134297571",
+              "replica_last_update_ms": "18",
+              "primary_offset": "0",
+              "replication_history_bytes": "0"
+            },
+            "observed_caught_up_seconds": 2.6711376430000087,
+            "transferred_bytes": 179565946,
+            "digest": "6045eaa56ea779a87fadc16765f35d52a23f8781ede7ec6d53cbbd3ca0a81de1"
+          }
+        ],
+        "primary": {
+          "primary_epoch": "6e58f083d83bcab97f4b32a76d5bf45b",
+          "replica_epoch": "",
+          "replication_pending_keys": "0",
+          "replication_epoch_invalidated": "false",
+          "replication_snapshot_bytes": "134297571",
+          "replica_checkpoint_resumed": "false",
+          "replica_snapshot_received": "0",
+          "replication_protocol": "2",
+          "role": "primary",
+          "replica_ready": "0",
+          "replica_offset": "0",
+          "replica_last_update_ms": "-1",
+          "primary_offset": "134297571",
+          "replication_history_bytes": "16594915"
+        }
+      },
+      {
+        "name": "two_history_overrun_recoveries_after_rewrite",
+        "phase_seconds_including_verification": 3.7212148820000124,
+        "replicas": [
+          {
+            "replica": "replica-0",
+            "state": {
+              "primary_epoch": "525d4c8b906c28642e95f14ea1575704",
+              "replica_epoch": "6e58f083d83bcab97f4b32a76d5bf45b",
+              "replication_pending_keys": "0",
+              "replication_epoch_invalidated": "false",
+              "replication_snapshot_bytes": "0",
+              "replica_checkpoint_resumed": "false",
+              "replica_snapshot_received": "134297573",
+              "replication_protocol": "2",
+              "role": "replica",
+              "replica_ready": "1",
+              "replica_offset": "167885173",
+              "replica_last_update_ms": "13",
+              "primary_offset": "0",
+              "replication_history_bytes": "0"
+            },
+            "observed_caught_up_seconds": 2.4602465560000013,
+            "transferred_bytes": 179216136,
+            "digest": "d3982dedaf17f81952cdb18ad805a40ef011a0d6bcc09dd248f54d87b74db7e7"
+          },
+          {
+            "replica": "replica-1",
+            "state": {
+              "primary_epoch": "ac8f004ff85fdc458027e99ba1ed40a1",
+              "replica_epoch": "6e58f083d83bcab97f4b32a76d5bf45b",
+              "replication_pending_keys": "0",
+              "replication_epoch_invalidated": "false",
+              "replication_snapshot_bytes": "0",
+              "replica_checkpoint_resumed": "false",
+              "replica_snapshot_received": "134297573",
+              "replication_protocol": "2",
+              "role": "replica",
+              "replica_ready": "1",
+              "replica_offset": "167885173",
+              "replica_last_update_ms": "14",
+              "primary_offset": "0",
+              "replication_history_bytes": "0"
+            },
+            "observed_caught_up_seconds": 2.713473513000011,
+            "transferred_bytes": 179216136,
+            "digest": "d3982dedaf17f81952cdb18ad805a40ef011a0d6bcc09dd248f54d87b74db7e7"
+          }
+        ],
+        "primary": {
+          "primary_epoch": "6e58f083d83bcab97f4b32a76d5bf45b",
+          "replica_epoch": "",
+          "replication_pending_keys": "0",
+          "replication_epoch_invalidated": "false",
+          "replication_snapshot_bytes": "134297573",
+          "replica_checkpoint_resumed": "false",
+          "replica_snapshot_received": "0",
+          "replication_protocol": "2",
+          "role": "primary",
+          "replica_ready": "0",
+          "replica_offset": "0",
+          "replica_last_update_ms": "-1",
+          "primary_offset": "167885173",
+          "replication_history_bytes": "16628085"
+        }
+      },
+      {
+        "name": "two_checkpoint_restarts",
+        "phase_seconds_including_verification": 1.2591218000000026,
+        "replicas": [
+          {
+            "replica": "replica-0",
+            "state": {
+              "primary_epoch": "839cf8814f5d11e7df927d26c8bf2d24",
+              "replica_epoch": "6e58f083d83bcab97f4b32a76d5bf45b",
+              "replication_pending_keys": "0",
+              "replication_epoch_invalidated": "false",
+              "replication_snapshot_bytes": "0",
+              "replica_checkpoint_resumed": "true",
+              "replica_snapshot_received": "0",
+              "replication_protocol": "2",
+              "role": "replica",
+              "replica_ready": "1",
+              "replica_offset": "167885200",
+              "replica_last_update_ms": "68",
+              "primary_offset": "0",
+              "replication_history_bytes": "0"
+            },
+            "observed_caught_up_seconds": 0.32520674399999905,
+            "transferred_bytes": 471,
+            "digest": "d3982dedaf17f81952cdb18ad805a40ef011a0d6bcc09dd248f54d87b74db7e7"
+          },
+          {
+            "replica": "replica-1",
+            "state": {
+              "primary_epoch": "1a9a5731da1dd669eeb0a9ec44a294a5",
+              "replica_epoch": "6e58f083d83bcab97f4b32a76d5bf45b",
+              "replication_pending_keys": "0",
+              "replication_epoch_invalidated": "false",
+              "replication_snapshot_bytes": "0",
+              "replica_checkpoint_resumed": "true",
+              "replica_snapshot_received": "0",
+              "replication_protocol": "2",
+              "role": "replica",
+              "replica_ready": "1",
+              "replica_offset": "167885200",
+              "replica_last_update_ms": "9",
+              "primary_offset": "0",
+              "replication_history_bytes": "0"
+            },
+            "observed_caught_up_seconds": 0.32544740799998806,
+            "transferred_bytes": 255,
+            "digest": "d3982dedaf17f81952cdb18ad805a40ef011a0d6bcc09dd248f54d87b74db7e7"
+          }
+        ],
+        "primary": {
+          "primary_epoch": "6e58f083d83bcab97f4b32a76d5bf45b",
+          "replica_epoch": "",
+          "replication_pending_keys": "0",
+          "replication_epoch_invalidated": "false",
+          "replication_snapshot_bytes": "134297573",
+          "replica_checkpoint_resumed": "false",
+          "replica_snapshot_received": "0",
+          "replication_protocol": "2",
+          "role": "primary",
+          "replica_ready": "0",
+          "replica_offset": "0",
+          "replica_last_update_ms": "-1",
+          "primary_offset": "167885200",
+          "replication_history_bytes": "16628112"
+        }
+      },
+      {
+        "name": "primary_restart_and_two_epoch_recoveries",
+        "phase_seconds_including_verification": 4.449706698,
+        "replicas": [
+          {
+            "replica": "replica-0",
+            "state": {
+              "primary_epoch": "839cf8814f5d11e7df927d26c8bf2d24",
+              "replica_epoch": "7744989360322ae9a459b612fb2d8ace",
+              "replication_pending_keys": "0",
+              "replication_epoch_invalidated": "false",
+              "replication_snapshot_bytes": "0",
+              "replica_checkpoint_resumed": "false",
+              "replica_snapshot_received": "134297573",
+              "replication_protocol": "2",
+              "role": "replica",
+              "replica_ready": "1",
+              "replica_offset": "0",
+              "replica_last_update_ms": "9",
+              "primary_offset": "0",
+              "replication_history_bytes": "0"
+            },
+            "observed_caught_up_seconds": 3.134544061000014,
+            "transferred_bytes": 179212016,
+            "digest": "d3982dedaf17f81952cdb18ad805a40ef011a0d6bcc09dd248f54d87b74db7e7"
+          },
+          {
+            "replica": "replica-1",
+            "state": {
+              "primary_epoch": "1a9a5731da1dd669eeb0a9ec44a294a5",
+              "replica_epoch": "7744989360322ae9a459b612fb2d8ace",
+              "replication_pending_keys": "0",
+              "replication_epoch_invalidated": "false",
+              "replication_snapshot_bytes": "0",
+              "replica_checkpoint_resumed": "false",
+              "replica_snapshot_received": "134297573",
+              "replication_protocol": "2",
+              "role": "replica",
+              "replica_ready": "1",
+              "replica_offset": "0",
+              "replica_last_update_ms": "0",
+              "primary_offset": "0",
+              "replication_history_bytes": "0"
+            },
+            "observed_caught_up_seconds": 3.466956398999997,
+            "transferred_bytes": 179212016,
+            "digest": "d3982dedaf17f81952cdb18ad805a40ef011a0d6bcc09dd248f54d87b74db7e7"
+          }
+        ],
+        "primary": {
+          "primary_epoch": "7744989360322ae9a459b612fb2d8ace",
+          "replica_epoch": "",
+          "replication_pending_keys": "0",
+          "replication_epoch_invalidated": "false",
+          "replication_snapshot_bytes": "134297573",
+          "replica_checkpoint_resumed": "false",
+          "replica_snapshot_received": "0",
+          "replication_protocol": "2",
+          "role": "primary",
+          "replica_ready": "0",
+          "replica_offset": "0",
+          "replica_last_update_ms": "-1",
+          "primary_offset": "0",
+          "replication_history_bytes": "0"
+        }
+      }
+    ],
+    "acknowledged_counter": 513
+  },
+  "capacity_failure": "CGO_ENABLED=0 prevented race test; fixed f0e774e. No capacity samples in this run."
+}

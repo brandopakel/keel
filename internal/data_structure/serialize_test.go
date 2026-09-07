@@ -1,11 +1,28 @@
 package data_structure
 
 import (
+	"bytes"
 	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func TestHLLAppendMarshalReusesAndClearsReservedStorage(t *testing.T) {
+	for _, items := range []int{0, 5, 10000} {
+		h := CreateHLL()
+		for i := 0; i < items; i++ {
+			h.Add(strconv.Itoa(i))
+		}
+		want := h.Marshal()
+		storage := bytes.Repeat([]byte{0xa5}, 7+h.MarshalSize())
+		var out []byte
+		allocs := testing.AllocsPerRun(10, func() { out = h.AppendMarshal(storage[:7]) })
+		assert.Zero(t, allocs, "a caller's reserved destination needs no extra payload")
+		assert.Equal(t, bytes.Repeat([]byte{0xa5}, 7), out[:7])
+		assert.Equal(t, want, out[7:], "sparse encoding must clear stale destination bits")
+	}
+}
 
 // TestSerialiseRoundTripsExactly.
 //

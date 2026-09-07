@@ -1,0 +1,23 @@
+Local parser diagnostic alongside frozen soaks; not server performance evidence.
+
+Before
+goos: darwin
+goarch: arm64
+pkg: github.com/brandopakel/keel/bench/arrival
+cpu: Apple M4 Pro
+BenchmarkDiscardLargeCollectionReply-12    	    2882	    376631 ns/op	1544.32 MB/s	  197171 B/op	    8192 allocs/op
+BenchmarkDiscardLargeCollectionReply-12    	    3252	    379705 ns/op	1531.82 MB/s	  197144 B/op	    8192 allocs/op
+BenchmarkDiscardLargeCollectionReply-12    	    3070	    385420 ns/op	1509.10 MB/s	  197115 B/op	    8192 allocs/op
+PASS
+ok  	github.com/brandopakel/keel/bench/arrival	3.871s
+
+After
+goos: darwin
+goarch: arm64
+pkg: github.com/brandopakel/keel/bench/arrival
+cpu: Apple M4 Pro
+BenchmarkDiscardLargeCollectionReply-12    	    6169	    180032 ns/op	3230.76 MB/s	       0 B/op	       0 allocs/op
+BenchmarkDiscardLargeCollectionReply-12    	    6540	    182838 ns/op	3181.17 MB/s	       0 B/op	       0 allocs/op
+BenchmarkDiscardLargeCollectionReply-12    	    6540	    181836 ns/op	3198.69 MB/s	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/brandopakel/keel/bench/arrival	3.756s
