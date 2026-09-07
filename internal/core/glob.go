@@ -113,13 +113,7 @@ func globMatchBounded(pattern, s string, remaining *int) (bool, bool) {
 	return p == len(pattern), false
 }
 
-// matchClass matches one byte against the bracket expression starting at
-// pattern[at], which is known to be '['. It returns the index just past the
-// closing ']' and whether c matched.
-//
-// An unterminated class - "[abc" - stops at the end of the pattern rather than
-// being an error, which is what Redis does. Refusing it would be defensible,
-// but not while claiming to accept Redis's patterns.
+// globStep consumes one work unit; nil selects the unbounded internal matcher.
 func globStep(remaining *int) bool {
 	if remaining == nil {
 		return true
@@ -130,6 +124,10 @@ func globStep(remaining *int) bool {
 	*remaining--
 	return true
 }
+
+// matchClassBounded matches one byte against a bracket expression and reports
+// the next pattern position, match result and budget exhaustion. Unterminated
+// classes stop at the pattern's end, matching Redis's behavior.
 func matchClassBounded(pattern string, at int, c byte, remaining *int) (int, bool, bool) {
 	p := at + 1
 
@@ -177,7 +175,10 @@ func matchClassBounded(pattern string, at int, c byte, remaining *int) (int, boo
 		// shell would call that trailing '-' a literal. Checked against Redis
 		// 8.10.1 rather than reasoned about, because the two disagree.
 		case p+2 < len(pattern) && pattern[p+1] == '-':
-			if !globStep(remaining) || !globStep(remaining) {
+			if !globStep(remaining) {
+				return p, false, true
+			}
+			if !globStep(remaining) {
 				return p, false, true
 			}
 			lo, hi := pattern[p], pattern[p+2]
