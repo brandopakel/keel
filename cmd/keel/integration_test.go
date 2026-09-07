@@ -137,20 +137,29 @@ type idleConn struct {
 func (c *idleConn) SetDeadline(at time.Time) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if err := c.Conn.SetDeadline(at); err != nil {
+		return err
+	}
 	c.readFixed, c.writeFixed = true, true
-	return c.Conn.SetDeadline(at)
+	return nil
 }
 func (c *idleConn) SetReadDeadline(at time.Time) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if err := c.Conn.SetReadDeadline(at); err != nil {
+		return err
+	}
 	c.readFixed = true
-	return c.Conn.SetReadDeadline(at)
+	return nil
 }
 func (c *idleConn) SetWriteDeadline(at time.Time) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if err := c.Conn.SetWriteDeadline(at); err != nil {
+		return err
+	}
 	c.writeFixed = true
-	return c.Conn.SetWriteDeadline(at)
+	return nil
 }
 func (c *idleConn) refresh(read bool) error {
 	c.mu.Lock()
