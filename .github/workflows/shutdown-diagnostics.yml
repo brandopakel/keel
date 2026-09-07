@@ -4,8 +4,17 @@ on:
   pull_request:
     branches: [develop]
     paths:
+      - cmd/keel/main.go
+      - cmd/keel/shutdown_test.go
+      - internal/core/aof*.go
+      - internal/server/server.go
+      - internal/server/shutdown.go
+      - scripts/validation_lib.py
       - scripts/check-large-write-shutdown.py
       - .github/workflows/shutdown-diagnostics.yml
+concurrency:
+  group: shutdown-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:

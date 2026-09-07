@@ -12,6 +12,17 @@ import time
 from validation_lib import Client, Server, info, sha256
 
 
+def writer_value(index, sequence):
+    header = f'{index:02d}:{sequence:012d}:'.encode()
+    return header + b'v' * ((1 << 20)-len(header))
+
+
+def compress_aof(source, destination):
+    with source.open('rb') as src, gzip.open(destination, 'xb', compresslevel=1) as out:
+        while block := src.read(1 << 20):
+            out.write(block)
+
+
 def run(args):
     root = args.out.resolve()
     root.mkdir(parents=True, exist_ok=False)
@@ -24,9 +35,9 @@ def run(args):
         flags.append('-aof-concurrent-append')
     server = Server(args.bin, root/'server', policy=args.policy,
                     async_append=args.mode != 'sync', extra=flags,
-                    shutdown_timeout=args.shutdown_seconds+10)
+                    shutdown_timeout=args.shutdown_seconds+10, startup_timeout=60)
     stop = threading.Event()
-    value = b'v' * (1 << 20)
+    closed_archive = root/'closed-before-replay.aof.gz'
     counts = [0]*4
     errors = []
     def write(index):
@@ -34,7 +45,7 @@ def run(args):
         try:
             client = Client('127.0.0.1', server.port, server.password)
             while not stop.is_set():
-                assert client.call('SET', f'writer:{index}', value) == b'OK'
+                assert client.call('SET', f'writer:{index}', writer_value(index, counts[index]+1)) == b'OK'
                 counts[index] += 1
         except Exception as exc:
             errors.append(repr(exc))
@@ -54,12 +65,25 @@ def run(args):
                       before_shutdown=info(server.client, 'persistence'))
         assert not errors and all(counts), 'write burst did not complete cleanly'
         for index in range(4):
-            assert server.client.call('GET', f'writer:{index}') == value
+            assert server.client.call('GET', f'writer:{index}') == writer_value(index, counts[index])
         started = time.monotonic()
         try:
             server.stop()
         finally:
             report['shutdown_seconds'] = time.monotonic()-started
+        path = root/'server/store.aof'
+        report['closed_aof'] = dict(bytes=path.stat().st_size, sha256=sha256(path))
+        # Replay may repair a torn tail. Preserve the original closed bytes first
+        # so a failing replay never destroys the evidence we need to inspect.
+        compress_aof(path, closed_archive)
+        report['closed_aof']['failure_archive'] = closed_archive.name
+        started = time.monotonic()
+        server.start()
+        report['replay_ready_seconds'] = time.monotonic()-started
+        for index in range(4):
+            assert server.client.call('GET', f'writer:{index}') == writer_value(index, counts[index]), 'replay lost a final acknowledged sequence'
+        report['recovered_sequences'] = counts[:]
+        server.stop()
         report['status'] = 'passed'
     except Exception as exc:
         report.update(status='failed', failure=repr(exc))
@@ -70,13 +94,15 @@ def run(args):
         if path.exists():
             report['aof'] = dict(bytes=path.stat().st_size, sha256=sha256(path))
             if report['status'] != 'passed':
-                with path.open('rb') as source, gzip.open(str(path)+'.gz', 'xb', compresslevel=1) as out:
-                    while block := source.read(1 << 20):
-                        out.write(block)
+                compress_aof(path, str(path)+'.gz')
                 report['aof']['failure_archive'] = 'server/store.aof.gz'
             # Hosted artifacts preserve failure data; no raw duplicate remains.
             (root/'report.json').write_text(json.dumps(report, indent=2)+'\n')
             path.unlink()
+        if report['status'] == 'passed':
+            report['closed_aof']['failure_archive'] = None
+            (root/'report.json').write_text(json.dumps(report, indent=2)+'\n')
+            closed_archive.unlink()
         (root/'report.json').write_text(json.dumps(report, indent=2)+'\n')
     print(json.dumps(report, indent=2))
     return 0 if report['status'] == 'passed' else 1

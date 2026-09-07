@@ -46,3 +46,11 @@ These runner samples do not establish a universal sufficient grace.
 Comparative throughput tests must give both runtime versions the same supported
 grace, workload and durability settings. A longer grace does not establish a
 persistence speedup or guarantee recovery from storage failure.
+
+Review extends the diagnostic beyond live-memory checks: each writer now stores a
+unique sequence, and a fresh process must recover every final acknowledged value
+from the closed AOF before the run passes. The pre-replay AOF is preserved in a
+compressed failure archive because replay can repair a torn tail. Successful raw
+AOFs and that temporary backup are pruned after reports are written. This stronger
+recovery gate is pending a new hosted run; the prior six passes covered shutdown.
+The workflow now runs for relevant runtime, persistence and helper changes.
