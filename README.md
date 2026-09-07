@@ -105,14 +105,20 @@ is limited to 16 MiB per client. A client holding incomplete input or pending ou
 without progress for 30 seconds is closed (checked approximately once a second).
 `-maxclients` bounds connected clients. Retained user-space input/output buffers
 also share a 256 MiB limit; excess clients are closed. These are resource limits, not an RSS guarantee;
-a reply can allocate before the output limit is checked.
+input and replies each have a 192 MiB retained-buffer ceiling within that total.
+Amplifying collection reads and `KEEL.DUMP` size their replies before construction;
+destructive collection commands also admit their persistence records before mutation.
+Aggregate transient allocations are not fully reserved before execution. `INFO clients`
+reports connected clients and retained input/reply/total user-space buffer bytes.
 
-Rewrites advance in slices of at most 2048 keys, targeting 1 MiB or 1 ms between
-keys. Large lists additionally yield every 256 elements or about 64 KiB; one large
-element can exceed that byte target. Mutations restart the list copy. Dirty keys are also processed in slices. A rewrite is abandoned if it exceeds
-30 seconds or 100,000 dirty keys; the original log remains authoritative. Snapshot
-creation refuses more than one million keys. Key-name enumeration now uses bounded batches. Individual large
-keys, disk writes, and final sync remain synchronous. There is no hard rewrite latency SLA.
+Rewrites traverse stable key slots in bounded batches, targeting 1 MiB or 1 ms
+between keys. Large collections yield between batches; oversized string values,
+collection members and their key names stream in at most 64 KiB fragments.
+Partly written records finish before dirty-key reconciliation replaces their old
+state. A rewrite is abandoned after 30 seconds, 100,000 dirty keys or an 8 MiB
+dirty-name accounting budget; the original log remains authoritative. Snapshot
+creation refuses more than one million keys. Opaque sketch serialization, disk
+writes and final sync can still stall. There is no hard rewrite latency SLA.
 
 Keep Keel on a private network. AUTH does not encrypt traffic and grants access to
 all commands, including destructive ones. Use a TLS proxy for untrusted network hops,
@@ -163,7 +169,7 @@ provides native workload comparisons, live heap/CPU profiles, seeded Redis
 differential tests and extended operational checks. Application pilots are one
 part of this coverage; Keel is the optimization target.
 Embedding and partitioning remain separate future decisions. The opt-in
-[protocol 2 candidate](docs/replication-v2.md) extends replication beyond the
+[merged protocol 2 experiment](docs/replication-v2.md) extends replication beyond the
 initial small-dataset experiment.
 
 ### What remains to build out
@@ -172,20 +178,21 @@ In order of distance, not size.
 
 - **Validating the experiments.** Asynchronous appends and bounded primary/read-only
   replication are included in alpha.3 as opt-in experiments with their own contracts and
-  limits. The candidate adds bounded concurrent string execution during appends
-  and protocol 2 recovery; both require further performance and deployment
+  limits. Unreleased development adds bounded concurrent string execution during appends
+  and protocol 2 recovery; both require further deployment
   validation. Automatic failover and distributed fencing remain unimplemented.
 - **Command surface outside the contract.** Transactions, Lua, Pub/Sub, blocking list
   commands, RESP3, ACL roles, and cluster routing are absent. `ZRANGE` lacks
-  `BYSCORE`, `BYLEX`, and `LIMIT`; `ZADD` lacks `GT`, `LT`, and `INCR`. The candidate
+  `BYSCORE`, `BYLEX`, and `LIMIT`; `ZADD` lacks `GT`, `LT`, and `INCR`. Unreleased development
   adds `ZCOUNT`, `ZRANGEBYSCORE`, `ZREVRANGEBYSCORE`, `ZINCRBY`, `ZPOPMIN` and `ZPOPMAX`.
   `LREM`, `LINSERT`, `GEOSEARCHSTORE`, the `GEORADIUS` family, `CMS.INFO`, `CMS.MERGE`,
   and `BF.CARD` are also missing.
 - **Persistence without a latency bound.** The `everysec` window stretches on slow storage.
-  A rewrite abandons itself past thirty seconds or 100,000 dirty keys, and individual large keys, disk writes, and the final sync still run on the
-  command thread. Dumps carry no TTL and are not Redis RDB.
-- **Scaling, deliberately deferred.** Embedding, partitioning, and replication for failure
-  recovery each wait on a pilot that shows which constraint is real; the
+  Rewrite budgets and fragmenting reduce work retained or emitted per cycle;
+  opaque encoding, file writes and final synchronization still need further work.
+  Dumps carry no TTL and are not Redis RDB.
+- **Scaling, deliberately deferred.** Embedding, partitioning and automatic failover
+  require separate architecture and evidence; the
   [delivery checklist](docs/engineering-delivery.md#5-demand-led-scaling-decision) lists
   the evidence each needs first.
 - **Evidence before a release past alpha.** Separate-host deployment benchmarks and
@@ -224,11 +231,14 @@ Runnable [Bencher, k6 and AWS DLT adapters](bench/external/README.md) are availa
 
 ### Current development status
 
-The latest published release is alpha.3. Merged development includes typed
-string storage, bounded concurrent string runs during appends, collection rewrite
-slices, replication protocol 2 and additional sorted-set operations. The review
-closeout candidate adds stable paged traversal/SCAN and shared snapshot enumeration.
-These development changes are not part of the published alpha.3 archives.
-[Closeout tracking](docs/engineering-closeout.md) records validation and remaining
-work; [the failover proposal](docs/failover-design.md) is a design, not automatic
-promotion support.
+The latest published release is alpha.3. Merged development includes typed string
+storage, ordered concurrent appends, stable paged traversal/SCAN, streamed large
+collection records, replication protocol 2, additional sorted-set operations,
+TTL/lookup-map compaction, reply admission and Linux readiness optimization.
+Five real RESP2 client libraries, scheduled capacity sweeps and larger recovery
+tests extend validation. These changes are absent from published alpha.3 archives.
+
+The [current engineering status](docs/engineering-status-2026-09-07.md) separates
+merged work, candidates, measured benefits and remaining gates. The four initial
+review findings are closed. The [failover proposal](docs/failover-design.md)
+requires verified external fencing; automatic promotion remains unimplemented.

@@ -1,5 +1,9 @@
 # Engineering closeout
 
+For current merged/candidate/released status and completed soak results, see
+[the September 7 rollup](engineering-status-2026-09-07.md). This record retains
+the original closeout sequence and its revision-specific evidence.
+
 Started September 7, 2026. Work is integrated separately from the active append
 admission branch and the frozen long-soak binaries. GoGIF remains unchanged.
 Spending remains capped at zero.

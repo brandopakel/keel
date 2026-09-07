@@ -1,6 +1,6 @@
-# Streaming replication candidate
+# Streaming replication experiment (merged, unreleased)
 
-Protocol 2 is an opt-in candidate, selected with `-replication-protocol 2` on
+Protocol 2 is merged development, absent from alpha.3 archives, selected with `-replication-protocol 2` on
 both the authenticated AOF primary and its read-only replica. Protocol 1 remains
 the default. Use the same connection and secret configuration shown in
 [the alpha replication guide](replication-alpha.md), adding this flag to both
@@ -41,10 +41,10 @@ A single value or opaque image still requires synchronous serialization and
 may exceed the command limit. Such a transfer cannot establish a readable
 replica. Hash/list/set/sorted-set rewrites yield after at most 256 entries, a
 roughly 64 KiB encoding target or a one-millisecond work slice. One oversized
-entry is emitted alone to make progress. Hash traversal keeps one map cursor,
-discarded on mutation, without adding a per-field index. Initial key enumeration,
-individual large values, opaque image construction and final file/directory
-syncs can still stall command execution.
+entry streams in 64 KiB fragments. Hash traversal keeps one map cursor,
+discarded on mutation, without adding a per-field index. Initial key names use
+bounded stable-slot batches. Opaque image construction, file writes and final
+file/directory syncs can still stall command execution.
 
 ## Restart checkpoints and rollback
 
