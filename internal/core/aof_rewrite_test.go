@@ -732,3 +732,38 @@ func TestRewriteRetainsBoundedNameBatches(t *testing.T) {
 
 	t.Logf("%d keys: walk retained at most %d names, %d walked", keys, worst, rewrite.pos)
 }
+
+// A ceiling below the keyspace a server is allowed to hold is worse than none:
+// auto-rewrite retries every minute, fails every time, and the log grows without
+// bound. This checks the two numbers stay in a sane relation to each other and
+// that refusing above the ceiling is a clean error rather than a started rewrite.
+func TestRewriteCeilingCoversTheKeyspaceAServerMayHold(t *testing.T) {
+	assert.LessOrEqual(t, rewriteKeyCeiling, config.KeyNumberLimit,
+		"a ceiling above the key limit is dead configuration")
+	assert.Greater(t, rewriteKeyCeiling, config.KeyNumberLimit/2,
+		"a ceiling far below the key limit leaves legal keyspaces unable to compact, "+
+			"which is how a log grows without bound")
+
+	ResetStores()
+	assert.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "ceiling.aof")))
+	defer func() { assert.NoError(t, CloseAOF()) }()
+	run(t, "SET", "k", "v")
+
+	// Above the ceiling the refusal is immediate and leaves nothing running, so
+	// the caller can tell a refusal from an abort part way through.
+	old := keyCountForRewrite
+	defer func() { keyCountForRewrite = old }()
+	keyCountForRewrite = func() int { return rewriteKeyCeiling + 1 }
+	err := StartRewrite()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "rewrite limit")
+	assert.False(t, RewriteActive(), "a refused rewrite must not leave one started")
+
+	// At the ceiling it proceeds.
+	keyCountForRewrite = func() int { return rewriteKeyCeiling }
+	assert.NoError(t, StartRewrite())
+	assert.True(t, RewriteActive())
+	for stepRewrite(t) {
+	}
+	assert.Equal(t, 1, aof.rewrites)
+}

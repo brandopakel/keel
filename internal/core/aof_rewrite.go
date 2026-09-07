@@ -59,6 +59,35 @@ import (
 // millisecond at the measured rate, which is under the latency of the disk
 // write that a client's own command may be waiting on anyway.
 const rewriteChunk = 2048
+
+// rewriteKeyCeiling refuses a rewrite that would not finish, rather than
+// walking for the abort budget and then throwing the work away. It has to be
+// set against what a rewrite actually costs, because a ceiling below the
+// keyspace a server is allowed to hold is worse than no ceiling: auto-rewrite
+// retries every minute, fails every time, and the log grows without bound. That
+// is the same shape as the compaction ratchet in
+// docs/general-performance-2026-09-06.md, reached by a different route.
+//
+// Measured on an M4 Pro with the log on APFS, one deliberate rewrite, no
+// concurrent writers: 4.14s at a million keys, 8.20s at two million, 16.37s at
+// four million - close to linear at about 4.1 seconds per million. Against the
+// thirty-second budget below, four million leaves roughly half of it spare,
+// which is the margin a slower disk needs.
+//
+// KeyNumberLimit still allows five million, so a keyspace between four and five
+// million cannot be compacted. Closing that needs a faster rewrite or a longer
+// budget rather than a larger number here, and the number should not be raised
+// past what has been measured.
+//
+// Under concurrent writes the binding constraint is rewriteDirtyKeys rather
+// than duration: a rewrite that runs four times longer collects four times the
+// dirty keys, so a large keyspace under load aborts on that budget first.
+const rewriteKeyCeiling = 4000000
+
+// keyCountForRewrite is injectable so the ceiling can be exercised without
+// building a keyspace that large.
+var keyCountForRewrite = data_structure.TotalKeys
+
 const rewriteDirtyKeys = 100000
 const rewriteDirtyBytes = 8 << 20
 const rewriteRecordSlice = 64 << 10
@@ -128,8 +157,8 @@ func StartRewrite() error {
 		return err
 	}
 
-	if data_structure.TotalKeys() > 1000000 {
-		return fmt.Errorf("rewrite limit: at most 1000000 keys")
+	if keyCountForRewrite() > rewriteKeyCeiling {
+		return fmt.Errorf("rewrite limit: at most %d keys", rewriteKeyCeiling)
 	}
 	path := aof.path
 	tmpPath := path + ".rewrite"
