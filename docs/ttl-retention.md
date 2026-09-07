@@ -22,6 +22,15 @@ Hosted validation for c7125f5 passed the
 and [native ARM64/Intel Mac plus ext4/XFS recovery](https://github.com/brandopakel/keel/actions/runs/34099313025).
 Integration with the merged traversal closeout receives the same checks again.
 
+The first integrated ARM64 run
+([34101698050](https://github.com/brandopakel/keel/actions/runs/34101698050))
+failed its short soak after 23,437 acknowledged writes with a three-second SET
+timeout. Its last completed checkpoint showed no pending append or write error;
+the existing logs do not establish the cause. This failure remains evidence,
+not a passed run. The harness now records fresh-connection INFO and Go goroutine
+stacks before shutting down an unexpectedly failed owned process. Three fresh
+five-minute ARM64 repetitions with unchanged client deadlines are pending.
+
 This measures live Go heap, not a process RSS decrease, a throughput improvement
 or a deployment capacity limit. Partly occupied expiry tables, lookup-map
 capacity and sparsely occupied key pages can still retain memory. Incremental
