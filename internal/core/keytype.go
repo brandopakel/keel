@@ -20,6 +20,7 @@ import (
 // bug this is fixing.
 var commandKeyspace = map[string]string{
 	"SET": "string", "GET": "string", "INCR": "string", "INCRBY": "string", "DECR": "string", "DECRBY": "string", "MSET": "string",
+	"SETEX": "string", "PSETEX": "string",
 	"LCS": "string",
 
 	// EXISTS, TYPE, KEYS, DEL and FLUSHDB are deliberately absent: they answer

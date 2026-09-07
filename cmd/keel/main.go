@@ -50,12 +50,14 @@ var (
 	showVersion        bool
 	passwordEnv        string
 	replicaPasswordEnv string
+	profileDir         string
 )
 
 // parseFlags reads the command line into config. It runs before anything
 // starts, from main rather than from an init, so that nothing else in the
 // process can observe a setting before the flag that changes it has been read.
 func parseFlags() {
+	flag.StringVar(&profileDir, "profile-dir", "", "diagnostic only: create a fresh private directory for CPU/heap/allocation profiles on shutdown")
 	flag.BoolVar(&config.ReplicationFeed, "replication-feed", false, "experimental: enable bounded canonical replication feed")
 	flag.StringVar(&config.ReplicaOf, "replicaof", "", "experimental: read-only replica of host:port")
 	flag.StringVar(&replicaPasswordEnv, "primary-password-env", "", "environment variable holding the primary AUTH password")
@@ -192,8 +194,19 @@ func main() {
 		fmt.Println(versionLine())
 		return
 	}
-	if err := runServer(); err != nil {
+	finishProfiles, err := startProfiles(profileDir)
+	if err != nil {
 		log.Println(err)
+		os.Exit(1)
+	}
+	err = runServer()
+	profileErr := finishProfiles()
+	if err != nil {
+		log.Println(err)
+		os.Exit(1)
+	}
+	if profileErr != nil {
+		log.Println(profileErr)
 		os.Exit(1)
 	}
 }

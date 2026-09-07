@@ -173,9 +173,19 @@ func checkTable(w, d uint64, remaining int, cellBytes uint64) error {
 // --- HyperLogLog ---
 
 func (h *HLL) Marshal() []byte {
-	w := &buf{}
-	w.bytes(h.regs)
-	return w.b
+	// Keep the alpha dense wire format byte-for-byte, without expanding the
+	// live sketch or allocating an intermediate dense buffer.
+	body := make([]byte, 8+hllDenseSize)
+	binary.LittleEndian.PutUint64(body, hllDenseSize)
+	if h.regs != nil {
+		copy(body[8:], h.regs)
+	} else {
+		packed := HLL{regs: body[8:]}
+		for _, entry := range h.sparse {
+			packed.setRegister(int(entry>>hllBits), uint8(entry&hllRegisterMax))
+		}
+	}
+	return body
 }
 
 func UnmarshalHLL(p []byte) (*HLL, error) {
@@ -194,10 +204,24 @@ func UnmarshalHLL(p []byte) (*HLL, error) {
 	if len(r.b) != 0 {
 		return nil, errors.New("hyperloglog: trailing bytes")
 	}
+	nonzero := 0
 	for i := 0; i < hllRegisters; i++ {
 		if h.getRegister(i) > hllQ+1 {
 			return nil, errors.New("hyperloglog: invalid register")
 		}
+		if h.getRegister(i) != 0 {
+			nonzero++
+		}
+	}
+	// Preserve any legacy spare-byte content. Canonical dumps have zero here.
+	if nonzero <= hllSparseLimit && regs[len(regs)-1] == 0 {
+		compact := CreateHLL()
+		for i := 0; i < hllRegisters; i++ {
+			if v := h.getRegister(i); v != 0 {
+				compact.setRegister(i, v)
+			}
+		}
+		h = compact
 	}
 	return h, nil
 }

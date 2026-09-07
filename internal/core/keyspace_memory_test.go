@@ -85,7 +85,7 @@ func TestEvictionCrossesKeyspaces(t *testing.T) {
 	withBudget(t, 512<<10, config.LRU)
 
 	// Fill with sketches only, so everything the budget holds is one type.
-	for i := 0; i < 200; i++ {
+	for i := 0; i < 4000; i++ {
 		cmdPFADD([]string{"h" + strconv.Itoa(i), "x"})
 	}
 	hllKeys := hllStore.Len()
@@ -145,9 +145,14 @@ func TestMemoryUsageFindsKeysInEveryKeyspace(t *testing.T) {
 		assert.Greater(t, n, int64(0), "MEMORY USAGE %s reported %d", key, n)
 	}
 
-	// A dense HyperLogLog is 12KB whatever it holds, and must be reported as
-	// such rather than as the one item added to it.
+	// Small sketches retain compact registers; after promotion the full dense
+	// allocation must be charged through the same MEMORY USAGE command.
 	res, _ := Decode(cmdMEMORY([]string{"USAGE", "hll"}))
+	assert.Less(t, res.(int64), int64(1000))
+	for i := 0; i < 1000; i++ {
+		cmdPFADD([]string{"hll", strconv.Itoa(i)})
+	}
+	res, _ = Decode(cmdMEMORY([]string{"USAGE", "hll"}))
 	assert.Greater(t, res.(int64), int64(12000))
 }
 

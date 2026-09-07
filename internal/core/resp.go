@@ -165,18 +165,25 @@ func (r *frameReader) value() (interface{}, error) {
 
 // bulk reads a length and then that many bytes.
 func (r *frameReader) bulk() (interface{}, error) {
+	return r.bulkString()
+}
+
+// bulkString keeps command tokens typed, avoiding boxing each string into an
+// interface only to extract it again. Every string owns its bytes; retaining a
+// small key never pins the rest of a client's large input buffer.
+func (r *frameReader) bulkString() (string, error) {
 	n, err := r.integer()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	if n < -1 {
-		return nil, ErrProtocol
+		return "", ErrProtocol
 	}
 	if n < 0 {
 		return "", nil
 	}
 	if n > maxBulkLength {
-		return nil, ErrProtocol
+		return "", ErrProtocol
 	}
 	// The payload is followed by a CRLF of its own. It is stepped over rather
 	// than checked, as Redis steps over it: the length is what delimits the
@@ -184,10 +191,10 @@ func (r *frameReader) bulk() (interface{}, error) {
 	// wrong is not worth dropping.
 	end := r.pos + int(n) + 2
 	if end > len(r.data) {
-		return nil, ErrIncompleteFrame
+		return "", ErrIncompleteFrame
 	}
 	if r.data[end-2] != '\r' || r.data[end-1] != '\n' {
-		return nil, ErrProtocol
+		return "", ErrProtocol
 	}
 	s := string(r.data[r.pos : r.pos+int(n)])
 	r.pos = end
@@ -399,6 +406,41 @@ func Encode(value interface{}, isSimpleString bool) []byte {
 // the next one. It returns ErrIncompleteFrame if data does not yet hold a whole
 // command, and ErrProtocol if the input is not a well-formed command at all.
 func ParseCmd(data []byte) (*Command, int, error) {
+	if len(data) == 0 || data[0] != '*' {
+		return parseCmdGeneric(data)
+	}
+	r := frameReader{data: data, pos: 1}
+	n, err := r.integer()
+	if err != nil {
+		return nil, 0, err
+	}
+	if n <= 0 || n > maxMultiBulkLength {
+		return nil, 0, ErrProtocol
+	}
+	// Capacity follows received tokens, not an untrusted declared array size.
+	tokens := make([]string, 0, min(int(n), 16))
+	for i := int64(0); i < n; i++ {
+		if r.pos == len(data) {
+			return nil, 0, ErrIncompleteFrame
+		}
+		if data[r.pos] != '$' {
+			// Preserve the existing decoder's handling of unusual RESP types,
+			// including its incomplete-versus-invalid classification.
+			return parseCmdGeneric(data)
+		}
+		r.pos++
+		token, err := r.bulkString()
+		if err != nil {
+			return nil, 0, err
+		}
+		tokens = append(tokens, token)
+	}
+	return &Command{Cmd: strings.ToUpper(tokens[0]), Args: tokens[1:]}, r.pos, nil
+}
+
+// parseCmdGeneric is also used as the reference decoder by differential fuzz
+// tests. DecodeOne remains the general RESP value decoder for replies/dumps.
+func parseCmdGeneric(data []byte) (*Command, int, error) {
 	value, n, err := DecodeOne(data)
 	if err != nil {
 		return nil, 0, err

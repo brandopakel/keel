@@ -38,7 +38,7 @@ populate the variable; avoid putting secrets in process arguments or shell histo
 
 | Area | Supported behavior |
 | --- | --- |
-| Strings | `GET`, `SET`, `MGET`, `MSET`, `INCR`, `INCRBY`, `DECR`, `DECRBY`, `LCS` |
+| Strings | `GET`, `SET`, `SETEX`, `PSETEX`, `MGET`, `MSET`, `INCR`, `INCRBY`, `DECR`, `DECRBY`, `LCS` |
 | SET options | `NX`, `XX`, `GET`, `KEEPTTL`, `EX`, `PX`, `EXAT`, `PXAT`; conditional failures return null, or the old value with `GET` |
 | Expiry, every type | `TTL`, `PTTL`, `EXPIRE`, `PEXPIRE`, `EXPIREAT`, `PEXPIREAT`, `PERSIST`; expiry setters accept `NX`, `XX`, `GT`, `LT` |
 | Keys | `DEL`, `EXISTS`, `TYPE`, `KEYS`, `DBSIZE`, `FLUSHDB` |
@@ -157,6 +157,10 @@ See the [engineering review](docs/engineering-review-2026-09-04.md),
 [delivery checklist](docs/engineering-delivery.md), and
 [historical design narrative](docs/architecture-history.md). History records prior
 measurements and behavior; this README defines the current integration contract.
+The [general-purpose validation program](docs/general-purpose-validation.md)
+provides native workload comparisons, live heap/CPU profiles, seeded Redis
+differential tests and extended operational checks. Application pilots are one
+part of this coverage; Keel is the optimization target.
 Embedding, partitioning, and replication are separate future decisions driven by
 application requirements, not features implied by I/O threads.
 

@@ -1,0 +1,3677 @@
+{
+  "schema": 1,
+  "date_utc": "2026-09-06",
+  "runtime_revisions": {
+    "baseline": "87cea7140ade84b64e7a9afb20ec9f26bea71d3e",
+    "parser": "0485953a351abfbce46b377b60965170a952f764",
+    "compact": "0d283b0ec3f7e16900299e2949563db5f2ffacb6"
+  },
+  "local_host": "Apple M4 Pro, 12 logical CPUs, 24 GiB, macOS 26.5.1 APFS",
+  "suites": {
+    "matrix-final": {
+      "runs": 198,
+      "manifest_sha256": "35dd7fae28d55d2048c905b5cb6f20d8200c40c70154cd950325d1862fdda242",
+      "binaries": {
+        "baseline": {
+          "path": "/Users/brandopakel/memkv/dist/keel-general-87cea71",
+          "sha256": "dedaecb9b9a0f433958d4c9055f3ef269fb60dffb6a0833380d6cbf69067469d",
+          "build": "/Users/brandopakel/memkv/dist/keel-general-87cea71: go1.26.6\n\tpath\tgithub.com/brandopakel/keel/cmd/keel\n\tmod\tgithub.com/brandopakel/keel\tv0.1.0-alpha.3.0.20260905232700-87cea7140ade\t\n\tdep\tgithub.com/spaolacci/murmur3\tv1.1.0\th1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tDefaultGODEBUG=asynctimerchan=1,containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,gotypesalias=0,httpcookiemaxnum=0,httpservecontentkeepheaders=1,multipathtcp=0,randseednop=0,rsa1024min=0,tls3des=1,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,winreadlinkvolume=0,winsymlink=0,x509keypairleaf=0,x509negativeserial=1,x509rsacrt=0,x509sha256skid=0,x509usepolicies=0\n\tbuild\tCGO_ENABLED=1\n\tbuild\tGOARCH=arm64\n\tbuild\tGOOS=darwin\n\tbuild\tGOARM64=v8.0\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=87cea7140ade84b64e7a9afb20ec9f26bea71d3e\n\tbuild\tvcs.time=2026-09-05T23:27:00Z\n\tbuild\tvcs.modified=false"
+        },
+        "candidate": {
+          "path": "/Users/brandopakel/memkv/dist/keel-general-6f-candidate",
+          "sha256": "a0110b44322d4e10ec6ebd0a935a9ef06e7d6e6862f81f74d6e777c7c8667b38",
+          "build": "/Users/brandopakel/memkv/dist/keel-general-6f-candidate: go1.26.6\n\tpath\tgithub.com/brandopakel/keel/cmd/keel\n\tmod\tgithub.com/brandopakel/keel\tv0.1.0-alpha.3.0.20260906014918-0485953a351a\t\n\tdep\tgithub.com/spaolacci/murmur3\tv1.1.0\th1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tDefaultGODEBUG=asynctimerchan=1,containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,gotypesalias=0,httpcookiemaxnum=0,httpservecontentkeepheaders=1,multipathtcp=0,randseednop=0,rsa1024min=0,tls3des=1,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,winreadlinkvolume=0,winsymlink=0,x509keypairleaf=0,x509negativeserial=1,x509rsacrt=0,x509sha256skid=0,x509usepolicies=0\n\tbuild\tCGO_ENABLED=1\n\tbuild\tGOARCH=arm64\n\tbuild\tGOOS=darwin\n\tbuild\tGOARM64=v8.0\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=0485953a351abfbce46b377b60965170a952f764\n\tbuild\tvcs.time=2026-09-06T01:49:18Z\n\tbuild\tvcs.modified=false"
+        },
+        "redis": {
+          "path": "/opt/homebrew/Cellar/redis/8.10.1/bin/redis-server",
+          "sha256": "48a07c3892d5982a1af6c3fbb9db896b50e7aa564b1d4e6abcb12fcb6b6b6e0d",
+          "build": "Redis server v=8.10.1 sha=00000000:1 malloc=libc bits=64 build=81870544b30d700a"
+        }
+      },
+      "gc_tracing": true,
+      "cases": {
+        "cache-read-64": {
+          "baseline": {
+            "rss_mib": {
+              "median": 17.3125,
+              "min": 17.25,
+              "max": 17.640625
+            },
+            "ops_per_second": {
+              "median": 163370.31,
+              "min": 162834.02,
+              "max": 167067.88
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.135,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.183,
+              "min": 0.183,
+              "max": 0.183
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 17.90625,
+              "min": 17.625,
+              "max": 18.171875
+            },
+            "ops_per_second": {
+              "median": 163317.96,
+              "min": 162994.8,
+              "max": 168351.37
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.135,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.183,
+              "min": 0.175,
+              "max": 0.183
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 7.9375,
+              "min": 7.921875,
+              "max": 7.953125
+            },
+            "ops_per_second": {
+              "median": 170300.03,
+              "min": 169436.84,
+              "max": 172045.74
+            },
+            "p99_ms": {
+              "median": 0.151,
+              "min": 0.151,
+              "max": 0.151
+            },
+            "p999_ms": {
+              "median": 0.175,
+              "min": 0.175,
+              "max": 0.175
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.0029719833730077,
+            "min": 0.9977014795405603,
+            "max": 1.0076824462009095,
+            "pairs": [
+              1.0076824462009095,
+              1.0029719833730077,
+              0.9977014795405603
+            ]
+          }
+        },
+        "cache-balanced-64": {
+          "baseline": {
+            "rss_mib": {
+              "median": 17.671875,
+              "min": 16.953125,
+              "max": 18.03125
+            },
+            "ops_per_second": {
+              "median": 162108.38,
+              "min": 160490.43,
+              "max": 164243.98
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.143,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.191,
+              "min": 0.191,
+              "max": 0.199
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 18.0625,
+              "min": 17.96875,
+              "max": 18.234375
+            },
+            "ops_per_second": {
+              "median": 162693.79,
+              "min": 160936.18,
+              "max": 163066.64
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.143,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.183,
+              "min": 0.183,
+              "max": 0.191
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 7.953125,
+              "min": 7.921875,
+              "max": 7.953125
+            },
+            "ops_per_second": {
+              "median": 169176.66,
+              "min": 167964.7,
+              "max": 170443.48
+            },
+            "p99_ms": {
+              "median": 0.151,
+              "min": 0.151,
+              "max": 0.151
+            },
+            "p999_ms": {
+              "median": 0.175,
+              "min": 0.175,
+              "max": 0.175
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.0027774241741392,
+            "min": 0.9928317616268189,
+            "max": 1.0036112260205179,
+            "pairs": [
+              0.9928317616268189,
+              1.0027774241741392,
+              1.0036112260205179
+            ]
+          }
+        },
+        "cache-write-64": {
+          "baseline": {
+            "rss_mib": {
+              "median": 17.546875,
+              "min": 17.0625,
+              "max": 18.203125
+            },
+            "ops_per_second": {
+              "median": 161831.74,
+              "min": 160126.05,
+              "max": 162863.71
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.143,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.199,
+              "min": 0.199,
+              "max": 0.199
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 17.96875,
+              "min": 17.71875,
+              "max": 18.25
+            },
+            "ops_per_second": {
+              "median": 163235.35,
+              "min": 162325.87,
+              "max": 163417.47
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.143,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.183,
+              "min": 0.183,
+              "max": 0.183
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 7.890625,
+              "min": 7.875,
+              "max": 7.9375
+            },
+            "ops_per_second": {
+              "median": 169806.46,
+              "min": 168719.58,
+              "max": 171129.93
+            },
+            "p99_ms": {
+              "median": 0.151,
+              "min": 0.151,
+              "max": 0.151
+            },
+            "p999_ms": {
+              "median": 0.175,
+              "min": 0.175,
+              "max": 0.175
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.0034001435924553,
+            "min": 1.0030533565294424,
+            "max": 1.0194178273928571,
+            "pairs": [
+              1.0030533565294424,
+              1.0034001435924553,
+              1.0194178273928571
+            ]
+          }
+        },
+        "cache-read-1k": {
+          "baseline": {
+            "rss_mib": {
+              "median": 20.5625,
+              "min": 20.5625,
+              "max": 20.734375
+            },
+            "ops_per_second": {
+              "median": 156462.84,
+              "min": 154370.15,
+              "max": 156614.45
+            },
+            "p99_ms": {
+              "median": 0.159,
+              "min": 0.159,
+              "max": 0.159
+            },
+            "p999_ms": {
+              "median": 0.215,
+              "min": 0.207,
+              "max": 0.215
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 20.75,
+              "min": 20.578125,
+              "max": 21.015625
+            },
+            "ops_per_second": {
+              "median": 156896.61,
+              "min": 155695.77,
+              "max": 157059.78
+            },
+            "p99_ms": {
+              "median": 0.151,
+              "min": 0.151,
+              "max": 0.151
+            },
+            "p999_ms": {
+              "median": 0.207,
+              "min": 0.207,
+              "max": 0.207
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 10.96875,
+              "min": 10.875,
+              "max": 10.984375
+            },
+            "ops_per_second": {
+              "median": 164837.44,
+              "min": 163759.83,
+              "max": 167439.09
+            },
+            "p99_ms": {
+              "median": 0.159,
+              "min": 0.151,
+              "max": 0.159
+            },
+            "p999_ms": {
+              "median": 0.175,
+              "min": 0.175,
+              "max": 0.175
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.0028434796406078,
+            "min": 0.9950974301629703,
+            "max": 1.0163662469719696,
+            "pairs": [
+              0.9950974301629703,
+              1.0028434796406078,
+              1.0163662469719696
+            ]
+          }
+        },
+        "cache-read-16k": {
+          "baseline": {
+            "rss_mib": {
+              "median": 50.96875,
+              "min": 50.5,
+              "max": 51.328125
+            },
+            "ops_per_second": {
+              "median": 102226.56,
+              "min": 102085.97,
+              "max": 102895.88
+            },
+            "p99_ms": {
+              "median": 0.239,
+              "min": 0.239,
+              "max": 0.239
+            },
+            "p999_ms": {
+              "median": 0.319,
+              "min": 0.319,
+              "max": 0.319
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 51.265625,
+              "min": 50.8203125,
+              "max": 51.3125
+            },
+            "ops_per_second": {
+              "median": 102252.72,
+              "min": 102197.88,
+              "max": 103284.82
+            },
+            "p99_ms": {
+              "median": 0.231,
+              "min": 0.231,
+              "max": 0.239
+            },
+            "p999_ms": {
+              "median": 0.311,
+              "min": 0.311,
+              "max": 0.319
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 30.578125,
+              "min": 30.546875,
+              "max": 30.609375
+            },
+            "ops_per_second": {
+              "median": 106431.46,
+              "min": 106160.18,
+              "max": 106763.83
+            },
+            "p99_ms": {
+              "median": 0.207,
+              "min": 0.207,
+              "max": 0.207
+            },
+            "p999_ms": {
+              "median": 0.231,
+              "min": 0.231,
+              "max": 0.231
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.0002559021843247,
+            "min": 0.9932164436515826,
+            "max": 1.0117435334160023,
+            "pairs": [
+              1.0117435334160023,
+              0.9932164436515826,
+              1.0002559021843247
+            ]
+          }
+        },
+        "cache-read-1m": {
+          "baseline": {
+            "rss_mib": {
+              "median": 99.890625,
+              "min": 98.515625,
+              "max": 99.90625
+            },
+            "ops_per_second": {
+              "median": 4090.94,
+              "min": 4082.29,
+              "max": 4110.4
+            },
+            "p99_ms": {
+              "median": 1.479,
+              "min": 1.471,
+              "max": 1.479
+            },
+            "p999_ms": {
+              "median": 1.631,
+              "min": 1.615,
+              "max": 1.679
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 103.96875,
+              "min": 103.328125,
+              "max": 108.015625
+            },
+            "ops_per_second": {
+              "median": 4074.96,
+              "min": 4071.13,
+              "max": 4099.75
+            },
+            "p99_ms": {
+              "median": 1.535,
+              "min": 1.471,
+              "max": 1.551
+            },
+            "p999_ms": {
+              "median": 1.775,
+              "min": 1.639,
+              "max": 1.823
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 85.828125,
+              "min": 82.796875,
+              "max": 86.875
+            },
+            "ops_per_second": {
+              "median": 4118.84,
+              "min": 4077.45,
+              "max": 4154.89
+            },
+            "p99_ms": {
+              "median": 1.791,
+              "min": 1.775,
+              "max": 1.823
+            },
+            "p999_ms": {
+              "median": 1.935,
+              "min": 1.927,
+              "max": 2.767
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 0.9972662402720043,
+            "min": 0.9913779680809655,
+            "max": 1.00215353928437,
+            "pairs": [
+              0.9972662402720043,
+              0.9913779680809655,
+              1.00215353928437
+            ]
+          }
+        },
+        "cache-miss": {
+          "baseline": {
+            "rss_mib": {
+              "median": 17.546875,
+              "min": 17.421875,
+              "max": 17.734375
+            },
+            "ops_per_second": {
+              "median": 166710.83,
+              "min": 166497.18,
+              "max": 167288.49
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.135,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.183,
+              "min": 0.183,
+              "max": 0.183
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 17.1875,
+              "min": 17.140625,
+              "max": 17.375
+            },
+            "ops_per_second": {
+              "median": 167351.62,
+              "min": 166620.24,
+              "max": 167476.98
+            },
+            "p99_ms": {
+              "median": 0.135,
+              "min": 0.135,
+              "max": 0.135
+            },
+            "p999_ms": {
+              "median": 0.159,
+              "min": 0.159,
+              "max": 0.167
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 7.46875,
+              "min": 7.421875,
+              "max": 7.5
+            },
+            "ops_per_second": {
+              "median": 172558.67,
+              "min": 170314.11,
+              "max": 173597.42
+            },
+            "p99_ms": {
+              "median": 0.151,
+              "min": 0.151,
+              "max": 0.151
+            },
+            "p999_ms": {
+              "median": 0.167,
+              "min": 0.167,
+              "max": 0.167
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.000739111617386,
+            "min": 1.000377372047533,
+            "max": 1.0045956822361213,
+            "pairs": [
+              1.000377372047533,
+              1.0045956822361213,
+              1.000739111617386
+            ]
+          }
+        },
+        "cache-hot": {
+          "baseline": {
+            "rss_mib": {
+              "median": 17.390625,
+              "min": 17.375,
+              "max": 17.6875
+            },
+            "ops_per_second": {
+              "median": 164453.07,
+              "min": 164019.71,
+              "max": 166579.47
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.143,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.183,
+              "min": 0.183,
+              "max": 0.183
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 18.078125,
+              "min": 17.671875,
+              "max": 18.28125
+            },
+            "ops_per_second": {
+              "median": 163338.75,
+              "min": 162815.45,
+              "max": 164692.21
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.143,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.183,
+              "min": 0.175,
+              "max": 0.191
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 7.90625,
+              "min": 7.78125,
+              "max": 7.921875
+            },
+            "ops_per_second": {
+              "median": 170586.63,
+              "min": 170351.52,
+              "max": 170639.69
+            },
+            "p99_ms": {
+              "median": 0.151,
+              "min": 0.151,
+              "max": 0.151
+            },
+            "p999_ms": {
+              "median": 0.175,
+              "min": 0.167,
+              "max": 0.175
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 0.9926578336225568,
+            "min": 0.9805455017956294,
+            "max": 1.0014541534554509,
+            "pairs": [
+              0.9926578336225568,
+              0.9805455017956294,
+              1.0014541534554509
+            ]
+          }
+        },
+        "cache-ttl": {
+          "baseline": {
+            "rss_mib": {
+              "median": 17.796875,
+              "min": 17.703125,
+              "max": 17.90625
+            },
+            "ops_per_second": {
+              "median": 158286.69,
+              "min": 158089.11,
+              "max": 159201.35
+            },
+            "p99_ms": {
+              "median": 0.151,
+              "min": 0.151,
+              "max": 0.151
+            },
+            "p999_ms": {
+              "median": 0.199,
+              "min": 0.199,
+              "max": 0.207
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 18.296875,
+              "min": 18.15625,
+              "max": 18.859375
+            },
+            "ops_per_second": {
+              "median": 160294.97,
+              "min": 160252.5,
+              "max": 162088.29
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.143,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.191,
+              "min": 0.191,
+              "max": 0.191
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 8.140625,
+              "min": 8.09375,
+              "max": 8.1875
+            },
+            "ops_per_second": {
+              "median": 167614.43,
+              "min": 166762.52,
+              "max": 167625.29
+            },
+            "p99_ms": {
+              "median": 0.151,
+              "min": 0.151,
+              "max": 0.151
+            },
+            "p999_ms": {
+              "median": 0.175,
+              "min": 0.175,
+              "max": 0.175
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.013953269772978,
+            "min": 1.01241930070052,
+            "max": 1.0181338914525537,
+            "pairs": [
+              1.01241930070052,
+              1.013953269772978,
+              1.0181338914525537
+            ]
+          }
+        },
+        "one-client": {
+          "baseline": {
+            "rss_mib": {
+              "median": 17.515625,
+              "min": 17.3046875,
+              "max": 18.125
+            },
+            "ops_per_second": {
+              "median": 50903.21,
+              "min": 50774.19,
+              "max": 50968.68
+            },
+            "p99_ms": {
+              "median": 0.047,
+              "min": 0.047,
+              "max": 0.047
+            },
+            "p999_ms": {
+              "median": 0.079,
+              "min": 0.079,
+              "max": 0.087
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 17.6875,
+              "min": 17.546875,
+              "max": 17.796875
+            },
+            "ops_per_second": {
+              "median": 51205.74,
+              "min": 51065.85,
+              "max": 51268.05
+            },
+            "p99_ms": {
+              "median": 0.047,
+              "min": 0.047,
+              "max": 0.047
+            },
+            "p999_ms": {
+              "median": 0.087,
+              "min": 0.079,
+              "max": 0.087
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 7.5,
+              "min": 7.484375,
+              "max": 7.546875
+            },
+            "ops_per_second": {
+              "median": 51856.31,
+              "min": 51848.08,
+              "max": 51933.91
+            },
+            "p99_ms": {
+              "median": 0.039,
+              "min": 0.039,
+              "max": 0.039
+            },
+            "p999_ms": {
+              "median": 0.079,
+              "min": 0.079,
+              "max": 0.087
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.0057442570723432,
+            "min": 1.0046510916115543,
+            "max": 1.0071673279543667,
+            "pairs": [
+              1.0046510916115543,
+              1.0071673279543667,
+              1.0057442570723432
+            ]
+          }
+        },
+        "many-clients": {
+          "baseline": {
+            "rss_mib": {
+              "median": 17.6875,
+              "min": 17.546875,
+              "max": 17.8125
+            },
+            "ops_per_second": {
+              "median": 157759.4,
+              "min": 156850.48,
+              "max": 158347.02
+            },
+            "p99_ms": {
+              "median": 2.335,
+              "min": 2.319,
+              "max": 2.335
+            },
+            "p999_ms": {
+              "median": 4.895,
+              "min": 4.639,
+              "max": 4.927
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 17.921875,
+              "min": 17.875,
+              "max": 18.5
+            },
+            "ops_per_second": {
+              "median": 159070.42,
+              "min": 158083.4,
+              "max": 159556.23
+            },
+            "p99_ms": {
+              "median": 2.319,
+              "min": 2.319,
+              "max": 2.319
+            },
+            "p999_ms": {
+              "median": 4.735,
+              "min": 4.735,
+              "max": 4.831
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 12.359375,
+              "min": 12.28125,
+              "max": 12.390625
+            },
+            "ops_per_second": {
+              "median": 165636.82,
+              "min": 164884.81,
+              "max": 166851.4
+            },
+            "p99_ms": {
+              "median": 2.287,
+              "min": 2.271,
+              "max": 2.287
+            },
+            "p999_ms": {
+              "median": 4.831,
+              "min": 4.767,
+              "max": 4.863
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.0076364556781683,
+            "min": 1.0020537603464517,
+            "max": 1.0141532241405955,
+            "pairs": [
+              1.0076364556781683,
+              1.0020537603464517,
+              1.0141532241405955
+            ]
+          }
+        },
+        "pipeline-16": {
+          "baseline": {
+            "rss_mib": {
+              "median": 18.578125,
+              "min": 18.46875,
+              "max": 18.734375
+            },
+            "ops_per_second": {
+              "median": 1456501.41,
+              "min": 1453330.99,
+              "max": 1461217.43
+            },
+            "p99_ms": {
+              "median": 0.335,
+              "min": 0.335,
+              "max": 0.335
+            },
+            "p999_ms": {
+              "median": 0.415,
+              "min": 0.407,
+              "max": 0.423
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 18.5625,
+              "min": 18.484375,
+              "max": 19.015625
+            },
+            "ops_per_second": {
+              "median": 1561910.66,
+              "min": 1558914.6,
+              "max": 1562048.01
+            },
+            "p99_ms": {
+              "median": 0.287,
+              "min": 0.287,
+              "max": 0.287
+            },
+            "p999_ms": {
+              "median": 0.383,
+              "min": 0.375,
+              "max": 0.383
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 7.890625,
+              "min": 7.84375,
+              "max": 8.0
+            },
+            "ops_per_second": {
+              "median": 1595925.34,
+              "min": 1586235.24,
+              "max": 1595930.46
+            },
+            "p99_ms": {
+              "median": 0.279,
+              "min": 0.279,
+              "max": 0.279
+            },
+            "p999_ms": {
+              "median": 0.319,
+              "min": 0.319,
+              "max": 0.319
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.0723715399630132,
+            "min": 1.0668601181413502,
+            "max": 1.07480540960597,
+            "pairs": [
+              1.0668601181413502,
+              1.0723715399630132,
+              1.07480540960597
+            ]
+          }
+        },
+        "pipeline-64": {
+          "baseline": {
+            "rss_mib": {
+              "median": 18.125,
+              "min": 18.09375,
+              "max": 18.515625
+            },
+            "ops_per_second": {
+              "median": 2456163.02,
+              "min": 2452616.12,
+              "max": 2459484.38
+            },
+            "p99_ms": {
+              "median": 0.703,
+              "min": 0.703,
+              "max": 0.703
+            },
+            "p999_ms": {
+              "median": 0.791,
+              "min": 0.791,
+              "max": 0.807
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 19.015625,
+              "min": 19.015625,
+              "max": 19.15625
+            },
+            "ops_per_second": {
+              "median": 2628988.5,
+              "min": 2624732.91,
+              "max": 2630703.04
+            },
+            "p99_ms": {
+              "median": 0.639,
+              "min": 0.631,
+              "max": 0.639
+            },
+            "p999_ms": {
+              "median": 0.719,
+              "min": 0.719,
+              "max": 0.735
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 8.015625,
+              "min": 7.984375,
+              "max": 8.015625
+            },
+            "ops_per_second": {
+              "median": 2588471.2,
+              "min": 2583980.44,
+              "max": 2612998.05
+            },
+            "p99_ms": {
+              "median": 0.679,
+              "min": 0.671,
+              "max": 0.679
+            },
+            "p999_ms": {
+              "median": 0.767,
+              "min": 0.759,
+              "max": 0.775
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.0696156728590405,
+            "min": 1.0686313932045113,
+            "max": 1.0719119386689833,
+            "pairs": [
+              1.0696156728590405,
+              1.0719119386689833,
+              1.0686313932045113
+            ]
+          }
+        },
+        "working-set-100k": {
+          "baseline": {
+            "rss_mib": {
+              "median": 48.53125,
+              "min": 48.5078125,
+              "max": 48.921875
+            },
+            "ops_per_second": {
+              "median": 160783.62,
+              "min": 159639.2,
+              "max": 162183.5
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.143,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.239,
+              "min": 0.239,
+              "max": 0.271
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 47.875,
+              "min": 47.28125,
+              "max": 47.8828125
+            },
+            "ops_per_second": {
+              "median": 163617.65,
+              "min": 163184.14,
+              "max": 165912.61
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.143,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.191,
+              "min": 0.191,
+              "max": 0.199
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 20.84375,
+              "min": 20.796875,
+              "max": 20.890625
+            },
+            "ops_per_second": {
+              "median": 170845.98,
+              "min": 170234.97,
+              "max": 171493.8
+            },
+            "p99_ms": {
+              "median": 0.151,
+              "min": 0.151,
+              "max": 0.151
+            },
+            "p999_ms": {
+              "median": 0.175,
+              "min": 0.175,
+              "max": 0.175
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.017626360197637,
+            "min": 1.0061698014902873,
+            "max": 1.0392974282005922,
+            "pairs": [
+              1.0061698014902873,
+              1.017626360197637,
+              1.0392974282005922
+            ]
+          }
+        },
+        "hash": {
+          "baseline": {
+            "rss_mib": {
+              "median": 17.90625,
+              "min": 17.40625,
+              "max": 18.2421875
+            },
+            "ops_per_second": {
+              "median": 160849.84,
+              "min": 160427.51,
+              "max": 163624.33
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.143,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.199,
+              "min": 0.199,
+              "max": 0.207
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 18.265625,
+              "min": 17.90625,
+              "max": 18.578125
+            },
+            "ops_per_second": {
+              "median": 162413.65,
+              "min": 161608.4,
+              "max": 164207.12
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.143,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.191,
+              "min": 0.191,
+              "max": 0.191
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 7.953125,
+              "min": 7.953125,
+              "max": 8.03125
+            },
+            "ops_per_second": {
+              "median": 170503.43,
+              "min": 168128.78,
+              "max": 170968.51
+            },
+            "p99_ms": {
+              "median": 0.151,
+              "min": 0.151,
+              "max": 0.151
+            },
+            "p999_ms": {
+              "median": 0.175,
+              "min": 0.175,
+              "max": 0.175
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.0097221731771695,
+            "min": 0.9876795217434963,
+            "max": 1.023559612687375,
+            "pairs": [
+              1.023559612687375,
+              0.9876795217434963,
+              1.0097221731771695
+            ]
+          }
+        },
+        "set": {
+          "baseline": {
+            "rss_mib": {
+              "median": 17.515625,
+              "min": 17.390625,
+              "max": 17.953125
+            },
+            "ops_per_second": {
+              "median": 163775.41,
+              "min": 162658.05,
+              "max": 165760.77
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.143,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.191,
+              "min": 0.183,
+              "max": 0.191
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 18.15625,
+              "min": 18.09375,
+              "max": 18.25
+            },
+            "ops_per_second": {
+              "median": 162926.16,
+              "min": 162811.16,
+              "max": 165525.93
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.143,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.183,
+              "min": 0.175,
+              "max": 0.183
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 7.71875,
+              "min": 7.625,
+              "max": 7.734375
+            },
+            "ops_per_second": {
+              "median": 168911.49,
+              "min": 168093.87,
+              "max": 171198.85
+            },
+            "p99_ms": {
+              "median": 0.151,
+              "min": 0.151,
+              "max": 0.151
+            },
+            "p999_ms": {
+              "median": 0.175,
+              "min": 0.175,
+              "max": 0.175
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.0009412998618883,
+            "min": 0.9828993916956347,
+            "max": 1.0106885398729881,
+            "pairs": [
+              0.9828993916956347,
+              1.0106885398729881,
+              1.0009412998618883
+            ]
+          }
+        },
+        "sorted-set": {
+          "baseline": {
+            "rss_mib": {
+              "median": 20.875,
+              "min": 20.796875,
+              "max": 21.328125
+            },
+            "ops_per_second": {
+              "median": 157851.45,
+              "min": 156046.84,
+              "max": 158595.18
+            },
+            "p99_ms": {
+              "median": 0.151,
+              "min": 0.151,
+              "max": 0.151
+            },
+            "p999_ms": {
+              "median": 0.207,
+              "min": 0.207,
+              "max": 0.215
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 21.109375,
+              "min": 20.921875,
+              "max": 21.515625
+            },
+            "ops_per_second": {
+              "median": 158952.72,
+              "min": 157779.84,
+              "max": 160696.35
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.143,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.199,
+              "min": 0.191,
+              "max": 0.199
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 7.828125,
+              "min": 7.796875,
+              "max": 7.9375
+            },
+            "ops_per_second": {
+              "median": 168461.31,
+              "min": 166882.34,
+              "max": 168633.54
+            },
+            "p99_ms": {
+              "median": 0.151,
+              "min": 0.151,
+              "max": 0.151
+            },
+            "p999_ms": {
+              "median": 0.175,
+              "min": 0.175,
+              "max": 0.175
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.006976622641097,
+            "min": 0.9948589862567072,
+            "max": 1.0297956049606645,
+            "pairs": [
+              1.0297956049606645,
+              1.006976622641097,
+              0.9948589862567072
+            ]
+          }
+        },
+        "queue": {
+          "baseline": {
+            "rss_mib": {
+              "median": 17.75,
+              "min": 17.71875,
+              "max": 18.265625
+            },
+            "ops_per_second": {
+              "median": 164461.63,
+              "min": 163694.8,
+              "max": 165503.56
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.143,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.207,
+              "min": 0.199,
+              "max": 0.215
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 18.109375,
+              "min": 18.0625,
+              "max": 18.21875
+            },
+            "ops_per_second": {
+              "median": 164932.89,
+              "min": 164892.6,
+              "max": 166811.99
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.143,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.183,
+              "min": 0.183,
+              "max": 0.183
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 7.78125,
+              "min": 7.734375,
+              "max": 7.8125
+            },
+            "ops_per_second": {
+              "median": 171591.15,
+              "min": 171023.95,
+              "max": 172808.07
+            },
+            "p99_ms": {
+              "median": 0.151,
+              "min": 0.151,
+              "max": 0.151
+            },
+            "p999_ms": {
+              "median": 0.175,
+              "min": 0.175,
+              "max": 0.175
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.0073172758083948,
+            "min": 0.9965519170705452,
+            "max": 1.0142912361989844,
+            "pairs": [
+              1.0142912361989844,
+              1.0073172758083948,
+              0.9965519170705452
+            ]
+          }
+        },
+        "counter": {
+          "baseline": {
+            "rss_mib": {
+              "median": 18.125,
+              "min": 17.359375,
+              "max": 18.171875
+            },
+            "ops_per_second": {
+              "median": 164734.8,
+              "min": 164192.3,
+              "max": 166129.02
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.143,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.183,
+              "min": 0.183,
+              "max": 0.183
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 17.8125,
+              "min": 17.6875,
+              "max": 18.1640625
+            },
+            "ops_per_second": {
+              "median": 164078.27,
+              "min": 164010.68,
+              "max": 165039.98
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.143,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.175,
+              "min": 0.167,
+              "max": 0.175
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 7.671875,
+              "min": 7.5625,
+              "max": 7.703125
+            },
+            "ops_per_second": {
+              "median": 172724.63,
+              "min": 171266.64,
+              "max": 173448.53
+            },
+            "p99_ms": {
+              "median": 0.151,
+              "min": 0.151,
+              "max": 0.151
+            },
+            "p999_ms": {
+              "median": 0.167,
+              "min": 0.167,
+              "max": 0.167
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 0.9956043288971123,
+            "min": 0.9934446131085347,
+            "max": 0.9993055094544628,
+            "pairs": [
+              0.9956043288971123,
+              0.9993055094544628,
+              0.9934446131085347
+            ]
+          }
+        },
+        "hll": {
+          "baseline": {
+            "rss_mib": {
+              "median": 80.703125,
+              "min": 80.296875,
+              "max": 81.1953125
+            },
+            "ops_per_second": {
+              "median": 165547.29,
+              "min": 165164.66,
+              "max": 166217.35
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.143,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.167,
+              "min": 0.167,
+              "max": 0.175
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 80.671875,
+              "min": 80.109375,
+              "max": 81.03125
+            },
+            "ops_per_second": {
+              "median": 165579.85,
+              "min": 163769.6,
+              "max": 166237.55
+            },
+            "p99_ms": {
+              "median": 0.135,
+              "min": 0.135,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.159,
+              "min": 0.159,
+              "max": 0.167
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 7.796875,
+              "min": 7.734375,
+              "max": 7.859375
+            },
+            "ops_per_second": {
+              "median": 173044.74,
+              "min": 172562.12,
+              "max": 173395.04
+            },
+            "p99_ms": {
+              "median": 0.151,
+              "min": 0.151,
+              "max": 0.151
+            },
+            "p999_ms": {
+              "median": 0.167,
+              "min": 0.167,
+              "max": 0.175
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.0001966809604674,
+            "min": 0.9852737996364399,
+            "max": 1.006495881140675,
+            "pairs": [
+              1.0001966809604674,
+              0.9852737996364399,
+              1.006495881140675
+            ]
+          }
+        },
+        "large-list-read": {
+          "baseline": {
+            "rss_mib": {
+              "median": 21.09375,
+              "min": 20.515625,
+              "max": 21.328125
+            },
+            "ops_per_second": {
+              "median": 13257.84,
+              "min": 13234.0,
+              "max": 13345.69
+            },
+            "p99_ms": {
+              "median": 1.335,
+              "min": 1.327,
+              "max": 1.335
+            },
+            "p999_ms": {
+              "median": 1.551,
+              "min": 1.487,
+              "max": 1.567
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 22.0625,
+              "min": 18.125,
+              "max": 22.453125
+            },
+            "ops_per_second": {
+              "median": 13261.07,
+              "min": 13244.24,
+              "max": 13263.12
+            },
+            "p99_ms": {
+              "median": 1.335,
+              "min": 1.335,
+              "max": 1.335
+            },
+            "p999_ms": {
+              "median": 1.495,
+              "min": 1.495,
+              "max": 1.511
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 12.421875,
+              "min": 12.234375,
+              "max": 12.515625
+            },
+            "ops_per_second": {
+              "median": 13350.16,
+              "min": 13212.77,
+              "max": 13383.28
+            },
+            "p99_ms": {
+              "median": 1.287,
+              "min": 1.279,
+              "max": 1.303
+            },
+            "p999_ms": {
+              "median": 1.463,
+              "min": 1.431,
+              "max": 1.639
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.0003982549193535,
+            "min": 0.9936593761731315,
+            "max": 1.0007737645458668,
+            "pairs": [
+              1.0003982549193535,
+              1.0007737645458668,
+              0.9936593761731315
+            ]
+          }
+        },
+        "reconnect": {
+          "baseline": {
+            "rss_mib": {
+              "median": 17.90625,
+              "min": 17.1484375,
+              "max": 18.03125
+            },
+            "ops_per_second": {
+              "median": 160484.19,
+              "min": 160466.03,
+              "max": 160885.63
+            },
+            "p99_ms": {
+              "median": 0.151,
+              "min": 0.151,
+              "max": 0.151
+            },
+            "p999_ms": {
+              "median": 0.199,
+              "min": 0.191,
+              "max": 0.199
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 18.15625,
+              "min": 17.9375,
+              "max": 18.453125
+            },
+            "ops_per_second": {
+              "median": 161987.93,
+              "min": 160550.14,
+              "max": 162446.1
+            },
+            "p99_ms": {
+              "median": 0.151,
+              "min": 0.151,
+              "max": 0.151
+            },
+            "p999_ms": {
+              "median": 0.191,
+              "min": 0.191,
+              "max": 0.199
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 8.0,
+              "min": 7.921875,
+              "max": 8.0625
+            },
+            "ops_per_second": {
+              "median": 168715.34,
+              "min": 168562.22,
+              "max": 169809.02
+            },
+            "p99_ms": {
+              "median": 0.159,
+              "min": 0.159,
+              "max": 0.159
+            },
+            "p999_ms": {
+              "median": 0.183,
+              "min": 0.183,
+              "max": 0.183
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.0093700195639208,
+            "min": 1.000524160783438,
+            "max": 1.0096992503308095,
+            "pairs": [
+              1.0093700195639208,
+              1.0096992503308095,
+              1.000524160783438
+            ]
+          }
+        }
+      }
+    },
+    "hll-compact-matched": {
+      "runs": 27,
+      "manifest_sha256": "4e7eb5dd7644e5dc6981c733a4ced30884d384f6c7d8aaf964f5643de365aa64",
+      "binaries": {
+        "baseline": {
+          "path": "/Users/brandopakel/memkv/dist/keel-general-6f-candidate",
+          "sha256": "a0110b44322d4e10ec6ebd0a935a9ef06e7d6e6862f81f74d6e777c7c8667b38",
+          "build": "/Users/brandopakel/memkv/dist/keel-general-6f-candidate: go1.26.6\n\tpath\tgithub.com/brandopakel/keel/cmd/keel\n\tmod\tgithub.com/brandopakel/keel\tv0.1.0-alpha.3.0.20260906014918-0485953a351a\t\n\tdep\tgithub.com/spaolacci/murmur3\tv1.1.0\th1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tDefaultGODEBUG=asynctimerchan=1,containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,gotypesalias=0,httpcookiemaxnum=0,httpservecontentkeepheaders=1,multipathtcp=0,randseednop=0,rsa1024min=0,tls3des=1,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,winreadlinkvolume=0,winsymlink=0,x509keypairleaf=0,x509negativeserial=1,x509rsacrt=0,x509sha256skid=0,x509usepolicies=0\n\tbuild\tCGO_ENABLED=1\n\tbuild\tGOARCH=arm64\n\tbuild\tGOOS=darwin\n\tbuild\tGOARM64=v8.0\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=0485953a351abfbce46b377b60965170a952f764\n\tbuild\tvcs.time=2026-09-06T01:49:18Z\n\tbuild\tvcs.modified=false"
+        },
+        "candidate": {
+          "path": "/Users/brandopakel/memkv/dist/keel-general-compact",
+          "sha256": "38818a3837734ddd4c2f3c93a080fe0d3ec3c4c55e9f5d3813e78e75306a194a",
+          "build": "/Users/brandopakel/memkv/dist/keel-general-compact: go1.26.6\n\tpath\tgithub.com/brandopakel/keel/cmd/keel\n\tmod\tgithub.com/brandopakel/keel\tv0.1.0-alpha.3.0.20260906021601-0d283b0ec3f7\t\n\tdep\tgithub.com/spaolacci/murmur3\tv1.1.0\th1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tDefaultGODEBUG=asynctimerchan=1,containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,gotypesalias=0,httpcookiemaxnum=0,httpservecontentkeepheaders=1,multipathtcp=0,randseednop=0,rsa1024min=0,tls3des=1,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,winreadlinkvolume=0,winsymlink=0,x509keypairleaf=0,x509negativeserial=1,x509rsacrt=0,x509sha256skid=0,x509usepolicies=0\n\tbuild\tCGO_ENABLED=1\n\tbuild\tGOARCH=arm64\n\tbuild\tGOOS=darwin\n\tbuild\tGOARM64=v8.0\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=0d283b0ec3f7e16900299e2949563db5f2ffacb6\n\tbuild\tvcs.time=2026-09-06T02:16:01Z\n\tbuild\tvcs.modified=false"
+        },
+        "redis": {
+          "path": "/opt/homebrew/bin/redis-server",
+          "sha256": "48a07c3892d5982a1af6c3fbb9db896b50e7aa564b1d4e6abcb12fcb6b6b6e0d",
+          "build": "Redis server v=8.10.1 sha=00000000:1 malloc=libc bits=64 build=81870544b30d700a"
+        }
+      },
+      "gc_tracing": true,
+      "cases": {
+        "hll": {
+          "baseline": {
+            "rss_mib": {
+              "median": 80.6875,
+              "min": 80.671875,
+              "max": 80.921875
+            },
+            "ops_per_second": {
+              "median": 166596.01,
+              "min": 165671.01,
+              "max": 167171.35
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.135,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.159,
+              "min": 0.159,
+              "max": 0.167
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 18.046875,
+              "min": 17.640625,
+              "max": 18.40625
+            },
+            "ops_per_second": {
+              "median": 164161.73,
+              "min": 162752.18,
+              "max": 165540.32
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.143,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.175,
+              "min": 0.167,
+              "max": 0.191
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 7.765625,
+              "min": 7.6875,
+              "max": 7.84375
+            },
+            "ops_per_second": {
+              "median": 172082.08,
+              "min": 170547.68,
+              "max": 173627.92
+            },
+            "p99_ms": {
+              "median": 0.151,
+              "min": 0.151,
+              "max": 0.151
+            },
+            "p999_ms": {
+              "median": 0.167,
+              "min": 0.167,
+              "max": 0.175
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 0.9853881254418998,
+            "min": 0.9823817697495777,
+            "max": 0.9902433640692618,
+            "pairs": [
+              0.9853881254418998,
+              0.9823817697495777,
+              0.9902433640692618
+            ]
+          }
+        },
+        "hll-dense": {
+          "baseline": {
+            "rss_mib": {
+              "median": 18.3359375,
+              "min": 17.96875,
+              "max": 18.6875
+            },
+            "ops_per_second": {
+              "median": 166460.76,
+              "min": 164930.62,
+              "max": 166637.77
+            },
+            "p99_ms": {
+              "median": 0.135,
+              "min": 0.135,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.175,
+              "min": 0.175,
+              "max": 0.191
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 18.609375,
+              "min": 18.078125,
+              "max": 18.71875
+            },
+            "ops_per_second": {
+              "median": 166348.47,
+              "min": 166019.4,
+              "max": 168421.29
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.135,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.175,
+              "min": 0.175,
+              "max": 0.183
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 9.03125,
+              "min": 8.921875,
+              "max": 9.078125
+            },
+            "ops_per_second": {
+              "median": 172584.84,
+              "min": 172266.55,
+              "max": 174108.11
+            },
+            "p99_ms": {
+              "median": 0.151,
+              "min": 0.151,
+              "max": 0.151
+            },
+            "p999_ms": {
+              "median": 0.167,
+              "min": 0.167,
+              "max": 0.175
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.0085966450620267,
+            "min": 0.9973485643102914,
+            "max": 1.010702975681924,
+            "pairs": [
+              0.9973485643102914,
+              1.0085966450620267,
+              1.010702975681924
+            ]
+          }
+        },
+        "hll-union": {
+          "baseline": {
+            "rss_mib": {
+              "median": 17.296875,
+              "min": 17.125,
+              "max": 17.4375
+            },
+            "ops_per_second": {
+              "median": 9806.56,
+              "min": 9803.2,
+              "max": 9819.22
+            },
+            "p99_ms": {
+              "median": 1.959,
+              "min": 1.951,
+              "max": 1.959
+            },
+            "p999_ms": {
+              "median": 2.655,
+              "min": 2.591,
+              "max": 2.703
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 18.453125,
+              "min": 18.21875,
+              "max": 18.96875
+            },
+            "ops_per_second": {
+              "median": 138359.54,
+              "min": 138178.03,
+              "max": 139490.51
+            },
+            "p99_ms": {
+              "median": 0.167,
+              "min": 0.167,
+              "max": 0.167
+            },
+            "p999_ms": {
+              "median": 0.295,
+              "min": 0.287,
+              "max": 0.295
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 7.625,
+              "min": 7.484375,
+              "max": 7.703125
+            },
+            "ops_per_second": {
+              "median": 80568.36,
+              "min": 80446.91,
+              "max": 81258.92
+            },
+            "p99_ms": {
+              "median": 0.239,
+              "min": 0.239,
+              "max": 0.239
+            },
+            "p999_ms": {
+              "median": 0.279,
+              "min": 0.271,
+              "max": 0.295
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 14.1137118491921,
+            "min": 14.07220023586395,
+            "max": 14.224204002218924,
+            "pairs": [
+              14.07220023586395,
+              14.224204002218924,
+              14.1137118491921
+            ]
+          }
+        }
+      }
+    },
+    "memory-corrected": {
+      "runs": 81,
+      "manifest_sha256": "1672e1f2bedc6007fb63afe8df7d72bd3b7a47177b16a535a2050fedf3eea83d",
+      "binaries": {
+        "baseline": {
+          "path": "/Users/brandopakel/memkv/dist/keel-general-87cea71",
+          "sha256": "dedaecb9b9a0f433958d4c9055f3ef269fb60dffb6a0833380d6cbf69067469d",
+          "build": "/Users/brandopakel/memkv/dist/keel-general-87cea71: go1.26.6\n\tpath\tgithub.com/brandopakel/keel/cmd/keel\n\tmod\tgithub.com/brandopakel/keel\tv0.1.0-alpha.3.0.20260905232700-87cea7140ade\t\n\tdep\tgithub.com/spaolacci/murmur3\tv1.1.0\th1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tDefaultGODEBUG=asynctimerchan=1,containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,gotypesalias=0,httpcookiemaxnum=0,httpservecontentkeepheaders=1,multipathtcp=0,randseednop=0,rsa1024min=0,tls3des=1,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,winreadlinkvolume=0,winsymlink=0,x509keypairleaf=0,x509negativeserial=1,x509rsacrt=0,x509sha256skid=0,x509usepolicies=0\n\tbuild\tCGO_ENABLED=1\n\tbuild\tGOARCH=arm64\n\tbuild\tGOOS=darwin\n\tbuild\tGOARM64=v8.0\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=87cea7140ade84b64e7a9afb20ec9f26bea71d3e\n\tbuild\tvcs.time=2026-09-05T23:27:00Z\n\tbuild\tvcs.modified=false"
+        },
+        "candidate": {
+          "path": "/Users/brandopakel/memkv/dist/keel-general-compact",
+          "sha256": "38818a3837734ddd4c2f3c93a080fe0d3ec3c4c55e9f5d3813e78e75306a194a",
+          "build": "/Users/brandopakel/memkv/dist/keel-general-compact: go1.26.6\n\tpath\tgithub.com/brandopakel/keel/cmd/keel\n\tmod\tgithub.com/brandopakel/keel\tv0.1.0-alpha.3.0.20260906021601-0d283b0ec3f7\t\n\tdep\tgithub.com/spaolacci/murmur3\tv1.1.0\th1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tDefaultGODEBUG=asynctimerchan=1,containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,gotypesalias=0,httpcookiemaxnum=0,httpservecontentkeepheaders=1,multipathtcp=0,randseednop=0,rsa1024min=0,tls3des=1,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,winreadlinkvolume=0,winsymlink=0,x509keypairleaf=0,x509negativeserial=1,x509rsacrt=0,x509sha256skid=0,x509usepolicies=0\n\tbuild\tCGO_ENABLED=1\n\tbuild\tGOARCH=arm64\n\tbuild\tGOOS=darwin\n\tbuild\tGOARM64=v8.0\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=0d283b0ec3f7e16900299e2949563db5f2ffacb6\n\tbuild\tvcs.time=2026-09-06T02:16:01Z\n\tbuild\tvcs.modified=false"
+        },
+        "redis": {
+          "path": "/opt/homebrew/bin/redis-server",
+          "sha256": "48a07c3892d5982a1af6c3fbb9db896b50e7aa564b1d4e6abcb12fcb6b6b6e0d",
+          "build": "Redis server v=8.10.1 sha=00000000:1 malloc=libc bits=64 build=81870544b30d700a"
+        }
+      },
+      "gc_tracing": true,
+      "cases": {
+        "keys-0-value-64-clients-1": {
+          "baseline": {
+            "rss_mib": {
+              "median": 11.296875,
+              "min": 11.265625,
+              "max": 11.3125
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 11.375,
+              "min": 11.171875,
+              "max": 11.46875
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 7.015625,
+              "min": 7.015625,
+              "max": 7.03125
+            },
+            "client_cpu_warnings": 0
+          }
+        },
+        "keys-0-value-64-clients-256": {
+          "baseline": {
+            "rss_mib": {
+              "median": 11.640625,
+              "min": 11.546875,
+              "max": 11.65625
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 11.640625,
+              "min": 11.53125,
+              "max": 11.671875
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 11.640625,
+              "min": 11.609375,
+              "max": 11.703125
+            },
+            "client_cpu_warnings": 0
+          }
+        },
+        "keys-2500-value-64-clients-1": {
+          "baseline": {
+            "rss_mib": {
+              "median": 13.0,
+              "min": 12.84375,
+              "max": 13.078125
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 12.625,
+              "min": 12.515625,
+              "max": 12.8125
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 7.4375,
+              "min": 7.40625,
+              "max": 7.4375
+            },
+            "client_cpu_warnings": 0
+          }
+        },
+        "keys-2500-value-64-clients-256": {
+          "baseline": {
+            "rss_mib": {
+              "median": 13.109375,
+              "min": 12.984375,
+              "max": 13.296875
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 12.625,
+              "min": 12.59375,
+              "max": 12.953125
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 12.078125,
+              "min": 11.90625,
+              "max": 12.109375
+            },
+            "client_cpu_warnings": 0
+          }
+        },
+        "keys-25000-value-64-clients-1": {
+          "baseline": {
+            "rss_mib": {
+              "median": 19.40625,
+              "min": 19.34375,
+              "max": 19.8125
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 18.484375,
+              "min": 18.328125,
+              "max": 18.578125
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 10.46875,
+              "min": 10.4375,
+              "max": 10.484375
+            },
+            "client_cpu_warnings": 0
+          }
+        },
+        "keys-100000-value-64-clients-1": {
+          "baseline": {
+            "rss_mib": {
+              "median": 38.203125,
+              "min": 38.015625,
+              "max": 38.765625
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 36.40625,
+              "min": 35.671875,
+              "max": 36.421875
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 20.375,
+              "min": 20.328125,
+              "max": 20.421875
+            },
+            "client_cpu_warnings": 0
+          }
+        },
+        "keys-1000000-value-64-clients-1": {
+          "baseline": {
+            "rss_mib": {
+              "median": 273.734375,
+              "min": 269.625,
+              "max": 285.34375
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 258.390625,
+              "min": 254.046875,
+              "max": 260.125
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 136.234375,
+              "min": 136.125,
+              "max": 136.234375
+            },
+            "client_cpu_warnings": 0
+          }
+        },
+        "keys-2500-value-1024-clients-1": {
+          "baseline": {
+            "rss_mib": {
+              "median": 16.515625,
+              "min": 16.265625,
+              "max": 16.8125
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 15.640625,
+              "min": 15.59375,
+              "max": 16.09375
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 10.5,
+              "min": 10.46875,
+              "max": 10.546875
+            },
+            "client_cpu_warnings": 0
+          }
+        },
+        "keys-25000-value-1024-clients-1": {
+          "baseline": {
+            "rss_mib": {
+              "median": 47.578125,
+              "min": 46.984375,
+              "max": 47.796875
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 43.234375,
+              "min": 43.109375,
+              "max": 43.40625
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 41.25,
+              "min": 41.21875,
+              "max": 41.28125
+            },
+            "client_cpu_warnings": 0
+          }
+        }
+      }
+    },
+    "persistence-no": {
+      "runs": 18,
+      "manifest_sha256": "4b518c5fc60d6fe81788f54f5542c712dc820feeaba7d38461afdcca5af4e1fe",
+      "binaries": {
+        "baseline": {
+          "path": "/Users/brandopakel/memkv/dist/keel-general-87cea71",
+          "sha256": "dedaecb9b9a0f433958d4c9055f3ef269fb60dffb6a0833380d6cbf69067469d",
+          "build": "/Users/brandopakel/memkv/dist/keel-general-87cea71: go1.26.6\n\tpath\tgithub.com/brandopakel/keel/cmd/keel\n\tmod\tgithub.com/brandopakel/keel\tv0.1.0-alpha.3.0.20260905232700-87cea7140ade\t\n\tdep\tgithub.com/spaolacci/murmur3\tv1.1.0\th1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tDefaultGODEBUG=asynctimerchan=1,containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,gotypesalias=0,httpcookiemaxnum=0,httpservecontentkeepheaders=1,multipathtcp=0,randseednop=0,rsa1024min=0,tls3des=1,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,winreadlinkvolume=0,winsymlink=0,x509keypairleaf=0,x509negativeserial=1,x509rsacrt=0,x509sha256skid=0,x509usepolicies=0\n\tbuild\tCGO_ENABLED=1\n\tbuild\tGOARCH=arm64\n\tbuild\tGOOS=darwin\n\tbuild\tGOARM64=v8.0\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=87cea7140ade84b64e7a9afb20ec9f26bea71d3e\n\tbuild\tvcs.time=2026-09-05T23:27:00Z\n\tbuild\tvcs.modified=false"
+        },
+        "candidate": {
+          "path": "/Users/brandopakel/memkv/dist/keel-general-compact",
+          "sha256": "38818a3837734ddd4c2f3c93a080fe0d3ec3c4c55e9f5d3813e78e75306a194a",
+          "build": "/Users/brandopakel/memkv/dist/keel-general-compact: go1.26.6\n\tpath\tgithub.com/brandopakel/keel/cmd/keel\n\tmod\tgithub.com/brandopakel/keel\tv0.1.0-alpha.3.0.20260906021601-0d283b0ec3f7\t\n\tdep\tgithub.com/spaolacci/murmur3\tv1.1.0\th1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tDefaultGODEBUG=asynctimerchan=1,containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,gotypesalias=0,httpcookiemaxnum=0,httpservecontentkeepheaders=1,multipathtcp=0,randseednop=0,rsa1024min=0,tls3des=1,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,winreadlinkvolume=0,winsymlink=0,x509keypairleaf=0,x509negativeserial=1,x509rsacrt=0,x509sha256skid=0,x509usepolicies=0\n\tbuild\tCGO_ENABLED=1\n\tbuild\tGOARCH=arm64\n\tbuild\tGOOS=darwin\n\tbuild\tGOARM64=v8.0\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=0d283b0ec3f7e16900299e2949563db5f2ffacb6\n\tbuild\tvcs.time=2026-09-06T02:16:01Z\n\tbuild\tvcs.modified=false"
+        },
+        "redis": {
+          "path": "/opt/homebrew/bin/redis-server",
+          "sha256": "48a07c3892d5982a1af6c3fbb9db896b50e7aa564b1d4e6abcb12fcb6b6b6e0d",
+          "build": "Redis server v=8.10.1 sha=00000000:1 malloc=libc bits=64 build=81870544b30d700a"
+        }
+      },
+      "gc_tracing": true,
+      "cases": {
+        "cache-write-64": {
+          "baseline": {
+            "rss_mib": {
+              "median": 17.5,
+              "min": 17.4375,
+              "max": 18.421875
+            },
+            "ops_per_second": {
+              "median": 158678.27,
+              "min": 158228.57,
+              "max": 164247.8
+            },
+            "p99_ms": {
+              "median": 0.151,
+              "min": 0.151,
+              "max": 0.151
+            },
+            "p999_ms": {
+              "median": 0.215,
+              "min": 0.207,
+              "max": 0.223
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 17.640625,
+              "min": 17.6171875,
+              "max": 18.6875
+            },
+            "ops_per_second": {
+              "median": 158422.08,
+              "min": 157653.95,
+              "max": 161774.88
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.143,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.207,
+              "min": 0.199,
+              "max": 0.207
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 8.09375,
+              "min": 8.046875,
+              "max": 8.125
+            },
+            "ops_per_second": {
+              "median": 162921.37,
+              "min": 159849.32,
+              "max": 164051.51
+            },
+            "p99_ms": {
+              "median": 0.159,
+              "min": 0.159,
+              "max": 0.159
+            },
+            "p999_ms": {
+              "median": 0.183,
+              "min": 0.183,
+              "max": 0.191
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 0.996368418168729,
+            "min": 0.9849439688081059,
+            "max": 0.9983854752134618,
+            "pairs": [
+              0.9849439688081059,
+              0.9983854752134618,
+              0.996368418168729
+            ]
+          }
+        },
+        "pipeline-16": {
+          "baseline": {
+            "rss_mib": {
+              "median": 18.671875,
+              "min": 18.515625,
+              "max": 18.96875
+            },
+            "ops_per_second": {
+              "median": 1425083.25,
+              "min": 1420983.46,
+              "max": 1437669.63
+            },
+            "p99_ms": {
+              "median": 0.351,
+              "min": 0.343,
+              "max": 0.351
+            },
+            "p999_ms": {
+              "median": 0.431,
+              "min": 0.423,
+              "max": 0.431
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 18.5703125,
+              "min": 18.515625,
+              "max": 18.578125
+            },
+            "ops_per_second": {
+              "median": 1514753.55,
+              "min": 1511992.42,
+              "max": 1526068.87
+            },
+            "p99_ms": {
+              "median": 0.295,
+              "min": 0.295,
+              "max": 0.303
+            },
+            "p999_ms": {
+              "median": 0.399,
+              "min": 0.391,
+              "max": 0.407
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 8.03125,
+              "min": 8.015625,
+              "max": 8.125
+            },
+            "ops_per_second": {
+              "median": 1486998.7,
+              "min": 1477009.39,
+              "max": 1492149.45
+            },
+            "p99_ms": {
+              "median": 0.295,
+              "min": 0.295,
+              "max": 0.295
+            },
+            "p999_ms": {
+              "median": 0.335,
+              "min": 0.335,
+              "max": 0.343
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.0659895717575771,
+            "min": 1.0516967100431829,
+            "max": 1.0708629618655612,
+            "pairs": [
+              1.0708629618655612,
+              1.0516967100431829,
+              1.0659895717575771
+            ]
+          }
+        }
+      }
+    },
+    "persistence-everysec": {
+      "runs": 18,
+      "manifest_sha256": "3211c2993461547f5cf63ccafe796bbd93815467bf60637448927ed349cfdf50",
+      "binaries": {
+        "baseline": {
+          "path": "/Users/brandopakel/memkv/dist/keel-general-87cea71",
+          "sha256": "dedaecb9b9a0f433958d4c9055f3ef269fb60dffb6a0833380d6cbf69067469d",
+          "build": "/Users/brandopakel/memkv/dist/keel-general-87cea71: go1.26.6\n\tpath\tgithub.com/brandopakel/keel/cmd/keel\n\tmod\tgithub.com/brandopakel/keel\tv0.1.0-alpha.3.0.20260905232700-87cea7140ade\t\n\tdep\tgithub.com/spaolacci/murmur3\tv1.1.0\th1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tDefaultGODEBUG=asynctimerchan=1,containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,gotypesalias=0,httpcookiemaxnum=0,httpservecontentkeepheaders=1,multipathtcp=0,randseednop=0,rsa1024min=0,tls3des=1,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,winreadlinkvolume=0,winsymlink=0,x509keypairleaf=0,x509negativeserial=1,x509rsacrt=0,x509sha256skid=0,x509usepolicies=0\n\tbuild\tCGO_ENABLED=1\n\tbuild\tGOARCH=arm64\n\tbuild\tGOOS=darwin\n\tbuild\tGOARM64=v8.0\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=87cea7140ade84b64e7a9afb20ec9f26bea71d3e\n\tbuild\tvcs.time=2026-09-05T23:27:00Z\n\tbuild\tvcs.modified=false"
+        },
+        "candidate": {
+          "path": "/Users/brandopakel/memkv/dist/keel-general-compact",
+          "sha256": "38818a3837734ddd4c2f3c93a080fe0d3ec3c4c55e9f5d3813e78e75306a194a",
+          "build": "/Users/brandopakel/memkv/dist/keel-general-compact: go1.26.6\n\tpath\tgithub.com/brandopakel/keel/cmd/keel\n\tmod\tgithub.com/brandopakel/keel\tv0.1.0-alpha.3.0.20260906021601-0d283b0ec3f7\t\n\tdep\tgithub.com/spaolacci/murmur3\tv1.1.0\th1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tDefaultGODEBUG=asynctimerchan=1,containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,gotypesalias=0,httpcookiemaxnum=0,httpservecontentkeepheaders=1,multipathtcp=0,randseednop=0,rsa1024min=0,tls3des=1,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,winreadlinkvolume=0,winsymlink=0,x509keypairleaf=0,x509negativeserial=1,x509rsacrt=0,x509sha256skid=0,x509usepolicies=0\n\tbuild\tCGO_ENABLED=1\n\tbuild\tGOARCH=arm64\n\tbuild\tGOOS=darwin\n\tbuild\tGOARM64=v8.0\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=0d283b0ec3f7e16900299e2949563db5f2ffacb6\n\tbuild\tvcs.time=2026-09-06T02:16:01Z\n\tbuild\tvcs.modified=false"
+        },
+        "redis": {
+          "path": "/opt/homebrew/bin/redis-server",
+          "sha256": "48a07c3892d5982a1af6c3fbb9db896b50e7aa564b1d4e6abcb12fcb6b6b6e0d",
+          "build": "Redis server v=8.10.1 sha=00000000:1 malloc=libc bits=64 build=81870544b30d700a"
+        }
+      },
+      "gc_tracing": true,
+      "cases": {
+        "cache-write-64": {
+          "baseline": {
+            "rss_mib": {
+              "median": 18.140625,
+              "min": 17.6875,
+              "max": 18.1484375
+            },
+            "ops_per_second": {
+              "median": 157265.71,
+              "min": 155249.72,
+              "max": 157593.44
+            },
+            "p99_ms": {
+              "median": 0.151,
+              "min": 0.151,
+              "max": 0.151
+            },
+            "p999_ms": {
+              "median": 0.215,
+              "min": 0.207,
+              "max": 0.215
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 17.8515625,
+              "min": 17.390625,
+              "max": 18.40625
+            },
+            "ops_per_second": {
+              "median": 157622.43,
+              "min": 156110.75,
+              "max": 158555.34
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.143,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.207,
+              "min": 0.199,
+              "max": 0.207
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 8.359375,
+              "min": 8.21875,
+              "max": 8.390625
+            },
+            "ops_per_second": {
+              "median": 162816.1,
+              "min": 162024.73,
+              "max": 163132.33
+            },
+            "p99_ms": {
+              "median": 0.159,
+              "min": 0.159,
+              "max": 0.159
+            },
+            "p999_ms": {
+              "median": 0.191,
+              "min": 0.183,
+              "max": 0.191
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.0055460969591443,
+            "min": 1.0001839543574909,
+            "max": 1.0082003254237686,
+            "pairs": [
+              1.0082003254237686,
+              1.0055460969591443,
+              1.0001839543574909
+            ]
+          }
+        },
+        "pipeline-16": {
+          "baseline": {
+            "rss_mib": {
+              "median": 18.5859375,
+              "min": 18.546875,
+              "max": 18.609375
+            },
+            "ops_per_second": {
+              "median": 1413441.41,
+              "min": 1407366.2,
+              "max": 1419030.7
+            },
+            "p99_ms": {
+              "median": 0.343,
+              "min": 0.343,
+              "max": 0.351
+            },
+            "p999_ms": {
+              "median": 0.439,
+              "min": 0.423,
+              "max": 0.439
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 18.453125,
+              "min": 18.25,
+              "max": 18.515625
+            },
+            "ops_per_second": {
+              "median": 1497873.54,
+              "min": 1485688.69,
+              "max": 1509779.39
+            },
+            "p99_ms": {
+              "median": 0.295,
+              "min": 0.295,
+              "max": 0.303
+            },
+            "p999_ms": {
+              "median": 0.399,
+              "min": 0.399,
+              "max": 0.423
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 8.15625,
+              "min": 7.984375,
+              "max": 8.203125
+            },
+            "ops_per_second": {
+              "median": 1471140.85,
+              "min": 1462364.39,
+              "max": 1475270.46
+            },
+            "p99_ms": {
+              "median": 0.295,
+              "min": 0.295,
+              "max": 0.303
+            },
+            "p999_ms": {
+              "median": 0.351,
+              "min": 0.343,
+              "max": 0.359
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.05973514671542,
+            "min": 1.0469743114084846,
+            "max": 1.0727693971902976,
+            "pairs": [
+              1.0727693971902976,
+              1.05973514671542,
+              1.0469743114084846
+            ]
+          }
+        }
+      }
+    },
+    "persistence-always": {
+      "runs": 18,
+      "manifest_sha256": "0ca5f9b5aa04a2601d9adb3db5392cb591a9da8fe0adc967a70e9d8255211112",
+      "binaries": {
+        "baseline": {
+          "path": "/Users/brandopakel/memkv/dist/keel-general-87cea71",
+          "sha256": "dedaecb9b9a0f433958d4c9055f3ef269fb60dffb6a0833380d6cbf69067469d",
+          "build": "/Users/brandopakel/memkv/dist/keel-general-87cea71: go1.26.6\n\tpath\tgithub.com/brandopakel/keel/cmd/keel\n\tmod\tgithub.com/brandopakel/keel\tv0.1.0-alpha.3.0.20260905232700-87cea7140ade\t\n\tdep\tgithub.com/spaolacci/murmur3\tv1.1.0\th1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tDefaultGODEBUG=asynctimerchan=1,containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,gotypesalias=0,httpcookiemaxnum=0,httpservecontentkeepheaders=1,multipathtcp=0,randseednop=0,rsa1024min=0,tls3des=1,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,winreadlinkvolume=0,winsymlink=0,x509keypairleaf=0,x509negativeserial=1,x509rsacrt=0,x509sha256skid=0,x509usepolicies=0\n\tbuild\tCGO_ENABLED=1\n\tbuild\tGOARCH=arm64\n\tbuild\tGOOS=darwin\n\tbuild\tGOARM64=v8.0\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=87cea7140ade84b64e7a9afb20ec9f26bea71d3e\n\tbuild\tvcs.time=2026-09-05T23:27:00Z\n\tbuild\tvcs.modified=false"
+        },
+        "candidate": {
+          "path": "/Users/brandopakel/memkv/dist/keel-general-compact",
+          "sha256": "38818a3837734ddd4c2f3c93a080fe0d3ec3c4c55e9f5d3813e78e75306a194a",
+          "build": "/Users/brandopakel/memkv/dist/keel-general-compact: go1.26.6\n\tpath\tgithub.com/brandopakel/keel/cmd/keel\n\tmod\tgithub.com/brandopakel/keel\tv0.1.0-alpha.3.0.20260906021601-0d283b0ec3f7\t\n\tdep\tgithub.com/spaolacci/murmur3\tv1.1.0\th1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tDefaultGODEBUG=asynctimerchan=1,containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,gotypesalias=0,httpcookiemaxnum=0,httpservecontentkeepheaders=1,multipathtcp=0,randseednop=0,rsa1024min=0,tls3des=1,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,winreadlinkvolume=0,winsymlink=0,x509keypairleaf=0,x509negativeserial=1,x509rsacrt=0,x509sha256skid=0,x509usepolicies=0\n\tbuild\tCGO_ENABLED=1\n\tbuild\tGOARCH=arm64\n\tbuild\tGOOS=darwin\n\tbuild\tGOARM64=v8.0\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=0d283b0ec3f7e16900299e2949563db5f2ffacb6\n\tbuild\tvcs.time=2026-09-06T02:16:01Z\n\tbuild\tvcs.modified=false"
+        },
+        "redis": {
+          "path": "/opt/homebrew/bin/redis-server",
+          "sha256": "48a07c3892d5982a1af6c3fbb9db896b50e7aa564b1d4e6abcb12fcb6b6b6e0d",
+          "build": "Redis server v=8.10.1 sha=00000000:1 malloc=libc bits=64 build=81870544b30d700a"
+        }
+      },
+      "gc_tracing": true,
+      "cases": {
+        "cache-write-64": {
+          "baseline": {
+            "rss_mib": {
+              "median": 15.640625,
+              "min": 15.28125,
+              "max": 15.9296875
+            },
+            "ops_per_second": {
+              "median": 2299.57,
+              "min": 2026.61,
+              "max": 2465.36
+            },
+            "p99_ms": {
+              "median": 8.383,
+              "min": 8.063,
+              "max": 8.895
+            },
+            "p999_ms": {
+              "median": 13.247,
+              "min": 12.991,
+              "max": 13.439
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 15.359375,
+              "min": 14.921875,
+              "max": 15.71875
+            },
+            "ops_per_second": {
+              "median": 2196.53,
+              "min": 2056.82,
+              "max": 2422.88
+            },
+            "p99_ms": {
+              "median": 8.159,
+              "min": 8.031,
+              "max": 8.255
+            },
+            "p999_ms": {
+              "median": 13.631,
+              "min": 8.319,
+              "max": 24.063
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 8.015625,
+              "min": 7.90625,
+              "max": 8.046875
+            },
+            "ops_per_second": {
+              "median": 2362.55,
+              "min": 2086.25,
+              "max": 2492.62
+            },
+            "p99_ms": {
+              "median": 8.191,
+              "min": 8.095,
+              "max": 9.151
+            },
+            "p999_ms": {
+              "median": 12.991,
+              "min": 12.223,
+              "max": 14.143
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.0149066667982494,
+            "min": 0.8909571015997664,
+            "max": 1.0536230686606627,
+            "pairs": [
+              1.0149066667982494,
+              0.8909571015997664,
+              1.0536230686606627
+            ]
+          }
+        },
+        "pipeline-16": {
+          "baseline": {
+            "rss_mib": {
+              "median": 17.078125,
+              "min": 16.765625,
+              "max": 17.203125
+            },
+            "ops_per_second": {
+              "median": 36247.48,
+              "min": 34706.37,
+              "max": 39822.33
+            },
+            "p99_ms": {
+              "median": 8.575,
+              "min": 8.127,
+              "max": 8.959
+            },
+            "p999_ms": {
+              "median": 13.951,
+              "min": 12.735,
+              "max": 37.631
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 17.234375,
+              "min": 17.1171875,
+              "max": 17.5625
+            },
+            "ops_per_second": {
+              "median": 37531.67,
+              "min": 33275.2,
+              "max": 38170.69
+            },
+            "p99_ms": {
+              "median": 8.255,
+              "min": 8.191,
+              "max": 9.279
+            },
+            "p999_ms": {
+              "median": 12.735,
+              "min": 8.511,
+              "max": 14.975
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 7.984375,
+              "min": 7.90625,
+              "max": 8.015625
+            },
+            "ops_per_second": {
+              "median": 36498.51,
+              "min": 33841.29,
+              "max": 40299.72
+            },
+            "p99_ms": {
+              "median": 8.383,
+              "min": 8.319,
+              "max": 10.047
+            },
+            "p999_ms": {
+              "median": 14.655,
+              "min": 8.895,
+              "max": 16.895
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 0.9587634777131689,
+            "min": 0.9424780016638905,
+            "max": 1.053057757394445,
+            "pairs": [
+              0.9587634777131689,
+              0.9424780016638905,
+              1.053057757394445
+            ]
+          }
+        }
+      }
+    },
+    "confirmation-untraced": {
+      "runs": 36,
+      "manifest_sha256": "cb145800e8c3ffcaba897b550fddbcf460753c9cf57f699a171ebb0b39d93227",
+      "binaries": {
+        "baseline": {
+          "path": "/Users/brandopakel/memkv/dist/keel-general-87cea71",
+          "sha256": "dedaecb9b9a0f433958d4c9055f3ef269fb60dffb6a0833380d6cbf69067469d",
+          "build": "/Users/brandopakel/memkv/dist/keel-general-87cea71: go1.26.6\n\tpath\tgithub.com/brandopakel/keel/cmd/keel\n\tmod\tgithub.com/brandopakel/keel\tv0.1.0-alpha.3.0.20260905232700-87cea7140ade\t\n\tdep\tgithub.com/spaolacci/murmur3\tv1.1.0\th1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tDefaultGODEBUG=asynctimerchan=1,containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,gotypesalias=0,httpcookiemaxnum=0,httpservecontentkeepheaders=1,multipathtcp=0,randseednop=0,rsa1024min=0,tls3des=1,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,winreadlinkvolume=0,winsymlink=0,x509keypairleaf=0,x509negativeserial=1,x509rsacrt=0,x509sha256skid=0,x509usepolicies=0\n\tbuild\tCGO_ENABLED=1\n\tbuild\tGOARCH=arm64\n\tbuild\tGOOS=darwin\n\tbuild\tGOARM64=v8.0\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=87cea7140ade84b64e7a9afb20ec9f26bea71d3e\n\tbuild\tvcs.time=2026-09-05T23:27:00Z\n\tbuild\tvcs.modified=false"
+        },
+        "candidate": {
+          "path": "/Users/brandopakel/memkv/dist/keel-general-compact",
+          "sha256": "38818a3837734ddd4c2f3c93a080fe0d3ec3c4c55e9f5d3813e78e75306a194a",
+          "build": "/Users/brandopakel/memkv/dist/keel-general-compact: go1.26.6\n\tpath\tgithub.com/brandopakel/keel/cmd/keel\n\tmod\tgithub.com/brandopakel/keel\tv0.1.0-alpha.3.0.20260906021601-0d283b0ec3f7\t\n\tdep\tgithub.com/spaolacci/murmur3\tv1.1.0\th1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tDefaultGODEBUG=asynctimerchan=1,containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,gotypesalias=0,httpcookiemaxnum=0,httpservecontentkeepheaders=1,multipathtcp=0,randseednop=0,rsa1024min=0,tls3des=1,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,winreadlinkvolume=0,winsymlink=0,x509keypairleaf=0,x509negativeserial=1,x509rsacrt=0,x509sha256skid=0,x509usepolicies=0\n\tbuild\tCGO_ENABLED=1\n\tbuild\tGOARCH=arm64\n\tbuild\tGOOS=darwin\n\tbuild\tGOARM64=v8.0\n\tbuild\tvcs=git\n\tbuild\tvcs.revision=0d283b0ec3f7e16900299e2949563db5f2ffacb6\n\tbuild\tvcs.time=2026-09-06T02:16:01Z\n\tbuild\tvcs.modified=false"
+        },
+        "redis": {
+          "path": "/opt/homebrew/bin/redis-server",
+          "sha256": "48a07c3892d5982a1af6c3fbb9db896b50e7aa564b1d4e6abcb12fcb6b6b6e0d",
+          "build": "Redis server v=8.10.1 sha=00000000:1 malloc=libc bits=64 build=81870544b30d700a"
+        }
+      },
+      "gc_tracing": false,
+      "cases": {
+        "pipeline-16": {
+          "baseline": {
+            "rss_mib": {
+              "median": 18.046875,
+              "min": 18.03125,
+              "max": 18.390625
+            },
+            "ops_per_second": {
+              "median": 1466544.33,
+              "min": 1460185.04,
+              "max": 1472578.01
+            },
+            "p99_ms": {
+              "median": 0.327,
+              "min": 0.327,
+              "max": 0.327
+            },
+            "p999_ms": {
+              "median": 0.407,
+              "min": 0.407,
+              "max": 0.415
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 18.953125,
+              "min": 18.640625,
+              "max": 18.984375
+            },
+            "ops_per_second": {
+              "median": 1555503.2,
+              "min": 1544070.84,
+              "max": 1570859.86
+            },
+            "p99_ms": {
+              "median": 0.279,
+              "min": 0.279,
+              "max": 0.287
+            },
+            "p999_ms": {
+              "median": 0.375,
+              "min": 0.375,
+              "max": 0.375
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 8.015625,
+              "min": 7.8125,
+              "max": 8.0625
+            },
+            "ops_per_second": {
+              "median": 1582268.7,
+              "min": 1582107.48,
+              "max": 1592191.78
+            },
+            "p99_ms": {
+              "median": 0.279,
+              "min": 0.271,
+              "max": 0.279
+            },
+            "p999_ms": {
+              "median": 0.319,
+              "min": 0.311,
+              "max": 0.319
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.0652781376256257,
+            "min": 1.0528633934986473,
+            "max": 1.0667413538247799,
+            "pairs": [
+              1.0667413538247799,
+              1.0528633934986473,
+              1.0652781376256257
+            ]
+          }
+        },
+        "pipeline-64": {
+          "baseline": {
+            "rss_mib": {
+              "median": 18.609375,
+              "min": 18.578125,
+              "max": 18.625
+            },
+            "ops_per_second": {
+              "median": 2478895.95,
+              "min": 2460854.86,
+              "max": 2516092.93
+            },
+            "p99_ms": {
+              "median": 0.695,
+              "min": 0.687,
+              "max": 0.703
+            },
+            "p999_ms": {
+              "median": 0.791,
+              "min": 0.775,
+              "max": 0.911
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 18.96875,
+              "min": 18.828125,
+              "max": 19.265625
+            },
+            "ops_per_second": {
+              "median": 2645945.93,
+              "min": 2645828.76,
+              "max": 2672203.64
+            },
+            "p99_ms": {
+              "median": 0.623,
+              "min": 0.615,
+              "max": 0.623
+            },
+            "p999_ms": {
+              "median": 0.719,
+              "min": 0.703,
+              "max": 0.743
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 7.9375,
+              "min": 7.90625,
+              "max": 7.953125
+            },
+            "ops_per_second": {
+              "median": 2581286.4,
+              "min": 2579255.11,
+              "max": 2601495.97
+            },
+            "p99_ms": {
+              "median": 0.679,
+              "min": 0.679,
+              "max": 0.687
+            },
+            "p999_ms": {
+              "median": 0.775,
+              "min": 0.767,
+              "max": 0.815
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.0673415961650183,
+            "min": 1.0620448903689736,
+            "max": 1.075214135140014,
+            "pairs": [
+              1.0673415961650183,
+              1.075214135140014,
+              1.0620448903689736
+            ]
+          }
+        },
+        "hll": {
+          "baseline": {
+            "rss_mib": {
+              "median": 80.84375,
+              "min": 80.578125,
+              "max": 81.265625
+            },
+            "ops_per_second": {
+              "median": 165422.06,
+              "min": 164471.7,
+              "max": 227612.71
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.135,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.159,
+              "min": 0.159,
+              "max": 0.183
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 17.578125,
+              "min": 17.3828125,
+              "max": 17.609375
+            },
+            "ops_per_second": {
+              "median": 167803.64,
+              "min": 166503.72,
+              "max": 242445.81
+            },
+            "p99_ms": {
+              "median": 0.143,
+              "min": 0.127,
+              "max": 0.143
+            },
+            "p999_ms": {
+              "median": 0.167,
+              "min": 0.159,
+              "max": 0.175
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 7.796875,
+              "min": 7.78125,
+              "max": 7.8125
+            },
+            "ops_per_second": {
+              "median": 170851.75,
+              "min": 170798.97,
+              "max": 223641.64
+            },
+            "p99_ms": {
+              "median": 0.151,
+              "min": 0.151,
+              "max": 0.151
+            },
+            "p999_ms": {
+              "median": 0.175,
+              "min": 0.167,
+              "max": 0.255
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 1.0143969915499784,
+            "min": 1.012354830648677,
+            "max": 1.0651681533953004,
+            "pairs": [
+              1.012354830648677,
+              1.0143969915499784,
+              1.0651681533953004
+            ]
+          }
+        },
+        "hll-union": {
+          "baseline": {
+            "rss_mib": {
+              "median": 17.328125,
+              "min": 16.71875,
+              "max": 17.390625
+            },
+            "ops_per_second": {
+              "median": 9779.98,
+              "min": 9762.59,
+              "max": 10023.54
+            },
+            "p99_ms": {
+              "median": 1.959,
+              "min": 1.783,
+              "max": 1.975
+            },
+            "p999_ms": {
+              "median": 2.623,
+              "min": 2.415,
+              "max": 2.735
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate": {
+            "rss_mib": {
+              "median": 18.578125,
+              "min": 18.421875,
+              "max": 18.625
+            },
+            "ops_per_second": {
+              "median": 138734.88,
+              "min": 138577.1,
+              "max": 177870.48
+            },
+            "p99_ms": {
+              "median": 0.167,
+              "min": 0.159,
+              "max": 0.167
+            },
+            "p999_ms": {
+              "median": 0.287,
+              "min": 0.247,
+              "max": 0.287
+            },
+            "client_cpu_warnings": 0
+          },
+          "redis": {
+            "rss_mib": {
+              "median": 7.546875,
+              "min": 7.546875,
+              "max": 7.625
+            },
+            "ops_per_second": {
+              "median": 80450.86,
+              "min": 80195.24,
+              "max": 86675.15
+            },
+            "p99_ms": {
+              "median": 0.239,
+              "min": 0.239,
+              "max": 0.247
+            },
+            "p999_ms": {
+              "median": 0.295,
+              "min": 0.263,
+              "max": 0.327
+            },
+            "client_cpu_warnings": 0
+          },
+          "candidate_baseline_throughput_ratio": {
+            "median": 14.194706527673496,
+            "min": 14.185599561553296,
+            "max": 17.745275621187723,
+            "pairs": [
+              14.185599561553296,
+              14.194706527673496,
+              17.745275621187723
+            ]
+          }
+        }
+      }
+    }
+  },
+  "functional": {
+    "differential-final-seed1": {
+      "status": "passed",
+      "seed": 20260906,
+      "steps_requested": 30000,
+      "binary_sha256": "a0110b44322d4e10ec6ebd0a935a9ef06e7d6e6862f81f74d6e777c7c8667b38",
+      "redis_sha256": "48a07c3892d5982a1af6c3fbb9db896b50e7aa564b1d4e6abcb12fcb6b6b6e0d",
+      "harness_sha256": "542171be52b00be66d7eb82cbce0af4f5a79725a4c8a3c917cbcb10f691ad36a",
+      "policy": "always",
+      "reply_checks": 30000,
+      "state_checks": 30,
+      "restarts": 2,
+      "limits": "Supported common RESP2 commands; unordered collections normalized; errors compared by class. No timing-based TTL differential or cross-type SET equivalence claim.",
+      "final_keys": 141,
+      "state_sha256": "27dfa0669f81c1c78977c795ebc87a633648a022bfd47e68f749df50f8502903",
+      "commands_sha256": "9a8a4693d6de15edfa45441cc51b9e8bd7acccd4c1ccee8c15c1e2547af32cdd"
+    },
+    "differential-compact-20260907": {
+      "status": "passed",
+      "seed": 20260907,
+      "steps_requested": 30000,
+      "binary_sha256": "38818a3837734ddd4c2f3c93a080fe0d3ec3c4c55e9f5d3813e78e75306a194a",
+      "redis_sha256": "48a07c3892d5982a1af6c3fbb9db896b50e7aa564b1d4e6abcb12fcb6b6b6e0d",
+      "harness_sha256": "9dcfb328f7638f50110bfab4ecfd2fa98442c1c15d1cb39e11b7d0be58074351",
+      "policy": "always",
+      "reply_checks": 30000,
+      "state_checks": 30,
+      "restarts": 2,
+      "limits": "Supported common RESP2 commands; unordered collections normalized; errors compared by class. No timing-based TTL differential or cross-type SET equivalence claim.",
+      "final_keys": 140,
+      "state_sha256": "075fbc64aebdae4d93bdb626e7895969e21f73999a5c68c8a6255d2967d9055d",
+      "commands_sha256": "5ef90ed07a4a49d4f6b1ffa4be0c0f5714d173cb1478a18de8f5ce9ee9d8b96a"
+    },
+    "differential-compact-20260908": {
+      "status": "passed",
+      "seed": 20260908,
+      "steps_requested": 30000,
+      "binary_sha256": "38818a3837734ddd4c2f3c93a080fe0d3ec3c4c55e9f5d3813e78e75306a194a",
+      "redis_sha256": "48a07c3892d5982a1af6c3fbb9db896b50e7aa564b1d4e6abcb12fcb6b6b6e0d",
+      "harness_sha256": "9dcfb328f7638f50110bfab4ecfd2fa98442c1c15d1cb39e11b7d0be58074351",
+      "policy": "always",
+      "reply_checks": 30000,
+      "state_checks": 30,
+      "restarts": 2,
+      "limits": "Supported common RESP2 commands; unordered collections normalized; errors compared by class. No timing-based TTL differential or cross-type SET equivalence claim.",
+      "final_keys": 138,
+      "state_sha256": "6de31bd2cecdef9ec61bb17516b72a501ac29983d4f3594d98e1c04ba64edb5c",
+      "commands_sha256": "54bcbda0fd95ef2ebed599fbd59ab1693c536fba4807fe588e81c8a2ab45aa67"
+    },
+    "hll-upgrade-v2": {
+      "status": "passed",
+      "baseline_sha256": "dedaecb9b9a0f433958d4c9055f3ef269fb60dffb6a0833380d6cbf69067469d",
+      "candidate_sha256": "38818a3837734ddd4c2f3c93a080fe0d3ec3c4c55e9f5d3813e78e75306a194a",
+      "harness_sha256": "958fa277efa5fe0d9189d3bbfa4124fb61793c43d14610b95df9bfc49ad86280",
+      "rollback_restarts": 2,
+      "original_aof_sha256": "46d66b84d86f7f7bbfd6799863918d86a7aba1ce89ad6d05d4f0c77353968c4e",
+      "replication_full_delta_restart": true,
+      "final_dump_sha256": {
+        "hll:0": "f9c2054d8193a0f0716d7f2a2dcb9f61985411be2103a1900ff3519ded51c6a9",
+        "hll:1": "20ffac0a91d4b94978bf0c5e161d5dec01050b53e289e43893cfc863065f299f",
+        "hll:10000": "1c9e6b8c5f6114edb2e984fe6db75b6bf48a66244de4974f16849ac8d7d210b7",
+        "hll:32": "5b38747c534c0c74c5bbd5d3ca4e4809e39698de7137768b897a0d2b0de665f0",
+        "hll:500": "25a1efdfcc8d86cd49fae9591a011b63919c55faddde14f3d0bddcb64a3e00a0",
+        "hll:600": "b8215d93ebb88d4f5eaa8f3d5b3d86ac5dbf7a2c20cdf05538f86f6ef91e9c3d",
+        "union": "14902625a8d7cb881a307f7c6ec73c1f334b8febb8885d17318cbd6100818047"
+      }
+    },
+    "operational-compact": {
+      "status": "passed",
+      "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+      "binary_sha256": "38818a3837734ddd4c2f3c93a080fe0d3ec3c4c55e9f5d3813e78e75306a194a",
+      "harness_sha256": "05c80a164c8a5f6aceb1eb09a4d8f47e5e91b2cf610e86bd91fdd04ce47a75dd",
+      "eviction": [
+        {
+          "status": "passed",
+          "policy": "lru",
+          "limit": "keys",
+          "keys_surviving": 64,
+          "evicted_keys": 448,
+          "estimated_keyspace_bytes": 269184,
+          "recovery_seconds": [
+            0.2937698750756681,
+            0.2970450420398265
+          ],
+          "acknowledged_non_evicted_values_lost": 0
+        },
+        {
+          "status": "passed",
+          "policy": "lru",
+          "limit": "bytes",
+          "keys_surviving": 31,
+          "evicted_keys": 481,
+          "estimated_keyspace_bytes": 130386,
+          "recovery_seconds": [
+            0.2961067499127239,
+            0.31124054198153317
+          ],
+          "acknowledged_non_evicted_values_lost": 0
+        },
+        {
+          "status": "passed",
+          "policy": "lfu",
+          "limit": "keys",
+          "keys_surviving": 64,
+          "evicted_keys": 448,
+          "estimated_keyspace_bytes": 269184,
+          "recovery_seconds": [
+            0.30067541694734246,
+            0.2987542920745909
+          ],
+          "acknowledged_non_evicted_values_lost": 0
+        },
+        {
+          "status": "passed",
+          "policy": "lfu",
+          "limit": "bytes",
+          "keys_surviving": 31,
+          "evicted_keys": 481,
+          "estimated_keyspace_bytes": 130386,
+          "recovery_seconds": [
+            0.28882054204586893,
+            0.31726870802231133
+          ],
+          "acknowledged_non_evicted_values_lost": 0
+        },
+        {
+          "status": "passed",
+          "policy": "random",
+          "limit": "keys",
+          "keys_surviving": 64,
+          "evicted_keys": 448,
+          "estimated_keyspace_bytes": 269184,
+          "recovery_seconds": [
+            0.29806279204785824,
+            0.3121617909055203
+          ],
+          "acknowledged_non_evicted_values_lost": 0
+        },
+        {
+          "status": "passed",
+          "policy": "random",
+          "limit": "bytes",
+          "keys_surviving": 31,
+          "evicted_keys": 481,
+          "estimated_keyspace_bytes": 130386,
+          "recovery_seconds": [
+            0.29017233301419765,
+            0.3067842499585822
+          ],
+          "acknowledged_non_evicted_values_lost": 0
+        }
+      ],
+      "slow_readers": {
+        "status": "passed",
+        "readers": 8,
+        "offered_reply_bytes_per_reader": 16777216,
+        "independent_ping_ms": {
+          "median": 0.16977102495729923,
+          "max": 3.365791984833777
+        },
+        "rss_peak_kib": 284272,
+        "clean_restart_verified": true,
+        "limits": "Responsiveness under bounded non-reading clients, not a hard process RSS guarantee or a latency SLO."
+      }
+    },
+    "soak-compact-smoke": {
+      "status": "passed",
+      "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+      "binary_sha256": "38818a3837734ddd4c2f3c93a080fe0d3ec3c4c55e9f5d3813e78e75306a194a",
+      "harness_sha256": "a1bae358deb0e8eafb881927541a09c082b8f31f220fb0f08696c9c39fa4d78c",
+      "seconds_requested": 90.0,
+      "started_utc": "2026-09-06T02:30:36Z",
+      "primary_crash_every": 3,
+      "checkpoint_count": 5,
+      "acknowledged_writes": 11103,
+      "primary_crash_recoveries": 1,
+      "replica_crash_recoveries": 4,
+      "checkpoints": [
+        {
+          "seconds": 15.005992625025101,
+          "writes": 2039,
+          "cache_set_get_pair_ms": {
+            "count": 2039,
+            "p50": 3.289666026830673,
+            "p99": 7.0241669891402125,
+            "max": 10.064415982924402
+          },
+          "maintenance_seconds": 0.15256029192823917,
+          "primary": {
+            "aof_enabled": "1",
+            "aof_base_size": "1883540",
+            "aof_current_size": "1883540",
+            "aof_rewrite_in_progress": "0",
+            "aof_last_write_status": "ok",
+            "aof_buffer_length": "0",
+            "aof_pending_fsync": "0",
+            "aof_pending_append_bytes": "0",
+            "aof_rewrites": "1",
+            "aof_keys_at_last_rewrite": "1006"
+          },
+          "replica": {
+            "primary_epoch": "965b3ea0626d6755039a955e95a444ed",
+            "replica_epoch": "51672aa71e8b637a9e8ae2fecd74c6a5",
+            "replication_pending_keys": "0",
+            "replication_epoch_invalidated": "false",
+            "role": "replica",
+            "replica_ready": "1",
+            "replica_offset": "147",
+            "replica_last_update_ms": "78",
+            "primary_offset": "0",
+            "replication_history_bytes": "0"
+          },
+          "ps": "89975  39648   5.4\n89976  32080   1.4\n"
+        },
+        {
+          "seconds": 30.17387883400079,
+          "writes": 4057,
+          "cache_set_get_pair_ms": {
+            "count": 2018,
+            "p50": 3.329187515191734,
+            "p99": 7.657084031961858,
+            "max": 14.032124890945852
+          },
+          "maintenance_seconds": 0.16762737499084324,
+          "primary": {
+            "aof_enabled": "1",
+            "aof_base_size": "1884429",
+            "aof_current_size": "1884429",
+            "aof_rewrite_in_progress": "0",
+            "aof_last_write_status": "ok",
+            "aof_buffer_length": "0",
+            "aof_pending_fsync": "0",
+            "aof_pending_append_bytes": "0",
+            "aof_rewrites": "2",
+            "aof_keys_at_last_rewrite": "1006"
+          },
+          "replica": {
+            "primary_epoch": "6ce8636f7217865cba955615424baa4e",
+            "replica_epoch": "51672aa71e8b637a9e8ae2fecd74c6a5",
+            "replication_pending_keys": "0",
+            "replication_epoch_invalidated": "false",
+            "role": "replica",
+            "replica_ready": "1",
+            "replica_offset": "293",
+            "replica_last_update_ms": "76",
+            "primary_offset": "0",
+            "replication_history_bytes": "0"
+          },
+          "ps": "89975  54496   5.9\n89978  33504   2.1\n"
+        },
+        {
+          "seconds": 45.369670249987394,
+          "writes": 6041,
+          "cache_set_get_pair_ms": {
+            "count": 1984,
+            "p50": 3.561291436199099,
+            "p99": 7.5525830034166574,
+            "max": 10.899333050474524
+          },
+          "maintenance_seconds": 0.21496483404189348,
+          "primary": {
+            "aof_enabled": "1",
+            "aof_base_size": "1884541",
+            "aof_current_size": "1884568",
+            "aof_rewrite_in_progress": "0",
+            "aof_last_write_status": "ok",
+            "aof_buffer_length": "0",
+            "aof_pending_fsync": "0",
+            "aof_pending_append_bytes": "0",
+            "aof_rewrites": "3",
+            "aof_keys_at_last_rewrite": "1007"
+          },
+          "replica": {
+            "primary_epoch": "96e54362a8d567c28589d7685a3b99dc",
+            "replica_epoch": "51672aa71e8b637a9e8ae2fecd74c6a5",
+            "replication_pending_keys": "0",
+            "replication_epoch_invalidated": "false",
+            "role": "replica",
+            "replica_ready": "1",
+            "replica_offset": "440",
+            "replica_last_update_ms": "73",
+            "primary_offset": "0",
+            "replication_history_bytes": "0"
+          },
+          "ps": "89975  62688   4.7\n89980  33792   1.3\n"
+        },
+        {
+          "seconds": 60.59946358401794,
+          "writes": 7173,
+          "cache_set_get_pair_ms": {
+            "count": 1132,
+            "p50": 3.783812513574958,
+            "p99": 8.25491698924452,
+            "max": 10.726582957431674
+          },
+          "maintenance_seconds": 0.15837945800740272,
+          "primary": {
+            "aof_enabled": "1",
+            "aof_base_size": "1884453",
+            "aof_current_size": "1884453",
+            "aof_rewrite_in_progress": "0",
+            "aof_last_write_status": "ok",
+            "aof_buffer_length": "0",
+            "aof_pending_fsync": "0",
+            "aof_pending_append_bytes": "0",
+            "aof_rewrites": "1",
+            "aof_keys_at_last_rewrite": "1006"
+          },
+          "replica": {
+            "primary_epoch": "96e54362a8d567c28589d7685a3b99dc",
+            "replica_epoch": "246619836f6fe11189b361bc0306d3ff",
+            "replication_pending_keys": "0",
+            "replication_epoch_invalidated": "false",
+            "role": "replica",
+            "replica_ready": "1",
+            "replica_offset": "87",
+            "replica_last_update_ms": "71",
+            "primary_offset": "0",
+            "replication_history_bytes": "0"
+          },
+          "ps": "89980  36656   2.8\n89983  38240   6.6\n"
+        },
+        {
+          "seconds": 75.7755144169787,
+          "writes": 9195,
+          "cache_set_get_pair_ms": {
+            "count": 2022,
+            "p50": 3.3612290280871093,
+            "p99": 7.585750077851117,
+            "max": 10.91045793145895
+          },
+          "maintenance_seconds": 0.1494102079886943,
+          "primary": {
+            "aof_enabled": "1",
+            "aof_base_size": "1884471",
+            "aof_current_size": "1884471",
+            "aof_rewrite_in_progress": "0",
+            "aof_last_write_status": "ok",
+            "aof_buffer_length": "0",
+            "aof_pending_fsync": "0",
+            "aof_pending_append_bytes": "0",
+            "aof_rewrites": "2",
+            "aof_keys_at_last_rewrite": "1006"
+          },
+          "replica": {
+            "primary_epoch": "b7562a3bbbecbeeb36c348094d9a80ae",
+            "replica_epoch": "246619836f6fe11189b361bc0306d3ff",
+            "replication_pending_keys": "0",
+            "replication_epoch_invalidated": "false",
+            "role": "replica",
+            "replica_ready": "1",
+            "replica_offset": "234",
+            "replica_last_update_ms": "60",
+            "primary_offset": "0",
+            "replication_history_bytes": "0"
+          },
+          "ps": "89983  46864   5.4\n89985  35856   1.1\n"
+        }
+      ],
+      "faults": [
+        {
+          "worker": false,
+          "fault": "RLIMIT_FSIZE",
+          "passed": true
+        },
+        {
+          "worker": true,
+          "fault": "RLIMIT_FSIZE",
+          "passed": true
+        }
+      ],
+      "passed": true,
+      "manual_promotion": true,
+      "elapsed_seconds": 90.34269862505607
+    }
+  },
+  "bencher": {
+    "parser": {
+      "revision": "0485953a351abfbce46b377b60965170a952f764",
+      "binary_sha256": "a0110b44322d4e10ec6ebd0a935a9ef06e7d6e6862f81f74d6e777c7c8667b38",
+      "metric_count": 198,
+      "source_directories": [
+        "dist/validation/general/matrix-final"
+      ],
+      "limits": "Local closed-loop diagnostic measurements; not hosted or dedicated-host execution.",
+      "return_code": 0,
+      "bmf_sha256": "c26d4cf142622c81e7f6166d512b330682860a744169274cc2c061ca3f499df3",
+      "urls": [
+        "https://bencher.dev/perf/keel/reports/01a0748c-78dd-7102-a3e6-2b6a2f337d49"
+      ],
+      "readback_verified": true
+    },
+    "compact": {
+      "revision": "0d283b0ec3f7e16900299e2949563db5f2ffacb6",
+      "binary_sha256": "38818a3837734ddd4c2f3c93a080fe0d3ec3c4c55e9f5d3813e78e75306a194a",
+      "metric_count": 81,
+      "source_directories": [
+        "dist/validation/general/hll-compact-matched",
+        "dist/validation/general/persistence-no",
+        "dist/validation/general/persistence-everysec",
+        "dist/validation/general/persistence-always"
+      ],
+      "limits": "Local closed-loop diagnostic measurements; not hosted or dedicated-host execution.",
+      "return_code": 0,
+      "bmf_sha256": "3f493887ca2095af91bdbe6f5fae69a04878181268f3be14eba0461aa26b4d66",
+      "urls": [
+        "https://bencher.dev/perf/keel/reports/01a0748c-7c31-7ae0-8286-249401d479a7"
+      ],
+      "readback_verified": true
+    }
+  },
+  "comparative_runs": 396,
+  "limits": "Local sequential closed-loop diagnostics, 3 repetitions per arm. Median and observed range, not confidence intervals. Initial runs enabled GC tracing on both Keel arms; confirmation-untraced disables it. No overall Redis or deployment-capacity claim.",
+  "excluded_evidence": [
+    "differential-first: real noncanonical-counter mismatch, fixed",
+    "profile-baseline: rejected memtier key range",
+    "all-cases-rehearsal: unsupported SETEX, subsequently implemented",
+    "ci-first-failure: Redis multicall argv[0] harness defect",
+    "memory-final: zero-key cases mislabeled as one key; repeated in memory-corrected",
+    "hll-upgrade: harness used unnamespaced DUMP; repeated with KEEL.DUMP",
+    "GitHub Go run 34006876769: wall-clock rewrite assertion ran under race; deterministic bounds/replay checks retained in correction"
+  ],
+  "raw_archive": {
+    "path": "bench/results/general-2026-09-06.json.gz",
+    "sha256": "e282403768c2cc1f739275f1f2f97f811bffcd5ef3e92e4bd1935bd75251904f",
+    "bytes": 616195,
+    "contents": "Exact manifests, per-arm reports, native memtier JSON including compressed HDR histograms, and telemetry CSV."
+  }
+}
