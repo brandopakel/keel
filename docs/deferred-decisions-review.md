@@ -1,6 +1,11 @@
 # Review of PR 33's deferred decisions
 
 Reviewed 6e0fcd1b8f78f19ba2e42e18bfe3b5cb76a71a4c on September 7, 2026.
+This is the historical review of that revision. The current
+[eviction](eviction-reservation.md) and
+[serialization](parallel-serialization.md) documents incorporate these corrections;
+their architecture options remain unimplemented.
+
 Keeping the existing eviction barrier while measuring alternatives is reasonable.
 The proposed documents need corrections before they describe current behavior
 or justify rejecting future work:
