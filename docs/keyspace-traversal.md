@@ -1,6 +1,6 @@
 # Stable keyspace traversal
 
-Status: implementation under validation, September 7, 2026. This supersedes the
+Status: adoption gate satisfied, September 7, 2026. This supersedes the
 fixed 1,024-shard proposal in PR #21. The original proposal reduced average pause
 size but could not stop inside a shard. Its approximately 4,900 keys per shard at
 five million keys was an average, not a maximum.
@@ -139,6 +139,38 @@ was 7.39 versus 7.45 MiB. These short RSS windows include Go runtime/GC variatio
 they do not measure a stable per-connection increment. Large-list reads again
 flagged generator CPU pressure in one repetition per arm.
 
-The longer seven-repetition targeted run on disjoint exposed CPU core groups
-is still running. Adoption remains under review until those tail and throughput
-results are assessed.
+The [longer targeted run](https://github.com/brandopakel/keel/actions/runs/34097519300)
+completed seven 30-second repetitions per arm on disjoint exposed core groups:
+
+| Workload | Paired throughput median (range) | Baseline / candidate p99 median |
+| --- | ---: | ---: |
+| 1 MiB values | 1.001 (0.988–1.015) | 5.471 / 5.439 ms |
+| 100k keys | 1.009 (0.974–1.038) | 0.375 / 0.367 ms |
+| Pipeline 16 | 1.012 (1.010–1.024) | 0.751 / 0.687 ms |
+
+No generator CPU warning occurred in those 42 comparative arms. The 1 MiB
+p99.9 stayed around 43 ms in both arms: the tail mode remains a performance
+issue in the underlying workload, but the longer comparison does not attribute
+it to this traversal change. Evidence is retained in
+`bench/results/traversal-targeted-matched-2026-09-07.json.gz`.
+
+**Adoption decision:** retain the stable paged traversal. Correctness/work-bound
+checks, both complete broad matrices and the longer targeted investigation
+satisfy this change's gate. There is no repeatable material throughput/tail
+regression in the investigated cases, and the memory results do not establish a
+material per-key increase. This is a bounded-enumeration improvement; it is not a
+claim of universal throughput gain, hard latency bounds or dedicated-host
+capacity. The initial mixed results remain part of the evidence.
+
+Separate candidate-only CPU/heap/allocation profiles are summarized in
+`bench/results/traversal-diagnostics-2026-09-07.txt`. Socket syscalls dominate the
+100k-key CPU profile (83% flat); multiplexer registration accounts for 8.9%
+cumulatively. The 1 MiB case spends about 25% in copying and 13% clearing memory,
+in addition to socket work. These diagnostics include preload/warmup and support
+follow-up hypotheses, not comparisons of profiled versus unprofiled throughput.
+
+The final review corrections after the measured runtime only affect matcher
+budget accounting and benchmark thread selection. None of the timed cases use
+SCAN/KEYS patterns, and the selected two-thread maximum produces the same
+client count before/after the selector fix. Final commit `ccbbb6a` passed all
+PR CI, including the dedicated matcher regressions and Redis differential suite.
