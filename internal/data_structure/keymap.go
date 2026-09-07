@@ -47,6 +47,8 @@ type keyMap[V any] struct {
 	free         int // page index plus one; zero means no page with available slots
 	end          uint64
 	count        int
+	lookupPeak   int
+	compaction   *lookupCompaction
 }
 
 func (m *keyMap[V]) position(key string) (uint64, uint64, bool) {
@@ -118,6 +120,10 @@ func (m *keyMap[V]) set(key string, value V) bool {
 		m.collisions[hash] = append(m.collisions[hash], pos)
 	} else {
 		m.lookup[hash] = pos
+		m.lookupPeak = max(m.lookupPeak, len(m.lookup))
+		if m.compaction != nil {
+			m.compaction.next[hash] = pos
+		}
 	}
 	m.end = max(m.end, pos+1)
 	m.count++
@@ -149,6 +155,13 @@ func (m *keyMap[V]) del(key string) bool {
 		delete(m.collisions, hash)
 	} else {
 		m.collisions[hash] = extra
+	}
+	if m.compaction != nil {
+		if current, ok := m.lookup[hash]; ok {
+			m.compaction.next[hash] = current
+		} else {
+			delete(m.compaction.next, hash)
+		}
 	}
 	index := int(pos / keyPageSlots)
 	ref := &m.pages[index]

@@ -82,15 +82,28 @@ var _ = data_structure.TotalKeys
 func MaintainMemory() int {
 	work := 0
 	deadline := time.Now().Add(time.Millisecond)
+	// Alternate the first table family so continuing TTL churn cannot starve
+	// lookup rebuilding (or vice versa). Both share the same total work budget.
+	memoryLookupFirst = !memoryLookupFirst
 	memoryCursor = data_structure.EachKeyspaceFrom(memoryCursor, func(ks data_structure.Keyspace) {
 		if work >= data_structure.ScanMaxWork || time.Now().After(deadline) {
 			return
 		}
-		if compact, ok := ks.(interface{ CompactExpiry(int) int }); ok {
-			work += compact.CompactExpiry(data_structure.ScanMaxWork - work)
+		for phase := 0; phase < 2; phase++ {
+			if work >= data_structure.ScanMaxWork || time.Now().After(deadline) {
+				return
+			}
+			if (phase == 0) == memoryLookupFirst {
+				if compact, ok := ks.(interface{ CompactLookup(int) int }); ok {
+					work += compact.CompactLookup(data_structure.ScanMaxWork - work)
+				}
+			} else if compact, ok := ks.(interface{ CompactExpiry(int) int }); ok {
+				work += compact.CompactExpiry(data_structure.ScanMaxWork - work)
+			}
 		}
 	})
 	return work
 }
 
 var memoryCursor int
+var memoryLookupFirst bool
