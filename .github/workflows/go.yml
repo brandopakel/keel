@@ -6,8 +6,14 @@
 #
 # The matrix runs the floor go.mod declares as well as current Go, because the
 # floor is a claim: the memory accounting in internal/data_structure/memory.go
-# is calibrated against real heap growth and only holds from 1.22. Testing only
-# the newest Go would let that floor rot without anyone noticing.
+# is calibrated against real heap growth, which depends on how the runtime lays
+# maps out. Testing only the newest Go would let that floor rot without anyone
+# noticing.
+#
+# The floor is the oldest Go still receiving security fixes, not the oldest that
+# happens to compile. It was 1.22 until it was raised: 1.22 had been unsupported
+# upstream since 1.24 shipped, and honouring it meant sizing internal structures
+# against a map implementation Go had already replaced.
 name: Go
 
 on:
@@ -23,14 +29,10 @@ jobs:
   build:
     name: ${{ matrix.os }} / go ${{ matrix.go }}
     runs-on: ${{ matrix.os }}
-    # Go 1.22's internal Mach-O linker omits LC_UUID required by macOS 26.
-    # https://github.com/golang/go/issues/68678
-    env:
-      GOFLAGS: ${{ matrix.os == 'macos-latest' && matrix.go == '1.22' && '-ldflags=-linkmode=external' || '' }}
     strategy:
       fail-fast: false
       matrix:
-        go: ['1.22', 'stable']
+        go: ['1.25', 'stable']
         os: [ubuntu-latest, macos-latest]
     steps:
       # Actions are pinned to commit SHAs rather than tags: a tag is mutable and
