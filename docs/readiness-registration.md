@@ -54,3 +54,14 @@ Raw reports and summaries are retained in
 `bench/results/readiness-matched-2026-09-07.json.gz`. The separate candidate CPU
 profile summary is in `bench/results/readiness-cpu-2026-09-07.txt`, and the longer
 comparison is in `bench/results/readiness-targeted-2026-09-07.json.gz`.
+
+The integrated 76ec59c run 34110455588 failed on Intel macOS: the slow-reader
+check timed out while polling INFO to establish its retained-reply precondition
+(the two-second PING check had not started). SIGQUIT showed the loop running on
+another thread with its stack unavailable, so the cause is unresolved. A separate
+no-TTL expiry test measured 742 ns against a 500 ns timing threshold. That test
+now observes forbidden ActiveExpire calls directly, avoiding a hardware-dependent
+correctness assertion. No runtime logic or slow-reader deadline changed. The
+complete failed job log is retained in bench/results/readiness-intel-failure-2026-09-07.log.
+A targeted diagnostic repeats the same slow-reader assertion on Linux and Intel
+macOS; passing repetitions do not erase the original unexplained failure.

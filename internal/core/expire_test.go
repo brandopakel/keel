@@ -72,25 +72,36 @@ func TestExpireCycleLeavesLivingKeysAlone(t *testing.T) {
 // nothing to do is the number that matters: a keyspace with no TTLs at all must
 // not be sampled, and one whose TTLs are all in the future must be sampled once
 // rather than repeatedly.
+type expirySamplingProbe struct {
+	data_structure.Keyspace
+	samples int
+}
+
+func (p *expirySamplingProbe) KeysWithExpiry() int { return 0 }
+func (p *expirySamplingProbe) Len() int            { return 0 }
+func (p *expirySamplingProbe) ActiveExpire(int) (int, int) {
+	p.samples++
+	return 0, 0
+}
+
 func TestExpireCycleCostsNothingWhenNothingExpires(t *testing.T) {
 	ResetStores()
+	t.Cleanup(ResetStores)
 	for i := 0; i < 1000; i++ {
 		run(t, "SET", "k"+strconv.Itoa(i), "v")
 	}
 	assert.Equal(t, 0, KeysWithExpiry())
 
 	before := data_structure.TotalKeys()
-	start := time.Now()
+	// Observe the forbidden traversal directly. A nanosecond threshold on a
+	// shared runner tests its scheduling, not whether expiry sampled a store.
+	probe := &expirySamplingProbe{}
+	data_structure.RegisterKeyspace(probe)
 	for i := 0; i < 10000; i++ {
 		ExpireCycle()
 	}
-	perCycle := time.Since(start) / 10000
-	t.Logf("no keys with a TTL: %v per cycle", perCycle)
+	assert.Zero(t, probe.samples, "a keyspace with no expiries must not be sampled")
 	assert.Equal(t, before, data_structure.TotalKeys())
-	if !raceEnabled {
-		assert.Less(t, perCycle, 500*time.Nanosecond,
-			"a keyspace with no expiries must not be walked")
-	} // The race detector instruments the registry reads; timing measures that overhead.
 }
 
 // TestExpireCycleIsBoundedPerTurn. A keyspace where everything has fallen due
