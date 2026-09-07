@@ -1,0 +1,49 @@
+# AOF staging and opaque replication allocation
+
+Committed AOF staging used to truncate its outer slices while retaining their
+backing arrays' references to command parts. A SET with an 8 MiB value, 64 KiB
+key and expiry left references accounting for 8,519,801 bytes after encoding.
+Staging now clears those references when consumed. Closing a drained AOF also
+releases its idle buffer. The focused test verifies removal, the surviving value
+and two replays; all three repetitions retain zero staged payload bytes.
+
+Protocol-2 opaque updates previously constructed a full state replacement before
+checking the 64 MiB delta limit. A just-oversized CMS update allocated 201,357,472
+bytes before invalidating the history. The candidate sizes the aggregate of all
+dirty-key replacements and expiry records before constructing any image. The
+same refusal allocates 728 bytes locally and preserves the acknowledged mutation
+while requiring snapshot recovery. Two individually admissible 36 MiB images
+are also refused before construction when their aggregate exceeds the limit.
+
+Accepted replacements append their KEL1 payload directly into one preallocated
+RESP body, preserving checksums and exact state without intermediate binary and
+string copies. Tests replay every stored type, deletion and absolute expiry,
+and exercise replica snapshot, delta and checkpoint recovery. This allocation
+check occurs after the primary's logical command: refusal selects replication
+snapshot recovery rather than returning an error for an already executed write.
+
+These fixes do not establish a process-wide transient reservation system. Client
+replies, retained request buffers, AOF capacity, worker-owned bytes, replication
+history and rewrite images still need aggregate admission before construction.
+An accepted opaque image still serializes synchronously, and snapshot fallback
+does not make large-key catch-up efficient. The frozen long soaks predate this
+candidate; local measurements are diagnostics rather than dedicated-host results.
+
+Native CI run 34158319335 at `54ed959` reproduced the historical Intel Mac
+`TestPendingRepliesSurviveOtherTraffic/kqueue` idle-read timeout. The existing
+cleanup closed both test sockets before collecting the server stack; its idle
+kevent stack therefore cannot identify the failure state. The regression now
+records completed replies and transport bytes/reads, and captures the owned
+server before closing those sockets. Request writes are checked as well. One
+hundred local repetitions (both socket modes) pass; those repeats do not explain
+the Intel failure. The dedicated native diagnostic applies identical diagnostic
+tests to the failing runtime and candidate and retains every result. No timeout
+has been widened and this is not yet a server liveness fix.
+
+Native diagnostic run 34159834235 passes 100 focused repetitions per arm (both
+socket modes, 400 subcases total) and three complete suites per arm. The baseline
+is the failing `54ed959` runtime; the candidate `e2f994f` changes only diagnostics
+and evidence. Both use identical diagnostic tests. ARM64, Intel and ext4/xfs
+recovery also pass. These successful repeats remain alongside the original
+failure; the intermittent Intel liveness cause is still unexplained. Raw logs:
+`bench/results/aof-pending-reply-native-2026-09-07.json.gz`.
