@@ -177,10 +177,16 @@ func cmdINFO(args []string) []byte {
 		fmt.Fprintf(&b, "aof_pending_fsync:%d\r\naof_pending_append_bytes:%d\r\n", pending, appendBytes)
 		fmt.Fprintf(&b, "aof_rewrite_dirty_keys:%d\r\naof_rewrite_dirty_bytes:%d\r\naof_rewrite_budget_aborts:%d\r\n", len(rewrite.dirty), rewrite.dirtyBytes, rewriteBudgetAborts)
 		rewritePending := 0
-		if pendingRewriteSync != nil {
+		if pendingRewriteIO != nil && pendingRewriteIO.body == nil {
 			rewritePending = 1
 		}
 		fmt.Fprintf(&b, "aof_rewrite_pending_sync:%d\r\n", rewritePending)
+		pendingWriteBytes := 0
+		if pendingRewriteIO != nil {
+			pendingWriteBytes = cap(pendingRewriteIO.body)
+		}
+		fmt.Fprintf(&b, "aof_rewrite_pending_write_bytes:%d\r\n", pendingWriteBytes)
+		persistenceIOInfo(&b)
 		fmt.Fprintf(&b, "aof_rewrites:%d\r\naof_keys_at_last_rewrite:%d\r\n\r\n", rewrites, keys)
 	}
 	if want("keyspace") {

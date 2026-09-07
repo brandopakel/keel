@@ -73,3 +73,10 @@ fields without requiring identical subsets. The expanded 10,000-command run,
 rewrite and two restarts pass, as do the full local suite, vet and three focused
 race repetitions after integrating bounded hash/zset storage and term guards.
 Raw review validation is in `geo-response-review-2026-09-07.json.gz`.
+
+Final corrected candidate `e93d978` passes the hosted Go/race/Docker matrix,
+external clients, Redis differential/native smoke, Linux ARM64 and Intel Mac
+recovery, and ext4/xfs recovery. The expanded local differential records 1,296
+GEO comparisons across initial state, rewrite and two restarts. The large-count
+fix uses a membership prepass rather than slice growth, preserving one bounded
+point allocation. Final follow-up review is still required for that change.

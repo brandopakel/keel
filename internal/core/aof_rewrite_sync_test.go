@@ -14,17 +14,31 @@ import (
 	"github.com/brandopakel/keel/internal/config"
 )
 
-// Existing slice-count tests count emitted slices, not idle sync polls. Wait
+// Existing slice-count tests count emitted slices, not idle I/O polls. Wait
 // only for worker completion here; AdvanceRewrite still consumes the result.
 func waitForRewriteSync(t *testing.T) {
 	t.Helper()
-	if pendingRewriteSync != nil {
+	if pendingRewriteIO != nil {
 		select {
-		case <-pendingRewriteSync.done:
+		case <-pendingRewriteIO.done:
 		case <-time.After(3 * time.Second):
-			t.Fatal("rewrite sync did not finish")
+			t.Fatal("rewrite I/O did not finish")
 		}
 	}
+}
+
+// Sync-specific tests first drain immutable writes. Their injected Sync may
+// block indefinitely, so this helper must never wait on the sync job itself.
+func advanceToRewriteSync(t *testing.T) {
+	t.Helper()
+	for i := 0; i < 1000; i++ {
+		if pendingRewriteIO != nil && pendingRewriteIO.body == nil {
+			return
+		}
+		waitForRewriteSync(t)
+		require.NoError(t, AdvanceRewrite())
+	}
+	t.Fatal("replacement sync did not start")
 }
 
 func TestRewriteSyncAllowsWritesAndResynchronizesDirtyState(t *testing.T) {
@@ -36,7 +50,12 @@ func TestRewriteSyncAllowsWritesAndResynchronizesDirtyState(t *testing.T) {
 	woken := make(chan struct{}, 2)
 	oldSync := rewriteFileSync
 	oldWake := rewriteWake
-	SetRewriteWaker(func() { woken <- struct{}{} })
+	SetRewriteWaker(func() {
+		select {
+		case woken <- struct{}{}:
+		default:
+		}
+	})
 	var calls atomic.Int32
 	rewriteFileSync = func(f *os.File) error {
 		if calls.Add(1) == 1 {
@@ -59,11 +78,18 @@ func TestRewriteSyncAllowsWritesAndResynchronizesDirtyState(t *testing.T) {
 	run(t, "SET", "k", "before")
 	require.NoError(t, FlushAOF())
 	require.NoError(t, StartRewrite())
-	require.NoError(t, AdvanceRewrite())
+	advanceToRewriteSync(t)
 	select {
 	case <-started:
 	case <-time.After(time.Second):
 		t.Fatal("sync did not start")
+	}
+	// Discard preceding snapshot-write wakeups before checking this Sync's
+	// own completion signal.
+	select {
+	case <-woken:
+	case <-time.After(time.Second):
+		t.Fatal("preceding snapshot write did not wake the owner")
 	}
 	require.False(t, RewriteNeedsCycle(), "a blocked worker must not cause a self-wakeup spin")
 	// The first sync remains blocked while commands execute and the old AOF
@@ -91,7 +117,7 @@ func TestRewriteSyncAllowsWritesAndResynchronizesDirtyState(t *testing.T) {
 	}
 	require.False(t, RewriteActive())
 	require.False(t, RewriteNeedsCycle())
-	require.Empty(t, woken, "only the background preflush needs a wakeup")
+	// Snapshot writes and the background preflush each wake the owner.
 	require.Equal(t, int32(2), calls.Load(), "one preflush plus a final dirty sync; continuous writes cannot cause endless retries")
 	require.NoError(t, CloseAOF())
 	ResetStores()
@@ -119,8 +145,8 @@ func TestCancelRewriteSyncTransfersCleanupWithoutReusingPath(t *testing.T) {
 	run(t, "SET", "k", "value")
 	require.NoError(t, FlushAOF())
 	require.NoError(t, StartRewrite())
-	require.NoError(t, AdvanceRewrite())
-	require.NotNil(t, pendingRewriteSync)
+	advanceToRewriteSync(t)
+	require.NotNil(t, pendingRewriteIO)
 	CancelRewrite()
 	require.False(t, RewriteActive())
 	require.Nil(t, rewrite.file)
@@ -183,8 +209,8 @@ func TestRewriteBudgetAbortWhileSyncOwnsFile(t *testing.T) {
 			run(t, "SET", "original", "value")
 			require.NoError(t, FlushAOF())
 			require.NoError(t, StartRewrite())
-			require.NoError(t, AdvanceRewrite())
-			job := pendingRewriteSync
+			advanceToRewriteSync(t)
+			job := pendingRewriteIO
 			require.NotNil(t, job)
 			before := rewriteBudgetAborts
 			if budget == "duration" {
@@ -195,14 +221,14 @@ func TestRewriteBudgetAbortWhileSyncOwnsFile(t *testing.T) {
 			}
 			require.False(t, RewriteActive())
 			require.Equal(t, before+1, rewriteBudgetAborts)
-			require.Same(t, job, pendingRewriteSync)
+			require.Same(t, job, pendingRewriteIO)
 			require.ErrorContains(t, StartRewrite(), "still releasing")
 			require.Equal(t, "OK", run(t, "SET", "after", "survives"))
 			require.NoError(t, FlushAOF())
 			close(release)
 			released = true
 			require.NoError(t, CloseAOF()) // shutdown joins the abandoned worker
-			require.Nil(t, pendingRewriteSync)
+			require.Nil(t, pendingRewriteIO)
 			_, err := os.Stat(path + ".rewrite")
 			require.True(t, os.IsNotExist(err))
 			ResetStores()
@@ -231,12 +257,13 @@ func TestRewriteDirtyTailSyncFailureKeepsAllAcknowledgedWrites(t *testing.T) {
 	run(t, "SET", "original", "value")
 	require.NoError(t, FlushAOF())
 	require.NoError(t, StartRewrite())
-	require.NoError(t, AdvanceRewrite())
+	advanceToRewriteSync(t)
 	waitForRewriteSync(t)
 	// The completed preflush covers only the original snapshot.
 	require.Equal(t, "OK", run(t, "SET", "during", "survives"))
 	var err error
 	for i := 0; RewriteActive() && err == nil && i < 100; i++ {
+		waitForRewriteSync(t)
 		err = FlushAOF()
 	}
 	require.ErrorIs(t, err, diskErr)
@@ -262,7 +289,12 @@ func TestRewriteWaitsForOriginalSyncWithoutSpinning(t *testing.T) {
 	release := make(chan struct{})
 	woken := make(chan struct{}, 4)
 	aofSync = func(f *os.File) error { <-release; return f.Sync() }
-	SetRewriteWaker(func() { woken <- struct{}{} })
+	SetRewriteWaker(func() {
+		select {
+		case woken <- struct{}{}:
+		default:
+		}
+	})
 	released := false
 	t.Cleanup(func() {
 		if !released {
@@ -285,6 +317,12 @@ func TestRewriteWaitsForOriginalSyncWithoutSpinning(t *testing.T) {
 	require.True(t, rewriteWalkDone())
 	require.True(t, RewriteActive())
 	require.False(t, RewriteNeedsCycle(), "original-file sync must not cause idle polling")
+	waitForRewriteSync(t)
+	select {
+	case <-woken:
+	case <-time.After(time.Second):
+		t.Fatal("snapshot write did not wake the owner before original sync was released")
+	}
 	close(release)
 	released = true
 	select {

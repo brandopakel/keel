@@ -59,6 +59,35 @@ import (
 // millisecond at the measured rate, which is under the latency of the disk
 // write that a client's own command may be waiting on anyway.
 const rewriteChunk = 2048
+
+// rewriteKeyCeiling refuses a rewrite that would not finish, rather than
+// walking for the abort budget and then throwing the work away. It has to be
+// set against what a rewrite actually costs, because a ceiling below the
+// keyspace a server is allowed to hold is worse than no ceiling: auto-rewrite
+// retries every minute, fails every time, and the log grows without bound. That
+// is the same shape as the compaction ratchet in
+// docs/general-performance-2026-09-06.md, reached by a different route.
+//
+// Measured on an M4 Pro with the log on APFS, one deliberate rewrite, no
+// concurrent writers: 4.14s at a million keys, 8.20s at two million, 16.37s at
+// four million - close to linear at about 4.1 seconds per million. Against the
+// thirty-second budget below, four million leaves roughly half of it spare,
+// which is the margin a slower disk needs.
+//
+// KeyNumberLimit still allows five million, so a keyspace between four and five
+// million cannot be compacted. Closing that needs a faster rewrite or a longer
+// budget rather than a larger number here, and the number should not be raised
+// past what has been measured.
+//
+// Under concurrent writes the binding constraint is rewriteDirtyKeys rather
+// than duration: a rewrite that runs four times longer collects four times the
+// dirty keys, so a large keyspace under load aborts on that budget first.
+const rewriteKeyCeiling = 4000000
+
+// keyCountForRewrite is injectable so the ceiling can be exercised without
+// building a keyspace that large.
+var keyCountForRewrite = data_structure.TotalKeys
+
 const rewriteDirtyKeys = 100000
 const rewriteDirtyBytes = 8 << 20
 const rewriteRecordSlice = 64 << 10
@@ -114,8 +143,8 @@ func StartRewrite() error {
 	if rewrite.active {
 		return fmt.Errorf("a rewrite is already running")
 	}
-	if ready, _ := pollRewriteSync(false); !ready {
-		return fmt.Errorf("previous rewrite sync is still releasing its file")
+	if ready, _ := pollRewriteIO(false); !ready {
+		return fmt.Errorf("previous rewrite I/O is still releasing its file")
 	}
 	if AppendPending() || (config.AOFAsyncAppend && len(aof.buf) > 0) {
 		return fmt.Errorf("rewrite waits for pending append; retry after the write reply")
@@ -128,8 +157,8 @@ func StartRewrite() error {
 		return err
 	}
 
-	if data_structure.TotalKeys() > 1000000 {
-		return fmt.Errorf("rewrite limit: at most 1000000 keys")
+	if keyCountForRewrite() > rewriteKeyCeiling {
+		return fmt.Errorf("rewrite limit: at most %d keys", rewriteKeyCeiling)
 	}
 	path := aof.path
 	tmpPath := path + ".rewrite"
@@ -182,7 +211,7 @@ func AdvanceRewrite() error {
 		abortRewrite(fmt.Errorf("rewrite exceeded duration or dirty-key budget"))
 		return nil // the original log continues to contain every write
 	}
-	if ready, err := pollRewriteSync(false); err != nil {
+	if ready, err := pollRewriteIO(false); err != nil {
 		abortRewrite(err)
 		return err
 	} else if !ready {
@@ -192,6 +221,14 @@ func AdvanceRewrite() error {
 	// worker releases the old descriptor. Re-emitting hot keys every cycle
 	// while replacement is blocked can make the rewrite larger than the log.
 	if rewriteWalkDone() && !rewrite.collectionActive && aof.syncPending != nil {
+		return nil
+	}
+	// Finish the bulk snapshot's write job before preflushing it. Dirty keys
+	// accumulate during that preflush and are reconciled afterwards. Starting
+	// another asynchronous dirty write on every cycle would chase hot keys
+	// indefinitely and prevent the final atomic handoff.
+	if rewriteWalkDone() && !rewrite.collectionActive && rewrite.stream == nil && !rewrite.preSyncComplete {
+		startRewriteSync()
 		return nil
 	}
 	if rewrite.stream != nil {
@@ -424,9 +461,9 @@ func noteRewriteDirty(key string) {
 
 // finishRewrite writes the keys that changed during the walk, then swaps the
 // new log in.
-func finishRewrite() error {
+func finishRewrite() (finalErr error) {
 	// Never close or replace a descriptor owned by the worker.
-	if aof.syncPending != nil {
+	if aof.syncPending != nil || pendingRewriteIO != nil {
 		return nil
 	}
 
@@ -434,11 +471,16 @@ func finishRewrite() error {
 		startRewriteSync()
 		return nil
 	}
+	rewriteFinalizeStats.active.Add(1)
+	finalStarted := time.Now()
+	defer func() { rewriteFinalizeStats.finish(finalStarted, finalErr) }()
 	if rewrite.syncedBytes != rewrite.written {
 		// Preflush the bulk snapshot once, then synchronize only the dirty
 		// suffix at the existing atomic handoff. Repeated asynchronous retries
 		// could otherwise starve forever under a continuous write stream.
-		if err := rewriteFileSync(rewrite.file); err != nil {
+		if err := timedPersistenceSync(&rewriteFinalSyncStats, rewrite.file, func(f *os.File) error {
+			return timedPersistenceSync(&rewriteSyncStats, f, rewriteFileSync)
+		}); err != nil {
 			abortRewrite(err)
 			return err
 		}
@@ -502,13 +544,13 @@ func finishRewrite() error {
 func abortRewrite(cause error) {
 	rewrite.hashCursor = nil
 	nextAutoRewrite = time.Now().Add(time.Minute)
-	workerOwnsFile := pendingRewriteSync != nil && pendingRewriteSync.abandon()
+	workerOwnsFile := pendingRewriteIO != nil && pendingRewriteIO.abandon()
 	if !workerOwnsFile && rewrite.file != nil {
 		rewrite.file.Close()
 	}
 	if !workerOwnsFile {
 		os.Remove(rewrite.tmpPath)
-		pendingRewriteSync = nil
+		pendingRewriteIO = nil
 	}
 	rewrite.active = false
 	rewrite.keys = nil
@@ -535,15 +577,21 @@ func rewriteWrite(body []byte) error {
 	if len(body) == 0 {
 		return nil
 	}
-	n, err := rewrite.file.Write(body)
-	if rewrite.digest != nil {
-		rewrite.digest.Write(body[:n])
+	if rewrite.preSyncComplete {
+		// The existing dirty-tail/handoff barrier remains synchronous. Moving
+		// this phase requires ordered dual writes and a separate commit cut.
+		n, err := timedPersistenceWrite(&rewriteWriteStats, rewrite.file, body, rewriteFileWrite)
+		if rewrite.digest != nil {
+			rewrite.digest.Write(body[:n])
+		}
+		rewrite.written += int64(n)
+		if err == nil && n != len(body) {
+			return io.ErrShortWrite
+		}
+		return err
 	}
-	rewrite.written += int64(n)
-	if err == nil && n != len(body) {
-		return io.ErrShortWrite
-	}
-	return err
+	startRewriteIO(body)
+	return nil
 }
 
 // emitKey appends the commands that recreate one key, or nothing if no
@@ -614,8 +662,8 @@ func RewriteAOF() error {
 			return err
 		}
 		// This helper is deliberately synchronous and is never the serving
-		// loop. Waiting here also avoids spinning while the worker owns Sync.
-		if _, err := pollRewriteSync(true); err != nil {
+		// loop. Waiting here also avoids spinning while the worker owns a write or Sync.
+		if _, err := pollRewriteIO(true); err != nil {
 			abortRewrite(err)
 			return err
 		}
