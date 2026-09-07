@@ -110,6 +110,10 @@ func cmdINFO(args []string) []byte {
 		stats := ClientBuffers()
 		fmt.Fprintf(&b, "# Clients\r\nconnected_clients:%d\r\nretained_input_bytes:%d\r\nretained_reply_bytes:%d\r\nretained_client_bytes:%d\r\n\r\n", stats.Connected, stats.InputBytes, stats.ReplyBytes, stats.TotalBytes)
 	}
+	if want("clients") && CommandAllocations != nil {
+		stats := CommandAllocations
+		fmt.Fprintf(&b, "command_allocation_limit_bytes:%d\r\ncommand_allocation_reserved_bytes:%d\r\ncommand_allocation_peak_bytes:%d\r\ncommand_allocation_refusals:%d\r\n", stats.Limit, stats.Reserved, stats.Peak, stats.Refusals)
+	}
 
 	if want("replication") {
 		role := "primary"

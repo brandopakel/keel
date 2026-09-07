@@ -86,7 +86,7 @@ func cmdHGET(args []string) []byte {
 	if !has {
 		return constant.RespNil
 	}
-	return Encode(value, false)
+	return encodeBoundedString(value)
 }
 
 func cmdHMGET(args []string) []byte {
