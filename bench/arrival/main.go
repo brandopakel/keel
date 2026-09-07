@@ -177,21 +177,30 @@ func exchangePipeline(c net.Conn, r *bufio.Reader, request []byte, timeout time.
 	if pipeline < 1 || pipeline > 4096 || len(request) > (64<<20)/pipeline {
 		return errors.New("pipeline request size limit")
 	}
-	if pipeline > 1 {
-		request = bytes.Repeat(request, pipeline)
-	}
 	if err := c.SetDeadline(time.Now().Add(timeout)); err != nil {
 		return err
 	}
-	for len(request) > 0 {
-		n, err := c.Write(request)
-		if err != nil {
-			return err
+	// Keep small pipelines in one write without multiplying a large request
+	// into a separate 64 MiB buffer for every connection. The original command
+	// remains immutable; repeated storage is at most 64 KiB per exchange.
+	perChunk := min(pipeline, max(1, (64<<10)/max(1, len(request))))
+	chunk := request
+	if perChunk > 1 {
+		chunk = bytes.Repeat(request, perChunk)
+	}
+	for sent := 0; sent < pipeline; {
+		count := min(perChunk, pipeline-sent)
+		for remaining := chunk[:count*len(request)]; len(remaining) > 0; {
+			n, err := c.Write(remaining)
+			if err != nil {
+				return err
+			}
+			if n == 0 {
+				return io.ErrShortWrite
+			}
+			remaining = remaining[n:]
 		}
-		if n == 0 {
-			return io.ErrShortWrite
-		}
-		request = request[n:]
+		sent += count
 	}
 	for i := 0; i < pipeline; i++ {
 		if _, err := readReply(r, 0); err != nil {

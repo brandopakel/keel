@@ -166,3 +166,16 @@ free shared runner, with deliberately overloaded adversaries and AOF disabled.
 The approximately 3% ordinary pipeline throughput cost is documented separately
 in docs/client-fairness.md. Both raw runs and exact revisions are retained in
 `bench/results/fairness-competing-clients-2026-09-07.json.gz`.
+
+The final allocation review found that the 64 MiB per-batch ceiling could still
+allocate that amount independently for every generator connection. Pipeline
+transmission now repeats at most 64 KiB of encoded commands per exchange and
+handles partial writes across chunks. Larger individual commands reuse their
+original request buffer. A valid 4,096-command / 16,300-byte request regression
+verifies all 66,764,800 bytes are written, every reply is drained and allocation
+stays below 256 KiB. This bounds the additional repeated batch storage, not all
+generator memory or connection buffers.
+
+The measured competing-reader GET batches are smaller than 64 KiB and retain
+their single-batch write behavior. The original evidence and harness revisions
+are preserved; larger write pipelines use the new chunked transmission path.

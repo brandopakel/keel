@@ -4,11 +4,48 @@ import (
 	"bufio"
 	"io"
 	"net"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 )
+
+type pipelineWriteProbe struct {
+	net.Conn
+	bytes, largest int
+}
+
+func (p *pipelineWriteProbe) SetDeadline(time.Time) error { return nil }
+func (p *pipelineWriteProbe) Write(b []byte) (int, error) {
+	p.largest = max(p.largest, len(b))
+	n := max(1, len(b)/2) // force the partial-write path too
+	p.bytes += n
+	return n, nil
+}
+
+func TestLargePipelineDoesNotAllocateWholeBatch(t *testing.T) {
+	request := []byte(strings.Repeat("x", 16300))
+	reader := bufio.NewReader(strings.NewReader(strings.Repeat("+OK\r\n", 4096)))
+	conn := new(pipelineWriteProbe)
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	err := exchangePipeline(conn, reader, request, time.Second, 4096)
+	runtime.ReadMemStats(&after)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if conn.bytes != len(request)*4096 || conn.largest > 64<<10 {
+		t.Fatalf("bytes=%d largest chunk=%d", conn.bytes, conn.largest)
+	}
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 256<<10 {
+		t.Fatalf("large pipeline allocated %d bytes", allocated)
+	}
+	if _, err := reader.ReadByte(); err != io.EOF {
+		t.Fatalf("replies not completely consumed: %v", err)
+	}
+}
 
 func TestHistogramQuantilesBoundSamples(t *testing.T) {
 	for n := int64(1); n < 1e12; n = n*3 + 1 {
