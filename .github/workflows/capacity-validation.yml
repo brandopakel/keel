@@ -1,6 +1,32 @@
 name: Scheduled capacity and larger recovery
 
 on:
+  workflow_call:
+    inputs:
+      candidate:
+        type: string
+        required: true
+      baseline:
+        type: string
+        default: 9f155872c60b07c0793e3653bd30d1fe96b8cb59
+      cases:
+        type: string
+        default: read-64,balanced-1k,expiry-storm,large-1m,large-hash,large-list,mixed-tenants
+      rates:
+        type: string
+        default: 1000,10000,50000,100000,150000
+      seconds:
+        type: number
+        default: 10
+      repetitions:
+        type: number
+        default: 2
+      policy:
+        type: string
+        default: 'off'
+      append_mode:
+        type: string
+        default: concurrent
   workflow_dispatch:
     inputs:
       candidate:
