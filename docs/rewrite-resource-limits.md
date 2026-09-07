@@ -46,3 +46,16 @@ an old immutable value during replacement still requires transient memory.
 Reply frame indices used by unbuffered writes are also charged to retained reply
 memory. Charging them to input left the reply-class admission limit understated;
 the regression test checks both the class boundary and repeated accounting.
+# Integrated validation
+
+After integration with merged PR 27, commit 70f253a passed the
+[Go/race/Docker matrix](https://github.com/brandopakel/keel/actions/runs/34101668336),
+[Redis differential, workload and combined operational checks](https://github.com/brandopakel/keel/actions/runs/34101668312),
+and [native ARM64/Intel Mac plus ext4/XFS recovery](https://github.com/brandopakel/keel/actions/runs/34101668332).
+
+The earlier frozen runtime also completed its separate four-hour ext4 and XFS
+recovery soaks in [34083541166](https://github.com/brandopakel/keel/actions/runs/34083541166).
+Each completed 15 primary and 32 replica crash recoveries. Those runs exercise
+the pre-closeout runtime and do not validate the new rewrite implementation.
+Their differing write counts are not a controlled filesystem performance
+comparison. The Mac eight-hour and 48-hour soaks are still running separately.
