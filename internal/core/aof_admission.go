@@ -157,8 +157,11 @@ func AppendAdmission(commands []*Command) (logBytes, replyBytes int, ok bool) {
 	}
 	if data_structure.TotalKeys()+newKeys > config.KeyNumberLimit ||
 		(config.MaxMemory > 0 && data_structure.TotalMemUsed()+growth > config.MaxMemory) {
-		// An eviction can name an arbitrary old key. Until its transcript has
-		// its own reservation, runs that may evict wait for the barrier.
+		// An eviction can name an arbitrary old key, and neither how many it
+		// removes nor which ones is knowable before the run executes, so its
+		// transcript cannot be reserved. Runs that may evict take the barrier.
+		// docs/eviction-reservation.md costs the alternatives and says why this
+		// is the answer rather than a gap waiting to be filled.
 		return 0, 0, false
 	}
 	for _, cmd := range commands {
