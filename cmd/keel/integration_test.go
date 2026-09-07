@@ -68,8 +68,13 @@ func startTestServer(t *testing.T, args ...string) *testServer {
 	}
 	t.Cleanup(func() {
 		if !s.stopped {
-			s.cmd.Process.Kill()
-			s.cmd.Wait()
+			if t.Failed() {
+				s.captureFailure(t)
+			} else {
+				_ = s.cmd.Process.Kill()
+				_ = s.cmd.Wait()
+			}
+			s.stopped = true
 		}
 	})
 	deadline := time.Now().Add(5 * time.Second)
@@ -84,6 +89,28 @@ func startTestServer(t *testing.T, args ...string) *testServer {
 	t.Fatal("server did not listen")
 	return nil
 }
+
+// captureFailure terminates only the test's owned server and reads its log
+// after Wait has joined the output copier. Register it after client cleanups
+// when a failure needs the sockets to remain open in the captured state.
+func (s *testServer) captureFailure(t *testing.T) {
+	t.Helper()
+	if s.stopped {
+		return
+	}
+	_ = s.cmd.Process.Signal(syscall.SIGQUIT)
+	done := make(chan struct{})
+	go func() { _ = s.cmd.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		_ = s.cmd.Process.Kill()
+		<-done
+	}
+	s.stopped = true
+	t.Logf("failed server diagnostics:\n%s", s.log.String())
+}
+
 func (s *testServer) stop(t *testing.T) {
 	t.Helper()
 	s.cmd.Process.Signal(syscall.SIGTERM)
@@ -278,9 +305,18 @@ func TestSlowReaderDoesNotBlockOtherClients(t *testing.T) {
 				t.Fatal(got)
 			}
 			slow, _ := connectTest(t, s)
-			io.WriteString(slow, strings.Repeat(request("GET", "large"), 32))
+			t.Cleanup(func() {
+				if t.Failed() {
+					s.captureFailure(t)
+				}
+			})
+			if _, err := io.WriteString(slow, strings.Repeat(request("GET", "large"), 32)); err != nil {
+				t.Fatal(err)
+			}
 			time.Sleep(100 * time.Millisecond)
-			c.SetDeadline(time.Now().Add(2 * time.Second))
+			if err := c.SetDeadline(time.Now().Add(2 * time.Second)); err != nil {
+				t.Fatal(err)
+			}
 			if got := call(t, c, r, "PING"); got != "+PONG" {
 				t.Fatal(got)
 			}
