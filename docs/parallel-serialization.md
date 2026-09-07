@@ -79,7 +79,31 @@ Protocol 2 retains an immutable rewritten-file descriptor and streams its byte
 ranges after rewrite handoff. This avoids a second mutable-keyspace walk; it
 does not eliminate snapshot construction or filesystem finalization costs.
 
-## Recommendation: not yet, and measure first
+## The measurement this asked for
+
+Taken since: a CPU profile of one rewrite over a million keys, and rewrite
+duration at three sizes. It settles the question rather than leaving it open.
+
+Where rewrite CPU goes:
+
+| | share of rewrite CPU |
+| --- | ---: |
+| `write` syscalls | 52% |
+| RESP serialization (`emitRewriteKey`, `appendCommand`, `appendBulkString`) | 35% |
+| Traversal (`KeyspaceWalk.Next`, `Dict.ScanUntil`) | 11% |
+
+And the figure that matters more: over a 4.5-second rewrite the process was **on
+CPU for 13% of the wall clock**. The rest was waiting on the log's writes and
+syncs. So serialization is 35% of 13% - roughly **5% of rewrite wall time**.
+
+Parallelizing 5% of the work caps the speedup near 1.05x however many workers are
+used, and the price was a lock on every `GET` or a copy that for collections
+moves the cost rather than removing it. That is not a close call.
+
+The dominant cost is the write syscall against a single ordered file, which is
+the one part that cannot be parallelized at all.
+
+## Recommendation: no, on the measurement rather than on the argument
 
 Parallel serialization has not demonstrated an adoption benefit. Current
 traversal walks bounded stable slots; large records stream in at most 64 KiB
@@ -90,13 +114,21 @@ can still block command execution. See [resource limits](rewrite-resource-limits
 [matched preflush measurements](rewrite-preflush.md). Shorter rewrite duration
 and lower command stalls are distinct outcomes to measure.
 
-Finishing sooner may also help the million-key snapshot ceiling, 30-second
+Finishing sooner may also help the snapshot key ceiling, 30-second
 duration limit and dirty-name count/byte budgets. Compare alternatives rather
 than assuming which one is cheaper:
 
 - Profile traversal, capture, encoding, writes and finalization separately on
   the target workload. Existing preflush measurements do not establish that
   encoding dominates every dataset.
+- One such profile exists and is a starting point rather than an answer. On a
+  million small strings, before the preflush worker moved bulk writes off the
+  loop, rewrite CPU was 52% `write` syscalls, 35% RESP encoding and 11%
+  traversal - and the process was on CPU for 13% of the rewrite's wall clock,
+  the rest waiting on the log. Encoding was therefore about 5% of wall time on
+  that dataset and that runtime. Both caveats matter: moving writes to a worker
+  changes the mix, and a dataset of large collections would encode far more per
+  key than a small string does.
 - The slice budgets and the abort window are constants that were chosen, not
   derived. Raising them may lift the ceiling for the cost of a longer tail.
 - Faster completion may reduce dirty-key accumulation. Test that effect with
@@ -109,7 +141,10 @@ cancellation, storage failures and crash recovery while work is outstanding.
 
 ## What would change the answer
 
-- A profile showing RESP encoding is most of rewrite time.
+- A profile showing RESP encoding is most of rewrite time on the target
+  workload. The one recorded above says otherwise for a million small strings on
+  the pre-preflush runtime, which is one dataset and one runtime, not a
+  conclusion about every rewrite.
 - A deployment that needs more than a million keys per node, where the ceiling
   is the binding constraint rather than a theoretical one.
 - Collections becoming copy-on-write, which would remove option B's weakness by

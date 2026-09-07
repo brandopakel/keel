@@ -8,6 +8,17 @@ spec.loader.exec_module(validation)
 
 
 class RewriteCompatibilityTests(unittest.TestCase):
+    def test_incomplete_offered_workload_cannot_pass_adoption(self):
+        complete = dict(scheduled=100, completed=100, failed=0, queue_dropped=0, queue_expired=0)
+        validation.require_complete_traffic(complete, 100)
+        for failure in ('failed', 'queue_dropped', 'queue_expired'):
+            with self.subTest(failure=failure), self.assertRaisesRegex(AssertionError, 'incomplete offered workload'):
+                validation.require_complete_traffic(dict(complete, completed=99, **{failure: 1}), 100)
+        with self.assertRaises(AssertionError):
+            validation.require_complete_traffic(dict(complete, completed=99), 100)
+        with self.assertRaises(AssertionError):
+            validation.require_complete_traffic(dict(complete, scheduled=99, completed=99), 100)
+
     def test_missing_append_flag_fails_before_measurement(self):
         flags = ('host', 'port', 'appendonly', 'appendfsync', 'appendfilename',
                  'aof-async-append', 'aof-concurrent-append', 'auto-aof-rewrite-percentage')
