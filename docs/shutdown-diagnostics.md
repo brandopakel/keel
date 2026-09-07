@@ -58,3 +58,10 @@ final acknowledged sequences matched in every arm. Reports and build identities
 are in `bench/results/shutdown-replay-diagnostic-2026-09-07.tar.gz`.
 The prior six passes covered shutdown alone.
 The workflow now runs for relevant runtime, persistence and helper changes.
+
+Pass-result gates and the server readiness probe use explicit checks, so optimized
+Python cannot remove writes or mismatch detection. Three tests run the actual
+diagnostic with fake server I/O under `python -O`: successful writes/recovery,
+invalid acknowledgments and a stale replay value. They passed locally in 0.51
+seconds and preserve the original AOF on the injected replay failure. Evidence is
+`bench/results/shutdown-optimized-python-gates-2026-09-07.json.gz`.
