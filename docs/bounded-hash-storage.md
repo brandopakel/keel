@@ -43,6 +43,22 @@ The benchmark matrix adds `hash-field-read`, `hash-field-mixed`,
 100,000-field hash. The previous `hash` scenario uses many one-field hashes;
 `large-hash-read` reads a whole 4,096-field hash. All remain useful and distinct.
 
+Review follow-up: the indexed memory estimate now tracks retained leaf capacity
+and node objects in O(1), updating the charge on splits, collision-chain growth,
+shrinks, merges and removals. Payload lengths and calibrated allocator slack are
+charged separately. Tests check accounting symmetry and measured heap after
+half the fields are removed, before every leaf has compacted. This remains an
+estimated keyspace budget rather than an exact allocator or RSS measurement.
+
+The routing seed intentionally remains process-local and unpredictable. Unlike
+probabilistic counters or filters, a hash stores exact field/value strings;
+routing-tree shape and HGETALL order are not persisted semantics. Existing
+rewrite/replay checks reconstruct new seeds and verify the exact logical data.
+Changing to a known deterministic routing hash would weaken collision resistance
+without improving replay correctness. Exact collision chains remain a documented
+worst-case lookup limitation; this candidate bounds individual map capacity,
+not every lookup's work under arbitrarily many exact 64-bit collisions.
+
 This prototype has not merged or been released. The frozen long soaks use their
 original runtime and cannot validate it. Aggregate temporary reservations,
 partially occupied key pages and filesystem handoff stalls remain separate work.

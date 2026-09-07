@@ -36,7 +36,7 @@ func (h *Hash) Set(field, value string) bool {
 	} else {
 		old, existed = h.fields[field]
 		if !existed && len(h.fields) == hashLeafFields {
-			h.large = &hashIndex{root: &hashNode{fields: h.fields, peak: len(h.fields)}, seed: maphash.MakeSeed(), count: len(h.fields)}
+			h.large = &hashIndex{root: &hashNode{fields: h.fields, peak: len(h.fields)}, seed: maphash.MakeSeed(), count: len(h.fields), storageBytes: hashLeafBytes(len(h.fields))}
 			h.fields = nil
 			h.large.set(field, value)
 		} else {
@@ -209,6 +209,11 @@ func (h *Hash) Entries() ([]string, []string) {
 // set's was - see TestHashMemUsageTracksRealHeap, which fails if this stops
 // describing the map underneath.
 func (h *Hash) MemUsage() uint64 {
+	if h.large != nil {
+		// Node/map capacity is retained across deletes until local compaction.
+		// Ten bytes per live field cover measured payload allocator rounding.
+		return hashBaseBytes + 32 + h.large.storageBytes + uint64(h.Len())*10 + h.fieldBytes + h.valueBytes
+	}
 	return hashBaseBytes + uint64(h.Len())*hashFieldOverhead +
 		h.fieldBytes + h.valueBytes
 }

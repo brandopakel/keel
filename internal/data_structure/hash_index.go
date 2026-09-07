@@ -19,9 +19,40 @@ type hashNode struct {
 }
 
 type hashIndex struct {
-	root  *hashNode
-	seed  maphash.Seed
-	count int
+	root         *hashNode
+	seed         maphash.Seed
+	count        int
+	storageBytes uint64
+}
+
+// Calibrated Go-map capacity classes for at most 192 string/string entries,
+// including the leaf node, map header, table/directory and allocator rounding.
+// Payload strings are charged separately. Memory is an estimate, not RSS.
+func hashLeafBytes(peak int) uint64 {
+	switch {
+	case peak == 0:
+		return 96
+	case peak <= 8:
+		return 384
+	case peak <= 14:
+		return 712
+	case peak <= 28:
+		return 1288
+	case peak <= 56:
+		return 2440
+	case peak <= 112:
+		return 5000
+	default:
+		return 9608
+	}
+}
+
+func (h *hashIndex) updatePeak(node *hashNode) {
+	if len(node.fields) > node.peak {
+		peak := len(node.fields)
+		h.storageBytes += hashLeafBytes(peak) - hashLeafBytes(node.peak)
+		node.peak = peak
+	}
 }
 
 func (h *hashIndex) leaf(hash uint64) **hashNode {
@@ -68,6 +99,7 @@ func (h *hashIndex) setByHash(field, value string, hash uint64, hashField func(s
 	h.count++
 	if node == nil {
 		*link = &hashNode{fields: map[string]string{field: value}, peak: 1}
+		h.storageBytes += hashLeafBytes(1)
 		return "", false
 	}
 	if node.next != nil {
@@ -84,14 +116,15 @@ func (h *hashIndex) setByHash(field, value string, hash uint64, hashField func(s
 		if len(node.fields) == hashLeafFields {
 			node.next = &hashNode{fields: make(map[string]string), bit: hash}
 			node = node.next
+			h.storageBytes += hashLeafBytes(0)
 		}
 		node.fields[field] = value
-		node.peak = max(node.peak, len(node.fields))
+		h.updatePeak(node)
 		return "", false
 	}
 	if len(node.fields) < hashLeafFields {
 		node.fields[field] = value
-		node.peak = max(node.peak, len(node.fields))
+		h.updatePeak(node)
 		return "", false
 	}
 	var different uint64
@@ -101,6 +134,7 @@ func (h *hashIndex) setByHash(field, value string, hash uint64, hashField func(s
 	if different == 0 {
 		node.bit = hash
 		node.next = &hashNode{fields: map[string]string{field: value}, bit: hash, peak: 1}
+		h.storageBytes += hashLeafBytes(1)
 		return "", false
 	}
 	bit := uint64(1) << (63 - bits.LeadingZeros64(different))
@@ -119,11 +153,13 @@ func (h *hashIndex) setByHash(field, value string, hash uint64, hashField func(s
 		right.fields[field] = value
 	}
 	left.peak, right.peak = len(left.fields), len(right.fields)
+	h.storageBytes = h.storageBytes - hashLeafBytes(node.peak) + 48 + hashLeafBytes(left.peak) + hashLeafBytes(right.peak)
 	*link = &hashNode{left: left, right: right, bit: bit}
 	return "", false
 }
 
 func (h *hashIndex) branch(link **hashNode, old, added *hashNode, bit, hash uint64) {
+	h.storageBytes += 48 + hashLeafBytes(added.peak)
 	if hash&bit == 0 {
 		*link = &hashNode{left: added, right: old, bit: bit}
 	} else {
@@ -161,12 +197,14 @@ func (h *hashIndex) delByHash(field string, hash uint64) (string, bool) {
 		removed, found = value, true
 		h.count--
 		if len(node.fields) == 0 {
+			h.storageBytes -= hashLeafBytes(node.peak)
 			*link = node.next
 		} else if node.peak >= 16 && len(node.fields) <= node.peak/4 {
 			next := make(map[string]string, len(node.fields))
 			for key, value := range node.fields {
 				next[key] = value
 			}
+			h.storageBytes -= hashLeafBytes(node.peak) - hashLeafBytes(len(next))
 			node.fields, node.peak = next, len(next)
 		}
 		break
@@ -181,8 +219,10 @@ func (h *hashIndex) delByHash(field string, hash uint64) (string, bool) {
 		link := path[i]
 		node := *link
 		if node.left == nil {
+			h.storageBytes -= 48
 			*link = node.right
 		} else if node.right == nil {
+			h.storageBytes -= 48
 			*link = node.left
 		} else if !merged && node.left.fields != nil && node.right.fields != nil &&
 			node.left.next == nil && node.right.next == nil &&
@@ -194,6 +234,7 @@ func (h *hashIndex) delByHash(field string, hash uint64) (string, bool) {
 			for key, value := range node.right.fields {
 				fields[key] = value
 			}
+			h.storageBytes = h.storageBytes - 48 - hashLeafBytes(node.left.peak) - hashLeafBytes(node.right.peak) + hashLeafBytes(len(fields))
 			*link = &hashNode{fields: fields, peak: len(fields)}
 			merged = true
 		}

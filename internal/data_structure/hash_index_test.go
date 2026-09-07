@@ -1,8 +1,10 @@
 package data_structure
 
 import (
+	"fmt"
 	"math/bits"
 	"math/rand"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -42,9 +44,11 @@ func requireBoundedHash(t *testing.T, h *Hash, expected map[string]string) {
 		return
 	}
 	var check func(*hashNode, uint64)
+	var storage uint64
 	check = func(node *hashNode, used uint64) {
 		require.NotNil(t, node)
 		if node.fields == nil {
+			storage += 48
 			require.Equal(t, 1, bits.OnesCount64(node.bit))
 			require.Zero(t, used&node.bit, "a routing bit cannot repeat along a path")
 			check(node.left, used|node.bit)
@@ -52,6 +56,7 @@ func requireBoundedHash(t *testing.T, h *Hash, expected map[string]string) {
 			return
 		}
 		for node != nil {
+			storage += hashLeafBytes(node.peak)
 			require.NotEmpty(t, node.fields)
 			require.LessOrEqual(t, len(node.fields), hashLeafFields)
 			require.LessOrEqual(t, node.peak, hashLeafFields)
@@ -60,6 +65,7 @@ func requireBoundedHash(t *testing.T, h *Hash, expected map[string]string) {
 		}
 	}
 	check(h.large.root, 0)
+	require.Equal(t, storage, h.large.storageBytes, "all live nodes and retained map capacities must be accounted")
 }
 
 func TestHashLeavesSplitShrinkAndReturnToSmallStorage(t *testing.T) {
@@ -146,4 +152,30 @@ func TestHashIndexExactCollisionsStayInBoundedLeaves(t *testing.T) {
 	h.delByHash("different", 1)
 	require.Nil(t, h.root)
 	require.Zero(t, h.count)
+	require.Zero(t, h.storageBytes, "collision-chain deletion must release every charge")
+}
+
+func TestIndexedHashEstimateTracksPartlyOccupiedLeaves(t *testing.T) {
+	before := heapBytes()
+	h := NewHash()
+	for i := 0; i < 200000; i++ {
+		h.Set(fmt.Sprintf("%020d", i), fmt.Sprintf("%020d", i))
+	}
+	for i := 0; i < 100000; i++ {
+		h.Del(fmt.Sprintf("%020d", i))
+	}
+	require.Equal(t, 100000, h.Len())
+	after := heapBytes()
+	actual := int64(after) - int64(before)
+	require.Positive(t, actual)
+	ratio := float64(h.MemUsage()) / float64(actual)
+	t.Logf("half-occupied estimate=%d actual=%d ratio=%.3f", h.MemUsage(), actual, ratio)
+	require.InDelta(t, 1.0, ratio, .10, "retained capacity must remain charged between compactions")
+	for i := 100000; i < 200000; i++ {
+		field := fmt.Sprintf("%020d", i)
+		value, ok := h.Get(field)
+		require.True(t, ok)
+		require.Equal(t, field, value)
+	}
+	runtime.KeepAlive(h)
 }
