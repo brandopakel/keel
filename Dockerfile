@@ -1,11 +1,12 @@
 # Build.
 #
-# Pinned above the floor go.mod declares, never below it. That floor is not a
-# preference: the memory accounting is calibrated against real heap growth and
-# does not hold under Go 1.21, where a -maxmemory bound under-counts by up to
-# 39% and stops bounding - see internal/data_structure/memory.go. An image built
-# on an older toolchain would be quietly wrong in exactly that way.
-FROM golang:1.24-alpine AS build
+# Pinned at or above the floor go.mod declares, never below it. That floor is not
+# a preference: the memory accounting is calibrated against real heap growth, so
+# it depends on how the runtime lays maps out, and a -maxmemory bound built on a
+# toolchain it was not calibrated for stops bounding - see
+# internal/data_structure/memory.go. Under Go 1.21 it under-counted by up to 39%.
+# An image built on an older toolchain would be quietly wrong in that way.
+FROM golang:1.25-alpine AS build
 
 WORKDIR /src
 
