@@ -49,7 +49,7 @@ populate the variable; avoid putting secrets in process arguments or shell histo
 | Sorted sets | `ZADD` with `NX`/`XX`/`CH`, `ZRANK`, `ZREM`, `ZSCORE`, `ZCARD`, `ZCOUNT`, `ZINCRBY`, `ZPOPMIN`/`ZPOPMAX`; `ZRANGEBYSCORE`/`ZREVRANGEBYSCORE`; `ZRANGE` rank ranges with `REV`/`WITHSCORES` |
 | Geo | `GEOADD`, `GEODIST`, `GEOHASH`, `GEOSEARCH`, `GEOPOS` |
 | Approximate analytics | Bloom `BF.*`, Count-Min `CMS.*`, Morris `MORRIS.*`, Cuckoo `CF.*`, and `PFADD`/`PFCOUNT`/`PFMERGE`; see the [command registry](internal/core/eval.go) for exact names |
-| Operations | `PING`, `AUTH`, `INFO`, `MEMORY USAGE key`, `MEMORY STATS`, `BGREWRITEAOF`, `KEEL.DUMP`, `KEEL.RESTORE` |
+| Operations | `PING`, `AUTH`, `INFO`, `MEMORY USAGE key`, `MEMORY STATS`, `BGREWRITEAOF`, `KEEL.DUMP`, `KEEL.RESTORE`, `KEEL.PROMOTE`/`KEEL.FENCE` |
 
 Important boundaries:
 
@@ -182,7 +182,14 @@ In order of distance, not size.
   replication are included in alpha.3 as opt-in experiments with their own contracts and
   limits. Unreleased development adds bounded concurrent string execution during appends
   and protocol 2 recovery; both require further deployment
-  validation. Automatic failover and distributed fencing remain unimplemented.
+  validation. Automatic failover remains unimplemented, and manual promotion still requires
+  operator fencing. `KEEL.PROMOTE`/`KEEL.FENCE` carry a durable term, and a node
+  that has learned of a higher term stops writing - a stale-generation guard, not
+  a fence. A partitioned node learns nothing and keeps writing, so exclusivity
+  still has to come from outside; see [the design](docs/failover-design.md).
+  A nonzero-term process restarts without write authority and requires a fresh
+  externally assigned higher term. Nonzero terms require protocol 2 throughout
+  the replication path; see [restart and upgrade rules](docs/term-guard-recovery.md).
 - **Command surface outside the contract.** Transactions, Lua, Pub/Sub, blocking list
   commands, RESP3, ACL roles, and cluster routing are absent. `ZRANGE` lacks
   `BYSCORE`, `BYLEX`, and `LIMIT`; `ZADD` lacks `GT`, `LT`, and `INCR`. Unreleased development

@@ -33,6 +33,10 @@ type ReplicationFrame struct {
 	SnapshotDone   bool   `json:"snapshot_done,omitempty"`
 	Pending        bool   `json:"pending,omitempty"`
 	CaughtUp       bool   `json:"caught_up,omitempty"`
+	// Term is the authority the sender believes it has. frameChecksum marshals
+	// the whole struct, so this is covered by the integrity checksum. Peer
+	// authentication and transport protection are separate requirements.
+	Term uint64 `json:"term,omitempty"`
 }
 type replicationBatch struct {
 	offset uint64
@@ -152,6 +156,9 @@ func cmdReplicationPull(args []string) []byte {
 	if !config.ReplicationFeed || config.ReplicationProtocol != 1 {
 		return Encode(errors.New("ERR replication protocol 1 is disabled"), false)
 	}
+	if CurrentTerm() != 0 || !Writable() {
+		return Encode(errors.New("ERR nonzero terms require replication protocol 2"), false)
+	}
 	if len(args) != 2 {
 		return Encode(errSyntax, false)
 	}
@@ -214,6 +221,10 @@ func cmdReplicationPull(args []string) []byte {
 func ApplyReplication(frame ReplicationFrame) error {
 	if config.ReplicationProtocol == 2 {
 		return applyReplicationV2(frame)
+	}
+	if CurrentTerm() != 0 || frame.Term != 0 {
+		replicaReady = false
+		return errors.New("nonzero terms require replication protocol 2")
 	}
 	if frame.Version != 1 || len(frame.Epoch) != 32 || len(frame.Body) > replicationLimit || frame.Checksum != frameChecksum(frame) {
 		return errors.New("invalid replication frame")
@@ -278,14 +289,28 @@ func (r *replicationReply) Write(b []byte) (int, error) { *r = append(*r, b...);
 func (r *replicationReply) Read(b []byte) (int, error)  { return 0, errors.New("read unsupported") }
 
 func replicaCommandError(cmd string) error {
-	if config.ReplicaOf == "" || replicaApplying || aof.replaying {
+	// Applying replicated state and replaying the log are not client writes:
+	// one is a decision the primary already made, the other is recovery.
+	if replicaApplying || aof.replaying {
 		return nil
 	}
-	if writeCommands[cmd] {
-		return errors.New("READONLY replica rejects writes")
+	if config.ReplicaOf != "" {
+		if writeCommands[cmd] {
+			// READONLY rather than FENCED even when this replica has seen a
+			// term above its own: a replica refuses writes because of what it
+			// is, and saying so is more use to a client than saying it lost an
+			// election it was never in.
+			return errors.New("READONLY replica rejects writes")
+		}
+		if cmd != "PING" && cmd != "INFO" && (!replicaReady || time.Since(replicaUpdated) > 5*time.Second) {
+			return errors.New("MASTERDOWN replica has no recent primary state")
+		}
+		return nil
 	}
-	if cmd != "PING" && cmd != "INFO" && (!replicaReady || time.Since(replicaUpdated) > 5*time.Second) {
-		return errors.New("MASTERDOWN replica has no recent primary state")
+	// Checked on every write rather than at a transition, so there is no window
+	// between losing authority and noticing it.
+	if writeCommands[cmd] && !Writable() {
+		return errFenced
 	}
 	return nil
 }

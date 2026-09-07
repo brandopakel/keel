@@ -27,6 +27,7 @@ var commandTable = map[string]func([]string) []byte{
 	"PEXPIRE": cmdPEXPIRE, "EXPIREAT": cmdEXPIREAT, "PERSIST": cmdPERSIST,
 
 	// Server
+	"KEEL.PROMOTE": cmdPROMOTE, "KEEL.FENCE": cmdFENCE,
 	"KEEL.REPL.PULL":  cmdReplicationPull,
 	"KEEL.REPL.PULL2": cmdReplicationPullV2,
 	"DBSIZE":          cmdDBSIZE, "FLUSHDB": cmdFLUSHDB, "MEMORY": cmdMEMORY, "INFO": cmdINFO,
