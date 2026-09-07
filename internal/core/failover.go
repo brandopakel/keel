@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/brandopakel/keel/internal/config"
 )
@@ -33,9 +34,13 @@ import (
 // only on promotion. One value cannot do both, because a primary restarting has
 // to invalidate offsets without claiming new authority.
 type failoverState struct {
-	// term is the highest term this node has seen, and is on disk before it is
-	// acted on. Never decreases, including across a restart.
+	// term is the highest term this node has seen. Successful observations are
+	// persisted; a storage failure still revokes live write authority. Atomic
+	// access publishes it to the replication transport's reader.
 	term uint64
+	// persisted is the last successfully synced observation. Failed updates
+	// remain pending, so retrying the same term cannot falsely acknowledge it.
+	persisted uint64
 
 	// fenced is set when this node has seen a term above the one it holds. It
 	// refuses writes from that moment, without waiting to be told twice and
@@ -65,8 +70,8 @@ var termSync = func(f *os.File) error { return f.Sync() }
 // every node before its first failover and every fresh install. A file that
 // exists but cannot be read or parsed is different in kind - something was
 // there and is now damaged - and a primary refuses to start on it rather than
-// guess a term the cluster may already have moved past. A replica may still
-// start, because a replica takes no writes.
+// guess a term the cluster may already have moved past. Replicas also refuse
+// damaged state: being read-only does not make following a stale history safe.
 //
 // The limit this cannot see is a storage rollback that removes the file
 // entirely, which is indistinguishable from a node that was never promoted.
@@ -74,39 +79,33 @@ var termSync = func(f *os.File) error { return f.Sync() }
 // has to be the one that never issues a term twice.
 func LoadTerm(path string) error {
 	failover.path = path + termFileName
-	failover.term, failover.held, failover.fenced = 0, 0, false
+	atomic.StoreUint64(&failover.term, 0)
+	failover.persisted = 0
+	failover.held, failover.fenced = 0, false
 
 	body, err := os.ReadFile(failover.path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
-		if config.ReplicaOf == "" {
-			return fmt.Errorf("unreadable term file %s: %w", failover.path, err)
-		}
-		return nil
+		return fmt.Errorf("unreadable term file %s: %w", failover.path, err)
 	}
 	term, parseErr := strconv.ParseUint(strings.TrimSpace(string(body)), 10, 64)
 	if parseErr != nil {
-		if config.ReplicaOf == "" {
-			return fmt.Errorf("damaged term file %s: %w", failover.path, parseErr)
-		}
-		return nil
+		return fmt.Errorf("damaged term file %s: %w", failover.path, parseErr)
 	}
-	failover.term = term
-	// Starting as a primary means claiming the term already on disk. Starting
-	// as a replica means only knowing it: a replica holds no term and writes
-	// nothing until something promotes it.
-	if config.ReplicaOf == "" {
-		failover.held = term
-	}
+	atomic.StoreUint64(&failover.term, term)
+	failover.persisted = term
+	// The numeric file records observation, not a durable grant to this
+	// incarnation. Every nonzero-term primary starts fenced and needs a fresh
+	// externally assigned higher term. Restart must not claim a successor's term.
+	failover.fenced = config.ReplicaOf == "" && term > 0
 	return nil
 }
 
-// persistTerm puts the term on disk before anything acts on it. Nothing else in
-// this file may raise the in-memory term without going through here first,
-// because a term acted on and then lost is a node that will take writes in a
-// term the cluster has already left behind.
+// persistTerm makes a term durable before granting local write authority.
+// Observing a successor revokes authority even if storage is failing; only a
+// successful persistence operation can promise recovery of that observation.
 func persistTerm(term uint64) error {
 	if failover.path == "" {
 		return errors.New("no term file: failover requires an append-only log")
@@ -130,7 +129,11 @@ func persistTerm(term uint64) error {
 	if err = termRename(tmp, failover.path); err != nil {
 		return err
 	}
-	return termSyncDir(dir)
+	if err = termSyncDir(dir); err != nil {
+		return err
+	}
+	failover.persisted = term
+	return nil
 }
 
 // observeTerm records a term learned from another node.
@@ -139,28 +142,29 @@ func persistTerm(term uint64) error {
 // old primary can still talk to the cluster - it stands down on the first
 // exchange rather than finishing what it was doing. It does nothing for a node
 // that cannot hear anyone, which is the case a fence exists for. The term is
-// persisted before the node acts on it, so a restart cannot walk it back.
+// persisted before success is reported. A persistence failure still stops live
+// writes and requires external isolation/recovery rather than continuing to write.
 func observeTerm(term uint64) error {
-	if term <= failover.term {
-		return nil
+	if term > failover.term {
+		atomic.StoreUint64(&failover.term, term)
+		// Only a primary needs fencing. Replicas already refuse writes.
+		if config.ReplicaOf == "" && failover.held < term {
+			failover.fenced = true
+		}
 	}
-	if err := persistTerm(term); err != nil {
-		return err
-	}
-	failover.term = term
-	// Only a primary needs fencing. A replica refuses writes because of what it
-	// is, so marking it fenced would report a deposition that never happened.
-	if config.ReplicaOf == "" && failover.held < term {
-		failover.fenced = true
+	if failover.persisted < failover.term {
+		return persistTerm(failover.term)
 	}
 	return nil
 }
 
 // Writable reports whether this node may accept a write.
-func Writable() bool { return !failover.fenced && failover.held == failover.term }
+func Writable() bool {
+	return config.ReplicaOf == "" && !failover.fenced && failover.held == failover.term
+}
 
 // CurrentTerm and HeldTerm are what INFO reports.
-func CurrentTerm() uint64 { return failover.term }
+func CurrentTerm() uint64 { return atomic.LoadUint64(&failover.term) }
 func HeldTerm() uint64    { return failover.held }
 func Fenced() bool        { return failover.fenced }
 
@@ -188,11 +192,16 @@ func cmdPROMOTE(args []string) []byte {
 	if term <= failover.term {
 		return Encode(fmt.Errorf("ERR term %d is not above the current term %d", term, failover.term), false)
 	}
+	// A volatile cache cannot enable this feature. Reject the unavailable
+	// operation before treating its proposed term as an authority observation.
+	if failover.path == "" {
+		return Encode(errors.New("ERR no term file: promotion requires an append-only log"), false)
+	}
 	// On disk before a single write is taken at it.
-	if err := persistTerm(term); err != nil {
+	if err := observeTerm(term); err != nil {
 		return Encode(fmt.Errorf("ERR persisting term: %w", err), false)
 	}
-	failover.term, failover.held, failover.fenced = term, term, false
+	failover.held, failover.fenced = term, false
 	return Encode("OK", true)
 }
 
