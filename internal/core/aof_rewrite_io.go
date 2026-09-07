@@ -1,25 +1,29 @@
 package core
 
 import (
+	"io"
 	"os"
 	"sync"
 )
 
-// One job owns one replacement-file Sync. It never reads the keyspace. The
+// One job owns one replacement-file write or Sync. It never reads the keyspace. The
 // event loop alone consumes its result and decides whether the snapshot is
 // still current; writes during Sync remain in the old AOF and the dirty set.
-type rewriteSyncJob struct {
+type rewriteIOJob struct {
 	file                *os.File
 	path                string
 	written             int64
 	done                chan struct{}
 	err                 error
+	body                []byte
+	n                   int
 	mu                  sync.Mutex
 	abandoned, finished bool
 }
 
-var pendingRewriteSync *rewriteSyncJob
+var pendingRewriteIO *rewriteIOJob
 var rewriteFileSync = func(f *os.File) error { return f.Sync() }
+var rewriteFileWrite = func(f *os.File, body []byte) (int, error) { return f.Write(body) }
 var rewriteWake func()
 
 // SetRewriteWaker is called by the event-loop owner. Each job captures the
@@ -27,7 +31,7 @@ var rewriteWake func()
 func SetRewriteWaker(wake func()) { rewriteWake = wake }
 
 // RewriteNeedsCycle avoids repeatedly waking a loop that cannot advance while
-// the replacement sync is blocked. Worker completion provides the next wakeup.
+// the replacement write or sync is blocked. Worker completion provides the next wakeup.
 func RewriteNeedsCycle() bool {
 	if !rewrite.active {
 		return false
@@ -37,11 +41,11 @@ func RewriteNeedsCycle() bool {
 	if rewriteWalkDone() && !rewrite.collectionActive && aof.syncPending != nil {
 		return len(aof.syncPending) > 0
 	}
-	if pendingRewriteSync == nil {
+	if pendingRewriteIO == nil {
 		return true
 	}
 	select {
-	case <-pendingRewriteSync.done:
+	case <-pendingRewriteIO.done:
 		return true
 	default:
 		return false
@@ -49,10 +53,21 @@ func RewriteNeedsCycle() bool {
 }
 
 func startRewriteSync() {
-	job := &rewriteSyncJob{file: rewrite.file, path: rewrite.tmpPath,
-		written: rewrite.written, done: make(chan struct{})}
-	pendingRewriteSync = job
+	startRewriteIO(nil)
+}
+
+// A non-nil body transfers one immutable encoded slice to the worker. The
+// owner cannot construct another slice, sync, close or reuse the path until
+// this job completes. A nil body requests the existing bulk preflush.
+func startRewriteIO(body []byte) {
+	if pendingRewriteIO != nil {
+		panic("overlapping replacement-file jobs")
+	}
+	job := &rewriteIOJob{file: rewrite.file, path: rewrite.tmpPath,
+		written: rewrite.written, done: make(chan struct{}), body: body}
+	pendingRewriteIO = job
 	syncFile := rewriteFileSync
+	writeFile := rewriteFileWrite
 	wake := rewriteWake
 	go func() {
 		defer func() {
@@ -60,14 +75,21 @@ func startRewriteSync() {
 				wake()
 			}
 		}()
-		job.err = syncFile(job.file)
+		if job.body == nil {
+			job.err = syncFile(job.file)
+		} else {
+			job.n, job.err = writeFile(job.file, job.body)
+			if job.err == nil && job.n != len(job.body) {
+				job.err = io.ErrShortWrite
+			}
+		}
 		job.mu.Lock()
 		if job.abandoned {
 			job.mu.Unlock()
 			// Cancellation transfers cleanup to the worker. A new rewrite is
 			// refused until this finishes, so the path cannot name a newer file.
 			if err := job.file.Close(); err != nil {
-				aofLog("abandoned rewrite sync close %s: %v", job.path, err)
+				aofLog("abandoned rewrite I/O close %s: %v", job.path, err)
 			}
 			if err := os.Remove(job.path); err != nil && !os.IsNotExist(err) {
 				aofLog("abandoned rewrite temp file left behind %s: %v", job.path, err)
@@ -82,7 +104,7 @@ func startRewriteSync() {
 }
 
 // abandon returns true when the worker takes responsibility for cleanup.
-func (job *rewriteSyncJob) abandon() bool {
+func (job *rewriteIOJob) abandon() bool {
 	job.mu.Lock()
 	defer job.mu.Unlock()
 	if job.finished {
@@ -92,8 +114,8 @@ func (job *rewriteSyncJob) abandon() bool {
 	return true
 }
 
-func pollRewriteSync(wait bool) (ready bool, err error) {
-	job := pendingRewriteSync
+func pollRewriteIO(wait bool) (ready bool, err error) {
+	job := pendingRewriteIO
 	if job == nil {
 		return true, nil
 	}
@@ -106,12 +128,19 @@ func pollRewriteSync(wait bool) (ready bool, err error) {
 			return false, nil
 		}
 	}
-	pendingRewriteSync = nil
+	pendingRewriteIO = nil
 	if !rewrite.active {
 		return true, nil
 	} // cancelled job already cleaned up
 	if job.err != nil {
 		return true, job.err
+	}
+	if job.body != nil {
+		if rewrite.digest != nil {
+			rewrite.digest.Write(job.body[:job.n])
+		}
+		rewrite.written += int64(job.n)
+		return true, nil
 	}
 	rewrite.syncedBytes = job.written
 	rewrite.preSyncComplete = true

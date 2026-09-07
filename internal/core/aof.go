@@ -225,7 +225,7 @@ func OpenAOF(path string) error {
 func CloseAOF() error {
 	closeReplicationSnapshot()
 	CancelRewrite()
-	_, _ = pollRewriteSync(true)
+	_, _ = pollRewriteIO(true)
 	if aof.file == nil {
 		return nil
 	}
