@@ -87,44 +87,32 @@ func pop(args []string, front bool, name string) []byte {
 		return constant.RespNil
 	}
 
-	// Clamped to the list before anything is allocated. count arrives from the
-	// client, and this line is a make() with it as the capacity: LPOP l
-	// 2147483647 asks for 34GB and takes the process out, from one command, on
-	// a connection that needs no authentication because there is none.
-	//
-	// The same shape as the SPOP bug this server already fixed once, where
-	// asking for more members than the set held spun the event loop forever.
-	// Reaching for a count larger than the collection is what a client does;
-	// the collection is the only bound that means anything.
-	if count > l.Len() {
-		count = l.Len()
+	count = min(count, l.Len())
+	walk := replyWalk(func(yield func(string) bool) {
+		for i := 0; i < count; i++ {
+			index := i
+			if !front {
+				index = l.Len() - 1 - i
+			}
+			value, _ := l.Index(index)
+			if !yield(value) {
+				return
+			}
+		}
+	})
+	out := encodeWalkReply(walk, !counted)
+	if len(out) > 0 && out[0] == '-' {
+		return out
 	}
-	popped := make([]string, 0, count)
 	for i := 0; i < count; i++ {
-		var v string
-		var got bool
 		if front {
-			v, got = l.PopFront()
+			l.PopFront()
 		} else {
-			v, got = l.PopBack()
+			l.PopBack()
 		}
-		if !got {
-			break
-		}
-		popped = append(popped, v)
 	}
 	dropListIfEmpty(key, l)
-
-	if !counted {
-		if len(popped) == 0 {
-			return constant.RespNil
-		}
-		return Encode(popped[0], false)
-	}
-	if len(popped) == 0 {
-		return constant.RespEmptyArray
-	}
-	return Encode(popped, false)
+	return out
 }
 
 func cmdLPOP(args []string) []byte { return pop(args, true, "LPOP") }
@@ -202,11 +190,7 @@ func cmdLRANGE(args []string) []byte {
 	if !ok {
 		return constant.RespEmptyArray
 	}
-	values := l.Range(start, stop)
-	if len(values) == 0 {
-		return constant.RespEmptyArray
-	}
-	return Encode(values, false)
+	return encodeWalkReply(func(yield func(string) bool) { l.VisitRange(start, stop, yield) }, false)
 }
 
 func cmdLTRIM(args []string) []byte {

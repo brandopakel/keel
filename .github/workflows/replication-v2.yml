@@ -5,6 +5,10 @@ on:
     branches: [develop]
   workflow_dispatch:
     inputs:
+      diagnose_arm:
+        description: Repeat the ARM64 concurrent recovery soak with failure stacks
+        type: boolean
+        default: false
       diagnose_slow_reader:
         description: Repeat the existing slow-reader assertion with failure stack capture
         type: boolean
@@ -23,6 +27,36 @@ permissions:
   contents: read
 
 jobs:
+  arm_diagnostic:
+    if: github.event_name == 'workflow_dispatch' && inputs.diagnose_arm
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version: stable }
+      - name: Build and record exact diagnostic runtime
+        run: |
+          go build -trimpath -o /tmp/keel-arm-diagnostic ./cmd/keel
+          mkdir -p dist/arm-diagnostic
+          go version -m /tmp/keel-arm-diagnostic > dist/arm-diagnostic/build.log
+          git rev-parse HEAD >> dist/arm-diagnostic/build.log
+      - name: Three fresh five-minute runs with unchanged deadlines
+        run: |
+          for repetition in 1 2 3; do
+            python3 scripts/soak.py --bin /tmp/keel-arm-diagnostic --out "dist/arm-diagnostic/run-$repetition" --seconds 300 --cycle-seconds 15 --concurrent --replication-protocol 2
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: arm-diagnostic
+          path: |
+            dist/arm-diagnostic/**/*.json
+            dist/arm-diagnostic/**/*.jsonl
+            dist/arm-diagnostic/**/*.log
+          retention-days: 14
+
   contention_diagnostic:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.diagnose_contention }}
     strategy:

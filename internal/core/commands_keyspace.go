@@ -104,18 +104,15 @@ func cmdMGET(args []string) []byte {
 		return Encode(errors.New("ERR wrong number of arguments for 'MGET' command"), false)
 	}
 
-	out := make([]interface{}, 0, len(args))
-	for _, key := range args {
-		obj := dictStore.Get(key)
+	return encodeLookupArray(len(args), func(i int) (string, bool) {
+		obj := dictStore.Get(args[i])
 		if obj == nil {
 			// nil encodes as a null bulk string, which is the element Redis
 			// puts here for both a missing key and a key of the wrong type.
-			out = append(out, nil)
-			continue
+			return "", false
 		}
-		out = append(out, obj.Value)
-	}
-	return Encode(out, false)
+		return obj.Value, true
+	})
 }
 
 // cmdMSET writes several string keys at once.

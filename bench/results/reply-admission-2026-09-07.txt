@@ -1,0 +1,26 @@
+Before runtime change (301cc9f + regression tests):
+--- FAIL: TestAmplifiedReadsRejectBeforeResponseAllocation (0.04s)
+    --- FAIL: TestAmplifiedReadsRejectBeforeResponseAllocation/MGET (0.02s)
+        reply_admission_test.go:44: 
+            	Error Trace:	/Users/brandopakel/keel-reply-admission/internal/core/reply_admission_test.go:44
+            	Error:      	"68158225" is not less than "1024"
+            	Test:       	TestAmplifiedReadsRejectBeforeResponseAllocation/MGET
+            	Messages:   	oversized reply must be refused
+    --- FAIL: TestAmplifiedReadsRejectBeforeResponseAllocation/HMGET (0.02s)
+        reply_admission_test.go:44: 
+            	Error Trace:	/Users/brandopakel/keel-reply-admission/internal/core/reply_admission_test.go:44
+            	Error:      	"68158225" is not less than "1024"
+            	Test:       	TestAmplifiedReadsRejectBeforeResponseAllocation/HMGET
+            	Messages:   	oversized reply must be refused
+    --- FAIL: TestAmplifiedReadsRejectBeforeResponseAllocation/SRANDMEMBER (0.00s)
+        reply_admission_test.go:44: 
+            	Error Trace:	/Users/brandopakel/keel-reply-admission/internal/core/reply_admission_test.go:44
+            	Error:      	"68158225" is not less than "1024"
+            	Test:       	TestAmplifiedReadsRejectBeforeResponseAllocation/SRANDMEMBER
+            	Messages:   	oversized reply must be refused
+FAIL
+FAIL	github.com/brandopakel/keel/internal/core	0.310s
+FAIL
+
+After runtime change:
+ok  	github.com/brandopakel/keel/internal/core	0.272s
