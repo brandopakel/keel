@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -246,5 +247,24 @@ func TestScheduledStartRejectsStaleEpochAndKeepsFutureOffset(t *testing.T) {
 	}
 	if _, err := measure(options{StartNS: now.Add(-time.Second).UnixNano()}); err == nil {
 		t.Fatal("stale measurement must fail before dialing")
+	}
+}
+
+func TestWholeCollectionLimitMatchesReplyParser(t *testing.T) {
+	for _, kind := range []string{"hash", "zset"} {
+		// HGETALL and ZRANGE WITHSCORES return two array elements per member.
+		elements := 2 * maxCollectionKeys(kind)
+		payload := "*" + strconv.Itoa(elements) + "\r\n" + strings.Repeat("$0\r\n\r\n", elements)
+		r := bufio.NewReader(strings.NewReader(payload))
+		if _, err := readReply(r, 0); err != nil {
+			t.Fatal(kind, err)
+		}
+		if _, err := r.ReadByte(); err != io.EOF {
+			t.Fatal("reply was not fully consumed", err)
+		}
+		over := "*" + strconv.Itoa(elements+2) + "\r\n"
+		if _, err := readReply(bufio.NewReader(strings.NewReader(over)), 0); err == nil || err.Error() != "unsupported reply" {
+			t.Fatal("oversized paired collection was not refused at its header", err)
+		}
 	}
 }

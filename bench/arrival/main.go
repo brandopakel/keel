@@ -20,6 +20,15 @@ import (
 	"time"
 )
 
+const maxReplyElements = 1 << 20
+
+func maxCollectionKeys(kind string) int {
+	if kind == "hash" || kind == "zset" {
+		return maxReplyElements / 2 // field/value or member/score pairs
+	}
+	return 1000000
+}
+
 type histogram struct {
 	buckets [4096]uint64
 	count   uint64
@@ -158,7 +167,7 @@ func readReply(r *bufio.Reader, depth int) (byte, error) {
 		}
 		return kind, nil
 	}
-	if kind == '*' && n <= 1<<20 {
+	if kind == '*' && n <= maxReplyElements {
 		for i := int64(0); i < n; i++ {
 			if _, err := readReply(r, depth+1); err != nil {
 				return 0, err
@@ -454,7 +463,7 @@ func main() {
 	flag.IntVar(&o.Connections, "connections", 32, "independent client connections")
 	flag.IntVar(&o.Pipeline, "pipeline", 1, "commands per scheduled batch; all replies finish before batch completion")
 	flag.IntVar(&o.Queue, "queue", 64, "bounded pending arrival slots")
-	flag.IntVar(&o.Keys, "keys", 10000, "working-set keys or collection members")
+	flag.IntVar(&o.Keys, "keys", 10000, "working-set keys or members; hash/zset max 524288, other max 1000000")
 	flag.IntVar(&o.Size, "size", 64, "value size in bytes")
 	flag.IntVar(&o.Writes, "writes", 5, "SET percentage")
 	flag.StringVar(&o.Prefix, "prefix", "arrival:", "owned dataset namespace")
@@ -464,7 +473,7 @@ func main() {
 	flag.Int64Var(&o.StartNS, "start-ns", 0, "optional common scheduled start for independent tenant generators")
 	flag.BoolVar(&prepare, "preload", false, "populate then exit before measurement")
 	flag.Parse()
-	if o.Pipeline < 1 || o.Pipeline > 4096 || o.Rate <= 0 || o.Rate > 10000000 || !(o.Seconds > 0 && o.Seconds <= 300) || o.Connections < 1 || o.Connections > 4096 || o.Queue < 0 || o.Queue > 65536 || o.Keys < 1 || o.Keys > 1000000 || o.Size < 0 || o.Size > 1<<20 || o.Writes < 0 || o.Writes > 100 || o.Timeout <= 0 || o.Timeout > time.Minute || (o.Collection != "" && o.Collection != "hash" && o.Collection != "list" && o.Collection != "set" && o.Collection != "zset") {
+	if o.Pipeline < 1 || o.Pipeline > 4096 || o.Rate <= 0 || o.Rate > 10000000 || !(o.Seconds > 0 && o.Seconds <= 300) || o.Connections < 1 || o.Connections > 4096 || o.Queue < 0 || o.Queue > 65536 || o.Keys < 1 || o.Keys > maxCollectionKeys(o.Collection) || o.Size < 0 || o.Size > 1<<20 || o.Writes < 0 || o.Writes > 100 || o.Timeout <= 0 || o.Timeout > time.Minute || (o.Collection != "" && o.Collection != "hash" && o.Collection != "list" && o.Collection != "set" && o.Collection != "zset") {
 		fmt.Fprintln(os.Stderr, "invalid workload bounds")
 		os.Exit(2)
 	}

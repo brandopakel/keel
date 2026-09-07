@@ -103,6 +103,13 @@ func TestDetachingWakerWaitsForActiveCallback(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("callback did not start")
 	}
+	// The active callback holds the same lock used by descriptor detachment.
+	// This deterministic check catches the old copy-unlock-call behavior even
+	// if the detaching goroutine is delayed by the scheduler.
+	if wakeMu.TryLock() {
+		wakeMu.Unlock()
+		t.Fatal("active callback did not serialize descriptor detachment")
+	}
 	attempting := make(chan struct{})
 	workers.Add(1)
 	go func() {
@@ -116,7 +123,7 @@ func TestDetachingWakerWaitsForActiveCallback(t *testing.T) {
 	select {
 	case <-detached:
 		early = true
-	case <-time.After(20 * time.Millisecond):
+	default:
 	}
 	releaseOnce.Do(func() { close(release) })
 	workers.Wait()

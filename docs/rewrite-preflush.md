@@ -31,7 +31,8 @@ under no/everysec/always fsync, for 36 arms. The bounded queue reports drops,
 expiry, errors, scheduled/service latency and generator CPU. INFO polling every
 10 ms and ps sampling every 250 ms are identical in both arms. Full snapshot
 contents are verified after measurement; crash/restart correctness is covered
-separately. Hosted comparisons below provide candidate evidence; local runs validate the harness only.
+separately. Hosted comparisons below provide candidate evidence; local smoke runs check
+the harness, basic rewrite completion and traffic correctness, without establishing performance.
 
 General cache validation accepts `rewrite_validation=<exact baseline SHA>` to
 run the comparison on a free public Linux runner with separate exposed server
@@ -67,7 +68,7 @@ A normal two-arm smoke passes. Cleanup failures from abandoned sync jobs are
 logged. Unit compatibility checks, race and workflow lint pass; all attempts
 are retained in `bench/results/rewrite-review-guards-2026-09-07.json.gz`.
 
-## Wakeup-corrected matched comparison
+## Matched comparison after wake-up correction
 
 Run 34126440085 repeats all 36 arms at e4639168 against the same baseline
 66f8ceb3. All 1,080,000 scheduled requests balance and complete, with zero drops,
@@ -132,3 +133,78 @@ race repetitions, full tests and vet. A final matched repeat and archive validat
 are required for this runtime change. Raw hosted results, the original timeout
 stack and both regression outcomes are retained in
 `bench/results/rewrite-integrated-sync-diagnostic-2026-09-07.json.gz`.
+
+The lifecycle regression now checks callback/detachment serialization directly
+with the shared mutex, so a delayed test goroutine cannot make the old
+copy-unlock-call behavior pass a short scheduling window. Timing is used only
+as a generous bound for callback startup, not as evidence of synchronization.
+
+## Final sync-runtime comparison and subsequent CI diagnostics
+
+Run 34130093393 repeats the final runtime 1adba282 against 3f16dfaa. All 36 arms,
+108 rewrites and 1,080,000 scheduled requests complete, without drops, expiry
+or protocol errors. The paired scheduled p99 / p99.9 medians in milliseconds:
+
+| Fsync | Writes | p99, baseline / candidate | p99.9, baseline / candidate |
+| --- | --- | --- | --- |
+| no | 0% | 1.196 / 1.180 | 11.010 / 4.260 |
+| no | 20% | 2.294 / 1.982 | 10.748 / 3.932 |
+| everysec | 0% | 1.196 / 1.180 | 10.486 / 4.063 |
+| everysec | 20% | 2.130 / 1.999 | 9.699 / 3.998 |
+| always | 0% | 1.212 / 1.180 | 10.879 / 4.096 |
+| always | 20% | 2.753 / 2.064 | 9.437 / 4.915 |
+
+This supports adoption of the final sync runtime under these paired conditions.
+Later changes affect tests, workflow diagnostics and documentation only.
+Combined-source b14ffe0 passes native candidate archive execution, checksums,
+installation and all nine alpha.2 upgrades on Linux AMD64/ARM64 and macOS
+Intel/ARM64 in 34130106439. No release is published.
+
+A subsequent Go 1.26.7 Apple Silicon run fails the fairness test's observation
+that a slow pipeline retained replies (34130598604); its original log omitted
+the counter and last client stats. Those diagnostics are now included, with the
+same deadlines and assertions. Thirty repetitions of all six cases pass locally
+on both Go 1.26.7 and Go 1.27.1, but this does not explain the hosted failure.
+The same-runner workflow compares the merged baseline and candidate with identical
+diagnostic assertions, fifty focused repetitions and three complete suites per arm.
+The Intel failure in 34130598562 is an alpha.3 asset HTTP 504 after all download
+retries, not a native test failure. Raw failed attempts, deterministic waker
+baseline/candidate results and final matched traffic are retained in
+`bench/results/rewrite-final-matched-and-mac-diagnostics-2026-09-07.json.gz`.
+
+The same-runner Go 1.26.7 Apple Silicon diagnostic 34131652665 passes fifty
+focused repetitions of all six cases per arm (600 subcases total) and three
+full suites per arm. The prior observation failure remains unreproduced and
+unexplained; no assertion or deadline was relaxed. The regression now retains
+the missing counter/client-state evidence if it recurs. Raw logs and exact
+runtime/toolchain/host records are in
+`bench/results/fairness-observation-diagnostic-2026-09-07.json.gz`.
+The branch integrates the now-merged set compaction, preserving both independent
+Mac diagnostic workflows. The frozen combined native archives and guarded soaks
+already contain the same runtime changes; subsequent edits affect diagnostics
+and documentation only.
+
+## Ordinary-workload adoption closeout
+
+Run 34132681515 completes the named Matched keyspace adoption matrix on the
+combined runtime 884eb49 against develop 10694f7, with five 15-second repetitions.
+Small-read, pipeline-16 and pipeline-64 paired median ratios are 1.006, 0.994 and
+1.005; no generator CPU warnings occur in those thirty arms. Their p99 medians
+are 0.223/0.223 ms, 0.623/0.631 ms and 1.511/1.487 ms, respectively.
+
+The many-client ratio is 1.007, but all ten arms flag generator CPU pressure.
+That row is excluded from server-capacity evidence. The earlier valid many-client
+comparison in 34128657503 records 1.010 with no CPU warning. Since that run, the
+sync-specific runtime edits do not execute with AOF and rewriting disabled; the
+set-maintenance integration is present in both final comparison arms. The earlier
+row remains relevant to that unchanged serving path. No comparison is made
+between absolute throughput on different runners.
+
+The final unconstrained rows, the earlier valid many-client row, repeated matched
+rewrite interference and correctness/recovery evidence support adoption. This is
+not a universal capacity or latency guarantee; the generator-limited result and
+unexplained historical Mac observations remain visible. Raw attempts are in
+`bench/results/rewrite-final-adoption-2026-09-07.json.gz`. CodeRabbit reviewed the
+final sync runtime through 53db86c, then automatically paused after repeated
+updates. The later merge of separately reviewed set maintenance, retained reports
+and documentation were inspected manually; a paused status is not a new review.

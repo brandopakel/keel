@@ -98,9 +98,11 @@ func TestPipelineYieldsWithCommandsStillPending(t *testing.T) {
 				}
 				// Leave the bulk replies unread, then observe actual backpressure.
 				observed := false
+				var lastStats string
 				deadline := time.Now().Add(2 * time.Second)
 				for time.Now().Before(deadline) {
 					stats := call(t, other, reader, "INFO", "clients")
+					lastStats = stats
 					for _, line := range strings.Split(stats, "\r\n") {
 						if raw, ok := strings.CutPrefix(line, "retained_reply_bytes:"); ok {
 							queued, err := strconv.Atoi(raw)
@@ -116,7 +118,7 @@ func TestPipelineYieldsWithCommandsStillPending(t *testing.T) {
 					time.Sleep(time.Millisecond)
 				}
 				if !observed {
-					t.Fatal("pipeline never retained queued replies")
+					t.Fatalf("pipeline never retained queued replies; counter=%s clients=%s", call(t, other, reader, "GET", "counter"), lastStats)
 				}
 				pendingAt, err := strconv.Atoi(call(t, other, reader, "GET", "counter"))
 				if err != nil || pendingAt < 1 || pendingAt >= count {
