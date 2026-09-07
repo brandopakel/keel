@@ -92,3 +92,31 @@ Queue tests now isolate append-held gating and verify one wake per newly nonempt
 continuation queue across 512 clients. Full tests and vet pass; raw before/after
 logs are in `bench/results/fairness-review-regressions-2026-09-07.json.gz`. The wake
 coalescing runtime delta still requires a matched performance repeat.
+
+## Final combined-baseline comparison
+
+Run 34124535770 compares a1dad867 with develop 66f8ceb3, including the same
+Linux readiness, TTL/lookup and allocation fixes in both arms. Five 15-second
+repetitions pass with no generator CPU warnings. Paired-median throughput ratios
+are small-read 0.993, many-clients 0.995, pipeline-16 0.990, pipeline-64 0.980 and
+large-list-read 0.997. Pipeline-64 p99 is 1.903/2.039 ms; other ordinary p99 values
+are unchanged or slightly lower. The remaining 1–2% pipeline cost is explicit.
+
+The same run completes three 15-second repetitions of each competing-client
+case. Each tenant offers 1,000 batches/s through its own process and bounded queue.
+With 256 × 64 KiB competing GETs, the ordinary client completes 162.93/1,000 per
+second before/after; its admission drops are 83.71%/0%, scheduled p99 is
+144.70/1.29 ms, and service p99 is 30.41/0.34 ms. With 32 × 1 MiB competing GETs,
+ordinary completion is 170.07/999.73 per second, drops 82.99%/0.027%, scheduled
+p99 197.13/6.49 ms and service p99 38.80/2.39 ms. These are medians, and the large
+pipeline remains intentionally overloaded. All 24 reports balance, with no
+protocol errors; generator CPU stays below 0.75 aggregate cores, and preparation
+precedes the common start by at least 1,996 ms.
+
+The adoption decision remains favorable with this measured tradeoff. The run
+also passes broad differential/operational checks and 128 MiB two-replica recovery.
+Every automatic check on a1dad867 passes, including real client libraries, race,
+Docker, native ARM64/Intel Mac and ext4/XFS. Raw final evidence is retained in
+`bench/results/fairness-final-matched-2026-09-07.json.gz`. Two dispatch attempts
+were cancelled after input mistakes (34124447493 wrong baseline SHA; 34124483876
+wrong workload name); they provide no performance evidence.
