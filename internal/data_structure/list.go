@@ -170,6 +170,26 @@ func (l *List) Range(start, stop int) []string {
 	return out
 }
 
+// VisitRange traverses a normalized rank range without materializing its values.
+// The visitor may stop early and must not mutate the list.
+func (l *List) VisitRange(start, stop int, yield func(string) bool) {
+	start, stop = l.absolute(start), l.absolute(stop)
+	if start < 0 {
+		start = 0
+	}
+	if stop >= l.count {
+		stop = l.count - 1
+	}
+	if start > stop || start >= l.count {
+		return
+	}
+	for i := start; i <= stop; i++ {
+		if !yield(l.buf[(l.head+i)%len(l.buf)]) {
+			return
+		}
+	}
+}
+
 // All returns every element in order, for the rewrite that has to write the
 // list back out as one command.
 func (l *List) All() []string { return l.Range(0, l.count-1) }

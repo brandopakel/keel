@@ -74,22 +74,9 @@ func scoreRange(args []string, reverse bool) []byte {
 	if !ok {
 		return constant.RespEmptyArray
 	}
-	members, scores := z.RangeByScore(min, max, minEx, maxEx, offset, count, reverse)
-	return encodeScoredMembers(members, scores, withScores)
-}
-
-func encodeScoredMembers(members []string, scores []float64, withScores bool) []byte {
-	if len(members) == 0 {
-		return constant.RespEmptyArray
-	}
-	if !withScores {
-		return Encode(members, false)
-	}
-	out := make([]string, 0, 2*len(members))
-	for i, m := range members {
-		out = append(out, m, formatZScore(scores[i]))
-	}
-	return Encode(out, false)
+	return scoredReply(func(yield func(string, float64) bool) {
+		z.VisitRangeByScore(min, max, minEx, maxEx, offset, count, reverse, yield)
+	}, withScores)
 }
 
 func cmdZINCRBY(args []string) []byte {
@@ -136,11 +123,22 @@ func zpop(args []string, reverse bool) []byte {
 		return constant.RespEmptyArray
 	}
 	count = min(count, z.Len())
-	members, scores := z.RangeByRank(0, count-1, reverse)
-	for _, m := range members {
-		z.Remove(m)
+	walk := func(yield func(string, float64) bool) { z.VisitRangeByRank(0, count-1, reverse, yield) }
+	names := replyWalk(func(yield func(string) bool) { walk(func(member string, _ float64) bool { return yield(member) }) })
+	if !removalFits("ZREM", args[0], count, names) {
+		return replyTooLarge
+	}
+	out := scoredReply(walk, true)
+	if len(out) > 0 && out[0] == '-' {
+		return out
+	}
+	record := make([]string, 2, count+2)
+	record[0], record[1] = "ZREM", args[0]
+	names(func(member string) bool { record = append(record, member); return true })
+	for _, member := range record[2:] {
+		z.Remove(member)
 	}
 	zsetSettle(args[0], z)
-	aofRecord(append([]string{"ZREM", args[0]}, members...)...)
-	return encodeScoredMembers(members, scores, true)
+	aofRecord(record...)
+	return out
 }
