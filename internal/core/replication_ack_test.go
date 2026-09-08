@@ -3,11 +3,12 @@ package core
 import (
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestPrimaryLearnsHowFarAReplicaHasApplied(t *testing.T) {
+func TestPrimaryLearnsReportedReceivedCursor(t *testing.T) {
 	setupReplicationV2(t)
 	t.Cleanup(resetReplicaAcknowledgement)
 
@@ -20,14 +21,14 @@ func TestPrimaryLearnsHowFarAReplicaHasApplied(t *testing.T) {
 	run(t, "SET", "k2", "v2")
 	require.Greater(t, replicationV2.end, uint64(0), "the primary produced a stream to be behind")
 
-	// A pull asking to resume from 0 says nothing has been applied yet.
+	// A pull asking to resume from 0 says nothing has been received yet.
 	pullV2(t, replication.epoch, 0, "", 0)
 	offset, behind, age = ReplicationAcknowledged()
 	require.Zero(t, offset)
 	require.Equal(t, replicationV2.end, behind, "a replica at zero is behind by the whole stream")
 	require.GreaterOrEqual(t, age, int64(0), "an acknowledgement arrived")
 
-	// Asking to resume from the end says all of it has been applied.
+	// Asking to resume from the end reports receipt through that cursor.
 	pullV2(t, replication.epoch, replicationV2.end, "", 0)
 	offset, behind, _ = ReplicationAcknowledged()
 	require.Equal(t, replicationV2.end, offset)
@@ -81,4 +82,68 @@ func TestInfoReportsReplicationLag(t *testing.T) {
 	require.Contains(t, info, "replication_acked_offset:0")
 	require.Contains(t, info, "replication_lag_bytes:"+strconv.FormatUint(replicationV2.end, 10))
 	require.NotContains(t, info, "replication_acked_age_ms:-1", "an acknowledgement arrived")
+}
+
+func TestReplicaProgressIgnoresFutureCursor(t *testing.T) {
+	setupReplicationV2(t)
+	run(t, "SET", "k", "v")
+	end := replicationV2.end
+	pullV2(t, replication.epoch, end, "", 0)
+	require.Equal(t, end, replicaAck.offset)
+	observed := time.Unix(100, 0)
+	replicaAck.at = observed
+	_ = cmdReplicationPullV2([]string{replication.epoch, strconv.FormatUint(end+1, 10), "", "0", strconv.FormatUint(CurrentTerm(), 10)})
+	require.Equal(t, end, replicaAck.offset, "an offset beyond this stream is not progress")
+	require.Equal(t, observed, replicaAck.at)
+}
+
+func TestReplicaProgressLowerCursorDoesNotRefreshBestAge(t *testing.T) {
+	setupReplicationV2(t)
+	run(t, "SET", "k", "v")
+	pullV2(t, replication.epoch, replicationV2.end, "", 0)
+	require.Equal(t, replicationV2.end, replicaAck.offset)
+	observed := time.Unix(100, 0)
+	replicaAck.at = observed
+	pullV2(t, replication.epoch, 0, "", 0)
+	require.Equal(t, replicationV2.end, replicaAck.offset)
+	require.Equal(t, observed, replicaAck.at, "a lagging peer must not make the best cursor look fresh")
+}
+
+func TestReplicaProgressIgnoresMalformedAndSnapshotPulls(t *testing.T) {
+	for _, cursor := range []struct{ name, snapshot, part string }{
+		{"malformed delta", "", "1"},
+		{"snapshot transfer", "stale-snapshot", "0"},
+	} {
+		t.Run(cursor.name, func(t *testing.T) {
+			setupReplicationV2(t)
+			run(t, "SET", "k", "v")
+			pullV2(t, replication.epoch, replicationV2.end, "", 0)
+			require.Equal(t, replicationV2.end, replicaAck.offset)
+			observed := time.Unix(100, 0)
+			replicaAck.at = observed
+			_ = cmdReplicationPullV2([]string{replication.epoch, strconv.FormatUint(replicationV2.end, 10), cursor.snapshot, cursor.part, strconv.FormatUint(CurrentTerm(), 10)})
+			require.Equal(t, replicationV2.end, replicaAck.offset)
+			require.Equal(t, observed, replicaAck.at, "only a validated delta cursor confirms stream progress")
+		})
+	}
+}
+
+func TestReplicaProgressResetsWhenPrimaryChangesEpoch(t *testing.T) {
+	setupReplicationV2(t)
+	run(t, "SET", "k", "v")
+	require.NotZero(t, replicationV2.end)
+	pullV2(t, replication.epoch, replicationV2.end, "", 0)
+	require.Equal(t, replicationV2.end, replicaAck.offset)
+	previousEpoch := replication.epoch
+	invalidateReplicationV2()
+	require.NotEqual(t, previousEpoch, replication.epoch)
+	offset, behind, age := ReplicationAcknowledged()
+	require.Zero(t, offset)
+	require.Zero(t, behind)
+	require.EqualValues(t, -1, age, "old epoch progress is not evidence for the new stream")
+	pullV2(t, replication.epoch, 0, "", 0)
+	offset, behind, age = ReplicationAcknowledged()
+	require.Zero(t, offset)
+	require.Zero(t, behind)
+	require.GreaterOrEqual(t, age, int64(0), "the new stream can record a lower cursor")
 }

@@ -17,6 +17,12 @@
       "digest": "sha256:548a9ffb2afa81c74b48555a22a1242fa776a4a7e8f4d599bc4897f1084ddf23"
     },
     {
+      "id": 549567544,
+      "name": "pruned-local-2026-09-07-early-release-evidence.tar.xz",
+      "bytes": 68508784,
+      "digest": "sha256:e5f9d303e03d1ed4f9364665873fe6c062f3c3b56d49562a4b98aff6e0c0366f"
+    },
+    {
       "id": 549512833,
       "name": "pruned-local-2026-09-07-manifest.json.gz",
       "bytes": 1709065,
@@ -89,7 +95,7 @@
       "digest": "sha256:aec7039c774c59bcda94f623a8b9528d06207e2dc9282879d42f39e600e3b2eb"
     }
   ],
-  "verified_files": 14,
+  "verified_files": 15,
   "note": "Owner-accessible draft evidence archive; compact conclusions and runtime source remain in ordinary repository history.",
   "source_probes_verified": true
 }
