@@ -342,7 +342,10 @@ func TestRewriteStallProfile(t *testing.T) {
 	}
 	path := filepath.Join(t.TempDir(), "profile.aof")
 	ResetStores()
-	assert.NoError(t, OpenAOF(path))
+	require.NoError(t, OpenAOF(path))
+	// A diagnostic deadline must not leave a worker or old keyspace traversal
+	// behind for the next test, even when require stops this test early.
+	t.Cleanup(func() { assert.NoError(t, CloseAOF()) })
 	const keys = 1000000
 	for i := 0; i < keys; i++ {
 		run(t, "SET", "key:"+strconv.Itoa(i), "value-of-some-length")
@@ -355,15 +358,30 @@ func TestRewriteStallProfile(t *testing.T) {
 	collecting := time.Since(start)
 
 	var walk []time.Duration
-	var final, waiting time.Duration
+	var final, waiting, longestWait time.Duration
+	longestPhase := "none"
 	total := collecting
 	for {
 		waitStart := time.Now()
+		phase := "ready"
+		if pendingRewriteIO != nil {
+			phase = "replacement write"
+			if pendingRewriteIO.body == nil {
+				phase = "replacement sync"
+			}
+		} else if aof.syncPending != nil {
+			phase = "original AOF sync"
+		}
 		for RewriteActive() && !RewriteNeedsCycle() {
-			require.Less(t, time.Since(waitStart), 3*time.Second, "rewrite worker did not finish")
+			require.Less(t, time.Since(waitStart), 3*time.Second,
+				"rewrite worker did not finish: phase=%s written=%d", phase, rewrite.written)
 			time.Sleep(time.Millisecond)
 		}
-		waiting += time.Since(waitStart)
+		waited := time.Since(waitStart)
+		waiting += waited
+		if waited > longestWait {
+			longestWait, longestPhase = waited, phase
+		}
 		t0 := time.Now()
 		require.NoError(t, AdvanceRewrite())
 		more := RewriteActive()
@@ -384,6 +402,8 @@ func TestRewriteStallProfile(t *testing.T) {
 		keys, collecting.Round(time.Millisecond), len(walk),
 		median.Round(time.Microsecond), worst.Round(time.Microsecond),
 		final.Round(time.Millisecond), total.Round(time.Millisecond), waiting.Round(time.Millisecond))
+	t.Logf("longest worker wait %v (%s); three-second diagnostic gate unchanged",
+		longestWait.Round(time.Microsecond), longestPhase)
 
 	// Shared-host scheduling and storage affect even the median. Correctness
 	// uses work bounds; the scheduled-probe harness measures latency separately.

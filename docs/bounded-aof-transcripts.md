@@ -184,3 +184,27 @@ mass-eviction allocations by about 80%, with a bounded retained transcript. The
 remaining optimization is the ordinary synchronous serialization path: profile
 its CPU and allocation costs on matched hosted runs before selecting a change.
 Review remains required before adoption; no new release is implied by this data.
+
+
+## Integrated Intel rewrite diagnostic failure
+
+The integrated runtime `d547a3ce4840201aae9c0bbfd104602888629f91` failed
+[its Intel native job](https://github.com/brandopakel/keel/actions/runs/34173728823/job/101898906222)
+in `TestRewriteStallProfile`: one worker wait reached 3.000139 seconds and hit
+its three-second diagnostic gate. The next moving-keyspace test then reported
+an old keyspace-registry traversal. The profile test lacked cleanup on its fatal
+exit, leaving the prior rewrite active; that source path can contaminate the next
+test. It does not identify why the first worker wait was slow.
+
+The profile fixture now always closes/cancels its AOF during test cleanup and
+records whether its longest wait was a replacement write, replacement sync or
+original-file sync. The three-second gate remains unchanged. A hosted Intel
+workflow runs five alternating control/candidate pairs with this identical
+fixture and preserves every failure. Its local short check passed in 5.47 seconds
+and pruned both Go cache and intermediate files; the million-key diagnostic is
+skipped locally. The original job log and short-check report are in
+`bench/results/transcript-intel-rewrite-wait-2026-09-07.json.gz`.
+
+These repetitions are diagnostic evidence. A successful repeat cannot explain
+the earlier wait or establish a fixed filesystem latency bound. The complete
+400-arm workload matrix remains separate evidence for its recorded runtime.
