@@ -21,6 +21,7 @@ def cases():
         'balanced-1k': [dict(size=1024, keys=10000, writes=50, share=1)],
         'expiry-storm': [dict(size=64, keys=10000, writes=50, share=1, expiry=True)],
         'large-1m': [dict(size=1048576, keys=32, writes=5, share=1)],
+        'large-write-1m': [dict(size=1048576, keys=32, writes=95, share=1, connections=4)],
         'large-hash': [dict(size=64, keys=4096, writes=0, share=1, collection='hash')],
         'large-list': [dict(size=64, keys=4096, writes=0, share=1, collection='list')],
         'large-set': [dict(size=64, keys=4096, writes=0, share=1, collection='set')],

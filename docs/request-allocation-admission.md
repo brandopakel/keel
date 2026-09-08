@@ -197,3 +197,35 @@ epoch restart. Maximum observed catch-up times across the two replicas are
 exact value/digest verification are 6.73, 4.77, 0.96 and 3.88 seconds. These
 public-runner measurements do not establish a deployment recovery SLO. Evidence:
 `request-admission-larger-recovery-2026-09-07.tar.gz` and its separate summary.
+
+The longer unprepared-memtier repeat (run 34181951552, same candidate runtime
+`6f7ba29` and baseline `15ce1c0`) passes all 30 arms with no connection errors
+or generator CPU warnings, but **does not pass the performance gate**. Five
+30-second pairs give median throughput ratios 1.007 for 1 MiB reads, 0.830 for
+1 MiB writes (individual ratios 0.834, 0.830, 1.239, 0.825, 0.731), and 0.979
+for pipeline writes. Median p99s are 41.215 → 41.215 ms, 42.239 → 42.239 ms,
+and 1.055 → 1.071 ms. The slower write arms have lower median request latency
+but more slow responses; CPU saturation is not established by their telemetry.
+Raw evidence: `request-admission-targeted-unprepared-2026-09-07.tar.gz`.
+
+Investigation found that pinned memtier 2.5.1 passes an uninitialized `int flags`
+to both SO_KEEPALIVE and TCP_NODELAY in `shard_connection::setup_socket`.
+[Upstream source](https://github.com/redis/memtier_benchmark/blob/2.5.1/shard_connection.cpp#L392-L425).
+This is a concrete generator defect, but does not by itself establish the
+socket values or exact cause of any historical slowdown. Workflow builds now
+verify the exact source checksum, initialize the option to one and verify the
+patched checksum. The matched workflow retains original/prepared binaries for
+a short syscall probe, requires all prepared TCP_NODELAY calls to succeed with
+one, then uses that same prepared generator for both server arms. Arm reports
+include the generator binary hash and preparation provenance. Previous raw
+results remain unchanged and their transport setting is unverified; a corrected
+comparison is required. Component allocation and independent Go arrival-generator
+results do not depend on this C++ source.
+
+The combined-candidate scheduled sweep (run 34182002957) completes 84 arms across
+seven workloads, rates 1,000/50,000/150,000 per second and two alternating pairs.
+No issued requests fail and none expire in the generator queue. Overload still
+drops arrivals before issue; the complete per-cell drops, latency, generator CPU
+and memory telemetry are in `request-admission-capacity-2026-09-07.tar.gz` and
+`request-admission-capacity-summary-2026-09-07.json.gz`. These are qualified
+public-runner observations, not dedicated-host capacity or deployment SLOs.

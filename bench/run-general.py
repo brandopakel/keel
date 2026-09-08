@@ -238,6 +238,10 @@ def run_arm(args, arm, binary, case, repetition, directory):
               'concurrent': arm != 'redis' and (args.concurrent or (args.candidate_concurrent and arm == 'candidate')),
               'profiles_enabled': args.profiles, 'server_command': command}
     report['gc_trace_enabled'] = (args.profiles or args.gc_trace) and arm != 'redis'
+    if args.memtier.is_file():
+        preparation = args.memtier.parent / 'keel-preparation.json'
+        report['load_generator'] = {'binary_sha256': sha256(args.memtier),
+                                    'preparation': json.loads(preparation.read_text()) if preparation.is_file() else None}
     log = (directory / 'server.log').open('w')
     sampler = None
     try:

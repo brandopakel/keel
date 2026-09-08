@@ -17,6 +17,18 @@ use an earlier runtime: XFS failed a three-second SET deadline alongside a
 [validation closeout](validation-closeout-2026-09-07.md#current-hosted-follow-up)
 for revisions and evidence; older status notes below are historical.
 
+## Benchmark transport qualification
+
+The longer PR #66 comparison showed a 17% median 1 MiB write deficit. Investigation
+then found an uninitialized TCP_NODELAY option in workflow-built memtier 2.5.1.
+Previous raw observations remain preserved, but their client socket setting was
+not verified; they cannot be treated as a controlled transport comparison.
+Checksum-verified preparation and a syscall gate now precede new matched runs.
+This qualification applies to earlier unprepared memtier workflow performance
+results, including positive and negative ratios; functional recovery checks,
+allocation fixtures and independent Go arrival-generator sweeps remain separate.
+See [the current investigation](request-allocation-admission.md).
+
 ## Four initial findings: complete
 
 PR #27 merged all four corrections with Go/race, Docker, differential, native
