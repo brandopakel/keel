@@ -5,6 +5,10 @@ on:
     branches: [develop]
   workflow_dispatch:
     inputs:
+      diagnose_rewrite_wait:
+        description: Optional exact control SHA for matched Intel rewrite waits
+        type: string
+        default: ''
       diagnose_arm:
         description: Repeat the ARM64 concurrent recovery soak with failure stacks
         type: boolean
@@ -39,6 +43,12 @@ permissions:
   contents: read
 
 jobs:
+  rewrite_wait_diagnostic:
+    if: github.event_name == 'workflow_dispatch' && inputs.diagnose_rewrite_wait != ''
+    uses: ./.github/workflows/rewrite-stall-diagnostic.yml
+    with:
+      baseline: ${{ inputs.diagnose_rewrite_wait }}
+
   fairness_diagnostic:
     if: github.event_name == 'workflow_dispatch' && inputs.diagnose_fairness
     runs-on: macos-latest

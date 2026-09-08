@@ -68,22 +68,16 @@ type aofState struct {
 	// leaving the first to grow forever and the second to be overwritten by
 	// something that never belonged to it.
 	path string
-	// buf holds what this cycle produced. Writes go to the file once per loop
-	// cycle rather than once per command: a command is a handful of bytes and a
-	// write syscall each would put the log in the same position the reply path
-	// was in before it started coalescing.
+	// buf coalesces ordinary commands until the loop flushes. Large transcripts
+	// drain bounded fragments without syncing or advancing a rewrite mid-record.
 	buf []byte
 	// staged is what the command currently executing wants recorded in its
 	// place, for the commands that must not be replayed as they arrived.
 	staged       [][]string
 	commandStart int
-	// extra is what the server decided on its own while the command ran: keys
-	// dropped by eviction, or reaped because their expiry had passed. These are
-	// additional to the command rather than instead of it - an eviction happens
-	// because of a write, and losing the write to record the eviction would be
-	// a straight swap of one bug for a worse one. They are also recorded when
-	// the command was only a read, since a GET is what reaps an expired key.
-	extra [][]string
+	// A scope preserves the unpublished replication prefix across bounded
+	// buffer drains. Opaque commands publish their final image instead.
+	commandActive, commandOpaque, commandChanged bool
 	// replaying suppresses recording, so loading a log does not write it back
 	// into itself.
 	recovered   []string
@@ -202,14 +196,19 @@ func OpenAOF(path string) error {
 	appendStarted, appendCompleted = 0, 0
 	appendWritten, appendSynced = 0, 0
 	for _, key := range aof.recovered {
-		aof.buf = appendCommand(aof.buf, "DEL", key)
+		appendAOFCommand("DEL", key)
 	}
 	aof.recovered = nil
 	data_structure.OnRemove = func(keyspace, key string) {
 		if aof.file == nil || aof.replaying {
 			return
 		}
-		aof.extra = append(aof.extra, []string{"DEL", key})
+		outsideCommand := !aof.commandActive
+		if outsideCommand {
+			aofBegin("")
+			defer aofEnd()
+		}
+		appendAOFCommand("DEL", key)
 		// Eviction and expiry remove keys no command named, so a rewrite has to
 		// hear about them here or it would carry a key forward that the server
 		// had already dropped.
@@ -238,7 +237,7 @@ func CloseAOF() error {
 	}
 	aof.file = nil
 	aof.path = ""
-	aof.buf, aof.staged, aof.extra = nil, nil, nil
+	aof.buf, aof.staged = nil, nil
 	data_structure.OnRemove = nil
 	return err
 }
@@ -257,13 +256,13 @@ func aofRecord(parts ...string) {
 }
 
 // aofBegin resets the staging areas before a command runs.
-func aofBegin() {
+func aofBegin(name string) {
+	aof.commandActive, aof.commandChanged = true, false
+	aof.commandOpaque = isOpaqueReplicationCommand(name)
 	aof.commandStart = len(aof.buf)
 	aof.skip = false
 	clear(aof.staged)
 	aof.staged = aof.staged[:0]
-	clear(aof.extra)
-	aof.extra = aof.extra[:0]
 }
 
 // aofCommit records what the command that just ran actually did.
@@ -271,7 +270,6 @@ func aofCommit(cmd *Command, reply []byte) {
 	if aof.file == nil || aof.replaying {
 		return
 	}
-	defer recordReplicationV2Commit(cmd)
 
 	// A key written while a rewrite is walking may already have been recorded
 	// at an older value, or not yet reached. Either way the rewrite will write
@@ -297,43 +295,30 @@ func aofCommit(cmd *Command, reply []byte) {
 		// Staged because the command as it arrived would not replay to the
 		// same state, so the replacement is what goes in the log.
 		for _, parts := range aof.staged {
-			aof.buf = appendCommand(aof.buf, parts...)
+			appendAOFCommand(parts[0], parts[1:]...)
 		}
 	case !writeCommands[cmd.Cmd]:
 		// A read. Nothing of the command itself is recorded, but it may still
-		// have reaped an expired key on the way past, which is in extra.
+		// have reaped an expired key, already recorded by the removal hook.
 	case len(reply) > 0 && reply[0] == '-':
 		// Failed, so by the heuristic in the file comment it changed nothing.
 	default:
-		aof.buf = appendCommand(aof.buf, append([]string{persistedName(cmd.Cmd)}, cmd.Args...)...)
+		appendAOFCommand(persistedName(cmd.Cmd), cmd.Args...)
 	}
 
-	// After the command, because a key evicted to make room for a write has to
-	// be dropped after that write, not before it - and under a policy that can
-	// choose any key, the one evicted is occasionally the one just written.
-	aofCommitExtras()
 	clear(aof.staged)
 	aof.staged = aof.staged[:0]
 }
 
-// aofCommitExtras writes the removals the server decided on by itself.
-//
-// Separate from aofCommit because active expiry runs between commands rather
-// than inside one: the keys it reaps are recorded by the same hook, and without
-// this nothing would ever write them out - and worse, the next command's
-// aofBegin would clear them, so a restart would bring back keys the server had
-// already expired.
-func aofCommitExtras() {
-	if aof.file == nil || aof.replaying {
-		clear(aof.extra)
-		aof.extra = aof.extra[:0]
-		return
+// aofEnd publishes the complete command after its eviction decisions. The
+// event loop cannot serve a replica pull in the middle of this serial scope.
+func aofEnd() {
+	// A failed drain reslices the retained buffer. Its old commandStart no
+	// longer names this slice, and none of that failed suffix may be published.
+	if aof.file != nil && !aof.replaying && aof.failed == nil {
+		recordReplicationV2Commit()
 	}
-	for _, parts := range aof.extra {
-		aof.buf = appendCommand(aof.buf, parts...)
-	}
-	clear(aof.extra)
-	aof.extra = aof.extra[:0]
+	aof.commandActive = false
 }
 
 // appendCommand writes one command in the same RESP a client would have sent,
@@ -405,25 +390,8 @@ func flushAOF(closing bool) error {
 	if aof.failed != nil {
 		return aof.failed
 	}
-	if len(aof.buf) > 0 {
-		n, err := timedPersistenceWrite(&appendWriteStats, aof.file, aof.buf,
-			func(f *os.File, body []byte) (int, error) { return f.Write(body) })
-		recordAOFDigest(aof.buf[:n])
-		aof.written += int64(n)
-		appendStarted += uint64(n)
-		appendWritten += uint64(n)
-		if n > 0 {
-			aof.dirty = true
-		}
-		if err == nil && n != len(aof.buf) {
-			err = io.ErrShortWrite
-		}
-		if err != nil {
-			aof.buf = aof.buf[n:]
-			aof.failed = err
-			return err
-		}
-		aof.buf = aof.buf[:0]
+	if err := writeAOFBuffer(); err != nil {
+		return err
 	}
 	syncDue := closing || config.AOFFsync == config.FsyncAlways ||
 		(config.AOFFsync == config.FsyncEverySec && time.Since(aof.lastSync) >= time.Second)

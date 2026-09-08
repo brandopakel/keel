@@ -30,7 +30,6 @@ func TestCommittedAOFStagingDoesNotRetainPayloads(t *testing.T) {
 	t.Logf("committed staging still references %d bytes", staged)
 	require.Zero(t, staged, "encoded records must release their borrowed field/value references")
 	require.Equal(t, int64(1), run(t, "DEL", key))
-	require.Zero(t, retainedStagingBytes(aof.extra), "committed removals must release key references")
 	require.Equal(t, "OK", run(t, "SET", "survivor", "exact"))
 	require.NoError(t, CloseAOF())
 	require.Zero(t, cap(aof.buf), "closing a drained log must release its idle buffer")

@@ -100,7 +100,8 @@ func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	// first because the type check below reads keys, and reading a key whose
 	// expiry has passed reaps it - a removal that has to reach the log even
 	// though the command it happened under went on to be refused.
-	aofBegin()
+	aofBegin(cmd.Cmd)
+	defer aofEnd()
 
 	// A name may only mean one thing at a time, and the stores cannot enforce
 	// that individually because none of them knows about the others. Checked
@@ -124,14 +125,13 @@ func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	res := handler(cmd.Args)
 	// With eviction suspended, removals so far are lazy expiry. They precede
 	// this command: recording them after INCR/HSET would delete the recreated key.
-	aofCommitExtras()
-	data_structure.SuspendEviction = suspended
-	data_structure.EnforceLimits()
-
 	// Recorded before the reply is written. FlushAOF runs between execution and
 	// the write phase, so under appendfsync always the client hears "OK" only
 	// once the log holding that OK is on disk.
 	aofCommit(cmd, res)
+	data_structure.SuspendEviction = suspended
+	// The removal hook writes eviction DELs directly after the canonical body.
+	data_structure.EnforceLimits()
 
 	_, err := c.Write(res)
 	return err

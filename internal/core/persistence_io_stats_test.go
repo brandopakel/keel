@@ -25,7 +25,6 @@ func TestPersistenceIOStatsExposeBlockedWorkAndCountFailures(t *testing.T) {
 	<-started
 	require.Equal(t, int64(1), stats.active.Load())
 	require.Zero(t, stats.calls.Load(), "completed-call counters must not hide an in-flight stall")
-	time.Sleep(15 * time.Millisecond)
 	close(release)
 	require.NoError(t, <-done)
 	require.Zero(t, stats.active.Load())
@@ -33,9 +32,14 @@ func TestPersistenceIOStatsExposeBlockedWorkAndCountFailures(t *testing.T) {
 	require.Positive(t, stats.lastNS.Load())
 	require.Equal(t, stats.lastNS.Load(), stats.totalNS.Load())
 	require.Equal(t, stats.lastNS.Load(), stats.maxNS.Load())
-	require.Equal(t, uint64(1), stats.slowCalls.Load())
-	require.Equal(t, stats.lastNS.Load(), stats.slowLastNS.Load())
-	require.Positive(t, stats.slowLastUnixUS.Load())
+	// Exercise slow-call accounting with a synthetic start safely beyond the
+	// cutoff; the blocked-work assertion above needs no wall-clock delay.
+	var slow persistenceIOStats
+	slow.active.Add(1)
+	slow.finish(time.Now().Add(-time.Minute), nil)
+	require.Equal(t, uint64(1), slow.slowCalls.Load())
+	require.Equal(t, slow.lastNS.Load(), slow.slowLastNS.Load())
+	require.Positive(t, slow.slowLastUnixUS.Load())
 	errDisk := errors.New("storage failure")
 	_, err := timedPersistenceWrite(&stats, nil, []byte("abc"), func(*os.File, []byte) (int, error) { return 0, errDisk })
 	require.ErrorIs(t, err, errDisk)

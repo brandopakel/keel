@@ -45,6 +45,18 @@ on:
         description: Optional exact baseline SHA for matched rewrite interference
         type: string
         default: ''
+      transcript_validation:
+        description: Optional exact baseline SHA for matched AOF transcript policies and modes
+        type: string
+        default: ''
+      transcript_shutdown_seconds:
+        description: Same supported shutdown grace for both transcript benchmark arms
+        type: string
+        default: '5'
+      transcript_policies:
+        description: JSON array of transcript policies to compare
+        type: string
+        default: '["off","no","everysec","always"]'
       rewrite_rate:
         description: Scheduled requests per second for matched rewrite interference
         type: string
@@ -54,6 +66,14 @@ permissions:
   contents: read
 
 jobs:
+  transcript_interference:
+    if: github.event_name == 'workflow_dispatch' && inputs.transcript_validation != ''
+    uses: ./.github/workflows/transcript-validation.yml
+    with:
+      baseline: ${{ inputs.transcript_validation }}
+      policies: ${{ inputs.transcript_policies }}
+      shutdown_seconds: ${{ inputs.transcript_shutdown_seconds }}
+
   rewrite_interference:
     if: github.event_name == 'workflow_dispatch' && inputs.rewrite_validation != ''
     uses: ./.github/workflows/rewrite-validation.yml

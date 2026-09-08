@@ -1,0 +1,90 @@
+name: Matched Intel rewrite wait diagnostic
+on:
+  workflow_dispatch:
+    inputs:
+      baseline:
+        description: Exact control runtime SHA with the same rewrite worker
+        type: string
+        required: true
+        default: a1d550c1e3e73d2633e4097e45d1816cfe8e9e8c
+  workflow_call:
+    inputs:
+      baseline:
+        type: string
+        required: true
+permissions:
+  contents: read
+jobs:
+  repeat:
+    runs-on: macos-15-intel
+    # Ten arms may each hit 150 seconds. Leave time for two compilations and
+    # failure evidence upload after that worst-case 25-minute measurement.
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version: '1.27.1' }
+      - name: Build both runtimes with the same diagnostic and cleanup
+        env:
+          BASELINE_REV: ${{ inputs.baseline }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$BASELINE_REV" =~ ^[0-9a-f]{40}$ ]]
+          # Execute only history reachable from the maintained runtime or the
+          # explicitly prepared matched transcript control branch.
+          git merge-base --is-ancestor "$BASELINE_REV" refs/remotes/origin/develop ||
+            git merge-base --is-ancestor "$BASELINE_REV" refs/remotes/origin/test/transcript-control-20260907
+          mkdir -p dist/rewrite-waits
+          git rev-parse HEAD > dist/rewrite-waits/harness-revision.log
+          printf '%s\n' "$BASELINE_REV" > dist/rewrite-waits/baseline-revision.log
+          sysctl hw.ncpu hw.memsize > dist/rewrite-waits/host.log
+          go version >> dist/rewrite-waits/host.log
+          git worktree add --detach "$RUNNER_TEMP/rewrite-control" "$BASELINE_REV"
+          cp internal/core/aof_rewrite_test.go "$RUNNER_TEMP/rewrite-control/internal/core/aof_rewrite_test.go"
+          go test -c -o "$RUNNER_TEMP/rewrite-candidate.test" ./internal/core
+          go -C "$RUNNER_TEMP/rewrite-control" test -c -o "$RUNNER_TEMP/rewrite-control.test" ./internal/core
+          shasum -a 256 "$RUNNER_TEMP/rewrite-candidate.test" "$RUNNER_TEMP/rewrite-control.test" > dist/rewrite-waits/binaries.log
+      - name: Five alternating pairs with per-phase wait diagnostics
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess, time
+          from pathlib import Path
+          out = Path('dist/rewrite-waits')
+          report = {'status': 'running', 'method': 'Five alternating same-host pairs with identical tests, a logged three-second threshold and a one-minute deadlock watchdog. Public Mac scheduling and physical storage remain uncontrolled. Test cleanup runs on failure; a successful repeat does not explain the original failure.', 'arms': []}
+          report['limits_seconds'] = {'diagnostic_wait_threshold': 3, 'rewrite_test_deadlock_watchdog': 60, 'go_test_process_timeout': 120, 'subprocess_arm_timeout': 150, 'github_job_timeout': 2400}
+          try:
+              for repetition in range(1, 6):
+                  order = ('control', 'candidate') if repetition % 2 else ('candidate', 'control')
+                  for arm in order:
+                      log = out/f'r{repetition}-{arm}.log'
+                      command = [str(Path(os.environ['RUNNER_TEMP'])/f'rewrite-{arm}.test'), '-test.v', '-test.count=1', '-test.timeout=2m', '-test.run=^TestRewrite(StallProfile|SeesTheKeyspaceMoveAndStillGetsItRight)$']
+                      started = time.monotonic()
+                      row = {'arm': arm, 'repetition': repetition, 'status': 'running', 'returncode': None, 'timeout_seconds': 150, 'log': log.name}
+                      report['arms'].append(row)
+                      (out/'report.json').write_text(json.dumps(report, indent=2)+'\n')
+                      try:
+                          with log.open('w') as output:
+                              result = subprocess.run(command, stdout=output, stderr=subprocess.STDOUT, timeout=150)
+                          row.update(status='passed' if result.returncode == 0 else 'failed', returncode=result.returncode)
+                      except subprocess.TimeoutExpired as exc:
+                          row.update(status='timed_out', failure=repr(exc))
+                      finally:
+                          row['elapsed_seconds'] = time.monotonic()-started
+                          (out/'report.json').write_text(json.dumps(report, indent=2)+'\n')
+              report['status'] = 'passed' if all(row['returncode'] == 0 for row in report['arms']) else 'failed'
+          except BaseException as exc:
+              report.update(status='failed', failure=repr(exc))
+              raise
+          finally:
+              (out/'report.json').write_text(json.dumps(report, indent=2)+'\n')
+          if report['status'] != 'passed':
+              raise SystemExit(1)
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: matched-intel-rewrite-waits
+          path: dist/rewrite-waits
+          retention-days: 30
