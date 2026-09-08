@@ -1,6 +1,6 @@
 # GEOSEARCH allocation admission
 
-Status: matched candidate awaiting integration and review, September 7, 2026.
+Status: merged in PR 53, unreleased, September 7, 2026.
 
 GEOSEARCH previously collected all matching points, sorted the full collection
 for COUNT, and encoded replies before applying the output limit. Six 11 MiB
@@ -79,4 +79,7 @@ external clients, Redis differential/native smoke, Linux ARM64 and Intel Mac
 recovery, and ext4/xfs recovery. The expanded local differential records 1,296
 GEO comparisons across initial state, rewrite and two restarts. The large-count
 fix uses a membership prepass rather than slice growth, preserving one bounded
-point allocation. Final follow-up review is still required for that change.
+point allocation. PR 53 merged after those checks. The retained CodeRabbit review covers the
+initial candidate; the subsequent sparse-count correction has local regression
+and differential evidence, but no separate completed CodeRabbit follow-up is
+recorded on that PR.

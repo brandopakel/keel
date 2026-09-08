@@ -52,22 +52,11 @@ func (ep *Epoll) Monitor(event Event) error {
 
 // Check waits for a bounded interval rather than indefinitely.
 //
-// An untimed wait makes the loop depend on being woken for everything it has to
-// do, and two things then go wrong. The loop's own periodic work - idle-client
-// sweeps and the ordered-append maintenance tick - cannot run on a server with
-// no traffic, because nothing is coming to wake it. And a descriptor that is
-// left unregistered while a reply is still owed to it strands that client
-// permanently: there is no event to wait for, so the loop never turns again.
-//
-// The second is not hypothetical. A 48-hour soak on b9a97e0 stopped after
-// eleven hours with every socket ESTABLISHED, both servers at zero CPU, and the
-// event loop parked in this call: a client was waiting for a reply that the
-// registration needed to produce it had been removed for. Bounding the wait
-// does not remove the underlying mistake, but it turns a permanent hang into
-// one interval of extra latency, and lets the loop notice on the next turn.
-//
-// The cost is a wakeup per interval on an idle server, which is what the
-// periodic work needed anyway.
+// Check returns an empty batch when the bounded wait expires. This permits
+// queued maintenance to run independently of readiness notifications. The
+// existing cron wake pipe already handles normal periodic work; this is an
+// additional fallback, not a repair for a missing descriptor registration.
+// The older stalled soak did not establish that such a registration was lost.
 func (ep *Epoll) Check() ([]Event, error) {
 	n, err := syscall.EpollWait(ep.fd, ep.native, int(CheckInterval/time.Millisecond))
 	if err != nil {
