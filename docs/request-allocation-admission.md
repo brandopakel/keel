@@ -302,3 +302,10 @@ PRs #67/#68 were integrated after these measurements; they add soak documentatio
 and growth checks, with no Keel runtime change. The combined failure-diagnostic
 fixture passes after including the new growth option; before/after evidence is
 in `soak-merge-fixture-2026-09-07.json.gz`.
+
+The newly merged nightly workflow also uses bounded archive preservation and
+uploads only reports, logs and compressed evidence, excluding raw persistence
+files. Its preservation deadline is two minutes; a failed or partial archive
+keeps an explicit failure and cannot qualify a soak as passed. The complete raw
+source may still be lost at runner teardown when bounded preservation cannot
+finish, as with the filesystem workflow's documented limitation.

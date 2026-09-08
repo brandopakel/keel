@@ -59,10 +59,19 @@ jobs:
             --seconds "${{ github.event.inputs.seconds || '16200' }}" \
             --cycle-seconds "${{ github.event.inputs.cycle_seconds || '30' }}" \
             ${{ matrix.args }}
+      - name: Bound persistence evidence before upload
+        if: always()
+        run: |
+          mkdir -p dist/soak
+          timeout 120s python3 scripts/archive-failed-aof.py dist/soak > dist/soak/preservation.log 2>&1
       - name: Retain evidence, including a failure
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: soak-${{ strategy.job-index }}
-          path: dist/soak
+          path: |
+            dist/soak/**/*.json
+            dist/soak/**/*.jsonl
+            dist/soak/**/*.log
+            dist/soak/**/*.gz
           retention-days: 30
