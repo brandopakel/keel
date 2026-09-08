@@ -178,9 +178,22 @@ pass by growing anyway. Four interrupted-archive regression cases failed before
 the fix: complete archive publication, either sample publication and source
 removal. A small atomic journal now records sample offsets and removal intent;
 retries verify published files and reconcile completed reports even when the
-original has already been removed. Existing mismatched or unfinished partial
-files are preserved and stop archiving for investigation. Ten archive tests,
+original has already been removed. Mismatched published archives remain untouched and report an error. Complete
+staging archives can be verified and promoted; unfinished staging is retained
+while bounded samples are published. Unique sample staging avoids collisions
+with an earlier killed process, and a per-directory failure does not prevent
+preservation of other directories. The helper still exits nonzero for incomplete
+evidence. These follow-up checks are in `failed-archive-isolation-2026-09-07.json.gz`. Ten archive tests,
 including interruption around journal transitions, pass after correction.
 This covers process interruption, not a power-loss durability claim. Before/after
 logs and the brief buffer-identity check are in
 `request-admission-review-restart-2026-09-07.json.gz`.
+
+The combined candidate `6f7ba29` passes the two-replica 128 MiB recovery job in
+run 34182002957. It verifies interrupted snapshots, two history-overflow
+recoveries after rewrite, two checkpoint restarts and recovery after a primary
+epoch restart. Maximum observed catch-up times across the two replicas are
+6.03, 4.06, 0.29 and 3.18 seconds, respectively; complete phase times including
+exact value/digest verification are 6.73, 4.77, 0.96 and 3.88 seconds. These
+public-runner measurements do not establish a deployment recovery SLO. Evidence:
+`request-admission-larger-recovery-2026-09-07.tar.gz` and its separate summary.

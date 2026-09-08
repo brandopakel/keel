@@ -14,6 +14,7 @@ from pathlib import Path
 import shutil
 import stat
 import tempfile
+import zlib
 
 
 class ArchiveBudgetExceeded(Exception):
@@ -47,6 +48,8 @@ def verify_archive(path, size, digest):
         while chunk := source.read(1 << 20):
             checked.update(chunk)
             count += len(chunk)
+            if count > size:
+                raise RuntimeError('failed AOF archive exceeds its source length')
     if count != size or checked.hexdigest() != digest:
         raise RuntimeError('failed AOF archive verification mismatch')
 
@@ -73,7 +76,7 @@ def verified_existing(path, size, digest):
         raise FileExistsError('existing evidence is not a regular file')
     try:
         verify_archive(path, size, digest)
-    except (OSError, EOFError, RuntimeError) as error:
+    except (OSError, EOFError, RuntimeError, zlib.error) as error:
         raise FileExistsError('existing evidence does not match the source') from error
 
 
@@ -134,7 +137,18 @@ def preserve(path, compressed_limit=64 << 20, sample_limit=64 << 10):
         return report
     write_report(report_path, report)
 
-    if limit > 0 and report.get('state') != 'sampling':
+    staging_blocked = partial.exists() or partial.is_symlink()
+    if staging_blocked:
+        try:
+            verified_existing(partial, size, digest)
+        except FileExistsError:
+            # Keep unknown/torn staging bytes, but still publish bounded samples.
+            report['reason'] = 'unfinished archive staging retained; preserving samples'
+        else:
+            os.link(partial, archive)
+            return finish_complete(path, report_path, report, archive)
+
+    if limit > 0 and report.get('state') != 'sampling' and not staging_blocked:
         owns_partial = False
         try:
             with partial.open('xb') as file:
@@ -173,15 +187,18 @@ def preserve(path, compressed_limit=64 << 20, sample_limit=64 << 10):
             if sample.exists() or sample.is_symlink():
                 verified_existing(sample, len(body), digest)
             else:
-                sample_partial = sample.with_name(sample.name + '.partial')
-                owns_partial = False
+                # A killed process may leave its staging entry behind. A new
+                # bounded sample uses a unique entry without deleting that evidence.
+                sample_partial = None
                 try:
-                    with sample_partial.open('xb') as output:
-                        owns_partial = True
+                    with tempfile.NamedTemporaryFile(mode='wb', dir=sample.parent,
+                                                     prefix='.' + sample.name + '-',
+                                                     suffix='.partial', delete=False) as output:
+                        sample_partial = Path(output.name)
                         output.write(gzip.compress(body, mtime=0))
                     os.link(sample_partial, sample)
                 finally:
-                    if owns_partial:
+                    if sample_partial is not None:
                         sample_partial.unlink(missing_ok=True)
             samples.append({'artifact': sample.name, 'offset': offset,
                             'bytes': len(body), 'sha256': digest})
@@ -202,7 +219,12 @@ def main():
     for path in sorted(paths):
         if path.is_symlink():
             continue
-        report = preserve(path)
+        try:
+            report = preserve(path)
+        except Exception as error:
+            print(json.dumps({'file': str(path), 'complete': False, 'error': repr(error)}))
+            incomplete = True
+            continue
         print(json.dumps({'file': str(path), **report}))
         incomplete |= not report['complete']
     return int(incomplete)

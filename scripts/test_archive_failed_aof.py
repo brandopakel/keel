@@ -1,4 +1,6 @@
 import gzip
+import contextlib
+import io
 import hashlib
 import importlib.util
 import json
@@ -74,8 +76,9 @@ class FailedAOFArchiveTests(unittest.TestCase):
             path.write_bytes(b'original')
             partial = path.with_name('store.aof.gz.partial')
             partial.write_bytes(b'earlier failure evidence')
-            with self.assertRaises(FileExistsError):
-                archive.preserve(path)
+            result = archive.preserve(path)
+            self.assertFalse(result['complete'])
+            self.assertEqual(len(result['samples']), 2)
             self.assertEqual(partial.read_bytes(), b'earlier failure evidence')
             self.assertEqual(path.read_bytes(), b'original')
 
@@ -169,6 +172,51 @@ class FailedAOFArchiveTests(unittest.TestCase):
                 self.assertEqual(result['sample_bytes'], 64)
                 self.assertEqual(len(result['samples']), 2)
                 self.assertTrue(path.exists())
+
+
+    def test_stale_sample_staging_does_not_block_publication(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'store.aof'
+            path.write_bytes(b'original' * 100)
+            stale = path.with_name('store.aof.prefix.gz.partial')
+            stale.write_bytes(b'interrupted earlier sample')
+            result = archive.preserve(path, compressed_limit=0, sample_limit=64)
+            self.assertFalse(result['complete'])
+            self.assertEqual(len(result['samples']), 2)
+            self.assertEqual(stale.read_bytes(), b'interrupted earlier sample')
+            self.assertTrue(path.exists())
+
+    def test_main_preserves_other_directories_after_one_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            failed, good = root/'a-failed', root/'b-good'
+            failed.mkdir()
+            good.mkdir()
+            (failed/'failed-aof.json').write_text(json.dumps({'complete': False}))
+            (good/'store.aof').write_bytes(b'good evidence')
+            output = io.StringIO()
+            with patch('sys.argv', ['archive-failed-aof.py', directory]), contextlib.redirect_stdout(output):
+                self.assertEqual(archive.main(), 1)
+            rows = [json.loads(line) for line in output.getvalue().splitlines()]
+            self.assertFalse(rows[0]['complete'])
+            self.assertIn('error', rows[0])
+            self.assertTrue(rows[1]['complete'])
+            self.assertFalse((good/'store.aof').exists())
+            self.assertEqual(gzip.decompress((good/'store.aof.gz').read_bytes()), b'good evidence')
+
+
+    def test_complete_staging_archive_is_reconciled(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'store.aof'
+            body = b'original' * 1000
+            path.write_bytes(body)
+            partial = path.with_name('store.aof.gz.partial')
+            partial.write_bytes(gzip.compress(body, mtime=0))
+            result = archive.preserve(path)
+            self.assertTrue(result['complete'])
+            self.assertFalse(path.exists())
+            self.assertEqual(gzip.decompress(path.with_name('store.aof.gz').read_bytes()), body)
+            self.assertTrue(partial.exists(), 'do not delete a pre-existing evidence entry')
 
 
 if __name__ == '__main__':
