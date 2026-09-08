@@ -75,5 +75,5 @@ Source/build provenance, per-tenant service/scheduled/queue latency, generator
 CPU, profiles and raw reports are retained in
 `bench/results/transcript-profiles-2026-09-07.tar.gz` and
 `bench/results/transcript-capacity-2026-09-07.tar.gz`. Their checksums and parsed
-rows are in `bench/results/transcript-profile-capacity-summary-2026-09-07.json`.
+rows are in `bench/results/transcript-profile-capacity-summary-2026-09-07.json.gz`.
 Successful disposable AOFs were hashed and pruned on GitHub runners.
