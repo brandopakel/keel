@@ -6,6 +6,16 @@ statements are superseded here. The latest published release remains
 `v0.1.0-alpha.3` (September 5). No release has been made from this closeout work.
 GoGIF remains an unchanged pilot, and spending remains capped at zero.
 
+## Latest closeout update
+
+PR #58 is merged with bounded AOF transcripts and the failed-drain replication
+correction. The broad overload sweep and paired CPU/allocation profiles are
+complete, with limitations preserved. PR #66 extends request allocation
+admission and remains under validation. The four-hour hosted filesystem runs
+use an earlier runtime and are still pending. See the current
+[validation closeout](validation-closeout-2026-09-07.md#current-hosted-follow-up)
+for revisions and evidence; older status notes below are historical.
+
 ## Four initial findings: complete
 
 PR #27 merged all four corrections with Go/race, Docker, differential, native

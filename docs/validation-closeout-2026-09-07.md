@@ -180,19 +180,31 @@ identifies 16 verified draft-release assets. Local soaks remain stopped.
 
 ## Current hosted follow-up
 
-PR 58 integrates all five closeout fixes and remains open for its full review.
-Its 400-arm persistence matrix and two-replica 128 MiB recovery test have passed.
-A new Intel rewrite diagnostic hit its existing three-second worker wait; the
-fixture now cleans up on failure. Five alternating control/candidate pairs then
-passed the unchanged limit, while recording a slower candidate median rewrite.
-The original wait remains unexplained; details and every result are in
-[the transcript report](bounded-aof-transcripts.md).
+PR #58 merged as `15ce1c0` after the final `0c74e92` review and required checks
+passed. Review reproduced a panic and incorrect replication publication after
+an AOF short write; failed drains now stop publication. The 400-arm persistence
+matrix and two-replica 128 MiB recovery test passed on their recorded runtimes.
+The original Intel three-second rewrite wait remains unexplained; ten matched
+repeats passed the original gate. The current fixture logs three seconds as a
+diagnostic threshold and has separate deadlock, process, arm and job watchdogs.
+Details and performance costs remain in [the transcript report](bounded-aof-transcripts.md).
 
-The broader capacity sweep is
-[run 34174358161](https://github.com/brandopakel/keel/actions/runs/34174358161).
-Four-hour ext4/XFS recovery jobs are
-[run 34174359818](https://github.com/brandopakel/keel/actions/runs/34174359818).
-They run on public GitHub hosts, are still in progress at this update and do not
-count as passes. No local test, benchmark or soak remains running. The current
-local copies of published test/benchmark output have been pruned. Alpha.3 remains
-the latest published software release.
+The [capacity sweep](https://github.com/brandopakel/keel/actions/runs/34174358161)
+completed 140 arms with no issued-request failures and generator queue drops
+under overload. The [paired profiles](https://github.com/brandopakel/keel/actions/runs/34176103471)
+completed 36 diagnostic arms. Their source revisions, measurements and
+limitations are in [the combined report](transcript-profile-capacity-2026-09-07.md).
+These do not establish a general speedup or dedicated-host capacity.
+
+PR #66 adds shared request allocation admission before TCP buffer growth and
+RESP decoding, plus bounded command-name conversion and diagnostics. Its
+[report](request-allocation-admission.md) records reproduced allocation gaps,
+initial hosted parser diagnostics and pending final validation. Remaining
+coverage includes unmodeled mutation/persistence/replication/rewrite allocations,
+compaction overlap and kernel memory. The global allocation program is not complete.
+
+[Four-hour ext4/XFS recovery jobs](https://github.com/brandopakel/keel/actions/runs/34174359818)
+remain running at this update on earlier runtime `6966b55`. They do not count as
+passes or validate later fixes. No local soak is running; new local checks are
+brief, guarded and pruned after archiving compact evidence on GitHub. Alpha.3
+remains the latest published software release.
