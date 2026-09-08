@@ -40,6 +40,10 @@ jobs:
         run: |
           set -euo pipefail
           go test -race ./internal/server -run '^TestRequest' -count=20 -json | tee dist/request-admission/workers.jsonl
+      - name: Socket pressure and recovery under the race detector
+        run: |
+          set -euo pipefail
+          go test -race ./cmd/keel -run '^(TestRequestReservationsRecoverAfterIncompleteWriters|TestCommandReservationsRecoverAfterSlowReaders)$' -count=3 -json | tee dist/request-admission/socket-recovery.jsonl
       - name: Differential parser fuzzing
         run: |
           set -euo pipefail

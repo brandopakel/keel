@@ -107,3 +107,28 @@ the source is pruned; incompressible/low-space cases retain the original on the
 runner, store bounded prefix/tail evidence, and stop further benchmark arms.
 Those partial samples cannot establish full replay and the unexported original
 lasts only until runner teardown. This avoids silently discarding failure bytes.
+
+The repeated matched comparison at `1c8930c` (run 34178562831, before command
+coallocation) passes all 120 arms without generator CPU warnings. Median paired
+throughput ratios are 1.001 (small read), 0.996 (balanced), 1.003 (1 KiB read),
+0.998 (small write), 0.956 (write pipeline), 1.012 (1 MiB read), 1.003 (1 MiB
+write), 0.993 (hash), 0.991 (sorted set), 0.994 (queue), 0.989 (TTL) and 0.989
+(many clients). Pipeline median p99 is 0.775 to 0.791 ms. This is a different
+public VM from the initial comparison; compare pairs within each run, not their
+absolute numbers across hosts. Evidence: `request-admission-matched-pre-coallocation-2026-09-07.tar.gz`.
+
+A follow-up coallocates common one/two-argument commands with their argument
+headers. At `11268c3`, the SET parser retains 150 B/op while falling from five
+allocations to four; single read ownership falls from six allocations to five,
+and a 64-command pipeline from 327 to 263. Hosted diagnostics pass 3,989,255
+differential fuzz inputs, twenty shared-worker race repetitions and the full
+Go/platform/race suite. Fixed-order pipeline component timings are roughly
+unchanged against the pre-admission baseline in this run; matched server
+measurements remain required. That follow-up is now integrated in PR #66 with
+the spare-capacity correction. Evidence: `coallocated-command-hosted-2026-09-07.json.gz`.
+
+The dedicated admission workflow also runs three race-instrumented repetitions
+of the incomplete-writer and slow-reader socket recovery fixtures. The complete
+Linux/Mac suites continue to run them too; brief local `-short` checks skip
+the aggregate socket-pressure fixture. Earlier dedicated diagnostic artifacts
+contain the worker tests but not this newly added socket step.
