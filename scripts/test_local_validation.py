@@ -202,6 +202,7 @@ class LocalValidationTests(unittest.TestCase):
             self.assertFalse((root/'go-tmp').exists())
             self.assertEqual((root/'tmp/failure.txt').read_text(), 'recovery evidence')
             report = json.loads((root/'local-resource-report.json').read_text())
+            self.assertTrue(report['go_cache_pruned'])
             self.assertTrue(report['go_temporary_files_pruned'])
             self.assertEqual(report['status'], 'failed')
 
