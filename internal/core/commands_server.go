@@ -84,6 +84,8 @@ func evictionPolicyName() string {
 // kernel socket buffers. The event loop owns both collection and observation.
 type ClientBufferStats struct {
 	Connected, InputBytes, ReplyBytes, TotalBytes int
+	RequestAllocationPeak                         int64
+	RequestAllocationRefusals                     uint64
 }
 
 // ClientBuffers is installed before accepting event-loop clients and removed
@@ -108,7 +110,8 @@ func cmdINFO(args []string) []byte {
 	want := func(name string) bool { return section == "" || section == name }
 	if want("clients") && ClientBuffers != nil {
 		stats := ClientBuffers()
-		fmt.Fprintf(&b, "# Clients\r\nconnected_clients:%d\r\nretained_input_bytes:%d\r\nretained_reply_bytes:%d\r\nretained_client_bytes:%d\r\n\r\n", stats.Connected, stats.InputBytes, stats.ReplyBytes, stats.TotalBytes)
+		fmt.Fprintf(&b, "# Clients\r\nconnected_clients:%d\r\nretained_input_bytes:%d\r\nretained_reply_bytes:%d\r\nretained_client_bytes:%d\r\n", stats.Connected, stats.InputBytes, stats.ReplyBytes, stats.TotalBytes)
+		fmt.Fprintf(&b, "request_allocation_peak_bytes:%d\r\nrequest_allocation_refusals:%d\r\n\r\n", stats.RequestAllocationPeak, stats.RequestAllocationRefusals)
 	}
 	if want("clients") && CommandAllocations != nil {
 		stats := CommandAllocations

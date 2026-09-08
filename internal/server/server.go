@@ -180,6 +180,10 @@ var clients = make(map[int]*client)
 // scratch belongs to whichever thread is calling, and nothing that survives the
 // call points into it.
 func (c *client) readCommands(scratch []byte) ([]*core.Command, error) {
+	return c.readCommandsReserved(scratch, nil)
+}
+
+func (c *client) readCommandsReserved(scratch []byte, budget *requestAllocationBudget) ([]*core.Command, error) {
 	b := c.buf
 	if b != nil && !c.bufferedReady && b.size() >= maxQueryBuffer {
 		// Wrap ErrProtocol so the caller replies before hanging up: the client
@@ -223,6 +227,10 @@ func (c *client) readCommands(scratch []byte) ([]*core.Command, error) {
 				want = maxDirectRead
 			}
 			want = min(want, maxQueryBuffer-b.size())
+			if capacity := b.growthCapacity(want); capacity > 0 && !budget.reserveObject(capacity) {
+				c.buf = nil
+				return nil, core.ErrRequestAllocation
+			}
 			b.reserve(want)
 			n, err = syscall.Read(c.fd, b.spare(want))
 		}
@@ -258,13 +266,27 @@ func (c *client) readCommands(scratch []byte) ([]*core.Command, error) {
 	var cmds []*core.Command
 	used := 0
 	for used < len(src) && len(cmds) < maxCommandsPerTurn {
-		cmd, consumed, perr := core.ParseCmd(src[used:])
+		cmd, consumed, perr := core.ParseCmdReserved(src[used:], budget.reserve)
 		if errors.Is(perr, core.ErrIncompleteFrame) {
 			// The rest of this command has not arrived yet. Keep what we have.
 			break
 		}
 		if perr != nil {
+			if errors.Is(perr, core.ErrRequestAllocation) {
+				c.buf = nil
+				return nil, perr
+			}
 			return cmds, perr
+		}
+		if len(cmds) == cap(cmds) {
+			capacity := max(4, 2*cap(cmds))
+			if !budget.reserveObject(capacity * 8) {
+				c.buf = nil
+				return nil, core.ErrRequestAllocation
+			}
+			grown := make([]*core.Command, len(cmds), capacity)
+			copy(grown, cmds)
+			cmds = grown
 		}
 		cmds = append(cmds, cmd)
 		used += consumed
@@ -281,6 +303,9 @@ func (c *client) readCommands(scratch []byte) ([]*core.Command, error) {
 		b.off += used
 	default:
 		// First partial frame on this connection: start buffering the remainder.
+		if !budget.reserveObject(len(src) - used + 64) {
+			return nil, core.ErrRequestAllocation
+		}
 		nb := &connBuffer{}
 		nb.add(src[used:])
 		c.buf = nb
@@ -535,10 +560,12 @@ func executeRun(c *client, arena *replyArena) bool {
 
 func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 	defer wg.Done()
+	var requestBudget requestAllocationBudget
 	core.CommandAllocations = &core.CommandAllocationBudget{Limit: maxRetainedClientBytes, ReplyLimit: maxRetainedClassBytes}
 	defer func() { core.CommandAllocations = nil }()
 	core.ClientBuffers = func() core.ClientBufferStats {
-		return core.ClientBufferStats{Connected: len(clients), InputBytes: retainedInputBytes, ReplyBytes: retainedReplyBytes, TotalBytes: retainedClientBytes}
+		return core.ClientBufferStats{Connected: len(clients), InputBytes: retainedInputBytes, ReplyBytes: retainedReplyBytes, TotalBytes: retainedClientBytes,
+			RequestAllocationPeak: requestBudget.peak, RequestAllocationRefusals: requestBudget.refusals.Load()}
 	}
 	defer func() { core.ClientBuffers = nil }()
 	defer func() {
@@ -567,6 +594,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 	)
 
 	pool := newIOPool(ioThreadCount())
+	pool.requestBudget = &requestBudget
 	defer pool.stop()
 
 	serverFD, err := listenTCP(config.Host, config.Port, config.MaxConnection)
@@ -821,7 +849,10 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 
 		readable = takeQueuedReads(readable)
 		// Phase one: read and parse, in parallel when there is enough of it.
+		requestBudget.begin(retainedClientBytes+core.AppendRetainedBytes()+cap(arena.buf), retainedInputBytes,
+			maxRetainedClientBytes, maxRetainedClassBytes)
 		pool.run(readable, false)
+		requestBudget.end()
 		if len(deferred) > 0 {
 			readable = append(deferred, readable...)
 		}
@@ -830,13 +861,28 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 		// multiplexer reported the connections, so the stores stay unsynchronised
 		// and a client's commands still run in the order it sent them.
 		arena.reset()
+		// Account all decoded inputs before executing any client. Otherwise
+		// a large reply could consume headroom still owned by a later read.
+		live := readable[:0]
 		for _, c := range readable {
 			if !accountClient(c) {
 				closeClient(c)
 				continue
 			}
+			live = append(live, c)
+		}
+		readable = live
+		for _, c := range readable {
 			if c.err != nil {
-				if errors.Is(c.err, core.ErrProtocol) {
+				if errors.Is(c.err, core.ErrRequestAllocation) {
+					c.out = requestAllocationReply
+					c.closeAfterWrite = true
+					if !accountClient(c) {
+						closeClient(c)
+						continue
+					}
+					writable = append(writable, c)
+				} else if errors.Is(c.err, core.ErrProtocol) {
 					c.out = core.Encode(c.err, false)
 					c.closeAfterWrite = true
 					writable = append(writable, c)

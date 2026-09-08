@@ -1,0 +1,44 @@
+name: Request allocation diagnostics
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'internal/core/request_decode*'
+      - 'internal/server/**'
+      - 'cmd/keel/request_allocations_test.go'
+      - '.github/workflows/request-admission.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  admission:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version: '1.27.1' }
+      - name: Record source and allocation diagnostics
+        run: |
+          set -euo pipefail
+          mkdir -p dist/request-admission
+          git rev-parse HEAD > dist/request-admission/source.log
+          go version > dist/request-admission/go.log
+          go test ./internal/core -run '^$' -bench '^BenchmarkRequestParsingAdmission$' -benchmem -benchtime=250ms -count=5 | tee dist/request-admission/parser-benchmark.log
+      - name: Shared reader reservations under the race detector
+        run: |
+          set -euo pipefail
+          go test -race ./internal/server -run '^TestRequest' -count=20 -json | tee dist/request-admission/workers.jsonl
+      - name: Differential parser fuzzing
+        run: |
+          set -euo pipefail
+          go test ./internal/core -run '^$' -fuzz '^FuzzReservedCommandParserMatchesValueDecoder$' -fuzztime=3m -parallel=2 | tee dist/request-admission/fuzz.log
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: request-allocation-diagnostics
+          path: |
+            dist/request-admission
+            internal/core/testdata/fuzz/FuzzReservedCommandParserMatchesValueDecoder
+          retention-days: 30

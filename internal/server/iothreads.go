@@ -74,9 +74,10 @@ func ioThreshold(threads int) int { return threads * 2 }
 
 // ioPool owns the worker goroutines and the per-thread assignment slices.
 type ioPool struct {
-	threads int
-	jobs    []chan ioJob
-	wg      sync.WaitGroup
+	threads       int
+	requestBudget *requestAllocationBudget
+	jobs          []chan ioJob
+	wg            sync.WaitGroup
 
 	// assign[i] is thread i's share for the current phase, slot 0 being the
 	// loop's own. Reused between phases: they are only ever rewritten after
@@ -163,7 +164,7 @@ func (p *ioPool) serve(c *client, write bool, scratch []byte) {
 	}
 
 	if len(c.cmds) == 0 {
-		c.cmds, c.err = c.readCommands(scratch)
+		c.cmds, c.err = c.readCommandsReserved(scratch, p.requestBudget)
 	}
 }
 
