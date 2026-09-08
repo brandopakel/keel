@@ -402,17 +402,43 @@ jobs:
           truncate -s 512M "$task_image"
           task_loop=$(sudo losetup --find --show "$task_image")
           cleanup() {
+            task_exit=$?
+            set +e
+            if [ "$task_exit" -ne 0 ] && [ -d "$task_mount/soak" ]; then
+              # The stopped run's files disappear with this owned loop device.
+              # Preserve bounded, verified failure evidence before unmounting it.
+              timeout 60s python3 scripts/archive-failed-aof.py "$task_mount/soak" > "$task_reports/persistence-preservation.log" 2>&1
+              task_archive_exit=$?
+              printf '%s\n' "$task_archive_exit" > "$task_reports/persistence-preservation-exit.log"
+            fi
             python3 - "$task_mount" "$task_reports" <<'PY'
-          import pathlib, shutil, sys
+          import hashlib, json, pathlib, shutil, sys
           source, target = map(pathlib.Path, sys.argv[1:])
+          def digest(path):
+              hashed, size = hashlib.sha256(), 0
+              with path.open('rb') as file:
+                  while chunk := file.read(1 << 20):
+                      hashed.update(chunk)
+                      size += len(chunk)
+              return {'bytes': size, 'sha256': hashed.hexdigest()}
+          inventory = []
           for p in source.rglob('*'):
-              if p.is_file() and p.suffix in ('.json', '.jsonl', '.log'):
+              if p.is_symlink() or not p.is_file():
+                  continue
+              if p.name == 'store.aof':
+                  inventory.append({'path': str(p.relative_to(source)), **digest(p),
+                                    'raw_uploaded': False})
+              if p.suffix in ('.json', '.jsonl', '.log', '.gz'):
                   out = target / p.relative_to(source)
                   out.parent.mkdir(parents=True, exist_ok=True)
                   shutil.copy2(p, out)
+                  assert digest(p) == digest(out), 'filesystem evidence copy mismatch'
+          (target/'persistence-inventory.json').write_text(json.dumps(inventory, indent=2)+'\n')
           PY
-            sudo umount "$task_mount" || true
-            sudo losetup -d "$task_loop"
+            if [ "$?" -ne 0 ]; then task_exit=1; fi
+            sudo umount "$task_mount" || task_exit=1
+            sudo losetup -d "$task_loop" || task_exit=1
+            exit "$task_exit"
           }
           trap cleanup EXIT
           if [ "$KEEL_TEST_FS" = ext4 ]; then

@@ -12,7 +12,8 @@ PR #58 is merged with bounded AOF transcripts and the failed-drain replication
 correction. The broad overload sweep and paired CPU/allocation profiles are
 complete, with limitations preserved. PR #66 extends request allocation
 admission and remains under validation. The four-hour hosted filesystem runs
-use an earlier runtime and are still pending. See the current
+use an earlier runtime: XFS failed a three-second SET deadline alongside a
+3.004-second AOF sync; ext4 is still pending. See the current
 [validation closeout](validation-closeout-2026-09-07.md#current-hosted-follow-up)
 for revisions and evidence; older status notes below are historical.
 
@@ -47,10 +48,10 @@ Evidence: [closeout](engineering-closeout.md), [traversal](keyspace-traversal.md
 | Storage and appends | PR #20: typed strings, ordered concurrent appends, collection rewrites, restart compaction, protocol 2 and sorted-set commands | Command execution remains serial; no universal throughput gain |
 | Traversal/rewrite resources | PR #28: immutable string/member fragments, 64 KiB stream slices, dirty-name count/byte/duration budgets | Opaque image construction and filesystem writes/finalization still stall |
 | Client fairness | PR #37: bounded pipeline turns, output-drain scheduling and safe command resumption | Individual commands remain atomic; no hard latency SLA |
-| Rewrite sync | PR #43: one background snapshot preflush, explicit completion notifications and safe waker detachment | Final dirty-tail sync, writes, rename and directory sync remain synchronous |
-| Opaque rewrites | PR #44: retain one binary image and emit 64 KiB fragments | Constructing that immutable image still requires full serialization |
-| Churn memory | PR #29/#36/#38/#45: release large empty TTL tables and incrementally rebuild sparsely occupied TTL, lookup and set membership maps | Partially occupied pages and hash/sorted-set maps still retain capacity; no RSS guarantee |
-| Allocation admission | PR #32/#35/#42: preflight amplified replies and destructive canonical records; encode accepted dumps once | Aggregate transient reservations and some opaque persistence construction remain incomplete |
+| Rewrite I/O | PR #43/#54: background bulk writes and preflush, explicit completion notifications, phase timing and safe worker ownership | Final dirty-tail sync, writes, rename and directory sync remain synchronous |
+| Opaque rewrites | PR #44/#52: bounded fragments and incremental CMS/Morris encoding | Other immutable-image construction and atomic large commands still cost CPU |
+| Churn memory | PR #29/#36/#38/#45/#48/#50: TTL/lookup/set/sorted-set compaction and bounded hash leaves | Partial pages, temporary old/new map overlap and workload-dependent costs remain; no RSS guarantee |
+| Allocation admission | PR #32/#35/#42/#53/#55: covered reply/workspace reservations; PR #58 bounds primary transcripts; PR #66 adds shared TCP input admission under validation | Mutation, replication/rewrite retention, compaction overlap and alternate transports remain outside a complete pool |
 | Linux throughput | PR #30: avoid unchanged readiness registrations on Linux | Darwin optimization was deferred after unresolved Intel test failures |
 | Client compatibility | PR #39: go-redis, Redigo, redis-py, node-redis and ioredis; 35 invocations across persistence modes and two restarts | Tested RESP2 subset only; no RESP3, transactions, cluster or every library API claim |
 | Operations and capacity | PR #34: scheduled overload sweeps, expiry storms, tenant mixtures, large collections, append diagnostics, two-replica 128 MiB recovery | Free public runners are not dedicated hosts or deployment SLO evidence |
@@ -116,12 +117,12 @@ recorded 1,585,893 acknowledged writes; protocol 2 with concurrent appends recor
 checks and storage-fault checks. They validate only source `b9a97e0` and binary
 SHA-256 `aeed3178e90e12664f8f715a7adb2889c6bffcdf36fbba076cbe9d64862c8b31`.
 
-The 48-hour continuous-primary run stopped reporting progress at 10:29:35 UTC
-after 739 checkpoints and 1,091,864 acknowledged writes. Its processes remain
-alive. A native sample shows the Python harness sleeping but does not identify
-the Python call site or establish a Keel fault. It is stalled, not a completed
-soak. The frozen processes were preserved; new harnesses have a progress watchdog.
-See [soak evidence](soak-progress-observability.md).
+The older 48-hour continuous-primary run stalled and was interrupted at the
+user's request. The later frozen `b14ffe0` run failed when its `ps` monitoring
+subprocess timed out. Both are incomplete, neither has restarted, and their
+owned processes are stopped. The old stall remains unexplained. The current
+[soak closeout](validation-closeout-2026-09-07.md) preserves both failures and
+the later eight-hour passes on their exact binaries.
 
 A combined candidate passes all nine alpha.2 upgrade/rewrite/restart/backup
 rollback cases across no/everysec/always and sync/barrier/concurrent append modes.
@@ -141,12 +142,13 @@ An Intel pending-reply timeout in
 PR #45 remains unexplained after thirty focused repetitions per arm and three
 full suites per arm pass on a matched host. Both failed attempts are preserved.
 
-Fresh frozen guarded runs began at 14:03 UTC on that combined source: eight-hour
-protocol-1 recovery, eight-hour concurrent protocol-2 recovery, and 48-hour
-continuous-primary protocol-2 recovery. Each is running, not passed. Binary
-SHA-256 is `227517de61bb5a9423ad6a62d337d727331166b89e1f7554743b88e859b6351d`.
-The local command `~/.local/bin/keel-current-soak-status` verifies progress and
-process identity. The Mac must remain running. The initial frozen-bundle launch
+The subsequent frozen `b14ffe0` protocol-1 and concurrent protocol-2 eight-hour
+recovery runs passed with 1,446,739 and 1,444,176 acknowledged writes. Each
+completed 31 primary and 64 replica crash recoveries. The companion 48-hour run
+failed monitoring before the requested stop. These historical binaries do not
+validate newer term, storage, transcript or request-admission changes. Local
+soaks are stopped; the laptop need not remain awake for hosted validation.
+The initial frozen-bundle launch
 failed before workloads because a Python dependency was omitted; the corrected
 bundle includes it and passed import preflight. Both launch attempts and all
 native reports are retained in

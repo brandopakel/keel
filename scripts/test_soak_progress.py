@@ -4,7 +4,7 @@ import subprocess
 import sys
 import tempfile
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 import unittest
 
 from soak_status import classify, inspect
@@ -65,6 +65,31 @@ with tempfile.TemporaryFile() as trace:
         self.assertTrue(report['trace'])
         self.assertIn('injected stalled operation', report['error'])
         self.assertEqual(report['timer'], [0, 0])
+
+
+    def test_request_failure_keeps_origin_before_process_diagnostics(self):
+        import soak
+        with tempfile.TemporaryDirectory() as directory:
+            args = SimpleNamespace(out=directory, bin='unused', replication_protocol=2,
+                                   concurrent=True, cycle_seconds=10)
+            primary, replica = MagicMock(), MagicMock()
+            primary.password, primary.port = 'private-password', 12345
+            def failed_request(*parts):
+                raise TimeoutError('timed out')
+            primary.client.call.side_effect = failed_request
+            report = {}
+            def diagnostics(server):
+                self.assertGreater(report['failure_observed_unix_seconds'], 0)
+                self.assertEqual(report['failure_stack'][-1]['function'], 'failed_request')
+                return {'captured': True}
+            with patch.object(soak, 'Server', side_effect=[primary, replica]), \
+                 patch.object(soak, 'capture_failed_process', side_effect=diagnostics):
+                with self.assertRaises(TimeoutError):
+                    soak.run(args, report, MagicMock())
+            self.assertNotIn('private-password', json.dumps(report))
+            self.assertGreaterEqual(report['elapsed_seconds'], 0)
+            primary.stop.assert_called_once_with(check=False)
+            replica.stop.assert_called_once_with(check=False)
 
 
 if __name__ == '__main__':
