@@ -1,0 +1,68 @@
+name: Scheduled soak
+
+# A 48-hour run needs a machine nobody needs back. That is the one resource this
+# project does not have, so the long-run gate is met a different way: repeated
+# independent runs on free runners, accumulating trials rather than uptime.
+#
+# The two are not the same and the difference is worth stating. Independent
+# starts are better at finding rare races, because each run re-rolls the timing
+# that produces them. A single long run is better at finding slow growth and
+# anything that depends on elapsed time. Growth is covered directly instead, by
+# the bounds in soak.py, which fail on the shape of the defect rather than
+# waiting for it to become a symptom.
+#
+# Each job stays under the six-hour runner limit with margin.
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: Duration per soak, seconds
+        default: '16200'
+      cycle_seconds:
+        description: Seconds between crash/recovery cycles
+        default: '30'
+
+permissions:
+  contents: read
+
+jobs:
+  soak:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: protocol 1, recovery
+            args: --replication-protocol 1 --primary-crash-every 3
+          - name: protocol 2 concurrent, recovery
+            args: --replication-protocol 2 --concurrent --primary-crash-every 3
+          - name: protocol 2 concurrent, continuous primary
+            args: --replication-protocol 2 --concurrent --primary-crash-every 0
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build
+        run: go build -trimpath -o /tmp/keel ./cmd/keel
+      - name: Soak
+        run: |
+          python3 scripts/soak.py --bin /tmp/keel --out dist/soak \
+            --seconds "${{ github.event.inputs.seconds || '16200' }}" \
+            --cycle-seconds "${{ github.event.inputs.cycle_seconds || '30' }}" \
+            ${{ matrix.args }}
+      - name: Retain evidence, including a failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: soak-${{ strategy.job-index }}
+          path: dist/soak
+          retention-days: 30
