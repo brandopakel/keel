@@ -92,7 +92,7 @@ func TestReplicaProgressIgnoresFutureCursor(t *testing.T) {
 	require.Equal(t, end, replicaAck.offset)
 	observed := time.Unix(100, 0)
 	replicaAck.at = observed
-	_ = cmdReplicationPullV2([]string{replication.epoch, strconv.FormatUint(end+1, 10), "", "0"})
+	_ = cmdReplicationPullV2([]string{replication.epoch, strconv.FormatUint(end+1, 10), "", "0", strconv.FormatUint(CurrentTerm(), 10)})
 	require.Equal(t, end, replicaAck.offset, "an offset beyond this stream is not progress")
 	require.Equal(t, observed, replicaAck.at)
 }
@@ -121,7 +121,7 @@ func TestReplicaProgressIgnoresMalformedAndSnapshotPulls(t *testing.T) {
 			require.Equal(t, replicationV2.end, replicaAck.offset)
 			observed := time.Unix(100, 0)
 			replicaAck.at = observed
-			_ = cmdReplicationPullV2([]string{replication.epoch, strconv.FormatUint(replicationV2.end, 10), cursor.snapshot, cursor.part})
+			_ = cmdReplicationPullV2([]string{replication.epoch, strconv.FormatUint(replicationV2.end, 10), cursor.snapshot, cursor.part, strconv.FormatUint(CurrentTerm(), 10)})
 			require.Equal(t, replicationV2.end, replicaAck.offset)
 			require.Equal(t, observed, replicaAck.at, "only a validated delta cursor confirms stream progress")
 		})
