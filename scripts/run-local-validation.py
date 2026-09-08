@@ -26,6 +26,8 @@ REPORT_RESERVE_BYTES = 64 << 10
 def directory_bytes(root):
     total = 0
     def traversal_failed(error):
+        if isinstance(error, FileNotFoundError):
+            return  # Go and test harnesses remove temporary directories during a sample.
         raise error
     for folder, directories, files in os.walk(root, followlinks=False, onerror=traversal_failed):
         directories[:] = [name for name in directories if not (Path(folder)/name).is_symlink()]
@@ -41,6 +43,7 @@ def stop_group(process):
     # The group was created by this wrapper. Stop descendants even when their
     # immediate parent has already exited, so a smoke cannot leave a server.
     for sig in (signal.SIGTERM, signal.SIGKILL):
+        process.poll()  # Reap an exited parent; still stop any remaining group members.
         try:
             os.killpg(process.pid, sig)
         except ProcessLookupError:

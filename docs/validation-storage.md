@@ -70,3 +70,14 @@ path; a collision is a failed run with a sibling fallback report and JSON on
 stdout. Filesystem errors can prevent any on-disk report, so stdout remains useful.
 This cooperative guard cannot prevent unrelated processes consuming disk or a
 command intentionally escaping its process group/output directory.
+
+A directory removed concurrently during a sample is treated like a disappearing
+file; permission and other traversal errors remain fatal. A deterministic scan
+race test verifies that remaining files are still counted. Cleanup reaps an exited
+parent before signaling its group, and a process test verifies surviving children
+are still stopped. These checks follow an interrupted Go regression run whose
+guard reported a vanished directory and a cleanup permission error. No owned
+process remained. The latter error's exact cause is not established by a successful
+repeat. The full Python test suite passed locally in 5.60 seconds; its cache and
+temporary fixtures were pruned. Evidence is in
+`bench/results/local-guard-temporary-churn-2026-09-07.json.gz`.
