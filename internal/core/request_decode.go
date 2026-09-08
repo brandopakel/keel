@@ -3,6 +3,8 @@ package core
 import (
 	"errors"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 var ErrRequestAllocation = errors.New("ERR request allocation budget exhausted")
@@ -91,14 +93,40 @@ func ParseCmdReserved(data []byte, reserve func(int) bool) (*Command, int, error
 				return nil, 0, err
 			}
 		}
-		value := string(data[span.start:span.end])
 		if i == 0 {
-			name = strings.ToUpper(value)
+			name = ownedUpperCommand(data[span.start:span.end])
 		} else {
-			args[i-1] = value
+			args[i-1] = string(data[span.start:span.end])
 		}
 	}
 	return &Command{Cmd: name, Args: args}, consumed, nil
+}
+
+// strings.ToUpper can grow its builder repeatedly for expanding Unicode or
+// invalid UTF-8. Size that rare path first so the admitted original string and
+// at most three-byte-per-input-byte conversion each allocate only once.
+func ownedUpperCommand(data []byte) string {
+	name := string(data)
+	hasLower := false
+	for i := 0; i < len(name); i++ {
+		if name[i] >= utf8.RuneSelf {
+			size := 0
+			for _, r := range name {
+				size += utf8.RuneLen(unicode.ToUpper(r))
+			}
+			var b strings.Builder
+			b.Grow(size)
+			for _, r := range name {
+				b.WriteRune(unicode.ToUpper(r))
+			}
+			return b.String()
+		}
+		hasLower = hasLower || ('a' <= name[i] && name[i] <= 'z')
+	}
+	if hasLower {
+		return strings.ToUpper(name)
+	}
+	return name
 }
 
 func (r *frameReader) commandStringSpan() (commandSpan, error) {

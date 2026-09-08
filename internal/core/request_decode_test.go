@@ -73,6 +73,22 @@ func TestRequestAllocationSizeRejectsOverflow(t *testing.T) {
 	require.Zero(t, size)
 }
 
+func TestReservedParserUppercaseExpansionFitsAdmission(t *testing.T) {
+	name := strings.Repeat("\xff", 256<<10)
+	wire := appendCommand(nil, name)
+	want := strings.ToUpper(name)
+	charge := 0
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	cmd, used, err := ParseCmdReserved(wire, func(n int) bool { charge = n; return true })
+	runtime.ReadMemStats(&after)
+	require.NoError(t, err)
+	require.Equal(t, len(wire), used)
+	require.Equal(t, want, cmd.Cmd)
+	require.LessOrEqual(t, after.TotalAlloc-before.TotalAlloc, uint64(charge), "temporary Unicode conversion must fit its admitted charge")
+}
+
 func FuzzReservedCommandParserMatchesValueDecoder(f *testing.F) {
 	for _, parts := range [][]string{{"PING"}, {"set", "k", "v"}, {"GET", "\x00\xff"}, {"MSET", "a", "", "b", "v"}} {
 		wire := appendCommand(nil, parts...)
