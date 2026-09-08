@@ -30,6 +30,10 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$BASELINE_REV" =~ ^[0-9a-f]{40}$ ]]
+          # Execute only history reachable from the maintained runtime or the
+          # explicitly prepared matched transcript control branch.
+          git merge-base --is-ancestor "$BASELINE_REV" refs/remotes/origin/develop ||
+            git merge-base --is-ancestor "$BASELINE_REV" refs/remotes/origin/test/transcript-control-20260907
           mkdir -p dist/rewrite-waits
           git rev-parse HEAD > dist/rewrite-waits/harness-revision.log
           printf '%s\n' "$BASELINE_REV" > dist/rewrite-waits/baseline-revision.log
@@ -54,10 +58,18 @@ jobs:
                       log = out/f'r{repetition}-{arm}.log'
                       command = [str(Path(os.environ['RUNNER_TEMP'])/f'rewrite-{arm}.test'), '-test.v', '-test.count=1', '-test.timeout=2m', '-test.run=^TestRewrite(StallProfile|SeesTheKeyspaceMoveAndStillGetsItRight)$']
                       started = time.monotonic()
-                      with log.open('w') as output:
-                          result = subprocess.run(command, stdout=output, stderr=subprocess.STDOUT, timeout=150)
-                      report['arms'].append({'arm': arm, 'repetition': repetition, 'returncode': result.returncode, 'elapsed_seconds': time.monotonic()-started, 'log': log.name})
+                      row = {'arm': arm, 'repetition': repetition, 'status': 'running', 'returncode': None, 'timeout_seconds': 150, 'log': log.name}
+                      report['arms'].append(row)
                       (out/'report.json').write_text(json.dumps(report, indent=2)+'\n')
+                      try:
+                          with log.open('w') as output:
+                              result = subprocess.run(command, stdout=output, stderr=subprocess.STDOUT, timeout=150)
+                          row.update(status='passed' if result.returncode == 0 else 'failed', returncode=result.returncode)
+                      except subprocess.TimeoutExpired as exc:
+                          row.update(status='timed_out', failure=repr(exc))
+                      finally:
+                          row['elapsed_seconds'] = time.monotonic()-started
+                          (out/'report.json').write_text(json.dumps(report, indent=2)+'\n')
               report['status'] = 'passed' if all(row['returncode'] == 0 for row in report['arms']) else 'failed'
           except BaseException as exc:
               report.update(status='failed', failure=repr(exc))
