@@ -228,8 +228,15 @@ func (c *client) readCommandsReserved(scratch []byte, budget *requestAllocationB
 			}
 			want = min(want, maxQueryBuffer-b.size())
 			if capacity := b.growthCapacity(want); capacity > 0 && !budget.reserveObject(capacity) {
-				c.buf = nil
-				return nil, core.ErrRequestAllocation
+				// A speculative growth refusal does not consume the space
+				// already owned by this connection, including a compactable
+				// prefix. Read into that space before shedding the frame.
+				free := cap(b.data) - b.size()
+				if free <= 0 {
+					c.buf = nil
+					return nil, core.ErrRequestAllocation
+				}
+				want = min(want, free)
 			}
 			b.reserve(want)
 			n, err = syscall.Read(c.fd, b.spare(want))

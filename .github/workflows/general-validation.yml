@@ -56,7 +56,7 @@ on:
       transcript_shutdown_seconds:
         description: Same supported shutdown grace for both transcript benchmark arms
         type: string
-        default: '5'
+        default: '30'
       transcript_policies:
         description: JSON array of transcript policies to compare
         type: string

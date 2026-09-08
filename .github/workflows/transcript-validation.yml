@@ -4,7 +4,7 @@ on:
     inputs:
       shutdown_seconds:
         type: string
-        default: '5'
+        default: '30'
       policies:
         type: string
         default: '["off","no","everysec","always"]'
@@ -75,6 +75,7 @@ jobs:
           assert 1 <= repetitions <= 10 and 1 <= seconds <= 30
           shutdown_seconds = int(os.environ['SHUTDOWN_SECONDS'])
           assert 1 <= shutdown_seconds <= 60
+          assert shutdown_seconds != 5, 'matched grace requires an explicit non-default setting supported by both runtimes'
           cpus = sorted(os.sched_getaffinity(0))
           topology = {}
           for cpu in cpus:
@@ -91,6 +92,9 @@ jobs:
               directory = 'dist/transcripts/' + mode
               outcome = subprocess.run(common+flags+['--out',directory])
               failed |= outcome.returncode != 0
+              # Reclaim a verified complete failure archive before another
+              # mode runs. Partial preservation stops the matrix with evidence.
+              subprocess.run(['python3','scripts/archive-failed-aof.py',directory],check=True)
               # The generator preserves failed arms; the next mode still runs.
               if outcome.returncode == 0:
                   subprocess.run(['python3','bench/summarize-general.py',directory],check=True)
@@ -98,28 +102,14 @@ jobs:
           PYTHON
       - name: Preserve failed persistence files with bounded compression
         if: always()
-        run: |
-          python3 - <<'PYTHON'
-          import gzip, hashlib, json
-          from pathlib import Path
-          for path in Path('dist/transcripts').rglob('store.aof'):
-              if not path.is_file() or path.is_symlink():
-                  continue
-              digest, size = hashlib.sha256(), 0
-              with path.open('rb') as source, gzip.open(str(path)+'.gz','xb') as output:
-                  while chunk := source.read(1 << 20):
-                      digest.update(chunk)
-                      size += len(chunk)
-                      output.write(chunk)
-              path.with_name('failed-aof.json').write_text(json.dumps({'bytes':size,'sha256':digest.hexdigest(),'artifact':path.name+'.gz'},indent=2))
-          PYTHON
+        run: python3 scripts/archive-failed-aof.py dist/transcripts
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
           name: aof-transcripts-${{ matrix.policy }}
           path: |
             dist/transcripts/**/*.json
-            dist/transcripts/**/*.aof.gz
+            dist/transcripts/**/*.gz
             dist/transcripts/**/*.log
             dist/transcripts/**/*.csv
             dist/transcripts/**/*.md

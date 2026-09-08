@@ -23,6 +23,10 @@ closes the connection. Earlier executed batches remain executed; clients must
 not blindly retry non-idempotent pipelines. If even the error cannot fit the
 existing retained limits, the connection closes directly.
 
+A refused speculative buffer-growth request first falls back to already-owned
+spare capacity, including a compactable parsed prefix. The refusal metric counts
+denied reservations; it can increase even when that fallback completes the read.
+
 Unknown-command errors quote at most 128 bytes of the command name, followed
 by `...` when truncated. This prevents formatting and CRLF sanitization from
 copying an entire untrusted token after request admission ends. Ordinary unknown
@@ -65,3 +69,41 @@ Matched comparison run 34177607787 was cancelled during setup after detecting
 invalid selected scenario names. Corrected run 34177666365 compares twelve
 unchanged workloads at `b456c27` against `39043e3`, five alternating pairs each;
 it predates the Unicode/diagnostic follow-ups and is not final-runtime validation.
+
+That initial 120-arm comparison completed with no command/connection errors.
+Median paired throughput ratios were 0.995 (small read), 0.984 (balanced),
+0.989 (1 KiB read), 0.989 (small write), 0.966 (write pipeline), 1.012 (1 MiB
+read), 0.985 (1 MiB write), 0.992 (hash), 0.989 (sorted set), 0.990 (queue) and
+0.998 (TTL). Pipeline median p99 rose from 1.631 to 1.735 ms. Many-client ratio
+was 0.986, but baseline repetition four had a generator CPU warning and is not
+a clean capacity result. These results justify further cost reduction, not a
+general speedup claim. Raw evidence: `request-admission-matched-initial-2026-09-07.tar.gz`.
+
+Diagnostics at `1c8930c` pass 3,629,581 differential fuzz inputs and twenty worker
+race repetitions. Full read ownership falls from 174 to 158 B for one SET and
+11,665 to 10,641 B for a pipeline of 64, with allocation counts still 6 and 327,
+respectively. Fixed-order component timing medians rise 7.3% and 6.4%; those
+timings are diagnostic and do not replace matched server results. Paired CPU
+profiles at that same runtime complete 36 instrumented arms in run 34178979147;
+the parser remains roughly 21–29% of pipelined CPU samples. Evidence:
+`request-admission-hosted-final-2026-09-07.json.gz` and
+`request-admission-profiles-2026-09-07.tar.gz`. “Final” in the archive name records
+the then-current diagnostic, before the subsequent spare-capacity correction.
+
+Review corrected premature refusal when an incomplete bulk header requested a
+larger speculative read despite having enough existing capacity for its actual
+suffix. The corrected regression fails the old reader and passes the fallback.
+Its first fixture accidentally provided a complete bulk header, so it never
+exercised speculative growth; those two fixture failures remain recorded and are
+not claimed as runtime reproductions. `request-admission-review-2026-09-07.json.gz`
+preserves these checks alongside bounded failed-AOF archive tests.
+
+The benchmark harness now distinguishes a requested shutdown wait budget from
+an explicitly passed binary setting. Omitted binary flags are reported as
+implicit, and the matched transcript workflow requires a supported non-default
+grace (30 seconds by default). Failed AOF preservation caps compressed output
+at 64 MiB and reserves free-space headroom. Complete archives are verified before
+the source is pruned; incompressible/low-space cases retain the original on the
+runner, store bounded prefix/tail evidence, and stop further benchmark arms.
+Those partial samples cannot establish full replay and the unexported original
+lasts only until runner teardown. This avoids silently discarding failure bytes.

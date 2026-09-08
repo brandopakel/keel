@@ -43,7 +43,9 @@ func TestRequestReservationRefusesBufferGrowthBeforeAllocation(t *testing.T) {
 	r, _ := socketPair(t)
 	require.NoError(t, syscall.SetNonblock(r, true))
 	prefix := []byte("*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$1000000\r\n")
-	c := &client{fd: r, buf: &connBuffer{data: append([]byte(nil), prefix...)}}
+	full := make([]byte, len(prefix))
+	copy(full, prefix)
+	c := &client{fd: r, buf: &connBuffer{data: full}}
 	var budget requestAllocationBudget
 	budget.begin(0, 0, 1024, 1024)
 	runtime.GC()
@@ -55,6 +57,28 @@ func TestRequestReservationRefusesBufferGrowthBeforeAllocation(t *testing.T) {
 	require.Nil(t, cmds)
 	require.Nil(t, c.buf)
 	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(16<<10))
+}
+
+func TestRequestReservationUsesExistingBufferSpaceAfterGrowthRefusal(t *testing.T) {
+	r, w := socketPair(t)
+	require.NoError(t, syscall.SetNonblock(r, true))
+	wire := encodeCmd("SET", "key", "value")
+	// End inside the bulk-length header, forcing a speculative sized read.
+	buffer := make([]byte, len(wire)-9, 128)
+	copy(buffer, wire)
+	c := &client{fd: r, buf: &connBuffer{data: buffer}}
+	n, err := syscall.Write(w, wire[len(buffer):])
+	require.NoError(t, err)
+	require.Equal(t, len(wire)-len(buffer), n)
+	var budget requestAllocationBudget
+	budget.begin(cap(buffer), cap(buffer), 1024, 1024)
+	cmds, err := c.readCommandsReserved(testScratch, &budget)
+	require.NoError(t, err, "a speculative growth refusal must not discard usable buffer space")
+	require.Len(t, cmds, 1)
+	require.Equal(t, []string{"key", "value"}, cmds[0].Args)
+	require.Nil(t, c.buf)
+	require.Positive(t, budget.refusals.Load())
+	require.LessOrEqual(t, budget.used.Load(), budget.limit)
 }
 
 func TestRequestReservationRefusalAndNextPhaseRecovery(t *testing.T) {

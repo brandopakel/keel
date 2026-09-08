@@ -11,7 +11,7 @@ import (
 
 func TestRequestReservationsRecoverAfterIncompleteWriters(t *testing.T) {
 	if testing.Short() {
-		t.Skip("aggregate socket pressure runs in hosted integration validation")
+		t.Skip("aggregate socket pressure is excluded from brief -short checks")
 	}
 	for _, threads := range []string{"1", "4"} {
 		t.Run(threads, func(t *testing.T) {
