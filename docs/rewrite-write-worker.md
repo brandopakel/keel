@@ -1,6 +1,6 @@
 # Bulk snapshot writes on an owned worker
 
-Status: candidate undergoing validation, September 7, 2026.
+Status: merged in PR 54, unreleased, September 7, 2026.
 
 Bulk rewrite slices previously called File.Write on the command owner. A bounded
 slice limits bytes copied, but a slow filesystem can block that call indefinitely.
@@ -107,3 +107,21 @@ older maximum cannot hide a subsequent slow interval. Fields remain approximate
 independent atomic observations. These new fields pass local full/vet and three
 rewrite/I/O race repetitions; they do not retroactively assign a cause to older
 observations or remove the handoff stall.
+
+Final phase-instrumented run 34163962923 compares `9dd815d` with `e4360ef` at
+500 scheduled requests/s. All three datasets complete 36 arms, 108 rewrites and
+270,000 requests apiece: 108 arms, 324 rewrites and 810,000 requests total, with
+zero failed, dropped or expired requests. This successful run supplements the
+previous failed string cell; it does not explain or erase that failure.
+
+Across the six string workload cells (three persistence policies and two write shares), median scheduled p99.9 is 3.87–4.78 ms
+before versus 1.56–3.57 ms with the worker. The sketch baseline already streams
+its tables, and effects remain mixed: CMS always-sync/20%-write p99.9 rises from
+4.78 to 8.32 ms; Morris in that cell rises from 2.59 to 2.75 ms. There is no
+additional general sketch benefit. For the candidate, 29 rewrite syncs exceed
+10 ms during measurement across the three datasets; none is a final handoff
+sync. No finalization call exceeds 10 ms; its largest process maximum is 4.79 ms.
+CMS records two ordinary AOF syncs above 10 ms in measurement. These phase
+observations describe this run, not the exact cause of earlier unattributed
+stalls. The raw results are in
+`bench/results/rewrite-worker-phase-interference-2026-09-07.json.gz`.

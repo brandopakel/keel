@@ -179,7 +179,8 @@ class LocalValidationTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 1, result.stdout+result.stderr)
                 self.assertEqual(json.loads((root/'local-resource-report.json').read_text())['status'], 'failed')
             finally:
-                if root.exists(): root.chmod(0o700)
+                if root.exists():
+                    root.chmod(0o700)
 
     def test_command_created_report_directory_uses_fallback(self):
         with tempfile.TemporaryDirectory() as temp:

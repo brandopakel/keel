@@ -45,7 +45,8 @@ def run(args):
         try:
             client = Client('127.0.0.1', server.port, server.password)
             while not stop.is_set():
-                assert client.call('SET', f'writer:{index}', writer_value(index, counts[index]+1)) == b'OK'
+                if client.call('SET', f'writer:{index}', writer_value(index, counts[index]+1)) != b'OK':
+                    raise RuntimeError('write was not acknowledged')
                 counts[index] += 1
         except Exception as exc:
             errors.append(repr(exc))
@@ -63,9 +64,11 @@ def run(args):
                 future.result()
         report.update(acknowledged_writes=counts, workload_errors=errors,
                       before_shutdown=info(server.client, 'persistence'))
-        assert not errors and all(counts), 'write burst did not complete cleanly'
+        if errors or not all(counts):
+            raise RuntimeError('write burst did not complete cleanly')
         for index in range(4):
-            assert server.client.call('GET', f'writer:{index}') == writer_value(index, counts[index])
+            if server.client.call('GET', f'writer:{index}') != writer_value(index, counts[index]):
+                raise RuntimeError('live state lost a final acknowledged sequence')
         started = time.monotonic()
         try:
             server.stop()
@@ -81,7 +84,8 @@ def run(args):
         server.start()
         report['replay_ready_seconds'] = time.monotonic()-started
         for index in range(4):
-            assert server.client.call('GET', f'writer:{index}') == writer_value(index, counts[index]), 'replay lost a final acknowledged sequence'
+            if server.client.call('GET', f'writer:{index}') != writer_value(index, counts[index]):
+                raise RuntimeError('replay lost a final acknowledged sequence')
         report['recovered_sequences'] = counts[:]
         server.stop()
         report['status'] = 'passed'

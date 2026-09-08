@@ -1,0 +1,95 @@
+{
+  "release_id": 384356108,
+  "tag_name": "validation-evidence-2026-09-07",
+  "url": "https://github.com/brandopakel/keel/releases/tag/untagged-15903be73c1c591e7270",
+  "draft": true,
+  "assets": [
+    {
+      "id": 549512834,
+      "name": "pruned-local-2026-09-07-checksums.json",
+      "bytes": 1672,
+      "digest": "sha256:51281d6099e0bcdbb9dc788e97d6daa10c7bb9856738add00e09c004fc9e76bc"
+    },
+    {
+      "id": 549540880,
+      "name": "pruned-local-2026-09-07-command-reservations.tar.xz",
+      "bytes": 1476780,
+      "digest": "sha256:548a9ffb2afa81c74b48555a22a1242fa776a4a7e8f4d599bc4897f1084ddf23"
+    },
+    {
+      "id": 549512833,
+      "name": "pruned-local-2026-09-07-manifest.json.gz",
+      "bytes": 1709065,
+      "digest": "sha256:40463f75e1251659d4ca38102b378786db9360bfbfa9ec91d83b34ad8c6dface"
+    },
+    {
+      "id": 549529277,
+      "name": "pruned-local-2026-09-07-original-supplement.tar.xz",
+      "bytes": 88928760,
+      "digest": "sha256:ff5a861c66569ac332efed0333a23fd80551a9c74d53f137c14110f5cacbc6ea"
+    },
+    {
+      "id": 549512829,
+      "name": "pruned-local-2026-09-07-persistence.tar.xz",
+      "bytes": 19143260,
+      "digest": "sha256:6458d434d91275f00b02351212cb39768042d0ade49812abf025d60b143545f4"
+    },
+    {
+      "id": 549512832,
+      "name": "pruned-local-2026-09-07-reports-01.tar.xz",
+      "bytes": 5461568,
+      "digest": "sha256:b72e5f0bcdb63f3b67f6ce3024369d7df715a6d1b8667f309d317dbb21e463f0"
+    },
+    {
+      "id": 549512831,
+      "name": "pruned-local-2026-09-07-reports-02.tar.xz",
+      "bytes": 34392204,
+      "digest": "sha256:87431e4402b44ce29f1565353e692279e5ebdf4ceaa499a49db7ee9d0da067b8"
+    },
+    {
+      "id": 549512847,
+      "name": "pruned-local-2026-09-07-reports-03.tar.xz",
+      "bytes": 7379792,
+      "digest": "sha256:e6675cf597ed30f8b34f2829895aa6b4e866a2eb009354856effe94f76e4abfe"
+    },
+    {
+      "id": 549512873,
+      "name": "pruned-local-2026-09-07-reports-04.tar.xz",
+      "bytes": 7359328,
+      "digest": "sha256:f48d252f50ae83535609954280e04e5c7f308ca9e066004c85c98946a9e63f2f"
+    },
+    {
+      "id": 549512906,
+      "name": "pruned-local-2026-09-07-reports-05.tar.xz",
+      "bytes": 25420800,
+      "digest": "sha256:af6503ff384d622fbebc1fbc1a72e301c821f477303359a2d570b5a99dc93cd6"
+    },
+    {
+      "id": 549512911,
+      "name": "pruned-local-2026-09-07-reports-06.tar.xz",
+      "bytes": 24098536,
+      "digest": "sha256:dba4f0e00c884785e4525d7824ea704bb0963a1a4c210e08030883c355f83d6e"
+    },
+    {
+      "id": 549512912,
+      "name": "pruned-local-2026-09-07-reports-07.tar.xz",
+      "bytes": 4157688,
+      "digest": "sha256:32a96cba644d5e1a8feaf7a794a6667abaa4f26b0f68bf361d32f43debe86322"
+    },
+    {
+      "id": 549526583,
+      "name": "pruned-local-2026-09-07-source-probes.tar.xz",
+      "bytes": 923520,
+      "digest": "sha256:bd726297054686e8ceb6e18a0a8c6084e08fb61de8762dd4a35169b584417c7c"
+    },
+    {
+      "id": 549528075,
+      "name": "pruned-local-2026-09-07-supplement.tar.xz",
+      "bytes": 39075528,
+      "digest": "sha256:aec7039c774c59bcda94f623a8b9528d06207e2dc9282879d42f39e600e3b2eb"
+    }
+  ],
+  "verified_files": 14,
+  "note": "Owner-accessible draft evidence archive; compact conclusions and runtime source remain in ordinary repository history.",
+  "source_probes_verified": true
+}

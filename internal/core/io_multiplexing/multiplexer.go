@@ -40,10 +40,8 @@ type IOMultiplexer interface {
 	Close() error
 }
 
-// CheckInterval bounds how long Check waits with nothing ready.
-//
-// It is the loop's heartbeat: short enough that the periodic work it gates -
-// idle-client sweeps, the ordered-append maintenance tick - keeps to its own
-// schedule, and long enough that an idle server is not paying for wakeups it
-// has no use for.
+// CheckInterval bounds how long Check waits with nothing ready. It provides
+// another opportunity for loop maintenance even if a wake notification is missed.
+// The server also has a periodic cron wake pipe. A timeout does not restore a
+// missing descriptor registration or guarantee a client reply within this period.
 const CheckInterval = 20 * time.Millisecond

@@ -70,7 +70,8 @@ class Server:
                     raise RuntimeError(f'server exited during startup; see {self.directory}/server.log')
                 try:
                     self.client = Client('127.0.0.1', self.port, self.password)
-                    assert self.client.call('PING') == b'PONG'
+                    if self.client.call('PING') != b'PONG':
+                        raise RuntimeError('server returned an invalid readiness response')
                     return self
                 except OSError:
                     time.sleep(.02)
