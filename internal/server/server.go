@@ -279,7 +279,7 @@ func (c *client) readCommandsReserved(scratch []byte, budget *requestAllocationB
 			return cmds, perr
 		}
 		if len(cmds) == cap(cmds) {
-			capacity := max(4, 2*cap(cmds))
+			capacity := max(1, 2*cap(cmds))
 			if !budget.reserveObject(capacity * 8) {
 				c.buf = nil
 				return nil, core.ErrRequestAllocation
