@@ -26,6 +26,8 @@ REPORT_RESERVE_BYTES = 64 << 10
 def directory_bytes(root):
     total = 0
     def traversal_failed(error):
+        if isinstance(error, FileNotFoundError):
+            return  # Go and test harnesses remove temporary directories during a sample.
         raise error
     for folder, directories, files in os.walk(root, followlinks=False, onerror=traversal_failed):
         directories[:] = [name for name in directories if not (Path(folder)/name).is_symlink()]
@@ -41,6 +43,7 @@ def stop_group(process):
     # The group was created by this wrapper. Stop descendants even when their
     # immediate parent has already exited, so a smoke cannot leave a server.
     for sig in (signal.SIGTERM, signal.SIGKILL):
+        process.poll()  # Reap an exited parent; still stop any remaining group members.
         try:
             os.killpg(process.pid, sig)
         except ProcessLookupError:
@@ -105,8 +108,10 @@ def run(args):
         temporary.mkdir()
         cache = root/'go-cache'
         cache.mkdir()
+        go_temporary = root/'go-tmp'
+        go_temporary.mkdir()
         env = dict(os.environ, KEEL_LOCAL_VALIDATION_ROOT=str(root), TMPDIR=str(temporary),
-                   GOTMPDIR=str(temporary), GOCACHE=str(cache))
+                   GOTMPDIR=str(go_temporary), GOCACHE=str(cache))
         with (root/'command.log').open('wb') as log:
             process = subprocess.Popen(command, stdout=log, stderr=log, env=env,
                                        start_new_session=True)
@@ -149,8 +154,13 @@ def run(args):
                 if root.is_symlink() or (current.st_dev, current.st_ino) != root_identity:
                     raise RuntimeError('validation output root identity changed')
                 root.chmod(0o700)
-                shutil.rmtree(root/'go-cache', ignore_errors=False)
-                report['go_cache_pruned'] = True
+                for name, field in [('go-cache', 'go_cache_pruned'),
+                                    ('go-tmp', 'go_temporary_files_pruned')]:
+                    try:
+                        shutil.rmtree(root/name, ignore_errors=False)
+                    except FileNotFoundError:
+                        pass
+                    report[field] = True
                 if report['status'] == 'passed':
                     shutil.rmtree(root/'tmp', ignore_errors=False)
                     report['temporary_files_pruned'] = True

@@ -24,8 +24,8 @@ its final status report. Inherited soft and hard file limits are never raised.
 After command and descendant exit, it rechecks all limits before recording a pass.
 It refuses
 deadlines above two minutes or output budgets above 1 GiB. Go caches and temporary
-directories are redirected inside that directory. The compilation cache is
-removed after every run; other temporary files are removed on success and kept
+directories are redirected inside that directory. The compilation cache and
+separate Go intermediate-build directory are removed after every run; other temporary files are removed on success and kept
 on failure for diagnosis. Failed commands and resource stops never become passes.
 All descendants in the wrapper's owned process group are stopped on exit.
 
@@ -70,3 +70,26 @@ path; a collision is a failed run with a sibling fallback report and JSON on
 stdout. Filesystem errors can prevent any on-disk report, so stdout remains useful.
 This cooperative guard cannot prevent unrelated processes consuming disk or a
 command intentionally escaping its process group/output directory.
+
+A directory removed concurrently during a sample is treated like a disappearing
+file; permission and other traversal errors remain fatal. A deterministic scan
+race test verifies that remaining files are still counted. Cleanup reaps an exited
+parent before signaling its group, and a process test verifies surviving children
+are still stopped. These checks follow an interrupted Go regression run whose
+guard reported a vanished directory and a cleanup permission error. No owned
+process remained. The latter error's exact cause is not established by a successful
+repeat. The full Python test suite passed locally in 5.60 seconds; its cache and
+temporary fixtures were pruned. Evidence is in
+`bench/results/local-guard-temporary-churn-2026-09-07.json.gz`.
+
+Go's `GOTMPDIR` is isolated from ordinary `TMPDIR`. Interrupted Go runs can leave
+large intermediate archives even after `GOCACHE` is deleted; both Go directories
+are now pruned on success or failure. Ordinary temporary failure evidence remains.
+A regression verifies this distinction with a failing child command.
+
+The September 7 draft evidence archive now holds 16 verified assets, including
+the last 123 working report files. Their local copies and downloaded benchmark
+ZIPs were removed after matching archive contents and GitHub digests. Thirty-nine
+obsolete worktrees have been removed so far; active source workspaces remain.
+The [archive index](../bench/results/local-evidence-archive-2026-09-07.json)
+identifies the retained assets without adding bulky output to source clones.
