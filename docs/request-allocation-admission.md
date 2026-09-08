@@ -236,3 +236,17 @@ the broad job rather than the matched job. The gate stopped both before any
 paired workload began. The workflow wiring is corrected; these failed setup
 attempts remain in `memtier-probe-first-attempts-2026-09-07.json.gz` and provide
 no socket-option observation or performance pass.
+
+An independent Go-generator diagnostic (run 34183839492, `e54b49e` versus
+`15ce1c0`) matches the large-write mix: four connections, 32 one-MiB values,
+95% writes and persistence disabled. All 24 ten-second arms complete without
+issued-request failures or queue expiry. At offered rates 250 and 500/s,
+neither version drops arrivals; median scheduled p99 is 2.785/2.785 ms and
+3.015/2.982 ms (baseline/candidate). At 1,000/s both complete every arrival,
+with p99 5.243/5.636 ms. At 2,000/s they complete 1,550.7/1,538.4 operations/s
+and drop 4,493/4,616 of 20,000 scheduled arrivals; p99 is 29.884/30.409 ms.
+Generator CPU is about 1.35 cores on one exposed physical core with two threads
+in that overloaded cell. These results show modest costs in this different
+generator/workload schedule; they neither erase nor causally explain the earlier
+memtier slowdown. Evidence: `request-admission-large-write-arrival-2026-09-07.tar.gz`
+and its summary with exact source, checksum, latency and generator CPU.
