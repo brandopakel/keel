@@ -243,3 +243,34 @@ Neither the capacity sweep nor either extended recovery run counts as passed
 yet. They use free public GitHub runners and do not depend on laptop uptime.
 An initial capacity dispatch, 34174317670, was canceled after detecting a wrong
 candidate SHA in its input; 34174358161 is the corrected dispatch.
+
+
+## Review corrections after the initial integrated validation
+
+The review reproduced two short-write failures with protocol 2 enabled and a
+previous buffered command: the commit slice could panic, or a larger retained
+tail could publish an incorrect suffix. `aofEnd` now skips publication after an
+AOF failure. Both regressions assert that the received-stream end and the reply
+acknowledgement prefix remain unchanged; the failed flush remains fatal.
+
+The allocation fixtures use `appendfsync no` to isolate their measurement from
+background sync allocations. Their 6 MiB SET and 8 MiB eviction allocation bounds
+remain unchanged and below the respective full-payload-copy boundaries. The
+append-order fixture releases its blocked worker only after observing the direct
+drain waiting in `pollAppend`; its five-second observation watchdog fails if that
+path was not exercised. It cannot silently pass because a release timer fired
+before submission.
+
+The million-key rewrite fixture clears the global stores after closing the AOF,
+including on early failure. Three seconds is now a logged diagnostic threshold;
+a one-minute deadlock watchdog bounds waiting, while a committed rewrite and
+slice-count checks establish correctness. The earlier failed three-second run
+and ten successful repeats retain their original results and unchanged old gate.
+Future runs use the revised fixture; they cannot retroactively pass that failure.
+
+The two regression cases failed against `916b96b` (7.17-second guarded local run).
+After the fix, transcript/replication and moving-keyspace checks passed in 6.47
+seconds with Go caches/intermediates pruned. Full before/after output is in
+`bench/results/transcript-review-regressions-2026-09-07.json.gz`. The capacity and
+four-hour filesystem runs at `6966b55` predate this failure-path fix and remain
+validation of that earlier runtime only.

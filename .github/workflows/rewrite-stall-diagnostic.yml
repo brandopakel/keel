@@ -40,13 +40,13 @@ jobs:
           go test -c -o "$RUNNER_TEMP/rewrite-candidate.test" ./internal/core
           go -C "$RUNNER_TEMP/rewrite-control" test -c -o "$RUNNER_TEMP/rewrite-control.test" ./internal/core
           shasum -a 256 "$RUNNER_TEMP/rewrite-candidate.test" "$RUNNER_TEMP/rewrite-control.test" > dist/rewrite-waits/binaries.log
-      - name: Five alternating pairs with the original three-second gate
+      - name: Five alternating pairs with per-phase wait diagnostics
         run: |
           python3 - <<'PY'
           import json, os, subprocess, time
           from pathlib import Path
           out = Path('dist/rewrite-waits')
-          report = {'status': 'running', 'method': 'Five alternating same-host pairs with identical tests and the original three-second worker gate. Public Mac scheduling and physical storage remain uncontrolled. Test cleanup runs on failure; a successful repeat does not explain the original failure.', 'arms': []}
+          report = {'status': 'running', 'method': 'Five alternating same-host pairs with identical tests, a logged three-second threshold and a one-minute deadlock watchdog. Public Mac scheduling and physical storage remain uncontrolled. Test cleanup runs on failure; a successful repeat does not explain the original failure.', 'arms': []}
           try:
               for repetition in range(1, 6):
                   order = ('control', 'candidate') if repetition % 2 else ('candidate', 'control')

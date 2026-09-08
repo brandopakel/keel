@@ -313,7 +313,9 @@ func aofCommit(cmd *Command, reply []byte) {
 // aofEnd publishes the complete command after its eviction decisions. The
 // event loop cannot serve a replica pull in the middle of this serial scope.
 func aofEnd() {
-	if aof.file != nil && !aof.replaying {
+	// A failed drain reslices the retained buffer. Its old commandStart no
+	// longer names this slice, and none of that failed suffix may be published.
+	if aof.file != nil && !aof.replaying && aof.failed == nil {
 		recordReplicationV2Commit()
 	}
 	aof.commandActive = false

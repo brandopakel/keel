@@ -20,9 +20,11 @@ import (
 
 func TestAOFTranscriptLargeValueKeepsBoundedBuffer(t *testing.T) {
 	ResetStores()
+	oldPolicy := config.AOFFsync
+	config.AOFFsync = config.FsyncNever
 	path := filepath.Join(t.TempDir(), "store.aof")
 	require.NoError(t, OpenAOF(path))
-	t.Cleanup(func() { CloseAOF(); ResetStores() })
+	t.Cleanup(func() { CloseAOF(); config.AOFFsync = oldPolicy; ResetStores() })
 	value := strings.Repeat("v", 8<<20)
 	runtime.GC()
 	var before, after runtime.MemStats
@@ -146,6 +148,32 @@ func TestAOFTranscriptPartialWriteNeverAdvancesReplyPrefix(t *testing.T) {
 	}
 }
 
+func TestAOFTranscriptFailedDrainDoesNotPublishReplication(t *testing.T) {
+	for _, tail := range []int{1, 3 << 20} {
+		t.Run(fmt.Sprint(tail), func(t *testing.T) {
+			setupReplicationV2(t)
+			oldWrite := aofWrite
+			t.Cleanup(func() { aofWrite = oldWrite })
+			run(t, "SET", "acknowledged", "safe")
+			require.NoError(t, FlushAOF())
+			ready := AppendReadyOffset()
+			run(t, "SET", "prior", strings.Repeat("p", 2<<20))
+			published := replicationV2.end
+			require.Greater(t, len(aof.buf), 1)
+			aofWrite = func(f *os.File, body []byte) (int, error) {
+				return f.Write(body[:len(body)-tail])
+			}
+			require.NotPanics(t, func() {
+				run(t, "SET", "torn", strings.Repeat("v", 2*maxAOFTranscriptBytes))
+			})
+			require.ErrorIs(t, aof.failed, io.ErrShortWrite)
+			require.Equal(t, published, replicationV2.end, "failed drain must not publish a resliced suffix")
+			require.Equal(t, ready, AppendReadyOffset(), "failure cannot acknowledge either buffered command")
+			require.ErrorIs(t, FlushAOF(), io.ErrShortWrite)
+		})
+	}
+}
+
 func TestAOFTranscriptReplicationPreservesChunkedPrefixes(t *testing.T) {
 	setupReplicationV2(t)
 	snapshot := snapshotV2(t)
@@ -257,10 +285,36 @@ func TestAOFTranscriptJoinsOlderAppendBeforeDirectDrain(t *testing.T) {
 	require.False(t, ready)
 	<-entered
 	require.False(t, AppendHasRoom(2*maxAOFTranscriptBytes), "normal server admission must use its barrier")
-	timer := time.AfterFunc(20*time.Millisecond, func() { once.Do(func() { close(release) }) })
-	defer timer.Stop()
 	value := strings.Repeat("x", 2*maxAOFTranscriptBytes)
+	// Release only after observing the direct drain waiting in pollAppend.
+	// A timer alone could release before execution and silently skip the join.
+	joined := make(chan bool, 1)
+	go func() {
+		deadline := time.NewTimer(5 * time.Second)
+		defer deadline.Stop()
+		tick := time.NewTicker(time.Millisecond)
+		defer tick.Stop()
+		stack := make([]byte, 128<<10)
+		for {
+			n := runtime.Stack(stack, true)
+			for _, frame := range bytes.Split(stack[:n], []byte("\n\n")) {
+				if bytes.Contains(frame, []byte(".pollAppend(")) && bytes.Contains(frame, []byte(".writeAOFBuffer(")) {
+					once.Do(func() { close(release) })
+					joined <- true
+					return
+				}
+			}
+			select {
+			case <-tick.C:
+			case <-deadline.C:
+				once.Do(func() { close(release) })
+				joined <- false
+				return
+			}
+		}
+	}()
 	run(t, "SET", "second", value) // even a direct core caller must preserve order
+	require.True(t, <-joined, "direct drain did not exercise the blocked append join")
 	require.NoError(t, aof.failed)
 	require.NoError(t, CloseAOF())
 	got, err := os.ReadFile(path)
@@ -272,8 +326,14 @@ func TestAOFTranscriptJoinsOlderAppendBeforeDirectDrain(t *testing.T) {
 
 func TestAOFTranscriptMassEvictionKeepsBoundedBuffer(t *testing.T) {
 	oldLimit, oldMemory := config.KeyNumberLimit, config.MaxMemory
+	oldPolicy := config.AOFFsync
+	config.AOFFsync = config.FsyncNever
 	config.KeyNumberLimit, config.MaxMemory = 1000, 0
-	t.Cleanup(func() { CloseAOF(); config.KeyNumberLimit, config.MaxMemory = oldLimit, oldMemory; ResetStores() })
+	t.Cleanup(func() {
+		CloseAOF()
+		config.KeyNumberLimit, config.MaxMemory, config.AOFFsync = oldLimit, oldMemory, oldPolicy
+		ResetStores()
+	})
 	ResetStores()
 	path := filepath.Join(t.TempDir(), "eviction.aof")
 	require.NoError(t, OpenAOF(path))
