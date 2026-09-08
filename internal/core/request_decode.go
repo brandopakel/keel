@@ -80,7 +80,8 @@ func ParseCmdReserved(data []byte, reserve func(int) bool) (*Command, int, error
 	if reserve != nil && !reserve(charge) {
 		return nil, 0, ErrRequestAllocation
 	}
-	args := make([]string, int(n)-1)
+	command := allocateDecodedCommand(int(n) - 1)
+	args := command.Args
 	var name string
 	r.pos = first
 	for i := 0; i < int(n); i++ {
@@ -99,7 +100,8 @@ func ParseCmdReserved(data []byte, reserve func(int) bool) (*Command, int, error
 			args[i-1] = string(data[span.start:span.end])
 		}
 	}
-	return &Command{Cmd: name, Args: args}, consumed, nil
+	command.Cmd = name
+	return command, consumed, nil
 }
 
 // strings.ToUpper can grow its builder repeatedly for expanding Unicode or
