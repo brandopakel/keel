@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,12 +52,15 @@ var (
 	passwordEnv        string
 	replicaPasswordEnv string
 	profileDir         string
+	shutdownTimeout    = 5 * time.Second
 )
 
 // parseFlags reads the command line into config. It runs before anything
 // starts, from main rather than from an init, so that nothing else in the
 // process can observe a setting before the flag that changes it has been read.
 func parseFlags() {
+	flag.DurationVar(&shutdownTimeout, "shutdown-timeout", 5*time.Second,
+		"grace period after SIGTERM/SIGINT for server cleanup and persistence sync; a second signal exits early")
 	flag.StringVar(&profileDir, "profile-dir", "", "diagnostic only: create a fresh private directory for CPU/heap/allocation profiles on shutdown")
 	flag.BoolVar(&config.ReplicationFeed, "replication-feed", false, "experimental: enable bounded canonical replication feed")
 	flag.IntVar(&config.ReplicationProtocol, "replication-protocol", 1, "experimental replication protocol: 1 (alpha images) or 2 (streaming snapshots, operation deltas and recovery checkpoints)")
@@ -105,6 +109,9 @@ func parseFlags() {
 	flag.IntVar(&config.MaxConnection, "maxclients", config.MaxConnection, "maximum connected clients")
 	flag.StringVar(&passwordEnv, "requirepass-env", "", "environment variable containing the required AUTH password")
 	flag.Parse()
+	if shutdownTimeout <= 0 {
+		log.Fatal("-shutdown-timeout must be positive")
+	}
 	if passwordEnv != "" {
 		config.RequirePass = os.Getenv(passwordEnv)
 		if config.RequirePass == "" {
@@ -280,30 +287,40 @@ func runServer() error {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	done := make(chan error, 1)
-	go func() { done <- serve(&wg) }()
-	select {
-	case err := <-done:
+	go func() {
+		err := serve(&wg)
 		closeErr := core.CloseAOF()
 		if err != nil {
-			return err
+			done <- err
+		} else {
+			done <- closeErr
 		}
-		return closeErr
+	}()
+	select {
+	case err := <-done:
+		return err
 	case <-signals:
 		server.Stop()
 	}
-	timer := time.NewTimer(5 * time.Second)
+	return waitForShutdown(done, signals, shutdownTimeout)
+}
+
+func waitForShutdown(done <-chan error, signals <-chan os.Signal, grace time.Duration) error {
+	timer := time.NewTimer(grace)
 	defer timer.Stop()
 	select {
 	case err := <-done:
-		closeErr := core.CloseAOF()
-		if err != nil {
-			return err
-		}
-		return closeErr
+		return err
 	case <-signals:
 		return fmt.Errorf("second termination signal")
 	case <-timer.C:
-		return fmt.Errorf("shutdown exceeded five seconds")
+		// Capture the blocked shutdown phase before main exits. A timeout
+		// alone cannot distinguish a parked event loop from slow persistence.
+		// Bound the diagnostic allocation/output even with many connections.
+		stack := make([]byte, 1<<20)
+		n := runtime.Stack(stack, true)
+		log.Printf("shutdown timeout goroutine dump (truncated=%t):\n%s", n == len(stack), stack[:n])
+		return fmt.Errorf("shutdown exceeded %s", grace)
 	}
 }
 
