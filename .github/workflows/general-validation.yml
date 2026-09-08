@@ -33,6 +33,10 @@ on:
         description: Run separate candidate CPU/heap diagnostics after comparison
         type: boolean
         default: false
+      profile_pair:
+        description: Optional JSON with exact candidate/baseline SHAs for separate AOF CPU and allocation profiles
+        type: string
+        default: ''
       append_diagnostics:
         description: Optional exact runtime SHA for matched append-policy comparisons and separate profiles
         type: string
@@ -66,6 +70,13 @@ permissions:
   contents: read
 
 jobs:
+  profile_pair:
+    if: github.event_name == 'workflow_dispatch' && inputs.profile_pair != ''
+    uses: ./.github/workflows/transcript-profiles.yml
+    with:
+      candidate: ${{ fromJSON(inputs.profile_pair).candidate }}
+      baseline: ${{ fromJSON(inputs.profile_pair).baseline }}
+
   transcript_interference:
     if: github.event_name == 'workflow_dispatch' && inputs.transcript_validation != ''
     uses: ./.github/workflows/transcript-validation.yml
