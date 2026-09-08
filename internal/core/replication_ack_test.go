@@ -89,6 +89,7 @@ func TestReplicaProgressIgnoresFutureCursor(t *testing.T) {
 	run(t, "SET", "k", "v")
 	end := replicationV2.end
 	pullV2(t, replication.epoch, end, "", 0)
+	require.Equal(t, end, replicaAck.offset)
 	observed := time.Unix(100, 0)
 	replicaAck.at = observed
 	_ = cmdReplicationPullV2([]string{replication.epoch, strconv.FormatUint(end+1, 10), "", "0"})
@@ -100,9 +101,11 @@ func TestReplicaProgressLowerCursorDoesNotRefreshBestAge(t *testing.T) {
 	setupReplicationV2(t)
 	run(t, "SET", "k", "v")
 	pullV2(t, replication.epoch, replicationV2.end, "", 0)
+	require.Equal(t, replicationV2.end, replicaAck.offset)
 	observed := time.Unix(100, 0)
 	replicaAck.at = observed
 	pullV2(t, replication.epoch, 0, "", 0)
+	require.Equal(t, replicationV2.end, replicaAck.offset)
 	require.Equal(t, observed, replicaAck.at, "a lagging peer must not make the best cursor look fresh")
 }
 
@@ -115,10 +118,32 @@ func TestReplicaProgressIgnoresMalformedAndSnapshotPulls(t *testing.T) {
 			setupReplicationV2(t)
 			run(t, "SET", "k", "v")
 			pullV2(t, replication.epoch, replicationV2.end, "", 0)
+			require.Equal(t, replicationV2.end, replicaAck.offset)
 			observed := time.Unix(100, 0)
 			replicaAck.at = observed
 			_ = cmdReplicationPullV2([]string{replication.epoch, strconv.FormatUint(replicationV2.end, 10), cursor.snapshot, cursor.part})
+			require.Equal(t, replicationV2.end, replicaAck.offset)
 			require.Equal(t, observed, replicaAck.at, "only a validated delta cursor confirms stream progress")
 		})
 	}
+}
+
+func TestReplicaProgressResetsWhenPrimaryChangesEpoch(t *testing.T) {
+	setupReplicationV2(t)
+	run(t, "SET", "k", "v")
+	require.NotZero(t, replicationV2.end)
+	pullV2(t, replication.epoch, replicationV2.end, "", 0)
+	require.Equal(t, replicationV2.end, replicaAck.offset)
+	previousEpoch := replication.epoch
+	invalidateReplicationV2()
+	require.NotEqual(t, previousEpoch, replication.epoch)
+	offset, behind, age := ReplicationAcknowledged()
+	require.Zero(t, offset)
+	require.Zero(t, behind)
+	require.EqualValues(t, -1, age, "old epoch progress is not evidence for the new stream")
+	pullV2(t, replication.epoch, 0, "", 0)
+	offset, behind, age = ReplicationAcknowledged()
+	require.Zero(t, offset)
+	require.Zero(t, behind)
+	require.GreaterOrEqual(t, age, int64(0), "the new stream can record a lower cursor")
 }

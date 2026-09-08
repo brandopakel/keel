@@ -23,3 +23,14 @@ checks and targeted protocol-2 tests passed in 5.77 seconds. Both local invocati
 used the resource guard and pruned compilation caches. Exact source/patch, failure
 and passing output are in `bench/results/replication-progress-regressions-2026-09-07.json.gz`.
 Hosted full/race/native and filesystem checks remain required before merge.
+
+Review also found that epoch invalidation reset the stream without clearing the
+old progress metric. It now resets the cursor and age together. The regression
+first proves that a valid cursor was recorded, changes the epoch, checks unknown
+progress, and confirms a fresh zero cursor can be observed. Rejection tests now
+also verify the stored offset before and after each rejected request.
+
+The first validation attempt was interrupted by a resource-guard directory-removal
+race; its partial output is preserved. With the guard correction, the complete
+targeted metric/protocol-2 suite passes in 5.74 seconds. Both outcomes and the exact
+patch are in `bench/results/replication-progress-epoch-review-2026-09-07.json.gz`.

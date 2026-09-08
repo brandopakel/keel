@@ -106,7 +106,8 @@ For protocol 2, `INFO replication` retains the fields `replication_acked_offset`
 `replication_lag_bytes` and `replication_acked_age_ms`. They describe the greatest
 **received stream cursor** reported by a valid ordinary delta pull in this epoch,
 its byte distance from the current primary stream end, and the age of the last
-confirmation at that cursor or beyond it. Lower cursors do not refresh the age.
+confirmation at that cursor or beyond it. Lower cursors do not refresh the age. Starting a new primary epoch resets both
+cursor and age to unknown.
 Malformed, out-of-history and snapshot-transfer requests do not update the metric.
 An age of -1 means no validated cursor has been observed, even if lag is zero.
 

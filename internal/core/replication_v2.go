@@ -67,6 +67,7 @@ func invalidateReplicationV2() {
 		return
 	}
 	replication.epoch = hex.EncodeToString(id[:])
+	resetReplicaAcknowledgement()
 	closeReplicationSnapshot()
 	replicationV2.history = nil
 	replicationV2.bytes = 0
