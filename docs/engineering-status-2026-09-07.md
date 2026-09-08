@@ -11,7 +11,8 @@ GoGIF remains an unchanged pilot, and spending remains capped at zero.
 PR #58 is merged with bounded AOF transcripts and the failed-drain replication
 correction. The broad overload sweep and paired CPU/allocation profiles are
 complete, with limitations preserved. PR #66 extends request allocation
-admission and remains under validation. The four-hour hosted filesystem runs
+admission; its corrected 84-arm comparison places the tested workloads near
+baseline, with scoped allocation reductions and no general speedup claim. The four-hour hosted filesystem runs
 use an earlier runtime: XFS failed a three-second SET deadline alongside a
 3.004-second AOF sync; ext4 is still pending. See the current
 [validation closeout](validation-closeout-2026-09-07.md#current-hosted-follow-up)
@@ -23,7 +24,9 @@ The longer PR #66 comparison showed a 17% median 1 MiB write deficit. Investigat
 then found an uninitialized TCP_NODELAY option in workflow-built memtier 2.5.1.
 Previous raw observations remain preserved, but their client socket setting was
 not verified; they cannot be treated as a controlled transport comparison.
-Checksum-verified preparation and a syscall gate now precede new matched runs.
+Checksum-verified preparation and a syscall gate now precede matched runs. The
+corrected 84-arm PR #66 comparison observes TCP_NODELAY enabled and does not
+reproduce that deficit (1 MiB write paired median ratio 1.008).
 This qualification applies to earlier unprepared memtier workflow performance
 results, including positive and negative ratios; functional recovery checks,
 allocation fixtures and independent Go arrival-generator sweeps remain separate.
@@ -63,7 +66,7 @@ Evidence: [closeout](engineering-closeout.md), [traversal](keyspace-traversal.md
 | Rewrite I/O | PR #43/#54: background bulk writes and preflush, explicit completion notifications, phase timing and safe worker ownership | Final dirty-tail sync, writes, rename and directory sync remain synchronous |
 | Opaque rewrites | PR #44/#52: bounded fragments and incremental CMS/Morris encoding | Other immutable-image construction and atomic large commands still cost CPU |
 | Churn memory | PR #29/#36/#38/#45/#48/#50: TTL/lookup/set/sorted-set compaction and bounded hash leaves | Partial pages, temporary old/new map overlap and workload-dependent costs remain; no RSS guarantee |
-| Allocation admission | PR #32/#35/#42/#53/#55: covered reply/workspace reservations; PR #58 bounds primary transcripts; PR #66 adds shared TCP input admission under validation | Mutation, replication/rewrite retention, compaction overlap and alternate transports remain outside a complete pool |
+| Allocation admission | PR #32/#35/#42/#53/#55: covered reply/workspace reservations; PR #58 bounds primary transcripts; PR #66 adds shared TCP input admission with corrected matched evidence | Mutation, replication/rewrite retention, compaction overlap and alternate transports remain outside a complete pool |
 | Linux throughput | PR #30: avoid unchanged readiness registrations on Linux | Darwin optimization was deferred after unresolved Intel test failures |
 | Client compatibility | PR #39: go-redis, Redigo, redis-py, node-redis and ioredis; 35 invocations across persistence modes and two restarts | Tested RESP2 subset only; no RESP3, transactions, cluster or every library API claim |
 | Operations and capacity | PR #34: scheduled overload sweeps, expiry storms, tenant mixtures, large collections, append diagnostics, two-replica 128 MiB recovery | Free public runners are not dedicated hosts or deployment SLO evidence |

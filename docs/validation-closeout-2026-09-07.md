@@ -200,8 +200,10 @@ These do not establish a general speedup or dedicated-host capacity.
 PR #66 adds shared request allocation admission before TCP buffer growth and
 RESP decoding, plus bounded command-name conversion and diagnostics. Its
 [report](request-allocation-admission.md) records reproduced allocation gaps,
-hosted parser/race/socket diagnostics, three broad matched comparisons and a
-longer targeted performance repeat in progress. Remaining
+hosted parser/race/socket diagnostics, all earlier matched attempts and the
+corrected 84-arm comparison with verified TCP_NODELAY. All corrected arms pass;
+the 17% large-write deficit is not reproduced and ordinary performance is near
+baseline. The generator correction and earlier failures remain explicit. Remaining
 coverage includes unmodeled mutation/persistence/replication/rewrite allocations,
 compaction overlap and kernel memory. The global allocation program is not complete.
 

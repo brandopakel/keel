@@ -250,3 +250,55 @@ in that overloaded cell. These results show modest costs in this different
 generator/workload schedule; they neither erase nor causally explain the earlier
 memtier slowdown. Evidence: `request-admission-large-write-arrival-2026-09-07.tar.gz`
 and its summary with exact source, checksum, latency and generator CPU.
+
+
+## Prepared-generator adoption result
+
+Runs [34184081130](https://github.com/brandopakel/keel/actions/runs/34184081130)
+and [34184079387](https://github.com/brandopakel/keel/actions/runs/34184079387)
+compare `6ca7ffed5740ac2d5e8f891055b647bf336ef167` against merged baseline
+`15ce1c0c696674e5c149811bc2bd071cd8554a8a`, persistence off. Both short socket
+probes observe four successful TCP_NODELAY calls with zero from the original
+binary and one from the prepared binary. Every measured arm uses the same
+prepared generator hash recorded in its probe. This verifies these runs' socket
+setting; it cannot recover the setting of historical runs.
+
+All 84 arms pass with zero connection errors and zero generator CPU warnings.
+Nine ordinary cases use three alternating ten-second pairs; the three targeted
+cases use five alternating thirty-second pairs. Median paired throughput ratios
+and median arm p99s are:
+
+| Workload | Candidate / baseline | Baseline p99 ms | Candidate p99 ms |
+| --- | ---: | ---: | ---: |
+| 64-byte reads | 1.007 | 0.327 | 0.319 |
+| Balanced 64-byte | 1.000 | 0.327 | 0.327 |
+| 64-byte writes | 1.000 | 0.327 | 0.327 |
+| 1 KiB reads | 1.011 | 0.375 | 0.367 |
+| TTL | 0.991 | 0.343 | 0.351 |
+| Many clients | 0.983 | 4.159 | 4.351 |
+| Hash | 0.994 | 0.343 | 0.343 |
+| Sorted set | 0.992 | 0.351 | 0.343 |
+| Queue | 0.994 | 0.335 | 0.335 |
+| 1 MiB reads | 0.998 | 4.383 | 4.479 |
+| 1 MiB writes | 1.008 | 5.663 | 5.631 |
+| Pipeline writes, 64 commands | 0.999 | 1.671 | 1.639 |
+
+The prior 17% large-write deficit is not reproduced under the verified transport
+setting; its raw evidence remains above. The targeted write ratios range from
+0.976 to 1.016, and pipeline ratios from 0.993 to 1.001. These results support
+adopting the scoped allocation improvement with ordinary performance near
+baseline; they do not establish a general speedup, statistical confidence
+intervals or dedicated-host capacity. Small-dataset RSS remains variable (for
+example 64-byte write medians 13.11 to 15.12 MiB); the allocation reduction is not
+a claim that RSS falls in every workload. The separate Go arrival sweep retains
+its saturation drops and modest latency costs.
+
+Complete available artifacts, socket traces, per-arm generator provenance,
+latencies and RSS are in `request-admission-prepared-ordinary-2026-09-07.tar.gz`
+and `request-admission-prepared-targeted-2026-09-07.tar.gz`; their separate summary
+files retain archive digests and all paired ranges. No runtime source changed
+after `9fb34cea`; later revisions integrate tests, harness fixes and evidence.
+PRs #67/#68 were integrated after these measurements; they add soak documentation
+and growth checks, with no Keel runtime change. The combined failure-diagnostic
+fixture passes after including the new growth option; before/after evidence is
+in `soak-merge-fixture-2026-09-07.json.gz`.
