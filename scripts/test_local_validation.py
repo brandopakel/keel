@@ -193,6 +193,18 @@ class LocalValidationTests(unittest.TestCase):
             self.assertEqual(json.loads(fallback.read_text())['status'], 'failed')
             self.assertTrue((root/'local-resource-report.json').is_dir())
 
+    def test_failure_prunes_go_temporary_builds_and_keeps_other_evidence(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)/'run'
+            result = self.invoke(root, "from pathlib import Path; import os,sys; (Path(os.environ['GOTMPDIR'])/'build.a').write_bytes(b'x'*(1<<20)); (Path(os.environ['TMPDIR'])/'failure.txt').write_text('recovery evidence'); sys.exit(2)")
+            self.assertEqual(result.returncode, 1, result.stdout+result.stderr)
+            self.assertFalse((root/'go-cache').exists())
+            self.assertFalse((root/'go-tmp').exists())
+            self.assertEqual((root/'tmp/failure.txt').read_text(), 'recovery evidence')
+            report = json.loads((root/'local-resource-report.json').read_text())
+            self.assertTrue(report['go_temporary_files_pruned'])
+            self.assertEqual(report['status'], 'failed')
+
     def test_directory_removed_during_scan_preserves_other_usage(self):
         spec = importlib.util.spec_from_file_location('churn_guard', SCRIPT)
         guard = importlib.util.module_from_spec(spec)
