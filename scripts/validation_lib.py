@@ -24,10 +24,14 @@ def sha256(path):
 
 class Server:
     def __init__(self, binary, directory, *, policy='always', async_append=False,
-                 port=None, extra=(), file_limit=None, password=None, startup_timeout=10):
+                 port=None, extra=(), file_limit=None, password=None, startup_timeout=10,
+                 shutdown_timeout=8):
         if not math.isfinite(startup_timeout) or startup_timeout <= 0:
             raise ValueError("startup_timeout must be finite and positive")
         self.startup_timeout = startup_timeout
+        if not math.isfinite(shutdown_timeout) or shutdown_timeout <= 0:
+            raise ValueError("shutdown_timeout must be finite and positive")
+        self.shutdown_timeout = shutdown_timeout
         self.binary = str(Path(binary).resolve())
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
@@ -66,7 +70,8 @@ class Server:
                     raise RuntimeError(f'server exited during startup; see {self.directory}/server.log')
                 try:
                     self.client = Client('127.0.0.1', self.port, self.password)
-                    assert self.client.call('PING') == b'PONG'
+                    if self.client.call('PING') != b'PONG':
+                        raise RuntimeError('server returned an invalid readiness response')
                     return self
                 except OSError:
                     time.sleep(.02)
@@ -87,11 +92,11 @@ class Server:
             if self.process.poll() is None:
                 self.process.kill() if crash else self.process.terminate()
             try:
-                result = self.process.wait(timeout=8)
+                result = self.process.wait(timeout=self.shutdown_timeout)
             except subprocess.TimeoutExpired:
                 self.process.kill()
                 self.process.wait()
-                raise RuntimeError('server failed to stop within eight seconds')
+                raise RuntimeError(f'server failed to stop within {self.shutdown_timeout} seconds')
             finally:
                 self.log.close()
             self.process = None
