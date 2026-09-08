@@ -17,7 +17,9 @@ permissions:
 jobs:
   repeat:
     runs-on: macos-15-intel
-    timeout-minutes: 25
+    # Ten arms may each hit 150 seconds. Leave time for two compilations and
+    # failure evidence upload after that worst-case 25-minute measurement.
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with: { persist-credentials: false, fetch-depth: 0 }
@@ -51,6 +53,7 @@ jobs:
           from pathlib import Path
           out = Path('dist/rewrite-waits')
           report = {'status': 'running', 'method': 'Five alternating same-host pairs with identical tests, a logged three-second threshold and a one-minute deadlock watchdog. Public Mac scheduling and physical storage remain uncontrolled. Test cleanup runs on failure; a successful repeat does not explain the original failure.', 'arms': []}
+          report['limits_seconds'] = {'diagnostic_wait_threshold': 3, 'rewrite_test_deadlock_watchdog': 60, 'go_test_process_timeout': 120, 'subprocess_arm_timeout': 150, 'github_job_timeout': 2400}
           try:
               for repetition in range(1, 6):
                   order = ('control', 'candidate') if repetition % 2 else ('candidate', 'control')
