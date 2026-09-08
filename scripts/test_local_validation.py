@@ -193,6 +193,46 @@ class LocalValidationTests(unittest.TestCase):
             self.assertEqual(json.loads(fallback.read_text())['status'], 'failed')
             self.assertTrue((root/'local-resource-report.json').is_dir())
 
+    def test_failure_prunes_go_temporary_builds_and_keeps_other_evidence(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)/'run'
+            result = self.invoke(root, "from pathlib import Path; import os,sys; (Path(os.environ['GOTMPDIR'])/'build.a').write_bytes(b'x'*(1<<20)); (Path(os.environ['TMPDIR'])/'failure.txt').write_text('recovery evidence'); sys.exit(2)")
+            self.assertEqual(result.returncode, 1, result.stdout+result.stderr)
+            self.assertFalse((root/'go-cache').exists())
+            self.assertFalse((root/'go-tmp').exists())
+            self.assertEqual((root/'tmp/failure.txt').read_text(), 'recovery evidence')
+            report = json.loads((root/'local-resource-report.json').read_text())
+            self.assertTrue(report['go_cache_pruned'])
+            self.assertTrue(report['go_temporary_files_pruned'])
+            self.assertEqual(report['status'], 'failed')
+
+    def test_directory_removed_during_scan_preserves_other_usage(self):
+        spec = importlib.util.spec_from_file_location('churn_guard', SCRIPT)
+        guard = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(guard)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            disappearing = root/'temporary'
+            disappearing.mkdir()
+            (root/'retained').write_bytes(b'x'*4096)
+            original_scandir = guard.os.scandir
+            def concurrent_cleanup(path):
+                if Path(path) == disappearing:
+                    disappearing.rmdir()
+                return original_scandir(path)
+            with patch.object(guard.os, 'scandir', concurrent_cleanup):
+                self.assertEqual(guard.directory_bytes(root), 4096)
+            self.assertFalse(disappearing.exists())
+
+    def test_exited_parent_does_not_leave_owned_child(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)/'run'
+            result = self.invoke(root, "import subprocess,sys; from pathlib import Path; p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)']); (Path(sys.argv[1])/'child.pid').write_text(str(p.pid))")
+            self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+            pid = int((root/'child.pid').read_text())
+            status = subprocess.run(['ps', '-o', 'stat=', '-p', str(pid)], text=True, capture_output=True).stdout.strip()
+            self.assertTrue(not status or status.startswith('Z'), status)
+
     def test_report_headroom_is_included_in_budget(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)/'run'
