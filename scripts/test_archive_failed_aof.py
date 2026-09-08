@@ -68,6 +68,17 @@ class FailedAOFArchiveTests(unittest.TestCase):
             self.assertEqual(path.read_bytes(), body)
             self.assertLessEqual(sum((path.parent / s['artifact']).stat().st_size for s in result['samples']), 256 << 10)
 
+    def test_existing_partial_archive_is_not_deleted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'store.aof'
+            path.write_bytes(b'original')
+            partial = path.with_name('store.aof.gz.partial')
+            partial.write_bytes(b'earlier failure evidence')
+            with self.assertRaises(FileExistsError):
+                archive.preserve(path)
+            self.assertEqual(partial.read_bytes(), b'earlier failure evidence')
+            self.assertEqual(path.read_bytes(), b'original')
+
 
 if __name__ == '__main__':
     unittest.main()

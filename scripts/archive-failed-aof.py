@@ -9,6 +9,7 @@ import argparse
 import gzip
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import stat
@@ -80,22 +81,25 @@ def preserve(path, compressed_limit=64 << 20, sample_limit=64 << 10):
               'samples': [], 'limitation': 'Partial samples cannot validate complete replay.'}
     complete = False
     if limit > 0:
+        owns_partial = False
         try:
             with partial.open('xb') as file:
+                owns_partial = True
                 with gzip.GzipFile(fileobj=LimitedWriter(file, limit), mode='wb', mtime=0) as output:
                     with path.open('rb') as source:
                         while chunk := source.read(1 << 20):
                             output.write(chunk)
             # Verify every uncompressed byte before removing the original.
             verify_archive(partial, size, digest)
-            if archive.exists():
-                raise FileExistsError('refusing to replace an existing archive')
-            partial.rename(archive)
+            # Publish without replacing any existing directory entry, including
+            # a symlink or another preservation attempt's archive.
+            os.link(partial, archive)
             complete = True
         except ArchiveBudgetExceeded:
             report['reason'] = 'compressed output budget exceeded; original retained'
         finally:
-            partial.unlink(missing_ok=True)
+            if owns_partial:
+                partial.unlink(missing_ok=True)
 
     if complete:
         compressed_size, compressed_digest = digest_file(archive)
