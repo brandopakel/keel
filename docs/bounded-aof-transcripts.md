@@ -79,8 +79,8 @@ With the four-MiB ceiling, the full suite and three focused race repetitions pas
 again. A second one-second local probe records one-MiB writes at roughly 150 to
 128 operations/s and pipelined small writes at 125k to 144k operations/s. These
 short, contended results remain diagnostic; they do not qualify either a gain or
-an acceptable regression. The PR stays a draft until the controlled policy/mode
-matrix and review can assess the memory/throughput tradeoff.
+an acceptable regression. That candidate was held until a controlled policy/mode matrix and review could
+assess the memory/throughput tradeoff.
 
 ## First hosted matrix and admission correction
 
@@ -142,3 +142,45 @@ artifacts are `bench/results/transcript-corrected-off-always-2026-09-07.tar.gz`.
 The remaining no/everysec comparison must use the same explicit supported shutdown
 grace on both binaries, after integrating the shutdown fix. The harness records the
 grace and preserves failures; it does not silently alter an older baseline binary.
+
+## Completed four-policy comparison
+
+[Run 34171209014](https://github.com/brandopakel/keel/actions/runs/34171209014)
+completes **400 passing arms**: 40 case/policy/mode cells, five alternating
+baseline/candidate pairs each. Candidate `b823ba52baf848b2b5052d71e986a18546c1e71d`
+and control `a1d550c1e3e73d2633e4097e45d1816cfe8e9e8c` share the merged reservation
+and shutdown runtime changes. Both receive an explicit 30-second shutdown grace.
+All completed cells have zero generator CPU warnings. Reports, tool logs,
+telemetry, host metadata and source identities are preserved in
+`bench/results/transcript-final-policy-matrix-2026-09-07.tar.gz` (about 7 MiB).
+The 563.65 GiB of cumulative disposable AOF output was hashed/reported and removed
+between arms on the hosted runners; it was never copied to the laptop.
+
+| Policy / mode | 64B read ratio | 64B write ratio | Pipeline write ratio | 1 MiB write ratio |
+| --- | ---: | ---: | ---: | ---: |
+| off/sync | 1.010 | 0.996 | 1.002 | 1.008 |
+| no/sync | 1.010 | 0.995 | 0.970 | 0.989 |
+| no/barrier | 0.995 | 1.002 | 1.013 | 0.999 |
+| no/concurrent | 1.002 | 1.004 | 1.038 | 0.997 |
+| everysec/sync | 1.002 | 0.996 | 0.965 | 0.992 |
+| everysec/barrier | 0.992 | 1.000 | 1.022 | 1.012 |
+| everysec/concurrent | 0.999 | 0.997 | 1.039 | 1.000 |
+| always/sync | 1.005 | 1.007 | 0.987 | 1.005 |
+| always/barrier | 0.996 | 1.012 | 1.026 | 1.007 |
+| always/concurrent | 1.008 | 0.992 | 0.996 | 1.005 |
+
+This supports a bounded-memory change with a measured throughput tradeoff; it
+does **not** establish performance neutrality or a general append-overlap speedup.
+The synchronous pipeline is about 3.0% slower with no periodic fsync and 3.5%
+slower with every-second fsync. Its every-second p99 moves from 1.967 to 2.039 ms.
+Always/synchronous pipeline p99 moves from 2.991 to 3.343 ms (about 11.8% higher),
+while its throughput is 1.3% lower. Every-second/synchronous 1 MiB write p99 rises
+from 39.167 to 42.239 ms. Other cells and append modes differ; per-cell evidence
+must accompany any performance claim. The shared public VMs do not establish
+dedicated deployment capacity or tails under every workload.
+
+The allocation fixtures reduce 8 MiB SET allocations by about 49% and long-key
+mass-eviction allocations by about 80%, with a bounded retained transcript. The
+remaining optimization is the ordinary synchronous serialization path: profile
+its CPU and allocation costs on matched hosted runs before selecting a change.
+Review remains required before adoption; no new release is implied by this data.
