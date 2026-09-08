@@ -162,6 +162,69 @@ def process_sample(*pids):
         return f'unavailable: {exc!r}'
 
 
+class GrowthBounds:
+    """Fails a soak the moment something grows without bound.
+
+    A long run was the only thing checking this, and it checked it badly: the
+    September 6 ratchet - a replica whose log never compacted because restart
+    reset its growth baseline - took two and a half hours to surface, and
+    surfaced as a readiness timeout rather than as the growth it was. Nothing
+    said "the log is not being compacted"; something eventually fell over.
+
+    Bounding it directly is both faster and more specific. A ratchet fails here
+    within a few cycles, and says which quantity ran away.
+
+    The bound is on what a steady-state workload should hold flat across
+    recovery cycles, not on any absolute size: this workload writes to a fixed
+    key range, so the log, the resident set and the descriptor count should all
+    settle. Growth proportional to elapsed time is the defect.
+    """
+
+    def __init__(self, tolerance):
+        self.tolerance = tolerance
+        self.settled = {}
+        self.breaches = []
+
+    def observe(self, cycle, values):
+        """values: name -> current measurement. Returns a list of breach dicts."""
+        # The first few cycles are the workload filling up, not steady state.
+        if cycle < 4:
+            for name, value in values.items():
+                self.settled[name] = max(self.settled.get(name, 0), value)
+            return []
+        found = []
+        for name, value in values.items():
+            baseline = self.settled.get(name, 0)
+            if baseline > 0 and value > baseline * self.tolerance:
+                found.append({'quantity': name, 'settled': baseline, 'now': value,
+                              'cycle': cycle, 'tolerance': self.tolerance})
+        self.breaches.extend(found)
+        return found
+
+
+def growth_values(primary, replica):
+    """What must stay flat: the two logs, and the descriptors each server holds.
+
+    Resident set is deliberately absent. It moves with allocator and GC
+    behaviour that is not a leak, so bounding it here would produce failures
+    nobody can act on. The logs and descriptors have no such excuse.
+    """
+    values = {}
+    for name, server in (('primary_aof', primary), ('replica_aof', replica)):
+        log = server.directory / 'store.aof'
+        try:
+            values[name] = log.stat().st_size
+        except OSError:
+            continue
+    for name, server in (('primary_tmpfiles', primary), ('replica_tmpfiles', replica)):
+        try:
+            values[name] = sum(1 for entry in server.directory.iterdir()
+                               if entry.name.startswith('.') or entry.name.endswith('.rewrite'))
+        except OSError:
+            continue
+    return values
+
+
 def run(args, report, watchdog):
     root = Path(args.out).resolve()
     replication_flags = ['-replication-protocol', str(args.replication_protocol)]
@@ -183,6 +246,7 @@ def run(args, report, watchdog):
     next_cycle = started + args.cycle_seconds
     next_check = started + min(30, args.cycle_seconds)
     cycles = 0
+    growth = GrowthBounds(args.growth_tolerance)
     try:
         primary.start()
         assert primary.client.call('SET', 'large-value', b'L' * 1048576) == b'OK'
@@ -275,6 +339,14 @@ def run(args, report, watchdog):
                 with (root/'recoveries.jsonl').open('a') as output:
                     output.write(json.dumps({'cycle': cycles, 'primary_crash': crash_primary,
                         'seconds': time.monotonic()-recovery_start, 'acknowledged_cache_values_lost': 0})+'\n')
+                breaches = growth.observe(cycles, growth_values(primary, replica))
+                if breaches:
+                    report['growth_breaches'] = growth.breaches
+                    raise AssertionError(
+                        'unbounded growth across recovery cycles: ' + '; '.join(
+                            f"{b['quantity']} settled at {b['settled']} and is now {b['now']} "
+                            f"at cycle {b['cycle']}" for b in breaches))
+                report['growth_settled'] = growth.settled
                 next_cycle = time.monotonic() + args.cycle_seconds
                 watchdog.beat("workload after recovery")
             time.sleep(.002)
@@ -320,6 +392,9 @@ if __name__ == '__main__':
                         help='crash primary every N recovery cycles; 0 keeps it alive to measure long-uptime growth')
     parser.add_argument('--progress-timeout', type=float, default=120,
                         help='fail with diagnostics if checkpoints/recovery stop progressing')
+    parser.add_argument('--growth-tolerance', type=float, default=3.0,
+                        help='fail if a log or descriptor count exceeds this multiple of its '
+                             'settled value across recovery cycles; 0 disables the check')
     parser.add_argument('--fault-only', action='store_true')
     parser.add_argument('--disk-root')
     args = parser.parse_args()
