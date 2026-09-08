@@ -1,0 +1,58 @@
+name: Request allocation diagnostics
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'internal/core/request_decode*'
+      - 'internal/server/**'
+      - 'cmd/keel/request_allocations_test.go'
+      - '.github/workflows/request-admission.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  admission:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version: '1.27.1' }
+      - name: Record source and allocation diagnostics
+        run: |
+          set -euo pipefail
+          mkdir -p dist/request-admission
+          git rev-parse HEAD > dist/request-admission/source.log
+          go version > dist/request-admission/go.log
+          go test ./internal/core -run '^$' -bench '^BenchmarkRequestParsingAdmission$' -benchmem -benchtime=250ms -count=5 | tee dist/request-admission/parser-benchmark.log
+      - name: Matched read-phase ownership allocations
+        run: |
+          set -euo pipefail
+          baseline=15ce1c0c696674e5c149811bc2bd071cd8554a8a
+          git worktree add --detach "$RUNNER_TEMP/request-baseline" "$baseline"
+          cp internal/server/request_parsing_benchmark_test.go "$RUNNER_TEMP/request-baseline/internal/server/"
+          printf '%s\n' "$baseline" > dist/request-admission/ownership-baseline.log
+          sha256sum internal/server/request_parsing_benchmark_test.go > dist/request-admission/ownership-fixture.log
+          go -C "$RUNNER_TEMP/request-baseline" test ./internal/server -run '^$' -bench '^BenchmarkReadPhaseOwnership$' -benchmem -benchtime=250ms -count=5 | tee dist/request-admission/ownership-baseline-benchmark.log
+          go test ./internal/server -run '^$' -bench '^BenchmarkReadPhaseOwnership$' -benchmem -benchtime=250ms -count=5 | tee dist/request-admission/ownership-candidate-benchmark.log
+      - name: Shared reader reservations under the race detector
+        run: |
+          set -euo pipefail
+          go test -race ./internal/server -run '^TestRequest' -count=20 -json | tee dist/request-admission/workers.jsonl
+      - name: Socket pressure and recovery under the race detector
+        run: |
+          set -euo pipefail
+          go test -race ./cmd/keel -run '^(TestRequestReservationsRecoverAfterIncompleteWriters|TestCommandReservationsRecoverAfterSlowReaders)$' -count=3 -json | tee dist/request-admission/socket-recovery.jsonl
+      - name: Differential parser fuzzing
+        run: |
+          set -euo pipefail
+          go test ./internal/core -run '^$' -fuzz '^FuzzReservedCommandParserMatchesValueDecoder$' -fuzztime=3m -parallel=2 | tee dist/request-admission/fuzz.log
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: request-allocation-diagnostics
+          path: |
+            dist/request-admission
+            internal/core/testdata/fuzz/FuzzReservedCommandParserMatchesValueDecoder
+          retention-days: 30

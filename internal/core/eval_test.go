@@ -2,6 +2,8 @@ package core
 
 import (
 	"bytes"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,6 +25,25 @@ func TestUnknownCommandIsAnError(t *testing.T) {
 	err := EvalAndResponse(&Command{Cmd: "NOSUCH", Args: []string{"a"}}, &w)
 	assert.EqualError(t, err, "ERR unknown command 'NOSUCH'")
 	assert.Empty(t, w.b, "nothing is written for it here; the caller replies")
+}
+
+func TestUnknownCommandDiagnosticIsBoundedBeforeFormatting(t *testing.T) {
+	ResetStores()
+	defer ResetStores()
+	cmd := &Command{Cmd: strings.Repeat("NO\r\n", 256<<10)}
+	var w replyWriter
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	err := EvalAndResponse(cmd, &w)
+	reply := Encode(err, false)
+	runtime.ReadMemStats(&after)
+	assert.Error(t, err)
+	assert.Empty(t, w.b, "replay must still receive a fatal unknown-command error")
+	assert.LessOrEqual(t, len(reply), 160)
+	assert.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(64<<10), "formatting and sanitizing an unknown name must stay small")
+	assert.Contains(t, string(reply), "...'")
+	assert.Equal(t, 1, bytes.Count(reply, []byte("\r\n")))
 }
 
 // TestAnErrorQuotingClientInputStaysOneFrame: a command name or argument can

@@ -1,0 +1,99 @@
+name: Paired AOF CPU and allocation diagnostics
+on:
+  workflow_call:
+    inputs:
+      candidate: { type: string, required: true }
+      baseline: { type: string, required: true }
+permissions:
+  contents: read
+jobs:
+  profiles:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        policy: ['no', everysec, always]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version: '1.27.1' }
+      - name: Build exact runtimes and pinned generator
+        env:
+          CANDIDATE_REV: ${{ inputs.candidate }}
+          BASELINE_REV: ${{ inputs.baseline }}
+          CGO_ENABLED: '0'
+        run: |
+          [[ "$CANDIDATE_REV" =~ ^[0-9a-f]{40}$ && "$BASELINE_REV" =~ ^[0-9a-f]{40}$ ]]
+          mkdir -p dist/profile-pair
+          git worktree add --detach "$RUNNER_TEMP/profile-candidate" "$CANDIDATE_REV"
+          git worktree add --detach "$RUNNER_TEMP/profile-baseline" "$BASELINE_REV"
+          go -C "$RUNNER_TEMP/profile-candidate" build -trimpath -o /tmp/profile-candidate ./cmd/keel
+          go -C "$RUNNER_TEMP/profile-baseline" build -trimpath -o /tmp/profile-baseline ./cmd/keel
+          go version -m /tmp/profile-candidate > dist/profile-pair/candidate-build.log
+          go version -m /tmp/profile-baseline > dist/profile-pair/baseline-build.log
+          git rev-parse HEAD > dist/profile-pair/harness-source.log
+          lscpu > dist/profile-pair/host.log
+          df -T . > dist/profile-pair/filesystem.log
+          sudo apt-get update
+          sudo apt-get install -y build-essential autoconf automake libtool pkg-config libevent-dev libssl-dev zlib1g-dev lsof
+          curl -fL --retry 3 https://github.com/redis/memtier_benchmark/archive/refs/tags/2.5.1.tar.gz -o /tmp/memtier.tar.gz
+          echo '9b34e17a0d1d7e70b152eb442c6362161b5b764ce2ea98e97b7c74815bdd90b7  /tmp/memtier.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/memtier.tar.gz -C /tmp
+          python3 scripts/prepare-memtier.py /tmp/memtier_benchmark-2.5.1
+          cd /tmp/memtier_benchmark-2.5.1
+          autoreconf -fi
+          ./configure
+          make -j2
+      - name: Alternate exact runtimes with identical synchronous persistence
+        env:
+          PROFILE_POLICY: ${{ matrix.policy }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          out = Path('dist/profile-pair')
+          cpus = sorted(os.sched_getaffinity(0))
+          topology = {}
+          for cpu in cpus:
+              root = Path(f'/sys/devices/system/cpu/cpu{cpu}/topology')
+              topology[cpu] = tuple((root/name).read_text().strip() for name in ('physical_package_id', 'core_id'))
+          server = [cpu for cpu in cpus if topology[cpu] == topology[cpus[0]]]
+          client = [cpu for cpu in cpus if cpu not in server]
+          if not client:
+              raise RuntimeError('two exposed physical core groups required')
+          report = {'status': 'running', 'policy': os.environ['PROFILE_POLICY'], 'server_cpus': server, 'generator_cpus': client, 'topology': topology, 'method': 'Three alternating same-host profile pairs, fresh servers, two unchanged workloads, identical synchronous persistence. CPU/heap capture and forced GC perturb execution: timing from these runs is diagnostic only and must not be mixed into uninstrumented performance ratios. Public VM tenancy/storage remain uncontrolled.', 'runs': []}
+          try:
+              for repetition in range(1, 4):
+                  order = ('baseline', 'candidate') if repetition % 2 else ('candidate', 'baseline')
+                  for arm in order:
+                      binary = '/tmp/profile-'+arm
+                      root = out/f'r{repetition}-{arm}'
+                      command = ['python3', 'bench/run-general.py', '--candidate', binary, '--memtier', '/tmp/memtier_benchmark-2.5.1/memtier_benchmark', '--profiles', '--policy', os.environ['PROFILE_POLICY'], '--cases', 'cache-write-64,cache-write-pipeline-64', '--reps', '1', '--seconds', '20', '--shutdown-seconds', '30', '--load-threads', '2', '--server-cpus', ','.join(map(str, server)), '--client-cpus', ','.join(map(str, client)), '--out', str(root)]
+                      result = subprocess.run(command)
+                      report['runs'].append({'arm': arm, 'repetition': repetition, 'returncode': result.returncode, 'directory': str(root)})
+                      for profile in root.rglob('*.pprof'):
+                          sample = 'alloc_space' if 'allocs' in profile.name else ('inuse_space' if 'heap' in profile.name else 'cpu')
+                          with profile.with_suffix('.top.log').open('w') as output:
+                              subprocess.run(['go', 'tool', 'pprof', '-top', '-nodecount=60', '-sample_index='+sample, binary, str(profile)], stdout=output, stderr=subprocess.STDOUT, check=True)
+                      (out/'report.json').write_text(json.dumps(report, indent=2)+'\n')
+              report['status'] = 'passed' if all(row['returncode'] == 0 for row in report['runs']) else 'failed'
+          except BaseException as exc:
+              report.update(status='failed', failure=repr(exc))
+              raise
+          finally:
+              (out/'report.json').write_text(json.dumps(report, indent=2)+'\n')
+          if report['status'] != 'passed':
+              raise SystemExit(1)
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: transcript-profiles-${{ matrix.policy }}
+          path: |
+            dist/profile-pair/**/*.json
+            dist/profile-pair/**/*.log
+            dist/profile-pair/**/*.csv
+            dist/profile-pair/**/*.pprof
+          retention-days: 30

@@ -48,9 +48,10 @@ raw terminal report retains `KeyboardInterrupt()`; a separate `user-stop.json`
 preserves the prior stale progress and explains the interruption. Neither run
 was restarted. Their reports, checkpoints, recovery records and diagnostic logs
 are archived in `bench/results/frozen-continuous-soak-stop-2026-09-07.json.gz`.
-They are separate evidence. The
-merged multiplexer timeout does not establish its root cause; see
-[the diagnostic assessment](soak-diagnostics-2026-09-07.md).
+They are separate evidence. The earlier
+[diagnostic assessment](soak-diagnostics-2026-09-07.md) is supplemented by
+[PR #67's server-side investigation](soak-progress-observability.md); the
+registration path it identifies remains unlocated.
 
 ## Engineering completed and candidates
 
@@ -80,7 +81,7 @@ merged multiplexer timeout does not establish its root cause; see
   34171209014. Large SET transcript allocations fell about 49%, and the large-key
   eviction fixture fell about 80%. Synchronous pipeline throughput fell about
   3–3.5% under no/everysec sync; some p99 tails increased. This is a bounded-memory
-  improvement with measured costs, not a general speedup. Review remains open;
+  improvement with measured costs, not a general speedup. Review is complete and PR 58 is merged;
   see [the full comparison](bounded-aof-transcripts.md).
 
 - PR 59 introduced protocol-2 progress metrics. Merged PR 64 corrects invalid cursor
@@ -122,15 +123,16 @@ The local figures exclude unrelated applications and their active build output.
 
 ## Work still open
 
-A complete temporary-allocation contract must cover parsing, other mutations,
-replication transport/history, rewrite images and borrowed retired values, and
-compaction overlap. PRs 55/58 are scoped improvements, not completion of that
-contract. Final rewrite sync/rename/directory-sync work requires a defined ordered
+TCP parsing now has pre-allocation admission in PR 66. A complete temporary-
+allocation contract still needs other mutations, replication transport/history,
+rewrite images and borrowed retired values, compaction overlap and alternate
+transports. PRs 55/58/66 are scoped improvements, not completion of that contract. Final rewrite sync/rename/directory-sync work requires a defined ordered
 handoff before commands can continue through it. Large commands still have CPU
-and filesystem stalls; the transcript draft may trade memory for more write calls.
+and filesystem stalls; bounded transcripts trade memory for more write calls in some cases.
 
-The older stalled soak and historical Intel pending-reply/Apple Silicon fairness
-observations remain unexplained despite successful repeats. A separate large-file
+PR #67 records the older stall investigation and its missing-readiness assessment;
+the registration path remains unidentified. Historical Intel pending-reply/Apple
+Silicon fairness observations remain unexplained despite successful repeats. A separate large-file
 startup observation is now timed explicitly and has matched successful repeats;
 that is not evidence of a runtime fix for those earlier observations.
 
@@ -144,12 +146,11 @@ do not substitute for dedicated deployment or actual application traces.
 
 | Priority | Remaining work | Evidence required to close it |
 | --- | --- | --- |
-| 1 | Finish transcript admission and shutdown integration | Reviewed source; all policy/mode pairs complete with matched settings; no unexplained correctness failures; any throughput/memory tradeoff stated explicitly. |
-| 2 | Complete aggregate temporary-allocation coverage | Bound parsing, mutation, replication, rewrite and compaction overlap before allocation; demonstrate rejection/recovery under mixed slow clients, large requests and persistence pressure. |
-| 3 | Reduce remaining large-command and rewrite finalization stalls | Define ordered publication across final sync/rename/directory sync; fault injection at each phase; paired tail-latency measurements with unchanged durability. |
-| 4 | Extend replication recovery and churn coverage | Larger snapshots, sustained updates, outages and multiple lagging replicas; verify final state and acknowledged offsets, bounded memory, recovery time and failure retention. |
-| 5 | Establish broadly applicable capacity limits | Load sweeps, expiry storms, tenant mixtures, large collections and client reconnect/slow-reader mixes with generator headroom; compare repeated same-host baseline/candidate/Redis runs. |
-| 6 | Resolve deployment and application evidence gaps | Existing suitable dedicated hosts and representative application traces within $0; retain GoGIF as one unchanged pilot. |
+| 1 | Complete aggregate temporary-allocation coverage | Extend covered TCP parsing/replies to mutation, replication, rewrite and compaction overlap before allocation; demonstrate rejection/recovery under mixed slow clients, large requests and persistence pressure. |
+| 2 | Reduce remaining large-command and rewrite finalization stalls | Define ordered publication across final sync/rename/directory sync; fault injection at each phase; paired tail-latency measurements with unchanged durability. |
+| 3 | Extend replication recovery and churn coverage | Larger snapshots, sustained updates, outages and multiple lagging replicas; verify final state and acknowledged offsets, bounded memory, recovery time and failure retention. |
+| 4 | Establish broadly applicable capacity limits | Load sweeps, expiry storms, tenant mixtures, large collections and client reconnect/slow-reader mixes with generator headroom; compare repeated same-host baseline/candidate/Redis runs. |
+| 5 | Resolve deployment and application evidence gaps | Existing suitable dedicated hosts and representative application traces within $0; retain GoGIF as one unchanged pilot. |
 
 Public-runner results cannot establish dedicated-host capacity. Short operational
 runs on ext4/xfs and native Linux ARM64/Intel Mac checks remain useful; extended
@@ -165,7 +166,7 @@ both success and failure. It preserves ordinary failure evidence. The final
 transcript policy comparison is [run 34171209014](https://github.com/brandopakel/keel/actions/runs/34171209014);
 all 400 arms passed, with compact reports archived in the repository and
 563.65 GiB of cumulative disposable AOF output pruned on the runners. None of
-that raw output was downloaded to the laptop. PR 58 remains open for review;
+that raw output was downloaded to the laptop. PR 58 has since merged;
 the measured throughput and tail-latency costs remain visible in its report.
 Its earlier corrected off/always comparison completed 160 arms. CodeRabbit's
 first transcript review was skipped at the included-review limit; a green status
@@ -180,19 +181,63 @@ identifies 16 verified draft-release assets. Local soaks remain stopped.
 
 ## Current hosted follow-up
 
-PR 58 integrates all five closeout fixes and remains open for its full review.
-Its 400-arm persistence matrix and two-replica 128 MiB recovery test have passed.
-A new Intel rewrite diagnostic hit its existing three-second worker wait; the
-fixture now cleans up on failure. Five alternating control/candidate pairs then
-passed the unchanged limit, while recording a slower candidate median rewrite.
-The original wait remains unexplained; details and every result are in
-[the transcript report](bounded-aof-transcripts.md).
+PR #58 merged as `15ce1c0` after the final `0c74e92` review and required checks
+passed. Review reproduced a panic and incorrect replication publication after
+an AOF short write; failed drains now stop publication. The 400-arm persistence
+matrix and two-replica 128 MiB recovery test passed on their recorded runtimes.
+The original Intel three-second rewrite wait remains unexplained; ten matched
+repeats passed the original gate. The current fixture logs three seconds as a
+diagnostic threshold and has separate deadlock, process, arm and job watchdogs.
+Details and performance costs remain in [the transcript report](bounded-aof-transcripts.md).
 
-The broader capacity sweep is
-[run 34174358161](https://github.com/brandopakel/keel/actions/runs/34174358161).
-Four-hour ext4/XFS recovery jobs are
-[run 34174359818](https://github.com/brandopakel/keel/actions/runs/34174359818).
-They run on public GitHub hosts, are still in progress at this update and do not
-count as passes. No local test, benchmark or soak remains running. The current
-local copies of published test/benchmark output have been pruned. Alpha.3 remains
-the latest published software release.
+The [capacity sweep](https://github.com/brandopakel/keel/actions/runs/34174358161)
+completed 140 arms with no issued-request failures and generator queue drops
+under overload. The [paired profiles](https://github.com/brandopakel/keel/actions/runs/34176103471)
+completed 36 diagnostic arms. Their source revisions, measurements and
+limitations are in [the combined report](transcript-profile-capacity-2026-09-07.md).
+These do not establish a general speedup or dedicated-host capacity.
+
+PR #66 adds shared request allocation admission before TCP buffer growth and
+RESP decoding, plus bounded command-name conversion and diagnostics. Its
+[report](request-allocation-admission.md) records reproduced allocation gaps,
+hosted parser/race/socket diagnostics, all earlier matched attempts and the
+corrected 84-arm comparison with verified TCP_NODELAY. All corrected arms pass;
+the 17% large-write deficit is not reproduced and ordinary performance is near
+baseline. The generator correction and earlier failures remain explicit. Remaining
+coverage includes unmodeled mutation/persistence/replication/rewrite allocations,
+compaction overlap and kernel memory. The global allocation program is not complete.
+
+[Four-hour filesystem recovery](https://github.com/brandopakel/keel/actions/runs/34174359818)
+on earlier runtime `6966b55` failed on XFS after about two hours; ext4 remains
+running. Neither counts as a pass or validates later fixes. No local soak is running; new local checks are
+brief, guarded and pruned after archiving compact evidence on GitHub. Alpha.3
+remains the latest published software release.
+
+### Hosted XFS failure and evidence preservation
+
+The XFS run reached 2,127,764 acknowledged cache writes and 239 checkpoints,
+with seven primary and sixteen replica crash recoveries. A primary SET then
+exceeded the unchanged three-second socket deadline. Its ordinary AOF sync
+maximum/last slow call was 3,003,783 microseconds, completing at
+02:47:35.258649 UTC shortly before the 02:47:35.411 traceback. That is consistent
+with a strict-durability reply waiting on slow filesystem sync. Later INFO probes
+succeeded and SIGQUIT stacks show idle event loops; they do not capture the
+server at the exact request deadline. Final rewrite sync's maximum was 712 µs
+and finalization's maximum was 5,073 µs in that process, so this evidence does
+not implicate rewrite finalization in this timeout.
+
+All 23 completed recovery records report zero acknowledged cache values lost.
+The failed final state was not independently replayed. The original workflow
+copied logs/reports before unmounting its owned filesystem but omitted AOFs;
+those missing bytes cannot be reconstructed. Complete available evidence and
+the job traceback are preserved in
+`hosted-xfs-soak-failure-2026-09-07.tar.gz`, with source, digest and limitations
+in `hosted-xfs-soak-failure-summary-2026-09-07.json.gz`.
+
+The updated harness records the failure time, elapsed duration and Python call
+frames before diagnostic queries and process teardown, excluding local variable
+contents. Filesystem cleanup now attempts bounded failed-AOF preservation before
+unmounting, verifies copied evidence, records preservation failures explicitly,
+and keeps hashes for raw logs that are not uploaded. Incomplete or interrupted
+preservation still limits replay evidence; it cannot turn the workload into a
+pass. The original three-second request deadline remains unchanged.

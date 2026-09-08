@@ -24,6 +24,7 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from validation_lib import Client, sha256
 
+DEFAULT_SHUTDOWN_SECONDS = 5
 
 def compatible_load_threads(requested, clients):
     # Use the maximum allowed divisor, not gcd(requested, clients): the maximum
@@ -218,7 +219,7 @@ def run_arm(args, arm, binary, case, repetition, directory):
             command += ['-aof-async-append']
         if args.concurrent or (args.candidate_concurrent and arm == 'candidate'):
             command += ['-aof-concurrent-append']
-        if args.shutdown_seconds != 5:
+        if args.shutdown_seconds != DEFAULT_SHUTDOWN_SECONDS:
             command += ['-shutdown-timeout', f'{args.shutdown_seconds}s']
         if args.profiles:
             command += ['-profile-dir', str(directory / 'profiles')]
@@ -230,10 +231,17 @@ def run_arm(args, arm, binary, case, repetition, directory):
     began = time.monotonic()
     report = {'status': 'running', 'arm': arm, 'case': case, 'repetition': repetition,
               'binary_sha256': sha256(binary), 'policy': args.policy, 'worker': args.worker and arm != 'redis',
-              'shutdown_grace_seconds': args.shutdown_seconds,
+              'requested_shutdown_grace_seconds': args.shutdown_seconds,
+              'shutdown_wait_timeout_seconds': args.shutdown_seconds + 5,
+              'shutdown_grace_explicit': arm != 'redis' and args.shutdown_seconds != DEFAULT_SHUTDOWN_SECONDS,
+              'shutdown_grace_seconds': args.shutdown_seconds if arm != 'redis' and args.shutdown_seconds != DEFAULT_SHUTDOWN_SECONDS else None,
               'concurrent': arm != 'redis' and (args.concurrent or (args.candidate_concurrent and arm == 'candidate')),
               'profiles_enabled': args.profiles, 'server_command': command}
     report['gc_trace_enabled'] = (args.profiles or args.gc_trace) and arm != 'redis'
+    if args.memtier.is_file():
+        preparation = args.memtier.parent / 'keel-preparation.json'
+        report['load_generator'] = {'binary_sha256': sha256(args.memtier),
+                                    'preparation': json.loads(preparation.read_text()) if preparation.is_file() else None}
     log = (directory / 'server.log').open('w')
     sampler = None
     try:
@@ -418,7 +426,7 @@ def main():
     parser.add_argument('--seconds', type=int, default=5)
     parser.add_argument('--policy', choices=['off', 'no', 'everysec', 'always'], default='off')
     parser.add_argument('--worker', action='store_true')
-    parser.add_argument('--shutdown-seconds', type=int, default=5, help='same explicit Keel shutdown grace for both arms; non-default requires runtimes supporting -shutdown-timeout')
+    parser.add_argument('--shutdown-seconds', type=int, default=DEFAULT_SHUTDOWN_SECONDS, help='non-default passes an explicit Keel shutdown grace to both arms; default leaves the binary setting implicit; non-default requires -shutdown-timeout support')
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument('--candidate-concurrent', action='store_true', help='enable bounded concurrent appends on candidate only; requires --worker')
     modes.add_argument('--concurrent', action='store_true', help='enable bounded concurrent appends on both Keel arms; requires --worker')

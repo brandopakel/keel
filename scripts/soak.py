@@ -10,6 +10,8 @@ import signal
 import statistics
 import subprocess
 import time
+import sys
+import traceback
 from collections import deque
 from pathlib import Path
 
@@ -370,6 +372,13 @@ def run(args, report, watchdog):
         report['manual_promotion'] = True
         report['elapsed_seconds'] = time.monotonic() - started
     except BaseException:
+        # Timestamp before diagnostic queries/SIGQUIT, which observe a later state.
+        report['failure_observed_unix_seconds'] = time.time()
+        report['elapsed_seconds'] = time.monotonic() - started
+        report['failure_stack'] = [
+            {'file': Path(frame.filename).name, 'line': frame.lineno, 'function': frame.name}
+            for frame in traceback.extract_tb(sys.exc_info()[2])[-32:]
+        ]
         report['failure_diagnostics'] = {
             'primary': capture_failed_process(primary),
             'replica': capture_failed_process(replica),

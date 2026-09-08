@@ -33,6 +33,7 @@ jobs:
           curl -fL --retry 3 https://github.com/redis/memtier_benchmark/archive/refs/tags/2.5.1.tar.gz -o /tmp/memtier.tar.gz
           echo '9b34e17a0d1d7e70b152eb442c6362161b5b764ce2ea98e97b7c74815bdd90b7  /tmp/memtier.tar.gz' | sha256sum -c -
           tar -xzf /tmp/memtier.tar.gz -C /tmp
+          python3 scripts/prepare-memtier.py /tmp/memtier_benchmark-2.5.1
           cd /tmp/memtier_benchmark-2.5.1
           autoreconf -fi
           ./configure

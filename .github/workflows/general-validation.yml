@@ -33,6 +33,10 @@ on:
         description: Run separate candidate CPU/heap diagnostics after comparison
         type: boolean
         default: false
+      profile_pair:
+        description: Optional JSON with exact candidate/baseline SHAs for separate AOF CPU and allocation profiles
+        type: string
+        default: ''
       append_diagnostics:
         description: Optional exact runtime SHA for matched append-policy comparisons and separate profiles
         type: string
@@ -52,7 +56,7 @@ on:
       transcript_shutdown_seconds:
         description: Same supported shutdown grace for both transcript benchmark arms
         type: string
-        default: '5'
+        default: '30'
       transcript_policies:
         description: JSON array of transcript policies to compare
         type: string
@@ -66,6 +70,13 @@ permissions:
   contents: read
 
 jobs:
+  profile_pair:
+    if: github.event_name == 'workflow_dispatch' && inputs.profile_pair != ''
+    uses: ./.github/workflows/transcript-profiles.yml
+    with:
+      candidate: ${{ fromJSON(inputs.profile_pair).candidate }}
+      baseline: ${{ fromJSON(inputs.profile_pair).baseline }}
+
   transcript_interference:
     if: github.event_name == 'workflow_dispatch' && inputs.transcript_validation != ''
     uses: ./.github/workflows/transcript-validation.yml
@@ -118,6 +129,7 @@ jobs:
           curl -fL --retry 3 https://github.com/redis/memtier_benchmark/archive/refs/tags/2.5.1.tar.gz -o /tmp/memtier.tar.gz
           echo '9b34e17a0d1d7e70b152eb442c6362161b5b764ce2ea98e97b7c74815bdd90b7  /tmp/memtier.tar.gz' | sha256sum -c -
           tar -xzf /tmp/memtier.tar.gz -C /tmp
+          python3 scripts/prepare-memtier.py /tmp/memtier_benchmark-2.5.1
           cd /tmp/memtier_benchmark-2.5.1
           autoreconf -fi
           ./configure
@@ -162,13 +174,16 @@ jobs:
       - name: Build pinned generator
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential autoconf automake libtool pkg-config libevent-dev libssl-dev zlib1g-dev redis-server lsof
+          sudo apt-get install -y build-essential autoconf automake libtool pkg-config libevent-dev libssl-dev zlib1g-dev redis-server lsof strace
           curl -fL --retry 3 https://github.com/redis/memtier_benchmark/archive/refs/tags/2.5.1.tar.gz -o /tmp/memtier.tar.gz
           echo '9b34e17a0d1d7e70b152eb442c6362161b5b764ce2ea98e97b7c74815bdd90b7  /tmp/memtier.tar.gz' | sha256sum -c -
           tar -xzf /tmp/memtier.tar.gz -C /tmp
           cd /tmp/memtier_benchmark-2.5.1
           autoreconf -fi
           ./configure
+          make -j2
+          cp memtier_benchmark /tmp/memtier-unpatched
+          python3 "$GITHUB_WORKSPACE/scripts/prepare-memtier.py" /tmp/memtier_benchmark-2.5.1
           make -j2
       - name: Build exact source pair and record host
         env:
@@ -188,6 +203,8 @@ jobs:
           git -C "$RUNNER_TEMP/keel-baseline" rev-parse HEAD > dist/matched/baseline-source.txt
           cp /proc/stat dist/matched/proc-stat-before.txt
           ps -eo pid,comm,pcpu,pmem > dist/matched/processes-before.txt
+      - name: Verify prepared generator socket options outside measurements
+        run: python3 scripts/check-memtier-sockets.py --bin /tmp/keel-candidate --memtier /tmp/memtier_benchmark-2.5.1/memtier_benchmark --unpatched /tmp/memtier-unpatched --out dist/matched/generator-sockets
       - name: Sequential paired workloads and memory with disjoint CPU masks
         env:
           SELECTED_CASES: ${{ inputs.cases }}

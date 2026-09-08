@@ -118,7 +118,14 @@ func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 		// Nothing ran, but the type check may still have reaped an expired
 		// key, and that removal has to be recorded.
 		aofCommit(cmd, nil)
-		return fmt.Errorf("ERR unknown command '%s'", cmd.Cmd)
+		// An untrusted command token can fill the entire query buffer. Error
+		// formatting and CRLF sanitization must not duplicate that token after
+		// request admission has handed ownership to the execution phase.
+		name, suffix := cmd.Cmd, ""
+		if len(name) > 128 {
+			name, suffix = name[:128], "..."
+		}
+		return fmt.Errorf("ERR unknown command '%s%s'", name, suffix)
 	}
 	suspended := data_structure.SuspendEviction
 	data_structure.SuspendEviction = true
