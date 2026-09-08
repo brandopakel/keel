@@ -102,18 +102,21 @@ role, readiness, applied offset, update age and retained history bytes.
    enable `-replication-feed` for new followers. Redirect clients only after checking
    the dataset and write behavior. Keep the old writer fenced.
 
-The primary reports what its replicas have confirmed. A pull asks to resume from
-an offset, and asking for it states that everything before it has been applied,
-so `INFO replication` carries `replication_acked_offset`, `replication_lag_bytes`
-and `replication_acked_age_ms`. Lag is how much a promotion would lose right now;
-age says whether replication is alive at all. An age of -1 means nothing has ever
-acknowledged, which is not the same as being caught up.
+For protocol 2, `INFO replication` retains the fields `replication_acked_offset`,
+`replication_lag_bytes` and `replication_acked_age_ms`. They describe the greatest
+**received stream cursor** reported by a valid ordinary delta pull in this epoch,
+its byte distance from the current primary stream end, and the age of the last
+confirmation at that cursor or beyond it. Lower cursors do not refresh the age. Starting a new primary epoch resets both
+cursor and age to unknown.
+Malformed, out-of-history and snapshot-transfer requests do not update the metric.
+An age of -1 means no validated cursor has been observed, even if lag is zero.
 
-None of it is a durability guarantee. With more than one replica the recorded
-offset is the furthest any has reached, not the nearest, so it cannot answer
-whether n replicas hold a given write. A `WAIT` that promised that needs
-per-replica offsets keyed by connection, which the command layer cannot supply
-today, and a way to hold a reply until the condition is met or a deadline passes.
+A received cursor may end inside a partial command still buffered by the replica.
+It does not establish an applied or durable prefix. Zero lag does not establish
+current availability, a safe promotion or how many acknowledged writes would be
+lost. With multiple replicas the value is the greatest any has reported; it does
+not identify that replica or count how many hold a write. A WAIT-style guarantee
+requires per-replica identity, explicitly applied/durable offsets and reply gating.
 
 There is no election, quorum, automated promotion, conflict resolution, WAIT command,
 or guarantee against split brain after an operator removes fencing. Asynchronous

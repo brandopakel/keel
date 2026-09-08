@@ -67,6 +67,7 @@ func invalidateReplicationV2() {
 		return
 	}
 	replication.epoch = hex.EncodeToString(id[:])
+	resetReplicaAcknowledgement()
 	closeReplicationSnapshot()
 	replicationV2.history = nil
 	replicationV2.bytes = 0
@@ -217,12 +218,6 @@ func cmdReplicationPullV2(args []string) []byte {
 	if e1 != nil || e2 != nil {
 		return Encode(errNotAnInteger, false)
 	}
-	// Asking to resume from an offset says everything before it has been
-	// applied. Only meaningful within this primary's own epoch: an offset from
-	// another history names a position in a stream this one never produced.
-	if args[0] == replication.epoch {
-		noteReplicaAcknowledged(offset)
-	}
 	if replicationV2.failed != nil {
 		return Encode(replicationV2.failed, false)
 	}
@@ -249,6 +244,10 @@ func cmdReplicationPullV2(args []string) []byte {
 			}
 		}
 		frame.CaughtUp = frame.To == replicationV2.end
+		// Only a successfully validated ordinary delta pull reports progress.
+		// The received cursor can still end inside a buffered command; it is
+		// not an applied/durable offset or a promotion-loss estimate.
+		noteReplicaAcknowledged(offset)
 		return encodeReplicationFrame(frame)
 	}
 	frame.Full = true
