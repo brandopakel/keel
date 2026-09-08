@@ -23,6 +23,12 @@
       "digest": "sha256:e5f9d303e03d1ed4f9364665873fe6c062f3c3b56d49562a4b98aff6e0c0366f"
     },
     {
+      "id": 549604993,
+      "name": "pruned-local-2026-09-07-final-working-reports.tar.xz",
+      "bytes": 3819996,
+      "digest": "sha256:2138ad57d59b23b239a1e238d15ef64fcc231dbc69d491fa860b0c205e787be4"
+    },
+    {
       "id": 549512833,
       "name": "pruned-local-2026-09-07-manifest.json.gz",
       "bytes": 1709065,
@@ -95,7 +101,7 @@
       "digest": "sha256:aec7039c774c59bcda94f623a8b9528d06207e2dc9282879d42f39e600e3b2eb"
     }
   ],
-  "verified_files": 15,
+  "verified_files": 16,
   "note": "Owner-accessible draft evidence archive; compact conclusions and runtime source remain in ordinary repository history.",
   "source_probes_verified": true
 }
