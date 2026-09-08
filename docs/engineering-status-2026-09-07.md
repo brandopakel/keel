@@ -107,10 +107,16 @@ checks and storage-fault checks. They validate only source `b9a97e0` and binary
 SHA-256 `aeed3178e90e12664f8f715a7adb2889c6bffcdf36fbba076cbe9d64862c8b31`.
 
 The 48-hour continuous-primary run stopped reporting progress at 10:29:35 UTC
-after 739 checkpoints and 1,091,864 acknowledged writes. Its processes remain
-alive. A native sample shows the Python harness sleeping but does not identify
-the Python call site or establish a Keel fault. It is stalled, not a completed
-soak. The frozen processes were preserved; new harnesses have a progress watchdog.
+after 739 checkpoints and 1,091,864 acknowledged writes. It is stalled, not a
+completed soak.
+
+A Go stack dump taken from the preserved primary before release does establish a
+Keel fault, which supersedes the earlier statement that none was identified. The
+event loop was parked in `KQueue.Check` while a client held an established
+connection and an unanswered request: a descriptor was left unregistered while a
+reply was owed, and an untimed wait meant the loop never turned again. PR #57
+bounds that wait so the condition is survivable; the path that dropped the
+registration is still unidentified.
 See [soak evidence](soak-progress-observability.md).
 
 A combined candidate passes all nine alpha.2 upgrade/rewrite/restart/backup
