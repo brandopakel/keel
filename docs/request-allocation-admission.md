@@ -229,3 +229,10 @@ drops arrivals before issue; the complete per-cell drops, latency, generator CPU
 and memory telemetry are in `request-admission-capacity-2026-09-07.tar.gz` and
 `request-admission-capacity-summary-2026-09-07.json.gz`. These are qualified
 public-runner observations, not dedicated-host capacity or deployment SLOs.
+
+The first prepared-generator dispatches (34183835925 and 34183837950) failed
+at the socket probe because the unpatched diagnostic binary had been copied in
+the broad job rather than the matched job. The gate stopped both before any
+paired workload began. The workflow wiring is corrected; these failed setup
+attempts remain in `memtier-probe-first-attempts-2026-09-07.json.gz` and provide
+no socket-option observation or performance pass.
