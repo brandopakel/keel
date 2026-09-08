@@ -66,7 +66,8 @@ func TestRequestReservationUsesExistingBufferSpaceAfterGrowthRefusal(t *testing.
 	// End inside the bulk-length header, forcing a speculative sized read.
 	buffer := make([]byte, len(wire)-9, 128)
 	copy(buffer, wire)
-	c := &client{fd: r, buf: &connBuffer{data: buffer}}
+	owned := &connBuffer{data: buffer}
+	c := &client{fd: r, buf: owned}
 	n, err := syscall.Write(w, wire[len(buffer):])
 	require.NoError(t, err)
 	require.Equal(t, len(wire)-len(buffer), n)
@@ -74,6 +75,8 @@ func TestRequestReservationUsesExistingBufferSpaceAfterGrowthRefusal(t *testing.
 	budget.begin(cap(buffer), cap(buffer), 1024, 1024)
 	cmds, err := c.readCommandsReserved(testScratch, &budget)
 	require.NoError(t, err, "a speculative growth refusal must not discard usable buffer space")
+	require.Equal(t, cap(buffer), cap(owned.data), "no unreserved buffer growth")
+	require.Same(t, &buffer[0], &owned.data[:cap(owned.data)][0], "reuse the original backing allocation")
 	require.Len(t, cmds, 1)
 	require.Equal(t, []string{"key", "value"}, cmds[0].Args)
 	require.Nil(t, c.buf)

@@ -132,3 +132,55 @@ of the incomplete-writer and slow-reader socket recovery fixtures. The complete
 Linux/Mac suites continue to run them too; brief local `-short` checks skip
 the aggregate socket-pressure fixture. Earlier dedicated diagnostic artifacts
 contain the worker tests but not this newly added socket step.
+
+The coallocated server comparison (run 34179665418, `11268c3` versus merged
+`15ce1c0`) completed all 120 arms with zero connection errors or generator CPU
+warnings. It used five alternating pairs of ten-second measurements with
+persistence disabled and disjoint exposed physical-core groups on one public VM.
+Median paired throughput ratios and median arm p99s are:
+
+| Workload | Candidate/baseline throughput | Baseline → candidate p99 (ms) |
+| --- | ---: | ---: |
+| cache-balanced-64 | 0.995 | 0.351 → 0.351 |
+| cache-read-1k | 0.999 | 0.391 → 0.391 |
+| cache-read-1m | 0.994 | 5.439 → 5.983 |
+| cache-read-64 | 0.996 | 0.343 → 0.351 |
+| cache-ttl | 0.990 | 0.367 → 0.375 |
+| cache-write-1m | 0.944 | 42.239 → 42.239 |
+| cache-write-64 | 0.997 | 0.351 → 0.351 |
+| cache-write-pipeline-64 | 0.991 | 1.695 → 1.639 |
+| hash | 0.990 | 0.351 → 0.351 |
+| many-clients | 1.000 | 4.063 → 4.095 |
+| queue | 0.993 | 0.359 → 0.359 |
+| sorted-set | 0.989 | 0.375 → 0.375 |
+
+Pipeline throughput is 0.9% below baseline, compared with the earlier 3–4%
+deficits, and its p99 is lower in this run. This is consistent with the reduced
+allocation count, but the separate VMs do not isolate that change causally.
+The 1 MiB write median is 5.6% lower, with paired ratios from 0.828 to 1.012;
+1 MiB read p99 also rose. A longer targeted repeat is required before closing
+that performance review. Raw data and all RSS observations are retained in
+`request-admission-matched-coallocated-2026-09-07.tar.gz`; source revisions,
+archive digest and paired statistics are in
+`request-admission-coallocated-summary-2026-09-07.json.gz`.
+
+The combined runtime at `8484840` passes the full Go/race/platform suites,
+external adapters, differential/workload smoke, shutdown-policy matrix and
+native ARM64/Intel Mac/ext4/XFS recovery. Its dedicated admission run
+34180641438 passes twenty worker race repetitions, three socket-pressure
+recovery repetitions and 3,649,972 parser fuzz inputs. Evidence is retained in
+`request-admission-hosted-combined-2026-09-07.json.gz`. This runtime includes
+the spare-buffer correction absent from the coallocation comparison above.
+
+Review strengthened the spare-buffer fixture to compare both backing-address
+identity and capacity, so a reader that ignores the refused reservation cannot
+pass by growing anyway. Four interrupted-archive regression cases failed before
+the fix: complete archive publication, either sample publication and source
+removal. A small atomic journal now records sample offsets and removal intent;
+retries verify published files and reconcile completed reports even when the
+original has already been removed. Existing mismatched or unfinished partial
+files are preserved and stop archiving for investigation. Ten archive tests,
+including interruption around journal transitions, pass after correction.
+This covers process interruption, not a power-loss durability claim. Before/after
+logs and the brief buffer-identity check are in
+`request-admission-review-restart-2026-09-07.json.gz`.

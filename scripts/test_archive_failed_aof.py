@@ -80,5 +80,96 @@ class FailedAOFArchiveTests(unittest.TestCase):
             self.assertEqual(path.read_bytes(), b'original')
 
 
+    def test_restart_after_archive_publication(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'store.aof'
+            path.write_bytes(b'original' * 1000)
+            real_link = archive.os.link
+            def interrupted_link(source, target):
+                real_link(source, target)
+                raise InterruptedError('stopped after archive publication')
+            with patch.object(archive.os, 'link', side_effect=interrupted_link):
+                with self.assertRaises(InterruptedError):
+                    archive.preserve(path)
+            result = archive.preserve(path)
+            self.assertTrue(result['complete'])
+            self.assertTrue(result['source_removed'])
+            self.assertFalse(path.exists())
+
+    def test_restart_after_each_sample_publication(self):
+        for boundary in (1, 2):
+            with self.subTest(boundary=boundary), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / 'store.aof'
+                path.write_bytes(os.urandom(4096))
+                # Reproduce the legacy boundary: a published sample without a report.
+                take = 64
+                body = path.read_bytes()
+                for label, offset in [('prefix', 0), ('tail', len(body)-take)][:boundary]:
+                    path.with_name('store.aof.'+label+'.gz').write_bytes(gzip.compress(body[offset:offset+take], mtime=0))
+                result = archive.preserve(path, compressed_limit=0, sample_limit=take)
+                self.assertFalse(result['complete'])
+                self.assertEqual(len(result['samples']), 2)
+                self.assertTrue(path.exists())
+
+    def test_restart_after_source_removal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'store.aof'
+            path.write_bytes(b'original')
+            real_unlink = Path.unlink
+            def interrupted_unlink(target, *args, **kwargs):
+                real_unlink(target, *args, **kwargs)
+                if target == path:
+                    raise InterruptedError('stopped after source removal')
+            with patch.object(Path, 'unlink', new=interrupted_unlink):
+                with self.assertRaises(InterruptedError):
+                    archive.preserve(path)
+            result = archive.preserve(path)
+            self.assertTrue(result['complete'])
+            self.assertTrue(result['source_removed'])
+
+
+    def test_interrupted_journal_transitions_reconcile(self):
+        for boundary in ('removal_pending', 'complete'):
+            with self.subTest(boundary=boundary), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / 'store.aof'
+                path.write_bytes(b'original')
+                real_write = archive.write_report
+                def interrupted_write(target, report):
+                    if report.get('state') == boundary:
+                        raise InterruptedError('stopped before journal transition')
+                    real_write(target, report)
+                with patch.object(archive, 'write_report', side_effect=interrupted_write):
+                    with self.assertRaises(InterruptedError):
+                        archive.preserve(path)
+                # Discovery must work even after the source was removed.
+                with patch('sys.argv', ['archive-failed-aof.py', directory]):
+                    self.assertEqual(archive.main(), 0)
+                result = json.loads(path.with_name('failed-aof.json').read_text())
+                self.assertEqual(result['state'], 'complete')
+                self.assertTrue(result['source_removed'])
+                self.assertFalse(path.exists())
+
+    def test_interrupted_sample_links_reuse_persisted_plan(self):
+        for boundary in (1, 2):
+            with self.subTest(boundary=boundary), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / 'store.aof'
+                path.write_bytes(os.urandom(4096))
+                real_link = archive.os.link
+                published = 0
+                def interrupted_link(source, target):
+                    nonlocal published
+                    real_link(source, target)
+                    published += 1
+                    if published == boundary:
+                        raise InterruptedError('stopped after sample publication')
+                with patch.object(archive.os, 'link', side_effect=interrupted_link):
+                    with self.assertRaises(InterruptedError):
+                        archive.preserve(path, compressed_limit=0, sample_limit=64)
+                result = archive.preserve(path, compressed_limit=4096, sample_limit=128)
+                self.assertEqual(result['sample_bytes'], 64)
+                self.assertEqual(len(result['samples']), 2)
+                self.assertTrue(path.exists())
+
+
 if __name__ == '__main__':
     unittest.main()
