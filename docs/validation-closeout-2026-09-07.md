@@ -75,10 +75,15 @@ merged multiplexer timeout does not establish its root cause; see
   eviction-record arrays. Correctness, replication, torn-tail and race checks
   pass locally and in hosted race/native recovery suites. The first matched matrix
   completed off/always policies but failed baseline shutdowns for no/everysec.
-  Large-write and pipeline throughput costs were observed. A corrected framing
-  and admission candidate is undergoing a fresh matched comparison; adoption is held.
+  Large-write and pipeline throughput costs were observed. The corrected framing
+  and admission candidate completed all 400 policy/mode arms in hosted run
+  34171209014. Large SET transcript allocations fell about 49%, and the large-key
+  eviction fixture fell about 80%. Synchronous pipeline throughput fell about
+  3–3.5% under no/everysec sync; some p99 tails increased. This is a bounded-memory
+  improvement with measured costs, not a general speedup. Review remains open;
+  see [the full comparison](bounded-aof-transcripts.md).
 
-- PR 59 introduced protocol-2 progress metrics. PR 64 corrects invalid cursor
+- PR 59 introduced protocol-2 progress metrics. Merged PR 64 corrects invalid cursor
   updates, stale timestamps and epoch resets. These report received stream bytes,
   which may include an incomplete command, and do not establish applied/durable
   state, current replica availability, quorum or promotion loss.
@@ -154,11 +159,14 @@ embedding, partitioning and transactions remain separate architectural commitmen
 
 ## Follow-up storage and validation work
 
-PRs 61, 62 and 63 are merged. PR 65 handles temporary directories disappearing
+PRs 61, 62, 63 and 64 are merged. PR 65 handles temporary directories disappearing
 during resource scans and prunes separate Go intermediate-build directories on
 both success and failure. It preserves ordinary failure evidence. The final
 transcript policy comparison is [run 34171209014](https://github.com/brandopakel/keel/actions/runs/34171209014);
-it remains incomplete at this update, and PR 58 has not passed its adoption gate.
+all 400 arms passed, with compact reports archived in the repository and
+563.65 GiB of cumulative disposable AOF output pruned on the runners. None of
+that raw output was downloaded to the laptop. PR 58 remains open for review;
+the measured throughput and tail-latency costs remain visible in its report.
 Its earlier corrected off/always comparison completed 160 arms. CodeRabbit's
 first transcript review was skipped at the included-review limit; a green status
 for that skip does not establish a completed review. Paid reviews are not enabled.
