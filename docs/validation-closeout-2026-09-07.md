@@ -71,25 +71,27 @@ merged multiplexer timeout does not establish its root cause; see
 - PR 55 adds aggregate reservations for covered reply/workspace paths and passes
   correctness, slow-reader recovery, race and matched workload checks. It is merged. Large-string/list throughput costs and CPU-limited
   collection cells are documented; it does not cover every process allocation.
-- Draft PR 58 bounds encoded primary AOF transcripts and removes accumulated
+- PR 58 bounds encoded primary AOF transcripts and removes accumulated
   eviction-record arrays. Correctness, replication, torn-tail and race checks
   pass locally and in hosted race/native recovery suites. The first matched matrix
   completed off/always policies but failed baseline shutdowns for no/everysec.
   Large-write and pipeline throughput costs were observed. A corrected framing
   and admission candidate is undergoing a fresh matched comparison; adoption is held.
 
-- PR 59 records protocol-2 replica acknowledgments and reports lag. This improves
-  observability; it does not add automatic promotion or change acknowledged-write
-  durability guarantees.
+- PR 59 introduced protocol-2 progress metrics. PR 64 corrects invalid cursor
+  updates, stale timestamps and epoch resets. These report received stream bytes,
+  which may include an incomplete command, and do not establish applied/durable
+  state, current replica availability, quorum or promotion loss.
 - PR 60 makes unavailable memory-monitoring samples diagnostic errors instead of
   immediately ending the workload. It addresses the newer soak harness failure
   mode without retroactively passing that run.
 - PR 61 adds a local validation wrapper with a two-minute maximum, default 512 MiB
   output budget, inherited per-file limits, reserved free space and child cleanup.
   Successful benchmark AOFs are hashed/reported and removed by default. Review
-  findings have regression checks; the final review is pending.
+  findings have regression checks; it is merged.
 - PR 62 adds an explicit shutdown grace while retaining the five-second default.
-  All six hosted large-write reproductions pass with a 30-second grace. Original
+  It is merged. All six hosted large-write reproductions pass with a 30-second grace,
+  including recovery of each writer's final acknowledged sequence. Original
   failures captured final fsync blocking cleanup and remain archived. This does
   not establish faster storage or explain the older stalled soak.
 
@@ -149,3 +151,20 @@ runs on ext4/xfs and native Linux ARM64/Intel Mac checks remain useful; extended
 validation runs on hosted runners and does not keep the laptop awake. Automatic
 failover requires enforceable external fencing or a separate election design;
 embedding, partitioning and transactions remain separate architectural commitments.
+
+## Follow-up storage and validation work
+
+PRs 61, 62 and 63 are merged. PR 65 handles temporary directories disappearing
+during resource scans and prunes separate Go intermediate-build directories on
+both success and failure. It preserves ordinary failure evidence. The final
+transcript policy comparison is [run 34171209014](https://github.com/brandopakel/keel/actions/runs/34171209014);
+it remains incomplete at this update, and PR 58 has not passed its adoption gate.
+Its earlier corrected off/always comparison completed 160 arms. CodeRabbit's
+first transcript review was skipped at the included-review limit; a green status
+for that skip does not establish a completed review. Paid reviews are not enabled.
+
+Thirty-eight old/merged/control worktrees have been removed. A further 561 MiB
+of temporary environments, binaries and early release evidence was pruned after
+archiving the evidence. The interrupted Go test's 141 MiB of intermediate builds
+was also pruned; its small test fixture remains archived. The archive index now
+identifies 15 verified draft-release assets. Local soaks remain stopped.
