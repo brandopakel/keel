@@ -208,3 +208,38 @@ skipped locally. The original job log and short-check report are in
 These repetitions are diagnostic evidence. A successful repeat cannot explain
 the earlier wait or establish a fixed filesystem latency bound. The complete
 400-arm workload matrix remains separate evidence for its recorded runtime.
+
+
+The [matched Intel diagnostic](https://github.com/brandopakel/keel/actions/runs/34174207786)
+completed all ten arms at `6966b5543a596cf4fbf5007d77412417f945ec07` versus
+control `a1d550c1e3e73d2633e4097e45d1816cfe8e9e8c`. Every arm passed the
+unchanged three-second gate and the subsequent moving-keyspace/replay test.
+Per-arm longest waits were 60.165–104.306 ms for the control and
+98.484–105.149 ms for the candidate, all in replacement sync. Across these five
+pairs, median loop work was 1.283 versus 1.390 seconds; median loop work plus
+worker waits was 3.325 versus 3.822 seconds. This small diagnostic therefore
+also records a slower candidate median; it is not evidence of faster rewrites.
+The original three-second timeout remains unexplained. Compact complete logs
+are in `bench/results/transcript-intel-rewrite-wait-pairs-2026-09-07.tar.gz`.
+
+## Broader hosted follow-up
+
+[Run 34174358161](https://github.com/brandopakel/keel/actions/runs/34174358161)
+uses exact runtime `6966b5543a596cf4fbf5007d77412417f945ec07`. Its two-replica
+128 MiB recovery job passed interrupted snapshots, history overflow after a
+rewrite, both checkpoint restarts, and recovery after primary restart/epoch
+change. All final value digests and counters matched. Observed catch-up was
+about 3.10 seconds initially, 3.16 seconds after history overflow, 0.37 seconds
+for checkpoint resumes and 2.64 seconds after primary restart, excluding the
+subsequent full-state verification. These are one public-runner experiment,
+not deployment recovery guarantees. Compact logs and full reports are in
+`bench/results/transcript-larger-recovery-2026-09-07.tar.gz`.
+
+The same run's seven-workload, five-rate, two-repetition capacity sweep is still
+running. Persistence is off in both comparison arms. Four-hour concurrent
+protocol-2 recovery jobs on ext4 and XFS are running separately in
+[run 34174359818](https://github.com/brandopakel/keel/actions/runs/34174359818).
+Neither the capacity sweep nor either extended recovery run counts as passed
+yet. They use free public GitHub runners and do not depend on laptop uptime.
+An initial capacity dispatch, 34174317670, was canceled after detecting a wrong
+candidate SHA in its input; 34174358161 is the corrected dispatch.
