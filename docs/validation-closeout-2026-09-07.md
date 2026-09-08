@@ -48,9 +48,10 @@ raw terminal report retains `KeyboardInterrupt()`; a separate `user-stop.json`
 preserves the prior stale progress and explains the interruption. Neither run
 was restarted. Their reports, checkpoints, recovery records and diagnostic logs
 are archived in `bench/results/frozen-continuous-soak-stop-2026-09-07.json.gz`.
-They are separate evidence. The
-merged multiplexer timeout does not establish its root cause; see
-[the diagnostic assessment](soak-diagnostics-2026-09-07.md).
+They are separate evidence. The earlier
+[diagnostic assessment](soak-diagnostics-2026-09-07.md) is supplemented by
+[PR #67's server-side investigation](soak-progress-observability.md); the
+registration path it identifies remains unlocated.
 
 ## Engineering completed and candidates
 
@@ -129,8 +130,9 @@ transports. PRs 55/58/66 are scoped improvements, not completion of that contrac
 handoff before commands can continue through it. Large commands still have CPU
 and filesystem stalls; bounded transcripts trade memory for more write calls in some cases.
 
-The older stalled soak and historical Intel pending-reply/Apple Silicon fairness
-observations remain unexplained despite successful repeats. A separate large-file
+PR #67 records the older stall investigation and its missing-readiness assessment;
+the registration path remains unidentified. Historical Intel pending-reply/Apple
+Silicon fairness observations remain unexplained despite successful repeats. A separate large-file
 startup observation is now timed explicitly and has matched successful repeats;
 that is not evidence of a runtime fix for those earlier observations.
 

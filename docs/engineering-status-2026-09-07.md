@@ -132,9 +132,18 @@ SHA-256 `aeed3178e90e12664f8f715a7adb2889c6bffcdf36fbba076cbe9d64862c8b31`.
 The older 48-hour continuous-primary run stalled and was interrupted at the
 user's request. The later frozen `b14ffe0` run failed when its `ps` monitoring
 subprocess timed out. Both are incomplete, neither has restarted, and their
-owned processes are stopped. The old stall remains unexplained. The current
+owned processes are stopped. The current
 [soak closeout](validation-closeout-2026-09-07.md) preserves both failures and
 the later eight-hour passes on their exact binaries.
+
+PR #67 records the server-side investigation of the older stall: the event loop
+was parked in `KQueue.Check` while a client had an established connection and an
+unanswered request. Its assessment identifies missing readiness registration as
+the cause. PR #57 bounds the wait; the registration path remains unidentified.
+See [the investigation](soak-progress-observability.md). PR #68 adds direct AOF
+and temporary-file growth observations and repeated hosted soaks. Independent
+runs do not establish 48 hours of continuous uptime; no such run has passed.
+
 
 A combined candidate passes all nine alpha.2 upgrade/rewrite/restart/backup
 rollback cases across no/everysec/always and sync/barrier/concurrent append modes.

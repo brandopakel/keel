@@ -71,7 +71,7 @@ with tempfile.TemporaryFile() as trace:
         import soak
         with tempfile.TemporaryDirectory() as directory:
             args = SimpleNamespace(out=directory, bin='unused', replication_protocol=2,
-                                   concurrent=True, cycle_seconds=10)
+                                   concurrent=True, cycle_seconds=10, growth_tolerance=3.0)
             primary, replica = MagicMock(), MagicMock()
             primary.password, primary.port = 'private-password', 12345
             def failed_request(*parts):
