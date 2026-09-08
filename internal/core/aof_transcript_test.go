@@ -157,8 +157,10 @@ func TestAOFTranscriptFailedDrainDoesNotPublishReplication(t *testing.T) {
 			run(t, "SET", "acknowledged", "safe")
 			require.NoError(t, FlushAOF())
 			ready := AppendReadyOffset()
+			before := replicationV2.end
 			run(t, "SET", "prior", strings.Repeat("p", 2<<20))
 			published := replicationV2.end
+			require.Greater(t, published, before, "the successful control must publish its command")
 			require.Greater(t, len(aof.buf), 1)
 			aofWrite = func(f *os.File, body []byte) (int, error) {
 				return f.Write(body[:len(body)-tail])
