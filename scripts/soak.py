@@ -6,6 +6,7 @@ import json
 import math
 import os
 import platform
+import shutil
 import signal
 import statistics
 import subprocess
@@ -180,79 +181,277 @@ class GrowthBounds:
     recovery cycles, not on any absolute size: this workload writes to a fixed
     key range, so the log, the resident set and the descriptor count should all
     settle. Growth proportional to elapsed time is the defect.
+
+    A log has one more property, which the first nine nightly runs taught by
+    failing every one of them here. It is not flat below the size the server
+    lets it reach before compacting (see compaction_ceiling). Under protocol 2
+    the replica keeps its log across restarts, so at the 64 MiB default it
+    climbed straight through three times a 15 MiB baseline without the server
+    ever having promised otherwise; a baseline recorded below the ceiling is the
+    point the workload had reached, not anything it settles to. The primary
+    showed the other half of the same problem: its log swings between the
+    compacted size after each checkpoint rewrite and that plus thirty seconds
+    of appends before the next, the early cycles sampled the trough, later ones
+    the peak, and 3.0 was the ratio between them.
+
+    So each quantity has a floor under its settled value. For the logs it is
+    the compaction ceiling, measured from the live data as the run goes; the
+    soak sets the minimum size low enough that compaction actually happens
+    within the run, hundreds of times rather than never. The swing between
+    rewrites sits well below the ceiling, and a log that stops compacting still
+    crosses three times it within a few cycles. Temporary files have a small
+    fixed floor: a quantity that settles at zero would otherwise never be
+    judged at all, which is what the first version did with them.
     """
 
-    def __init__(self, tolerance):
+    def __init__(self, tolerance, floors=(), warmup_cycles=3, settled=None, informational=()):
         self.tolerance = tolerance
-        self.settled = {}
+        self.floors = dict(floors)
+        self.warmup_cycles = warmup_cycles
+        self.settled = dict(settled or {})
+        # Recorded alongside the rest but never judged.
+        self.informational = frozenset(informational)
         self.breaches = []
+        # Cycles judged against the bound. A run that never gets past warm-up has
+        # not checked growth, whatever its report says.
+        self.judged_cycles = 0
+
+    def baseline(self, name):
+        return max(self.settled.get(name, 0), self.floors.get(name, 0))
+
+    def raise_floor(self, name, value):
+        """Floors only rise: a ceiling that fell with the live data would let a
+        later segment accept growth an earlier one would have failed."""
+        self.floors[name] = max(self.floors.get(name, 0), value)
 
     def observe(self, cycle, values):
         """values: name -> current measurement. Returns a list of breach dicts."""
         # The first few cycles are the workload filling up, not steady state.
-        if cycle < 4:
+        if cycle <= self.warmup_cycles:
             for name, value in values.items():
                 self.settled[name] = max(self.settled.get(name, 0), value)
             return []
+        self.judged_cycles += 1
         found = []
         for name, value in values.items():
-            baseline = self.settled.get(name, 0)
+            if name in self.informational:
+                continue
+            baseline = self.baseline(name)
             if baseline > 0 and value > baseline * self.tolerance:
-                found.append({'quantity': name, 'settled': baseline, 'now': value,
-                              'cycle': cycle, 'tolerance': self.tolerance})
+                found.append({'quantity': name, 'settled': self.settled.get(name, 0),
+                              'floor': self.floors.get(name, 0), 'baseline': baseline,
+                              'now': value, 'cycle': cycle, 'tolerance': self.tolerance})
         self.breaches.extend(found)
         return found
 
+    def describe(self):
+        return {'tolerance': self.tolerance, 'floors': self.floors, 'warmup_cycles': self.warmup_cycles,
+                'informational': sorted(self.informational), 'settled': self.settled,
+                'judged_cycles': self.judged_cycles, 'breaches': self.breaches}
+
+
+def parse_size(text):
+    """Bytes for a size the server accepts on its command line, such as 8mb."""
+    lowered = str(text).strip().lower()
+    for suffix, unit in (('kb', 1 << 10), ('mb', 1 << 20), ('gb', 1 << 30)):
+        if lowered.endswith(suffix):
+            lowered = lowered[:-len(suffix)].strip()
+            break
+    else:
+        unit = 1
+    if not lowered.isdigit():
+        raise ValueError(f'unparseable size {text!r}')
+    return int(lowered) * unit
+
+
+TORN_TAIL_PREFIX = '.keel-torn-tail-'
+TORN_TAIL_COUNTS = ('primary_torn_tails', 'replica_torn_tails')
+# What a healthy server may have beside its log at once: one rewrite in flight
+# and one checkpoint being renamed into place.
+TMPFILE_FLOOR = 2
+
+
+def compaction_ceiling(client, min_size):
+    """The largest a log may legitimately be before the server compacts it.
+
+    Compaction starts once the log reaches -auto-aof-rewrite-min-size and has
+    doubled against its base. After a restart that base is not the compacted
+    size but a conservative estimate of three times the live data
+    (internal/core/aof.go), so a server restarted often - this soak restarts
+    the replica every cycle - waits for max(min size, six times live) before
+    compacting. Below that, growth is the contract rather than a defect.
+    """
+    used = int(info(client, 'memory')['used_memory'])
+    return max(min_size, 2 * 3 * used)
+
 
 def growth_values(primary, replica):
-    """What must stay flat: the two logs, and the descriptors each server holds.
+    """What must stay flat: the two logs, and the temporary files beside them.
 
     Resident set is deliberately absent. It moves with allocator and GC
     behaviour that is not a leak, so bounding it here would produce failures
-    nobody can act on. The logs and descriptors have no such excuse.
+    nobody can act on. The logs and temporary files have no such excuse.
+
+    Torn-tail backups are counted but not bounded. The server keeps one beside
+    the log for each crash that tore its last record, as documented; they are
+    evidence a crash left, and this soak crashes servers on purpose.
     """
     values = {}
-    for name, server in (('primary_aof', primary), ('replica_aof', replica)):
-        log = server.directory / 'store.aof'
+    for prefix, server in (('primary', primary), ('replica', replica)):
         try:
-            values[name] = log.stat().st_size
+            values[f'{prefix}_aof'] = (server.directory / 'store.aof').stat().st_size
+        except OSError:
+            pass
+        try:
+            names = [entry.name for entry in server.directory.iterdir()]
         except OSError:
             continue
-    for name, server in (('primary_tmpfiles', primary), ('replica_tmpfiles', replica)):
-        try:
-            values[name] = sum(1 for entry in server.directory.iterdir()
-                               if entry.name.startswith('.') or entry.name.endswith('.rewrite'))
-        except OSError:
-            continue
+        values[f'{prefix}_torn_tails'] = sum(1 for name in names if name.startswith(TORN_TAIL_PREFIX))
+        values[f'{prefix}_tmpfiles'] = sum(
+            1 for name in names
+            if (name.startswith('.') and not name.startswith(TORN_TAIL_PREFIX)) or name.endswith('.rewrite'))
     return values
+
+
+HANDOFF = 'handoff.json'
+SERVER_DIRECTORIES = ('primary', 'replica')
+
+
+def encode_state(expected, events, hashes, members, scores, large):
+    """The harness's model of the keyspace, as JSON can carry it.
+
+    Everything the workload writes is ASCII, so Latin-1 round-trips the bytes
+    exactly and the file stays readable."""
+    text = lambda value: value.decode('latin-1')
+    return {'expected': {key: text(value) for key, value in expected.items()},
+            'events': [text(event) for event in events],
+            'hashes': {text(field): text(value) for field, value in hashes.items()},
+            'members': sorted(text(member) for member in members),
+            'scores': {text(member): score for member, score in scores.items()},
+            'large': [text(item) for item in large]}
+
+
+def decode_state(state):
+    raw = lambda value: value.encode('latin-1')
+    return ({key: raw(value) for key, value in state['expected'].items()},
+            deque((raw(event) for event in state['events']), maxlen=128),
+            {raw(field): raw(value) for field, value in state['hashes'].items()},
+            {raw(member) for member in state['members']},
+            {raw(member): score for member, score in state['scores'].items()},
+            deque((raw(item) for item in state['large']), maxlen=128))
+
+
+def load_handoff(args):
+    """The previous segment's state, checked before anything is built on it."""
+    previous = Path(args.resume).resolve()
+    handoff = json.loads((previous / HANDOFF).read_text())
+    if not handoff.get('passed'):
+        raise AssertionError(f'{previous / HANDOFF} does not record a passed segment')
+    if handoff['segment'] != args.segment - 1 or handoff['segments'] != args.segments:
+        raise AssertionError(f"handoff is segment {handoff['segment']} of {handoff['segments']}, "
+                             f"not the predecessor of segment {args.segment} of {args.segments}")
+    for field in ('replication_protocol', 'concurrent', 'primary_crash_every', 'auto_rewrite_min_size'):
+        if handoff[field] != getattr(args, field):
+            raise AssertionError(f'handoff {field}={handoff[field]!r} differs from this segment')
+    # The whole run validates one binary, or it validates nothing in particular.
+    if handoff['binary_sha256'] != sha256(args.bin):
+        raise AssertionError('this segment would run a different binary from the one handed off')
+    return previous, handoff
+
+
+def inherit_directories(previous, root):
+    """Carry both servers' on-disk state into this segment's evidence directory.
+
+    Everything but the previous server logs: those belong to the segment that
+    wrote them and are in its artifact."""
+    for name in SERVER_DIRECTORIES:
+        source, target = previous / name, root / name
+        target.mkdir(parents=True)
+        for entry in source.iterdir():
+            if entry.name == 'server.log' or entry.is_dir():
+                continue
+            shutil.copy2(entry, target / entry.name)
 
 
 def run(args, report, watchdog):
     root = Path(args.out).resolve()
-    replication_flags = ['-replication-protocol', str(args.replication_protocol)]
-    primary = Server(args.bin, root / 'primary', async_append=True,
-                     extra=['-replication-feed'] + replication_flags + (['-aof-concurrent-append'] if args.concurrent else []))
+    final = args.segment == args.segments
+    resumed = args.segment > 1
+    # Both logs compact at this floor rather than the 64 MiB default, so a
+    # multi-hour run exercises compaction hundreds of times instead of never,
+    # and the growth bound has a floor the server actually promises.
+    floor = parse_size(args.auto_rewrite_min_size)
+    shared_flags = ['-replication-protocol', str(args.replication_protocol),
+                    '-auto-aof-rewrite-min-size', args.auto_rewrite_min_size]
+    if args.concurrent:
+        shared_flags.append('-aof-concurrent-append')
+    ports = {}
+    if resumed:
+        previous, handoff = load_handoff(args)
+        inherit_directories(previous, root)
+        # A segment boundary is a planned restart of both servers, not a
+        # reconfiguration, so the ports carry over. The replica still takes a
+        # full snapshot here: its checkpoint names the primary's epoch, and the
+        # primary's history does not survive its own restart.
+        ports = handoff['ports']
+    primary = Server(args.bin, root / 'primary', async_append=True, port=ports.get('primary'),
+                     extra=['-replication-feed'] + shared_flags)
     password = primary.password
-    replica = Server(args.bin, root / 'replica', async_append=True, password=password,
+    replica = Server(args.bin, root / 'replica', async_append=True, password=password, port=ports.get('replica'),
                      extra=['-replicaof', f'127.0.0.1:{primary.port}',
-                            '-primary-password-env', 'KEEL_VALIDATION_PASSWORD'] + replication_flags +
-                           (['-aof-concurrent-append'] if args.concurrent else []))
+                            '-primary-password-env', 'KEEL_VALIDATION_PASSWORD'] + shared_flags)
     for server in [primary, replica]:
         server.env['GODEBUG'] = 'gctrace=1'
-    expected, events = {}, deque(maxlen=128)
-    hashes, members, scores = {}, set(), {}
-    large = deque([b'L' * 4096] * 128, maxlen=128)
+    floors = {'primary_aof': floor, 'replica_aof': floor,
+              'primary_tmpfiles': TMPFILE_FLOOR, 'replica_tmpfiles': TMPFILE_FLOOR}
+    if resumed:
+        expected, events, hashes, members, scores, large = decode_state(handoff['state'])
+        i, cycles = handoff['i'], handoff['cycles']
+        # The baseline was settled in the first segment. Settling again here
+        # would accept whatever the log had grown to, which is the ratchet the
+        # bound exists to catch.
+        growth = GrowthBounds(args.growth_tolerance, {**floors, **handoff['growth_floors']},
+                              settled=handoff['growth_settled'], informational=TORN_TAIL_COUNTS)
+        before = handoff['cumulative']
+    else:
+        expected, events = {}, deque(maxlen=128)
+        hashes, members, scores = {}, set(), {}
+        large = deque([b'L' * 4096] * 128, maxlen=128)
+        i, cycles = 0, 0
+        growth = GrowthBounds(args.growth_tolerance, floors, informational=TORN_TAIL_COUNTS)
+        before = {'segments_completed': 0, 'elapsed_seconds': 0, 'acknowledged_writes': 0,
+                  'checkpoint_count': 0, 'primary_crash_recoveries': 0,
+                  'replica_crash_recoveries': 0, 'replica_compactions': 0}
     pair_latencies = []
-    i = 0
     started = time.monotonic()
     next_cycle = started + args.cycle_seconds
     next_check = started + min(30, args.cycle_seconds)
-    cycles = 0
-    growth = GrowthBounds(args.growth_tolerance)
+
+    def roll_up(completed=False):
+        if args.segments > 1:
+            report['cumulative'] = {
+                'segments_completed': before['segments_completed'] + int(completed),
+                'elapsed_seconds': before['elapsed_seconds'] + time.monotonic() - started,
+                **{name: before[name] + report[name] for name in
+                   ('acknowledged_writes', 'checkpoint_count', 'primary_crash_recoveries',
+                    'replica_crash_recoveries', 'replica_compactions')}}
+
+    # The replica's rewrite counter describes its open log and restarts with
+    # it, so the harness keeps the running total: compaction that happened is
+    # a number in the report, not an inference from a log that stayed small.
+    replica_rewrites_seen = 0
+
+    def note_replica_rewrites():
+        nonlocal replica_rewrites_seen
+        current = int(info(replica.client, 'persistence')['aof_rewrites'])
+        report['replica_compactions'] += max(0, current - replica_rewrites_seen)
+        replica_rewrites_seen = current
+
     try:
         primary.start()
-        assert primary.client.call('SET', 'large-value', b'L' * 1048576) == b'OK'
-        assert primary.client.call('RPUSH', 'large-list', *large) == len(large)
+        if not resumed:
+            assert primary.client.call('SET', 'large-value', b'L' * 1048576) == b'OK'
+            assert primary.client.call('RPUSH', 'large-list', *large) == len(large)
         replica.start()
         try:
             replica.client.call('SET', 'forbidden', 'write')
@@ -260,6 +459,18 @@ def run(args, report, watchdog):
             assert 'READONLY' in str(exc)
         else:
             raise AssertionError('replica accepted a client write')
+        if resumed:
+            # Everything the previous segment acknowledged has to be on both
+            # servers, on this machine, before anything is written on top of it.
+            handoff_start = time.monotonic()
+            verify(primary.client, expected, events)
+            verify_collections(primary.client, hashes, members, scores, large)
+            synchronized(primary, replica)
+            verify(replica.client, expected, events)
+            verify_collections(replica.client, hashes, members, scores, large)
+            report['handoff_recovery'] = {'seconds': time.monotonic() - handoff_start,
+                                          'replica': info(replica.client, 'replication')}
+            roll_up()
         while time.monotonic() - started < args.seconds:
             key = f'cache:{i % 1000}'
             value = f'{i}:'.encode() + b'v' * 256
@@ -301,6 +512,7 @@ def run(args, report, watchdog):
                 verify(replica.client, expected, events)
                 verify_collections(primary.client, hashes, members, scores, large)
                 verify_collections(replica.client, hashes, members, scores, large)
+                note_replica_rewrites()
                 ordered = sorted(pair_latencies)
                 sample = {'seconds': now-started, 'writes': report['acknowledged_writes'],
                           'cache_set_get_pair_ms': {'count': len(ordered), 'p50': statistics.median(ordered),
@@ -308,7 +520,10 @@ def run(args, report, watchdog):
                           'maintenance_seconds': time.monotonic()-maintenance_start,
                           'primary': info(primary.client, 'persistence'),
                           'replica': info(replica.client, 'replication'),
+                          'replica_persistence': info(replica.client, 'persistence'),
+                          'growth': growth_values(primary, replica),
                           'ps': process_sample(primary.process.pid, replica.process.pid)}
+                roll_up()
                 checkpoint(root, report, sample)
                 watchdog.beat("workload after checkpoint")
                 pair_latencies.clear()
@@ -332,49 +547,80 @@ def run(args, report, watchdog):
                     verify_collections(primary.client, hashes, members, scores, large)
                     report['primary_crash_recoveries'] += 1
                 else:
+                    note_replica_rewrites()
                     replica.stop(crash=True)
                     replica.start()
+                    replica_rewrites_seen = 0
                     report['replica_crash_recoveries'] += 1
                 synchronized(primary, replica)
                 verify(replica.client, expected, events)
                 verify_collections(replica.client, hashes, members, scores, large)
+                values = growth_values(primary, replica)
+                ceiling = compaction_ceiling(primary.client, floor)
+                for name in ('primary_aof', 'replica_aof'):
+                    growth.raise_floor(name, ceiling)
                 with (root/'recoveries.jsonl').open('a') as output:
                     output.write(json.dumps({'cycle': cycles, 'primary_crash': crash_primary,
-                        'seconds': time.monotonic()-recovery_start, 'acknowledged_cache_values_lost': 0})+'\n')
-                breaches = growth.observe(cycles, growth_values(primary, replica))
+                        'seconds': time.monotonic()-recovery_start, 'acknowledged_cache_values_lost': 0,
+                        'growth': values})+'\n')
+                breaches = growth.observe(cycles, values)
+                report['growth'] = growth.describe()
                 if breaches:
-                    report['growth_breaches'] = growth.breaches
                     raise AssertionError(
                         'unbounded growth across recovery cycles: ' + '; '.join(
-                            f"{b['quantity']} settled at {b['settled']} and is now {b['now']} "
-                            f"at cycle {b['cycle']}" for b in breaches))
-                report['growth_settled'] = growth.settled
+                            f"{b['quantity']} is {b['now']} at cycle {b['cycle']}, over {b['tolerance']}x "
+                            f"its baseline {b['baseline']} (settled {b['settled']}, floor {b['floor']})"
+                            for b in breaches))
                 next_cycle = time.monotonic() + args.cycle_seconds
                 watchdog.beat("workload after recovery")
             time.sleep(.002)
-        watchdog.beat("final verification and promotion")
+        watchdog.beat("final verification and promotion" if final else "segment handoff")
         # Quiesce and fence the primary before promoting the fully applied replica.
         time.sleep(.08)
         assert primary.client.call('GET', 'expiring') is None
         synchronized(primary, replica)
         verify(replica.client, expected, events)
         verify_collections(replica.client, hashes, members, scores, large)
+        note_replica_rewrites()
+        report['growth'] = growth.describe()
+        if growth.tolerance > 0 and growth.judged_cycles == 0:
+            # A pass that never judged a cycle has not checked growth. The
+            # first version of the bound was validated by exactly such a run.
+            raise AssertionError(
+                f'growth bounds never engaged: {cycles} recovery cycles ran and the first '
+                f'{growth.warmup_cycles} are warm-up; lengthen --seconds or shorten --cycle-seconds')
+        ports = {'primary': primary.port, 'replica': replica.port}
         primary.stop()
         replica.stop()
-        with Server(args.bin, root / 'replica', async_append=True) as promoted:
-            verify(promoted.client, expected, events)
-            verify_collections(promoted.client, hashes, members, scores, large)
-            assert promoted.client.call('SET', 'promotion', 'writable') == b'OK'
-        with Server(args.bin, root / 'replica', async_append=True) as restarted:
-            assert restarted.client.call('GET', 'promotion') == b'writable'
-            verify(restarted.client, expected, events)
-            verify_collections(restarted.client, hashes, members, scores, large)
-        report['manual_promotion'] = True
+        handoff = None
+        if final:
+            with Server(args.bin, root / 'replica', async_append=True) as promoted:
+                verify(promoted.client, expected, events)
+                verify_collections(promoted.client, hashes, members, scores, large)
+                assert promoted.client.call('SET', 'promotion', 'writable') == b'OK'
+            with Server(args.bin, root / 'replica', async_append=True) as restarted:
+                assert restarted.client.call('GET', 'promotion') == b'writable'
+                verify(restarted.client, expected, events)
+                verify_collections(restarted.client, hashes, members, scores, large)
+            report['manual_promotion'] = True
+        else:
+            handoff = {'segment': args.segment, 'segments': args.segments, 'i': i, 'cycles': cycles,
+                       'ports': ports, 'growth_settled': growth.settled, 'growth_floors': growth.floors,
+                       'replication_protocol': args.replication_protocol, 'concurrent': args.concurrent,
+                       'primary_crash_every': args.primary_crash_every,
+                       'auto_rewrite_min_size': args.auto_rewrite_min_size,
+                       'binary_sha256': report['binary_sha256'],
+                       'state': encode_state(expected, events, hashes, members, scores, large)}
         report['elapsed_seconds'] = time.monotonic() - started
+        roll_up(completed=True)
+        if handoff is not None:
+            handoff['cumulative'] = report['cumulative']
+        return handoff
     except BaseException:
         # Timestamp before diagnostic queries/SIGQUIT, which observe a later state.
         report['failure_observed_unix_seconds'] = time.time()
         report['elapsed_seconds'] = time.monotonic() - started
+        roll_up()
         report['failure_stack'] = [
             {'file': Path(frame.filename).name, 'line': frame.lineno, 'function': frame.name}
             for frame in traceback.extract_tb(sys.exc_info()[2])[-32:]
@@ -404,6 +650,13 @@ if __name__ == '__main__':
     parser.add_argument('--growth-tolerance', type=float, default=3.0,
                         help='fail if a log or descriptor count exceeds this multiple of its '
                              'settled value across recovery cycles; 0 disables the check')
+    parser.add_argument('--auto-rewrite-min-size', default='8mb',
+                        help='-auto-aof-rewrite-min-size for both servers, and the floor under a '
+                             "log's settled value; low enough that compaction happens within the run")
+    parser.add_argument('--segment', type=int, default=1,
+                        help='this run is segment N of a longer run continued across machines')
+    parser.add_argument('--segments', type=int, default=1, help='segments in the whole run')
+    parser.add_argument('--resume', help="the previous segment's evidence directory; required after segment 1")
     parser.add_argument('--fault-only', action='store_true')
     parser.add_argument('--disk-root')
     args = parser.parse_args()
@@ -411,6 +664,14 @@ if __name__ == '__main__':
             args.seconds <= 0 or args.cycle_seconds <= 0 or args.primary_crash_every < 0 or
             not math.isfinite(args.progress_timeout) or args.progress_timeout <= 0):
         parser.error('durations must be finite and positive; primary-crash-every must be nonnegative')
+    if not 1 <= args.segment <= args.segments:
+        parser.error('--segment must be between 1 and --segments')
+    if (args.segment > 1) != (args.resume is not None):
+        parser.error('--resume is required after segment 1 and meaningless for the first')
+    try:
+        parse_size(args.auto_rewrite_min_size)
+    except ValueError as exc:
+        parser.error(str(exc))
     os.umask(0o077)
     root = Path(args.out).resolve()
     assert not root.exists(), 'use a fresh evidence directory'
@@ -421,14 +682,17 @@ if __name__ == '__main__':
               'primary_crash_every': args.primary_crash_every, 'concurrent': args.concurrent,
               'replication_protocol': args.replication_protocol,
               'progress_timeout_seconds': args.progress_timeout,
-              'checkpoint_count': 0,
+              'auto_rewrite_min_size': args.auto_rewrite_min_size,
+              'segment': args.segment, 'segments': args.segments, 'resumed_from': args.resume,
+              'checkpoint_count': 0, 'replica_compactions': 0,
               'acknowledged_writes': 0, 'primary_crash_recoveries': 0,
               'replica_crash_recoveries': 0, 'checkpoints': [], 'faults': [], 'passed': False}
     (root / 'progress.json').write_text(json.dumps(report, indent=2) + '\n')
+    handoff = None
     try:
         with (root/'watchdog.log').open('w') as trace, ProgressWatchdog(args.progress_timeout, trace) as watchdog:
             if not args.fault_only:
-                run(args, report, watchdog)
+                handoff = run(args, report, watchdog)
             for worker in [False, True]:
                 watchdog.beat(f'write failure worker={worker}')
                 report['faults'].append(write_failure(args.bin, root, worker, args.disk_root, args.concurrent))
@@ -441,3 +705,11 @@ if __name__ == '__main__':
     finally:
         (root / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
         (root / 'progress.json').write_text(json.dumps(report, indent=2) + '\n')
+        # The next segment builds on this one only if everything here passed,
+        # including the storage-fault checks that ran after the soak itself.
+        if handoff is not None and report['passed']:
+            handoff['passed'] = True
+            (root / HANDOFF).write_text(json.dumps(handoff) + '\n')
+        print(json.dumps({key: report.get(key) for key in (
+            'status', 'segment', 'segments', 'acknowledged_writes', 'primary_crash_recoveries',
+            'replica_crash_recoveries', 'replica_compactions', 'cumulative')}), flush=True)

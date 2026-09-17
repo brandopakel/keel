@@ -249,5 +249,8 @@ tests extend validation. These changes are absent from published alpha.3 archive
 
 The [current engineering status](docs/engineering-status-2026-09-07.md) separates
 merged work, candidates, measured benefits and remaining gates. The four initial
-review findings are closed. The [failover proposal](docs/failover-design.md)
+review findings are closed. The [long-run gate](docs/long-run-gate.md) records why
+the nightly soak failed its first nine nights, what its growth bound now measures,
+and how the 48-hour run is executed as a chain of segments on free runners - and
+what such a chain does and does not establish. The [failover proposal](docs/failover-design.md)
 requires verified external fencing; automatic promotion remains unimplemented.

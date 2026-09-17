@@ -147,6 +147,19 @@ See [the investigation](soak-progress-observability.md). PR #68 adds direct AOF
 and temporary-file growth observations and repeated hosted soaks. Independent
 runs do not establish 48 hours of continuous uptime; no such run has passed.
 
+Update, September 17: the nightly soak failed all nine nights since PR #68 on
+its own growth bound, which measured the replica's protocol 2 log below the
+size the server compacts at and sampled the primary's log at a random phase of
+its rewrite cycle; the temporary-file half of the check never judged anything.
+No leak was involved. [The long-run gate](long-run-gate.md) records the
+failures, the corrected bound (a compaction floor set low enough to be
+exercised, a measured ceiling as the baseline floor, and a run that refuses to
+pass without judging a cycle), and `long-soak.yml`, which runs the three soak
+shapes for 48 hours as chains of nine segments on free runners with every
+acknowledged value verified at each boundary. That establishes 48 hours of one
+dataset and one pair of logs on one binary; it does not establish 48 hours of
+process uptime, and the document says how to get that when a machine exists.
+
 
 A combined candidate passes all nine alpha.2 upgrade/rewrite/restart/backup
 rollback cases across no/everysec/always and sync/barrier/concurrent append modes.

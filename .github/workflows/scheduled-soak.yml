@@ -11,7 +11,11 @@ name: Scheduled soak
 # the bounds in soak.py, which fail on the shape of the defect rather than
 # waiting for it to become a symptom.
 #
-# Each job stays under the six-hour runner limit with margin.
+# Each job stays under the six-hour runner limit with margin. The 48 hours
+# themselves run as long-soak.yml, in segments. When a machine that can be kept
+# for two days exists, dispatch this workflow onto it instead: a self-hosted
+# runner label, seconds=172800 and timeout_minutes up to 7200 give the
+# uninterrupted run that segments cannot. See docs/long-run-gate.md.
 
 on:
   schedule:
@@ -24,6 +28,12 @@ on:
       cycle_seconds:
         description: Seconds between crash/recovery cycles
         default: '30'
+      runner:
+        description: Runner label; a self-hosted label for a run past six hours
+        default: ubuntu-latest
+      timeout_minutes:
+        description: Job timeout; GitHub-hosted runners end at 360 regardless
+        default: '330'
 
 permissions:
   contents: read
@@ -31,8 +41,8 @@ permissions:
 jobs:
   soak:
     name: ${{ matrix.name }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 330
+    runs-on: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
+    timeout-minutes: ${{ fromJSON(github.event.inputs.timeout_minutes || '330') }}
     strategy:
       fail-fast: false
       matrix:

@@ -1,0 +1,103 @@
+name: Soak segment
+
+# One segment of a long soak. It takes over the deployment the previous
+# segment handed off - both servers' logs, the replica's checkpoint and the
+# harness's record of every acknowledged value - verifies all of it on this
+# machine before writing anything, runs the workload for most of a runner's six
+# hours, and hands the deployment on. The last segment promotes the replica
+# instead. Called by long-soak.yml, which says why the run is in segments.
+#
+# Every segment runs the binary the chain built once, not a fresh build: the
+# run validates one binary, and the harness refuses a handoff from another.
+
+on:
+  workflow_call:
+    inputs:
+      arm:
+        description: Short identifier for this arm's artifacts
+        type: string
+        required: true
+      args:
+        description: Harness arguments selecting the arm
+        type: string
+        required: true
+      segment:
+        type: number
+        required: true
+      segments:
+        type: number
+        required: true
+      previous:
+        description: The previous segment's artifact; empty for the first
+        type: string
+        default: ''
+      seconds:
+        description: Duration of this segment's workload, seconds
+        type: string
+        required: true
+      cycle_seconds:
+        type: string
+        required: true
+      runner:
+        type: string
+        default: ubuntu-latest
+
+permissions:
+  contents: read
+
+jobs:
+  soak:
+    name: soak
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Use the binary the chain built
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: long-soak-binary
+          path: /tmp/long-soak
+      - name: Take over from the previous segment
+        if: inputs.previous != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ${{ inputs.previous }}
+          path: dist/previous
+      - name: Soak
+        env:
+          PREVIOUS: ${{ inputs.previous }}
+          SECONDS_PER_SEGMENT: ${{ inputs.seconds }}
+          CYCLE_SECONDS: ${{ inputs.cycle_seconds }}
+          SEGMENT: ${{ inputs.segment }}
+          SEGMENTS: ${{ inputs.segments }}
+          ARM_ARGS: ${{ inputs.args }}
+        run: |
+          chmod +x /tmp/long-soak/keel
+          sha256sum -c <(sed 's# .*#  /tmp/long-soak/keel#' /tmp/long-soak/keel.sha256)
+          resume=()
+          if [ -n "$PREVIOUS" ]; then resume=(--resume dist/previous); fi
+          # shellcheck disable=SC2086 # the arm's arguments are several words
+          python3 scripts/soak.py --bin /tmp/long-soak/keel --out dist/soak \
+            --seconds "$SECONDS_PER_SEGMENT" --cycle-seconds "$CYCLE_SECONDS" \
+            --segment "$SEGMENT" --segments "$SEGMENTS" "${resume[@]}" $ARM_ARGS
+      - name: Bound failed persistence evidence before upload
+        if: failure()
+        run: |
+          mkdir -p dist/soak
+          timeout 120s python3 scripts/archive-failed-aof.py dist/soak > dist/soak/preservation.log 2>&1
+      - name: Retain evidence and the handoff, including a failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: long-soak-${{ inputs.arm }}-s${{ inputs.segment }}
+          path: |
+            dist/soak/**/*.json
+            dist/soak/**/*.jsonl
+            dist/soak/**/*.log
+            dist/soak/**/*.gz
+            dist/soak/primary/store.aof
+            dist/soak/replica/store.aof
+            dist/soak/replica/store.aof.replica-checkpoint
+          retention-days: 30
