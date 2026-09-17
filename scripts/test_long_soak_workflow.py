@@ -24,6 +24,8 @@ class LongSoakWorkflowTests(unittest.TestCase):
                 self.assertIn(f'    needs: {arm}-s{segment - 1}\n', text)
                 self.assertIn(f"      previous: 'long-soak-{arm}-s{segment - 1}'\n", text)
         self.assertIn("      previous: ''\n", text)
+        self.assertIn(f"github.event_name == 'pull_request' && '{generator.REHEARSAL_SECONDS}'", text)
+        self.assertIn('  pull_request:\n    paths:\n      - .github/workflows/long-soak.yml\n', text)
 
     def test_segment_workflow_exists_and_uploads_what_the_next_segment_needs(self):
         segment = (generator.WORKFLOW.parent / 'soak-segment.yml').read_text()

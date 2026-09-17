@@ -19,8 +19,18 @@ name: Long soak
 #
 # Every segment runs the binary built here once, so all 27 jobs validate
 # the same bytes even if a Go patch release lands mid-run.
+#
+# A pull request that changes the chain, its segment or the harness runs the
+# whole chain with 5-minute segments: every handoff, in about an hour.
 
 on:
+  pull_request:
+    paths:
+      - .github/workflows/long-soak.yml
+      - .github/workflows/soak-segment.yml
+      - scripts/soak.py
+      - scripts/validation_lib.py
+      - scripts/generate-long-soak-workflow.py
   workflow_dispatch:
     inputs:
       segment_seconds:
@@ -37,6 +47,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: long-soak-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -72,8 +86,8 @@ jobs:
       segment: 1
       segments: 9
       previous: ''
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p1-s2:
     name: protocol 1, recovery 2/9
@@ -85,8 +99,8 @@ jobs:
       segment: 2
       segments: 9
       previous: 'long-soak-p1-s1'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p1-s3:
     name: protocol 1, recovery 3/9
@@ -98,8 +112,8 @@ jobs:
       segment: 3
       segments: 9
       previous: 'long-soak-p1-s2'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p1-s4:
     name: protocol 1, recovery 4/9
@@ -111,8 +125,8 @@ jobs:
       segment: 4
       segments: 9
       previous: 'long-soak-p1-s3'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p1-s5:
     name: protocol 1, recovery 5/9
@@ -124,8 +138,8 @@ jobs:
       segment: 5
       segments: 9
       previous: 'long-soak-p1-s4'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p1-s6:
     name: protocol 1, recovery 6/9
@@ -137,8 +151,8 @@ jobs:
       segment: 6
       segments: 9
       previous: 'long-soak-p1-s5'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p1-s7:
     name: protocol 1, recovery 7/9
@@ -150,8 +164,8 @@ jobs:
       segment: 7
       segments: 9
       previous: 'long-soak-p1-s6'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p1-s8:
     name: protocol 1, recovery 8/9
@@ -163,8 +177,8 @@ jobs:
       segment: 8
       segments: 9
       previous: 'long-soak-p1-s7'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p1-s9:
     name: protocol 1, recovery 9/9
@@ -176,8 +190,8 @@ jobs:
       segment: 9
       segments: 9
       previous: 'long-soak-p1-s8'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p2c-s1:
     name: protocol 2 concurrent, recovery 1/9
@@ -189,8 +203,8 @@ jobs:
       segment: 1
       segments: 9
       previous: ''
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p2c-s2:
     name: protocol 2 concurrent, recovery 2/9
@@ -202,8 +216,8 @@ jobs:
       segment: 2
       segments: 9
       previous: 'long-soak-p2c-s1'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p2c-s3:
     name: protocol 2 concurrent, recovery 3/9
@@ -215,8 +229,8 @@ jobs:
       segment: 3
       segments: 9
       previous: 'long-soak-p2c-s2'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p2c-s4:
     name: protocol 2 concurrent, recovery 4/9
@@ -228,8 +242,8 @@ jobs:
       segment: 4
       segments: 9
       previous: 'long-soak-p2c-s3'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p2c-s5:
     name: protocol 2 concurrent, recovery 5/9
@@ -241,8 +255,8 @@ jobs:
       segment: 5
       segments: 9
       previous: 'long-soak-p2c-s4'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p2c-s6:
     name: protocol 2 concurrent, recovery 6/9
@@ -254,8 +268,8 @@ jobs:
       segment: 6
       segments: 9
       previous: 'long-soak-p2c-s5'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p2c-s7:
     name: protocol 2 concurrent, recovery 7/9
@@ -267,8 +281,8 @@ jobs:
       segment: 7
       segments: 9
       previous: 'long-soak-p2c-s6'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p2c-s8:
     name: protocol 2 concurrent, recovery 8/9
@@ -280,8 +294,8 @@ jobs:
       segment: 8
       segments: 9
       previous: 'long-soak-p2c-s7'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p2c-s9:
     name: protocol 2 concurrent, recovery 9/9
@@ -293,8 +307,8 @@ jobs:
       segment: 9
       segments: 9
       previous: 'long-soak-p2c-s8'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p2cc-s1:
     name: protocol 2 concurrent, continuous primary 1/9
@@ -306,8 +320,8 @@ jobs:
       segment: 1
       segments: 9
       previous: ''
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p2cc-s2:
     name: protocol 2 concurrent, continuous primary 2/9
@@ -319,8 +333,8 @@ jobs:
       segment: 2
       segments: 9
       previous: 'long-soak-p2cc-s1'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p2cc-s3:
     name: protocol 2 concurrent, continuous primary 3/9
@@ -332,8 +346,8 @@ jobs:
       segment: 3
       segments: 9
       previous: 'long-soak-p2cc-s2'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p2cc-s4:
     name: protocol 2 concurrent, continuous primary 4/9
@@ -345,8 +359,8 @@ jobs:
       segment: 4
       segments: 9
       previous: 'long-soak-p2cc-s3'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p2cc-s5:
     name: protocol 2 concurrent, continuous primary 5/9
@@ -358,8 +372,8 @@ jobs:
       segment: 5
       segments: 9
       previous: 'long-soak-p2cc-s4'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p2cc-s6:
     name: protocol 2 concurrent, continuous primary 6/9
@@ -371,8 +385,8 @@ jobs:
       segment: 6
       segments: 9
       previous: 'long-soak-p2cc-s5'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p2cc-s7:
     name: protocol 2 concurrent, continuous primary 7/9
@@ -384,8 +398,8 @@ jobs:
       segment: 7
       segments: 9
       previous: 'long-soak-p2cc-s6'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p2cc-s8:
     name: protocol 2 concurrent, continuous primary 8/9
@@ -397,8 +411,8 @@ jobs:
       segment: 8
       segments: 9
       previous: 'long-soak-p2cc-s7'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
   p2cc-s9:
     name: protocol 2 concurrent, continuous primary 9/9
@@ -410,6 +424,6 @@ jobs:
       segment: 9
       segments: 9
       previous: 'long-soak-p2cc-s8'
-      seconds: ${{ github.event.inputs.segment_seconds || '19200' }}
-      cycle_seconds: ${{ github.event.inputs.cycle_seconds || '30' }}
+      seconds: ${{ github.event_name == 'pull_request' && '300' || github.event.inputs.segment_seconds || '19200' }}
+      cycle_seconds: ${{ github.event_name == 'pull_request' && '20' || github.event.inputs.cycle_seconds || '30' }}
       runner: ${{ github.event.inputs.runner || 'ubuntu-latest' }}

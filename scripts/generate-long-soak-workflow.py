@@ -12,6 +12,10 @@ from pathlib import Path
 SEGMENTS = 9
 SEGMENT_SECONDS = 19200  # 5h20m; nine of them are 48 hours
 CYCLE_SECONDS = 30
+# A pull request that touches the chain runs it in miniature: every handoff
+# exercised, about an hour of wall clock, before the real thing depends on it.
+REHEARSAL_SECONDS = 300
+REHEARSAL_CYCLE_SECONDS = 20
 ARMS = [
     ('p1', 'protocol 1, recovery', '--replication-protocol 1 --primary-crash-every 3'),
     ('p2c', 'protocol 2 concurrent, recovery', '--replication-protocol 2 --concurrent --primary-crash-every 3'),
@@ -40,8 +44,18 @@ HEADER = f'''name: Long soak
 #
 # Every segment runs the binary built here once, so all {SEGMENTS * len(ARMS)} jobs validate
 # the same bytes even if a Go patch release lands mid-run.
+#
+# A pull request that changes the chain, its segment or the harness runs the
+# whole chain with {REHEARSAL_SECONDS // 60}-minute segments: every handoff, in about an hour.
 
 on:
+  pull_request:
+    paths:
+      - .github/workflows/long-soak.yml
+      - .github/workflows/soak-segment.yml
+      - scripts/soak.py
+      - scripts/validation_lib.py
+      - scripts/generate-long-soak-workflow.py
   workflow_dispatch:
     inputs:
       segment_seconds:
@@ -58,6 +72,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: long-soak-${{{{ github.ref }}}}
+  cancel-in-progress: ${{{{ github.event_name == 'pull_request' }}}}
 
 jobs:
   build:
@@ -99,8 +117,8 @@ def segment_job(arm, title, args, segment):
       segment: {segment}
       segments: {SEGMENTS}
       previous: '{previous}'
-      seconds: ${{{{ github.event.inputs.segment_seconds || '{SEGMENT_SECONDS}' }}}}
-      cycle_seconds: ${{{{ github.event.inputs.cycle_seconds || '{CYCLE_SECONDS}' }}}}
+      seconds: ${{{{ github.event_name == 'pull_request' && '{REHEARSAL_SECONDS}' || github.event.inputs.segment_seconds || '{SEGMENT_SECONDS}' }}}}
+      cycle_seconds: ${{{{ github.event_name == 'pull_request' && '{REHEARSAL_CYCLE_SECONDS}' || github.event.inputs.cycle_seconds || '{CYCLE_SECONDS}' }}}}
       runner: ${{{{ github.event.inputs.runner || 'ubuntu-latest' }}}}
 '''
 
