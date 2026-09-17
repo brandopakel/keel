@@ -57,7 +57,7 @@ replica did not compact until the log reached six times live memory - the
 restart estimate, not the floor, decides - which is why the floor is the
 ceiling and not the flag's value.
 
-## The stall that motivated the gate
+## The stall that motivated the gate, and what closes it
 
 The one 48-hour attempt that ran long enough to stop was read at the time as a
 server fault: a lost readiness registration leaving the event loop parked with
@@ -66,8 +66,35 @@ a reply owed. The preserved dump and the harness source that ran say otherwise
 timeout means it was never waiting on the server. It was asleep in a call of
 its own with no deadline, most likely `ps`, which failed the same way on the
 same laptop three days later. The [investigation](soak-progress-observability.md)
-carries the evidence. The gate matters for the reason it always did - slow
-growth and elapsed-time effects - not because that run found a defect.
+carries the evidence.
+
+That withdraws a claimed defect; it does not prove there is none, and the
+loop had a real gap in how it would have shown one. Its sweep closed
+connections holding incomplete input or an undelivered reply for thirty
+seconds, silently, and did not look at a connection whose request it had
+parsed and never answered - the one state that means the loop forgot someone.
+A recurrence would have been a hang with nothing in the log. Three things now
+make the property enforceable rather than argued:
+
+- `sweepStalledClients` closes every stalled state within thirty seconds,
+  including a parsed run never executed, a held or deferred run in the
+  ordered-append queue, and a queued pipeline continuation. An unanswered
+  request is **logged with the connection's full state** - parsed commands,
+  reply bytes, held/deferred/queued flags, registered interest, age - while
+  that state still exists. A slow reader is closed and counted, not logged.
+- `INFO clients` reports `clients_closed_slow` and `clients_closed_unanswered`.
+  The second is the server saying it stopped serving someone. The soak asserts
+  it is zero on both servers at every checkpoint and every recovery cycle, so
+  a recurrence fails the run within a minute and the server log names the
+  connection.
+- `TestConcurrentAppendAnswersEveryRequest` drives the ordered-append path
+  from six connections at once with every request shape that moves its state
+  machine - admitted and unmodelled runs, rewrites under traffic, keys expiring
+  on their own, unknown commands, hundred-command pipelines, a reply larger
+  than the arena - each under a five-second deadline, and checks the counter.
+
+The gate matters for the reason it always did - slow growth and elapsed-time
+effects - and a connection the loop forgets can no longer hide behind it.
 
 ## How 48 hours run on free runners
 
@@ -99,26 +126,56 @@ hours per run, on standard runners in a public repository, which cost nothing.
 
 ## True uptime, when a machine exists
 
-`scheduled-soak.yml` accepts a runner label and a timeout. On a self-hosted
-runner the job limit is five days, so `runner=<label>`, `seconds=172800`,
-`timeout_minutes=2940` is the uninterrupted 48-hour run the checklist
-literally asks for. Candidate machines that cost nothing, in order of fit:
+`scheduled-soak.yml` has a weekly `uptime` job: 48 hours of the
+continuous-primary shape on a self-hosted runner, the only shape for which
+process uptime means anything (the recovery shapes restart their primary every
+third cycle by design). It runs only once the repository variable
+`SOAK_RUNNER` names a registered runner's label, so nothing queues for a
+machine that does not exist. Any arm can also be dispatched onto that runner
+with the `runner`, `seconds` and `timeout_minutes` inputs; self-hosted jobs may
+run for five days.
 
-1. **Oracle Cloud Always Free** - an Ampere A1 shape up to 4 OCPU / 24 GB,
-   permanently free, ARM. Needs an account with a card on file for identity
-   only. The most capable option, and the one worth trying first.
-2. **Google Cloud Always Free** - one `e2-micro` (shared vCPU, 1 GB) in a US
-   region. Enough for this workload's ~2 MB dataset, marginal for the 1 MiB
-   value's replication and the Go runtime under `gctrace=1`; try with the
-   continuous-primary arm only.
-3. **Any always-on machine you already own** - a NAS, a Raspberry Pi, a spare
-   desktop. Register it as a runner with the label, and the same dispatch works.
+The machine that costs nothing is an **Oracle Cloud Always Free** Ampere A1
+instance: up to 4 OCPUs and 24 GB, permanently free, arm64. Nobody can create
+the account but its owner - it needs identity, a card for verification only,
+and a phone - so these are the steps, in order:
 
-Registering a self-hosted runner on a public repository exposes it to
-workflows from forks unless "require approval for all outside collaborators"
-stays on in the repository's Actions settings, which it should. Keep the
-runner ephemeral or reset its work directory between runs. The zero-dollar
-budget in `AGENTS.md` is why these are listed and nothing paid is.
+1. Sign up at cloud.oracle.com. Choose the home region deliberately: Always
+   Free resources live only there and it cannot be changed later. A1 capacity
+   is scarce in many regions, so instance creation often fails with "Out of
+   host capacity"; it can be retried until it succeeds, and it is worth
+   checking current reports of which regions have capacity before choosing.
+2. Create a compute instance: shape **VM.Standard.A1.Flex**, 4 OCPUs, 24 GB;
+   image Ubuntu 24.04 (aarch64); a 50 GB boot volume (the free allowance is
+   200 GB in total); your SSH key. Leave the default VCN. Nothing inbound is
+   needed - the runner polls GitHub over HTTPS.
+3. On the instance, as root, with a registration token that
+   `gh api -X POST repos/brandopakel/keel/actions/runners/registration-token -q .token`
+   prints (valid one hour; nothing long-lived stays on the machine):
+
+       sudo ./scripts/provision-soak-runner.sh --repo brandopakel/keel --token <token>
+
+   It installs the runner from GitHub's release, verified against the
+   published checksum, as a service under an unprivileged user with the label
+   `soak`.
+4. Once: `gh variable set SOAK_RUNNER --repo brandopakel/keel --body soak`.
+   The weekly run now happens on its own (Sundays 05:00 UTC), and a manual one is
+   `gh workflow run scheduled-soak.yml -f runner=soak -f seconds=172800 -f timeout_minutes=2940`.
+
+Two Oracle rules to know. Always Free compute is reclaimed after seven days
+in which CPU, network and memory all stayed under 20% at the 95th percentile;
+the weekly 48-hour run keeps it well above that, but a skipped week is a
+risk, and a reclaimed instance is recreated from step 2. And a shape other
+than A1.Flex within the free limits, or a boot volume past the allowance,
+bills; the console marks free-eligible choices.
+
+Self-hosted runners on a public repository run workflows from forks unless
+approval is required, so the repository's Actions setting now requires
+approval for every outside collaborator's workflow, and the default workflow
+token is read-only. The runner is persistent rather than ephemeral because a
+schedule has to find it; those two settings are what make that acceptable.
+Google Cloud's Always Free `e2-micro` (1 GB, x86) and any always-on machine
+you already own work with the same script.
 
 ## Reading the evidence
 

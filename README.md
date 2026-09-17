@@ -102,7 +102,10 @@ The old `MEMKV.*` command aliases and `memkv-master.aof` migration path remain s
 
 Nonblocking replies have a 64 MiB per-client pending-output limit. Incomplete input
 is limited to 16 MiB per client. A client holding incomplete input or pending output
-without progress for 30 seconds is closed (checked approximately once a second).
+without progress for 30 seconds is closed (checked approximately once a second), and
+so is one whose parsed request the server has not answered in that time; `INFO clients`
+counts the two separately (`clients_closed_slow`, `clients_closed_unanswered`), and the
+second is logged with the connection's state because it indicates a server fault.
 `-maxclients` bounds connected clients. Retained user-space input/output buffers
 also share a 256 MiB limit; excess clients are closed. These are resource limits, not an RSS guarantee;
 input and replies each have a 192 MiB retained-buffer ceiling within that total.

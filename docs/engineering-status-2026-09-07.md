@@ -149,7 +149,13 @@ section) withdraws that assessment: the loop was being woken at 10 Hz and had
 re-entered `kevent` within the last minute, and the harness's three-second
 socket timeout means it was not waiting on a reply at all but stuck in a
 harness call without a deadline, most likely `ps`. No Keel defect is
-established by the stall; none is excluded by it either. PR #68 adds direct AOF
+established by the stall; none is excluded by it either. What closes the item
+is enforcement: the loop now closes and logs any connection whose parsed request
+it has not answered within thirty seconds, `INFO clients` counts those
+separately from slow readers, the soak asserts the count is zero at every
+checkpoint, and a six-connection liveness test drives the ordered-append path
+with every request shape that moves it. A recurrence fails a soak within a
+minute and names the connection in the server log. PR #68 adds direct AOF
 and temporary-file growth observations and repeated hosted soaks. Independent
 runs do not establish 48 hours of continuous uptime; no such run has passed.
 

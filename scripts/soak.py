@@ -66,6 +66,21 @@ def verify(client, expected, events):
     assert client.call('LRANGE', 'events', 0, -1) == list(events)
 
 
+def verify_served(client):
+    """The loop closed nobody for a request it never answered.
+
+    A connection the server has stopped serving is what the stalled 48-hour
+    run looked like from outside. The server now closes such a connection
+    within thirty seconds and logs its state; this turns that log line into a
+    failed soak at the next checkpoint instead of a silence found hours later.
+    Slow readers are the client's doing and are reported, not asserted."""
+    stats = info(client, 'clients')
+    assert stats['clients_closed_unanswered'] == '0', (
+        f"server closed {stats['clients_closed_unanswered']} connection(s) with an unanswered request; "
+        "its server.log names them")
+    return {'closed_slow': int(stats['clients_closed_slow']), 'closed_unanswered': int(stats['clients_closed_unanswered'])}
+
+
 def verify_collections(client, hashes, members, scores, large):
     raw = client.call('HGETALL', 'hash')
     assert len(raw) == 2 * len(hashes)
@@ -512,6 +527,7 @@ def run(args, report, watchdog):
                 verify(replica.client, expected, events)
                 verify_collections(primary.client, hashes, members, scores, large)
                 verify_collections(replica.client, hashes, members, scores, large)
+                served = {'primary': verify_served(primary.client), 'replica': verify_served(replica.client)}
                 note_replica_rewrites()
                 ordered = sorted(pair_latencies)
                 sample = {'seconds': now-started, 'writes': report['acknowledged_writes'],
@@ -521,6 +537,7 @@ def run(args, report, watchdog):
                           'primary': info(primary.client, 'persistence'),
                           'replica': info(replica.client, 'replication'),
                           'replica_persistence': info(replica.client, 'persistence'),
+                          'clients_closed': served,
                           'growth': growth_values(primary, replica),
                           'ps': process_sample(primary.process.pid, replica.process.pid)}
                 roll_up()
@@ -555,6 +572,8 @@ def run(args, report, watchdog):
                 synchronized(primary, replica)
                 verify(replica.client, expected, events)
                 verify_collections(replica.client, hashes, members, scores, large)
+                verify_served(primary.client)
+                verify_served(replica.client)
                 values = growth_values(primary, replica)
                 ceiling = compaction_ceiling(primary.client, floor)
                 for name in ('primary_aof', 'replica_aof'):
