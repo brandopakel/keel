@@ -135,30 +135,50 @@ machine that does not exist. Any arm can also be dispatched onto that runner
 with the `runner`, `seconds` and `timeout_minutes` inputs; self-hosted jobs may
 run for five days.
 
-The machine that costs nothing is an **Oracle Cloud Always Free** Ampere A1
-instance: up to 4 OCPUs and 24 GB, permanently free, arm64. Nobody can create
-the account but its owner - it needs identity, a card for verification only,
-and a phone - so these are the steps, in order:
+The machine that costs nothing is an **Oracle Cloud Always Free** instance.
+Two shapes qualify: the Ampere **VM.Standard.A1.Flex** (up to 4 OCPUs and
+24 GB, arm64) and the AMD **VM.Standard.E2.1.Micro** (1 OCPU, 1 GB, x86; two
+allowed). The A1 is the better machine and the scarcer one: on September 17,
+2026 it was "Out of capacity" in the only availability domain of the San Jose
+home region, so the runner went on a Micro, which is enough for two small
+servers and the harness once the bootstrap adds swap for the Go build, and
+which is the hosted runners' architecture besides. The A1 can be tried again
+at any time; both can be held at once.
 
-1. Sign up at cloud.oracle.com. Choose the home region deliberately: Always
-   Free resources live only there and it cannot be changed later. A1 capacity
-   is scarce in many regions, so instance creation often fails with "Out of
-   host capacity"; it can be retried until it succeeds, and it is worth
-   checking current reports of which regions have capacity before choosing.
-2. Create a compute instance: shape **VM.Standard.A1.Flex**, 4 OCPUs, 24 GB;
-   image Ubuntu 24.04 (aarch64); a 50 GB boot volume (the free allowance is
-   200 GB in total); your SSH key. Leave the default VCN. Nothing inbound is
-   needed - the runner polls GitHub over HTTPS.
-3. On the instance, as root, with a registration token that
+Nobody can create the account but its owner - it needs identity, a card for
+verification only, and a phone - so these are the steps, in order, with the
+console's quirks as met:
+
+1. Sign up at cloud.oracle.com. The home region is where Always Free resources
+   live and cannot be changed later.
+2. **Create the network first**, with Networking → Overview → *Create a VCN
+   with internet connectivity* (the wizard). It makes a public subnet, an
+   internet gateway, the route and a security list that admits SSH. The
+   instance form's own "create new VCN" option leaves the public-IP toggle
+   disabled, and its VCN list does not refresh while the form is open.
+3. Compute → Instances → Create instance. Change the **image** before the
+   shape: the full Ubuntu 24.04 image is x86 only, so an A1 needs *Canonical
+   Ubuntu 24.04 Minimal aarch64* (search "aarch64"); a Micro takes the full
+   image. Then *Change shape*: A1 is under Ampere and lets the row expand to
+   set OCPUs and memory; the Micro is under *Specialty and previous
+   generation*. Both carry the "Always Free-eligible" badge; nothing without
+   it. If the dialog shows no shapes at all, close and reopen it.
+4. Networking: *Select existing* VCN and its public subnet; the public IPv4
+   toggle turns on by itself. SSH keys: *Paste public key* - generate a pair
+   locally (`ssh-keygen -t ed25519 -f ~/.ssh/keel-soak`) rather than
+   downloading Oracle's private key. Storage: default. Create. "Out of
+   capacity" means retry later or take the other shape.
+5. On the instance, as root, with a registration token that
    `gh api -X POST repos/brandopakel/keel/actions/runners/registration-token -q .token`
    prints (valid one hour; nothing long-lived stays on the machine):
 
-       sudo ./scripts/provision-soak-runner.sh --repo brandopakel/keel --token <token>
+       git clone https://github.com/brandopakel/keel.git
+       sudo ./keel/scripts/provision-soak-runner.sh --repo brandopakel/keel --token <token>
 
-   It installs the runner from GitHub's release, verified against the
-   published checksum, as a service under an unprivileged user with the label
-   `soak`.
-4. Once: `gh variable set SOAK_RUNNER --repo brandopakel/keel --body soak`.
+   It adds swap on a small machine, installs the runner from GitHub's release
+   verified against the published checksum, and registers it as a service
+   under an unprivileged user with the label `soak`.
+6. Once: `gh variable set SOAK_RUNNER --repo brandopakel/keel --body soak`.
    The weekly run now happens on its own (Sundays 05:00 UTC). A manual 48-hour
    run is `gh workflow run scheduled-soak.yml -f uptime=true -f runner=soak`,
    and a short check that the runner works is any ordinary dispatch with
