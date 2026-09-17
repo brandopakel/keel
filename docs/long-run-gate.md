@@ -57,6 +57,18 @@ replica did not compact until the log reached six times live memory - the
 restart estimate, not the floor, decides - which is why the floor is the
 ceiling and not the flag's value.
 
+## The stall that motivated the gate
+
+The one 48-hour attempt that ran long enough to stop was read at the time as a
+server fault: a lost readiness registration leaving the event loop parked with
+a reply owed. The preserved dump and the harness source that ran say otherwise
+- the loop was being woken at 10 Hz, and the harness's three-second socket
+timeout means it was never waiting on the server. It was asleep in a call of
+its own with no deadline, most likely `ps`, which failed the same way on the
+same laptop three days later. The [investigation](soak-progress-observability.md)
+carries the evidence. The gate matters for the reason it always did - slow
+growth and elapsed-time effects - not because that run found a defect.
+
 ## How 48 hours run on free runners
 
 `long-soak.yml` runs each of the three soak shapes as a chain of nine segments

@@ -143,7 +143,13 @@ PR #67 records the server-side investigation of the older stall: the event loop
 was parked in `KQueue.Check` while a client had an established connection and an
 unanswered request. Its assessment identifies missing readiness registration as
 the cause. PR #57 bounds the wait; the registration path remains unidentified.
-See [the investigation](soak-progress-observability.md). PR #68 adds direct AOF
+See [the investigation](soak-progress-observability.md). A re-reading of the
+preserved dump and harness source on September 17 (same document, final
+section) withdraws that assessment: the loop was being woken at 10 Hz and had
+re-entered `kevent` within the last minute, and the harness's three-second
+socket timeout means it was not waiting on a reply at all but stuck in a
+harness call without a deadline, most likely `ps`. No Keel defect is
+established by the stall; none is excluded by it either. PR #68 adds direct AOF
 and temporary-file growth observations and repeated hosted soaks. Independent
 runs do not establish 48 hours of continuous uptime; no such run has passed.
 

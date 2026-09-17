@@ -88,3 +88,57 @@ modes. Complete checkpoint/recovery series and terminal reports are retained in
 b9a97e002e5f6edb7fef54c7100ab9f7fd162e09, binary SHA-256
 `aeed3178e90e12664f8f715a7adb2889c6bffcdf36fbba076cbe9d64862c8b31`.
 These passes do not cover later changes or complete the stalled 48-hour test.
+
+## The server side of that stall, re-read on September 17
+
+The section above concludes that a descriptor was left unregistered while a
+reply was owed, so that the loop "never turns again". The preserved evidence
+in `bench/results/frozen-continuous-soak-stop-2026-09-07.json.gz` - both
+server logs with the SIGQUIT dump, the report, and the harness source that
+ran - does not support that, and supports something else.
+
+**The loop was turning.** The build that stalled already had the 10 Hz cron
+goroutine that pokes the wakeup pipe (`cronStop`, present since 72d8979), and
+the dump shows it alive (`goroutine 21`, `RunAsyncTCPServer.func3`, in
+`select`). The loop goroutine itself is printed as `[syscall]` with no
+duration, where every goroutine that had been blocked since startup is
+printed with `1039 minutes` - it had re-entered `kevent` within the last
+minute, which is what a loop woken ten times a second looks like. The
+asynchronous append worker is absent from the dump, so no batch was pending.
+A loop that turns every 100 ms and holds a reply would be a state-machine
+fault in the ordered-append path, not a lost registration; a reading of that
+path (`aof_ordered.go`, `server.go`) at the stalled commit found no state a
+turning loop cannot leave, and the bounded wait that PR #57 added changes
+nothing for a loop that was already being woken.
+
+**The harness was not waiting on the server.** Its RESP client opens every
+connection with `socket.create_connection(..., timeout=3)`
+(`bench/external/aws/resp_client.py`), so a request the server never answered
+would have raised `TimeoutError` three seconds later, the harness would have
+written `status: failed`, and the process would have exited. Eleven hours
+later it was alive with `status: running`. The one-second native sample
+recorded above found it in `time.sleep`, which is not where a client blocked
+on a socket sits. So the harness was stuck in something of its own that had
+no deadline. The checkpoint that ran at the moment both servers went idle
+(03:29:35 local; the primary's last allocation-driven GC is at that second,
+the replica's within twenty seconds) contained one such call: `ps` through
+`subprocess.check_output` with no timeout. Three days later, on the same
+laptop, the frozen b14ffe0 run failed because `ps` exceeded the two-second
+timeout it had been given by then. The current harness gives it fifteen
+seconds and never lets it end a run (`process_sample`), and a stalled
+checkpoint is now a watchdog failure with stacks rather than a quiet sleep.
+
+What this does and does not establish, kept separate:
+
+- The stall is not evidence of a Keel defect. The claim that the one run
+  long enough to find something found a server fault is withdrawn; what it
+  found was a harness call without a deadline, since fixed.
+- It is also not evidence of the absence of one. A missing readiness
+  registration was never observed; it was inferred, and the inference does
+  not hold. Nothing here proves the ordered-append path has no fault - the
+  nightly and long soaks are the check for that, and they now run with
+  growth bounds that engage and a harness that fails loudly instead of
+  sleeping.
+- Both interpretations agree on one thing: a soak that stops progressing must
+  fail with stacks within minutes, not be found asleep eleven hours later.
+  That is what PR #40's watchdog and the bounded `ps` provide.
