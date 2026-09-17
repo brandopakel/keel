@@ -154,6 +154,13 @@ from outside users. Historical throughput and memory results in [bench/](bench/R
 are not release guarantees. The repaired memory harness measures live connections and
 verifies process identity. Run it against the exact binary you plan to deploy.
 
+## Reporting problems
+
+Open an [issue](https://github.com/brandopakel/keel/issues/new/choose) with the
+binary version, the full server command line, the client commands in order, and
+what the [integration contract](#integration-contract) says should have happened.
+Report vulnerabilities [privately](https://github.com/brandopakel/keel/security/advisories/new).
+
 ## Development and roadmap
 
 ```sh
