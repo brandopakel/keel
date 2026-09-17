@@ -51,6 +51,17 @@ apt-get update -q
 apt-get install -y -q curl tar git jq python3 ca-certificates libicu-dev
 # The runner's dependency script knows the rest (libssl, krb5, ...).
 
+# The Always Free x86 shape has 1 GB. The Go build peaks past that, and a
+# runner job that dies in the compiler is a wasted week. Two gigabytes of swap
+# cost nothing but boot-volume space and let the build finish, slowly.
+if [ "$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)" -lt 2048 ] && [ ! -f /swapfile ]; then
+  fallocate -l 2G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile >/dev/null
+  swapon /swapfile
+  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+
 id "$RUNNER_USER" >/dev/null 2>&1 || useradd --system --create-home --shell /bin/bash "$RUNNER_USER"
 mkdir -p "$RUNNER_HOME"
 chown "$RUNNER_USER:$RUNNER_USER" "$RUNNER_HOME"
