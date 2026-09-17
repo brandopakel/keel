@@ -159,8 +159,11 @@ and a phone - so these are the steps, in order:
    published checksum, as a service under an unprivileged user with the label
    `soak`.
 4. Once: `gh variable set SOAK_RUNNER --repo brandopakel/keel --body soak`.
-   The weekly run now happens on its own (Sundays 05:00 UTC), and a manual one is
-   `gh workflow run scheduled-soak.yml -f runner=soak -f seconds=172800 -f timeout_minutes=2940`.
+   The weekly run now happens on its own (Sundays 05:00 UTC). A manual 48-hour
+   run is `gh workflow run scheduled-soak.yml -f uptime=true -f runner=soak`,
+   and a short check that the runner works is any ordinary dispatch with
+   `-f runner=soak -f seconds=600`, which runs the three arms one after another
+   there.
 
 Two Oracle rules to know. Always Free compute is reclaimed after seven days
 in which CPU, network and memory all stayed under 20% at the 95th percentile;

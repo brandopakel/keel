@@ -88,7 +88,9 @@ cat <<MSG
 Runner registered to $REPO with labels [$LABELS], running as a service.
 
 Next, once:   gh variable set SOAK_RUNNER --repo $REPO --body soak
-Then the weekly true-uptime soak in scheduled-soak.yml runs here on its own,
-and a manual run is:
-  gh workflow run scheduled-soak.yml --repo $REPO -f runner=soak -f seconds=172800 -f timeout_minutes=2940
+Then the weekly true-uptime soak in scheduled-soak.yml runs here on its own.
+A short check that this runner works:
+  gh workflow run scheduled-soak.yml --repo $REPO -f runner=soak -f seconds=600 -f timeout_minutes=60
+The full 48 hours, now:
+  gh workflow run scheduled-soak.yml --repo $REPO -f uptime=true -f runner=soak
 MSG
