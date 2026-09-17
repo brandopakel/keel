@@ -86,6 +86,10 @@ type ClientBufferStats struct {
 	Connected, InputBytes, ReplyBytes, TotalBytes int
 	RequestAllocationPeak                         int64
 	RequestAllocationRefusals                     uint64
+	// Connections the event loop closed for holding work past its timeout:
+	// slow readers and half-sent requests, and separately requests the server
+	// parsed and never answered. The second should stay at zero.
+	ClosedSlow, ClosedUnanswered uint64
 }
 
 // ClientBuffers is installed before accepting event-loop clients and removed
@@ -111,7 +115,8 @@ func cmdINFO(args []string) []byte {
 	if want("clients") && ClientBuffers != nil {
 		stats := ClientBuffers()
 		fmt.Fprintf(&b, "# Clients\r\nconnected_clients:%d\r\nretained_input_bytes:%d\r\nretained_reply_bytes:%d\r\nretained_client_bytes:%d\r\n", stats.Connected, stats.InputBytes, stats.ReplyBytes, stats.TotalBytes)
-		fmt.Fprintf(&b, "request_allocation_peak_bytes:%d\r\nrequest_allocation_refusals:%d\r\n\r\n", stats.RequestAllocationPeak, stats.RequestAllocationRefusals)
+		fmt.Fprintf(&b, "request_allocation_peak_bytes:%d\r\nrequest_allocation_refusals:%d\r\n", stats.RequestAllocationPeak, stats.RequestAllocationRefusals)
+		fmt.Fprintf(&b, "clients_closed_slow:%d\r\nclients_closed_unanswered:%d\r\n\r\n", stats.ClosedSlow, stats.ClosedUnanswered)
 	}
 	if want("clients") && CommandAllocations != nil {
 		stats := CommandAllocations

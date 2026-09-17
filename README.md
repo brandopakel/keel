@@ -102,7 +102,10 @@ The old `MEMKV.*` command aliases and `memkv-master.aof` migration path remain s
 
 Nonblocking replies have a 64 MiB per-client pending-output limit. Incomplete input
 is limited to 16 MiB per client. A client holding incomplete input or pending output
-without progress for 30 seconds is closed (checked approximately once a second).
+without progress for 30 seconds is closed (checked approximately once a second), and
+so is one whose parsed request the server has not answered in that time; `INFO clients`
+counts the two separately (`clients_closed_slow`, `clients_closed_unanswered`), and the
+second is logged with the connection's state because it indicates a server fault.
 `-maxclients` bounds connected clients. Retained user-space input/output buffers
 also share a 256 MiB limit; excess clients are closed. These are resource limits, not an RSS guarantee;
 input and replies each have a 192 MiB retained-buffer ceiling within that total.
@@ -153,6 +156,13 @@ The product advantage still needs measurement on real application traces and fee
 from outside users. Historical throughput and memory results in [bench/](bench/README.md)
 are not release guarantees. The repaired memory harness measures live connections and
 verifies process identity. Run it against the exact binary you plan to deploy.
+
+## Reporting problems
+
+Open an [issue](https://github.com/brandopakel/keel/issues/new/choose) with the
+binary version, the full server command line, the client commands in order, and
+what the [integration contract](#integration-contract) says should have happened.
+Report vulnerabilities [privately](https://github.com/brandopakel/keel/security/advisories/new).
 
 ## Development and roadmap
 
@@ -249,5 +259,8 @@ tests extend validation. These changes are absent from published alpha.3 archive
 
 The [current engineering status](docs/engineering-status-2026-09-07.md) separates
 merged work, candidates, measured benefits and remaining gates. The four initial
-review findings are closed. The [failover proposal](docs/failover-design.md)
+review findings are closed. The [long-run gate](docs/long-run-gate.md) records why
+the nightly soak failed its first nine nights, what its growth bound now measures,
+and how the 48-hour run is executed as a chain of segments on free runners - and
+what such a chain does and does not establish. The [failover proposal](docs/failover-design.md)
 requires verified external fencing; automatic promotion remains unimplemented.

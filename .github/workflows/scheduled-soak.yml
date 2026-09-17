@@ -11,11 +11,19 @@ name: Scheduled soak
 # the bounds in soak.py, which fail on the shape of the defect rather than
 # waiting for it to become a symptom.
 #
-# Each job stays under the six-hour runner limit with margin.
+# Each job stays under the six-hour runner limit with margin. The 48 hours
+# themselves run as long-soak.yml, in segments, and as one uninterrupted run
+# on a self-hosted runner when one exists: the `uptime` job below runs weekly
+# once the repository variable SOAK_RUNNER names that runner's label, and any
+# arm can be dispatched onto it with the `runner` input. Self-hosted jobs may
+# run for five days. See docs/long-run-gate.md, and
+# scripts/provision-soak-runner.sh for the machine.
 
 on:
   schedule:
     - cron: '0 3 * * *'
+    # The weekly true-uptime run; only the uptime job answers this one.
+    - cron: '0 5 * * 0'
   workflow_dispatch:
     inputs:
       seconds:
@@ -24,6 +32,16 @@ on:
       cycle_seconds:
         description: Seconds between crash/recovery cycles
         default: '30'
+      runner:
+        description: Runner label; a self-hosted label for a run past six hours
+        default: ubuntu-latest
+      timeout_minutes:
+        description: Job timeout; GitHub-hosted runners end at 360 regardless
+        default: '330'
+      uptime:
+        description: Run only the 48-hour continuous-primary uptime job, on `runner`; ignores seconds and timeout_minutes
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -31,8 +49,9 @@ permissions:
 jobs:
   soak:
     name: ${{ matrix.name }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 330
+    if: github.event.schedule != '0 5 * * 0' && github.event.inputs.uptime != 'true'
+    runs-on: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
+    timeout-minutes: ${{ fromJSON(github.event.inputs.timeout_minutes || '330') }}
     strategy:
       fail-fast: false
       matrix:
@@ -55,6 +74,7 @@ jobs:
         run: go build -trimpath -o /tmp/keel ./cmd/keel
       - name: Soak
         run: |
+          rm -rf dist/soak  # a self-hosted workspace keeps the last run's
           python3 scripts/soak.py --bin /tmp/keel --out dist/soak \
             --seconds "${{ github.event.inputs.seconds || '16200' }}" \
             --cycle-seconds "${{ github.event.inputs.cycle_seconds || '30' }}" \
@@ -75,3 +95,46 @@ jobs:
             dist/soak/**/*.log
             dist/soak/**/*.gz
           retention-days: 30
+
+  # Forty-eight hours of one primary process, which segments cannot give and a
+  # hosted runner cannot hold. Only the continuous-primary shape needs it: the
+  # recovery shapes restart their primary every third cycle by design. Weekly,
+  # only when SOAK_RUNNER names a registered self-hosted runner, so an empty
+  # repository never queues a job nothing will pick up; or dispatched with
+  # uptime=true onto the `runner` input. Always the full 48 hours.
+  uptime:
+    name: 48 hours of uptime, protocol 2 concurrent, continuous primary
+    if: (github.event.schedule == '0 5 * * 0' && vars.SOAK_RUNNER != '') || github.event.inputs.uptime == 'true'
+    runs-on: ${{ github.event.inputs.uptime == 'true' && github.event.inputs.runner || vars.SOAK_RUNNER }}
+    timeout-minutes: 2940
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build
+        run: go build -trimpath -o /tmp/keel ./cmd/keel
+      - name: Soak
+        run: |
+          rm -rf dist/soak
+          python3 scripts/soak.py --bin /tmp/keel --out dist/soak \
+            --seconds 172800 --cycle-seconds 300 \
+            --replication-protocol 2 --concurrent --primary-crash-every 0
+      - name: Bound persistence evidence before upload
+        if: always()
+        run: |
+          mkdir -p dist/soak
+          timeout 120s python3 scripts/archive-failed-aof.py dist/soak > dist/soak/preservation.log 2>&1
+      - name: Retain evidence, including a failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: soak-uptime-48h
+          path: |
+            dist/soak/**/*.json
+            dist/soak/**/*.jsonl
+            dist/soak/**/*.log
+          retention-days: 90

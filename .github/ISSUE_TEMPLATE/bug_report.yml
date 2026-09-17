@@ -1,0 +1,82 @@
+name: Bug report
+description: Keel did something its README contract says it should not.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keel is alpha. The [integration contract](https://github.com/brandopakel/keel#integration-contract)
+        lists what is supported; behaviour outside it is a feature request, not a bug, and is welcome as one.
+        The fields below are what a report needs to be reproduced. A report without a binary version
+        and the exact command line usually cannot be.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `keel -version`, or the release archive name and its SHA-256 from the release checksums.
+      placeholder: keel v0.1.0-alpha.3 ...
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: OS, architecture, and whether it ran in the container image.
+      placeholder: Ubuntu 24.04 arm64, docker image
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Server command line
+      description: Every flag, with secrets replaced. `-requirepass-env` names a variable, not a value, and can stay.
+      render: sh
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What you did
+      description: The client commands, in order, as `redis-cli` lines or client-library calls. Pipelined or concurrent? Say so.
+      render: sh
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What the contract says should happen
+      description: Quote or link the README line or Redis command page you relied on.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: Exact replies or errors. For a crash, the server log's last lines; for a hang, `kill -QUIT <pid>` writes goroutine stacks to the log.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: info
+    attributes:
+      label: INFO and MEMORY STATS
+      description: Output of `INFO` and `MEMORY STATS` from the affected server, taken as close to the event as possible.
+      render: text
+  - type: textarea
+    id: persistence
+    attributes:
+      label: Persistence and replication
+      description: |
+        `-appendfsync` policy; whether `-aof-async-append`, `-aof-concurrent-append`, `-replication-feed` or
+        `-replicaof` were in use; the AOF's size and whether a rewrite was running. Do not attach an AOF that
+        contains data you would not post publicly; say whether you can share one privately.
+  - type: dropdown
+    id: reproducible
+    attributes:
+      label: Reproducibility
+      options:
+        - Every time
+        - Sometimes; steps included
+        - Once; could not reproduce
+    validations:
+      required: true
