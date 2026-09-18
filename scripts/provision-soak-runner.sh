@@ -62,6 +62,18 @@ if [ "$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)" -lt 2048 ] && [ ! 
   echo '/swapfile none swap sw 0 0' >> /etc/fstab
 fi
 
+# Ubuntu's unattended-upgrades runs daily and lets needrestart restart any
+# service that maps an upgraded library. That includes the runner, and a
+# restarted runner cancels the job it is running - which is how the first
+# 48-hour attempt ended at nine hours, healthy, on 2026-09-18. Security
+# updates stay on; the runner is exempt, and the machine never reboots itself.
+mkdir -p /etc/needrestart/conf.d
+cat > /etc/needrestart/conf.d/actions-runner.conf <<'NR'
+# The GitHub Actions runner hosts multi-day jobs; a restart cancels them.
+$nrconf{override_rc}{qr(^actions\.runner)} = 0;
+NR
+echo 'Unattended-Upgrade::Automatic-Reboot "false";' > /etc/apt/apt.conf.d/52soak-runner-no-reboot
+
 id "$RUNNER_USER" >/dev/null 2>&1 || useradd --system --create-home --shell /bin/bash "$RUNNER_USER"
 mkdir -p "$RUNNER_HOME"
 chown "$RUNNER_USER:$RUNNER_USER" "$RUNNER_HOME"
