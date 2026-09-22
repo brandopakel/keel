@@ -22,8 +22,10 @@ from progress_watchdog import ProgressWatchdog
 
 # The server closes a connection whose request it has not answered after
 # thirty seconds, checked about once a second, and logs its state as it does.
+# Unread bytes must be seen by two sweeps a second apart, so allow for that.
 STALLED_CLIENT_TIMEOUT = 30
-STALL_SWEEP_SLACK = 6
+STALL_SWEEP_SLACK = 8
+SWEEP_COUNTERS = ('clients_closed_unanswered', 'clients_closed_unread', 'clients_closed_slow')
 
 
 def wait_for_stall_sweep(probe, evidence):
@@ -45,16 +47,15 @@ def wait_for_stall_sweep(probe, evidence):
     while time.monotonic() < deadline:
         time.sleep(1)
         now = info(probe, 'clients')
-        if (now['clients_closed_unanswered'] != before['clients_closed_unanswered'] or
-                now['clients_closed_slow'] != before['clients_closed_slow']):
+        if any(now.get(field) != before.get(field) for field in SWEEP_COUNTERS):
             evidence['clients_after_sweep'] = now
-            evidence['sweep_closed_unanswered'] = (int(now['clients_closed_unanswered']) -
-                                                  int(before['clients_closed_unanswered']))
-            evidence['sweep_closed_slow'] = int(now['clients_closed_slow']) - int(before['clients_closed_slow'])
+            for field in SWEEP_COUNTERS:
+                evidence['sweep_' + field.removeprefix('clients_')] = (
+                    int(now.get(field, 0)) - int(before.get(field, 0)))
             return
     evidence['clients_after_sweep'] = info(probe, 'clients')
-    evidence['sweep_closed_unanswered'] = 0
-    evidence['sweep_closed_slow'] = 0
+    for field in SWEEP_COUNTERS:
+        evidence['sweep_' + field.removeprefix('clients_')] = 0
 
 
 def capture_failed_process(server):
@@ -120,13 +121,14 @@ def verify_served(client):
     stats = info(client, 'clients')
     for field, what in (('clients_closed_unanswered', 'an unanswered request'),
                         ('clients_closed_unread', 'a request it never read')):
-        # Absent on a server built before the counter existed; a missing field
-        # is not a pass, so it is reported rather than silently skipped.
-        assert stats.get(field, '0') == '0', (
+        # The soak always runs the binary it just built, so a missing counter
+        # means the check is not there, and that is not a pass.
+        assert field in stats, f"INFO clients has no {field}"
+        assert stats[field] == '0', (
             f"server closed {stats[field]} connection(s) with {what}; its server.log names them")
     return {'closed_slow': int(stats['clients_closed_slow']),
             'closed_unanswered': int(stats['clients_closed_unanswered']),
-            'closed_unread': int(stats.get('clients_closed_unread', 0))}
+            'closed_unread': int(stats['clients_closed_unread'])}
 
 
 def verify_collections(client, hashes, members, scores, large):

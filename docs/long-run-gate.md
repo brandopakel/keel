@@ -144,13 +144,20 @@ is never read, so nothing is owed and nothing is held. The first version of
 the sweep was blind to precisely the case it was written for.
 
 The evidence is not in the loop's state but in the kernel's. The sweep now
-asks, for an idle connection with nothing pending, how many bytes the socket
-is holding unread (`FIONREAD`); bytes waiting on a connection the loop has
-not touched for thirty seconds mean the loop was never told they arrived. It
-closes and logs that with the byte count and `registered=`, counts it in
-`INFO clients` as `clients_closed_unread`, and the soak asserts that count is
-zero alongside the unanswered one. A peer that has merely gone quiet has
-nothing waiting and is left alone, however long it has been silent.
+asks, for a connection silent for thirty seconds with nothing pending, how
+many bytes the socket is holding unread (`FIONREAD`). One sighting proves
+nothing: a pooled connection that speaks after a long silence can do so just
+after the loop's last wait and just before the sweep, and the next wait will
+read it. So the sweep closes the connection only when an earlier sweep, at
+least a second before, already saw unread bytes and nothing has been read
+since - by then the loop has waited again and was not told they arrived.
+Connections the loop has paused on purpose while a flush completes are
+skipped. The close is logged with the byte count, how long the bytes have
+been waiting, and `registered=`; it is counted in `INFO clients` as
+`clients_closed_unread`, the harness's stall wait watches for it, and the
+soak asserts it is zero alongside the unanswered one. A peer that has merely
+gone quiet has nothing waiting and is left alone, however long it has been
+silent.
 
 The three runs' evidence is retained in the run artifacts and locally at
 `/tmp/keel-check/nightly-0920` and `/tmp/keel-check/nightly-0922`. This

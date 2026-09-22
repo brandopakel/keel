@@ -211,6 +211,16 @@ class StallSweepWaitTests(unittest.TestCase):
         self.assertEqual(evidence['sweep_closed_slow'], 0)
         self.assertEqual(evidence['clients_after_sweep']['clients_closed_unanswered'], '1')
 
+    def test_waits_for_a_request_the_loop_never_read(self):
+        probe = MagicMock()
+        quiet = {'clients_closed_slow': 0, 'clients_closed_unanswered': 0, 'clients_closed_unread': 0}
+        probe.call.side_effect = self.info_sequence(quiet, quiet, dict(quiet, clients_closed_unread=1))
+        evidence = {}
+        with unittest.mock.patch.object(soak.time, 'sleep'):
+            soak.wait_for_stall_sweep(probe, evidence)
+        self.assertEqual(evidence['sweep_closed_unread'], 1)
+        self.assertEqual(evidence['sweep_closed_unanswered'], 0)
+
     def test_records_nothing_closed_when_the_sweep_stays_quiet(self):
         probe = MagicMock()
         probe.call.side_effect = lambda *parts: b'clients_closed_slow:0\r\nclients_closed_unanswered:0\r\n'
