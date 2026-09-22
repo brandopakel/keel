@@ -185,6 +185,17 @@ console's quirks as met:
    `-f runner=soak -f seconds=600`, which runs the three arms one after another
    there.
 
+One Ubuntu rule learned the hard way: `unattended-upgrades` runs daily and
+`needrestart` restarts any service that maps an upgraded library, the runner
+included, and a restarted runner cancels the job it is running. The first
+48-hour attempt (run 35278409128) ended that way at 9.09 hours on September
+18 with every metric healthy - 1.82 million writes, 80 replica compactions,
+105 judged cycles, no breaches, no unanswered requests, primary RSS flat at
+50-53 MB. The bootstrap now exempts the runner from `needrestart` and turns
+off automatic reboots; security updates stay on. A cancelled job's `if:
+always()` steps do not run, so its evidence is not uploaded either; what the
+harness wrote stays on the machine under the runner's work directory.
+
 Two Oracle rules to know. Always Free compute is reclaimed after seven days
 in which CPU, network and memory all stayed under 20% at the 95th percentile;
 the weekly 48-hour run keeps it well above that, but a skipped week is a
