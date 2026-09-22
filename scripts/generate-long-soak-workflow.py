@@ -67,8 +67,6 @@ on:
       runner:
         description: Runner label for the segments
         default: ubuntu-latest
-  schedule:
-    - cron: '0 4 * * 6'
 
 permissions:
   contents: read

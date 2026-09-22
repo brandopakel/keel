@@ -192,19 +192,32 @@ servers, and the replica takes a full snapshot at each one because the
 primary's replication history does not survive its restart. Say this when
 citing the result.
 
-The chain runs weekly (Saturday 04:00 UTC) and on dispatch. About 146 runner
-hours per run, on standard runners in a public repository, which cost nothing.
+The chain runs on dispatch. About 146 runner hours per run, on standard
+runners in a public repository, which cost nothing.
+
+## Schedule after the gate was met
+
+The 48-hour uptime gate passed twice: run 35352473161 (September 18 to 20,
+2026) and run 35502854458 (September 20 to 22), each one primary process for
+48.00 hours with no growth breach and no unanswered closure. Repeating it
+weekly re-proves the same thing, so on September 22 both 48-hour forms - the
+Saturday segment chain and the Sunday uptime run - stopped being scheduled.
+They remain one dispatch away, and a passing earlier build does not validate
+a later one: before a release, the uptime run is dispatched on the release
+candidate's commit and its result is cited with the release.
+
+The nightly three-arm soak stays scheduled. It runs on GitHub-hosted runners,
+not on any maintainer's machine, and it is the only place the open protocol 2
+liveness stall has reproduced.
 
 ## True uptime, when a machine exists
 
-`scheduled-soak.yml` has a weekly `uptime` job: 48 hours of the
-continuous-primary shape on a self-hosted runner, the only shape for which
-process uptime means anything (the recovery shapes restart their primary every
-third cycle by design). It runs only once the repository variable
-`SOAK_RUNNER` names a registered runner's label, so nothing queues for a
-machine that does not exist. Any arm can also be dispatched onto that runner
-with the `runner`, `seconds` and `timeout_minutes` inputs; self-hosted jobs may
-run for five days.
+`scheduled-soak.yml` has an `uptime` job: 48 hours of the continuous-primary
+shape on a self-hosted runner, the only shape for which process uptime means
+anything (the recovery shapes restart their primary every third cycle by
+design). It runs when dispatched with `uptime=true` and a `runner` label. Any
+arm can also be dispatched onto that runner with the `runner`, `seconds` and
+`timeout_minutes` inputs; self-hosted jobs may run for five days.
 
 The machine that costs nothing is an **Oracle Cloud Always Free** instance.
 Two shapes qualify: the Ampere **VM.Standard.A1.Flex** (up to 4 OCPUs and
@@ -249,9 +262,8 @@ console's quirks as met:
    It adds swap on a small machine, installs the runner from GitHub's release
    verified against the published checksum, and registers it as a service
    under an unprivileged user with the label `soak`.
-6. Once: `gh variable set SOAK_RUNNER --repo brandopakel/keel --body soak`.
-   The weekly run now happens on its own (Sundays 05:00 UTC). A manual 48-hour
-   run is `gh workflow run scheduled-soak.yml -f uptime=true -f runner=soak`,
+6. A 48-hour run is
+   `gh workflow run scheduled-soak.yml -f uptime=true -f runner=soak`,
    and a short check that the runner works is any ordinary dispatch with
    `-f runner=soak -f seconds=600`, which runs the three arms one after another
    there.
@@ -268,9 +280,10 @@ always()` steps do not run, so its evidence is not uploaded either; what the
 harness wrote stays on the machine under the runner's work directory.
 
 Two Oracle rules to know. Always Free compute is reclaimed after seven days
-in which CPU, network and memory all stayed under 20% at the 95th percentile;
-the weekly 48-hour run keeps it well above that, but a skipped week is a
-risk, and a reclaimed instance is recreated from step 2. And a shape other
+in which CPU, network and memory all stayed under 20% at the 95th percentile.
+With the weekly 48-hour run no longer scheduled the machine sits idle between
+releases and may be reclaimed; a reclaimed instance is recreated from step 2
+before the next release candidate's run. And a shape other
 than A1.Flex within the free limits, or a boot volume past the allowance,
 bills; the console marks free-eligible choices.
 
