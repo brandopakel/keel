@@ -367,7 +367,7 @@ func (c *client) unanswered() bool {
 // forgot or in what state. This line does, within the timeout, while the state
 // still exists. A slow reader is not logged: that is the client's behaviour,
 // and a flood of them should not be able to fill the log.
-func sweepStalledClients(now time.Time, forget func(*client)) int {
+func sweepStalledClients(now time.Time, mux io_multiplexing.IOMultiplexer, forget func(*client)) int {
 	closed := 0
 	for _, c := range clients {
 		if now.Sub(c.lastProgress) <= stalledClientTimeout {
@@ -375,9 +375,14 @@ func sweepStalledClients(now time.Time, forget func(*client)) int {
 		}
 		switch {
 		case c.unanswered():
-			log.Printf("closing client fd=%d: request unanswered for %s (parsed=%d reply=%d partial=%v held=%v deferred=%v queued=%v interest=%d known=%v)",
+			// Whether the kernel still had the descriptor decides between two
+			// different faults: a registration the loop lost, or a client the
+			// loop's own queues forgot while the kernel would have reported it.
+			// Asked here, before the close that would erase the answer.
+			registered := mux.Forget(c.fd)
+			log.Printf("closing client fd=%d: request unanswered for %s (parsed=%d reply=%d partial=%v held=%v deferred=%v queued=%v interest=%d known=%v registered=%v)",
 				c.fd, now.Sub(c.lastProgress).Round(time.Second), len(c.cmds), len(c.out), c.buf != nil,
-				c.appendHeld, c.appendDeferred, c.readQueued, c.interest, c.interestKnown)
+				c.appendHeld, c.appendDeferred, c.readQueued, c.interest, c.interestKnown, registered)
 			clientsClosedUnanswered++
 		case len(c.out) > 0 || c.buf != nil:
 			clientsClosedSlow++
@@ -825,7 +830,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 			if time.Now().After(nextMaintenance) {
 				nextMaintenance = time.Now().Add(time.Second)
 				core.MaintainMemory()
-				sweepStalledClients(time.Now(), func(c *client) { delete(paused, c.fd) })
+				sweepStalledClients(time.Now(), ioMultiplexer, func(c *client) { delete(paused, c.fd) })
 			}
 			continue
 		}
@@ -1044,7 +1049,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 		if !now.Before(nextMaintenance) {
 			nextMaintenance = now.Add(time.Second)
 			core.MaintainMemory()
-			sweepStalledClients(now, nil)
+			sweepStalledClients(now, ioMultiplexer, nil)
 		}
 
 		if stop {

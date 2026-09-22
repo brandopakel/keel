@@ -52,7 +52,8 @@ func TestSweepClosesEveryStalledStateAndNamesTheUnansweredOnes(t *testing.T) {
 		clients[r] = cases[i].c
 	}
 	forgotten := map[int]bool{}
-	closed := sweepStalledClients(time.Now(), func(c *client) { forgotten[c.fd] = true })
+	mux := &forgettingMonitor{registered: map[int]bool{cases[3].c.fd: true}}
+	closed := sweepStalledClients(time.Now(), mux, func(c *client) { forgotten[c.fd] = true })
 
 	wantClosed, wantSaid := 0, 0
 	for _, tc := range cases {
@@ -71,8 +72,22 @@ func TestSweepClosesEveryStalledStateAndNamesTheUnansweredOnes(t *testing.T) {
 	require.Equal(t, oldUnanswered+uint64(wantSaid), clientsClosedUnanswered)
 	require.Equal(t, wantSaid, bytes.Count(logged.Bytes(), []byte("request unanswered")),
 		"every unanswered request is logged, nothing else is:\n%s", logged.String())
-	require.Contains(t, logged.String(), "parsed=1 reply=0 partial=false held=false deferred=false queued=false interest=2 known=true")
+	require.Contains(t, logged.String(), "parsed=1 reply=0 partial=false held=false deferred=false queued=false interest=2 known=true registered=true")
 	require.Contains(t, logged.String(), "held=true")
+	require.Contains(t, logged.String(), "registered=false")
+	require.Equal(t, wantSaid, len(mux.forgotten), "the kernel is asked about every unanswered connection and no other")
+}
+
+// forgettingMonitor answers Forget from a table and records who was asked.
+type forgettingMonitor struct {
+	io_multiplexing.IOMultiplexer
+	registered map[int]bool
+	forgotten  []int
+}
+
+func (m *forgettingMonitor) Forget(fd int) bool {
+	m.forgotten = append(m.forgotten, fd)
+	return m.registered[fd]
 }
 
 func TestUnansweredCoversEveryOwedState(t *testing.T) {

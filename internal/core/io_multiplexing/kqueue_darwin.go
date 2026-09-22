@@ -87,6 +87,17 @@ func (kq *KQueue) Check() ([]Event, error) {
 	return kq.ready, nil
 }
 
+func (kq *KQueue) Forget(fd int) bool {
+	registered := false
+	for _, filter := range []int16{syscall.EVFILT_READ, syscall.EVFILT_WRITE} {
+		_, err := syscall.Kevent(kq.fd, []syscall.Kevent_t{{Ident: uint64(fd), Filter: filter, Flags: syscall.EV_DELETE}}, nil, nil)
+		if err != syscall.ENOENT {
+			registered = true
+		}
+	}
+	return registered
+}
+
 func (kq *KQueue) Close() error {
 	return syscall.Close(kq.fd)
 }

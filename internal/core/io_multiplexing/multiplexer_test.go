@@ -165,3 +165,35 @@ func TestMonitorRefusesABadDescriptor(t *testing.T) {
 	defer mux.Close()
 	assert.Error(t, mux.Monitor(Event{Fd: -1, Op: OpRead}))
 }
+
+func TestForgetReportsWhetherTheKernelStillKnewTheDescriptor(t *testing.T) {
+	mux, err := CreateIOMultiplexer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mux.Close()
+	var fds [2]int
+	if err := syscall.Pipe(fds[:]); err != nil {
+		t.Fatal(err)
+	}
+	defer syscall.Close(fds[0])
+	defer syscall.Close(fds[1])
+	if mux.Forget(fds[0]) {
+		t.Fatal("a descriptor never registered reports as registered")
+	}
+	if err := mux.Monitor(Event{Fd: fds[0], Op: OpRead}); err != nil {
+		t.Fatal(err)
+	}
+	if !mux.Forget(fds[0]) {
+		t.Fatal("a registered descriptor reports as unknown")
+	}
+	if mux.Forget(fds[0]) {
+		t.Fatal("Forget did not remove the registration")
+	}
+	if err := mux.Monitor(Event{Fd: fds[0], Op: OpWrite}); err != nil {
+		t.Fatal(err)
+	}
+	if !mux.Forget(fds[0]) {
+		t.Fatal("a write registration reports as unknown")
+	}
+}

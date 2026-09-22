@@ -1,0 +1,94 @@
+name: Liveness hunt
+
+# Provokes the intermittent unanswered-request event on demand.
+#
+# On September 20, 2026 two hosted Linux runs of protocol 2 with concurrent
+# appends stopped serving their existing connections while still answering
+# new ones - once 22 seconds after a primary restart in the nightly, once two
+# minutes into a chain segment - roughly one arm-run in six. The Oracle
+# machine ran the same shape for 48 hours without it. Waiting a night per
+# sample is slow; this runs many short samples at once on the runners that
+# show it. Each sample is the ordinary soak, so a hit produces the server's
+# own record of the forgotten connection (docs/long-run-gate.md), the
+# harness's diagnostics, and both logs.
+
+on:
+  workflow_dispatch:
+    inputs:
+      samples:
+        description: Parallel samples per arm (each about fifteen minutes)
+        default: '8'
+      seconds:
+        description: Workload seconds per sample
+        default: '900'
+      cycle_seconds:
+        default: '30'
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      samples: ${{ steps.plan.outputs.samples }}
+    steps:
+      - id: plan
+        env:
+          SAMPLES: ${{ github.event.inputs.samples }}
+        run: |
+          n="${SAMPLES:-8}"
+          [ "$n" -ge 1 ] && [ "$n" -le 20 ] || { echo "samples must be 1..20"; exit 1; }
+          echo "samples=$(seq -s, 1 "$n" | sed 's/^/[/; s/$/]/')" >> "$GITHUB_OUTPUT"
+  sample:
+    name: ${{ matrix.name }} ${{ matrix.sample }}
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        arm: [p2c, p2cc]
+        sample: ${{ fromJSON(needs.plan.outputs.samples) }}
+        include:
+          - arm: p2c
+            name: protocol 2 concurrent, recovery
+            args: --replication-protocol 2 --concurrent --primary-crash-every 3
+          - arm: p2cc
+            name: protocol 2 concurrent, continuous primary
+            args: --replication-protocol 2 --concurrent --primary-crash-every 0
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build
+        run: go build -trimpath -o /tmp/keel ./cmd/keel
+      - name: Soak
+        env:
+          SECONDS_PER_SAMPLE: ${{ github.event.inputs.seconds }}
+          CYCLE_SECONDS: ${{ github.event.inputs.cycle_seconds }}
+          ARM_ARGS: ${{ matrix.args }}
+        run: |
+          # shellcheck disable=SC2086
+          python3 scripts/soak.py --bin /tmp/keel --out dist/soak \
+            --seconds "${SECONDS_PER_SAMPLE:-900}" --cycle-seconds "${CYCLE_SECONDS:-30}" $ARM_ARGS
+      - name: Bound persistence evidence before upload
+        if: failure()
+        run: |
+          mkdir -p dist/soak
+          timeout 120s python3 scripts/archive-failed-aof.py dist/soak > dist/soak/preservation.log 2>&1
+      - name: Retain a failure's evidence
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: hunt-${{ matrix.arm }}-${{ matrix.sample }}
+          path: |
+            dist/soak/**/*.json
+            dist/soak/**/*.jsonl
+            dist/soak/**/*.log
+            dist/soak/**/*.gz
+          retention-days: 30
