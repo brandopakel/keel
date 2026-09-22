@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"io"
 	"log"
 	"syscall"
 	"testing"
@@ -185,4 +186,42 @@ func TestSweepLeavesARequestTheLoopIsAboutToRead(t *testing.T) {
 	require.Contains(t, clients, held)
 	require.Equal(t, oldUnread, clientsClosedUnread)
 	require.Empty(t, mux.forgotten)
+}
+
+// Every command answers, so a run that consumed commands and produced nothing
+// is a server fault. Left alone it is the quietest stall there is: the request
+// was read, so nothing is unread; it ran, so nothing is pending; and nothing
+// was written, so the client waits forever. The run's client is closed and
+// counted instead, and a run with nothing to execute is not mistaken for one.
+func TestARunThatAnswersNothingClosesItsClient(t *testing.T) {
+	oldRespond, oldUnreplied := respond, runsUnreplied
+	t.Cleanup(func() { respond, runsUnreplied = oldRespond, oldUnreplied })
+	var logged bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&logged)
+	t.Cleanup(func() { log.SetOutput(previous) })
+	respond = func(c *client, cmd *core.Command, w io.ReadWriter) {
+		if cmd.Cmd != "SILENT" {
+			oldRespond(c, cmd, w)
+		}
+	}
+	var arena replyArena
+	arena.reset()
+
+	one := &client{fd: -1, cmds: []*core.Command{{Cmd: "SILENT"}}}
+	require.False(t, executeRun(one, &arena))
+	require.ErrorIs(t, one.err, errUnreplied)
+	many := &client{fd: -1, cmds: []*core.Command{{Cmd: "SILENT"}, {Cmd: "SILENT"}}}
+	require.False(t, executeRun(many, &arena))
+	require.ErrorIs(t, many.err, errUnreplied)
+	require.Equal(t, oldUnreplied+2, runsUnreplied)
+	require.Contains(t, logged.String(), `2 command(s) from "SILENT" ran and produced no reply`)
+
+	answered := &client{fd: -1, cmds: []*core.Command{{Cmd: "SILENT"}, {Cmd: "PING"}}}
+	require.True(t, executeRun(answered, &arena), "a batch with any reply is answered")
+	require.NoError(t, answered.err)
+	idle := &client{fd: -1}
+	require.False(t, executeRun(idle, &arena))
+	require.NoError(t, idle.err, "a run with nothing to execute owes nothing")
+	require.Equal(t, oldUnreplied+2, runsUnreplied)
 }

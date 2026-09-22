@@ -26,6 +26,11 @@ on:
       timeout_minutes:
         description: Job timeout; at least the sample length plus twenty
         default: '40'
+      interest_cache:
+        description: Linux client interest cache; 'off' builds with it disabled to test whether it causes the stall
+        type: choice
+        options: ['on', 'off']
+        default: 'on'
 
 permissions:
   contents: read
@@ -69,7 +74,14 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Build
-        run: go build -trimpath -o /tmp/keel ./cmd/keel
+        env:
+          INTEREST_CACHE: ${{ github.event.inputs.interest_cache }}
+        run: |
+          flags=""
+          if [ "$INTEREST_CACHE" = "off" ]; then
+            flags="-X github.com/brandopakel/keel/internal/server.interestCacheOff=1"
+          fi
+          go build -trimpath -ldflags "$flags" -o /tmp/keel ./cmd/keel
       - name: Soak
         env:
           SECONDS_PER_SAMPLE: ${{ github.event.inputs.seconds }}
@@ -88,7 +100,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: hunt-${{ matrix.arm }}-${{ matrix.sample }}
+          name: hunt-cache-${{ github.event.inputs.interest_cache || 'on' }}-${{ matrix.arm }}-${{ matrix.sample }}
           path: |
             dist/soak/**/*.json
             dist/soak/**/*.jsonl

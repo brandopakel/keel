@@ -159,6 +159,24 @@ soak asserts it is zero alongside the unanswered one. A peer that has merely
 gone quiet has nothing waiting and is left alone, however long it has been
 silent.
 
+One shape was still invisible: a run that executes a request and produces no
+reply. The request was read, so nothing is unread; it ran, so nothing is
+pending; and the loop writes nothing and leaves the connection's interest
+where the run found it - `OpNone`, for a client the ordered-append queue had
+deferred. Every command answers in RESP, so this should not happen, and no
+handler returns an empty reply outright, but nothing checked it. Such a run
+now closes its client, logs the first command, and counts it as
+`clients_closed_unreplied`, which the soak asserts is zero and the stall
+wait watches.
+
+Two hypotheses remain, and the next stall's log line tells them apart:
+`bytes unread ... registered=false` means the kernel lost a registration that
+the Linux interest cache still records, so no later `setInterest` restores
+it; `ran and produced no reply` is the shape above. To test the first
+directly, the liveness hunt takes `interest_cache=off`, which builds with the
+cache disabled. Ninety arm-hours without a stall, against about one arm-run
+in six with it on, would implicate the cache.
+
 The three runs' evidence is retained in the run artifacts and locally at
 `/tmp/keel-check/nightly-0920` and `/tmp/keel-check/nightly-0922`. This
 remains an open server-side liveness defect on the protocol 2

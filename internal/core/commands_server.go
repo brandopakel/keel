@@ -89,8 +89,11 @@ type ClientBufferStats struct {
 	// Connections the event loop closed for holding work past its timeout:
 	// slow readers and half-sent requests; requests the server parsed and
 	// never answered; and requests it never read at all, the socket still
-	// holding their bytes. The last two should stay at zero.
+	// holding their bytes. RunsUnreplied counts connections closed because a
+	// run executed commands and produced no reply. All but the first should
+	// stay at zero.
 	ClosedSlow, ClosedUnanswered, ClosedUnread uint64
+	RunsUnreplied                              uint64
 }
 
 // ClientBuffers is installed before accepting event-loop clients and removed
@@ -117,7 +120,8 @@ func cmdINFO(args []string) []byte {
 		stats := ClientBuffers()
 		fmt.Fprintf(&b, "# Clients\r\nconnected_clients:%d\r\nretained_input_bytes:%d\r\nretained_reply_bytes:%d\r\nretained_client_bytes:%d\r\n", stats.Connected, stats.InputBytes, stats.ReplyBytes, stats.TotalBytes)
 		fmt.Fprintf(&b, "request_allocation_peak_bytes:%d\r\nrequest_allocation_refusals:%d\r\n", stats.RequestAllocationPeak, stats.RequestAllocationRefusals)
-		fmt.Fprintf(&b, "clients_closed_slow:%d\r\nclients_closed_unanswered:%d\r\nclients_closed_unread:%d\r\n\r\n", stats.ClosedSlow, stats.ClosedUnanswered, stats.ClosedUnread)
+		fmt.Fprintf(&b, "clients_closed_slow:%d\r\nclients_closed_unanswered:%d\r\nclients_closed_unread:%d\r\nclients_closed_unreplied:%d\r\n\r\n",
+			stats.ClosedSlow, stats.ClosedUnanswered, stats.ClosedUnread, stats.RunsUnreplied)
 	}
 	if want("clients") && CommandAllocations != nil {
 		stats := CommandAllocations
