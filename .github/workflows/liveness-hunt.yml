@@ -23,6 +23,9 @@ on:
         default: '900'
       cycle_seconds:
         default: '30'
+      timeout_minutes:
+        description: Job timeout; at least the sample length plus twenty
+        default: '40'
 
 permissions:
   contents: read
@@ -44,7 +47,7 @@ jobs:
     name: ${{ matrix.name }} ${{ matrix.sample }}
     needs: plan
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: ${{ fromJSON(github.event.inputs.timeout_minutes || '40') }}
     strategy:
       fail-fast: false
       matrix:
