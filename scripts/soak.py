@@ -114,12 +114,19 @@ def verify_served(client):
     run looked like from outside. The server now closes such a connection
     within thirty seconds and logs its state; this turns that log line into a
     failed soak at the next checkpoint instead of a silence found hours later.
-    Slow readers are the client's doing and are reported, not asserted."""
+    Two shapes are asserted: a request parsed and never answered, and a request
+    whose bytes were never read at all. Slow readers are the client's doing and
+    are reported, not asserted."""
     stats = info(client, 'clients')
-    assert stats['clients_closed_unanswered'] == '0', (
-        f"server closed {stats['clients_closed_unanswered']} connection(s) with an unanswered request; "
-        "its server.log names them")
-    return {'closed_slow': int(stats['clients_closed_slow']), 'closed_unanswered': int(stats['clients_closed_unanswered'])}
+    for field, what in (('clients_closed_unanswered', 'an unanswered request'),
+                        ('clients_closed_unread', 'a request it never read')):
+        # Absent on a server built before the counter existed; a missing field
+        # is not a pass, so it is reported rather than silently skipped.
+        assert stats.get(field, '0') == '0', (
+            f"server closed {stats[field]} connection(s) with {what}; its server.log names them")
+    return {'closed_slow': int(stats['clients_closed_slow']),
+            'closed_unanswered': int(stats['clients_closed_unanswered']),
+            'closed_unread': int(stats.get('clients_closed_unread', 0))}
 
 
 def verify_collections(client, hashes, members, scores, large):

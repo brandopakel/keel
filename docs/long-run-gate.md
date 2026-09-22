@@ -127,12 +127,38 @@ whether the kernel still had its registration. Three changes:
   arms in parallel on hosted Linux, so a hit arrives in an hour rather than
   a night.
 
-The two runs' evidence (reports, both server logs with dumps, checkpoints)
-is retained locally at `/tmp/keel-check/nightly-0920` and in the run
-artifacts. Until a hit with the named state is in hand, this is an open
-server-side liveness defect on the protocol 2 concurrent-append path under
-hosted Linux timing, and the strongest reason not to make an availability
-claim for that path.
+### The sweep could not see it, and what the third occurrence showed
+
+The nightly of September 22 (run 35704463217, continuous-primary arm, 2h11m
+in) hit it again, this time with the waiting harness. The result was a
+negative one, and it indicted the check rather than the server: the harness
+waited the full thirty-six seconds and the server closed **nothing** -
+`sweep_closed_unanswered=0`, no log line - while `connected_clients` stayed
+at two and the loop sat idle in `epoll_wait` with no append worker.
+
+The connection was established and the server had *no pending work for it*:
+no parsed commands, no reply, no partial buffer. The sweep only examines
+connections with visible pending work, so it passed this one over. That is
+the fault's own signature: if the readiness registration is lost, the request
+is never read, so nothing is owed and nothing is held. The first version of
+the sweep was blind to precisely the case it was written for.
+
+The evidence is not in the loop's state but in the kernel's. The sweep now
+asks, for an idle connection with nothing pending, how many bytes the socket
+is holding unread (`FIONREAD`); bytes waiting on a connection the loop has
+not touched for thirty seconds mean the loop was never told they arrived. It
+closes and logs that with the byte count and `registered=`, counts it in
+`INFO clients` as `clients_closed_unread`, and the soak asserts that count is
+zero alongside the unanswered one. A peer that has merely gone quiet has
+nothing waiting and is left alone, however long it has been silent.
+
+The three runs' evidence is retained in the run artifacts and locally at
+`/tmp/keel-check/nightly-0920` and `/tmp/keel-check/nightly-0922`. This
+remains an open server-side liveness defect on the protocol 2
+concurrent-append path under hosted Linux timing - about one arm-run in six
+there, none in 96 hours of two-vCPU uptime runs - and the strongest reason
+not to make an availability claim for that path. What has changed is that the
+next occurrence names itself.
 
 ## How 48 hours run on free runners
 

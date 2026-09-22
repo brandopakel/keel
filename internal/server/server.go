@@ -343,11 +343,14 @@ func (c *client) setInterest(mux io_multiplexing.IOMultiplexer, op io_multiplexi
 // request the server has parsed and not answered.
 const stalledClientTimeout = 30 * time.Second
 
-// Connections the sweep closed, for INFO. The two are different claims. A slow
-// reader or a half-sent request is the client's doing and the README says it
-// is closed. An unanswered request is the server's: it accepted the request
-// and stopped serving the connection, which from outside is a hang.
-var clientsClosedSlow, clientsClosedUnanswered uint64
+// Connections the sweep closed, for INFO. The three are different claims. A
+// slow reader or a half-sent request is the client's doing and the README says
+// it is closed. An unanswered request is the server's: it accepted the request
+// and stopped serving the connection, which from outside is a hang. An unread
+// request is worse, and was invisible until September 22, 2026: the loop never
+// saw the request at all, so it owes nothing, holds nothing, and every other
+// check here passes the connection over while the client waits forever.
+var clientsClosedSlow, clientsClosedUnanswered, clientsClosedUnread uint64
 
 // unanswered says whether the loop owes this connection a reply it has not
 // produced or has produced and is holding: a parsed run not yet executed, a
@@ -387,7 +390,20 @@ func sweepStalledClients(now time.Time, mux io_multiplexing.IOMultiplexer, forge
 		case len(c.out) > 0 || c.buf != nil:
 			clientsClosedSlow++
 		default:
-			continue
+			// Nothing owed, nothing held: every check above has passed this
+			// connection over, which is exactly what a connection whose
+			// readiness registration went missing looks like from in here.
+			// The evidence is not in the loop's state but in the kernel's,
+			// so ask it. A connection whose peer is simply idle has nothing
+			// waiting and is left alone, however old it is.
+			unread, asked := unreadBytes(c.fd)
+			if !asked || unread == 0 {
+				continue
+			}
+			registered := mux.Forget(c.fd)
+			log.Printf("closing client fd=%d: %d bytes unread for %s with nothing pending (interest=%d known=%v registered=%v)",
+				c.fd, unread, now.Sub(c.lastProgress).Round(time.Second), c.interest, c.interestKnown, registered)
+			clientsClosedUnread++
 		}
 		closeClient(c)
 		if forget != nil {
@@ -633,7 +649,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 	core.ClientBuffers = func() core.ClientBufferStats {
 		return core.ClientBufferStats{Connected: len(clients), InputBytes: retainedInputBytes, ReplyBytes: retainedReplyBytes, TotalBytes: retainedClientBytes,
 			RequestAllocationPeak: requestBudget.peak, RequestAllocationRefusals: requestBudget.refusals.Load(),
-			ClosedSlow: clientsClosedSlow, ClosedUnanswered: clientsClosedUnanswered}
+			ClosedSlow: clientsClosedSlow, ClosedUnanswered: clientsClosedUnanswered, ClosedUnread: clientsClosedUnread}
 	}
 	defer func() { core.ClientBuffers = nil }()
 	defer func() {
