@@ -10,7 +10,7 @@
 # The registration token comes from
 #   gh api -X POST repos/brandopakel/keel/actions/runners/registration-token -q .token
 # and is valid for one hour; nothing long-lived is left on the machine. The
-# runner is not ephemeral: a persistent runner is what lets a weekly schedule
+# runner is not ephemeral: a persistent runner is what lets a dispatched run
 # find it. What keeps a persistent runner on a public repository safe is the
 # repository's Actions setting requiring approval for every outside
 # collaborator's workflow, which is set, and the read-only default token.
@@ -110,8 +110,6 @@ cat <<MSG
 
 Runner registered to $REPO with labels [$LABELS], running as a service.
 
-Next, once:   gh variable set SOAK_RUNNER --repo $REPO --body soak
-Then the weekly true-uptime soak in scheduled-soak.yml runs here on its own.
 A short check that this runner works:
   gh workflow run scheduled-soak.yml --repo $REPO -f runner=soak -f seconds=600 -f timeout_minutes=60
 The full 48 hours, now:

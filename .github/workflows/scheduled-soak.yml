@@ -13,17 +13,16 @@ name: Scheduled soak
 #
 # Each job stays under the six-hour runner limit with margin. The 48 hours
 # themselves run as long-soak.yml, in segments, and as one uninterrupted run
-# on a self-hosted runner when one exists: the `uptime` job below runs weekly
-# once the repository variable SOAK_RUNNER names that runner's label, and any
-# arm can be dispatched onto it with the `runner` input. Self-hosted jobs may
-# run for five days. See docs/long-run-gate.md, and
-# scripts/provision-soak-runner.sh for the machine.
+# on a self-hosted runner: the `uptime` job below, dispatched with uptime=true
+# onto the `runner` input, and any arm can be dispatched onto that runner the
+# same way. Self-hosted jobs may run for five days. Both 48-hour forms are
+# dispatched, not scheduled: the gate was met twice in September 2026, and it
+# is re-run on a release candidate rather than every week. See
+# docs/long-run-gate.md, and scripts/provision-soak-runner.sh for the machine.
 
 on:
   schedule:
     - cron: '0 3 * * *'
-    # The weekly true-uptime run; only the uptime job answers this one.
-    - cron: '0 5 * * 0'
   workflow_dispatch:
     inputs:
       seconds:
@@ -49,7 +48,7 @@ permissions:
 jobs:
   soak:
     name: ${{ matrix.name }}
-    if: github.event.schedule != '0 5 * * 0' && github.event.inputs.uptime != 'true'
+    if: github.event.inputs.uptime != 'true'
     runs-on: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
     timeout-minutes: ${{ fromJSON(github.event.inputs.timeout_minutes || '330') }}
     strategy:
@@ -98,14 +97,13 @@ jobs:
 
   # Forty-eight hours of one primary process, which segments cannot give and a
   # hosted runner cannot hold. Only the continuous-primary shape needs it: the
-  # recovery shapes restart their primary every third cycle by design. Weekly,
-  # only when SOAK_RUNNER names a registered self-hosted runner, so an empty
-  # repository never queues a job nothing will pick up; or dispatched with
-  # uptime=true onto the `runner` input. Always the full 48 hours.
+  # recovery shapes restart their primary every third cycle by design.
+  # Dispatched with uptime=true onto the `runner` input, normally the
+  # self-hosted label `soak`. Always the full 48 hours.
   uptime:
     name: 48 hours of uptime, protocol 2 concurrent, continuous primary
-    if: (github.event.schedule == '0 5 * * 0' && vars.SOAK_RUNNER != '') || github.event.inputs.uptime == 'true'
-    runs-on: ${{ github.event.inputs.uptime == 'true' && github.event.inputs.runner || vars.SOAK_RUNNER }}
+    if: github.event.inputs.uptime == 'true'
+    runs-on: ${{ github.event.inputs.runner }}
     timeout-minutes: 2940
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
