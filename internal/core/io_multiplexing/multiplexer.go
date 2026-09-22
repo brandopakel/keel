@@ -37,6 +37,12 @@ type IOMultiplexer interface {
 	// none. The slice belongs to the multiplexer and is overwritten by the next
 	// call, so a caller keeps nothing from it.
 	Check() ([]Event, error)
+	// Forget removes whatever registration the descriptor has and reports
+	// whether it had one. It exists for the moment a connection is closed
+	// because the loop stopped serving it: whether the kernel still knew the
+	// descriptor is the difference between a lost registration and a lost
+	// client, and closing the descriptor afterwards erases the evidence.
+	Forget(fd int) (registered bool)
 	Close() error
 }
 

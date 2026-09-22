@@ -76,6 +76,10 @@ func (ep *Epoll) Check() ([]Event, error) {
 	return ep.ready, nil
 }
 
+func (ep *Epoll) Forget(fd int) bool {
+	return syscall.EpollCtl(ep.fd, syscall.EPOLL_CTL_DEL, fd, nil) != syscall.ENOENT
+}
+
 func (ep *Epoll) Close() error {
 	return syscall.Close(ep.fd)
 }

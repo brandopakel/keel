@@ -20,6 +20,43 @@ from validation_lib import Client, Server, info, rewrite, sha256
 from progress_watchdog import ProgressWatchdog
 
 
+# The server closes a connection whose request it has not answered after
+# thirty seconds, checked about once a second, and logs its state as it does.
+STALLED_CLIENT_TIMEOUT = 30
+STALL_SWEEP_SLACK = 6
+
+
+def wait_for_stall_sweep(probe, evidence):
+    """Give the server its chance to say what it forgot, before it is killed.
+
+    A harness request that timed out three seconds ago is still outstanding
+    on the harness's own connection. If the server has stopped serving that
+    connection, its sweep will close it and log the connection's state -
+    parsed commands, held or deferred run, queued continuation, registered or
+    not - within thirty-odd seconds. Both times this happened in September
+    2026 the harness had SIGQUITed the server four seconds in, and a goroutine
+    dump of an idle loop said nothing. So the harness now waits, polling the
+    server's own count of such closures over a fresh connection, and records
+    what changed. A server that stops answering the probe too is recorded as
+    that."""
+    before = info(probe, 'clients')
+    evidence['clients_before_sweep'] = before
+    deadline = time.monotonic() + STALLED_CLIENT_TIMEOUT + STALL_SWEEP_SLACK
+    while time.monotonic() < deadline:
+        time.sleep(1)
+        now = info(probe, 'clients')
+        if (now['clients_closed_unanswered'] != before['clients_closed_unanswered'] or
+                now['clients_closed_slow'] != before['clients_closed_slow']):
+            evidence['clients_after_sweep'] = now
+            evidence['sweep_closed_unanswered'] = (int(now['clients_closed_unanswered']) -
+                                                  int(before['clients_closed_unanswered']))
+            evidence['sweep_closed_slow'] = int(now['clients_closed_slow']) - int(before['clients_closed_slow'])
+            return
+    evidence['clients_after_sweep'] = info(probe, 'clients')
+    evidence['sweep_closed_unanswered'] = 0
+    evidence['sweep_closed_slow'] = 0
+
+
 def capture_failed_process(server):
     """Collect evidence before tearing down an already failed owned test run."""
     process = server.process
@@ -31,10 +68,14 @@ def capture_failed_process(server):
     probe = None
     try:
         probe = Client('127.0.0.1', server.port)
-        probe.socket.settimeout(.5)
+        probe.socket.settimeout(2)
         assert probe.call('AUTH', server.password) == b'OK'
         evidence['persistence'] = info(probe, 'persistence')
         evidence['replication'] = info(probe, 'replication')
+        try:
+            wait_for_stall_sweep(probe, evidence)
+        except Exception as exc:
+            evidence['sweep_wait_failure'] = repr(exc)
     except Exception as exc:
         evidence['probe_failure'] = repr(exc)
     finally:
@@ -644,10 +685,13 @@ def run(args, report, watchdog):
             {'file': Path(frame.filename).name, 'line': frame.lineno, 'function': frame.name}
             for frame in traceback.extract_tb(sys.exc_info()[2])[-32:]
         ]
-        report['failure_diagnostics'] = {
-            'primary': capture_failed_process(primary),
-            'replica': capture_failed_process(replica),
-        }
+        # Each capture may wait out the server's stall sweep; keep the
+        # watchdog from ending the diagnostics it exists to produce.
+        watchdog.beat("failure diagnostics, primary")
+        diagnostics = {'primary': capture_failed_process(primary)}
+        watchdog.beat("failure diagnostics, replica")
+        diagnostics['replica'] = capture_failed_process(replica)
+        report['failure_diagnostics'] = diagnostics
         raise
     finally:
         primary.stop(check=False)

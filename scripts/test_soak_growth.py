@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
+import unittest.mock
 from unittest.mock import MagicMock
 
 import soak
@@ -187,3 +188,36 @@ class HandoffTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class StallSweepWaitTests(unittest.TestCase):
+    def info_sequence(self, *rows):
+        calls = iter(rows)
+        def call(*parts):
+            row = next(calls)
+            return ''.join(f'{k}:{v}\r\n' for k, v in row.items()).encode()
+        return call
+
+    def test_waits_until_the_server_reports_a_closure(self):
+        probe = MagicMock()
+        probe.call.side_effect = self.info_sequence(
+            {'clients_closed_slow': 0, 'clients_closed_unanswered': 0},
+            {'clients_closed_slow': 0, 'clients_closed_unanswered': 0},
+            {'clients_closed_slow': 0, 'clients_closed_unanswered': 1})
+        evidence = {}
+        with unittest.mock.patch.object(soak.time, 'sleep'):
+            soak.wait_for_stall_sweep(probe, evidence)
+        self.assertEqual(evidence['sweep_closed_unanswered'], 1)
+        self.assertEqual(evidence['sweep_closed_slow'], 0)
+        self.assertEqual(evidence['clients_after_sweep']['clients_closed_unanswered'], '1')
+
+    def test_records_nothing_closed_when_the_sweep_stays_quiet(self):
+        probe = MagicMock()
+        probe.call.side_effect = lambda *parts: b'clients_closed_slow:0\r\nclients_closed_unanswered:0\r\n'
+        evidence = {}
+        clock = iter(range(0, 200))
+        with unittest.mock.patch.object(soak.time, 'sleep'), \
+             unittest.mock.patch.object(soak.time, 'monotonic', side_effect=lambda: next(clock)):
+            soak.wait_for_stall_sweep(probe, evidence)
+        self.assertEqual(evidence['sweep_closed_unanswered'], 0)
+        self.assertIn('clients_after_sweep', evidence)

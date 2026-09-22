@@ -96,6 +96,44 @@ make the property enforceable rather than argued:
 The gate matters for the reason it always did - slow growth and elapsed-time
 effects - and a connection the loop forgets can no longer hide behind it.
 
+### It happened, twice, and the first version of the check let it get away
+
+On September 20, 2026, two hosted Linux runs of protocol 2 with concurrent
+appends stopped serving their existing connections while still answering new
+ones. In the nightly's recovery arm (run 35499515760), 22 seconds after a
+primary crash-restart, the harness's `RPUSH` went unanswered for three
+seconds and the replica's link to the same primary timed out in the same
+second; the SIGQUIT dump shows the loop idle in `epoll_wait`, no append
+worker, an empty buffer, every AOF offset equal - and a fresh connection
+(the harness's diagnostic probe) answered normally. Two minutes into segment
+4 of the chain's continuous-primary arm (run 35432168246) the same thing.
+The Oracle machine ran the continuous-primary shape for 48 hours with no
+occurrence; the hosted runners have four vCPUs to its two. Roughly one
+arm-run in six on hosted Linux.
+
+What the record did not contain was the connection's state, because the
+harness SIGQUITed the server four seconds after its own timeout, before the
+server's thirty-second sweep would have closed the connection and said
+whether it was parsed-and-unexecuted, held, deferred, queued - and now,
+whether the kernel still had its registration. Three changes:
+
+- The harness waits out the sweep before killing anything, polling `INFO
+  clients` over a fresh connection, and records what the server closed
+  (`failure_diagnostics.*.sweep_closed_unanswered`).
+- The sweep asks the multiplexer to forget the descriptor before closing it
+  and logs `registered=true|false`: the difference between a registration
+  the loop lost and a client its own queues forgot.
+- `liveness-hunt.yml` runs many fifteen-minute samples of both protocol 2
+  arms in parallel on hosted Linux, so a hit arrives in an hour rather than
+  a night.
+
+The two runs' evidence (reports, both server logs with dumps, checkpoints)
+is retained locally at `/tmp/keel-check/nightly-0920` and in the run
+artifacts. Until a hit with the named state is in hand, this is an open
+server-side liveness defect on the protocol 2 concurrent-append path under
+hosted Linux timing, and the strongest reason not to make an availability
+claim for that path.
+
 ## How 48 hours run on free runners
 
 `long-soak.yml` runs each of the three soak shapes as a chain of nine segments
