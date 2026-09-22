@@ -138,6 +138,7 @@ func (b *connBuffer) commit(n int) { b.data = b.data[:len(b.data)+n] }
 type client struct {
 	fd                         int
 	lastProgress               time.Time
+	unreadSeen                 time.Time
 	closeAfterWrite            bool
 	authenticated              bool
 	interestKnown              bool
@@ -343,11 +344,14 @@ func (c *client) setInterest(mux io_multiplexing.IOMultiplexer, op io_multiplexi
 // request the server has parsed and not answered.
 const stalledClientTimeout = 30 * time.Second
 
-// Connections the sweep closed, for INFO. The two are different claims. A slow
-// reader or a half-sent request is the client's doing and the README says it
-// is closed. An unanswered request is the server's: it accepted the request
-// and stopped serving the connection, which from outside is a hang.
-var clientsClosedSlow, clientsClosedUnanswered uint64
+// Connections the sweep closed, for INFO. The three are different claims. A
+// slow reader or a half-sent request is the client's doing and the README says
+// it is closed. An unanswered request is the server's: it accepted the request
+// and stopped serving the connection, which from outside is a hang. An unread
+// request is worse, and was invisible until September 22, 2026: the loop never
+// saw the request at all, so it owes nothing, holds nothing, and every other
+// check here passes the connection over while the client waits forever.
+var clientsClosedSlow, clientsClosedUnanswered, clientsClosedUnread uint64
 
 // unanswered says whether the loop owes this connection a reply it has not
 // produced or has produced and is holding: a parsed run not yet executed, a
@@ -358,8 +362,10 @@ func (c *client) unanswered() bool {
 }
 
 // sweepStalledClients closes every connection that has held pending work past
-// the timeout without progress, and returns how many it closed. forget, if
-// given, is told about each so the caller can drop its own references.
+// the timeout without progress, and returns how many it closed. paused holds
+// the connections the loop has deliberately stopped reading while a flush
+// completes; their unread bytes are expected. forget, if given, is told about
+// each closed connection so the caller can drop its own references.
 //
 // An unanswered request is logged with the connection's state. The 48-hour
 // soak that stalled was read from a SIGQUIT dump of a loop that was still
@@ -367,7 +373,7 @@ func (c *client) unanswered() bool {
 // forgot or in what state. This line does, within the timeout, while the state
 // still exists. A slow reader is not logged: that is the client's behaviour,
 // and a flood of them should not be able to fill the log.
-func sweepStalledClients(now time.Time, mux io_multiplexing.IOMultiplexer, forget func(*client)) int {
+func sweepStalledClients(now time.Time, mux io_multiplexing.IOMultiplexer, paused map[int]*client, forget func(*client)) int {
 	closed := 0
 	for _, c := range clients {
 		if now.Sub(c.lastProgress) <= stalledClientTimeout {
@@ -387,7 +393,39 @@ func sweepStalledClients(now time.Time, mux io_multiplexing.IOMultiplexer, forge
 		case len(c.out) > 0 || c.buf != nil:
 			clientsClosedSlow++
 		default:
-			continue
+			// Nothing owed, nothing held: every check above has passed this
+			// connection over, which is exactly what a connection whose
+			// readiness registration went missing looks like from in here.
+			// The evidence is not in the loop's state but in the kernel's,
+			// so ask it. A connection whose peer is simply idle has nothing
+			// waiting and is left alone, however old it is.
+			if paused[c.fd] == c {
+				c.unreadSeen = time.Time{}
+				continue
+			}
+			unread, asked := unreadBytes(c.fd)
+			if !asked || unread == 0 {
+				c.unreadSeen = time.Time{}
+				continue
+			}
+			// A request can land after the loop's last wait and before this
+			// sweep; the next wait reports it and the read counts as progress.
+			// So bytes are only evidence when an earlier sweep, at least a
+			// second ago, already saw them and nothing has been read since.
+			// Closing on first sight would drop a healthy pooled connection
+			// that happened to speak just as the sweep ran.
+			if c.unreadSeen.IsZero() || c.unreadSeen.Before(c.lastProgress) {
+				c.unreadSeen = now
+				continue
+			}
+			if now.Sub(c.unreadSeen) < time.Second {
+				continue
+			}
+			registered := mux.Forget(c.fd)
+			log.Printf("closing client fd=%d: %d bytes unread for at least %s, silent for %s, with nothing pending (interest=%d known=%v registered=%v)",
+				c.fd, unread, now.Sub(c.unreadSeen).Round(time.Second), now.Sub(c.lastProgress).Round(time.Second),
+				c.interest, c.interestKnown, registered)
+			clientsClosedUnread++
 		}
 		closeClient(c)
 		if forget != nil {
@@ -633,7 +671,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 	core.ClientBuffers = func() core.ClientBufferStats {
 		return core.ClientBufferStats{Connected: len(clients), InputBytes: retainedInputBytes, ReplyBytes: retainedReplyBytes, TotalBytes: retainedClientBytes,
 			RequestAllocationPeak: requestBudget.peak, RequestAllocationRefusals: requestBudget.refusals.Load(),
-			ClosedSlow: clientsClosedSlow, ClosedUnanswered: clientsClosedUnanswered}
+			ClosedSlow: clientsClosedSlow, ClosedUnanswered: clientsClosedUnanswered, ClosedUnread: clientsClosedUnread}
 	}
 	defer func() { core.ClientBuffers = nil }()
 	defer func() {
@@ -830,7 +868,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 			if time.Now().After(nextMaintenance) {
 				nextMaintenance = time.Now().Add(time.Second)
 				core.MaintainMemory()
-				sweepStalledClients(time.Now(), ioMultiplexer, func(c *client) { delete(paused, c.fd) })
+				sweepStalledClients(time.Now(), ioMultiplexer, paused, func(c *client) { delete(paused, c.fd) })
 			}
 			continue
 		}
@@ -1049,7 +1087,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 		if !now.Before(nextMaintenance) {
 			nextMaintenance = now.Add(time.Second)
 			core.MaintainMemory()
-			sweepStalledClients(now, ioMultiplexer, nil)
+			sweepStalledClients(now, ioMultiplexer, paused, func(c *client) { delete(paused, c.fd) })
 		}
 
 		if stop {

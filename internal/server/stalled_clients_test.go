@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"log"
+	"syscall"
 	"testing"
 	"time"
 
@@ -53,7 +54,7 @@ func TestSweepClosesEveryStalledStateAndNamesTheUnansweredOnes(t *testing.T) {
 	}
 	forgotten := map[int]bool{}
 	mux := &forgettingMonitor{registered: map[int]bool{cases[3].c.fd: true}}
-	closed := sweepStalledClients(time.Now(), mux, func(c *client) { forgotten[c.fd] = true })
+	closed := sweepStalledClients(time.Now(), mux, nil, func(c *client) { forgotten[c.fd] = true })
 
 	wantClosed, wantSaid := 0, 0
 	for _, tc := range cases {
@@ -98,4 +99,90 @@ func TestUnansweredCoversEveryOwedState(t *testing.T) {
 	require.True(t, (&client{appendHeld: true}).unanswered())
 	require.True(t, (&client{appendDeferred: true}).unanswered())
 	require.True(t, (&client{readQueued: true}).unanswered())
+}
+
+// The sweep's first version could not see the fault it was written for. On
+// September 22, 2026 a primary stopped serving an established connection, and
+// the sweep waited its full thirty seconds and closed nothing: the loop had
+// never read the request, so it owed nothing, held nothing, and every check
+// passed the connection over while its bytes sat in the socket.
+func TestSweepSeesARequestTheLoopNeverRead(t *testing.T) {
+	oldClients := clients
+	clients = make(map[int]*client)
+	t.Cleanup(func() { clients = oldClients })
+	oldUnread := clientsClosedUnread
+	t.Cleanup(func() { clientsClosedUnread = oldUnread })
+	var logged bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&logged)
+	t.Cleanup(func() { log.SetOutput(previous) })
+
+	stale := time.Now().Add(-stalledClientTimeout - time.Second)
+	request := []byte("*1\r\n$4\r\nPING\r\n")
+	unread, peer := socketPair(t)
+	clients[unread] = &client{fd: unread, lastProgress: stale,
+		interest: io_multiplexing.OpRead, interestKnown: true}
+	if _, err := syscall.Write(peer, request); err != nil {
+		t.Fatal(err)
+	}
+	// A peer that has simply gone quiet has sent nothing, and is left alone
+	// however long it has been silent.
+	quiet, _ := socketPair(t)
+	clients[quiet] = &client{fd: quiet, lastProgress: stale,
+		interest: io_multiplexing.OpRead, interestKnown: true}
+
+	mux := &forgettingMonitor{registered: map[int]bool{}}
+	now := time.Now()
+	require.Equal(t, 0, sweepStalledClients(now, mux, nil, nil),
+		"first sight is not evidence: the request may have landed after the loop's last wait")
+	require.Equal(t, 0, sweepStalledClients(now.Add(500*time.Millisecond), mux, nil, nil),
+		"nor is a second look within the second")
+	require.Equal(t, 1, sweepStalledClients(now.Add(time.Second), mux, nil, nil))
+	require.NotContains(t, clients, unread, "the connection holding an unread request is closed")
+	require.Contains(t, clients, quiet, "a quiet connection is not")
+	require.Equal(t, oldUnread+1, clientsClosedUnread)
+	require.Equal(t, []int{unread}, mux.forgotten, "only the unread connection is asked about")
+	line := logged.String()
+	require.Contains(t, line, "14 bytes unread for at least 1s")
+	require.Contains(t, line, "with nothing pending")
+	require.Contains(t, line, "registered=false")
+}
+
+// Bytes on a long-idle connection are usually a request that arrived a moment
+// ago, not a lost registration. A pooled connection that speaks after a long
+// silence, just as the sweep runs, must be read and answered, not closed; and
+// a connection the loop stopped reading on purpose, while a flush completes,
+// is holding its request exactly as intended.
+func TestSweepLeavesARequestTheLoopIsAboutToRead(t *testing.T) {
+	oldClients := clients
+	clients = make(map[int]*client)
+	t.Cleanup(func() { clients = oldClients })
+	oldUnread := clientsClosedUnread
+	t.Cleanup(func() { clientsClosedUnread = oldUnread })
+
+	stale := time.Now().Add(-stalledClientTimeout - time.Second)
+	request := []byte("*1\r\n$4\r\nPING\r\n")
+	arriving, arrivingPeer := socketPair(t)
+	clients[arriving] = &client{fd: arriving, lastProgress: stale,
+		interest: io_multiplexing.OpRead, interestKnown: true}
+	held, heldPeer := socketPair(t)
+	clients[held] = &client{fd: held, lastProgress: stale,
+		interest: io_multiplexing.OpNone, interestKnown: true}
+	for _, fd := range []int{arrivingPeer, heldPeer} {
+		if _, err := syscall.Write(fd, request); err != nil {
+			t.Fatal(err)
+		}
+	}
+	paused := map[int]*client{held: clients[held]}
+
+	mux := &forgettingMonitor{registered: map[int]bool{}}
+	now := time.Now()
+	require.Equal(t, 0, sweepStalledClients(now, mux, paused, nil))
+	// The loop's next wait reports the request and the read is progress.
+	clients[arriving].lastProgress = now.Add(10 * time.Millisecond)
+	require.Equal(t, 0, sweepStalledClients(now.Add(2*time.Second), mux, paused, nil))
+	require.Contains(t, clients, arriving)
+	require.Contains(t, clients, held)
+	require.Equal(t, oldUnread, clientsClosedUnread)
+	require.Empty(t, mux.forgotten)
 }
