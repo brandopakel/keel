@@ -106,22 +106,23 @@ jobs:
           path: archives
       - name: Verify and install native candidate
         run: python3 scripts/check-archive.py --archive archives/*.tar.gz --revision "$GITHUB_SHA" --out installed
-      - name: Download and verify published alpha.2
+      - name: Download and verify published alpha.3
         env:
           GH_TOKEN: ${{ github.token }}
           TARGET_OS: ${{ matrix.goos }}
           TARGET_ARCH: ${{ matrix.goarch }}
         run: |
-          # Retained alpha.3 closeout baseline reports provide these independent
-          # pins: bench/results/alpha2-archive-pins-2026-09-06.json.
+          # Independent pins from the published alpha.3 validation manifest:
+          # bench/results/alpha3-archive-pins-2026-09-23.json. A mutable release
+          # asset/checksum pair cannot change them.
           case "${TARGET_OS}_${TARGET_ARCH}" in
-            linux_amd64) task_digest=8886e22a9a0b23e16a3488a78b6d264ef1636cc9ce58c11136360e2d2d38f5ef ;;
-            linux_arm64) task_digest=aa75536677e99431749e75ab091453ff22adf18c8f2d002ae2a2fc58d32323ba ;;
-            darwin_amd64) task_digest=205553690961ae8c9301fd296a1fa106a5db8d4d29a7638f31095b6bb93144fc ;;
-            darwin_arm64) task_digest=4739b633995ac8245da82b42b06c1f29f13139e6f388d9ab4fd590b48b4d4c94 ;;
+            linux_amd64) task_digest=da48ff82cd7f053c088c002db1c4016f22dc564f204138b7a98e861e38727154 ;;
+            linux_arm64) task_digest=687427234be21d6e05b62ea018895bd92cd0760d02845225a033ffaa17d1cc00 ;;
+            darwin_amd64) task_digest=12785d31c0a3c1b845175eef627cd1d7d9d08ffab8e17c0a8818c4d666a1f0ab ;;
+            darwin_arm64) task_digest=12efa65d0773582a343bafaac01b9346dde93eb69f46d16e12eb809f6a8863ab ;;
             *) exit 1 ;;
           esac
-          gh release download v0.1.0-alpha.2 --repo "$GITHUB_REPOSITORY" --pattern "keel_v0.1.0-alpha.2_${TARGET_OS}_${TARGET_ARCH}.tar.gz*" --dir baseline-archive
+          gh release download v0.1.0-alpha.3 --repo "$GITHUB_REPOSITORY" --pattern "keel_v0.1.0-alpha.3_${TARGET_OS}_${TARGET_ARCH}.tar.gz*" --dir baseline-archive
           python3 scripts/check-archive.py --archive baseline-archive/*.tar.gz --expected-sha256 "$task_digest" --out baseline
       - name: Upgrade, rewrite, restart and backup rollback
         run: python3 installed/scripts/check-upgrade.py --baseline baseline/keel --candidate installed/keel --out upgrade-evidence --concurrent

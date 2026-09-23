@@ -1,3 +1,61 @@
+# v0.1.0-alpha.4
+
+This increment brings the development work merged since alpha.3 to a published
+build: typed string storage, stable paged traversal and `SCAN`, streamed large
+collection records, additional sorted-set operations, TTL/lookup/set-map
+compaction, client fairness, reply and request allocation admission, and a
+Linux readiness optimization that skips unchanged `epoll_ctl` registrations.
+
+Two experiments are extended and remain opt-in:
+
+- `-aof-concurrent-append` (requires `-aof-async-append`): bounded string
+  commands run while earlier writes are still being appended, with replies
+  released in log order.
+- `-replication-protocol 2`: streaming snapshots, operation deltas, replica
+  recovery checkpoints and a durable failover term (`KEEL.PROMOTE` /
+  `KEEL.FENCE`). Replication is still asynchronous and can lose acknowledged
+  writes on primary failure. Automatic failover is not implemented, and manual
+  promotion still requires external fencing. See
+  [replication-v2.md](replication-v2.md) and [failover-design.md](failover-design.md).
+
+The event loop now closes a connection it has stopped serving instead of
+leaving the client waiting, and it logs why. There are three cases: a request
+parsed and not answered within 30 seconds, request bytes left unread, and a
+run that produces no reply. `INFO clients` reports each as
+`clients_closed_unanswered`, `clients_closed_unread` and
+`clients_closed_unreplied`. All three should stay at zero, and a nonzero count
+is a bug worth reporting.
+
+**Replies wait for the disk under `appendfsync always`.** A write is
+acknowledged only after its fsync, so a disk that stalls for ten seconds delays
+that write's reply by ten seconds. Other clients keep being served in the
+meantime when `-aof-concurrent-append` is on. This is the durability contract
+working as designed, and Redis behaves the same way. On GitHub-hosted runners
+fsyncs of 4 to 13 seconds were measured, so set client timeouts with the disk
+in mind, or use `appendfsync everysec` where losing up to a second of writes
+is acceptable.
+
+Validation for this build:
+
+- The protocol 2 concurrent continuous-primary shape ran 48 hours as one
+  primary process twice on a small Always Free x86 VM, with no growth breach, no
+  unanswered closure and flat RSS (runs 35352473161 and 35502854458). The
+  48-hour run on this tag's commit is linked from the release.
+- A nightly three-arm soak runs on GitHub-hosted runners. The intermittent
+  "liveness stall" it reported in September 2026 was traced to hosted-runner
+  fsync latency exceeding the harness's three-second client timeout, not to a
+  server defect. See [long-run-gate.md](long-run-gate.md).
+- The release workflow upgrades from the published alpha.3 archives on all
+  four native targets, rewrites, restarts and rolls back from backup.
+
+Persistence written by alpha.3 is read by this version. Back up persistence
+files before upgrading. This remains an alpha: see the README for the
+integration contract and the boundaries that stay.
+
+---
+
+The following notes describe the previously published alpha.3 and are historical.
+
 # v0.1.0-alpha.3
 
 This increment restores production active expiry, moves everysec fsync off the

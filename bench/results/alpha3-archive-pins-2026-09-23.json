@@ -1,0 +1,45 @@
+{
+  "provenance": "Archive reports from the published alpha.3 validation manifest (validation-v0.1.0-alpha.3.json, release workflow https://github.com/brandopakel/keel/actions/runs/33994225803). On 2026-09-23 each sha256 matched the release asset's GitHub digest and its published .sha256 sidecar; darwin_amd64 and linux_arm64 also match the pins in runtime-native-filesystem-2026-09-06.json.",
+  "reports": {
+    "keel_v0.1.0-alpha.3_darwin_amd64.tar.gz": {
+      "archive": "keel_v0.1.0-alpha.3_darwin_amd64.tar.gz",
+      "sha256": "12785d31c0a3c1b845175eef627cd1d7d9d08ffab8e17c0a8818c4d666a1f0ab",
+      "binary_sha256": "caeda761467b9b1af84c4bbc6bbf8616aa96adf1a726957c33484803819413f4",
+      "native_machine": "x86_64",
+      "platform": "macOS-15.7.9-x86_64-i386-64bit-Mach-O",
+      "version": "keel v0.1.0-alpha.3 (a9de9156aeb4)",
+      "files": 44,
+      "passed": true
+    },
+    "keel_v0.1.0-alpha.3_darwin_arm64.tar.gz": {
+      "archive": "keel_v0.1.0-alpha.3_darwin_arm64.tar.gz",
+      "sha256": "12efa65d0773582a343bafaac01b9346dde93eb69f46d16e12eb809f6a8863ab",
+      "binary_sha256": "4c65f65d1ade25cc29e670788884d3b2d0fe3e9d4f27d9c86f28516f69267088",
+      "native_machine": "arm64",
+      "platform": "macOS-15.7.9-arm64-arm-64bit-Mach-O",
+      "version": "keel v0.1.0-alpha.3 (a9de9156aeb4)",
+      "files": 44,
+      "passed": true
+    },
+    "keel_v0.1.0-alpha.3_linux_amd64.tar.gz": {
+      "archive": "keel_v0.1.0-alpha.3_linux_amd64.tar.gz",
+      "sha256": "da48ff82cd7f053c088c002db1c4016f22dc564f204138b7a98e861e38727154",
+      "binary_sha256": "71c209f2723ad6bdba496be30baf569b24eefd28bd4467b0e141d42930935f37",
+      "native_machine": "x86_64",
+      "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+      "version": "keel v0.1.0-alpha.3 (a9de9156aeb4)",
+      "files": 44,
+      "passed": true
+    },
+    "keel_v0.1.0-alpha.3_linux_arm64.tar.gz": {
+      "archive": "keel_v0.1.0-alpha.3_linux_arm64.tar.gz",
+      "sha256": "687427234be21d6e05b62ea018895bd92cd0760d02845225a033ffaa17d1cc00",
+      "binary_sha256": "8f29abf0fb4a2b33bf074b1eef819f5ae6240c25d2ec240fdcde64bc8da7ab65",
+      "native_machine": "aarch64",
+      "platform": "Linux-6.17.0-1022-azure-aarch64-with-glibc2.39",
+      "version": "keel v0.1.0-alpha.3 (a9de9156aeb4)",
+      "files": 44,
+      "passed": true
+    }
+  }
+}
