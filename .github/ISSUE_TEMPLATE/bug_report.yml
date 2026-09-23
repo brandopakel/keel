@@ -14,7 +14,7 @@ body:
     attributes:
       label: Version
       description: Output of `keel -version`, or the release archive name and its SHA-256 from the release checksums.
-      placeholder: keel v0.1.0-alpha.3 ...
+      placeholder: keel v0.1.0-alpha.4 ...
     validations:
       required: true
   - type: input
