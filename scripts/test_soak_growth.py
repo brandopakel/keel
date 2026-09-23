@@ -231,3 +231,30 @@ class StallSweepWaitTests(unittest.TestCase):
             soak.wait_for_stall_sweep(probe, evidence)
         self.assertEqual(evidence['sweep_closed_unanswered'], 0)
         self.assertIn('clients_after_sweep', evidence)
+
+
+class SlowReplyTests(unittest.TestCase):
+    def persistence(self, sync_seconds, ended_ago):
+        ended = int((soak.time.time() - ended_ago) * 1e6)
+        return (f'aof_sync_slow_last_usec:{int(sync_seconds * 1e6)}\r\n'
+                f'aof_sync_slow_last_unix_usec:{ended}\r\n').encode()
+
+    def test_a_slow_fsync_explains_a_slow_reply(self):
+        client = MagicMock()
+        client.call.return_value = self.persistence(4.0, 0.1)
+        report = {}
+        soak.record_slow_reply(report, client, soak.time.monotonic(), 4.05)
+        self.assertEqual(report['slow_replies']['count'], 1)
+        self.assertEqual(report['slow_replies']['explained_by_fsync'], 1)
+        self.assertTrue(report['slow_replies']['recent'][0]['explained_by_fsync'])
+
+    def test_a_slow_reply_with_fast_or_old_fsyncs_is_the_servers(self):
+        client = MagicMock()
+        report = {}
+        client.call.return_value = self.persistence(0.02, 0.1)
+        soak.record_slow_reply(report, client, soak.time.monotonic(), 10)
+        client.call.return_value = self.persistence(12.0, 3600)
+        soak.record_slow_reply(report, client, soak.time.monotonic(), 10)
+        self.assertEqual(report['slow_replies']['count'], 2)
+        self.assertEqual(report['slow_replies']['explained_by_fsync'], 0)
+        self.assertEqual(report['slow_replies']['max_seconds'], 10)
