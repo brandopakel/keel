@@ -17,7 +17,7 @@ name: Scheduled soak
 # onto the `runner` input, and any arm can be dispatched onto that runner the
 # same way. Self-hosted jobs may run for five days. Both 48-hour forms are
 # dispatched, not scheduled: the gate was met twice in September 2026, and it
-# is re-run on a release candidate rather than every week. See
+# is re-run on a beta candidate rather than every week. See
 # docs/long-run-gate.md, and scripts/provision-soak-runner.sh for the machine.
 
 on:
