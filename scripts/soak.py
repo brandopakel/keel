@@ -25,7 +25,8 @@ from progress_watchdog import ProgressWatchdog
 # Unread bytes must be seen by two sweeps a second apart, so allow for that.
 STALLED_CLIENT_TIMEOUT = 30
 STALL_SWEEP_SLACK = 8
-SWEEP_COUNTERS = ('clients_closed_unanswered', 'clients_closed_unread', 'clients_closed_slow')
+SWEEP_COUNTERS = ('clients_closed_unanswered', 'clients_closed_unread', 'clients_closed_unreplied',
+                  'clients_closed_slow')
 
 
 def wait_for_stall_sweep(probe, evidence):
@@ -120,7 +121,8 @@ def verify_served(client):
     are reported, not asserted."""
     stats = info(client, 'clients')
     for field, what in (('clients_closed_unanswered', 'an unanswered request'),
-                        ('clients_closed_unread', 'a request it never read')):
+                        ('clients_closed_unread', 'a request it never read'),
+                        ('clients_closed_unreplied', 'a request that ran and produced no reply')):
         # The soak always runs the binary it just built, so a missing counter
         # means the check is not there, and that is not a pass.
         assert field in stats, f"INFO clients has no {field}"
@@ -128,7 +130,8 @@ def verify_served(client):
             f"server closed {stats[field]} connection(s) with {what}; its server.log names them")
     return {'closed_slow': int(stats['clients_closed_slow']),
             'closed_unanswered': int(stats['clients_closed_unanswered']),
-            'closed_unread': int(stats['clients_closed_unread'])}
+            'closed_unread': int(stats['clients_closed_unread']),
+            'closed_unreplied': int(stats['clients_closed_unreplied'])}
 
 
 def verify_collections(client, hashes, members, scores, large):

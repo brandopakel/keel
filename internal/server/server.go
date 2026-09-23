@@ -326,7 +326,15 @@ func (c *client) readCommandsReserved(scratch []byte, budget *requestAllocationB
 // per successful reply. State belongs to this connection, not its reusable fd.
 // Linux has matched adoption evidence. Darwin keeps forwarding registrations
 // while the Intel liveness discrepancy under concurrent test load is unresolved.
-const cacheClientInterest = runtime.GOOS == "linux"
+//
+// A build can turn the cache off with
+// -ldflags "-X github.com/brandopakel/keel/internal/server.interestCacheOff=1",
+// which is how the liveness hunt tests whether the cache is behind the protocol
+// 2 stall: a registration the kernel dropped while the cache still records it
+// would never be restored, since every later setInterest is skipped.
+var interestCacheOff string
+
+var cacheClientInterest = runtime.GOOS == "linux" && interestCacheOff == ""
 
 func (c *client) setInterest(mux io_multiplexing.IOMultiplexer, op io_multiplexing.Operation) error {
 	if cacheClientInterest && c.interestKnown && c.interest == op {
@@ -352,6 +360,22 @@ const stalledClientTimeout = 30 * time.Second
 // saw the request at all, so it owes nothing, holds nothing, and every other
 // check here passes the connection over while the client waits forever.
 var clientsClosedSlow, clientsClosedUnanswered, clientsClosedUnread uint64
+
+// runsUnreplied counts runs that executed at least one command and produced
+// no reply. Every command answers in RESP, so this should never happen; if it
+// does, the loop writes nothing, leaves the connection's interest wherever the
+// run found it, and the client waits forever with nothing unread and nothing
+// pending - a stall no sweep can see. The run's client is closed instead, and
+// the first few are logged with the command that ran.
+var runsUnreplied uint64
+
+const loggedUnrepliedRuns = 10
+
+var errUnreplied = errors.New("run produced no reply")
+
+// respond runs one command for a client; a variable so a test can stand in a
+// command that answers nothing.
+var respond = (*client).respond
 
 // unanswered says whether the loop owes this connection a reply it has not
 // produced or has produced and is holding: a parsed run not yet executed, a
@@ -613,9 +637,21 @@ func executeRun(c *client, arena *replyArena) bool {
 	if len(c.cmds) == 0 {
 		return false
 	}
+	first := c.cmds[0].Cmd
+	defer func() {
+		if consumed == 0 || c.err != nil || len(c.out) > 0 || c.inArena {
+			return
+		}
+		c.err = errUnreplied
+		runsUnreplied++
+		if runsUnreplied <= loggedUnrepliedRuns {
+			log.Printf("closing client fd=%d: %d command(s) from %.64q ran and produced no reply (interest=%d known=%v deferred=%v)",
+				c.fd, consumed, first, c.interest, c.interestKnown, c.appendDeferred)
+		}
+	}()
 	var capture captureWriter
 	if len(c.cmds) == 1 {
-		c.respond(c.cmds[0], &capture)
+		respond(c, c.cmds[0], &capture)
 		consumed = 1
 		if len(capture.p) > maxOutputBuffer {
 			c.err = fmt.Errorf("output buffer limit exceeded")
@@ -632,7 +668,7 @@ func executeRun(c *client, arena *replyArena) bool {
 			budget.ReplyRetained = retainedReplyBytes
 		}
 		capture.p = nil
-		c.respond(cmd, &capture)
+		respond(c, cmd, &capture)
 		consumed++
 		if len(capture.p) > maxOutputBuffer {
 			c.err = fmt.Errorf("output buffer limit exceeded")
@@ -665,13 +701,17 @@ func executeRun(c *client, arena *replyArena) bool {
 
 func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 	defer wg.Done()
+	if interestCacheOff != "" {
+		log.Println("client interest cache off: every registration goes to the kernel")
+	}
 	var requestBudget requestAllocationBudget
 	core.CommandAllocations = &core.CommandAllocationBudget{Limit: maxRetainedClientBytes, ReplyLimit: maxRetainedClassBytes}
 	defer func() { core.CommandAllocations = nil }()
 	core.ClientBuffers = func() core.ClientBufferStats {
 		return core.ClientBufferStats{Connected: len(clients), InputBytes: retainedInputBytes, ReplyBytes: retainedReplyBytes, TotalBytes: retainedClientBytes,
 			RequestAllocationPeak: requestBudget.peak, RequestAllocationRefusals: requestBudget.refusals.Load(),
-			ClosedSlow: clientsClosedSlow, ClosedUnanswered: clientsClosedUnanswered, ClosedUnread: clientsClosedUnread}
+			ClosedSlow: clientsClosedSlow, ClosedUnanswered: clientsClosedUnanswered, ClosedUnread: clientsClosedUnread,
+			RunsUnreplied: runsUnreplied}
 	}
 	defer func() { core.ClientBuffers = nil }()
 	defer func() {
