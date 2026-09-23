@@ -246,7 +246,9 @@ The 48-hour uptime gate passed twice: run 35352473161 (September 18 to 20,
 weekly re-proves the same thing, so on September 22 both 48-hour forms - the
 Saturday segment chain and the Sunday uptime run - stopped being scheduled.
 They remain one dispatch away, and a passing earlier build does not validate
-a later one: before a release, the uptime run is dispatched on the release
+a later one. alpha.4 ships without a 48-hour run of its own: its notes say the
+two passing runs tested 58ff941, and that the release build is covered by the
+nightly soak. Before a beta, the uptime run is dispatched on the release
 candidate's commit and its result is cited with the release.
 
 The nightly three-arm soak stays scheduled. It runs on GitHub-hosted runners,
@@ -326,7 +328,7 @@ Two Oracle rules to know. Always Free compute is reclaimed after seven days
 in which CPU, network and memory all stayed under 20% at the 95th percentile.
 With the weekly 48-hour run no longer scheduled the machine sits idle between
 releases and may be reclaimed; a reclaimed instance is recreated from step 2
-before the next release candidate's run. And a shape other
+before the next run is dispatched. And a shape other
 than A1.Flex within the free limits, or a boot volume past the allowance,
 bills; the console marks free-eligible choices.
 
