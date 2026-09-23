@@ -24,6 +24,17 @@ from progress_watchdog import ProgressWatchdog
 # thirty seconds, checked about once a second, and logs its state as it does.
 # Unread bytes must be seen by two sweeps a second apart, so allow for that.
 STALLED_CLIENT_TIMEOUT = 30
+
+# Every write is fsynced before its reply (appendfsync always), so a reply can
+# only be as quick as the disk. GitHub-hosted runners' disks sometimes take
+# seconds: the three "liveness stalls" of September 20-23, 2026 were each the
+# run's slowest fsync - 4.4 s, 12.7 s and 4.0 s - ending just after the
+# client's three-second timeout, while the loop went on serving everyone
+# else. The harness now waits long enough to tell a slow disk from a server
+# that has stopped answering, and records every reply slower than
+# SLOW_REPLY_SECONDS with the fsync that explains it, or the lack of one.
+REPLY_TIMEOUT = 60
+SLOW_REPLY_SECONDS = 3
 STALL_SWEEP_SLACK = 8
 SWEEP_COUNTERS = ('clients_closed_unanswered', 'clients_closed_unread', 'clients_closed_unreplied',
                   'clients_closed_slow')
@@ -57,6 +68,33 @@ def wait_for_stall_sweep(probe, evidence):
     evidence['clients_after_sweep'] = info(probe, 'clients')
     for field in SWEEP_COUNTERS:
         evidence['sweep_' + field.removeprefix('clients_')] = 0
+
+
+def record_slow_reply(report, client, started, seconds):
+    """Keep a reply slower than SLOW_REPLY_SECONDS with the fsync beside it.
+
+    A slow disk is reported, not failed: the server did what appendfsync
+    always asks. The record says whether the slowest recent fsync accounts
+    for the wait, so a slow reply with fast fsyncs stands out as the server's
+    own doing."""
+    persistence = info(client, 'persistence')
+    slow = report.setdefault('slow_replies', {'count': 0, 'max_seconds': 0, 'recent': []})
+    slow['count'] += 1
+    slow['max_seconds'] = max(slow['max_seconds'], seconds)
+    sync_seconds = int(persistence['aof_sync_slow_last_usec']) / 1e6
+    sync_ended = int(persistence['aof_sync_slow_last_unix_usec']) / 1e6
+    # Explained when the latest slow fsync ended during this wait and took
+    # most of it; an old or short one leaves the wait to the server.
+    explained = (sync_ended >= time.time() - seconds - 1 and
+                 sync_seconds >= seconds - SLOW_REPLY_SECONDS)
+    slow['explained_by_fsync'] = slow.get('explained_by_fsync', 0) + int(explained)
+    slow['recent'].append({
+        'at_seconds': round(time.monotonic() - started, 1),
+        'reply_seconds': round(seconds, 3),
+        'slow_fsync_seconds': sync_seconds,
+        'slow_fsync_ended_unix': sync_ended,
+        'explained_by_fsync': explained})
+    slow['recent'] = slow['recent'][-50:]
 
 
 def capture_failed_process(server):
@@ -463,11 +501,12 @@ def run(args, report, watchdog):
         # primary's history does not survive its own restart.
         ports = handoff['ports']
     primary = Server(args.bin, root / 'primary', async_append=True, port=ports.get('primary'),
-                     extra=['-replication-feed'] + shared_flags)
+                     extra=['-replication-feed'] + shared_flags, reply_timeout=REPLY_TIMEOUT)
     password = primary.password
     replica = Server(args.bin, root / 'replica', async_append=True, password=password, port=ports.get('replica'),
                      extra=['-replicaof', f'127.0.0.1:{primary.port}',
-                            '-primary-password-env', 'KEEL_VALIDATION_PASSWORD'] + shared_flags)
+                            '-primary-password-env', 'KEEL_VALIDATION_PASSWORD'] + shared_flags,
+                     reply_timeout=REPLY_TIMEOUT)
     for server in [primary, replica]:
         server.env['GODEBUG'] = 'gctrace=1'
     floors = {'primary_aof': floor, 'replica_aof': floor,
@@ -546,7 +585,10 @@ def run(args, report, watchdog):
             assert primary.client.call('SET', key, value) == b'OK'
             expected[key] = value
             assert primary.client.call('GET', key) == value
-            pair_latencies.append((time.monotonic()-request_start)*1000)
+            pair_seconds = time.monotonic()-request_start
+            pair_latencies.append(pair_seconds*1000)
+            if pair_seconds > SLOW_REPLY_SECONDS:
+                record_slow_reply(report, primary.client, started, pair_seconds)
             report['acknowledged_writes'] += 1
             if i % 20 == 0:
                 event = str(i).encode()

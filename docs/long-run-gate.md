@@ -213,6 +213,31 @@ citing the result.
 The chain runs on dispatch. About 146 runner hours per run, on standard
 runners in a public repository, which cost nothing.
 
+## The stall was the disk
+
+On September 23, 2026 the fourth occurrence, in liveness hunt 35764382514
+(continuous-primary arm, 1 h 52 m in), came with #73's unread check in place
+and it too closed nothing: nothing unread, nothing pending, all offsets equal.
+What its report did show was an fsync of 4.0 s that ended one second after the
+harness's three-second client timeout. The reports of September 20 and 22
+show the same thing: each failure is the run's slowest fsync (4.4 s and
+12.7 s), ending 1.4 s and 9.7 s after the timeout.
+
+The soak runs `appendfsync always`, so a write's reply waits for its fsync,
+and the ordered-append path keeps the loop serving every other connection -
+including the new ones the harness opened to diagnose it - while that one
+reply waits. That is the whole signature: an established connection that
+gets no answer, new connections that do, an idle loop, no append worker and
+equal offsets by the time anyone looks. GitHub-hosted runners' disks stall
+for seconds now and then; the Oracle machine's did not, which is why 96 hours
+there never saw it. No server defect was found.
+
+The harness now waits up to 60 seconds for a reply (`REPLY_TIMEOUT`) and
+records every reply slower than three seconds under `slow_replies`, with the
+latest slow fsync and whether it accounts for the wait
+(`explained_by_fsync`). A reply that does not come in 60 seconds still fails
+the run and still runs the stall diagnostics.
+
 ## Schedule after the gate was met
 
 The 48-hour uptime gate passed twice: run 35352473161 (September 18 to 20,

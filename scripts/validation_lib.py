@@ -25,10 +25,13 @@ def sha256(path):
 class Server:
     def __init__(self, binary, directory, *, policy='always', async_append=False,
                  port=None, extra=(), file_limit=None, password=None, startup_timeout=10,
-                 shutdown_timeout=8):
+                 shutdown_timeout=8, reply_timeout=None):
         if not math.isfinite(startup_timeout) or startup_timeout <= 0:
             raise ValueError("startup_timeout must be finite and positive")
         self.startup_timeout = startup_timeout
+        # How long the harness's own connection waits for a reply once the
+        # server is up; None keeps the client's three-second connect timeout.
+        self.reply_timeout = reply_timeout
         if not math.isfinite(shutdown_timeout) or shutdown_timeout <= 0:
             raise ValueError("shutdown_timeout must be finite and positive")
         self.shutdown_timeout = shutdown_timeout
@@ -72,6 +75,8 @@ class Server:
                     self.client = Client('127.0.0.1', self.port, self.password)
                     if self.client.call('PING') != b'PONG':
                         raise RuntimeError('server returned an invalid readiness response')
+                    if self.reply_timeout is not None:
+                        self.client.socket.settimeout(self.reply_timeout)
                     return self
                 except OSError:
                     time.sleep(.02)
