@@ -189,10 +189,9 @@ initial small-dataset experiment.
 In order of distance, not size.
 
 - **Validating the experiments.** Asynchronous appends and bounded primary/read-only
-  replication are included in alpha.3 as opt-in experiments with their own contracts and
-  limits. Unreleased development adds bounded concurrent string execution during appends
-  and protocol 2 recovery; both require further deployment
-  validation. Automatic failover remains unimplemented, and manual promotion still requires
+  replication are opt-in experiments with their own contracts and limits. Alpha.4 adds
+  bounded concurrent string execution during appends and protocol 2 recovery, also
+  opt-in; both require further deployment validation. Automatic failover remains unimplemented, and manual promotion still requires
   operator fencing. `KEEL.PROMOTE`/`KEEL.FENCE` carry a durable term, and a node
   that has learned of a higher term stops writing - a stale-generation guard, not
   a fence. A partitioned node learns nothing and keeps writing, so exclusivity
@@ -250,12 +249,14 @@ Runnable [Bencher, k6 and AWS DLT adapters](bench/external/README.md) are availa
 
 ### Current development status
 
-The latest published release is alpha.3. Merged development includes typed string
-storage, ordered concurrent appends, stable paged traversal/SCAN, streamed large
-collection records, replication protocol 2, additional sorted-set operations,
-TTL/lookup/set-map compaction, client fairness, reply admission and Linux readiness optimization.
-Five real RESP2 client libraries, scheduled capacity sweeps and larger recovery
-tests extend validation. These changes are absent from published alpha.3 archives.
+The latest published release is alpha.4. It includes typed string storage, ordered
+concurrent appends, stable paged traversal/SCAN, streamed large collection records,
+replication protocol 2, additional sorted-set operations, TTL/lookup/set-map
+compaction, client fairness, reply admission and Linux readiness optimization; see
+the [release notes](docs/alpha-release-notes.md). Five real RESP2 client libraries,
+scheduled capacity sweeps and larger recovery tests extend validation. Its two
+48-hour uptime runs tested an earlier commit; the release build is covered by the
+nightly soak, and a 48-hour run on the exact build is planned before a beta.
 
 The [current engineering status](docs/engineering-status-2026-09-07.md) separates
 merged work, candidates, measured benefits and remaining gates. The four initial
