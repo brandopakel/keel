@@ -162,8 +162,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           python3 - <<'PY'
+          import os, re
           from pathlib import Path
-          Path('release-notes.md').write_text(Path('docs/alpha-release-notes.md').read_text().split('\n---\n', 1)[0])
+          notes = Path('docs/alpha-release-notes.md').read_text().split('\n---\n', 1)[0]
+          # Links in the notes are relative to docs/, which a release page cannot
+          # resolve; pin them to this tag's copy of each document.
+          base = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/blob/{os.environ['GITHUB_REF_NAME']}/docs/"
+          notes = re.sub(r'\]\(([A-Za-z0-9_.-]+\.md(?:#[^)]*)?)\)', lambda m: f']({base}{m.group(1)})', notes)
+          Path('release-notes.md').write_text(notes)
           PY
           gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1 \
             || gh release create "${GITHUB_REF_NAME}" \
