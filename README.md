@@ -254,9 +254,9 @@ concurrent appends, stable paged traversal/SCAN, streamed large collection recor
 replication protocol 2, additional sorted-set operations, TTL/lookup/set-map
 compaction, client fairness, reply admission and Linux readiness optimization; see
 the [release notes](docs/alpha-release-notes.md). Five real RESP2 client libraries,
-scheduled capacity sweeps and larger recovery tests extend validation. Its two
-48-hour uptime runs tested an earlier commit; the release build is covered by the
-nightly soak, and a 48-hour run on the exact build is planned before a beta.
+scheduled capacity sweeps and larger recovery tests extend validation. The release
+build ran 48 hours as one primary process after publication (run 36045054751) with
+no growth breach and no closed connection.
 
 The [current engineering status](docs/engineering-status-2026-09-07.md) separates
 merged work, candidates, measured benefits and remaining gates. The four initial

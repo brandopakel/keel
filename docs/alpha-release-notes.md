@@ -40,10 +40,11 @@ Validation for this build:
 - The protocol 2 concurrent continuous-primary shape ran 48 hours as one
   primary process twice on a small Always Free x86 VM, with no growth breach, no
   unanswered closure and flat RSS (runs 35352473161 and 35502854458). Both runs
-  tested commit 58ff941, not this tag. Since then the event loop has gained the
-  unread and no-reply connection checks described above. This build is covered
-  by the nightly soaks, which run 4.5 hours per arm, and not by a 48-hour run of
-  its own. A 48-hour run on the exact build is planned before a beta.
+  tested commit 58ff941. After release, the same shape ran 48 hours on this
+  tag's commit (5852df8, run 36045054751, September 24-26, 2026): 9.3 million
+  writes, 574 replica crash recoveries, 394 replica compactions, no growth
+  breach, no connection closed by any of the stall checks, and primary RSS
+  about 50 MB in the last hour. Promotion and both write-fault checks passed.
 - A nightly three-arm soak runs on GitHub-hosted runners. The intermittent
   "liveness stall" it reported in September 2026 was traced to hosted-runner
   fsync latency exceeding the harness's three-second client timeout, not to a
