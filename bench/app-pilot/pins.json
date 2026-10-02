@@ -1,0 +1,56 @@
+{
+  "redis": {
+    "version": "8.10.2",
+    "url": "https://download.redis.io/releases/redis-8.10.2.tar.gz",
+    "sha256": "b9ffee226b5eecdba98a679260dad764b2a4ebd90dce4ad5ac9e9f3eef9c02b3"
+  },
+  "gitea_app": {
+    "repo": "https://github.com/go-gitea/gitea",
+    "tag": "v28.0.0",
+    "commit": "15b8a5805adf57c5189602008d38cccfd3c795e0",
+    "pnpm": "12.6.0"
+  },
+  "checkouts": {
+    "gitea-main": {
+      "repo": "https://github.com/go-gitea/gitea",
+      "commit": "986b0bcae0d352c9afd516c45a0c3fcbdd903669"
+    },
+    "go-redis-cache": {
+      "repo": "https://github.com/go-redis/cache",
+      "commit": "b8aec2d93201cbd6d5cd7b75c334703fd5b46ace"
+    },
+    "gin-contrib-sessions": {
+      "repo": "https://github.com/gin-contrib/sessions",
+      "commit": "30faf8469f7727b2b78dd4409745bb62991753da"
+    }
+  },
+  "suites": [
+    {
+      "name": "gitea-cache-queue-session",
+      "checkout": "gitea-main",
+      "packages": ["./modules/cache", "./modules/queue", "./modules/session"],
+      "run": "^(TestStringCacheAdapters|TestBaseRedis|TestSession)$",
+      "gates": true
+    },
+    {
+      "name": "go-redis-cache",
+      "checkout": "go-redis-cache",
+      "packages": ["./..."],
+      "gates": true
+    },
+    {
+      "name": "gin-contrib-sessions",
+      "checkout": "gin-contrib-sessions",
+      "packages": ["./redis"],
+      "gates": true
+    },
+    {
+      "name": "gitea-known-unsupported",
+      "checkout": "gitea-main",
+      "packages": ["./modules/globallock", "./services/pubsub"],
+      "run": "^(TestLocker|TestRedisBroker)$",
+      "gates": false,
+      "reason": "Gitea's Redis global lock runs redsync Lua scripts and its Redis websocket broker uses Pub/Sub. Keel has neither, so these tests record the exact failures without failing the job."
+    }
+  ]
+}
