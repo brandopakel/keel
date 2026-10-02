@@ -59,7 +59,10 @@ jobs:
           curl -fL --retry 3 "$(python3 "$pins" get redis.url)" -o "$RUNNER_TEMP/redis.tar.gz"
           echo "$(python3 "$pins" get redis.sha256)  $RUNNER_TEMP/redis.tar.gz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/redis.tar.gz" -C "$RUNNER_TEMP"
-          make -C "$RUNNER_TEMP/redis-$version" -j"$(nproc)" BUILD_TLS=no > "$RUNNER_TEMP/redis-build.log" 2>&1 \
+          # The top-level Makefile of Redis 8 also builds the bundled modules
+          # (search, JSON, time series), which no part of the pilot loads;
+          # src/ alone is the core server, built the way upstream always has.
+          make -C "$RUNNER_TEMP/redis-$version/src" -j"$(nproc)" BUILD_TLS=no > "$RUNNER_TEMP/redis-build.log" 2>&1 \
             || { tail -100 "$RUNNER_TEMP/redis-build.log"; exit 1; }
           cp "$RUNNER_TEMP/redis-$version/src/redis-server" dist/servers/redis-server
       - name: Record what was built
