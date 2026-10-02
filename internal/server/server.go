@@ -363,7 +363,8 @@ var clientsClosedSlow, clientsClosedUnanswered, clientsClosedUnread uint64
 
 // connectionsReceived counts accepted connections for INFO, which is where a
 // connection count belongs: one log line per accept floods the log of any
-// application that opens short-lived connections or a large pool.
+// application that opens short-lived connections or a large pool. acceptClient
+// counts a connection only once it is fully set up, on every accept path.
 var connectionsReceived uint64
 
 // runsUnreplied counts runs that executed at least one command and produced
@@ -587,6 +588,7 @@ func acceptClient(serverFD int, mux io_multiplexing.IOMultiplexer) (*client, boo
 		syscall.Close(connFD)
 		return nil, false
 	}
+	connectionsReceived++
 	return &client{fd: connFD, lastProgress: time.Now(), interestKnown: true, interest: io_multiplexing.OpRead}, true
 }
 
@@ -961,8 +963,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 				syscall.Read(wakeupFDs[0], drain[:])
 			case serverFD:
 				// The listening socket is readable: a client is waiting to be
-				// accepted. Counted only once the connection is fully set up,
-				// so INFO counts clients that actually existed.
+				// accepted.
 				if len(clients) >= config.MaxConnection {
 					fd, _, err := syscall.Accept(serverFD)
 					if err == nil {
@@ -972,7 +973,6 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 				}
 				if c, ok := acceptClient(serverFD, ioMultiplexer); ok {
 					clients[c.fd] = c
-					connectionsReceived++
 				}
 			default:
 				// An existing client is sending commands. Nothing is read yet:
