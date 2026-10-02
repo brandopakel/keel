@@ -496,6 +496,43 @@ func TestIdleActiveExpiry(t *testing.T) {
 	t.Fatal("idle TTL was not actively reclaimed")
 }
 
+// Accepted connections are counted in INFO rather than logged: a line per
+// accept floods the log of any application with a pool or short-lived clients.
+func TestConnectionsCountedNotLogged(t *testing.T) {
+	s := startTestServer(t)
+	c, r := connectTest(t, s)
+	before := connectionsReceived(t, call(t, c, r, "INFO", "stats"))
+	for i := 0; i < 3; i++ {
+		other, otherReader := connectTest(t, s)
+		if got := call(t, other, otherReader, "PING"); got != "+PONG" {
+			t.Fatal(got)
+		}
+		other.Close()
+	}
+	if got := connectionsReceived(t, call(t, c, r, "INFO", "stats")) - before; got != 3 {
+		t.Fatalf("total_connections_received rose by %d over three connections", got)
+	}
+	s.stop(t)
+	if strings.Contains(s.log.String(), "new client") {
+		t.Fatalf("connection logged:\n%s", s.log.String())
+	}
+}
+
+func connectionsReceived(t *testing.T, info string) int {
+	t.Helper()
+	for _, line := range strings.Split(info, "\r\n") {
+		if v, ok := strings.CutPrefix(line, "total_connections_received:"); ok {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return n
+		}
+	}
+	t.Fatalf("no total_connections_received in INFO stats:\n%s", info)
+	return 0
+}
+
 func TestAsyncAppendPipelineAndRestart(t *testing.T) {
 	for _, policy := range []string{"always", "everysec", "no"} {
 		t.Run(policy, func(t *testing.T) {

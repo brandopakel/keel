@@ -361,6 +361,11 @@ const stalledClientTimeout = 30 * time.Second
 // check here passes the connection over while the client waits forever.
 var clientsClosedSlow, clientsClosedUnanswered, clientsClosedUnread uint64
 
+// connectionsReceived counts accepted connections for INFO, which is where a
+// connection count belongs: one log line per accept floods the log of any
+// application that opens short-lived connections or a large pool.
+var connectionsReceived uint64
+
 // runsUnreplied counts runs that executed at least one command and produced
 // no reply. Every command answers in RESP, so this should never happen; if it
 // does, the loop writes nothing, leaves the connection's interest wherever the
@@ -711,7 +716,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 		return core.ClientBufferStats{Connected: len(clients), InputBytes: retainedInputBytes, ReplyBytes: retainedReplyBytes, TotalBytes: retainedClientBytes,
 			RequestAllocationPeak: requestBudget.peak, RequestAllocationRefusals: requestBudget.refusals.Load(),
 			ClosedSlow: clientsClosedSlow, ClosedUnanswered: clientsClosedUnanswered, ClosedUnread: clientsClosedUnread,
-			RunsUnreplied: runsUnreplied}
+			RunsUnreplied: runsUnreplied, ConnectionsReceived: connectionsReceived}
 	}
 	defer func() { core.ClientBuffers = nil }()
 	defer func() {
@@ -724,7 +729,6 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 	}()
 	log.Println("starting an asynchronous TCP server on", config.Host, config.Port)
 
-	clientNumber := 0
 	nextMaintenance := time.Now()
 	var heldReplies []*client
 	paused := make(map[int]*client)
@@ -958,7 +962,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 			case serverFD:
 				// The listening socket is readable: a client is waiting to be
 				// accepted. Counted only once the connection is fully set up,
-				// so the id in the log matches a client that actually exists.
+				// so INFO counts clients that actually existed.
 				if len(clients) >= config.MaxConnection {
 					fd, _, err := syscall.Accept(serverFD)
 					if err == nil {
@@ -968,8 +972,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 				}
 				if c, ok := acceptClient(serverFD, ioMultiplexer); ok {
 					clients[c.fd] = c
-					clientNumber++
-					log.Printf("new client: id=%d\n", clientNumber)
+					connectionsReceived++
 				}
 			default:
 				// An existing client is sending commands. Nothing is read yet:

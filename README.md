@@ -112,7 +112,8 @@ input and replies each have a 192 MiB retained-buffer ceiling within that total.
 Amplifying collection reads and `KEEL.DUMP` size their replies before construction;
 destructive collection commands also admit their persistence records before mutation.
 Aggregate transient allocations are not fully reserved before execution. `INFO clients`
-reports connected clients and retained input/reply/total user-space buffer bytes.
+reports connected clients and retained input/reply/total user-space buffer bytes;
+`INFO stats` counts accepted connections (`total_connections_received`), which are not logged.
 
 Rewrites traverse stable key slots in bounded batches, targeting 1 MiB or 1 ms
 between keys. Large collections yield between batches; oversized string values,
@@ -201,8 +202,7 @@ In order of distance, not size.
   the replication path; see [restart and upgrade rules](docs/term-guard-recovery.md).
 - **Command surface outside the contract.** Transactions, Lua, Pub/Sub, blocking list
   commands, RESP3, ACL roles, and cluster routing are absent. `ZRANGE` lacks
-  `BYSCORE`, `BYLEX`, and `LIMIT`; `ZADD` lacks `GT`, `LT`, and `INCR`. Unreleased development
-  adds `ZCOUNT`, `ZRANGEBYSCORE`, `ZREVRANGEBYSCORE`, `ZINCRBY`, `ZPOPMIN` and `ZPOPMAX`.
+  `BYSCORE`, `BYLEX`, and `LIMIT`; `ZADD` lacks `GT`, `LT`, and `INCR`.
   `LREM`, `LINSERT`, `GEOSEARCHSTORE`, the `GEORADIUS` family, `CMS.INFO`, `CMS.MERGE`,
   and `BF.CARD` are also missing.
 - **Persistence without a latency bound.** The `everysec` window stretches on slow storage.
