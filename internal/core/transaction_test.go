@@ -158,6 +158,16 @@ func TestTransactionQueueLimitRefusesAndReleases(t *testing.T) {
 	require.Zero(t, data_structure.TotalKeys())
 }
 
+// EXEC cannot be bounded before it runs, so concurrent appends must never let a
+// run holding it overlap a pending append: it waits at the drained barrier.
+func TestTransactionCommandsTakeTheAppendBarrier(t *testing.T) {
+	ResetStores()
+	for _, name := range []string{"MULTI", "EXEC", "DISCARD"} {
+		_, _, bounded := AppendAdmission([]*Command{{Cmd: "SET", Args: []string{"k", "v"}}, {Cmd: name}})
+		require.False(t, bounded, name)
+	}
+}
+
 func TestEveryCommandHasAnArityOrIsRefusedInATransaction(t *testing.T) {
 	for name := range commandTable {
 		_, counted := commandArity[name]
