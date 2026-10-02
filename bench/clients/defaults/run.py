@@ -61,6 +61,11 @@ def main():
     ap.add_argument("--update-expected", action="store_true")
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
+    # The node probe runs from its own directory, so every path given
+    # relative to the caller has to be made absolute first.
+    args.bin, args.go_probe = os.path.abspath(args.bin), os.path.abspath(args.go_probe)
+    args.node_dir = os.path.abspath(args.node_dir)
+    args.python = [os.path.abspath(p) for p in args.python]
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=False)
 
