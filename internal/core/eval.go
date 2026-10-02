@@ -13,9 +13,10 @@ import (
 // Command dispatch.
 //
 // One table from name to handler. A command is registered here, in the type
-// table in keytype.go so a name held by another type is refused, and - if it
-// changes anything - in the log's writeCommands; each of those is a list that
-// can be read against the others.
+// table in keytype.go so a name held by another type is refused, in
+// commandArity in transaction.go so a transaction can count its arguments
+// before running it, and - if it changes anything - in the log's
+// writeCommands; each of those is a list that can be read against the others.
 var commandTable = map[string]func([]string) []byte{
 	"PING": cmdPING, "ECHO": cmdECHO, "SELECT": cmdSELECT,
 
@@ -148,14 +149,7 @@ func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 		// Nothing ran, but the type check may still have reaped an expired
 		// key, and that removal has to be recorded.
 		aofCommit(cmd, nil)
-		// An untrusted command token can fill the entire query buffer. Error
-		// formatting and CRLF sanitization must not duplicate that token after
-		// request admission has handed ownership to the execution phase.
-		name, suffix := cmd.Cmd, ""
-		if len(name) > 128 {
-			name, suffix = name[:128], "..."
-		}
-		return fmt.Errorf("ERR unknown command '%s%s'", name, suffix)
+		return unknownCommand(cmd.Cmd)
 	}
 	suspended := data_structure.SuspendEviction
 	data_structure.SuspendEviction = true
@@ -172,4 +166,17 @@ func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 
 	_, err := c.Write(res)
 	return err
+}
+
+// unknownCommand is the error for a command this server does not have.
+//
+// An untrusted command token can fill the entire query buffer. Error
+// formatting and CRLF sanitization must not duplicate that token after request
+// admission has handed ownership to the execution phase.
+func unknownCommand(name string) error {
+	suffix := ""
+	if len(name) > 128 {
+		name, suffix = name[:128], "..."
+	}
+	return fmt.Errorf("ERR unknown command '%s%s'", name, suffix)
 }

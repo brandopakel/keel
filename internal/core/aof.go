@@ -78,6 +78,10 @@ type aofState struct {
 	// A scope preserves the unpublished replication prefix across bounded
 	// buffer drains. Opaque commands publish their final image instead.
 	commandActive, commandOpaque, commandChanged bool
+	// transaction is set while EXEC runs its commands, and transactionLogged
+	// once MULTI has been written ahead of the block's first record. A
+	// transaction that records nothing writes no frame; see transaction.go.
+	transaction, transactionLogged bool
 	// replaying suppresses recording, so loading a log does not write it back
 	// into itself.
 	recovered   []string
@@ -440,6 +444,12 @@ func flushAOF(closing bool) error {
 // expected shape of an unclean stop and the commands before it are perfectly
 // good. Anything malformed earlier in the file is a real error and is reported
 // as one.
+//
+// A transaction's block is held until its EXEC has been read and only then
+// replayed, so a crash part way through writing one leaves none of it applied.
+// Its MULTI is where the torn tail starts: what was intact of the block goes to
+// the backup with the rest, which is Redis's rule for an AOF that ends inside
+// MULTI.
 func LoadAOF(path string) (int, error) {
 	aof.recovered = nil
 	f, err := os.Open(path)
@@ -469,27 +479,72 @@ func LoadAOF(path string) (int, error) {
 	}()
 	reader := bufio.NewReaderSize(f, 64*1024)
 	applied, used := 0, int64(0)
+	// block is the open transaction's commands and where each began; begun is
+	// where its MULTI began, or -1 outside one.
+	var block []replayedCommand
+	begun := int64(-1)
 	for {
 		cmd, n, err := readAOFCommand(reader)
 		if err == io.EOF && n == 0 {
+			if begun >= 0 {
+				return applied, &truncatedAOF{path, begun, true}
+			}
 			return applied, nil
 		}
 		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-			return applied, &truncatedAOF{path, used}
+			if begun >= 0 {
+				return applied, &truncatedAOF{path, begun, true}
+			}
+			return applied, &truncatedAOF{path, used, false}
 		}
 		if err != nil {
 			return applied, fmt.Errorf("malformed command at byte %d: %w", used, err)
 		}
-		sink := &replayWriter{}
-		if err := EvalAndResponse(cmd, sink); err != nil {
-			return applied, fmt.Errorf("replaying %s at byte %d: %w", cmd.Cmd, used, err)
+		frame := cmd.Cmd == "MULTI" || cmd.Cmd == "EXEC"
+		switch {
+		case frame && len(cmd.Args) != 0:
+			return applied, fmt.Errorf("malformed %s frame at byte %d", cmd.Cmd, used)
+		case cmd.Cmd == "MULTI" && begun >= 0:
+			return applied, fmt.Errorf("MULTI at byte %d inside the transaction begun at byte %d", used, begun)
+		case cmd.Cmd == "MULTI":
+			begun = used
+		case cmd.Cmd == "EXEC" && begun < 0:
+			return applied, fmt.Errorf("EXEC without MULTI at byte %d", used)
+		case cmd.Cmd == "EXEC":
+			for _, queued := range block {
+				if err := replayAOFCommand(queued.cmd, queued.at); err != nil {
+					return applied, err
+				}
+				applied++
+			}
+			clear(block)
+			block, begun = block[:0], -1
+		case begun >= 0:
+			block = append(block, replayedCommand{cmd, used})
+		default:
+			if err := replayAOFCommand(cmd, used); err != nil {
+				return applied, err
+			}
+			applied++
 		}
-		if sink.err != nil {
-			return applied, fmt.Errorf("replaying %s at byte %d: %w", cmd.Cmd, used, sink.err)
-		}
-		applied++
 		used += n
 	}
+}
+
+type replayedCommand struct {
+	cmd *Command
+	at  int64
+}
+
+func replayAOFCommand(cmd *Command, at int64) error {
+	sink := &replayWriter{}
+	if err := EvalAndResponse(cmd, sink); err != nil {
+		return fmt.Errorf("replaying %s at byte %d: %w", cmd.Cmd, at, err)
+	}
+	if sink.err != nil {
+		return fmt.Errorf("replaying %s at byte %d: %w", cmd.Cmd, at, sink.err)
+	}
+	return nil
 }
 
 // Read one canonical AOF frame; memory is proportional to one command, not the log.
@@ -553,14 +608,21 @@ func (w *replayWriter) Write(p []byte) (int, error) {
 type truncatedAOF struct {
 	path   string
 	offset int64
+	// transaction says the tail begins with a transaction whose EXEC was
+	// never written, rather than with a command cut short.
+	transaction bool
 }
 
 func (e *truncatedAOF) Error() string {
+	if e.transaction {
+		return fmt.Sprintf("incomplete final transaction in %s from byte %d", e.path, e.offset)
+	}
 	return fmt.Sprintf("truncated final command in %s at byte %d", e.path, e.offset)
 }
 func (e *truncatedAOF) Unwrap() error { return errTruncatedAOF }
 
-// RepairAOFTail preserves the torn suffix before truncating to the last complete command.
+// RepairAOFTail preserves the torn suffix before truncating to the last
+// complete command, or to before the MULTI of a transaction that never ended.
 func RepairAOFTail(cause error) error {
 	var tail *truncatedAOF
 	if !errors.As(cause, &tail) {

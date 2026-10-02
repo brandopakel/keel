@@ -160,6 +160,10 @@ type client struct {
 	cmds []*core.Command
 	err  error
 
+	// tx is the connection's open MULTI, nil outside one. Its queued commands
+	// are input the connection holds, and are accounted as input.
+	tx *core.Transaction
+
 	// out is the reply to send in the write phase. When inArena it is a window
 	// into the cycle's arena, recorded as offsets because appending to the
 	// arena can move it, and resolved to a slice once the cycle stops growing.
@@ -474,6 +478,8 @@ func closeClient(c *client) {
 	retainedReplyBytes -= c.accountedReply
 	c.accountedInput, c.accountedReply = 0, 0
 	c.cmds = nil
+	// A transaction ends with its connection: what it queued never runs.
+	c.tx = nil
 	delete(clients, c.fd)
 	c.buf = nil
 	c.out = nil
@@ -661,6 +667,9 @@ func executeRun(c *client, arena *replyArena) bool {
 	if len(c.cmds) == 1 {
 		respond(c, c.cmds[0], &capture)
 		consumed = 1
+		if c.err != nil {
+			return false
+		}
 		if len(capture.p) > maxOutputBuffer {
 			c.err = fmt.Errorf("output buffer limit exceeded")
 			return false
@@ -678,6 +687,10 @@ func executeRun(c *client, arena *replyArena) bool {
 		capture.p = nil
 		respond(c, cmd, &capture)
 		consumed++
+		if c.err != nil {
+			arena.buf = arena.buf[:c.outStart]
+			return false
+		}
 		if c.closeAfterWrite {
 			// QUIT: the commands pipelined after it are dropped unanswered,
 			// as Redis drops them, and the batch ends with its reply.
@@ -1256,7 +1269,16 @@ func aofReadPath(current, legacy string) string {
 // AUTH, HELLO and QUIT are answered before authentication, as Redis answers
 // them: HELLO because it can carry the credentials, and QUIT because a client
 // that never logged in can still hang up.
+//
+// A connection in a transaction hands every command to core.Transact, which
+// queues it; MULTI, EXEC and DISCARD go there always. Only an authenticated
+// connection gets that far, so MULTI cannot open a way around AUTH.
 func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
+	if c.tx != nil && (cmd.Cmd == "AUTH" || cmd.Cmd == "HELLO" || cmd.Cmd == "CLIENT") {
+		// These change the connection, not the data.
+		w.Write(c.tx.Refuse(core.ErrNotInTransaction))
+		return
+	}
 	switch cmd.Cmd {
 	case "AUTH":
 		valid := len(cmd.Args) == 1 || (len(cmd.Args) == 2 && cmd.Args[0] == "default")
@@ -1284,6 +1306,15 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 		responseErrorRw(fmt.Errorf("NOAUTH Authentication required"), w)
 		return
 	}
+	if c.tx != nil || core.IsTransactionCommand(cmd.Cmd) {
+		var err error
+		if c.tx, err = core.Transact(c.tx, cmd, w); err != nil {
+			// The transaction ran and its reply cannot be delivered; executeRun
+			// closes the connection, as for any reply over the output limit.
+			c.err = err
+		}
+		return
+	}
 	if cmd.Cmd == "CLIENT" {
 		c.clientCommand(cmd.Args, w)
 		return
@@ -1303,7 +1334,7 @@ func accountClient(c *client) bool {
 	// Frames describe reply write boundaries; parsed commands and the query
 	// buffer belong to input. Keep c.outBytes limited to the payload itself.
 	reply += cap(c.frames) * 8
-	input := parsedBytes(c.cmds)
+	input := parsedBytes(c.cmds) + c.tx.RetainedBytes()
 	if c.buf != nil {
 		input += cap(c.buf.data)
 	}

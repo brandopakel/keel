@@ -190,8 +190,8 @@ func cmdDUMP(args []string) []byte {
 	if !fits {
 		return replyTooLarge
 	}
-	if !reserveReplyMemory(size) {
-		return allocationPressure
+	if refusal := admitReply(size); refusal != nil {
+		return refusal
 	}
 	out := make([]byte, 0, size)
 	out = append(out, '$')

@@ -74,13 +74,31 @@ func reserveReplyMemory(n int) bool {
 	return true
 }
 
+// replyCeiling is the most one reply may come to. It is the output limit,
+// except while EXEC runs: a transaction answers with one array holding every
+// reply, so each command it runs may use only what the replies before it left.
+var replyCeiling = MaxReplyBytes
+
+// admitReply is the last check before a reply of n encoded bytes is built: it
+// has to fit what the client can still be sent, and building it has to fit the
+// run's allocation budget. Each refusal names its own reason.
+func admitReply(n int) []byte {
+	if n > replyCeiling {
+		return replyTooLarge
+	}
+	if !reserveReplyMemory(n) {
+		return allocationPressure
+	}
+	return nil
+}
+
 func encodeBoundedString(value string) []byte {
 	size, fits := addBulkSize(0, len(value))
 	if !fits {
 		return replyTooLarge
 	}
-	if !reserveReplyMemory(size) {
-		return allocationPressure
+	if refusal := admitReply(size); refusal != nil {
+		return refusal
 	}
 	return appendBulkString(make([]byte, 0, size), value)
 }
