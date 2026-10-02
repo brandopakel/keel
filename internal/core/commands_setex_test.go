@@ -43,8 +43,14 @@ func TestExpiringSetAliasesValidateBeforeMutation(t *testing.T) {
 			}
 		}
 		run(t, "HSET", "hash", "field", "value")
-		if !strings.HasPrefix(string(rawReply(t, command, "hash", "100", "replacement")), "-WRONGTYPE") {
-			t.Fatal("alias did not preserve SET's documented type boundary")
+		if !strings.HasPrefix(string(rawReply(t, command, "hash", "0", "replacement")), "-ERR") {
+			t.Fatalf("%s accepted an invalid TTL over a hash", command)
+		}
+		if run(t, "TYPE", "hash") != "hash" {
+			t.Fatal("a refused command replaced the hash before validating")
+		}
+		if string(rawReply(t, command, "hash", "100", "replacement")) != "+OK\r\n" || run(t, "GET", "hash") != "replacement" {
+			t.Fatalf("%s did not replace a hash, as SET does", command)
 		}
 	}
 }

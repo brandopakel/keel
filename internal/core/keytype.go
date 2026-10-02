@@ -143,6 +143,17 @@ func writtenKeys(cmd *Command) []string {
 	return nil
 }
 
+// replacingWrites store a string whatever the name held before, as Redis's do:
+// SET, SETEX, PSETEX and MSET replace a hash, list or set outright, and SETNX
+// finds any existing key and leaves it. They stay in the table above for the
+// keys they write and are exempt from the check below. Refusing them was this
+// server's rule rather than Redis's - an application that reused a name for a
+// different type, a summary string where a hash had been, failed here and
+// nowhere else - and it came from the check being applied to every command
+// alike, not from anything a string write needs. SET's GET option still answers
+// WRONGTYPE for a key it cannot read as a string; cmdSET checks that itself.
+var replacingWrites = map[string]bool{"SET": true, "SETEX": true, "PSETEX": true, "MSET": true, "SETNX": true}
+
 // checkKeyTypes reports an error if any key the command names is already held
 // by a different kind of store.
 //
@@ -151,7 +162,7 @@ func writtenKeys(cmd *Command) []string {
 // type - see the comment on lcsValue.
 func checkKeyTypes(cmd *Command) error {
 	space, checked := commandKeyspace[cmd.Cmd]
-	if !checked || len(cmd.Args) == 0 {
+	if !checked || len(cmd.Args) == 0 || replacingWrites[cmd.Cmd] {
 		return nil
 	}
 

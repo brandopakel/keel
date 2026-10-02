@@ -3,8 +3,10 @@
 
 Compare replies and final state for the supported common command contract.
 Unordered sets/hash fields are normalized; error text is compared by RESP error
-class. Deliberate differences (SET over another type, Redis dumps/modules) are
-outside this test, not silently accepted mismatches.
+class. Deliberate differences (Redis dumps/modules) are outside this test, not
+silently accepted mismatches. String writes also land on names other types
+hold, because SET, MSET, SETEX, PSETEX and SETNX replace or find those as
+Redis's do.
 """
 import argparse
 import hashlib
@@ -52,6 +54,14 @@ def operation(rng):
                         str(rng.randrange(-100, 100)).encode(), b'007', b'+1',
                         b'-0', b'9223372036854775807', b'-9223372036854775808'])
     member, field = 'member:'+str(rng.randrange(16)), 'field:'+str(rng.randrange(8))
+    if kind == 'string' and rng.random() < 0.15:
+        other = rng.choice(['hash', 'list', 'set', 'zset']) + ':' + str(rng.randrange(32))
+        return rng.choice([
+            ['SET', other, value], ['SET', other, value, 'NX'], ['SET', other, value, 'XX'],
+            ['SET', other, value, 'GET'], ['SET', other, value, 'KEEPTTL'],
+            ['MSET', key, value, other, value], ['SETEX', other, 3600, value],
+            ['PSETEX', other, 3600000, value], ['SETNX', other, value],
+        ])
     if kind == 'string':
         return rng.choice([
             ['SET', key, value], ['SET', key, value, 'NX'], ['SET', key, value, 'XX', 'GET'],
@@ -205,7 +215,7 @@ def run(args):
               'binary_sha256': sha256(args.bin), 'redis_sha256': sha256(args.redis),
               'harness_sha256': sha256(__file__), 'policy': args.policy, 'concurrent': args.concurrent,
               'reply_checks': 0, 'state_checks': 0, 'restarts': 0,
-              'limits': 'Supported common RESP2 commands; unordered collections normalized; errors compared by class. No timing-based TTL differential or cross-type SET equivalence claim.'}
+              'limits': 'Supported common RESP2 commands; unordered collections normalized; errors compared by class. No timing-based TTL differential.'}
     server = Server(args.bin, root/'keel', policy=args.policy, async_append=args.concurrent,
                     extra=['-aof-concurrent-append'] if args.concurrent else ())
     server.env = {key: value for key,value in server.env.items() if key in ('PATH','HOME','TMPDIR','KEEL_VALIDATION_PASSWORD')}
