@@ -180,7 +180,7 @@ The [general-purpose validation program](docs/general-purpose-validation.md)
 provides native workload comparisons, live heap/CPU profiles, seeded Redis
 differential tests and extended operational checks. Application pilots are one
 part of this coverage; Keel is the optimization target.
-Embedding and partitioning remain separate future decisions. The opt-in
+Embedding is planned in [the embedding plan](docs/embedding-plan.md); partitioning remains a separate future decision. The opt-in
 [merged protocol 2 experiment](docs/replication-v2.md) extends replication beyond the
 initial small-dataset experiment.
 
