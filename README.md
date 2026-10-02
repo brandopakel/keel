@@ -39,24 +39,27 @@ populate the variable; avoid putting secrets in process arguments or shell histo
 
 | Area | Supported behavior |
 | --- | --- |
-| Strings | `GET`, `SET`, `SETEX`, `PSETEX`, `MGET`, `MSET`, `INCR`, `INCRBY`, `DECR`, `DECRBY`, `LCS` |
+| Strings | `GET`, `SET`, `SETNX`, `SETEX`, `PSETEX`, `MGET`, `MSET`, `INCR`, `INCRBY`, `DECR`, `DECRBY`, `LCS` |
 | SET options | `NX`, `XX`, `GET`, `KEEPTTL`, `EX`, `PX`, `EXAT`, `PXAT`; conditional failures return null, or the old value with `GET` |
 | Expiry, every type | `TTL`, `PTTL`, `EXPIRE`, `PEXPIRE`, `EXPIREAT`, `PEXPIREAT`, `PERSIST`; expiry setters accept `NX`, `XX`, `GT`, `LT` |
-| Keys | `DEL`, `EXISTS`, `TYPE`, `KEYS`, `SCAN` with `MATCH`/`COUNT`/`TYPE`, `DBSIZE`, `FLUSHDB` |
+| Keys | `DEL`, `UNLINK` (same as `DEL`), `EXISTS`, `TYPE`, `KEYS`, `SCAN` with `MATCH`/`COUNT`/`TYPE`, `DBSIZE`, `FLUSHDB` |
 | Hashes | `HSET`, `HSETNX`, `HGET`, `HMGET`, `HDEL`, `HEXISTS`, `HLEN`, `HKEYS`, `HVALS`, `HGETALL`, `HINCRBY` |
 | Lists | `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LLEN`, `LINDEX`, `LSET`, `LRANGE`, `LTRIM`; pops accept an optional count |
 | Sets | `SADD`, `SREM`, `SCARD`, `SMEMBERS`, `SISMEMBER`, `SMISMEMBER`, `SPOP`, `SRANDMEMBER` |
 | Sorted sets | `ZADD` with `NX`/`XX`/`CH`, `ZRANK`, `ZREM`, `ZSCORE`, `ZCARD`, `ZCOUNT`, `ZINCRBY`, `ZPOPMIN`/`ZPOPMAX`; `ZRANGEBYSCORE`/`ZREVRANGEBYSCORE`; `ZRANGE` rank ranges with `REV`/`WITHSCORES` |
 | Geo | `GEOADD`, `GEODIST`, `GEOHASH`, `GEOSEARCH`, `GEOPOS` |
 | Approximate analytics | Bloom `BF.*`, Count-Min `CMS.*`, Morris `MORRIS.*`, Cuckoo `CF.*`, and `PFADD`/`PFCOUNT`/`PFMERGE`; see the [command registry](internal/core/eval.go) for exact names |
-| Operations | `PING`, `AUTH`, `INFO`, `MEMORY USAGE key`, `MEMORY STATS`, `BGREWRITEAOF`, `KEEL.DUMP`, `KEEL.RESTORE`, `KEEL.PROMOTE`/`KEEL.FENCE` |
+| Connection | `HELLO` (RESP2; `HELLO 3` answers `NOPROTO`), `AUTH`, `CLIENT ID`/`SETNAME`/`GETNAME`/`SETINFO`/`INFO`, `SELECT 0`, `QUIT`, `ECHO`, `PING` |
+| Operations | `INFO` (reports `redis_version:7.0.0`, the command level followed), `MEMORY USAGE key`, `MEMORY STATS`, `BGREWRITEAOF`, `KEEL.DUMP`, `KEEL.RESTORE`, `KEEL.PROMOTE`/`KEEL.FENCE` |
 
 Important boundaries:
 
 - One database, RESP2, IPv4. No transactions, Lua, Pub/Sub, blocking list commands,
   ACL roles, native TLS, cluster routing, or supported embedding API.
   Opt-in [replication](docs/replication-alpha.md) is experimental and bounded.
-  Clients must avoid RESP3 negotiation and unsupported initialization commands.
+  `HELLO 3` is refused with `NOPROTO`, which go-redis and ioredis answer by
+  falling back to RESP2. redis-py 8 and node-redis 6 default to RESP3 and do not
+  fall back: set `protocol=2` / `RESP: 2`. See [client defaults](docs/client-library-compatibility.md#default-configurations).
 - `SET` and `MSET` refuse keys of another type with `WRONGTYPE`; unlike Redis SET,
   they do not overwrite collections. Delete explicitly when changing type.
 - `ZRANGE` does not support `BYSCORE`, `BYLEX`, or `LIMIT`. ZADD `GT`/`LT`/`INCR`

@@ -111,7 +111,7 @@ var aof aofState
 // the next restart, while a read listed by accident only makes the file bigger.
 // An explicit list is the one that can be read against eval.go and checked.
 var writeCommands = map[string]bool{
-	"SET": true, "MSET": true, "DEL": true, "FLUSHDB": true,
+	"SET": true, "SETNX": true, "MSET": true, "DEL": true, "UNLINK": true, "FLUSHDB": true,
 	"SETEX": true, "PSETEX": true,
 	"EXPIRE": true, "PEXPIREAT": true, "PEXPIRE": true, "EXPIREAT": true, "PERSIST": true, "INCR": true, "INCRBY": true, "DECR": true, "DECRBY": true,
 	"HSET": true, "HSETNX": true, "HDEL": true, "HINCRBY": true,
@@ -134,9 +134,15 @@ var writeCommands = map[string]bool{
 // a command is appended to the log as it was received - so a client sending the
 // old name would write the old name into a brand new file, and the log would
 // carry the alias forward forever. Read both, write one.
+//
+// UNLINK is recorded as the DEL it is, so a log written by this build still
+// replays on one from before UNLINK existed - which is what a rollback needs.
 func persistedName(cmd string) string {
-	if cmd == "MEMKV.RESTORE" {
+	switch cmd {
+	case "MEMKV.RESTORE":
 		return "KEEL.RESTORE"
+	case "UNLINK":
+		return "DEL"
 	}
 	return cmd
 }

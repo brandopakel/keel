@@ -2,8 +2,6 @@ package server
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"crypto/subtle"
 	"errors"
 	"fmt"
 	"io"
@@ -11,7 +9,6 @@ import (
 	"net"
 	"os"
 	"runtime"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -136,11 +133,15 @@ func (b *connBuffer) commit(n int) { b.data = b.data[:len(b.data)+n] }
 // its own, and both are dropped at the end of the cycle. An idle connection
 // holds the struct and nothing else.
 type client struct {
-	fd                         int
-	lastProgress               time.Time
-	unreadSeen                 time.Time
-	closeAfterWrite            bool
-	authenticated              bool
+	fd              int
+	lastProgress    time.Time
+	unreadSeen      time.Time
+	closeAfterWrite bool
+	authenticated   bool
+	// id numbers the connection for HELLO and CLIENT ID; name, libName and
+	// libVersion are what CLIENT SETNAME and CLIENT SETINFO recorded.
+	id                         uint64
+	name, libName, libVersion  string
 	interestKnown              bool
 	interest                   io_multiplexing.Operation
 	accountedInput             int
@@ -589,7 +590,7 @@ func acceptClient(serverFD int, mux io_multiplexing.IOMultiplexer) (*client, boo
 		return nil, false
 	}
 	connectionsReceived++
-	return &client{fd: connFD, lastProgress: time.Now(), interestKnown: true, interest: io_multiplexing.OpRead}, true
+	return &client{fd: connFD, id: connectionsReceived, lastProgress: time.Now(), interestKnown: true, interest: io_multiplexing.OpRead}, true
 }
 
 // replyBuffer collects the replies produced from one read so they can be sent
@@ -677,6 +678,16 @@ func executeRun(c *client, arena *replyArena) bool {
 		capture.p = nil
 		respond(c, cmd, &capture)
 		consumed++
+		if c.closeAfterWrite {
+			// QUIT: the commands pipelined after it are dropped unanswered,
+			// as Redis drops them, and the batch ends with its reply.
+			consumed = len(c.cmds)
+			arena.buf = append(arena.buf, capture.p...)
+			if WriteUnbuffered {
+				c.frames = append(c.frames, len(capture.p))
+			}
+			break
+		}
 		if len(capture.p) > maxOutputBuffer {
 			c.err = fmt.Errorf("output buffer limit exceeded")
 			return false
@@ -1238,29 +1249,43 @@ func aofReadPath(current, legacy string) string {
 	return current
 }
 
-// respond enforces connection-local authentication before dispatching commands.
+// respond enforces connection-local authentication before dispatching
+// commands, and answers the commands that concern the connection itself - see
+// connection_commands.go.
+//
+// AUTH, HELLO and QUIT are answered before authentication, as Redis answers
+// them: HELLO because it can carry the credentials, and QUIT because a client
+// that never logged in can still hang up.
 func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
-	if strings.EqualFold(cmd.Cmd, "AUTH") {
+	switch cmd.Cmd {
+	case "AUTH":
 		valid := len(cmd.Args) == 1 || (len(cmd.Args) == 2 && cmd.Args[0] == "default")
 		if !valid {
 			responseErrorRw(fmt.Errorf("ERR wrong number of arguments or unsupported user for AUTH"), w)
 			return
 		}
-		if config.RequirePass == "" {
-			responseErrorRw(fmt.Errorf("ERR AUTH called without a configured password"), w)
-			return
-		}
-		got, want := sha256.Sum256([]byte(cmd.Args[len(cmd.Args)-1])), sha256.Sum256([]byte(config.RequirePass))
-		c.authenticated = subtle.ConstantTimeCompare(got[:], want[:]) == 1
-		if !c.authenticated {
-			responseErrorRw(fmt.Errorf("WRONGPASS invalid username-password pair"), w)
+		if err := c.authenticate(cmd.Args[len(cmd.Args)-1]); err != nil {
+			responseErrorRw(err, w)
 			return
 		}
 		w.Write([]byte("+OK\r\n"))
 		return
+	case "HELLO":
+		c.hello(cmd.Args, w)
+		return
+	case "QUIT":
+		// Nothing after QUIT runs: executeRun stops at closeAfterWrite, and the
+		// write phase closes the connection once this reply has gone.
+		w.Write([]byte("+OK\r\n"))
+		c.closeAfterWrite = true
+		return
 	}
 	if config.RequirePass != "" && !c.authenticated {
 		responseErrorRw(fmt.Errorf("NOAUTH Authentication required"), w)
+		return
+	}
+	if cmd.Cmd == "CLIENT" {
+		c.clientCommand(cmd.Args, w)
 		return
 	}
 	responseRw(cmd, w)

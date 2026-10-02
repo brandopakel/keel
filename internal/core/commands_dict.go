@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"errors"
 	"math"
 	"strconv"
@@ -24,6 +25,24 @@ var (
 // Like SET here, they refuse a key already holding another data type.
 func cmdSETEX(args []string) []byte  { return setWithTTL(args, "EX") }
 func cmdPSETEX(args []string) []byte { return setWithTTL(args, "PX") }
+
+// cmdSETNX is SET key value NX answering 1 or 0, the older spelling clients
+// still send: cachelib's and Flask-Caching's add() are built on it. It goes
+// through SET, so it is logged as the SET it performs and a log written here
+// replays on a build that predates the name.
+func cmdSETNX(args []string) []byte {
+	if len(args) != 2 {
+		return Encode(errors.New("ERR wrong number of arguments for 'SETNX' command"), false)
+	}
+	switch reply := cmdSET([]string{args[0], args[1], "NX"}); {
+	case bytes.Equal(reply, constant.RespOk):
+		return constant.RespOne
+	case bytes.Equal(reply, constant.RespNil):
+		return constant.RespZero
+	default:
+		return reply
+	}
+}
 
 func setWithTTL(args []string, unit string) []byte {
 	if len(args) != 3 {
@@ -207,6 +226,16 @@ func cmdDEL(args []string) []byte {
 		}
 	}
 	return Encode(deleted, false)
+}
+
+// cmdUNLINK is DEL. Redis hands an unlinked value to a background thread to
+// free; here deleting costs the same either way, so the two are one command,
+// and UNLINK is logged as DEL - see persistedName.
+func cmdUNLINK(args []string) []byte {
+	if len(args) == 0 {
+		return Encode(errors.New("ERR wrong number of arguments for 'UNLINK' command"), false)
+	}
+	return cmdDEL(args)
 }
 
 // cmdEXPIRE implements EXPIRE key seconds. A time already passed - zero or

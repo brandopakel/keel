@@ -71,7 +71,8 @@ func TestEveryRegisteredCommandIsTypeCheckedOrDeliberatelyNot(t *testing.T) {
 		"KEEL.PROMOTE": true, "KEEL.FENCE": true, // a term, not a key
 		"KEEL.REPL.PULL":  true, // protocol cursor, not key arguments
 		"KEEL.REPL.PULL2": true,
-		"PING":            true, "DEL": true, "EXISTS": true, "TYPE": true, "KEYS": true, "MGET": true,
+		"PING":            true, "ECHO": true, "SELECT": true, // no key at all
+		"DEL": true, "UNLINK": true, "EXISTS": true, "TYPE": true, "KEYS": true, "MGET": true,
 		"FLUSHDB": true, "DBSIZE": true, "MEMORY": true, "INFO": true, "BGREWRITEAOF": true, "SCAN": true,
 		"KEEL.DUMP": true, "KEEL.RESTORE": true, "MEMKV.DUMP": true, "MEMKV.RESTORE": true,
 		"TTL": true, "PTTL": true, "EXPIRE": true, "PEXPIRE": true, "EXPIREAT": true, "PEXPIREAT": true, "PERSIST": true, "MORRIS.INFO": true,
