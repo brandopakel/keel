@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Replay deterministic mixed RESP2 operations against Keel and Redis.
 
-Compare replies and final state for the supported common command contract.
+Compare replies and final state for the supported common command contract,
+including transactions: MULTI blocks of the same operations, with queueing
+refusals, nested MULTI and DISCARD mixed in.
 Unordered sets/hash fields are normalized; error text is compared by RESP error
 class. Deliberate differences (Redis dumps/modules) are outside this test, not
 silently accepted mismatches. String writes also land on names other types
@@ -22,18 +24,93 @@ import time
 from validation_lib import Client, Server, rewrite, sha256
 
 
+def normalize(command, value):
+    if command[0] in ('SMEMBERS', 'HKEYS', 'HVALS', 'KEYS'):
+        value = sorted(value)
+    if command[0] == 'HGETALL':
+        assert len(value) % 2 == 0, 'truncated HGETALL response'
+        value = sorted(zip(value[::2], value[1::2]))
+    return value
+
+
+def error_class(message):
+    return message.removeprefix('(error) ').split()[0]
+
+
 def execute(client, command):
     try:
-        value = client.call(*command)
-        if command[0] in ('SMEMBERS', 'HKEYS', 'HVALS', 'KEYS'):
-            value = sorted(value)
-        if command[0] == 'HGETALL':
-            assert len(value) % 2 == 0, 'truncated HGETALL response'
-            value = sorted(zip(value[::2], value[1::2]))
-        return ('ok', value)
+        return ('ok', normalize(command, client.call(*command)))
     except RuntimeError as exc:
-        message = str(exc).removeprefix('(error) ')
-        return ('error', message.split()[0])
+        return ('error', error_class(str(exc)))
+
+
+def read_tolerant(client, depth=0):
+    """Read one reply, keeping an error inside an array as a value.
+
+    The shared client raises on any error, which would abandon the rest of an
+    EXEC array on the wire; a transaction's reply holds an error per command
+    that failed, so each one is kept and compared by class instead.
+    """
+    if depth > 16:
+        raise ValueError('RESP nesting limit')
+    line = client.stream.readline(65537)
+    if not line.endswith(b'\r\n'):
+        raise ValueError('invalid RESP header')
+    kind, body = line[:1], line[1:-2]
+    if kind == b'-':
+        return ('error', error_class(body.decode(errors='replace')))
+    if kind == b'+':
+        return body
+    if kind == b':':
+        return int(body)
+    n = int(body)
+    if n == -1 and kind in (b'$', b'*'):
+        return None
+    if kind == b'$':
+        value = client.stream.read(n+2)
+        if len(value) != n+2 or value[-2:] != b'\r\n':
+            raise ValueError('invalid bulk reply')
+        return value[:-2]
+    if kind == b'*':
+        return [read_tolerant(client, depth+1) for _ in range(n)]
+    raise ValueError('unknown RESP kind')
+
+
+def transaction(rng):
+    """A MULTI block of ordinary operations, and the ways one goes wrong.
+
+    Most blocks commit, some with runtime errors the operations produce on
+    their own; some carry a command Redis refuses while queueing (unknown, or
+    the wrong number of arguments), which aborts the block at EXEC; some nest a
+    MULTI, which is refused without aborting; and some end in DISCARD.
+    """
+    commands = [operation(rng) for _ in range(rng.randrange(6))]
+    shape = rng.random()
+    refusal = None
+    if shape < .08:
+        refusal = ['NOSUCHCOMMAND', 'x']
+    elif shape < .16:
+        refusal = rng.choice([['GET'], ['HSET', 'hash:0'], ['SETEX', 'string:0', 10], ['LRANGE', 'list:0', 0]])
+    elif shape < .22:
+        refusal = ['MULTI']
+    if refusal:
+        commands.insert(rng.randrange(len(commands)+1), refusal)
+    return commands, ['DISCARD'] if shape > .92 else ['EXEC']
+
+
+def execute_transaction(client, commands, ending):
+    replies = []
+    for command in (['MULTI'], *commands, ending):
+        parts = [p if isinstance(p, bytes) else str(p).encode() for p in command]
+        client.socket.sendall(b'*%d\r\n' % len(parts)+b''.join(b'$%d\r\n' % len(p)+p+b'\r\n' for p in parts))
+        replies.append(read_tolerant(client))
+    result = replies[-1]
+    if ending == ['EXEC'] and isinstance(result, list):
+        queued = [command for command, reply in zip(commands, replies[1:-1]) if reply == b'QUEUED']
+        assert len(queued) == len(result), ('EXEC reply length', commands, replies)
+        replies[-1] = [value if isinstance(value, tuple) else normalize(command, value)
+                       for command, value in zip(queued, result)]
+    return replies
 
 
 def snapshot(client):
@@ -214,8 +291,8 @@ def run(args):
     report = {'status': 'running', 'seed': args.seed, 'steps_requested': args.steps,
               'binary_sha256': sha256(args.bin), 'redis_sha256': sha256(args.redis),
               'harness_sha256': sha256(__file__), 'policy': args.policy, 'concurrent': args.concurrent,
-              'reply_checks': 0, 'state_checks': 0, 'restarts': 0,
-              'limits': 'Supported common RESP2 commands; unordered collections normalized; errors compared by class. No timing-based TTL differential.'}
+              'reply_checks': 0, 'transaction_checks': 0, 'state_checks': 0, 'restarts': 0,
+              'limits': 'Supported common RESP2 commands, alone and in MULTI/EXEC/DISCARD blocks; unordered collections normalized; errors compared by class, inside EXEC replies too. No timing-based TTL differential or WATCH claim.'}
     server = Server(args.bin, root/'keel', policy=args.policy, async_append=args.concurrent,
                     extra=['-aof-concurrent-append'] if args.concurrent else ())
     server.env = {key: value for key,value in server.env.items() if key in ('PATH','HOME','TMPDIR','KEEL_VALIDATION_PASSWORD')}
@@ -250,11 +327,20 @@ def run(args):
             assert client.call('SET', b'', b'empty-key') == b'OK'
         report['scan_checks'] = check_scan(server.client, reference)
         rng = random.Random(args.seed)
+        encode = lambda command: [{'hex':part.hex()} if isinstance(part,bytes) else part for part in command]
         for index in range(args.steps):
-            command = operation(rng)
-            trace.write(json.dumps([{'hex':part.hex()} if isinstance(part,bytes) else part for part in command])+'\n')
-            actual, expected = execute(server.client, command), execute(reference, command)
-            assert actual == expected, (index, command, actual, expected)
+            if rng.random() < .1:
+                commands, ending = transaction(rng)
+                trace.write(json.dumps({'transaction': [encode(c) for c in commands], 'end': ending})+'\n')
+                actual = execute_transaction(server.client, commands, ending)
+                expected = execute_transaction(reference, commands, ending)
+                assert actual == expected, (index, commands, ending, actual, expected)
+                report['transaction_checks'] += 1
+            else:
+                command = operation(rng)
+                trace.write(json.dumps(encode(command))+'\n')
+                actual, expected = execute(server.client, command), execute(reference, command)
+                assert actual == expected, (index, command, actual, expected)
             report['reply_checks'] += 1
             if index % 1000 == 999:
                 assert snapshot(server.client) == snapshot(reference), ('state', index)

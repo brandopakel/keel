@@ -24,6 +24,24 @@ async function connect() {
     await client.connect();
     return { call: args => client.sendCommand(args.map(argument)),
       pipeline: key => Promise.all(Array.from({ length: 257 }, () => client.incr(key))),
+      transaction: async x => {
+        // An error inside EXEC rejects with every reply attached.
+        let replies;
+        try {
+          replies = await client.multi().set(x.string_key, argument(x.value)).incr(x.counter_key)
+            .lPush(x.string_key, 'x').get(x.string_key).exec();
+        } catch (error) {
+          if (!error.replies) throw error;
+          assert.deepEqual(error.errorIndexes, [2], 'transaction error index');
+          replies = error.replies;
+        }
+        assert.equal(replies[0], 'OK', 'transaction SET');
+        assert.equal(replies[1], 1, 'transaction INCR');
+        assert.match(String(replies[2]?.message), /WRONGTYPE/, 'transaction LPUSH');
+        assert.deepEqual(normalize(replies[3]), x.value, 'transaction GET');
+        await assert.rejects(client.multi().set(x.aborted_key, 'never').addCommand(['NOSUCHCOMMAND']).exec(),
+          /EXECABORT|unknown command/, 'aborted transaction');
+      },
       close: () => client.close() };
   }
   assert.equal(library, 'ioredis');
@@ -37,6 +55,18 @@ async function connect() {
       for (let i = 0; i < 257; i++) pipeline.incr(key);
       const results = await pipeline.exec();
       return results.map(([error, result]) => { if (error) throw error; return result; });
+    },
+    transaction: async x => {
+      // ioredis answers a transaction as [error, result] pairs.
+      const results = await client.multi().set(x.string_key, argument(x.value)).incr(x.counter_key)
+        .lpush(x.string_key, 'x').getBuffer(x.string_key).exec();
+      assert.deepEqual(results[0], [null, 'OK'], 'transaction SET');
+      assert.deepEqual(results[1], [null, 1], 'transaction INCR');
+      assert.match(String(results[2][0]?.message), /WRONGTYPE/, 'transaction LPUSH');
+      assert.equal(results[3][0], null, 'transaction GET');
+      assert.deepEqual(normalize(results[3][1]), x.value, 'transaction GET');
+      await assert.rejects(client.multi().set(x.aborted_key, 'never').call('NOSUCHCOMMAND').exec(),
+        /EXECABORT|unknown command/, 'aborted transaction');
     }, close: () => client.disconnect() };
 }
 let client = await connect();
@@ -64,6 +94,7 @@ try {
       cursor = String(result[0]); result[1].forEach(x => found.add(x));
     } while (cursor !== '0');
     assert.deepEqual([...found].sort(), fixture.scan_keys.toSorted());
+    await client.transaction(fixture.transaction);
   }
   for (const test of fixture.verification) await checkCase(test);
   await client.close(); client = await connect();
