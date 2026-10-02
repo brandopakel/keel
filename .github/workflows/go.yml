@@ -55,6 +55,16 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # The store and command packages have to build anywhere Go does, because
+      # the embedding plan (docs/embedding-plan.md) makes them a library. The
+      # server's event loop is Linux and macOS only, and stays that way.
+      - name: Portable core
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          for goos in windows freebsd; do
+            GOOS=$goos go build ./internal/core ./internal/data_structure ./internal/config
+          done
+
       - name: Test
         run: go test -v ./...
 
