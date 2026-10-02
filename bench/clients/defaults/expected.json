@@ -1,0 +1,114 @@
+{
+  "keel-auth": {
+    "go-redis v9.22.0": {
+      "default": "ok",
+      "named": "ok",
+      "pipeline": "ok",
+      "tx": "fail"
+    },
+    "ioredis 5.11.1": {
+      "close": "ok",
+      "default": "ok",
+      "named": "ok",
+      "pipeline": "ok",
+      "tx": "fail"
+    },
+    "ioredis 6.0.0": {
+      "close": "ok",
+      "default": "ok",
+      "named": "ok",
+      "pipeline": "ok",
+      "tx": "fail"
+    },
+    "node-redis 4.7.1": {
+      "close": "ok",
+      "default": "ok",
+      "named": "ok",
+      "pipeline": "ok",
+      "tx": "fail"
+    },
+    "node-redis 6.2.1": {
+      "close": "fail",
+      "default": "fail",
+      "named": "fail",
+      "pipeline": "fail",
+      "tx": "fail"
+    },
+    "redigo v1.9.3": {
+      "default": "ok",
+      "named": "ok",
+      "pipeline": "ok",
+      "tx": "fail"
+    },
+    "redis-py 5.3.1": {
+      "close": "ok",
+      "default": "ok",
+      "named": "ok",
+      "pipeline": "ok",
+      "tx": "fail"
+    },
+    "redis-py 8.1.0": {
+      "close": "fail",
+      "default": "fail",
+      "named": "fail",
+      "pipeline": "fail",
+      "tx": "fail"
+    }
+  },
+  "keel-noauth": {
+    "go-redis v9.22.0": {
+      "default": "ok",
+      "named": "ok",
+      "pipeline": "ok",
+      "tx": "fail"
+    },
+    "ioredis 5.11.1": {
+      "close": "ok",
+      "default": "ok",
+      "named": "ok",
+      "pipeline": "ok",
+      "tx": "fail"
+    },
+    "ioredis 6.0.0": {
+      "close": "ok",
+      "default": "ok",
+      "named": "ok",
+      "pipeline": "ok",
+      "tx": "fail"
+    },
+    "node-redis 4.7.1": {
+      "close": "ok",
+      "default": "ok",
+      "named": "ok",
+      "pipeline": "ok",
+      "tx": "fail"
+    },
+    "node-redis 6.2.1": {
+      "close": "fail",
+      "default": "fail",
+      "named": "fail",
+      "pipeline": "fail",
+      "tx": "fail"
+    },
+    "redigo v1.9.3": {
+      "default": "ok",
+      "named": "ok",
+      "pipeline": "ok",
+      "tx": "fail"
+    },
+    "redis-py 5.3.1": {
+      "close": "ok",
+      "default": "ok",
+      "named": "ok",
+      "pipeline": "ok",
+      "tx": "fail"
+    },
+    "redis-py 8.1.0": {
+      "close": "fail",
+      "default": "fail",
+      "named": "fail",
+      "pipeline": "fail",
+      "tx": "fail"
+    }
+  }
+}

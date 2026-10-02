@@ -1,0 +1,11 @@
+{
+  "name": "keel-client-defaults",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "redis": "6.2.1",
+    "redis4": "npm:redis@4.7.1",
+    "ioredis": "6.0.0",
+    "ioredis5": "npm:ioredis@5.11.1"
+  }
+}
