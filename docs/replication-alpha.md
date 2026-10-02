@@ -76,6 +76,11 @@ updates replace affected keys rather than rerunning random commands: Morris,
 Cuckoo and other probabilistic state therefore match the primary. This increases
 bandwidth and serialization cost for large/hot keys; benchmark before adopting it.
 
+Images are sealed when a replica pulls, and a pull runs between commands, never
+inside `EXEC`; a [transaction](transactions.md)'s keys are therefore sealed into
+one batch and applied together. A replica refuses a write transaction as it
+refuses writes, with `READONLY` while queueing and `EXECABORT` at `EXEC`.
+
 The transport polls every 100 ms, receives at most one frame awaiting application,
 and hands state changes to the replica's event loop. Commands in a frame are
 structurally validated before application. An application/checksum/order failure

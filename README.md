@@ -50,11 +50,12 @@ populate the variable; avoid putting secrets in process arguments or shell histo
 | Geo | `GEOADD`, `GEODIST`, `GEOHASH`, `GEOSEARCH`, `GEOPOS` |
 | Approximate analytics | Bloom `BF.*`, Count-Min `CMS.*`, Morris `MORRIS.*`, Cuckoo `CF.*`, and `PFADD`/`PFCOUNT`/`PFMERGE`; see the [command registry](internal/core/eval.go) for exact names |
 | Connection | `HELLO` (RESP2; `HELLO 3` answers `NOPROTO`), `AUTH`, `CLIENT ID`/`SETNAME`/`GETNAME`/`SETINFO`/`INFO`, `SELECT 0`, `QUIT`, `ECHO`, `PING` |
+| Transactions | `MULTI`, `EXEC`, `DISCARD`; a command refused while queueing makes `EXEC` answer `EXECABORT`, and one that fails inside `EXEC` is an error in its reply while the rest run; no `WATCH` |
 | Operations | `INFO` (reports `redis_version:7.0.0`, the command level followed), `MEMORY USAGE key`, `MEMORY STATS`, `BGREWRITEAOF`, `KEEL.DUMP`, `KEEL.RESTORE`, `KEEL.PROMOTE`/`KEEL.FENCE` |
 
 Important boundaries:
 
-- One database, RESP2, IPv4. No transactions, Lua, Pub/Sub, blocking list commands,
+- One database, RESP2, IPv4. No Lua, Pub/Sub, blocking list commands,
   ACL roles, native TLS, cluster routing, or supported embedding API.
   Opt-in [replication](docs/replication-alpha.md) is experimental and bounded.
   `HELLO 3` is refused with `NOPROTO`, which go-redis and ioredis answer by
@@ -77,6 +78,13 @@ Important boundaries:
   thread. Use bounded ranges and lower `-lcs-max-cells` for latency-sensitive workloads.
 - Pipeline requests are supported; pipelines are not transactions. If a connection
   closes after a write, its outcome may be unknown. Retrying increments can duplicate effects.
+- [Transactions](docs/transactions.md) run with no other client's command between
+  theirs, and the log and replicas receive all of one or none. There is no rollback.
+  `WATCH`/`UNWATCH` are unknown commands, so optimistic-locking APIs fail. `AUTH`,
+  `BGREWRITEAOF`, `KEEL.PROMOTE`/`KEEL.FENCE` and `KEEL.REPL.*` are refused inside
+  `MULTI`. A connection may queue 16 MiB, counted as retained input; `EXEC`'s reply
+  shares the 64 MiB output limit, and one that cannot fit closes the connection
+  after the transaction has run. A transaction runs without yielding to other clients.
 
 [Python cache and analytics example](examples/cache_analytics.py) uses explicit
 RESP2 and a nontransactional pipeline. The command behavior follows the supported
@@ -99,8 +107,12 @@ portions of Redis's [SET](https://redis.io/docs/latest/commands/set/) and
 
 Startup streams the AOF. A torn final command is copied to a `.keel-torn-tail-*`
 file beside the log, then the log is truncated to the last complete command before
-new appends. Other malformed records or failed replay commands prevent startup.
-Back up the AOF before upgrading. Dumps use a Keel-specific version and checksum;
+new appends; a transaction whose `EXEC` never reached the disk is set aside from
+its `MULTI`, so none of it is replayed. Other malformed records or failed replay
+commands prevent startup. Back up the AOF before upgrading. A log holding a
+transaction cannot be replayed by an older build: complete a `BGREWRITEAOF` or
+restore the backup before rolling back, and upgrade protocol 2 replicas before
+their primary. Dumps use a Keel-specific version and checksum;
 legacy unversioned dumps remain readable, but neither format is Redis RDB or includes TTL.
 The old `MEMKV.*` command aliases and `memkv-master.aof` migration path remain supported.
 
@@ -204,8 +216,9 @@ In order of distance, not size.
   A nonzero-term process restarts without write authority and requires a fresh
   externally assigned higher term. Nonzero terms require protocol 2 throughout
   the replication path; see [restart and upgrade rules](docs/term-guard-recovery.md).
-- **Command surface outside the contract.** Transactions, Lua, Pub/Sub, blocking list
-  commands, RESP3, ACL roles, and cluster routing are absent. `ZRANGE` lacks
+- **Command surface outside the contract.** `WATCH`, Lua, Pub/Sub, blocking list
+  commands, RESP3, ACL roles, and cluster routing are absent. Unreleased development
+  adds `MULTI`/`EXEC`/`DISCARD`. `ZRANGE` lacks
   `BYSCORE`, `BYLEX`, and `LIMIT`; `ZADD` lacks `GT`, `LT`, and `INCR`.
   `LREM`, `LINSERT`, `GEOSEARCHSTORE`, the `GEORADIUS` family, `CMS.INFO`, `CMS.MERGE`,
   and `BF.CARD` are also missing.

@@ -14,11 +14,24 @@ GoGIF stays unchanged; this matrix adds independent language/library coverage.
 The fixture checks binary strings, nil/repeated MGET entries, conditional SET,
 hashes, lists, sets, sorted-set rank order, millisecond expiration, uppercase SCAN
 TYPE, wrong-type errors followed by a successful command, and 257 ordered INCR
-replies. Every library closes and reconnects. Authenticated worker-barrier and
+replies. Each library's own transaction API then runs two
+[transactions](transactions.md): go-redis `TxPipelined`, Redigo `Send` of `MULTI`
+and the queued commands then `Do("EXEC")`, redis-py's default transactional
+`pipeline()`, and node-redis and ioredis `multi()`. One commits with a WRONGTYPE
+error inside `EXEC`, which each library must report for that command alone,
+and a value carrying CRLF and a multibyte character; the other queues an unknown
+command, so `EXEC` must abort and its write must never appear. Every library
+closes and reconnects. Authenticated worker-barrier and
 ordered-concurrent modes use `appendfsync always`; all surviving strings,
 collections and counters are checked after each of two clean AOF restarts.
 The AOF-off arm covers initial execution and reconnect. This totals 35 client
-invocations, with isolated key prefixes and fresh owned servers per mode.
+invocations, with isolated key prefixes and fresh owned servers per mode. The
+restart checks include both transactions' results.
+
+node-redis decodes an `EXEC` reply with its default string mapping, whatever
+mapping the queued commands asked for, so the transaction's value is valid
+UTF-8 for every library. A binary value holding a whole `EXEC` frame inside a
+transaction is covered by the process tests instead.
 
 The local matrix passed against runtime 745ff7c4f62e0631ca9a9698faff172010ffcd94,
 binary SHA-256 `428f218b3a888b7ef5e555a6003c6ebfe7adc1df850fa5a2cdf295c2b4d1e805`.
@@ -45,9 +58,9 @@ python3 bench/clients/run.py --bin /path/to/keel --go-clients /tmp/keel-go-clien
 
 Coverage is limited to these commands and connection modes. Raw-command methods
 exercise each library's wire codec and handshake; native pipelines exercise its
-reply association. Transactions, RESP3, cluster routing, pub/sub, scripting,
-blocking commands, TLS and every high-level client method are outside this
-matrix. Clean restart checks complement the separate crash/failure suites;
+reply association, and transaction APIs its MULTI/EXEC handling. `WATCH`, RESP3,
+cluster routing, pub/sub, scripting, blocking commands, TLS and every high-level
+client method are outside this matrix. Clean restart checks complement the separate crash/failure suites;
 they do not establish application compatibility or a durability guarantee for
 other fsync policies. Other application traces remain useful pilot work.
 
