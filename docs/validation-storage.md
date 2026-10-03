@@ -64,12 +64,20 @@ keeps exit status 1. Some tests set a much smaller limit of their own
 (`KEEL_TEST_FILE_LIMIT`). When another limit stopped the command, any
 refused-write evidence is kept beside it, because a command can hit the file
 limit first and then hang until the time limit. A run interrupted by its caller
-(SIGINT or SIGTERM) is not diagnosed as a limit hit. If the calling shell's `ulimit -f` is below
-`--max-file-mib`, the advice says to raise that limit instead. A passing run that
-leaves a file exactly at the ceiling records a `file_limit_warning`. The kernel
-shortens the write that crosses the ceiling without an error, so a command that
-ignores a short count can still exit zero. Every report records
-`peak_file_bytes` and `peak_file`, the largest file seen.
+(SIGINT or SIGTERM) is not diagnosed as a limit hit. If the calling shell's
+`ulimit -f` is below `--max-file-mib`, the advice says to raise that limit
+instead. A passing run that leaves a file exactly at the ceiling records a
+`file_limit_warning`. The kernel shortens the write that crosses the ceiling
+without an error, so a command that ignores a short count can still exit zero.
+Every report records `peak_file_bytes` and `peak_file`, the largest file seen.
+
+An output-budget hit names what filled the budget at that moment, largest first:
+
+- the disposable Go cache;
+- `go test`'s build work (compiled packages and linked test binaries);
+- each test's temporary directory, with the package that declares the test.
+
+Every report also records each entry's peak as `peak_usage_bytes_by_entry`.
 
 With the Go releases this repository supports (1.26 and later), `t.TempDir` is
 created under `GOTMPDIR` when it is set. A test's temporary files therefore land
@@ -78,14 +86,34 @@ budgets and are pruned with it, which `t.TempDir` cleanup does anyway. A fresh
 Go cache plus `go test` build work for `./cmd/keel` measured about 290 MiB of the
 512 MiB budget, which leaves about 220 MiB for a test's own files.
 
+The whole suite (`go test -count=1 ./...`) needs about 339 MiB of the budget
+for a fresh Go cache (154 MiB) and build work (185 MiB). Measured on darwin/arm64
+with Go 1.26.6 in October 2026:
+
+| Revision | Peak output | Result at the 512 MiB default |
+| --- | ---: | --- |
+| develop `a62e9a2` | over 512 MiB after 7 s | stopped, exit 3. The report named the collection fixture in `./cmd/keel` at 208 MiB, then 280 MiB in a repeat: its 195 MiB AOF plus a timing-dependent `.rewrite` |
+| one 65 MiB log per collection type | 460 and 454 MiB | passes in about 26 s |
+| the same with `-short` | 424 MiB | passes. `-short` saves little, because the Go cache and build work dominate |
+
+That leaves about 50 MiB of headroom for test files written while other
+packages run. A larger local run should be narrowed to the packages it changes,
+or run on hosted CI.
+
 Keep tests within those budgets. `go test -v ./...` in the Go workflow's
 ubuntu-latest/stable leg runs under `scripts/test-file-footprint.py`. That script
 records every test's peak bytes on disk and its largest file in a job summary
-table and a `test-file-footprint` artifact. It runs the command in its own process
-group and stops what is left of it on exit or cancellation. A warning annotation is raised for a
-test whose largest file reaches 128 MiB (half the per-file default) or that
-holds 128 MiB on disk at once (a quarter of the output budget). The measurement
-is sampled every 0.1 s. When a test genuinely needs more, skip it under
+table and a `test-file-footprint` artifact, with the package of each test. It
+runs the command in its own process group and stops what is left of it on exit
+or cancellation. A warning annotation is raised in three cases:
+
+- a test's largest file reaches 128 MiB (half the per-file default);
+- a test holds 128 MiB on disk at once (a quarter of the output budget);
+- all test temporaries together reach 160 MiB at once, the 512 MiB budget less
+  352 MiB allowed for a fresh local Go cache and build work, which CI's warm
+  cache cannot show.
+
+The measurement is sampled every 0.1 s. When a test genuinely needs more, skip it under
 `testing.Short()` so brief local checks can pass `-short` while CI keeps running
 it. Do not raise the defaults for it.
 

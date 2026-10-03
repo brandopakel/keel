@@ -28,6 +28,12 @@ import subprocess
 import sys
 import time
 
+# A fresh local Go cache plus go test's build work for the whole suite, which
+# the local wrapper's output budget also has to hold: measured at 339 MiB
+# (go-cache 154, go-build work 185) on darwin/arm64 with Go 1.26.6 in October
+# 2026, rounded up. CI reuses a warm cache, so it cannot see this share.
+LOCAL_GO_BUILD_MIB = 352
+
 
 def local_wrapper():
     path = Path(__file__).with_name('run-local-validation.py')
@@ -122,6 +128,10 @@ def main():
                         help='warn when one test holds this much on disk at once (default: a '
                              f'quarter of the local wrapper\'s {output_default} MiB --max-output-mib '
                              'default, which a fresh Go cache shares)')
+    parser.add_argument('--warn-suite-mib', type=float, default=output_default - LOCAL_GO_BUILD_MIB,
+                        help='warn when all test temporaries together reach this much at once (default: '
+                             f'the local {output_default} MiB budget less {LOCAL_GO_BUILD_MIB} MiB of fresh '
+                             'Go cache and build work, which a local whole-suite run also holds)')
     parser.add_argument('--top', type=int, default=15, help='entries to list in the summary')
     parser.add_argument('command', nargs=argparse.REMAINDER)
     args = parser.parse_args()
@@ -170,6 +180,7 @@ def main():
     for entry in tests:
         entry['package'] = packages.get(entry['name'])
     warn_file, warn_test = args.warn_file_mib*2**20, args.warn_test_mib*2**20
+    warn_suite = args.warn_suite_mib*2**20
     warnings = []
     for entry in tests:
         reasons = []
@@ -184,10 +195,17 @@ def main():
                             f"{output_default} MiB in all, Go cache included (--max-output-mib). "
                             'Make the test write less, or skip it under testing.Short() so local '
                             'checks can pass -short while CI keeps running it.')
+    if peak['test_bytes'] >= warn_suite:
+        warnings.append(f"All test temporaries together reached {mib(peak['test_bytes'])} at once. A local "
+                        f"whole-suite run also holds about {LOCAL_GO_BUILD_MIB} MiB of fresh Go cache and "
+                        f"build work, so it would pass the wrapper's {output_default} MiB output budget "
+                        '(--max-output-mib). Make the largest tests in the table write less, or skip them '
+                        'under testing.Short().')
     record = dict(command=command, exit_code=process.returncode, elapsed_seconds=elapsed,
                   samples=samples, interval_seconds=args.interval,
                   local_wrapper_defaults=dict(max_file_mib=file_default, max_output_mib=output_default),
                   warn_file_bytes=int(warn_file), warn_test_bytes=int(warn_test),
+                  warn_suite_bytes=int(warn_suite), local_go_build_allowance_mib=LOCAL_GO_BUILD_MIB,
                   peak_concurrent_test_bytes=peak['test_bytes'],
                   peak_build_bytes=max((e['peak_bytes'] for e in build), default=0),
                   sampling_errors=errors[:20], warnings=warnings, tests=tests)
@@ -197,9 +215,10 @@ def main():
     lines = ['### Test file footprint', '',
              f"Sampled every {args.interval:g} s ({samples} samples) while `{' '.join(command)}` ran. "
              f"Peak of all test temporaries at once: {mib(peak['test_bytes'])}; go test build work: "
-             f"{mib(record['peak_build_bytes'])}. Warnings at {mib(warn_file)} per file or "
-             f"{mib(warn_test)} per test; the local wrapper allows {file_default} MiB per file and "
-             f'{output_default} MiB in all.', '',
+             f"{mib(record['peak_build_bytes'])}. Warnings at {mib(warn_file)} per file, "
+             f"{mib(warn_test)} per test, or {mib(warn_suite)} for all tests at once; the local wrapper "
+             f'allows {file_default} MiB per file and {output_default} MiB in all, of which a fresh '
+             f'whole-suite run uses about {LOCAL_GO_BUILD_MIB} MiB for the Go cache and build work.', '',
              '| Test temp directory | Package | Peak on disk | Largest file | File |',
              '| --- | --- | ---: | ---: | --- |']
     lines += [f"| {e['name']} | {e['package'] or ''} | {mib(e['peak_bytes'])} | {mib(e['peak_file_bytes'])} "

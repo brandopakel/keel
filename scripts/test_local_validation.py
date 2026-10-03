@@ -295,6 +295,7 @@ class LocalValidationTests(unittest.TestCase):
             self.assertEqual(first, 'go-tmp/TestBigLogbarrierlist (test in ./internal/core) 1.6 MiB', usage)
             self.assertIn('go-tmp/go-build work (compiled packages, linked test binaries) 0.3 MiB', usage)
             self.assertIn('go-cache (disposable Go build cache) 0.2 MiB', usage)
+            self.assertNotIn('command.log', usage)  # Under 1% of the total.
             self.assertIn('TestBigLogbarrierlist (test in ./internal/core)', report['limit_hit']['message'])
             self.assertIn('narrow the command', report['limit_hit']['advice'])
             peaks = report['peak_usage_bytes_by_entry']

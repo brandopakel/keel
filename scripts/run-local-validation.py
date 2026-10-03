@@ -139,7 +139,10 @@ def test_packages(entries, base='.', most_files=20000):
 
 def describe_usage(usage, most=6):
     """The largest entries, with the package of any test named among them."""
-    top = sorted(usage.items(), key=lambda item: item[1], reverse=True)[:most]
+    ranked = sorted(usage.items(), key=lambda item: item[1], reverse=True)
+    # Omit entries under 1% of the total, but always name the largest.
+    total = sum(usage.values())
+    top = ranked[:1] + [item for item in ranked[1:most] if item[1]*100 >= total]
     try:
         packages = test_packages([entry for entry, _ in top])
     except Exception:

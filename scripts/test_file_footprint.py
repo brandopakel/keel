@@ -73,8 +73,20 @@ class FootprintTests(unittest.TestCase):
             defaults = record['local_wrapper_defaults']
             self.assertEqual(record['warn_file_bytes'], defaults['max_file_mib']*2**20//2)
             self.assertEqual(record['warn_test_bytes'], defaults['max_output_mib']*2**20//4)
+            self.assertEqual(record['warn_suite_bytes'],
+                             (defaults['max_output_mib']-record['local_go_build_allowance_mib'])*2**20)
             self.assertEqual(record['warnings'], [])
             self.assertNotIn('::warning', result.stdout)
+
+    def test_suite_total_warns_before_a_local_whole_suite_run_would_fail(self):
+        with tempfile.TemporaryDirectory() as temp:
+            out = Path(temp)/'footprint'
+            result = self.record(out, 0, '--warn-suite-mib', '3')
+            self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+            record = json.loads((out/'test-file-footprint.json').read_text())
+            self.assertEqual(len(record['warnings']), 1, record['warnings'])
+            self.assertIn('All test temporaries together reached', record['warnings'][0])
+            self.assertIn('--max-output-mib', record['warnings'][0])
 
     def test_unreadable_directory_does_not_stop_the_record(self):
         if os.geteuid() == 0:
