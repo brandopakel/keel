@@ -94,6 +94,8 @@ type ClientBufferStats struct {
 	// stay at zero.
 	ClosedSlow, ClosedUnanswered, ClosedUnread uint64
 	RunsUnreplied                              uint64
+	// ConnectionsReceived counts every connection accepted since startup.
+	ConnectionsReceived uint64
 }
 
 // ClientBuffers is installed before accepting event-loop clients and removed
@@ -167,8 +169,12 @@ func cmdINFO(args []string) []byte {
 			config.MaxMemory, humanBytes(config.MaxMemory), evictionPolicyName())
 	}
 	if want("stats") {
-		fmt.Fprintf(&b, "# Stats\r\nevicted_keys:%d\r\nexpired_keys:%d\r\n\r\n",
+		fmt.Fprintf(&b, "# Stats\r\nevicted_keys:%d\r\nexpired_keys:%d\r\n",
 			data_structure.Evicted(), ExpiredKeys())
+		if ClientBuffers != nil {
+			fmt.Fprintf(&b, "total_connections_received:%d\r\n", ClientBuffers().ConnectionsReceived)
+		}
+		b.WriteString("\r\n")
 	}
 	if want("persistence") {
 		base, current, rewrites, keys := AOFStats()
