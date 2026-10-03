@@ -82,18 +82,15 @@ func cmdLCS(args []string) []byte {
 		return Encode(int64(data_structure.LCSLen(a, b)), false)
 	}
 
-	// Reversed copies of both strings, four rows, pair/run slice growth, the
-	// subsequence and encoded output coexist. IDX also builds nested arrays.
+	// The checkpointed rows, pair/run slice growth, the subsequence and the
+	// encoded output coexist. IDX also builds nested arrays.
 	perByte := 128
 	if wantIdx {
 		perByte = 1024
 	}
 	shorter := min(len(a), len(b))
 	maxInt := int(^uint(0) >> 1)
-	if len(a) > (maxInt-16384)/4 || len(b) > (maxInt-16384-4*len(a))/4 {
-		return allocationPressure
-	}
-	base := 4*(len(a)+len(b)) + 16384
+	base := data_structure.LCSWorkspaceBytes(len(a), len(b)) + 16384
 	if shorter == 0 {
 		base = 64
 	}
