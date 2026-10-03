@@ -23,7 +23,7 @@ import (
 
 func cmdMORRISINITBYDIM(args []string) []byte {
 	if len(args) != 3 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'MORRIS.INITBYDIM' command"), false)
+		return Encode(wrongArguments("MORRIS.INITBYDIM"), false)
 	}
 	key := args[0]
 	width, err := strconv.ParseUint(args[1], 10, 32)
@@ -46,7 +46,7 @@ func cmdMORRISINITBYDIM(args []string) []byte {
 
 func cmdMORRISINITBYPROB(args []string) []byte {
 	if len(args) != 3 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'MORRIS.INITBYPROB' command"), false)
+		return Encode(wrongArguments("MORRIS.INITBYPROB"), false)
 	}
 	key := args[0]
 	errRate, err := strconv.ParseFloat(args[1], 64)
@@ -83,7 +83,7 @@ func cmdMORRISINITBYPROB(args []string) []byte {
 
 func cmdMORRISINCRBY(args []string) []byte {
 	if len(args) < 3 || len(args)%2 == 0 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'MORRIS.INCRBY' command"), false)
+		return Encode(wrongArguments("MORRIS.INCRBY"), false)
 	}
 	key := args[0]
 	m, exist := morrisStore.Get(key)
@@ -111,7 +111,7 @@ func cmdMORRISINCRBY(args []string) []byte {
 
 func cmdMORRISQUERY(args []string) []byte {
 	if len(args) < 2 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'MORRIS.QUERY' command"), false)
+		return Encode(wrongArguments("MORRIS.QUERY"), false)
 	}
 	key := args[0]
 	m, exist := morrisStore.Get(key)
@@ -138,7 +138,7 @@ func cmdMORRISQUERY(args []string) []byte {
 // and values RESP2 sends - as MORRIS.QUERY keeps its bulk-string counts.
 func cmdMORRISINFO(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'MORRIS.INFO' command"), false)
+		return Encode(wrongArguments("MORRIS.INFO"), false)
 	}
 	key := args[0]
 	m, exist := morrisStore.Peek(key)

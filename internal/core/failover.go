@@ -183,7 +183,7 @@ var errFenced = errors.New("FENCED this node is not the holder of the current te
 // that makes a term worth anything.
 func cmdPROMOTE(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("ERR wrong number of arguments for 'KEEL.PROMOTE' command"), false)
+		return Encode(wrongArguments("KEEL.PROMOTE"), false)
 	}
 	term, err := strconv.ParseUint(args[0], 10, 64)
 	if err != nil {
@@ -215,7 +215,7 @@ func cmdPROMOTE(args []string) []byte {
 // paths whether or not the node cooperates.
 func cmdFENCE(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("ERR wrong number of arguments for 'KEEL.FENCE' command"), false)
+		return Encode(wrongArguments("KEEL.FENCE"), false)
 	}
 	term, err := strconv.ParseUint(args[0], 10, 64)
 	if err != nil {

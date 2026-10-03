@@ -43,7 +43,7 @@ func bloomForWrite(key string) *data_structure.SBChain {
 // cmdBFRESERVE implements BF.RESERVE key error_rate capacity [EXPANSION n].
 func cmdBFRESERVE(args []string) []byte {
 	if len(args) != 3 && len(args) != 5 {
-		return Encode(errors.New("ERR wrong number of arguments for 'BF.RESERVE' command"), false)
+		return Encode(wrongArguments("BF.RESERVE"), false)
 	}
 	key := args[0]
 
@@ -92,7 +92,7 @@ func cmdBFRESERVE(args []string) []byte {
 // if it may have been there already.
 func cmdBFADD(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(errors.New("ERR wrong number of arguments for 'BF.ADD' command"), false)
+		return Encode(wrongArguments("BF.ADD"), false)
 	}
 	key := args[0]
 	sb := bloomForWrite(key)
@@ -110,7 +110,7 @@ func cmdBFADD(args []string) []byte {
 // BF.ADD would have answered for it.
 func cmdBFMADD(args []string) []byte {
 	if len(args) < 2 {
-		return Encode(errors.New("ERR wrong number of arguments for 'BF.MADD' command"), false)
+		return Encode(wrongArguments("BF.MADD"), false)
 	}
 	key := args[0]
 	sb := bloomForWrite(key)
@@ -133,7 +133,7 @@ func cmdBFMADD(args []string) []byte {
 
 func cmdBFEXISTS(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(errors.New("ERR wrong number of arguments for 'BF.EXISTS' command"), false)
+		return Encode(wrongArguments("BF.EXISTS"), false)
 	}
 	sb, ok := bloomFor(args[0])
 	return boolReply(ok && sb.Exists(args[1]))
@@ -141,7 +141,7 @@ func cmdBFEXISTS(args []string) []byte {
 
 func cmdBFMEXISTS(args []string) []byte {
 	if len(args) < 2 {
-		return Encode(errors.New("ERR wrong number of arguments for 'BF.MEXISTS' command"), false)
+		return Encode(wrongArguments("BF.MEXISTS"), false)
 	}
 	sb, ok := bloomFor(args[0])
 	out := make([]interface{}, 0, len(args)-1)
@@ -154,7 +154,7 @@ func cmdBFMEXISTS(args []string) []byte {
 // cmdBFINFO implements BF.INFO key: name and value pairs describing the filter.
 func cmdBFINFO(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("ERR wrong number of arguments for 'BF.INFO' command"), false)
+		return Encode(wrongArguments("BF.INFO"), false)
 	}
 	// Peek rather than Get: reporting on a key is not using it.
 	sb, ok := sbStore.Peek(args[0])

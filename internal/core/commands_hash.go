@@ -34,7 +34,7 @@ func dropIfEmpty(key string, h *data_structure.Hash) bool {
 
 func cmdHSET(args []string) []byte {
 	if len(args) < 3 || len(args)%2 != 1 {
-		return Encode(errors.New("ERR wrong number of arguments for 'HSET' command"), false)
+		return Encode(wrongArguments("HSET"), false)
 	}
 	key := args[0]
 
@@ -57,7 +57,7 @@ func cmdHSET(args []string) []byte {
 
 func cmdHSETNX(args []string) []byte {
 	if len(args) != 3 {
-		return Encode(errors.New("ERR wrong number of arguments for 'HSETNX' command"), false)
+		return Encode(wrongArguments("HSETNX"), false)
 	}
 	key, field, value := args[0], args[1], args[2]
 
@@ -76,7 +76,7 @@ func cmdHSETNX(args []string) []byte {
 
 func cmdHGET(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(errors.New("ERR wrong number of arguments for 'HGET' command"), false)
+		return Encode(wrongArguments("HGET"), false)
 	}
 	h, ok := hashFor(args[0])
 	if !ok {
@@ -91,7 +91,7 @@ func cmdHGET(args []string) []byte {
 
 func cmdHMGET(args []string) []byte {
 	if len(args) < 2 {
-		return Encode(errors.New("ERR wrong number of arguments for 'HMGET' command"), false)
+		return Encode(wrongArguments("HMGET"), false)
 	}
 	h, ok := hashFor(args[0])
 
@@ -105,7 +105,7 @@ func cmdHMGET(args []string) []byte {
 
 func cmdHDEL(args []string) []byte {
 	if len(args) < 2 {
-		return Encode(errors.New("ERR wrong number of arguments for 'HDEL' command"), false)
+		return Encode(wrongArguments("HDEL"), false)
 	}
 	key := args[0]
 	h, ok := hashFor(key)
@@ -120,7 +120,7 @@ func cmdHDEL(args []string) []byte {
 
 func cmdHEXISTS(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(errors.New("ERR wrong number of arguments for 'HEXISTS' command"), false)
+		return Encode(wrongArguments("HEXISTS"), false)
 	}
 	h, ok := hashFor(args[0])
 	if !ok || !h.Exists(args[1]) {
@@ -131,7 +131,7 @@ func cmdHEXISTS(args []string) []byte {
 
 func cmdHLEN(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("ERR wrong number of arguments for 'HLEN' command"), false)
+		return Encode(wrongArguments("HLEN"), false)
 	}
 	h, ok := hashFor(args[0])
 	if !ok {
@@ -142,7 +142,7 @@ func cmdHLEN(args []string) []byte {
 
 func cmdHKEYS(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("ERR wrong number of arguments for 'HKEYS' command"), false)
+		return Encode(wrongArguments("HKEYS"), false)
 	}
 	h, ok := hashFor(args[0])
 	if !ok {
@@ -153,7 +153,7 @@ func cmdHKEYS(args []string) []byte {
 
 func cmdHVALS(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("ERR wrong number of arguments for 'HVALS' command"), false)
+		return Encode(wrongArguments("HVALS"), false)
 	}
 	h, ok := hashFor(args[0])
 	if !ok {
@@ -169,7 +169,7 @@ func cmdHVALS(args []string) []byte {
 // and it is what Redis sends.
 func cmdHGETALL(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("ERR wrong number of arguments for 'HGETALL' command"), false)
+		return Encode(wrongArguments("HGETALL"), false)
 	}
 	h, ok := hashFor(args[0])
 	if !ok {
@@ -186,7 +186,7 @@ func cmdHGETALL(args []string) []byte {
 // leaves the field alone - it is not reset to the increment.
 func cmdHINCRBY(args []string) []byte {
 	if len(args) != 3 {
-		return Encode(errors.New("ERR wrong number of arguments for 'HINCRBY' command"), false)
+		return Encode(wrongArguments("HINCRBY"), false)
 	}
 	key, field := args[0], args[1]
 

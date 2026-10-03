@@ -333,7 +333,7 @@ func TestTransactionReachesAReplicaWhole(t *testing.T) {
 			}
 			expectReplies(t, pipeline(t, rc, rr, []string{"MULTI"}, []string{"SET", "left", "local"},
 				[]string{"GET", "left"}, []string{"EXEC"}),
-				"+OK", "-READONLY replica rejects writes", "+QUEUED", execAbort)
+				"+OK", "-READONLY You can't write against a read only replica.", "+QUEUED", execAbort)
 
 			const rounds = 200
 			done := make(chan error, 1)

@@ -69,20 +69,23 @@ func TestAuthenticationStillGatesTransactions(t *testing.T) {
 	t.Cleanup(func() { config.RequirePass = old; core.ResetStores() })
 	core.ResetStores()
 	c := &client{fd: -1}
-	require.Equal(t, "-NOAUTH Authentication required\r\n", runOnce(t, c, command("MULTI")))
+	require.Equal(t, "-NOAUTH Authentication required.\r\n", runOnce(t, c, command("MULTI")))
 	require.Nil(t, c.tx)
-	require.Equal(t, "-NOAUTH Authentication required\r\n", runOnce(t, c, command("EXEC")))
+	// EXEC is refused as Redis refuses it, naming why the transaction it
+	// would have run is discarded.
+	require.Equal(t, "-EXECABORT Transaction discarded because of: NOAUTH Authentication required.\r\n", runOnce(t, c, command("EXEC")))
 
 	// AUTH inside a transaction is queued and runs in its place, as in Redis.
-	// The commands queued while the connection was authenticated still run;
-	// a failed AUTH leaves it unauthenticated afterwards, as it does outside.
+	// The commands queued while the connection was authenticated still run,
+	// and a failed AUTH leaves the connection logged in, as it does outside
+	// a transaction and in Redis.
 	require.Equal(t, "+OK\r\n+OK\r\n+QUEUED\r\n+QUEUED\r\n+QUEUED\r\n+QUEUED\r\n"+
-		"*4\r\n+OK\r\n+OK\r\n-WRONGPASS invalid username-password pair\r\n+OK\r\n",
+		"*4\r\n+OK\r\n+OK\r\n-WRONGPASS invalid username-password pair or user is disabled.\r\n+OK\r\n",
 		runOnce(t, c, command("AUTH", "secret"), command("MULTI"), command("SET", "k", "v"),
 			command("AUTH", "default", "secret"), command("AUTH", "wrong"), command("SET", "after", "v"), command("EXEC")))
-	require.False(t, c.authenticated)
+	require.True(t, c.authenticated)
 	require.Nil(t, c.tx)
-	require.Equal(t, "-NOAUTH Authentication required\r\n", runOnce(t, c, command("GET", "k")))
+	require.Equal(t, "$1\r\nv\r\n", runOnce(t, c, command("GET", "k")))
 	var sink replyBuffer
 	responseRw(command("EXISTS", "k", "after"), &sink)
 	require.Equal(t, ":2\r\n", sink.buf.String())

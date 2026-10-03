@@ -143,14 +143,12 @@ jobs:
           git archive FETCH_HEAD | tar -x -C /tmp/keel-hll-baseline
           (cd /tmp/keel-hll-baseline && go build -trimpath -o /tmp/keel-hll-baseline-bin ./cmd/keel)
           python3 scripts/check-hll-upgrade.py --baseline /tmp/keel-hll-baseline-bin --candidate /tmp/keel-general --out dist/general-ci/hll-upgrade
-      - name: Differential replies, rewrite and two restarts
-        run: |
-          python3 scripts/differential.py --bin /tmp/keel-general --redis /usr/bin/redis-server --out dist/general-ci/differential --steps 20000
-      - name: Build Redis 8.10.1 and RedisBloom for the RESP3 differential
-        # RESP3 replies are compared with Redis 8's shapes, and Ubuntu's
-        # redis-server is 7.0. The tarball bundles its modules and builds all
-        # of them by default; RedisBloom is the one BF, CF and CMS need, and
-        # RediSearch does not build against this runner's Rust and clang.
+      - name: Build Redis 8.10.1 and RedisBloom for the differentials
+        # Replies, errors included, are compared byte for byte with Redis
+        # 8.10.1's, and Ubuntu's redis-server is 7.0, whose error wording is
+        # older. The tarball bundles its modules and builds all of them by
+        # default; RedisBloom is the one BF, CF and CMS need, and RediSearch
+        # does not build against this runner's Rust and clang.
         run: |
           curl -fL --retry 3 https://download.redis.io/releases/redis-8.10.1.tar.gz -o /tmp/redis-8.10.1.tar.gz
           echo '60166c95ab7aedaa9dfe516de685be0a4dd87be95ded59ba429df14c13f1b663  /tmp/redis-8.10.1.tar.gz' | sha256sum -c -
@@ -158,6 +156,13 @@ jobs:
           make -C /tmp/redis-8.10.1 -j"$(nproc)" build redisbloom
           /tmp/redis-8.10.1/src/redis-server --version
           ls -l /tmp/redis-8.10.1/modules/redisbloom/redisbloom.so
+      - name: Error replies byte for byte against Redis 8.10.1 and RedisBloom
+        run: |
+          python3 scripts/error-parity.py --bin /tmp/keel-general --redis /tmp/redis-8.10.1/src/redis-server \
+            --redis-module /tmp/redis-8.10.1/modules/redisbloom/redisbloom.so --out dist/general-ci/error-parity
+      - name: Differential replies, rewrite and two restarts
+        run: |
+          python3 scripts/differential.py --bin /tmp/keel-general --redis /tmp/redis-8.10.1/src/redis-server --out dist/general-ci/differential --steps 20000
       - name: RESP3 differential replies, rewrite and two restarts
         run: |
           python3 scripts/differential.py --protocol 3 --bin /tmp/keel-general --redis /tmp/redis-8.10.1/src/redis-server \

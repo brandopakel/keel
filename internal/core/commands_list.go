@@ -2,7 +2,6 @@ package core
 
 import (
 	"errors"
-	"strconv"
 
 	"github.com/brandopakel/keel/internal/constant"
 	"github.com/brandopakel/keel/internal/data_structure"
@@ -31,7 +30,7 @@ func dropListIfEmpty(key string, l *data_structure.List) {
 // push is LPUSH and RPUSH, which differ only in the end they add to.
 func push(args []string, front bool, name string) []byte {
 	if len(args) < 2 {
-		return Encode(errors.New("ERR wrong number of arguments for '"+name+"' command"), false)
+		return Encode(wrongArguments(name), false)
 	}
 	key := args[0]
 
@@ -57,21 +56,18 @@ func cmdRPUSH(args []string) []byte { return push(args, false, "RPUSH") }
 // for - a count of zero is an empty array rather than a nil.
 func pop(args []string, front bool, name string) []byte {
 	if len(args) < 1 || len(args) > 2 {
-		return Encode(errors.New("ERR wrong number of arguments for '"+name+"' command"), false)
+		return Encode(wrongArguments(name), false)
 	}
 	key := args[0]
 
 	count := 1
 	counted := len(args) == 2
 	if counted {
-		n, err := strconv.Atoi(args[1])
+		n, err := positiveCount(args[1])
 		if err != nil {
-			return Encode(errors.New("ERR value is not an integer or out of range"), false)
+			return Encode(err, false)
 		}
-		if n < 0 {
-			return Encode(errors.New("ERR value is out of range, must be positive"), false)
-		}
-		count = n
+		count = int(n)
 	}
 
 	l, ok := listFor(key)
@@ -125,7 +121,7 @@ func cmdRPOP(args []string) []byte { return pop(args, false, "RPOP") }
 
 func cmdLLEN(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("ERR wrong number of arguments for 'LLEN' command"), false)
+		return Encode(wrongArguments("LLEN"), false)
 	}
 	l, ok := listFor(args[0])
 	if !ok {
@@ -134,40 +130,41 @@ func cmdLLEN(args []string) []byte {
 	return Encode(l.Len(), false)
 }
 
+// cmdLINDEX looks the key up before it reads the index, as Redis does, so a
+// key that is not there answers nil whatever the index says.
 func cmdLINDEX(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(errors.New("ERR wrong number of arguments for 'LINDEX' command"), false)
+		return Encode(wrongArguments("LINDEX"), false)
 	}
-	index, err := strconv.Atoi(args[1])
-	if err != nil {
-		return Encode(errors.New("ERR value is not an integer or out of range"), false)
-	}
-
 	l, ok := listFor(args[0])
 	if !ok {
 		return nullReply()
 	}
-	value, found := l.Index(index)
+	index, valid := counterInteger(args[1])
+	if !valid {
+		return Encode(errNotAnInteger, false)
+	}
+	value, found := l.Index(int(index))
 	if !found {
 		return nullReply()
 	}
 	return encodeBoundedString(value)
 }
 
+// cmdLSET, like LINDEX, finds the key before it reads the index.
 func cmdLSET(args []string) []byte {
 	if len(args) != 3 {
-		return Encode(errors.New("ERR wrong number of arguments for 'LSET' command"), false)
+		return Encode(wrongArguments("LSET"), false)
 	}
-	index, err := strconv.Atoi(args[1])
-	if err != nil {
-		return Encode(errors.New("ERR value is not an integer or out of range"), false)
-	}
-
 	l, ok := listFor(args[0])
 	if !ok {
 		return Encode(errors.New("ERR no such key"), false)
 	}
-	if !l.Set(index, args[2]) {
+	index, valid := counterInteger(args[1])
+	if !valid {
+		return Encode(errNotAnInteger, false)
+	}
+	if !l.Set(int(index), args[2]) {
 		return Encode(errors.New("ERR index out of range"), false)
 	}
 	listStore.Resize(args[0])
@@ -180,15 +177,11 @@ func cmdLSET(args []string) []byte {
 // "everything" whatever the length.
 func cmdLRANGE(args []string) []byte {
 	if len(args) != 3 {
-		return Encode(errors.New("ERR wrong number of arguments for 'LRANGE' command"), false)
+		return Encode(wrongArguments("LRANGE"), false)
 	}
-	start, err := strconv.Atoi(args[1])
+	start, stop, err := integerRange(args[1], args[2])
 	if err != nil {
-		return Encode(errors.New("ERR value is not an integer or out of range"), false)
-	}
-	stop, err := strconv.Atoi(args[2])
-	if err != nil {
-		return Encode(errors.New("ERR value is not an integer or out of range"), false)
+		return Encode(err, false)
 	}
 
 	l, ok := listFor(args[0])
@@ -200,12 +193,11 @@ func cmdLRANGE(args []string) []byte {
 
 func cmdLTRIM(args []string) []byte {
 	if len(args) != 3 {
-		return Encode(errSyntax, false)
+		return Encode(wrongArguments("LTRIM"), false)
 	}
-	start, e1 := strconv.Atoi(args[1])
-	stop, e2 := strconv.Atoi(args[2])
-	if e1 != nil || e2 != nil {
-		return Encode(errNotAnInteger, false)
+	start, stop, err := integerRange(args[1], args[2])
+	if err != nil {
+		return Encode(err, false)
 	}
 	l, ok := listFor(args[0])
 	if !ok {

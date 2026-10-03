@@ -42,7 +42,9 @@ func TestZADDRefusesBadPairs(t *testing.T) {
 	assert.Contains(t, run(t, "ZADD", "z", "1"), "wrong number of arguments")
 	assert.Contains(t, run(t, "ZADD", "z", "1", "a", "2"), "syntax error")
 	assert.Contains(t, run(t, "ZADD", "z", "CH"), "wrong number of arguments")
-	assert.Contains(t, run(t, "ZADD", "z", "NX", "CH", "XX"), "XX and NX")
+	assert.Equal(t, "ERR syntax error", run(t, "ZADD", "z", "NX", "CH", "XX"),
+		"no pairs follow the options, which Redis refuses before it compares them")
+	assert.Equal(t, "ERR XX and NX options at the same time are not compatible", run(t, "ZADD", "z", "NX", "XX", "1", "a"))
 	assert.Contains(t, run(t, "ZADD", "z", "one", "a"), "not a valid float")
 	assert.Contains(t, run(t, "ZADD", "z", "nan", "a"), "not a valid float")
 	// A bad score anywhere in the batch stores none of it.
