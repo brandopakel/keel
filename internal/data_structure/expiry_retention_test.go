@@ -17,18 +17,17 @@ func TestEmptyExpiryTableReleasesRetainedHeap(t *testing.T) {
 	for _, kind := range []string{"string", "collection"} {
 		for _, action := range []string{"persist", "overwrite", "delete"} {
 			t.Run(kind+"/"+action, func(t *testing.T) {
-				withEviction(t, config.EvictFirst, 5, 1000000)
-				ResetKeyspaces()
+				space := NewSpace(evictionLimits(config.EvictFirst, 5, 1000000))
 				var ks Keyspace
 				var put func(string)
 				if kind == "string" {
-					d := CreateDict()
+					d := CreateDict(space)
 					ks, put = d, func(key string) { d.Put(key, d.NewObj("value")) }
 				} else {
-					k := NewKeyed[retentionValue]("retention")
+					k := NewKeyed[retentionValue](space, "retention")
 					ks, put = k, func(key string) { k.Put(key, 1) }
 				}
-				RegisterKeyspace(ks)
+				space.RegisterKeyspace(ks)
 				keys := make([]string, 100000)
 				for i := range keys {
 					keys[i] = "ttl:" + strconv.Itoa(i)
@@ -76,19 +75,18 @@ func TestEmptyExpiryTableReleasesRetainedHeap(t *testing.T) {
 func TestSingleKeyTTLChurnAvoidsMapReallocation(t *testing.T) {
 	for _, kind := range []string{"string", "collection"} {
 		t.Run(kind, func(t *testing.T) {
-			withEviction(t, config.EvictFirst, 5, 1000000)
-			ResetKeyspaces()
+			space := NewSpace(evictionLimits(config.EvictFirst, 5, 1000000))
 			var ks Keyspace
 			if kind == "string" {
-				d := CreateDict()
+				d := CreateDict(space)
 				d.Put("key", d.NewObj("value"))
 				ks = d
 			} else {
-				k := NewKeyed[retentionValue]("retention")
+				k := NewKeyed[retentionValue](space, "retention")
 				k.Put("key", 1)
 				ks = k
 			}
-			RegisterKeyspace(ks)
+			space.RegisterKeyspace(ks)
 			ks.SetExpiryAt("key", 1<<60)
 			var clearFailed, expiryStillSet bool
 			allocs := testing.AllocsPerRun(1000, func() {

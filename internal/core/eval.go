@@ -160,8 +160,8 @@ func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 		aofCommit(cmd, nil)
 		return unknownCommand(cmd.Cmd)
 	}
-	suspended := data_structure.SuspendEviction
-	data_structure.SuspendEviction = true
+	suspended := data_structure.DefaultSpace.SuspendEviction
+	data_structure.DefaultSpace.SuspendEviction = true
 	res := handler(cmd.Args)
 	// With eviction suspended, removals so far are lazy expiry. They precede
 	// this command: recording them after INCR/HSET would delete the recreated key.
@@ -169,7 +169,7 @@ func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	// the write phase, so under appendfsync always the client hears "OK" only
 	// once the log holding that OK is on disk.
 	aofCommit(cmd, res)
-	data_structure.SuspendEviction = suspended
+	data_structure.DefaultSpace.SuspendEviction = suspended
 	// The removal hook writes eviction DELs directly after the canonical body.
 	data_structure.EnforceLimits()
 

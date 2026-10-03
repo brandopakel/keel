@@ -19,6 +19,8 @@ type Keyed[T Sized] struct {
 	expiryPeak       int
 	expiryCompaction *expiryCompaction
 	valueCursor      uint64
+	// space is where this store's accesses are clocked and its limits enforced.
+	space *Space
 }
 
 type keyedEntry[T Sized] struct {
@@ -30,8 +32,10 @@ type keyedEntry[T Sized] struct {
 	bytes uint64
 }
 
-func NewKeyed[T Sized](name string) *Keyed[T] {
-	return &Keyed[T]{name: name}
+// NewKeyed returns an empty keyspace called name, for space. Like CreateDict it
+// leaves registering it to the caller.
+func NewKeyed[T Sized](space *Space, name string) *Keyed[T] {
+	return &Keyed[T]{name: name, space: space}
 }
 
 // entryBytes charges the value, the key, and the same per-entry overhead the
@@ -47,14 +51,14 @@ func (k *Keyed[T]) Get(key string) (T, bool) {
 	e, ok := k.items.getPtr(key)
 	if ok && k.expired(key) {
 		k.Delete(key)
-		noteRemoval(k, key)
+		k.space.noteRemoval(k, key)
 		ok = false
 	}
 	if !ok {
 		var zero T
 		return zero, false
 	}
-	Touch(&e.access)
+	k.space.Touch(&e.access)
 	return e.value, true
 }
 
@@ -74,7 +78,7 @@ func (k *Keyed[T]) Exists(key string) bool {
 	_, ok := k.items.getPtr(key)
 	if ok && k.expired(key) {
 		k.Delete(key)
-		noteRemoval(k, key)
+		k.space.noteRemoval(k, key)
 		return false
 	}
 	return ok
@@ -98,13 +102,13 @@ func (k *Keyed[T]) Put(key string, value T) {
 	}
 
 	k.dropExpiry(key)
-	e := &keyedEntry[T]{value: value, access: NewAccess()}
+	e := &keyedEntry[T]{value: value, access: k.space.NewAccess()}
 	e.bytes = k.entryBytes(key, value)
-	Touch(&e.access)
+	k.space.Touch(&e.access)
 	k.items.set(key, *e)
 	k.memUsed += e.bytes
 
-	EnforceLimits()
+	k.space.EnforceLimits()
 }
 
 // Resize re-measures a value that was mutated in place.
@@ -125,8 +129,8 @@ func (k *Keyed[T]) Resize(key string) {
 	}
 	k.memUsed += e.bytes
 
-	Touch(&e.access)
-	EnforceLimits()
+	k.space.Touch(&e.access)
+	k.space.EnforceLimits()
 }
 
 // Keyed is a Keyspace, so eviction can weigh its keys against every other kind.
@@ -148,13 +152,13 @@ func (k *Keyed[T]) ScoreOf(key string) (uint64, bool) {
 	if !ok {
 		return 0, false
 	}
-	return Score(e.access), true
+	return k.space.Score(e.access), true
 }
 
 // SampleKeys appends up to n keys chosen at random.
 func (k *Keyed[T]) SampleKeys(dst []Candidate, n int) []Candidate {
 	k.items.sample(n, func(key string, e keyedEntry[T]) {
-		dst = append(dst, Candidate{Space: k, Key: key, Score: Score(e.access)})
+		dst = append(dst, Candidate{Keyspace: k, Key: key, Score: k.space.Score(e.access)})
 	})
 	return dst
 }
@@ -179,7 +183,10 @@ func (k *Keyed[T]) Delete(key string) bool {
 	return true
 }
 
-func (k *Keyed[T]) expired(key string) bool             { at, ok := k.expiries[key]; return ok && at <= nowMs() }
+func (k *Keyed[T]) expired(key string) bool {
+	at, ok := k.expiries[key]
+	return ok && at <= k.space.nowMs()
+}
 func (k *Keyed[T]) GetExpiry(key string) (uint64, bool) { at, ok := k.expiries[key]; return at, ok }
 func (k *Keyed[T]) SetExpiryAt(key string, at uint64) {
 	e, ok := k.items.getPtr(key)
@@ -198,7 +205,7 @@ func (k *Keyed[T]) SetExpiryAt(key string, at uint64) {
 		k.expiryCompaction.next[key] = at
 	}
 	k.expiryPeak = max(k.expiryPeak, len(k.expiries))
-	EnforceLimits()
+	k.space.EnforceLimits()
 }
 func (k *Keyed[T]) ClearExpiry(key string) bool {
 	if _, ok := k.expiries[key]; !ok {
@@ -216,12 +223,12 @@ func (k *Keyed[T]) ActiveExpire(samples int) (examined, expired int) {
 	if samples <= 0 {
 		return
 	}
-	now := nowMs()
+	now := k.space.nowMs()
 	for key, at := range k.expiries {
 		examined++
 		if at <= now {
 			k.Delete(key)
-			noteRemoval(k, key)
+			k.space.noteRemoval(k, key)
 			expired++
 		}
 		if examined >= samples {
