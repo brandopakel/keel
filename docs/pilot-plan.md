@@ -1,6 +1,8 @@
 # Pilot and release evidence
 
 Use the cache/analytics example as a starting point with two or three outside projects.
+The first application pilot, Gitea run unmodified on Keel and Redis in CI, is described in
+[application-pilot.md](application-pilot.md).
 Recruitment and sending messages require the owner's chosen contacts; no outreach has been performed.
 
 For each pilot, record:

@@ -1,0 +1,295 @@
+# A real application, unmodified, with its cache, web sessions and job queues
+# on Keel, and the same application with identical settings on Redis.
+#
+# Gitea is the pilot because it is widely deployed, keeps all three in Redis
+# when configured to, and its Redis client (go-redis) falls back to RESP2 on
+# its own, so nothing in Gitea has to change. Each arm runs two things:
+#
+# - Regression: the Redis-backed test suites of Gitea, go-redis/cache and
+#   gin-contrib/sessions, unmodified at pinned commits. A failure here means a
+#   change to Keel broke something an outside project relies on.
+# - Application: the real `gitea web` from a pinned release, driven through its
+#   web form and API, with the server killed under load and restarted from its
+#   append-only file, to measure what a crash costs a running application.
+#
+# Both arms use append-only persistence with a one-second fsync, the same
+# memory limit and least-recently-used eviction. Every arm uploads its raw
+# results even when it fails, and the summary job always runs, so a failed or
+# partial run is kept alongside the ones that passed.
+name: Application pilot
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [develop]
+    paths:
+      - .github/workflows/application-pilot.yml
+      - bench/app-pilot/**
+
+permissions:
+  contents: read
+
+# A newer push does not cancel a run in progress: a run that was stopped early
+# is evidence lost, and the pilot is cheap enough to let finish.
+concurrency:
+  group: application-pilot-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  MAXMEMORY: 256mb
+
+jobs:
+  servers:
+    name: Build Keel and the pinned Redis
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version: '1.27.1', cache: false }
+      - name: Check the harness's own parsing and summaries
+        run: python3 -m unittest discover -s bench/app-pilot -p 'test_*.py' -v
+      - name: Build Keel from this commit
+        run: go build -trimpath -o dist/servers/keel ./cmd/keel
+      - name: Build the pinned Redis release from its checked source tarball
+        run: |
+          pins=bench/app-pilot/pins.py
+          version=$(python3 "$pins" get redis.version)
+          curl -fL --retry 3 "$(python3 "$pins" get redis.url)" -o "$RUNNER_TEMP/redis.tar.gz"
+          echo "$(python3 "$pins" get redis.sha256)  $RUNNER_TEMP/redis.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/redis.tar.gz" -C "$RUNNER_TEMP"
+          # The top-level Makefile of Redis 8 also builds the bundled modules
+          # (search, JSON, time series), which no part of the pilot loads;
+          # src/ alone is the core server, built the way upstream always has.
+          make -C "$RUNNER_TEMP/redis-$version/src" -j"$(nproc)" BUILD_TLS=no > "$RUNNER_TEMP/redis-build.log" 2>&1 \
+            || { tail -100 "$RUNNER_TEMP/redis-build.log"; exit 1; }
+          cp "$RUNNER_TEMP/redis-$version/src/redis-server" dist/servers/redis-server
+      - name: Record what was built
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, platform, subprocess
+          def sha(path): return hashlib.sha256(open(path, 'rb').read()).hexdigest()
+          def out(*cmd): return subprocess.run(cmd, capture_output=True, text=True).stdout.strip()
+          prov = {
+              'keel_commit': os.environ['GITHUB_SHA'],
+              'keel_sha256': sha('dist/servers/keel'),
+              'keel_version': out('dist/servers/keel', '-version'),
+              'redis_version': out('dist/servers/redis-server', '--version'),
+              'redis_sha256': sha('dist/servers/redis-server'),
+              'redis_tarball_sha256': sha(os.path.join(os.environ['RUNNER_TEMP'], 'redis.tar.gz')),
+              'go': out('go', 'version'),
+              'runner': f"{os.environ.get('ImageOS')} {os.environ.get('ImageVersion')} {platform.release()}",
+          }
+          json.dump(prov, open('dist/servers/servers-provenance.json', 'w'), indent=2)
+          print(json.dumps(prov, indent=2))
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-servers
+          path: dist/servers
+          retention-days: 14
+
+  gitea:
+    name: Build the pinned Gitea release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version: '1.27.1', cache: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: '24' }
+      - name: Fetch the release by commit and check its tag still names it
+        run: python3 bench/app-pilot/pins.py fetch gitea_app "$RUNNER_TEMP/gitea"
+      # Gitea's own Makefile, with its embedded-assets tag, builds the binary
+      # the project releases: the frontend is compiled and embedded, so the
+      # pages served are the real ones.
+      - name: Build Gitea with its own Makefile
+        working-directory: ${{ runner.temp }}/gitea
+        env:
+          TAGS: bindata
+        run: |
+          # pnpm runs the frontend build that goes into the binary, so it is
+          # installed from a tarball checked against its registry integrity
+          # rather than resolved by name. It has no dependencies of its own.
+          pins="$GITHUB_WORKSPACE/bench/app-pilot/pins.py"
+          curl -fL --retry 3 "$(python3 "$pins" get gitea_app.pnpm_tarball)" -o "$RUNNER_TEMP/pnpm.tgz"
+          PNPM_INTEGRITY="$(python3 "$pins" get gitea_app.pnpm_integrity)" python3 - "$RUNNER_TEMP/pnpm.tgz" <<'PY'
+          import base64, hashlib, os, sys
+          actual = 'sha512-' + base64.b64encode(hashlib.sha512(open(sys.argv[1], 'rb').read()).digest()).decode()
+          if actual != os.environ['PNPM_INTEGRITY']:
+              sys.exit(f'pnpm tarball integrity {actual} does not match the pinned value')
+          print('pnpm tarball integrity verified:', actual)
+          PY
+          npm install -g "$RUNNER_TEMP/pnpm.tgz"
+          make build
+      - name: Record what was built
+        run: |
+          mkdir -p dist/gitea
+          cp "$RUNNER_TEMP/gitea/gitea" dist/gitea/gitea
+          python3 - <<'PY'
+          import hashlib, json, os, subprocess
+          def out(*cmd): return subprocess.run(cmd, capture_output=True, text=True).stdout.strip()
+          src = os.path.join(os.environ['RUNNER_TEMP'], 'gitea')
+          prov = {
+              'gitea_commit': out('git', '-C', src, 'rev-parse', 'HEAD'),
+              'gitea_sha256': hashlib.sha256(open('dist/gitea/gitea', 'rb').read()).hexdigest(),
+              'gitea_version': out('dist/gitea/gitea', '--version'),
+              'go': out('go', 'version'), 'node': out('node', '--version'), 'pnpm': out('pnpm', '--version'),
+              'pnpm_integrity': json.load(open('bench/app-pilot/pins.json'))['gitea_app']['pnpm_integrity'],
+          }
+          os.makedirs('dist/gitea-provenance', exist_ok=True)
+          json.dump(prov, open('dist/gitea-provenance/gitea-provenance.json', 'w'), indent=2)
+          print(json.dumps(prov, indent=2))
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-gitea
+          path: dist/gitea
+          retention-days: 14
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-gitea-provenance
+          path: dist/gitea-provenance
+          retention-days: 14
+
+  regression:
+    name: Regression suites / ${{ matrix.arm }}
+    needs: servers
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        arm: [keel, redis]
+    env:
+      ARM: ${{ matrix.arm }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version: '1.27.1', cache: false }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: pilot-servers
+          path: dist/servers
+      - name: Fetch every suite at its pinned commit
+        run: |
+          chmod +x dist/servers/keel dist/servers/redis-server
+          python3 bench/app-pilot/pins.py fetch-checkouts "$RUNNER_TEMP/checkouts"
+      - name: Run the suites against ${{ matrix.arm }}
+        run: |
+          server=dist/servers/keel; [ "$ARM" = redis ] && server=dist/servers/redis-server
+          python3 bench/app-pilot/regression.py --arm "$ARM" --server-bin "$server" \
+            --checkouts "$RUNNER_TEMP/checkouts" --out "dist/pilot/regression-$ARM" --maxmemory "$MAXMEMORY"
+      - name: Keep raw results, including from a failed run
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-regression-${{ matrix.arm }}
+          path: dist/pilot/regression-${{ matrix.arm }}
+          retention-days: 14
+
+  # Both arms of the application run on one runner, one after the other.
+  # Separate runners differ in CPU and disk, which would show up as a latency
+  # or memory difference between Keel and Redis that neither server caused.
+  # Which arm goes first alternates with the run number, so neither always
+  # gets the colder or the warmer machine.
+  app:
+    name: Gitea web application / both arms on one runner
+    needs: [servers, gitea]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: pilot-servers
+          path: dist/servers
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: pilot-gitea
+          path: dist/gitea
+      - name: Run Gitea on each arm, crash the server under load and restart it
+        run: |
+          chmod +x dist/servers/keel dist/servers/redis-server dist/gitea/gitea
+          if [ $((GITHUB_RUN_NUMBER % 2)) -eq 0 ]; then order="keel redis"; else order="redis keel"; fi
+          echo "arm order: $order"
+          status=0 position=0
+          for arm in $order; do
+            position=$((position + 1))
+            server=dist/servers/keel; [ "$arm" = redis ] && server=dist/servers/redis-server
+            # A failing arm does not stop the other one: both results are kept.
+            python3 bench/app-pilot/gitea_pilot.py --arm "$arm" --server-bin "$server" \
+              --gitea-bin dist/gitea/gitea --out "dist/pilot/app-$arm" --maxmemory "$MAXMEMORY" \
+              --position "$position" || status=1
+          done
+          exit "$status"
+      # Repositories, indexes and the database are the application's working
+      # state rather than results; the logs, measurements and the server's
+      # append-only file are kept.
+      - name: Keep the Keel arm's raw results, including from a failed run
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-app-keel
+          path: |
+            dist/pilot/app-keel
+            !dist/pilot/app-keel/gitea-work
+            !dist/pilot/app-keel/git
+          retention-days: 14
+      - name: Keep the Redis arm's raw results, including from a failed run
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-app-redis
+          path: |
+            dist/pilot/app-redis
+            !dist/pilot/app-redis/gitea-work
+            !dist/pilot/app-redis/git
+          retention-days: 14
+
+  summary:
+    name: Summary
+    needs: [servers, gitea, regression, app]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false }
+      # A missing artifact is a result to report, not a reason to skip the
+      # summary, so the downloads may fail without failing the job.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        continue-on-error: true
+        with:
+          pattern: pilot-regression-*
+          path: artifacts
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        continue-on-error: true
+        with:
+          pattern: pilot-app-*
+          path: artifacts
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        continue-on-error: true
+        with:
+          name: pilot-gitea-provenance
+          path: artifacts/pilot-gitea-provenance
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        continue-on-error: true
+        with:
+          name: pilot-servers
+          path: artifacts/pilot-servers
+      - name: Combine both arms
+        run: |
+          python3 bench/app-pilot/summarize.py --artifacts artifacts --out dist/pilot-summary
+          cat dist/pilot-summary/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: pilot-summary
+          path: dist/pilot-summary
+          retention-days: 30
