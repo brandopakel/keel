@@ -1,9 +1,11 @@
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 
@@ -87,6 +89,25 @@ class FootprintTests(unittest.TestCase):
             record = json.loads((out/'test-file-footprint.json').read_text())
             self.assertEqual(record['sampling_errors'], [])
             self.assertIn('TestHidden', [t['name'] for t in record['tests']])
+
+    def test_terminated_record_stops_the_command_group(self):
+        with tempfile.TemporaryDirectory() as temp:
+            out, pid = Path(temp)/'footprint', Path(temp)/'grandchild.pid'
+            code = ("import subprocess,sys,time; p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)']); "
+                    f"open({str(pid)!r},'w').write(str(p.pid)); time.sleep(60)")
+            record = subprocess.Popen([sys.executable, str(SCRIPT), '--out', str(out), '--interval', '.05',
+                                       '--', sys.executable, '-c', code], stdout=subprocess.PIPE,
+                                      stderr=subprocess.PIPE, text=True)
+            deadline = time.monotonic()+5
+            while not (pid.exists() and pid.read_text()):
+                self.assertLess(time.monotonic(), deadline)
+                time.sleep(.05)
+            record.send_signal(signal.SIGTERM)
+            record.communicate(timeout=20)
+            self.assertEqual(record.returncode, 128+signal.SIGTERM)
+            status = subprocess.run(['ps', '-o', 'stat=', '-p', pid.read_text()], text=True,
+                                    capture_output=True).stdout.strip()
+            self.assertTrue(not status or status.startswith('Z'), status)
 
     def test_existing_output_is_refused(self):
         with tempfile.TemporaryDirectory() as temp:
