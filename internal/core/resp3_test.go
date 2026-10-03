@@ -34,10 +34,11 @@ func rawReplyAs(t *testing.T, resp3 bool, name string, args ...string) []byte {
 
 // replyScript is one session, run in order from an empty keyspace, with the
 // exact reply each protocol gives. The RESP2 column was captured before RESP3
-// existed here, and RESP2 connections must still get it byte for byte. An
-// empty RESP3 column means the reply is the same in both. {n} stands for a
-// number that is not about framing - a size in an INFO reply, a SCAN cursor -
-// and matches any.
+// existed here, and RESP2 connections must still get it byte for byte - apart
+// from CF.MEXISTS, BF.INFO and CF.INFO, whose RESP2 replies were Keel's own
+// and are now RedisBloom's (see redisbloom.go). An empty RESP3 column means
+// the reply is the same in both. {n} stands for a number that is not about
+// framing - a size in an INFO reply, a SCAN cursor - and matches any.
 var replyScript = []struct {
 	args         []string
 	resp2, resp3 string
@@ -206,7 +207,7 @@ var replyScript = []struct {
 		"#f\r\n"},
 	{[]string{"BF.MEXISTS", "bf", "a", "z"}, "*2\r\n:1\r\n:0\r\n",
 		"*2\r\n#t\r\n#f\r\n"},
-	{[]string{"BF.INFO", "bf"}, "*10\r\n$8\r\nCapacity\r\n:100\r\n$4\r\nSize\r\n:{n}\r\n$17\r\nNumber of filters\r\n:1\r\n$24\r\nNumber of items inserted\r\n:2\r\n$14\r\nExpansion rate\r\n:2\r\n",
+	{[]string{"BF.INFO", "bf"}, "*10\r\n+Capacity\r\n:100\r\n+Size\r\n:{n}\r\n+Number of filters\r\n:1\r\n+Number of items inserted\r\n:2\r\n+Expansion rate\r\n:2\r\n",
 		"%5\r\n+Capacity\r\n:100\r\n+Size\r\n:{n}\r\n+Number of filters\r\n:1\r\n+Number of items inserted\r\n:2\r\n+Expansion rate\r\n:2\r\n"},
 	{[]string{"CF.RESERVE", "cf", "100"}, "+OK\r\n", ""},
 	{[]string{"CF.ADD", "cf", "a"}, ":1\r\n",
@@ -219,15 +220,15 @@ var replyScript = []struct {
 		"#t\r\n"},
 	{[]string{"CF.EXISTS", "missing", "a"}, ":0\r\n",
 		"#f\r\n"},
-	{[]string{"CF.MEXISTS", "cf", "a", "z"}, "*2\r\n$1\r\n1\r\n$1\r\n0\r\n",
+	{[]string{"CF.MEXISTS", "cf", "a", "z"}, "*2\r\n:1\r\n:0\r\n",
 		"*2\r\n#t\r\n#f\r\n"},
 	{[]string{"CF.DEL", "cf", "a"}, ":1\r\n",
 		"#t\r\n"},
 	{[]string{"CF.DEL", "cf", "zz"}, ":0\r\n",
 		"#f\r\n"},
 	{[]string{"CF.COUNT", "cf", "b"}, ":1\r\n", ""},
-	{[]string{"CF.INFO", "cf"}, "*14\r\n$8\r\nCapacity\r\n$3\r\n100\r\n$4\r\nSize\r\n${n}\r\n{n}\r\n$17\r\nNumber of buckets\r\n$2\r\n32\r\n$11\r\nBucket size\r\n$1\r\n4\r\n$14\r\nMax iterations\r\n$3\r\n500\r\n$24\r\nNumber of items inserted\r\n$1\r\n2\r\n$23\r\nNumber of items deleted\r\n$1\r\n1\r\n",
-		"%7\r\n+Capacity\r\n:100\r\n+Size\r\n:{n}\r\n+Number of buckets\r\n:32\r\n+Bucket size\r\n:4\r\n+Max iterations\r\n:500\r\n+Number of items inserted\r\n:2\r\n+Number of items deleted\r\n:1\r\n"},
+	{[]string{"CF.INFO", "cf"}, "*16\r\n+Size\r\n:{n}\r\n+Number of buckets\r\n:32\r\n+Number of filters\r\n:1\r\n+Number of items inserted\r\n:1\r\n+Number of items deleted\r\n:1\r\n+Bucket size\r\n:4\r\n+Expansion rate\r\n:0\r\n+Max iterations\r\n:500\r\n",
+		"%8\r\n+Size\r\n:{n}\r\n+Number of buckets\r\n:32\r\n+Number of filters\r\n:1\r\n+Number of items inserted\r\n:1\r\n+Number of items deleted\r\n:1\r\n+Bucket size\r\n:4\r\n+Expansion rate\r\n:0\r\n+Max iterations\r\n:500\r\n"},
 	{[]string{"CMS.INITBYDIM", "cms", "10", "5"}, "+OK\r\n", ""},
 	{[]string{"CMS.INCRBY", "cms", "a", "3", "b", "2"}, "*2\r\n:3\r\n:2\r\n", ""},
 	{[]string{"CMS.QUERY", "cms", "a", "z"}, "*2\r\n:3\r\n:0\r\n", ""},

@@ -361,21 +361,10 @@ func Encode(value interface{}, isSimpleString bool) []byte {
 		return appendDouble(make([]byte, 0, len(v)+16), string(v))
 	case ReplyBool:
 		return boolReply(bool(v))
-	case replyTextBool:
-		if replyRESP3 {
-			return boolReply(bool(v))
-		}
-		if v {
-			return encodeString("1")
-		}
-		return encodeString("0")
 	case ReplyVerbatim:
 		return appendVerbatim(make([]byte, 0, len(v)+24), string(v))
 	case infoField:
-		if replyRESP3 {
-			return appendSimpleString(make([]byte, 0, len(v)+3), string(v))
-		}
-		return encodeString(string(v))
+		return appendSimpleString(make([]byte, 0, len(v)+3), string(v))
 	case string:
 		if isSimpleString {
 			return appendSimpleString(make([]byte, 0, len(v)+3), v)
