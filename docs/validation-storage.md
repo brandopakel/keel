@@ -36,6 +36,59 @@ creates a separate session or writes outside its designated directories. Use
 owned validation scripts, never an existing application or production dataset.
 No wrapper can guarantee a kernel-blocked process exits immediately.
 
+### When a wrapper limit, not the code, stops a check
+
+A limit hit is reported as the harness's, so it is not mistaken for a product
+failure. The exit status is 0 for a pass, 1 for a failed command, 2 for
+arguments refused before launch and 3 when one of the wrapper's limits stopped
+or broke the command. The report's `limit_hit` and the last stderr line name the
+limit, its value, the flag that changes it and the evidence:
+
+| Limit | Flag | Evidence |
+| --- | --- | --- |
+| Time | `--seconds` (at most 120) | the wrapper stopped the command |
+| Output budget | `--max-output-mib` (at most 1024, Go cache included) | the wrapper stopped the command |
+| Free-space reserve | `--min-free-gib` (at least 2) | the wrapper stopped the command |
+| Per-file size | `--max-file-mib` (at most the output budget) | below |
+
+The kernel enforces the per-file ceiling, so the command sees it: a C program is
+killed by `SIGXFSZ`, while Go and Python get `EFBIG` ("file too large") and
+usually fail with that error in their output. A failed run counts as a per-file
+hit when the command died of `SIGXFSZ`, when a file under the output directory
+reached the ceiling, or when the command log reports a refused write while some
+file was seen at half the ceiling or more. The last case covers a file that is
+deleted after hitting the limit, as an abandoned AOF rewrite deletes its
+`.rewrite` file. A shell's exit status 153 (128 + `SIGXFSZ`) counts as likely. A
+refused write with no file near the ceiling is named as a `possible` hit and
+keeps exit status 1. Some tests set a much smaller limit of their own
+(`KEEL_TEST_FILE_LIMIT`). When another limit stopped the command, any
+refused-write evidence is kept beside it, because a command can hit the file
+limit first and then hang until the time limit. A run interrupted by its caller
+(SIGINT or SIGTERM) is not diagnosed as a limit hit. If the calling shell's `ulimit -f` is below
+`--max-file-mib`, the advice says to raise that limit instead. A passing run that
+leaves a file exactly at the ceiling records a `file_limit_warning`. The kernel
+shortens the write that crosses the ceiling without an error, so a command that
+ignores a short count can still exit zero. Every report records
+`peak_file_bytes` and `peak_file`, the largest file seen.
+
+With the Go releases this repository supports (1.26 and later), `t.TempDir` is
+created under `GOTMPDIR` when it is set. A test's temporary files therefore land
+in the wrapper's `go-tmp` alongside the build work. They count toward its
+budgets and are pruned with it, which `t.TempDir` cleanup does anyway. A fresh
+Go cache plus `go test` build work for `./cmd/keel` measured about 290 MiB of the
+512 MiB budget, which leaves about 220 MiB for a test's own files.
+
+Keep tests within those budgets. `go test -v ./...` in the Go workflow's
+ubuntu-latest/stable leg runs under `scripts/test-file-footprint.py`. That script
+records every test's peak bytes on disk and its largest file in a job summary
+table and a `test-file-footprint` artifact. It runs the command in its own process
+group and stops what is left of it on exit or cancellation. A warning annotation is raised for a
+test whose largest file reaches 128 MiB (half the per-file default) or that
+holds 128 MiB on disk at once (a quarter of the output budget). The measurement
+is sampled every 0.1 s. When a test genuinely needs more, skip it under
+`testing.Short()` so brief local checks can pass `-short` while CI keeps running
+it. Do not raise the defaults for it.
+
 The general benchmark runner now hashes and removes successfully stopped Keel
 AOFs by default. `--retain-passed-aof` is an explicit diagnostic opt-in. Failed
 AOFs remain intact. A checksum and pending-removal record are saved before unlink;
