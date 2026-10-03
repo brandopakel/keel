@@ -234,7 +234,7 @@ class ProbeWriter(threading.Thread):
 
 def gitea_cli(gitea, config, *args, capture=True):
     out = subprocess.run([gitea, *args, "--config", str(config)], capture_output=capture, text=True,
-                         env=dict(os.environ, GITEA_WORK_DIR=str(config.parents[2])))
+                         env=dict(os.environ, GITEA_WORK_DIR=str(config.parents[2])), timeout=600)
     if out.returncode != 0:
         raise RuntimeError(f"gitea {' '.join(args)} failed: {out.stdout}\n{out.stderr}")
     return out.stdout.strip()
@@ -244,9 +244,9 @@ def write_config(gitea, work):
     config = work / "custom/conf/app.ini"
     config.parent.mkdir(parents=True, exist_ok=True)
     secret = subprocess.run([gitea, "generate", "secret", "SECRET_KEY"], capture_output=True, text=True,
-                            check=True).stdout.strip()
+                            check=True, timeout=60).stdout.strip()
     token = subprocess.run([gitea, "generate", "secret", "INTERNAL_TOKEN"], capture_output=True, text=True,
-                           check=True).stdout.strip()
+                           check=True, timeout=60).stdout.strip()
     redis = f"redis://127.0.0.1:{pilot_lib.APP_PORT}/0"
     config.write_text(f"""APP_NAME = Keel application pilot
 RUN_MODE = prod
@@ -404,13 +404,13 @@ class Workload:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(f"# Pilot note {round_}.{n}\n\npilot keel search marker {user} {repo}\n" * 20)
                 subprocess.run(git + ["-C", str(checkout), "add", "-A"], env=env, check=True,
-                               capture_output=True)
+                               capture_output=True, timeout=120)
                 subprocess.run(git + ["-C", str(checkout), "commit", "-q", "-m", f"Pilot round {round_}.{n}"],
-                               env=env, check=True, capture_output=True)
+                               env=env, check=True, capture_output=True, timeout=120)
             subprocess.run(git + ["-C", str(checkout), "push", "-q", "origin", "HEAD:main"], env=env, check=True,
                            capture_output=True, timeout=120)
             after = subprocess.run(["git", "-C", str(checkout), "rev-parse", "HEAD"], capture_output=True,
-                                   text=True, check=True).stdout.strip()
+                                   text=True, check=True, timeout=120).stdout.strip()
             self.expect(("push", f"{user}/{repo}", after))
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
             error = f"{exc!r} {getattr(exc, 'stderr', b'')!r}"[:500]
@@ -482,19 +482,29 @@ class Workload:
                 self.comment(user, user, repo, number, 0)
 
     def mixed(self, user, halt, counter):
-        """Browse continuously, writing an issue and a comment every few pages."""
+        """Browse continuously, writing an issue and a comment every few pages.
+
+        Runs across the crash, so nothing in it may end the thread early: an
+        exception is recorded as a failed request and the loop carries on, and
+        someone whose repository was never created only browses.
+        """
         n = 100
         while not halt.is_set():
-            for path, endpoint in self.pages(user):
-                if halt.is_set():
-                    return
-                self.browsers[user].request("GET", path, endpoint)
-            repo = self.repos[user][0]
-            n += 1
-            self.open_issue(user, repo, n)
-            numbers = self.issues[(user, repo)]
-            if numbers:
-                self.comment(user, user, repo, numbers[-1], n)
+            try:
+                for path, endpoint in self.pages(user):
+                    if halt.is_set():
+                        return
+                    self.browsers[user].request("GET", path, endpoint)
+                if self.repos[user]:
+                    repo = self.repos[user][0]
+                    n += 1
+                    self.open_issue(user, repo, n)
+                    numbers = self.issues[(user, repo)]
+                    if numbers:
+                        self.comment(user, user, repo, numbers[-1], n)
+            except Exception as exc:  # recorded, never raised into the restart check
+                self.recorder.add(endpoint="mixed load", status=None, seconds=0.0, ok=False, error=repr(exc))
+                time.sleep(0.1)
             counter[user] = counter.get(user, 0) + 1
 
 
@@ -544,7 +554,7 @@ def run(args):
         sink.start()
         snapshot("start")
         results["gitea"]["version"] = subprocess.run([args.gitea_bin, "--version"], capture_output=True,
-                                                     text=True).stdout.strip()
+                                                     text=True, timeout=60).stdout.strip()
         config = write_config(args.gitea_bin, work)
         # The configuration is part of the evidence; its generated secrets are not.
         (out / "app.ini").write_text(re.sub(r"^(SECRET_KEY|INTERNAL_TOKEN) = .*$", r"\1 = <redacted>",
@@ -628,10 +638,10 @@ def run(args):
                 time.sleep(0.2)
         finally:
             halt.set()
-            for future in futures:
-                future.result()
+            probe.halt.set()
+            concurrent.futures.wait(futures)
             pool.shutdown()
-        probe.halt.set()
+        results["load_thread_errors"] = [repr(f.exception()) for f in futures if f.exception()]
         probe.join(5)
         results["restart"] = {
             "outage_requested_seconds": args.outage_seconds,

@@ -34,7 +34,7 @@ def load(path):
 def find(root, name, arm=None):
     pattern = f"**/{name}"
     for path in sorted(Path(root).glob(pattern)):
-        if arm is None or f"-{arm}" in str(path.relative_to(root)).split("/")[0]:
+        if arm is None or path.relative_to(root).parts[0].endswith(f"-{arm}"):
             return path
     return None
 

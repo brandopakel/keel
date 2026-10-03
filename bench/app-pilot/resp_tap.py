@@ -100,6 +100,40 @@ def command_record(kind, value):
     return rec
 
 
+class Stream:
+    """One direction of a connection: buffers bytes and hands out whole values.
+
+    A frame the parser cannot read stops the logging for this direction only;
+    the bytes keep flowing, so a parser bug can cost evidence but never change
+    what the application sees.
+    """
+
+    def __init__(self, on_value, on_error):
+        self.buf = bytearray()
+        self.on_value, self.on_error = on_value, on_error
+        self.failed = None
+
+    def feed(self, data):
+        if self.failed:
+            return
+        self.buf.extend(data)
+        pos = 0
+        try:
+            while True:
+                try:
+                    kind, value, next_pos = parse_value(self.buf, pos)
+                except Incomplete:
+                    break
+                pos = next_pos
+                self.on_value(kind, value)
+        except (ValueError, IndexError) as exc:
+            self.failed = repr(exc)
+            self.buf.clear()
+            self.on_error(self.failed)
+            return
+        del self.buf[:pos]
+
+
 async def pipe(reader, writer, on_data):
     try:
         while data := await reader.read(65536):
@@ -135,45 +169,33 @@ class Tap:
             return
         self.emit({"conn": conn, "event": "open", "t": time.time()})
         pending = collections.deque()
-        cbuf, rbuf = bytearray(), bytearray()
         seq = 0
 
-        def on_client(data):
+        def on_command(kind, value):
             nonlocal seq
-            cbuf.extend(data)
-            pos = 0
-            while True:
-                try:
-                    kind, value, pos = parse_value(cbuf, pos)
-                except Incomplete:
-                    break
-                rec = command_record(kind, value)
-                if rec is not None:
-                    seq += 1
-                    rec.update(conn=conn, seq=seq)
-                    pending.append(rec)
-            del cbuf[:pos]
+            rec = command_record(kind, value)
+            if rec is not None:
+                seq += 1
+                rec.update(conn=conn, seq=seq)
+                pending.append(rec)
 
-        def on_reply(data):
-            rbuf.extend(data)
-            pos = 0
-            while True:
-                try:
-                    kind, value, pos = parse_value(rbuf, pos)
-                except Incomplete:
-                    break
-                if kind == ">":  # a RESP3 push is not the reply to any request
-                    self.emit({"conn": conn, "event": "push"})
-                    continue
-                rec = pending.popleft() if pending else {"conn": conn, "cmd": "?unpaired"}
-                rec["reply"] = kind
-                if kind in "-!":
-                    rec["error"] = (value or b"").decode("utf-8", "replace")[:200]
-                self.emit(rec)
-            del rbuf[:pos]
+        def on_reply(kind, value):
+            if kind == ">":  # a RESP3 push is not the reply to any request
+                self.emit({"conn": conn, "event": "push"})
+                return
+            rec = pending.popleft() if pending else {"conn": conn, "cmd": "?unpaired"}
+            rec["reply"] = kind
+            if kind in "-!":
+                rec["error"] = (value or b"").decode("utf-8", "replace")[:200]
+            self.emit(rec)
 
-        await asyncio.gather(pipe(creader, uwriter, on_client),
-                             pipe(ureader, cwriter, on_reply))
+        def broken(direction, error):
+            self.emit({"conn": conn, "event": "parse_error", "direction": direction, "error": error})
+
+        requests = Stream(on_command, lambda e: broken("request", e))
+        replies = Stream(on_reply, lambda e: broken("reply", e))
+        await asyncio.gather(pipe(creader, uwriter, requests.feed),
+                             pipe(ureader, cwriter, replies.feed))
         for rec in pending:
             rec["reply"] = "none: connection closed"
             self.emit(rec)

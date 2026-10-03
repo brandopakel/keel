@@ -109,8 +109,18 @@ def run_suite(suite, args):
         result.update(parse_go_test_json(out / "go-test.json"))
     if (out / "wire.jsonl").exists():
         result["wire"] = pilot_lib.summarize_wire([out / "wire.jsonl"])
-    result["passed"] = result.get("exit_code") == 0 and "harness_error" not in result
+    result["passed"] = suite_passed(result)
     return result
+
+
+def suite_passed(result):
+    """A suite passes only if go test succeeded and actually ran something.
+
+    `go test -run` that matches nothing exits 0 with "no tests to run", and a
+    pin bump that renames tests looks the same, so a zero count is a failure.
+    """
+    ran = sum((result.get("top_level") or {}).values())
+    return result.get("exit_code") == 0 and "harness_error" not in result and ran > 0
 
 
 def main():

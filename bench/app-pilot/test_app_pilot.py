@@ -50,6 +50,25 @@ class RespParsing(unittest.TestCase):
         self.assertEqual(resp_tap.command_record(kind, value)["cmd"], "PING")
 
 
+class TapStream(unittest.TestCase):
+    def test_malformed_frame_stops_only_logging(self):
+        values, errors = [], []
+        stream = resp_tap.Stream(lambda k, v: values.append(k), errors.append)
+        stream.feed(resp(b"PING") + b"$abc\r\n")
+        stream.feed(resp(b"GET", b"k"))  # forwarded by pipe(), no longer parsed
+        self.assertEqual(values, ["*"])
+        self.assertEqual(len(errors), 1)
+        self.assertTrue(stream.failed)
+
+    def test_split_frames_are_reassembled(self):
+        values = []
+        stream = resp_tap.Stream(lambda k, v: values.append(resp_tap.command_record(k, v)["cmd"]), self.fail)
+        whole = resp(b"SET", b"k", b"v") + resp(b"GET", b"k")
+        for i in range(0, len(whole), 3):
+            stream.feed(whole[i:i + 3])
+        self.assertEqual(values, ["SET", "GET"])
+
+
 class WireSummary(unittest.TestCase):
     def test_unsupported_separates_client_probes(self):
         records = [{"conn": 1, "event": "open"},
@@ -121,7 +140,24 @@ class GoTestJson(unittest.TestCase):
         self.assertEqual(parsed["failing"][0]["result"], "fail")
 
 
+class SuiteVerdict(unittest.TestCase):
+    def test_a_suite_that_ran_nothing_fails(self):
+        self.assertFalse(regression.suite_passed({"exit_code": 0, "top_level": {}}))
+        self.assertTrue(regression.suite_passed({"exit_code": 0, "top_level": {"pass": 3}}))
+        self.assertFalse(regression.suite_passed({"exit_code": 0, "top_level": {"pass": 3},
+                                                  "harness_error": "x"}))
+
+
 class Summary(unittest.TestCase):
+    def test_arm_is_matched_exactly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name in ("pilot-app-redis-old", "pilot-app-redis"):
+                (root / name).mkdir()
+                (root / name / "results.json").write_text("{}")
+            self.assertEqual(summarize.find(root, "results.json", "redis").parent.name, "pilot-app-redis")
+
+
     def test_missing_arm_is_reported(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

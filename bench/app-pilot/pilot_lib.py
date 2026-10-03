@@ -168,7 +168,7 @@ class CacheServer:
 
     def version(self):
         flag = "-version" if self.arm == "keel" else "--version"
-        out = subprocess.run([self.binary, flag], capture_output=True, text=True)
+        out = subprocess.run([self.binary, flag], capture_output=True, text=True, timeout=30)
         lines = (out.stdout.strip() or out.stderr.strip()).splitlines()
         return lines[0] if lines else ""
 

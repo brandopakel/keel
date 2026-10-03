@@ -8,7 +8,9 @@
     "repo": "https://github.com/go-gitea/gitea",
     "tag": "v28.0.0",
     "commit": "15b8a5805adf57c5189602008d38cccfd3c795e0",
-    "pnpm": "12.6.0"
+    "pnpm": "12.6.0",
+    "pnpm_tarball": "https://registry.npmjs.org/pnpm/-/pnpm-12.6.0.tgz",
+    "pnpm_integrity": "sha512-PvaPlRyxEawgS0paFvCy3fDaVqluBBPoHYVdnwtV75JnFHCQKOHNAMQFwsX7e56OxNxGd3yAXQNzwvL/AP0g7A=="
   },
   "checkouts": {
     "gitea-main": {

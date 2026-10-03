@@ -111,7 +111,19 @@ jobs:
         env:
           TAGS: bindata
         run: |
-          npm install -g "pnpm@$(python3 "$GITHUB_WORKSPACE/bench/app-pilot/pins.py" get gitea_app.pnpm)"
+          # pnpm runs the frontend build that goes into the binary, so it is
+          # installed from a tarball checked against its registry integrity
+          # rather than resolved by name. It has no dependencies of its own.
+          pins="$GITHUB_WORKSPACE/bench/app-pilot/pins.py"
+          curl -fL --retry 3 "$(python3 "$pins" get gitea_app.pnpm_tarball)" -o "$RUNNER_TEMP/pnpm.tgz"
+          PNPM_INTEGRITY="$(python3 "$pins" get gitea_app.pnpm_integrity)" python3 - "$RUNNER_TEMP/pnpm.tgz" <<'PY'
+          import base64, hashlib, os, sys
+          actual = 'sha512-' + base64.b64encode(hashlib.sha512(open(sys.argv[1], 'rb').read()).digest()).decode()
+          if actual != os.environ['PNPM_INTEGRITY']:
+              sys.exit(f'pnpm tarball integrity {actual} does not match the pinned value')
+          print('pnpm tarball integrity verified:', actual)
+          PY
+          npm install -g "$RUNNER_TEMP/pnpm.tgz"
           make build
       - name: Record what was built
         run: |
@@ -126,6 +138,7 @@ jobs:
               'gitea_sha256': hashlib.sha256(open('dist/gitea/gitea', 'rb').read()).hexdigest(),
               'gitea_version': out('dist/gitea/gitea', '--version'),
               'go': out('go', 'version'), 'node': out('node', '--version'), 'pnpm': out('pnpm', '--version'),
+              'pnpm_integrity': json.load(open('bench/app-pilot/pins.json'))['gitea_app']['pnpm_integrity'],
           }
           os.makedirs('dist/gitea-provenance', exist_ok=True)
           json.dump(prov, open('dist/gitea-provenance/gitea-provenance.json', 'w'), indent=2)

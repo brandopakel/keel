@@ -7,6 +7,7 @@ same code, and a tag that is later moved cannot change what was measured.
 """
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -25,11 +26,15 @@ def fetch(repo, commit, dest, tag=None):
     """Check out exactly `commit` into `dest`, verifying the tag if one is named."""
     dest = Path(dest)
     if (dest / ".git").exists():
-        head = subprocess.run(["git", "-C", str(dest), "rev-parse", "HEAD"],
-                              capture_output=True, text=True, check=True).stdout.strip()
-        if head != commit:
+        head = subprocess.run(["git", "-C", str(dest), "rev-parse", "--verify", "-q", "HEAD"],
+                              capture_output=True, text=True).stdout.strip()
+        if head == commit:
+            return
+        if head:
             raise SystemExit(f"{dest} is at {head}, not the pinned {commit}")
-        return
+        # An earlier fetch was interrupted after `git init`: nothing was checked
+        # out, so start again rather than fail on every rerun.
+        shutil.rmtree(dest)
     dest.mkdir(parents=True, exist_ok=True)
     git = ["git", "-C", str(dest)]
     subprocess.run(git + ["init", "-q"], check=True)
