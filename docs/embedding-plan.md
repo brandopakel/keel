@@ -1,6 +1,6 @@
 # Embedding plan: Keel as a Go library
 
-Status: proposal, October 2, 2026. Nothing here is implemented yet.
+Status: accepted plan, October 2, 2026. Phase 0 is in review; nothing later is implemented yet.
 
 The owner asked for Keel to be usable as a Go library, not only as a server:
 several independent instances per process, safe for concurrent use, a typed
@@ -130,7 +130,7 @@ for key, err := range db.Scan(ctx, keel.ScanOptions{Match: "user:*"}) { ... }
 - **`Do`:** an experimental `Do(ctx, args...)` runs the command language, for
   commands without a typed method yet.
 - **`Atomic`:** reuses the transaction block primitive from the MULTI/EXEC work.
-  Like Redis EXEC, it isolates and logs as one frame and does not roll back.
+  As with Redis EXEC, it isolates and logs as one frame and never rolls back.
 
 Package layout:
 
@@ -216,13 +216,20 @@ How each step is verified:
 6. Freezing the API too early, which is why it ships as an alpha with
    experimental markings.
 
-## Open decisions for the owner
+## Decisions
 
-- **Eviction default:** the library defaults to LRU, matching the `cmd/keel`
-  flag; `config.EvictStrategy` itself defaults to random.
-- **Key limit default:** what `MaxKeys` should default to (5,000,000 today),
-  given the four-million-key rewrite ceiling.
-- **`Atomic` semantics:** whether `Atomic` should ever roll back. Redis EXEC
-  does not; undo images would be a separate, priced phase.
-- **Release target:** whether the first embeddable release is
-  `v0.2.0-alpha.1`, or an alpha of the 0.1 line.
+The owner settled the open questions on October 2, 2026, with a standing rule
+for anything left uncertain: do what Redis does.
+
+- **Eviction default:** LRU, matching the `cmd/keel` flag. `config.EvictStrategy`
+  defaulting to random is the server-side inconsistency to remove in step 2.5.
+- **Key limit default:** none, as in Redis, where only `maxmemory` bounds the
+  keyspace. `MaxKeys` defaults to zero, meaning unlimited. The server's current
+  5,000,000 cap becomes an explicit `-maxkeys`-style setting rather than a
+  hidden default. The rewrite's four-million-key ceiling and the snapshot's
+  one-million-key refusal stay documented limits of persistence, not of the
+  keyspace.
+- **`Atomic` semantics:** as Redis EXEC. Queued work is isolated and logged as
+  one frame; a command that fails inside it does not undo the others, and there
+  is no rollback.
+- **Release target:** the first embeddable release is `v0.2.0-alpha.1`.
