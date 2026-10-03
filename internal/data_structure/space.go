@@ -144,17 +144,16 @@ var DefaultSpace = &Space{rng: evictionSeed, limits: limitRefs{
 // The package-level functions act on DefaultSpace, so callers read as they did
 // while the plan moves them onto spaces of their own.
 
-func RegisterKeyspace(ks Keyspace)        { DefaultSpace.RegisterKeyspace(ks) }
-func ResetKeyspaces()                     { DefaultSpace.ResetKeyspaces() }
-func OwnerOf(key string) (Keyspace, bool) { return DefaultSpace.OwnerOf(key) }
-func DeleteAnywhere(key string) bool      { return DefaultSpace.DeleteAnywhere(key) }
-func TotalMemUsed() uint64                { return DefaultSpace.TotalMemUsed() }
-func TotalKeys() int                      { return DefaultSpace.TotalKeys() }
-func EachKeyspace(fn func(Keyspace))      { DefaultSpace.EachKeyspace(fn) }
-func Evicted() uint64                     { return DefaultSpace.Evicted() }
-func EnforceLimits()                      { DefaultSpace.EnforceLimits() }
-func NewKeyspaceWalk() *KeyspaceWalk      { return DefaultSpace.NewKeyspaceWalk() }
-func LCSTooLarge(a, b string) bool        { return DefaultSpace.LCSTooLarge(a, b) }
+func RegisterKeyspace(ks Keyspace)   { DefaultSpace.RegisterKeyspace(ks) }
+func ResetKeyspaces()                { DefaultSpace.ResetKeyspaces() }
+func DeleteAnywhere(key string) bool { return DefaultSpace.DeleteAnywhere(key) }
+func TotalMemUsed() uint64           { return DefaultSpace.TotalMemUsed() }
+func TotalKeys() int                 { return DefaultSpace.TotalKeys() }
+func EachKeyspace(fn func(Keyspace)) { DefaultSpace.EachKeyspace(fn) }
+func Evicted() uint64                { return DefaultSpace.Evicted() }
+func EnforceLimits()                 { DefaultSpace.EnforceLimits() }
+func NewKeyspaceWalk() *KeyspaceWalk { return DefaultSpace.NewKeyspaceWalk() }
+func LCSTooLarge(a, b string) bool   { return DefaultSpace.LCSTooLarge(a, b) }
 func EachKeyspaceFrom(start int, fn func(Keyspace)) int {
 	return DefaultSpace.EachKeyspaceFrom(start, fn)
 }
@@ -163,4 +162,17 @@ func VisitKeyspacesFrom(start int, fn func(Keyspace) bool) int {
 }
 func ScanKeyspaces(cursor uint64, budget int, keep func(Keyspace, string) bool, dst []string) ([]string, uint64) {
 	return DefaultSpace.ScanKeyspaces(cursor, budget, keep, dst)
+}
+
+// OwnerOf repeats (*Space).OwnerOf over DefaultSpace instead of calling it.
+// The type check runs it for every key of every command, and it used to be
+// inlined there; delegating costs the inliner 88 against its budget of 80, so
+// each of those keys would pay for a call that the copy avoids.
+func OwnerOf(key string) (Keyspace, bool) {
+	for _, ks := range DefaultSpace.keyspaces {
+		if ks.Has(key) {
+			return ks, true
+		}
+	}
+	return nil, false
 }
