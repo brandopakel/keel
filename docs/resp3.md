@@ -147,8 +147,8 @@ with `core.EncodeAs`.
   about RESP3: `LCS ... IDX` placed matches differently from Redis among
   equally good choices, in both protocols, and now places them where Redis
   does. CI runs it on every pull request against
-  Redis 8.10.1 built from the release tarball, pinned by checksum, without the
-  module.
+  Redis 8.10.1 and its RedisBloom, built from the release tarball, pinned by
+  checksum.
 - `bench/clients/defaults` runs each library with only a host, port and
   password. See [client defaults](client-library-compatibility.md#default-configurations).
 - Unit tests pin each command's RESP3 bytes and its unchanged RESP2 bytes

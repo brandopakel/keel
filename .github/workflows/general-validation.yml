@@ -146,19 +146,22 @@ jobs:
       - name: Differential replies, rewrite and two restarts
         run: |
           python3 scripts/differential.py --bin /tmp/keel-general --redis /usr/bin/redis-server --out dist/general-ci/differential --steps 20000
-      - name: Build Redis 8.10.1 for the RESP3 differential
+      - name: Build Redis 8.10.1 and RedisBloom for the RESP3 differential
         # RESP3 replies are compared with Redis 8's shapes, and Ubuntu's
-        # redis-server is 7.0. The modules are not built: BF, CF and CMS are
-        # compared locally against RedisBloom; see docs/resp3.md.
+        # redis-server is 7.0. The tarball bundles its modules and builds all
+        # of them by default; RedisBloom is the one BF, CF and CMS need, and
+        # RediSearch does not build against this runner's Rust and clang.
         run: |
           curl -fL --retry 3 https://download.redis.io/releases/redis-8.10.1.tar.gz -o /tmp/redis-8.10.1.tar.gz
           echo '60166c95ab7aedaa9dfe516de685be0a4dd87be95ded59ba429df14c13f1b663  /tmp/redis-8.10.1.tar.gz' | sha256sum -c -
           tar -xzf /tmp/redis-8.10.1.tar.gz -C /tmp
-          make -C /tmp/redis-8.10.1 -j"$(nproc)"
+          make -C /tmp/redis-8.10.1 -j"$(nproc)" build redisbloom
           /tmp/redis-8.10.1/src/redis-server --version
+          ls -l /tmp/redis-8.10.1/modules/redisbloom/redisbloom.so
       - name: RESP3 differential replies, rewrite and two restarts
         run: |
-          python3 scripts/differential.py --protocol 3 --bin /tmp/keel-general --redis /tmp/redis-8.10.1/src/redis-server --out dist/general-ci/differential-resp3 --steps 20000
+          python3 scripts/differential.py --protocol 3 --bin /tmp/keel-general --redis /tmp/redis-8.10.1/src/redis-server \
+            --redis-module /tmp/redis-8.10.1/modules/redisbloom/redisbloom.so --out dist/general-ci/differential-resp3 --steps 20000
       - name: All workload smoke cases
         run: |
           python3 bench/run-general.py --candidate /tmp/keel-general --memtier /tmp/memtier_benchmark-2.5.1/memtier_benchmark --out dist/general-ci/workloads --reps 1 --seconds 1
