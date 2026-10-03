@@ -197,7 +197,14 @@ How each step is verified:
   tests, the race job and the client and differential suites.
 - **Hot-path steps:** paired A/B runs against develop (`bench/run-ab.sh`) and
   matched hosted runs, passing at a median paired ratio of at least 0.98 with
-  no increase in allocations per operation.
+  no increase in allocations per operation. The hosted runs come from the
+  paired command-path job (`.github/workflows/command-path.yml`), which fails
+  on more allocations and reports time. Its noise floor, measured with
+  develop against develop, is 0.3% in the median across benchmarks and 3% in a
+  single benchmark. But code layout alone moved that median by up to 3.5% and
+  a single benchmark by up to 9.5%. So the 0.98 rule reads the median across
+  benchmarks, and a result near the budget, or a single family over it, is
+  repeated before it counts. The job's header has the runs.
 - **Phase 4:** byte-identical reply and transcript goldens.
 - **Persistence steps:** restart, upgrade and rollback checks.
 - **Phase 5:** two-instance isolation and contention stress tests under
