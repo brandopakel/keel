@@ -265,6 +265,7 @@ def run(args):
                   minimum_free_bytes=int(args.min_free_gib*2**30))
     process = None
     stopped = None
+    interrupted_by = None
     previous_limit = resource.getrlimit(resource.RLIMIT_FSIZE)
     started = time.monotonic()
     previous_handlers = {}
@@ -317,6 +318,8 @@ def run(args):
         report.update(status='failed', failure=repr(exc))
         if isinstance(exc, LimitReached):
             stopped = exc
+        elif isinstance(exc, (InterruptedError, KeyboardInterrupt)):
+            interrupted_by = exc
     finally:
         # Ignore repeat interrupts during bounded cleanup, then restore callers.
         for sig in previous_handlers:
@@ -338,7 +341,9 @@ def run(args):
             resource.setrlimit(resource.RLIMIT_FSIZE, previous_limit)
             for sig, handler in previous_handlers.items():
                 signal.signal(sig, handler)
-            if report['status'] != 'passed':
+            # An interrupted run was stopped by its caller, not by a limit,
+            # even if a file happened to sit at the ceiling.
+            if report['status'] != 'passed' and interrupted_by is None:
                 try:
                     diagnose(report, root, stopped, report.get('command_exit_code'))
                 except Exception as exc:

@@ -324,6 +324,25 @@ class LocalValidationTests(unittest.TestCase):
             self.assertIn('--max-file-mib', report['limit_hit']['evidence'][-1])
             self.assertIn('file too large', report['limit_hit']['evidence'][-1])
 
+    def test_interrupted_run_is_not_a_limit_hit(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)/'run'
+            wrapper = subprocess.Popen([sys.executable, str(SCRIPT), '--out', str(root), '--seconds', '8',
+                '--max-output-mib', '2', '--max-file-mib', '1', '--min-free-gib', '2', '--',
+                sys.executable, '-c', "import sys,time; from pathlib import Path; (Path(sys.argv[1])/'full').write_bytes(b'x'*(1<<20)); time.sleep(60)",
+                '{out}'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            deadline = time.monotonic()+5
+            while not ((root/'full').exists() and (root/'full').stat().st_size == 1<<20):
+                self.assertLess(time.monotonic(), deadline)
+                time.sleep(.05)
+            time.sleep(.4)  # Let a sample see the file at the ceiling.
+            wrapper.send_signal(signal.SIGINT)
+            stdout, stderr = wrapper.communicate(timeout=10)
+            self.assertEqual(wrapper.returncode, 1, stdout+stderr)
+            report = json.loads((root/'local-resource-report.json').read_text())
+            self.assertIn('InterruptedError', report['failure'])
+            self.assertNotIn('limit_hit', report)
+
     def test_unrelated_file_size_error_is_only_possible(self):
         # A test may impose a far smaller limit of its own. Name the wrapper's
         # limit as a possibility without claiming it was the cause.

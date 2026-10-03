@@ -23,6 +23,7 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -81,6 +82,23 @@ def sample(roots, entries, peak):
     peak['test_bytes'] = max(peak['test_bytes'], total)
 
 
+def stop_group(process):
+    """Stop whatever is left of the command's process group."""
+    for sig, wait in ((signal.SIGTERM, 5), (signal.SIGKILL, 5)):
+        process.poll()
+        try:
+            os.killpg(process.pid, sig)
+        except (ProcessLookupError, PermissionError):
+            break
+        try:
+            process.wait(timeout=wait)
+        except subprocess.TimeoutExpired:
+            continue
+        # The leader is gone; give other members a moment, then force them.
+        time.sleep(.2)
+    process.wait()
+
+
 def mib(n):
     return f'{n/2**20:.1f} MiB'
 
@@ -125,17 +143,20 @@ def main():
             sample(roots, entries, peak)
         except Exception as exc:
             errors.append(repr(exc))
+    def terminated(signum, frame):
+        raise SystemExit(128 + signum)
+    signal.signal(signal.SIGTERM, terminated)
     started = time.monotonic()
-    process = subprocess.Popen(command, env=env)
+    # Its own process group, so that an interrupted or cancelled record also
+    # stops the test binaries and servers go test started.
+    process = subprocess.Popen(command, env=env, start_new_session=True)
     try:
         while process.poll() is None:
             take_sample()
             samples += 1
             time.sleep(args.interval)
     finally:
-        if process.poll() is None:
-            process.terminate()
-            process.wait()
+        stop_group(process)
     take_sample()
     elapsed = time.monotonic() - started
     tests = sorted((e for e in entries.values() if not e['name'].startswith('go-build')),
