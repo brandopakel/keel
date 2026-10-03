@@ -108,13 +108,18 @@ func cmdCFRESERVE(args []string) []byte {
 		return Encode(wrongArguments("CF.RESERVE"), false)
 	}
 	key := args[0]
-	capacity, foreign, err := parseCFReserve(args)
-	if err != nil {
-		legacy, ok := parseLegacyCFReserve(args)
-		if !ok || !replayingFilterLog() {
+	// A form the earlier build accepted, replayed, means what it meant to
+	// that build - see replayingFilterLog. That includes a key named after an
+	// option, CF.RESERVE expansion 1000, which RedisBloom reads as the option.
+	// Every form both builds accept from a client, they read alike, so a log
+	// this build writes replays the same way.
+	capacity, legacyForm := parseLegacyCFReserve(args)
+	foreign := false
+	if !legacyForm || !replayingFilterLog() {
+		var err error
+		if capacity, foreign, err = parseCFReserve(args); err != nil {
 			return Encode(err, false)
 		}
-		capacity, foreign = legacy, false
 	}
 	switch filterKeyStatus(key, cfStore) {
 	case filterHeld:

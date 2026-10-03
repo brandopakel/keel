@@ -83,9 +83,11 @@ var bloomPersistenceKeys = []string{"bf", "bf:grow", "bf:auto", "bf:auto2", "cf"
 // written: commands it accepted and recorded that RedisBloom refuses, or
 // answers differently. CF.RESERVE below RedisBloom's minimum capacity and with
 // a leading zero, BF.RESERVE with a number Go parses and Redis does not, an
-// expansion and a capacity past RedisBloom's ranges, and a CF.DEL of a key
-// that is not there. A log is replayed by the build that reads it, so each has
-// to replay as it did when it was written.
+// expansion and a capacity past RedisBloom's ranges, a CF.DEL of a key that is
+// not there, and reservations of keys RedisBloom would read as options -
+// nonscaling, expansion, maxiterations - which were only names to the earlier
+// build. A log is replayed by the build that reads it, so each has to replay
+// as it did when it was written.
 var legacyBloomLog = [][]string{
 	{"CF.RESERVE", "cf:1", "1"},
 	{"CF.RESERVE", "cf:3", "3"},
@@ -105,9 +107,18 @@ var legacyBloomLog = [][]string{
 	{"BF.MADD", "bf:007", "a", "b", "c"},
 	{"BF.MADD", "bf:wide", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"},
 	{"BF.ADD", "bf:hex", "a"},
+	{"BF.RESERVE", "nonscaling", "0.01", "2"},
+	{"BF.MADD", "nonscaling", "a", "b", "c", "d"},
+	{"BF.RESERVE", "NonScaling", "0.01", "1", "EXPANSION", "3"},
+	{"BF.MADD", "NonScaling", "a", "b"},
+	{"CF.RESERVE", "expansion", "1000"},
+	{"CF.RESERVE", "maxiterations", "1000"},
+	{"CF.RESERVE", "bucketsize", "100"},
+	{"CF.ADD", "expansion", "a"},
 }
 
-var legacyBloomKeys = []string{"cf:1", "cf:3", "cf:7", "bf:007", "bf:plus", "bf:hex", "bf:wide", "bf:zeros", "bf:huge"}
+var legacyBloomKeys = []string{"cf:1", "cf:3", "cf:7", "bf:007", "bf:plus", "bf:hex", "bf:wide", "bf:zeros", "bf:huge",
+	"nonscaling", "NonScaling", "expansion", "maxiterations", "bucketsize"}
 
 type redisBloomPersistence struct {
 	SourceRevision string `json:"source_revision"`
@@ -292,4 +303,31 @@ func TestBloomCuckooLegacyLogReplays(t *testing.T) {
 	}
 	require.Equal(t, want.LegacyDumps, sha256Hex(got))
 	require.True(t, strings.HasPrefix(want.SourceRevision, "6567ca7"))
+}
+
+// TestBFRESERVEOfAKeyNamedNONSCALINGIsLoggedSoItReplays: RedisBloom reads a
+// key named NONSCALING as the option, and so does this build, but the earlier
+// build read it as a name, and a log is replayed as the earlier build read it.
+// So the reservation is logged with the option spelled out - a form the
+// earlier build refused - and replays to the filter it made.
+func TestBFRESERVEOfAKeyNamedNONSCALINGIsLoggedSoItReplays(t *testing.T) {
+	var before []byte
+	path := withAOF(t, func() {
+		require.Equal(t, "+OK\r\n", string(rawReply(t, "BF.RESERVE", "nonscaling", "0.000001", "50")))
+		items := []string{"nonscaling"}
+		for i := 0; i < 50; i++ {
+			items = append(items, "item:"+strconv.Itoa(i))
+		}
+		run(t, "BF.MADD", items...)
+		require.Equal(t, "-ERR non scaling filter is full\r\n", string(rawReply(t, "BF.ADD", "nonscaling", "over")))
+		before, _ = dumpKey("nonscaling")
+	})
+	log, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(log), string(appendCommand(nil, "BF.RESERVE", "nonscaling", "0.000001", "50", "NONSCALING")))
+	restart(t, path)
+	after, ok := dumpKey("nonscaling")
+	require.True(t, ok)
+	require.Equal(t, before, after, "the filter that does not grow, as it was")
+	require.Equal(t, "*1\r\n$-1\r\n", string(rawReply(t, "BF.INFO", "nonscaling", "EXPANSION")))
 }

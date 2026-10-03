@@ -207,8 +207,12 @@ func hasNonzeroMantissa(s string) bool {
 // A log is replayed by the build that reads it, and the build before this one
 // accepted, and recorded, reservations RedisBloom refuses - a cuckoo filter of
 // capacity 1, a capacity written 007, an expansion past 32768 - and answered
-// a CF.DEL of a missing key with 0, which is recorded too. Refusing them now
-// would stop that log loading, or load it without the filters it holds, so a
-// replay that RedisBloom's rules refuse falls back to the earlier build's.
-// What a client sends is held to RedisBloom's.
+// a CF.DEL of a missing key with 0, which is recorded too. Some it read
+// differently from RedisBloom, too: RedisBloom finds its options among every
+// argument, so to it BF.RESERVE nonscaling 0.01 100 is a filter that does not
+// grow, and CF.RESERVE expansion 1000 an expansion of 1000. Refusing or
+// rereading them now would stop that log loading, or load it without the
+// filters it holds, so a replayed reservation the earlier build would have
+// accepted is read as that build read it. What a client sends is held to
+// RedisBloom's rules, and logged in a form that replays to the same filter.
 func replayingFilterLog() bool { return aof.replaying || replicaApplying }

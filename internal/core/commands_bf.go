@@ -143,13 +143,16 @@ func cmdBFRESERVE(args []string) []byte {
 		return Encode(wrongArguments("BF.RESERVE"), false)
 	}
 	key := args[0]
-	r, err := parseBFReserve(args)
-	if err != nil {
-		legacy, ok := parseLegacyBFReserve(args)
-		if !ok || !replayingFilterLog() {
+	// A form the earlier build accepted, replayed, means what it meant to
+	// that build - see replayingFilterLog. Where this build reads one of those
+	// forms differently, it logs another, below.
+	legacy, legacyForm := parseLegacyBFReserve(args)
+	r := legacy
+	if !legacyForm || !replayingFilterLog() {
+		var err error
+		if r, err = parseBFReserve(args); err != nil {
 			return Encode(err, false)
 		}
-		r = legacy
 	}
 	switch filterKeyStatus(key, sbStore) {
 	case filterHeld:
@@ -167,6 +170,13 @@ func cmdBFRESERVE(args []string) []byte {
 		return Encode(err, false)
 	}
 	sbStore.Put(key, data_structure.CreateSBChain(r.capacity, r.errorRate, r.expansion))
+	if legacyForm && legacy != r {
+		// The one form both builds read, differently: a key named NONSCALING,
+		// which RedisBloom takes for the option and the earlier build took for
+		// a name. The log gets the option spelled out, a form the earlier
+		// build refused, so a replay builds what this command built.
+		aofRecord("BF.RESERVE", key, args[1], args[2], "NONSCALING")
+	}
 	return constant.RespOk
 }
 

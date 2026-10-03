@@ -125,10 +125,16 @@ None of them is about framing:
   `SCANDUMP`/`LOADCHUNK` pairs and the `DEBUG` forms are not implemented.
 
 What is logged, replicated and dumped did not change. A log written by the
-earlier build still replays to the same filters, including commands RedisBloom
-refuses: a `CF.RESERVE` of capacity 1, a capacity written `007`, an expansion
-past 32768, and a `CF.DEL` of a missing key. A `NONSCALING` filter is new. A
-log or dump that holds one does not load on a build from before this change.
+earlier build still replays to the same filters. That includes commands
+RedisBloom refuses: a `CF.RESERVE` of capacity 1, a capacity written `007`, an
+expansion past 32768, and a `CF.DEL` of a missing key. It also includes
+commands RedisBloom reads differently, because it looks for options among all
+the arguments, the key included. `BF.RESERVE nonscaling 0.01 100` and
+`CF.RESERVE expansion 1000` were only key names to the earlier build, and a
+replay reads them that way. This build follows RedisBloom and reads that first
+one as `NONSCALING`, so it logs it with the option spelled out. A `NONSCALING`
+filter is new. A log or dump that holds one does not load on a build from
+before this change.
 
 Nothing in RedisBloom corresponds to `MORRIS.*`, so Keel chose. `MORRIS.INFO` is
 a map in RESP3, RESP3's type for name/value pairs, and keeps the bulk-string
