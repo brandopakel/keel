@@ -27,7 +27,9 @@ Time is reported, not enforced. The measured noise floor of this job, and the
 reasoning for leaving time ungated, are in the header of
 .github/workflows/command-path.yml. The repo's rule for a change on the command
 path is a median paired ratio of at least 0.98 in matched runs. A ratio above
-1/0.98 is marked so that a reviewer can weigh it against its interval.
+1/0.98 is marked for a reviewer. The intervals cover noise within one run.
+They cannot cover the build's code layout, which is fixed for the run, and
+layout alone has moved single benchmarks by up to 9.5%.
 
 The exit status is 1, with every reason listed, when:
 - a line is neither a benchmark result, a `key: value` line nor PASS; this
@@ -369,8 +371,10 @@ def markdown(result):
                 f"range from {o['row_range'][0]:.3f} to {o['row_range'][1]:.3f}. {effect}"]
     out += ['', f"{rounds['count']} rounds: {len(rounds['baseline_first'])} ran the baseline first and "
             f"{len(rounds['candidate_first'])} the candidate first. Each ratio pairs a candidate run with the "
-            "baseline run next to it, and the intervals resample rounds within each order. Time is reported, "
-            "not gated; allocations are gated."]
+            "baseline run next to it, and the intervals resample rounds within each order. They cover noise "
+            "within this run, not the code layout of the two builds: a change that runs nothing new has moved "
+            "the median by up to 3.5% and single benchmarks by up to 9.5% (see the header of "
+            "command-path.yml). Time is reported, not gated; allocations are gated."]
     if result['failures']:
         out += ['', '**FAILED**', '']
         out += [f'- {f}' for f in result['failures']]

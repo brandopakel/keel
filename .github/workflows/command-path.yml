@@ -10,19 +10,55 @@
 # - Both sides are built with -trimpath, from worktrees whose paths have the
 #   same length, and each runs from its own package directory. The build
 #   directory is not in either binary, so two builds of the same source are
-#   byte-identical, and the provenance says when they are. Without -trimpath, an
-#   A/A build from two directories differed by 4 KiB from the paths alone, and
-#   its candidate ran 9.8% slower in every round (run 37091722334).
+#   byte-identical, and the provenance says when they are. Without -trimpath,
+#   two builds of one commit from two directories differ by 4 KiB from the
+#   paths alone. The A/A run that showed it had a candidate slower in every
+#   round, 9.8% in the median (run 37091722334).
 # - Each round runs the two binaries back to back, and the order alternates:
 #   odd rounds run the baseline first, even rounds the candidate (ABBA). Each
 #   candidate run is paired with the baseline run next to it, so drift between
 #   rounds cancels out of each ratio, and a cost of running second falls on
 #   both sides equally. The comparison fails if the orders do not balance.
+# - Every run executes a fresh copy of its side's binary (see the rounds step).
 #
 # What fails the job: more allocations per operation on any row, eviction
 # rows whose evictions/op is not sane on both sides, and any row that does not
 # parse, is missing from one side or one round, or reports different metrics
 # on the two sides. Time is reported with an interval and is not gated.
+#
+# Noise floor, measured on ubuntu-latest with 12 rounds on 2026-10-03.
+# "Median" is the median paired ratio across the 20 benchmarks, with its 95%
+# interval. "Benchmarks" is the range of the single benchmarks' medians.
+#
+#   Run          Host           Median  Interval        Benchmarks
+#   A/A, develop against develop, byte-identical binaries:
+#   37155424821  Xeon 6973P-C   1.003   0.999 to 1.028  0.970 to 1.022
+#   37155427790  EPYC 9V74      1.002   1.000 to 1.005  0.983 to 1.014
+#   37155430926  EPYC 7763      0.999   0.996 to 1.001  0.988 to 1.005
+#   37155434251  EPYC 7763      1.000   0.997 to 1.002  0.990 to 1.012
+#   Layout control: develop against develop plus an unreachable branch in a
+#   cold function, so the code moves and nothing new runs (the last two runs
+#   came before the fresh copy per run):
+#   37155437598  EPYC 9V45      0.996   0.984 to 1.008  0.961 to 1.034
+#   37155440411  EPYC 9V74      0.987   0.979 to 0.994  0.905 to 1.034
+#   37154644606  EPYC 7763      0.965   0.961 to 0.976  0.919 to 1.034
+#   37154648439  Xeon 8573C     1.003   0.999 to 1.007  0.976 to 1.019
+#   A/A before this pairing (6 rounds, baseline always first, no -trimpath):
+#   37091722334  EPYC 9V74      1.098   1.077 to 1.102  1.003 to 1.165
+#   37153909284  EPYC 7763      1.001   0.993 to 1.003  0.986 to 1.019
+#   37153912995  EPYC 7763      1.003   0.996 to 1.007  0.992 to 1.028
+#   37153916307  EPYC 9V74      1.000   0.995 to 1.009  0.992 to 1.020
+#
+# Why time is not gated: an A/A run now lands within 0.3% of 1 in the median
+# and within 3% in any single benchmark. A real change also moves code,
+# though. Layout alone moved the median by up to 3.5% and a single benchmark
+# by up to 9.5%, in either direction, and outside the intervals: they measure
+# noise within a run, while a build's layout is fixed for the whole run. A 2%
+# gate would fail changes that cost nothing and pass ones that cost more
+# whenever the layout favours them. So read the median across benchmarks
+# against the plan's 0.98 rule. A result near the budget, or a single
+# benchmark over it, needs repeated runs (they land on different hosts) or
+# bench/run-ab.sh before it counts against a step.
 name: Command path
 
 on:
