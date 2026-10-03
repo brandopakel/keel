@@ -1,0 +1,65 @@
+# Paired command-path benchmarks: a change against its base.
+#
+# The embedding plan (docs/embedding-plan.md) moves every store, the evictor
+# and the log into an engine, a step at a time, and each step adds an
+# indirection to the path a command takes. This job runs BenchmarkCommandPath
+# and BenchmarkCommandPathUnderEviction on the base and the change alternately,
+# on the same runner, so drift between runs cancels out of each paired ratio.
+# More allocations per operation fail the job; time is reported for review,
+# because a shared runner moves by more than the budget a step is allowed.
+name: Command path
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline:
+        description: Revision to compare against (default develop)
+        default: develop
+  pull_request:
+    branches: [develop]
+    paths: ['internal/**', 'cmd/**', 'go.mod', 'go.sum', '.github/workflows/command-path.yml', 'scripts/compare-benchmarks.py']
+
+permissions:
+  contents: read
+
+jobs:
+  paired:
+    name: Paired command-path benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version-file: go.mod }
+      - name: Baseline worktree
+        env:
+          BASELINE: ${{ github.event.pull_request.base.sha || inputs.baseline }}
+        run: |
+          mkdir -p dist/command-path
+          # A branch name from the dispatch input exists only as origin/<name>.
+          rev=$(git rev-parse --verify --quiet "$BASELINE^{commit}" || git rev-parse --verify "origin/$BASELINE^{commit}")
+          git worktree add --detach "$RUNNER_TEMP/baseline" "$rev"
+          { echo "baseline $(git -C "$RUNNER_TEMP/baseline" rev-parse HEAD)"
+            echo "candidate $(git rev-parse HEAD)"
+            echo "runner $(uname -srm) cpus $(nproc)"; go version; } | tee dist/command-path/provenance.txt
+          # Each side runs its own benchmark file, so a change to the setup
+          # code is measured where it lands; names present on both sides are
+          # compared and the rest are listed.
+          go -C "$RUNNER_TEMP/baseline" test -c -o "$RUNNER_TEMP/baseline.test" ./internal/core
+          go test -c -o "$RUNNER_TEMP/candidate.test" ./internal/core
+      - name: Interleaved runs
+        run: |
+          bench='^BenchmarkCommandPath'
+          for i in 1 2 3 4 5 6; do
+            (cd "$RUNNER_TEMP/baseline/internal/core" && "$RUNNER_TEMP/baseline.test" -test.run '^$' -test.bench "$bench" -test.benchmem -test.benchtime=200ms) >> dist/command-path/baseline.txt
+            (cd internal/core && "$RUNNER_TEMP/candidate.test" -test.run '^$' -test.bench "$bench" -test.benchmem -test.benchtime=200ms) >> dist/command-path/candidate.txt
+          done
+      - name: Compare
+        run: python3 scripts/compare-benchmarks.py dist/command-path/baseline.txt dist/command-path/candidate.txt --json dist/command-path/comparison.json | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: command-path-benchmarks
+          path: dist/command-path
+          retention-days: 30

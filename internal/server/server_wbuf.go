@@ -18,9 +18,7 @@ package server
 // test. `-mode kqueue-nobuf` selects this path and is the baseline
 // representing upstream's design in everything under bench/results.
 //
-// The buffering itself lives in respondBatch, which both paths reach through
-// FDComm.Write. This file previously carried its own copy - a bufComm sink and
-// a writeAll loop that spun on EAGAIN. Spinning burns a core and, in a
-// single-threaded event loop, stalls every other connection, so the copy was
-// dropped in favour of the blocking-mode fallback in FDComm.Write.
+// Either way every write is nonblocking: a reply the socket will not take yet
+// stays pending and resumes on write readiness, so a slow reader never holds
+// the loop.
 var WriteUnbuffered bool
