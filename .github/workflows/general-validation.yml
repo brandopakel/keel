@@ -162,6 +162,13 @@ jobs:
         run: |
           python3 scripts/differential.py --protocol 3 --bin /tmp/keel-general --redis /tmp/redis-8.10.1/src/redis-server \
             --redis-module /tmp/redis-8.10.1/modules/redisbloom/redisbloom.so --out dist/general-ci/differential-resp3 --steps 20000
+      - name: RedisBloom reply parity, RESP2 and RESP3, byte for byte
+        # Every BF and CF reply and error, edge cases and transactions
+        # included, against the RedisBloom that Redis 8.10.1 ships, then the
+        # filters through two crash restarts and a rewrite.
+        run: |
+          python3 scripts/redisbloom-parity.py --bin /tmp/keel-general --redis /tmp/redis-8.10.1/src/redis-server \
+            --redis-module /tmp/redis-8.10.1/modules/redisbloom/redisbloom.so --out dist/general-ci/redisbloom-parity --steps 20000
       - name: All workload smoke cases
         run: |
           python3 bench/run-general.py --candidate /tmp/keel-general --memtier /tmp/memtier_benchmark-2.5.1/memtier_benchmark --out dist/general-ci/workloads --reps 1 --seconds 1

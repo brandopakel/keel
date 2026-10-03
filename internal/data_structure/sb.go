@@ -44,7 +44,9 @@ type SBChain struct {
 	filters []SBLink
 	// size is the number of items added to the whole chain.
 	size uint64
-	// growthFactor multiplies the capacity of each new filter.
+	// growthFactor multiplies the capacity of each new filter. Zero is a
+	// chain that never grows - RedisBloom's NONSCALING - which refuses a new
+	// item once its one filter holds what it was sized for.
 	growthFactor uint64
 }
 
@@ -53,16 +55,20 @@ type SBChain struct {
 // item is not added; everything already in the chain is still there.
 var ErrFilterTooLarge = errors.New("ERR the filter cannot grow: its next filter would be larger than this server allocates for one key")
 
+// ErrNonScalingFull is answered by Add for a new item when a chain that does
+// not grow is full, in RedisBloom's words.
+var ErrNonScalingFull = errors.New("ERR non scaling filter is full")
+
 // CreateSBChain starts a chain with one filter of the given capacity and error
-// rate, growing by expansion each time it fills. It returns nil for a capacity
-// of zero, an error rate outside (0, 1), an expansion below one, or a first
-// filter larger than MaxStructureBytes: no filter can be sized for the first
-// two, the third would grow a filter of no capacity the first time the chain
-// filled, and the fourth is an allocation nothing should make.
+// rate, growing by expansion each time it fills, or never growing for an
+// expansion of zero. It returns nil for a capacity of zero, an error rate
+// outside (0, 1), or a first filter larger than MaxStructureBytes: no filter
+// can be sized for the first two, and the third is an allocation nothing
+// should make.
 func CreateSBChain(capacity uint64, errorRate float64, expansion uint64) *SBChain {
 	// NaN is refused by name: it compares false against everything, so the
 	// range check alone would let it through into the sizing arithmetic.
-	if capacity == 0 || math.IsNaN(errorRate) || errorRate <= 0 || errorRate >= 1 || expansion == 0 {
+	if capacity == 0 || math.IsNaN(errorRate) || errorRate <= 0 || errorRate >= 1 {
 		return nil
 	}
 	if BloomBytesFor(capacity, errorRate) > MaxStructureBytes {
@@ -108,7 +114,9 @@ func (sb *SBChain) nextFilter() (capacity uint64, errorRate float64) {
 
 // Add records an item and reports whether it was new to the chain. False
 // means the item was probably added before; like any Bloom filter answer, that
-// can be a false positive.
+// can be a false positive. A chain that does not grow answers
+// ErrNonScalingFull for a new item once it is full, and an item it already
+// holds is still answered false.
 //
 // A new item that arrives when the newest filter is full makes the chain grow,
 // and the growth is sized before it is made: a filter larger than
@@ -122,6 +130,9 @@ func (sb *SBChain) Add(item string) (added bool, err error) {
 	}
 	current := sb.newest()
 	if current.size >= current.bloom.Entries {
+		if sb.growthFactor == 0 {
+			return false, ErrNonScalingFull
+		}
 		capacity, errorRate := sb.nextFilter()
 		if BloomBytesFor(capacity, errorRate) > MaxStructureBytes {
 			return false, ErrFilterTooLarge
@@ -154,8 +165,12 @@ func (sb *SBChain) Count() uint64 { return sb.size }
 // Filters is how many filters the chain has grown to.
 func (sb *SBChain) Filters() int { return len(sb.filters) }
 
-// Expansion is the growth factor.
+// Expansion is the growth factor, zero for a chain that does not grow.
 func (sb *SBChain) Expansion() uint64 { return sb.growthFactor }
+
+// NonScaling reports whether the chain refuses new items when full rather
+// than growing.
+func (sb *SBChain) NonScaling() bool { return sb.growthFactor == 0 }
 
 // MemUsage estimates the bytes held by the whole chain.
 //

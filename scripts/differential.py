@@ -491,11 +491,8 @@ def transaction3(rng, modules):
     elif shape < .22:
         refusal = ['MULTI']
     elif shape < .4:
-        # Between the two HELLOs replies are RESP2, where CF.MEXISTS keeps
-        # Keel's own form, "1" and "0" as strings, rather than RedisBloom's
-        # integers; RESP2 replies are unchanged by RESP3 support, so that
-        # difference is outside this mode and these blocks leave it out.
-        commands = [command for command in commands if command[0] != 'CF.MEXISTS']
+        # Between the two HELLOs replies are RESP2, in which the BF and CF
+        # commands answer as RedisBloom's do too.
         down = rng.randrange(len(commands)+1)
         commands.insert(down, ['HELLO', 2])
         commands.insert(rng.randrange(down+1, len(commands)+1), ['HELLO', 3])
@@ -522,14 +519,12 @@ def execute_transaction3(client, commands, ending):
 
 
 def setup_modules3(candidate, reference):
-    # A second CF.RESERVE of the same key is not compared: Keel answers
-    # "CF: key already exists" where RedisBloom answers "ERR item exists", a
-    # difference in error text that predates RESP3 and is the same in both
-    # protocols.
+    # Each reservation twice: the second is refused, in RedisBloom's words.
     checks = 0
     for i in range(4):
         for command in (['BF.RESERVE', f'bf:{i}', 0.000001, 100000], ['CF.RESERVE', f'cf:{i}', 100000],
-                        ['CMS.INITBYDIM', f'cms:{i}', 2000, 5]):
+                        ['CMS.INITBYDIM', f'cms:{i}', 2000, 5], ['BF.RESERVE', f'bf:{i}', 0.000001, 100000],
+                        ['CF.RESERVE', f'cf:{i}', 100000]):
             actual, expected = execute3(candidate, command), execute3(reference, command)
             assert actual == expected, (command, actual, expected)
             checks += 1
@@ -676,12 +671,18 @@ def check_shapes3(candidate, reference, modules):
             assert field_types(got) == field_types(want), (got, want)
             values = lambda reply: {key: item for key, item in reply[1] if key != ('simple', b'Size')}
             assert values(got) == values(want), (got, want)
-            # Keel's CF.INFO fields are its own; RedisBloom's form is a map from
-            # simple-string names to integers, and so is Keel's.
+            # CF.INFO's fields are RedisBloom's, in its order. The memory
+            # figures are each implementation's own, and so is the geometry:
+            # Keel's filters have BUCKETSIZE 4, MAXITERATIONS 500 and
+            # EXPANSION 0, and these were reserved with RedisBloom's defaults,
+            # under which RedisBloom grows a filter where Keel's refuses an
+            # item, and compacts it later, resetting its count of deletions.
             got, want = candidate.call('CF.INFO', f'cf:{i}'), reference.call('CF.INFO', f'cf:{i}')
-            for reply in (got, want):
-                assert {item for item in field_types(reply)} <= {(key, 'int') for key, _ in reply[1]}, reply
-                assert all(key[0] == 'simple' for key, _ in reply[1]), reply
+            assert [(key, item[0]) for key, item in got[1]] == [(key, item[0]) for key, item in want[1]], (got, want)
+            own = {b'Size', b'Number of buckets', b'Bucket size', b'Max iterations', b'Expansion rate',
+                   b'Number of filters', b'Number of items deleted'}
+            values = lambda reply: [(key, item) for key, item in reply[1] if key[1] not in own]
+            assert values(got) == values(want), (got, want)
             checks += 2
     return checks
 
@@ -810,8 +811,8 @@ def run(args):
                              'TTL/PTTL of a live key and module INFO compared by type and field names. BF/CF/CMS only with '
                              '--redis-module. Not compared: Keel-only commands (KEEL.*, MEMKV.*, MORRIS.*, SRAND), '
                              'BGREWRITEAOF, SELECT of another database, and random picks other than those determined by the set. '
-                             'Transactions as in the RESP2 mode, with HELLO 2 and HELLO 3 queued inside some (those leave out CF.MEXISTS, whose '
-                             'RESP2 form is Keel\'s own); no WATCH claim.')
+                             'Transactions as in the RESP2 mode, with HELLO 2 and HELLO 3 queued inside some; no WATCH claim. '
+                             'BF and CF replies and errors are compared byte for byte by scripts/redisbloom-parity.py.')
     server = Server(args.bin, root/'keel', policy=args.policy, async_append=args.concurrent,
                     extra=['-aof-concurrent-append'] if args.concurrent else ())
     server.env = {key: value for key,value in server.env.items() if key in ('PATH','HOME','TMPDIR','KEEL_VALIDATION_PASSWORD')}

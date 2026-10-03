@@ -154,6 +154,18 @@ func writtenKeys(cmd *Command) []string {
 // WRONGTYPE for a key it cannot read as a string; cmdSET checks that itself.
 var replacingWrites = map[string]bool{"SET": true, "SETEX": true, "PSETEX": true, "MSET": true, "SETNX": true}
 
+// filterCommands check the type of the key they name themselves, at the point
+// RedisBloom's do, and are exempt from the check below as well: a reservation
+// reports a bad parameter ahead of a key of another type, and BF.EXISTS,
+// CF.EXISTS and their kind answer no for one where every other read answers
+// WRONGTYPE. They stay in the table above for the keys they write. See
+// filterKeyStatus.
+var filterCommands = map[string]bool{
+	"BF.RESERVE": true, "BF.ADD": true, "BF.MADD": true, "BF.EXISTS": true, "BF.MEXISTS": true, "BF.INFO": true,
+	"CF.RESERVE": true, "CF.ADD": true, "CF.ADDNX": true, "CF.EXISTS": true, "CF.MEXISTS": true,
+	"CF.DEL": true, "CF.COUNT": true, "CF.INFO": true,
+}
+
 // checkKeyTypes reports an error if any key the command names is already held
 // by a different kind of store.
 //
@@ -162,7 +174,7 @@ var replacingWrites = map[string]bool{"SET": true, "SETEX": true, "PSETEX": true
 // type - see the comment on lcsValue.
 func checkKeyTypes(cmd *Command) error {
 	space, checked := commandKeyspace[cmd.Cmd]
-	if !checked || len(cmd.Args) == 0 || replacingWrites[cmd.Cmd] {
+	if !checked || len(cmd.Args) == 0 || replacingWrites[cmd.Cmd] || filterCommands[cmd.Cmd] {
 		return nil
 	}
 

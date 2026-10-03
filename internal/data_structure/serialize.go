@@ -348,8 +348,13 @@ func UnmarshalSBChain(p []byte) (*SBChain, error) {
 	}
 	// One link is a few dozen bytes at minimum, so a count larger than the
 	// bytes remaining cannot be honest and must not become an allocation.
-	if count == 0 || s.growthFactor == 0 || count > uint64(len(r.b))/53 {
+	if count == 0 || count > uint64(len(r.b))/53 {
 		return nil, fmt.Errorf("bloom filter: %d links in %d bytes", count, len(r.b))
+	}
+	// A growth factor of zero is a chain that never grows, so it has the one
+	// filter it was reserved with.
+	if s.growthFactor == 0 && count != 1 {
+		return nil, fmt.Errorf("bloom filter: a chain that does not grow has %d links", count)
 	}
 
 	s.filters = make([]SBLink, 0, count)
