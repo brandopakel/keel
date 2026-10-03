@@ -33,6 +33,10 @@ on:
         description: Compare the pending-reply regression and full suites on one Intel runner
         type: boolean
         default: false
+      diagnose_reservations:
+        description: "Interleave exact baseline and candidate SHAs (\"<baseline> <candidate>\") for the slow-reader reservation test and full suites on Intel"
+        type: string
+        default: ''
   workflow_call:
     inputs:
       long_filesystem_soak:
@@ -280,8 +284,94 @@ jobs:
           path: dist/slow-reader
           retention-days: 30
 
+  reservation_diagnostic:
+    if: github.event_name == 'workflow_dispatch' && inputs.diagnose_reservations != ''
+    name: Reservation repeats / runner ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [1, 2, 3, 4, 5]
+    runs-on: macos-15-intel
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false, fetch-depth: 0 }
+      # Same toolchain selection as the native job whose failure this repeats.
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version: stable }
+      - name: Build exact baseline and candidate trees
+        env:
+          ARMS: ${{ inputs.diagnose_reservations }}
+          RUNNER_INDEX: ${{ matrix.runner }}
+        run: |
+          read -r baseline candidate <<< "$ARMS"
+          out="dist/reservation-diagnostic/runner-$RUNNER_INDEX"
+          mkdir -p "$out"
+          git worktree add --detach "$RUNNER_TEMP/baseline" "$baseline"
+          git worktree add --detach "$RUNNER_TEMP/candidate" "$candidate"
+          for arm in baseline candidate; do
+            git -C "$RUNNER_TEMP/$arm" rev-parse HEAD > "$out/$arm-revision.log"
+            go -C "$RUNNER_TEMP/$arm" test -c -o "$RUNNER_TEMP/$arm.test" ./cmd/keel
+            go version -m "$RUNNER_TEMP/$arm.test" > "$out/$arm-build.log"
+          done
+          go version > "$out/toolchain.log"
+          { uname -a; sysctl hw.ncpu hw.memsize kern.ipc.nmbclusters kern.ipc.maxsockbuf net.inet.tcp.autosndbufmax net.inet.tcp.sendspace; } > "$out/host.log" 2>&1 || true
+      - name: Interleave focused and full-suite outcomes without changing deadlines
+        timeout-minutes: 42
+        env:
+          RUNNER_INDEX: ${{ matrix.runner }}
+        shell: bash
+        run: |
+          # Every outcome is recorded, so a failing run must not end the loop.
+          set +e +o pipefail
+          out="$GITHUB_WORKSPACE/dist/reservation-diagnostic/runner-$RUNNER_INDEX"
+          printf 'kind\trepetition\tarm\texit\tseconds\tmbuf_denied_delta\tmbuf_delayed_delta\tfailed_tests\n' > "$out/outcomes.tsv"
+          counter() { netstat -m | awk -v k="$1" '$0 ~ k {print $1; exit}'; }
+          record() {
+            local kind=$1 rep=$2 arm=$3 code=$4 secs=$5 log=$6 d0=$7 l0=$8
+            local d1 l1 failed
+            d1=$(counter "requests for memory denied"); l1=$(counter "requests for memory delayed")
+            failed=$(grep -oE -- '--- FAIL: [A-Za-z0-9_/]+' "$log" | sed 's/--- FAIL: //' | sort -u | paste -sd, -)
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$kind" "$rep" "$arm" "$code" "$secs" "$(( ${d1:-0} - ${d0:-0} ))" "$(( ${l1:-0} - ${l0:-0} ))" "${failed:--}" >> "$out/outcomes.tsv"
+          }
+          failed=0
+          # The focused test alone, one process per run, arms alternating.
+          for repetition in $(seq 1 20); do
+            if (( repetition % 2 == 0 )); then arms="candidate baseline"; else arms="baseline candidate"; fi
+            for arm in $arms; do
+              log="$out/focused-$repetition-$arm.log"
+              d0=$(counter "requests for memory denied"); l0=$(counter "requests for memory delayed")
+              start=$SECONDS
+              (cd "$RUNNER_TEMP/$arm/cmd/keel" && "$RUNNER_TEMP/$arm.test" -test.run='^TestCommandReservationsRecoverAfterSlowReaders$' -test.count=1 -test.timeout=2m -test.v) > "$log" 2>&1
+              code=$?
+              record focused "$repetition" "$arm" "$code" "$((SECONDS - start))" "$log" "$d0" "$l0"
+              if (( code != 0 )); then failed=1; netstat -m > "$out/focused-$repetition-$arm.netstat"; vm_stat > "$out/focused-$repetition-$arm.vmstat"; else rm -f "$log"; fi
+            done
+          done
+          # The native job's first step, uncached, arms alternating.
+          for repetition in 1 2 3 4; do
+            if (( repetition % 2 == 0 )); then arms="candidate baseline"; else arms="baseline candidate"; fi
+            for arm in $arms; do
+              log="$out/suite-$repetition-$arm.log"
+              d0=$(counter "requests for memory denied"); l0=$(counter "requests for memory delayed")
+              start=$SECONDS
+              go -C "$RUNNER_TEMP/$arm" test -count=1 ./... > "$log" 2>&1
+              code=$?
+              record suite "$repetition" "$arm" "$code" "$((SECONDS - start))" "$log" "$d0" "$l0"
+              if (( code != 0 )); then failed=1; netstat -m > "$out/suite-$repetition-$arm.netstat"; vm_stat > "$out/suite-$repetition-$arm.vmstat"; fi
+            done
+          done
+          column -t -s $'\t' "$out/outcomes.tsv" >> "$GITHUB_STEP_SUMMARY" || true
+          exit "$failed"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: reservation-diagnostic-${{ matrix.runner }}
+          path: dist/reservation-diagnostic
+          retention-days: 30
+
   native:
-    if: ${{ !inputs.long_filesystem_soak }}
+    if: ${{ !inputs.long_filesystem_soak && inputs.diagnose_reservations == '' }}
     name: Native recovery / ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -366,6 +456,7 @@ jobs:
           retention-days: 7
 
   filesystems:
+    if: ${{ inputs.diagnose_reservations == '' }}
     name: Recovery on ${{ matrix.fs }}
     runs-on: ubuntu-24.04
     timeout-minutes: ${{ inputs.long_filesystem_soak && 270 || 15 }}
