@@ -140,6 +140,34 @@ def describe_limit(report, limit):
     return f'{mib(effective)} per file', '--max-file-mib', advice
 
 
+def file_size_evidence(report, root, exit_code):
+    """Return (confidence, evidence) that the per-file ceiling broke the command."""
+    ceiling = report.get('effective_file_limit_bytes', report['file_limit_bytes'])
+    peak = report.get('peak_file_bytes', 0)
+    evidence, signalled = [], False
+    if exit_code == -signal.SIGXFSZ:
+        signalled = True
+        evidence.append('the command was killed by SIGXFSZ, the file-size limit signal')
+    elif exit_code == 128 + signal.SIGXFSZ:
+        evidence.append(f'the command exited with {exit_code}, the status a shell gives a '
+                        'child killed by SIGXFSZ')
+    if peak >= ceiling:
+        evidence.append(f"{report['peak_file']} reached the {ceiling}-byte ceiling")
+    lines = [f'command output: {line}' for line in signature_lines(root/'command.log')]
+    if evidence:
+        # A file can also end exactly at the ceiling, or a command exit with
+        # 153, by chance; a refused write's message or signal settles it.
+        return ('confirmed' if signalled or lines else 'likely'), evidence + lines
+    if not lines:
+        return None, []
+    # A test may set a much smaller limit of its own on purpose. A file seen at
+    # half this wrapper's ceiling ties the error to the wrapper. Samples are a
+    # quarter second apart, so a file that reached the ceiling and was then
+    # deleted may have been seen only part-way.
+    lines.append(f"largest file seen: {report.get('peak_file')} at {peak} bytes")
+    return ('likely' if peak*2 >= ceiling else 'possible'), lines
+
+
 def diagnose(report, root, stopped, exit_code):
     """Record which of this wrapper's limits explains a failed run, if any.
 
@@ -149,34 +177,13 @@ def diagnose(report, root, stopped, exit_code):
         record_peak_file(report, root, *scan_output(root)[1:])
     except OSError:
         pass  # The failure is already recorded; this scan only adds evidence.
-    confidence, evidence = 'confirmed', []
     if stopped is None:
-        ceiling = report.get('effective_file_limit_bytes', report['file_limit_bytes'])
-        peak = report.get('peak_file_bytes', 0)
-        killed = exit_code == -signal.SIGXFSZ
-        if killed:
-            evidence.append('the command was killed by SIGXFSZ, the file-size limit signal')
-        if peak >= ceiling:
-            evidence.append(f"{report['peak_file']} reached the {ceiling}-byte ceiling")
-        lines = [f'command output: {line}' for line in signature_lines(root/'command.log')]
-        if evidence:
-            # A file can also end exactly at the ceiling by chance; a refused
-            # write's message or signal settles it.
-            confidence = 'confirmed' if killed or lines else 'likely'
-        elif lines:
-            lines.append(f"largest file seen: {report.get('peak_file')} at {peak} bytes")
-            # A test may set a much smaller limit of its own on purpose. A file
-            # seen at half this wrapper's ceiling ties the error to the wrapper.
-            # Samples are a quarter second apart, so a file that reached the
-            # ceiling and was then deleted may have been seen only part-way.
-            confidence = 'likely' if peak*2 >= ceiling else 'possible'
-        else:
+        confidence, evidence = file_size_evidence(report, root, exit_code)
+        if confidence is None:
             return
-        evidence += lines
         limit = 'file_size'
     else:
-        limit = stopped.limit
-        evidence.append(str(stopped))
+        confidence, evidence, limit = 'confirmed', [str(stopped)], stopped.limit
         if limit == 'output':
             # Say what filled the budget: often the disposable Go cache.
             usage = []
@@ -192,6 +199,12 @@ def diagnose(report, root, stopped, exit_code):
                     pass
             evidence.append('usage by entry: ' + ', '.join(
                 f'{name} {size/2**20:.1f} MiB' for size, name in sorted(usage, reverse=True)[:6]))
+        # A command can hit the per-file ceiling first, then hang until the
+        # time limit; keep that evidence beside the limit that stopped it.
+        earlier, file_evidence = file_size_evidence(report, root, None)
+        if earlier is not None:
+            evidence.append(f'the per-file size limit (--max-file-mib) may have failed it first '
+                            f'({earlier}): ' + '; '.join(file_evidence))
     value, flag, advice = describe_limit(report, limit)
     name = LIMIT_NAMES[limit]
     if confidence == 'possible':
