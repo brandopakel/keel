@@ -43,7 +43,7 @@ func ParseCmdReserved(data []byte, reserve func(int) bool) (*Command, int, error
 	}
 	first := r.pos
 	var spans [16]commandSpan
-	charge := 64 // Command and the caller's pointer to it.
+	charge := 80 // Command, its 64 bytes rounded to their size class, and the caller's pointer to it.
 	add := func(size int) bool {
 		padded, ok := RequestAllocationSize(size)
 		if !ok || padded > int(^uint(0)>>1)-charge {
@@ -82,7 +82,7 @@ func ParseCmdReserved(data []byte, reserve func(int) bool) (*Command, int, error
 	}
 	command := allocateDecodedCommand(int(n) - 1)
 	args := command.Args
-	var name string
+	var name, sent string
 	r.pos = first
 	for i := 0; i < int(n); i++ {
 		var span commandSpan
@@ -95,19 +95,25 @@ func ParseCmdReserved(data []byte, reserve func(int) bool) (*Command, int, error
 			}
 		}
 		if i == 0 {
-			name = ownedUpperCommand(data[span.start:span.end])
+			name, sent = ownedUpperCommand(data[span.start:span.end])
 		} else {
 			args[i-1] = string(data[span.start:span.end])
 		}
 	}
 	command.Cmd = name
+	if name != sent {
+		// The spelling the client sent, which an unknown command's error
+		// echoes; both strings are within the admitted charge.
+		command.Name = sent
+	}
 	return command, consumed, nil
 }
 
 // strings.ToUpper can grow its builder repeatedly for expanding Unicode or
 // invalid UTF-8. Size that rare path first so the admitted original string and
-// at most three-byte-per-input-byte conversion each allocate only once.
-func ownedUpperCommand(data []byte) string {
+// at most three-byte-per-input-byte conversion each allocate only once. The
+// original is returned as well, as the client spelled the name.
+func ownedUpperCommand(data []byte) (upper, sent string) {
 	name := string(data)
 	hasLower := false
 	for i := 0; i < len(name); i++ {
@@ -121,14 +127,14 @@ func ownedUpperCommand(data []byte) string {
 			for _, r := range name {
 				b.WriteRune(unicode.ToUpper(r))
 			}
-			return b.String()
+			return b.String(), name
 		}
 		hasLower = hasLower || ('a' <= name[i] && name[i] <= 'z')
 	}
 	if hasLower {
-		return strings.ToUpper(name)
+		return strings.ToUpper(name), name
 	}
-	return name
+	return name, name
 }
 
 func (r *frameReader) commandStringSpan() (commandSpan, error) {

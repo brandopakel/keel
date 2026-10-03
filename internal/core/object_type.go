@@ -5,7 +5,10 @@ import (
 	"strconv"
 )
 
-var errNotAnInteger = errors.New("ERR value is not an integer or out of range")
+var (
+	errNotAnInteger  = errors.New("ERR value is not an integer or out of range")
+	errCountNegative = errors.New("ERR value is out of range, must be positive")
+)
 
 func canonicalInteger(v string) (int64, bool) {
 	// A canonical int64 is at most 20 bytes. ParseInt's error includes a copy
@@ -36,4 +39,26 @@ func counterInteger(v string) (int64, bool) {
 		return n, err == nil
 	}
 	return canonicalInteger(v)
+}
+
+// positiveCount reads a count that may be zero but not negative, as Redis's
+// getPositiveLongFromObjectOrReply reads one: anything that is not such an
+// integer, a word or a negative number alike, is refused in the same words.
+func positiveCount(v string) (int64, error) {
+	n, valid := counterInteger(v)
+	if !valid || n < 0 {
+		return 0, errCountNegative
+	}
+	return n, nil
+}
+
+// integerRange reads a start and a stop, LRANGE's and LTRIM's and ZRANGE's,
+// as integers on a 64-bit build.
+func integerRange(startText, stopText string) (start, stop int, err error) {
+	a, validStart := counterInteger(startText)
+	b, validStop := counterInteger(stopText)
+	if !validStart || !validStop {
+		return 0, 0, errNotAnInteger
+	}
+	return int(a), int(b), nil
 }

@@ -141,7 +141,8 @@ func StartRewrite() error {
 		return fmt.Errorf("appendonly is off")
 	}
 	if rewrite.active {
-		return fmt.Errorf("a rewrite is already running")
+		// Redis's words, which BGREWRITEAOF answers with.
+		return fmt.Errorf("Background append only file rewriting already in progress")
 	}
 	if ready, _ := pollRewriteIO(false); !ready {
 		return fmt.Errorf("previous rewrite I/O is still releasing its file")

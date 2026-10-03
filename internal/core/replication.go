@@ -160,7 +160,7 @@ func cmdReplicationPull(args []string) []byte {
 		return Encode(errors.New("ERR nonzero terms require replication protocol 2"), false)
 	}
 	if len(args) != 2 {
-		return Encode(errSyntax, false)
+		return Encode(wrongArguments("KEEL.REPL.PULL"), false)
 	}
 	offset, err := strconv.ParseUint(args[1], 10, 64)
 	if err != nil {
@@ -295,6 +295,8 @@ func (r *replicationReply) Read(b []byte) (int, error)  { return 0, errors.New("
 // UNWATCH because they send it while putting one back.
 var answersWithoutData = map[string]bool{"PING": true, "INFO": true, "ECHO": true, "SELECT": true, "UNWATCH": true}
 
+var errReadOnlyReplica = errors.New("READONLY You can't write against a read only replica.")
+
 func replicaCommandError(cmd string) error {
 	// Applying replicated state and replaying the log are not client writes:
 	// one is a decision the primary already made, the other is recovery.
@@ -306,8 +308,8 @@ func replicaCommandError(cmd string) error {
 			// READONLY rather than FENCED even when this replica has seen a
 			// term above its own: a replica refuses writes because of what it
 			// is, and saying so is more use to a client than saying it lost an
-			// election it was never in.
-			return errors.New("READONLY replica rejects writes")
+			// election it was never in. Worded as a Redis replica words it.
+			return errReadOnlyReplica
 		}
 		if !answersWithoutData[cmd] && (!replicaReady || time.Since(replicaUpdated) > 5*time.Second) {
 			return errors.New("MASTERDOWN replica has no recent primary state")

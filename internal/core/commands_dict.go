@@ -3,6 +3,7 @@ package core
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -16,15 +17,20 @@ import (
 // lives in the string dictionary, and the other types have none.
 
 var (
-	errSetExpire    = errors.New("ERR invalid expire time in 'set' command")
-	errExpireExpire = errors.New("ERR invalid expire time in 'expire' command")
 	errIncrOverflow = errors.New("ERR increment or decrement would overflow")
+	errDecrOverflow = errors.New("ERR decrement would overflow")
 )
+
+// invalidExpireTime is Redis's refusal of an expiry, which names the command
+// that was given it.
+func invalidExpireTime(name string) error {
+	return fmt.Errorf("ERR invalid expire time in '%s' command", strings.ToLower(name))
+}
 
 // SETEX/PSETEX share SET's validation and canonical SET/PEXPIREAT persistence.
 // Like SET, they replace a key whatever type held it.
-func cmdSETEX(args []string) []byte  { return setWithTTL(args, "EX") }
-func cmdPSETEX(args []string) []byte { return setWithTTL(args, "PX") }
+func cmdSETEX(args []string) []byte  { return setWithTTL("SETEX", args, "EX") }
+func cmdPSETEX(args []string) []byte { return setWithTTL("PSETEX", args, "PX") }
 
 // cmdSETNX is SET key value NX answering 1 or 0, the older spelling clients
 // still send: cachelib's and Flask-Caching's add() are built on it. It goes
@@ -32,7 +38,7 @@ func cmdPSETEX(args []string) []byte { return setWithTTL(args, "PX") }
 // replays on a build that predates the name.
 func cmdSETNX(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(errors.New("ERR wrong number of arguments for 'SETNX' command"), false)
+		return Encode(wrongArguments("SETNX"), false)
 	}
 	switch reply := cmdSET([]string{args[0], args[1], "NX"}); {
 	case bytes.Equal(reply, constant.RespOk):
@@ -44,11 +50,11 @@ func cmdSETNX(args []string) []byte {
 	}
 }
 
-func setWithTTL(args []string, unit string) []byte {
+func setWithTTL(name string, args []string, unit string) []byte {
 	if len(args) != 3 {
-		return Encode(errors.New("ERR wrong number of arguments for expiring SET command"), false)
+		return Encode(wrongArguments(name), false)
 	}
-	return cmdSET([]string{args[0], args[2], unit, args[1]})
+	return setCommand(name, []string{args[0], args[2], unit, args[1]})
 }
 
 // cmdSET implements SET key value [EX seconds | PX milliseconds].
@@ -60,60 +66,62 @@ func setWithTTL(args []string, unit string) []byte {
 // all was accepted just as readily. Anything past EX and PX is refused rather
 // than guessed at, which is the difference between a command this server does
 // not implement and a command it appears to implement and does not.
-func cmdSET(args []string) []byte {
+func cmdSET(args []string) []byte { return setCommand("SET", args) }
+
+// setCommand is SET, and SETEX and PSETEX through it; name is the command
+// running, which an invalid expiry names. The options are read as Redis reads
+// them: NX and XX exclude each other, KEEPTTL and the four expiry options
+// exclude one another, though one expiry option may be given again, and its
+// last value counts. The expiry is checked only once every option has been
+// read, so a malformed option is refused ahead of a malformed expiry.
+func setCommand(name string, args []string) []byte {
 	if len(args) < 2 {
-		return Encode(errors.New("ERR wrong number of arguments for 'SET' command"), false)
+		return Encode(wrongArguments(name), false)
 	}
 	nx, xx, get, keep := false, false, false, false
-	var at int64
-	expiry := false
+	unit, expire := "", ""
 	for i := 2; i < len(args); i++ {
-		switch strings.ToUpper(args[i]) {
-		case "NX":
+		switch opt := strings.ToUpper(args[i]); {
+		case opt == "NX" && !xx:
 			nx = true
-		case "XX":
+		case opt == "XX" && !nx:
 			xx = true
-		case "GET":
+		case opt == "GET":
 			get = true
-		case "KEEPTTL":
-			if expiry {
-				return Encode(errSyntax, false)
-			}
+		case opt == "KEEPTTL" && unit == "":
 			keep = true
-		case "EX", "PX", "EXAT", "PXAT":
-			if expiry || keep || i+1 == len(args) {
-				return Encode(errSyntax, false)
-			}
-			opt := strings.ToUpper(args[i])
+		case (opt == "EX" || opt == "PX" || opt == "EXAT" || opt == "PXAT") && !keep &&
+			(unit == "" || unit == opt) && i+1 < len(args):
+			unit, expire = opt, args[i+1]
 			i++
-			n, err := strconv.ParseInt(args[i], 10, 64)
-			if err != nil {
-				return Encode(errNotAnInteger, false)
-			}
-			if n <= 0 {
-				return Encode(errSetExpire, false)
-			}
-			if opt == "EX" || opt == "EXAT" {
-				if n > math.MaxInt64/1000 {
-					return Encode(errSetExpire, false)
-				}
-				n *= 1000
-			}
-			at = n
-			if opt == "EX" || opt == "PX" {
-				var ok bool
-				at, ok = expiryInstant(n)
-				if !ok {
-					return Encode(errSetExpire, false)
-				}
-			}
-			expiry = true
 		default:
 			return Encode(errSyntax, false)
 		}
 	}
-	if nx && xx {
-		return Encode(errSyntax, false)
+	var at int64
+	expiry := unit != ""
+	if expiry {
+		n, valid := counterInteger(expire)
+		if !valid {
+			return Encode(errNotAnInteger, false)
+		}
+		if n <= 0 {
+			return Encode(invalidExpireTime(name), false)
+		}
+		if unit == "EX" || unit == "EXAT" {
+			if n > math.MaxInt64/1000 {
+				return Encode(invalidExpireTime(name), false)
+			}
+			n *= 1000
+		}
+		at = n
+		if unit == "EX" || unit == "PX" {
+			var ok bool
+			at, ok = expiryInstant(n)
+			if !ok {
+				return Encode(invalidExpireTime(name), false)
+			}
+		}
 	}
 	key, value := args[0], args[1]
 	// A name another type holds is a key that exists, so NX leaves it and XX
@@ -194,7 +202,7 @@ func expiryInstant(ttlMs int64) (int64, bool) {
 
 func cmdGET(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("ERR wrong number of arguments for 'GET' command"), false)
+		return Encode(wrongArguments("GET"), false)
 	}
 	// Get reaps a key whose TTL has passed, so what comes back is live.
 	obj := dictStore.Get(args[0])
@@ -223,7 +231,7 @@ func remainingTTL(key string) int64 {
 // as Redis rounds it.
 func cmdTTL(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("ERR wrong number of arguments for 'TTL' command"), false)
+		return Encode(wrongArguments("TTL"), false)
 	}
 	left := remainingTTL(args[0])
 	if left < 0 {
@@ -235,7 +243,7 @@ func cmdTTL(args []string) []byte {
 // cmdPTTL is TTL in milliseconds.
 func cmdPTTL(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("ERR wrong number of arguments for 'PTTL' command"), false)
+		return Encode(wrongArguments("PTTL"), false)
 	}
 	return Encode(remainingTTL(args[0]), false)
 }
@@ -249,7 +257,7 @@ func cmdPTTL(args []string) []byte {
 // answers.
 func cmdDEL(args []string) []byte {
 	if len(args) == 0 {
-		return Encode(errors.New("ERR wrong number of arguments for 'DEL' command"), false)
+		return Encode(wrongArguments("DEL"), false)
 	}
 	deleted := 0
 	for _, key := range args {
@@ -265,7 +273,7 @@ func cmdDEL(args []string) []byte {
 // and UNLINK is logged as DEL - see persistedName.
 func cmdUNLINK(args []string) []byte {
 	if len(args) == 0 {
-		return Encode(errors.New("ERR wrong number of arguments for 'UNLINK' command"), false)
+		return Encode(wrongArguments("UNLINK"), false)
 	}
 	return cmdDEL(args)
 }
@@ -273,29 +281,16 @@ func cmdUNLINK(args []string) []byte {
 // cmdEXPIRE implements EXPIRE key seconds. A time already passed - zero or
 // negative - deletes the key, as it does in Redis, and is logged as the DEL
 // it amounts to.
-func cmdEXPIRE(args []string) []byte    { return expireCommand(args, 1000, false) }
-func cmdPEXPIRE(args []string) []byte   { return expireCommand(args, 1, false) }
-func cmdEXPIREAT(args []string) []byte  { return expireCommand(args, 1000, true) }
-func cmdPEXPIREAT(args []string) []byte { return expireCommand(args, 1, true) }
+func cmdEXPIRE(args []string) []byte    { return expireCommand("EXPIRE", args, 1000, false) }
+func cmdPEXPIRE(args []string) []byte   { return expireCommand("PEXPIRE", args, 1, false) }
+func cmdEXPIREAT(args []string) []byte  { return expireCommand("EXPIREAT", args, 1000, true) }
+func cmdPEXPIREAT(args []string) []byte { return expireCommand("PEXPIREAT", args, 1, true) }
 
-func expireCommand(args []string, scale int64, absolute bool) []byte {
+// expireCommand reads its options before its time, as Redis does, and refuses
+// them in Redis's words.
+func expireCommand(name string, args []string, scale int64, absolute bool) []byte {
 	if len(args) < 2 {
-		return Encode(errors.New("ERR wrong number of arguments for expiry command"), false)
-	}
-	n, err := strconv.ParseInt(args[1], 10, 64)
-	if err != nil {
-		return Encode(errNotAnInteger, false)
-	}
-	if n > math.MaxInt64/scale || n < math.MinInt64/scale {
-		return Encode(errExpireExpire, false)
-	}
-	at := n * scale
-	if !absolute && at > 0 {
-		var ok bool
-		at, ok = expiryInstant(at)
-		if !ok {
-			return Encode(errExpireExpire, false)
-		}
+		return Encode(wrongArguments(name), false)
 	}
 	nx, xx, gt, lt := false, false, false, false
 	for _, opt := range args[2:] {
@@ -309,11 +304,29 @@ func expireCommand(args []string, scale int64, absolute bool) []byte {
 		case "LT":
 			lt = true
 		default:
-			return Encode(errSyntax, false)
+			return Encode(fmt.Errorf("ERR Unsupported option %s", EchoArgument(opt)), false)
 		}
 	}
-	if (nx && (xx || gt || lt)) || (gt && lt) {
-		return Encode(errSyntax, false)
+	if nx && (xx || gt || lt) {
+		return Encode(errors.New("ERR NX and XX, GT or LT options at the same time are not compatible"), false)
+	}
+	if gt && lt {
+		return Encode(errors.New("ERR GT and LT options at the same time are not compatible"), false)
+	}
+	n, valid := counterInteger(args[1])
+	if !valid {
+		return Encode(errNotAnInteger, false)
+	}
+	if n > math.MaxInt64/scale || n < math.MinInt64/scale {
+		return Encode(invalidExpireTime(name), false)
+	}
+	at := n * scale
+	if !absolute && at > 0 {
+		var ok bool
+		at, ok = expiryInstant(at)
+		if !ok {
+			return Encode(invalidExpireTime(name), false)
+		}
 	}
 	owner, ok := data_structure.OwnerOf(args[0])
 	if !ok {
@@ -337,7 +350,7 @@ func expireCommand(args []string, scale int64, absolute bool) []byte {
 
 func cmdPERSIST(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errSyntax, false)
+		return Encode(wrongArguments("PERSIST"), false)
 	}
 	owner, ok := data_structure.OwnerOf(args[0])
 	if ok && owner.ClearExpiry(args[0]) {
@@ -350,17 +363,17 @@ func cmdPERSIST(args []string) []byte {
 // The value is changed in place, so a TTL on the key survives, as it does in
 // Redis. A value that is not a canonical integer is refused, and so is one
 // that would overflow, rather than wrapping to a number nobody asked for.
-func cmdINCR(args []string) []byte   { return increment(args, 1, false) }
-func cmdDECR(args []string) []byte   { return increment(args, -1, false) }
-func cmdINCRBY(args []string) []byte { return increment(args, 1, true) }
-func cmdDECRBY(args []string) []byte { return increment(args, -1, true) }
-func increment(args []string, sign int64, explicit bool) []byte {
+func cmdINCR(args []string) []byte   { return increment("INCR", args, 1, false) }
+func cmdDECR(args []string) []byte   { return increment("DECR", args, -1, false) }
+func cmdINCRBY(args []string) []byte { return increment("INCRBY", args, 1, true) }
+func cmdDECRBY(args []string) []byte { return increment("DECRBY", args, -1, true) }
+func increment(name string, args []string, sign int64, explicit bool) []byte {
 	want := 1
 	if explicit {
 		want = 2
 	}
 	if len(args) != want {
-		return Encode(errors.New("ERR wrong number of arguments for increment command"), false)
+		return Encode(wrongArguments(name), false)
 	}
 	delta := sign
 	if explicit {
@@ -369,7 +382,8 @@ func increment(args []string, sign int64, explicit bool) []byte {
 			return Encode(errNotAnInteger, false)
 		}
 		if sign == -1 && n == math.MinInt64 {
-			return Encode(errIncrOverflow, false)
+			// Negating it would overflow before anything is added.
+			return Encode(errDecrOverflow, false)
 		}
 		delta = n * sign
 	}
@@ -406,7 +420,7 @@ func increment(args []string, sign int64, explicit bool) []byte {
 // next to a DBSIZE of zero.
 func cmdDBSIZE(args []string) []byte {
 	if len(args) != 0 {
-		return Encode(errors.New("ERR wrong number of arguments for 'DBSIZE' command"), false)
+		return Encode(wrongArguments("DBSIZE"), false)
 	}
 	return Encode(int64(data_structure.TotalKeys()), false)
 }

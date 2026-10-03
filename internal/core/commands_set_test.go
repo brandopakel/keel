@@ -72,9 +72,10 @@ func TestSPOP(t *testing.T) {
 	assert.Equal(t, []interface{}{}, run(t, "SPOP", "s", "0"))
 	assert.EqualValues(t, 1, run(t, "SCARD", "s"))
 
-	assert.Contains(t, run(t, "SPOP", "s", "-1"), "must be positive")
-	assert.Contains(t, run(t, "SPOP", "s", "many"), "not an integer")
-	assert.Contains(t, run(t, "SPOP", "s", "1", "2"), "wrong number of arguments")
+	assert.Equal(t, "ERR value is out of range, must be positive", run(t, "SPOP", "s", "-1"))
+	assert.Equal(t, "ERR value is out of range, must be positive", run(t, "SPOP", "s", "many"),
+		"Redis words a count that is not a number the same way")
+	assert.Equal(t, "ERR syntax error", run(t, "SPOP", "s", "1", "2"))
 }
 
 func TestSRANDMEMBER(t *testing.T) {
@@ -106,7 +107,9 @@ func TestSRANDMEMBER(t *testing.T) {
 	// could consume is refused rather than allocated.
 	assert.Contains(t, run(t, "SRANDMEMBER", "s", "-100000000000"), "out of range")
 	assert.Len(t, run(t, "SRANDMEMBER", "s", "100000000000").([]interface{}), 3, "a positive count is only ever the set")
-	assert.Contains(t, run(t, "SRANDMEMBER", "s", "1", "2"), "wrong number of arguments")
+	assert.Equal(t, "ERR syntax error", run(t, "SRANDMEMBER", "s", "1", "2"))
+	assert.Equal(t, "ERR value is out of range, value must between -9223372036854775807 and 9223372036854775807",
+		run(t, "SRANDMEMBER", "s", "-9223372036854775808"))
 }
 
 func TestSRANDIsTheOldNameForSRANDMEMBER(t *testing.T) {

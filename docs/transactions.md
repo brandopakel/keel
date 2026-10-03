@@ -21,18 +21,21 @@ order; `DISCARD` drops it. The replies clients match on are Redis's:
 | `MULTI` inside `MULTI` | `ERR MULTI calls can not be nested`; the transaction stays open |
 | `WATCH key` inside `MULTI` | `ERR WATCH inside MULTI is not allowed`; the transaction stays open |
 | `EXEC` or `DISCARD` without `MULTI` | `ERR EXEC without MULTI`, `ERR DISCARD without MULTI` |
-| `EXEC` with arguments inside a transaction | `EXECABORT Transaction discarded because of: wrong number of arguments for 'exec' command`; the transaction is discarded |
+| `EXEC` with arguments, inside a transaction or not | `EXECABORT Transaction discarded because of: wrong number of arguments for 'exec' command`; a transaction is discarded |
+| `EXEC` before the connection has logged in | `EXECABORT Transaction discarded because of: NOAUTH Authentication required.` |
 | Writability lost between queueing and `EXEC` | `EXECABORT Transaction discarded because of:` and the reason, for example `FENCED ...` or `MASTERDOWN ...`; nothing runs |
 
-Argument counts are checked while queueing with Redis's arity for Redis's
-commands, and each handler's own count for Keel's, so a command Redis would
-refuse at queue time is refused at queue time here, with Redis's wording, which
-names the command in lower case. A test runs every handler with every count the
-table refuses and requires it to refuse as well, so the table can never turn a
-valid command into an aborted transaction. An unknown command keeps Keel's
-existing `ERR unknown command 'NAME'`, without Redis's `with args beginning
-with:` suffix; the error class is the same. Every reply in the table above was
-checked against Redis 8.10.1.
+Argument counts are checked from one table before any command runs, queued or
+not: Redis's arity for Redis's commands, RedisBloom's for `BF.*`, `CF.*` and
+`CMS.*`, and the same form for Keel's own. A command Redis would refuse at queue
+time is refused at queue time here, in Redis's words, which name the command in
+lower case and a subcommand as `memory|usage`. A test runs every handler with
+every count the table refuses and requires it to refuse as well, so the table
+can never turn a valid command into an aborted transaction. An unknown command
+is answered as Redis 8 answers it, `ERR unknown command 'name', with args
+beginning with: 'a' 'b' `, the name as it was sent; see
+[error replies](error-replies.md). Every reply in the table above was checked
+against Redis 8.10.1.
 
 A connection that closes inside a transaction runs nothing it queued, and the
 memory the queue held is released with the connection.
@@ -47,8 +50,10 @@ runs in its place at `EXEC`:
   argument counts are Redis's. Only an authenticated connection can open a
   transaction, so `MULTI` does not bypass `AUTH`. A failed `AUTH` inside `EXEC`
   is a `WRONGPASS` element; the commands queued while the connection was
-  authenticated still run, and the connection is unauthenticated afterwards, as
-  after a failed `AUTH` outside a transaction. A queued `HELLO 3` or `HELLO 2`
+  authenticated still run, and the connection stays logged in, as after a
+  failed `AUTH` outside a transaction and in Redis. (Redis 8.10.1 sends no
+  element at all for that failure while its `EXEC` reply still counts one, so
+  a client waits forever; Keel sends the error.) A queued `HELLO 3` or `HELLO 2`
   switches the protocol at its place in `EXEC`, so the replies after it in the
   `EXEC` array are in the new protocol, as in Redis; see
   [RESP3](resp3.md#transactions).
@@ -172,7 +177,7 @@ contains the transaction. Opaque images are where this happens in practice: a
 filter publishes its whole image for each command that changes it.
 
 A replica refuses write transactions as it refuses writes: each queued write
-is answered `READONLY replica rejects writes`, and `EXEC` answers `EXECABORT`.
+is answered `READONLY You can't write against a read only replica.`, and `EXEC` answers `EXECABORT`.
 Transactions of reads run on a replica with recent primary state; a stale
 replica refuses reads while queueing, or at `EXEC` with `EXECABORT ... because
 of: MASTERDOWN ...`.
@@ -251,7 +256,7 @@ transaction and refuse a write transaction.
 
 The seeded Redis differential mixes `MULTI` blocks into its operations, with
 queue-time refusals, nested `MULTI` and `DISCARD`, and compares every reply,
-including each element of `EXEC`'s array by error class. A local 4,000-step run
+including each element of `EXEC`'s array, errors byte for byte. A local 4,000-step run
 against Redis 8.10.1 passed with 399 transactions, its state checks and two
 crash restarts, and the hosted 20,000-step run against Redis 7.0.15 passed with
 1,985. The [client-library matrix](client-library-compatibility.md)

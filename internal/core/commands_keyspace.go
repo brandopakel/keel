@@ -1,7 +1,7 @@
 package core
 
 import (
-	"errors"
+	"strings"
 	"time"
 
 	"github.com/brandopakel/keel/internal/constant"
@@ -22,7 +22,7 @@ import (
 
 func cmdEXISTS(args []string) []byte {
 	if len(args) == 0 {
-		return Encode(errors.New("ERR wrong number of arguments for 'EXISTS' command"), false)
+		return Encode(wrongArguments("EXISTS"), false)
 	}
 
 	// Repeats count repeatedly, which is Redis's behaviour from 3.0 on:
@@ -45,7 +45,7 @@ func cmdEXISTS(args []string) []byte {
 // rather than borrowing a word that would be a lie.
 func cmdTYPE(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("ERR wrong number of arguments for 'TYPE' command"), false)
+		return Encode(wrongArguments("TYPE"), false)
 	}
 
 	owner, held := data_structure.OwnerOf(args[0])
@@ -66,7 +66,7 @@ func cmdTYPE(args []string) []byte {
 // it is the honest answer when a caller really does want the whole keyspace.
 func cmdKEYS(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("ERR wrong number of arguments for 'KEYS' command"), false)
+		return Encode(wrongArguments("KEYS"), false)
 	}
 	pattern := args[0]
 
@@ -111,7 +111,7 @@ func cmdKEYS(args []string) []byte {
 // absent from the type table in keytype.go.
 func cmdMGET(args []string) []byte {
 	if len(args) == 0 {
-		return Encode(errors.New("ERR wrong number of arguments for 'MGET' command"), false)
+		return Encode(wrongArguments("MGET"), false)
 	}
 
 	return encodeLookupArray(len(args), func(i int) (string, bool) {
@@ -140,7 +140,7 @@ func cmdMGET(args []string) []byte {
 // then refuse.
 func cmdMSET(args []string) []byte {
 	if len(args) == 0 || len(args)%2 != 0 {
-		return Encode(errors.New("ERR wrong number of arguments for 'MSET' command"), false)
+		return Encode(wrongArguments("MSET"), false)
 	}
 
 	replaced := false
@@ -168,12 +168,17 @@ func cmdMSET(args []string) []byte {
 // and unless it is told they changed it will finish by producing a log that
 // restores everything FLUSHDB just removed. Marking them dirty makes
 // finishRewrite emit a DEL for each and re-emit nothing, which is exactly right.
+//
+// SYNC and ASYNC are Redis's, and accepted as Redis accepts them; anything else
+// is a syntax error. Either way the keys are gone before the reply, which is
+// all ASYNC changes in Redis too: only when their memory is freed. What is
+// logged is the plain FLUSHDB, which every release replays.
 func cmdFLUSHDB(args []string) []byte {
-	if len(args) != 0 {
-		// ASYNC and SYNC are accepted by Redis and mean nothing on a server
-		// that has no background free. Refusing is better than accepting a
-		// word that promises something this does not do.
-		return Encode(errors.New("ERR wrong number of arguments for 'FLUSHDB' command"), false)
+	if len(args) > 1 || len(args) == 1 && !strings.EqualFold(args[0], "SYNC") && !strings.EqualFold(args[0], "ASYNC") {
+		return Encode(errSyntax, false)
+	}
+	if len(args) == 1 {
+		aofRecord("FLUSHDB")
 	}
 
 	data_structure.EachKeyspace(func(ks data_structure.Keyspace) {

@@ -220,7 +220,7 @@ func TestExpireCycleReportsWhatItReclaimed(t *testing.T) {
 	for i := 0; i < 50 && ExpireCycle() > 0; i++ {
 	}
 
-	info := run(t, "INFO", "").(string)
+	info := run(t, "INFO").(string)
 	assert.Contains(t, info, "expired_keys:1")
 	assert.Contains(t, info, "expires=1", "the survivor still carries its TTL")
 	assert.True(t, strings.Contains(info, "db0:keys=1"))

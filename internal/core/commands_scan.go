@@ -38,7 +38,7 @@ const scanMatchWork = 1 << 20
 // on an empty reply. That is Redis's rule too.
 func cmdSCAN(args []string) []byte {
 	if len(args) < 1 {
-		return Encode(errors.New("ERR wrong number of arguments for 'SCAN' command"), false)
+		return Encode(wrongArguments("SCAN"), false)
 	}
 	cursor, err := strconv.ParseUint(args[0], 10, 64)
 	if err != nil {
@@ -62,10 +62,11 @@ func cmdSCAN(args []string) []byte {
 			if i+1 >= len(args) {
 				return Encode(errSyntax, false)
 			}
-			n, convErr := strconv.Atoi(args[i+1])
-			if convErr != nil {
+			parsed, valid := counterInteger(args[i+1])
+			if !valid {
 				return Encode(errNotAnInteger, false)
 			}
+			n := int(parsed)
 			if n < 1 || n > scanMaxCount {
 				return Encode(errSyntax, false)
 			}

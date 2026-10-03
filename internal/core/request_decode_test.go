@@ -141,3 +141,24 @@ func BenchmarkRequestParsingAdmission(b *testing.B) {
 		}
 	}
 }
+
+// TestDecodersKeepTheNameAsSent: Redis echoes an unknown command's name as the
+// client spelled it, so every decoder keeps that spelling beside the
+// upper-cased name, and only when the two differ.
+func TestDecodersKeepTheNameAsSent(t *testing.T) {
+	reserved := func(wire []byte) (*Command, int, error) {
+		return ParseCmdReserved(wire, func(int) bool { return true })
+	}
+	for _, parse := range []func([]byte) (*Command, int, error){ParseCmd, parseCmdGeneric, reserved} {
+		for _, c := range []struct{ sent, cmd, name string }{
+			{"get", "GET", "get"}, {"GET", "GET", ""}, {"GeT", "GET", "GeT"}, {"", "", ""},
+			{"é", "É", "é"}, {"\xff", "�", "\xff"},
+		} {
+			cmd, _, err := parse(appendCommand(nil, c.sent, "k"))
+			require.NoError(t, err)
+			require.Equal(t, c.cmd, cmd.Cmd, "%q", c.sent)
+			require.Equal(t, c.name, cmd.Name, "%q", c.sent)
+			require.Equal(t, c.sent, cmd.sentName())
+		}
+	}
+}

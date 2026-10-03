@@ -2,9 +2,7 @@ package core
 
 import (
 	"errors"
-	"fmt"
 	"io"
-	"strconv"
 
 	"github.com/brandopakel/keel/internal/constant"
 	"github.com/brandopakel/keel/internal/data_structure"
@@ -14,9 +12,10 @@ import (
 //
 // One table from name to handler. A command is registered here, in the type
 // table in keytype.go so a name held by another type is refused, in
-// commandArity in transaction.go so a transaction can count its arguments
-// before running it, and - if it changes anything - in the log's
-// writeCommands; each of those is a list that can be read against the others.
+// commandArity in command_check.go so its arguments are counted before it
+// runs, and - if it changes anything - in the log's writeCommands; each of
+// those is a list that can be read against the others. Dispatch looks a
+// command up in commands, the index of this table and commandArity together.
 var commandTable = map[string]func([]string) []byte{
 	"PING": cmdPING, "ECHO": cmdECHO, "SELECT": cmdSELECT,
 	"UNWATCH": cmdUNWATCH,
@@ -86,13 +85,13 @@ func cmdPING(args []string) []byte {
 	case 1:
 		return encodeBoundedString(args[0])
 	}
-	return Encode(errors.New("ERR wrong number of arguments for 'PING' command"), false)
+	return Encode(wrongArguments("PING"), false)
 }
 
 // cmdECHO answers its one argument, as PING does when given one.
 func cmdECHO(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("ERR wrong number of arguments for 'ECHO' command"), false)
+		return Encode(wrongArguments("ECHO"), false)
 	}
 	return encodeBoundedString(args[0])
 }
@@ -104,10 +103,10 @@ func cmdECHO(args []string) []byte {
 // believed they had a database to themselves.
 func cmdSELECT(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("ERR wrong number of arguments for 'SELECT' command"), false)
+		return Encode(wrongArguments("SELECT"), false)
 	}
-	n, err := strconv.Atoi(args[0])
-	if err != nil {
+	n, valid := counterInteger(args[0])
+	if !valid {
 		return Encode(errNotAnInteger, false)
 	}
 	if n != 0 {
@@ -115,6 +114,10 @@ func cmdSELECT(args []string) []byte {
 	}
 	return constant.RespOk
 }
+
+// runningName is the name of the command running, as its client spelled it,
+// held as replyRESP3 is: for the few errors in which Redis repeats it.
+var runningName string
 
 // EvalAndResponse runs one command and writes its reply to c.
 //
@@ -127,13 +130,26 @@ func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	// command - see resp3.go. Log replay and replica apply answer nobody, and
 	// run as RESP2 whatever the command says: what they produce has to be the
 	// same however the command first arrived.
-	saved := replyRESP3
+	saved, savedName := replyRESP3, runningName
 	replyRESP3 = cmd.RESP3 && !aof.replaying && !replicaApplying
-	defer func() { replyRESP3 = saved }()
+	runningName = cmd.sentName()
+	defer func() { replyRESP3, runningName = saved, savedName }()
 
-	if err := replicaCommandError(cmd.Cmd); err != nil {
-		_, werr := c.Write(Encode(err, false))
-		return werr
+	// Redis names and counts a command before anything else, a replica's
+	// refusal of a write included. A command this server does not have is
+	// returned rather than answered, so that a log replay stops on it.
+	entry, known := commands[cmd.Cmd]
+	if entry.run == nil {
+		// Unknown, or one only the transport answers, with none here to.
+		return unknownCommand(cmd)
+	}
+	refused := commandRefusal(cmd, entry, known)
+	if refused == nil {
+		refused = replicaCommandError(cmd.Cmd)
+	}
+	if refused != nil {
+		_, err := c.Write(Encode(refused, false))
+		return err
 	}
 	// Anything a command wants written to the log instead of itself is staged
 	// while it runs, so the slate has to be clean before it starts. This comes
@@ -153,16 +169,9 @@ func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 		return werr
 	}
 
-	handler, known := commandTable[cmd.Cmd]
-	if !known {
-		// Nothing ran, but the type check may still have reaped an expired
-		// key, and that removal has to be recorded.
-		aofCommit(cmd, nil)
-		return unknownCommand(cmd.Cmd)
-	}
 	suspended := data_structure.DefaultSpace.SuspendEviction
 	data_structure.DefaultSpace.SuspendEviction = true
-	res := handler(cmd.Args)
+	res := entry.run(cmd.Args)
 	// With eviction suspended, removals so far are lazy expiry. They precede
 	// this command: recording them after INCR/HSET would delete the recreated key.
 	// Recorded before the reply is written. FlushAOF runs between execution and
@@ -175,17 +184,4 @@ func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 
 	_, err := c.Write(res)
 	return err
-}
-
-// unknownCommand is the error for a command this server does not have.
-//
-// An untrusted command token can fill the entire query buffer. Error
-// formatting and CRLF sanitization must not duplicate that token after request
-// admission has handed ownership to the execution phase.
-func unknownCommand(name string) error {
-	suffix := ""
-	if len(name) > 128 {
-		name, suffix = name[:128], "..."
-	}
-	return fmt.Errorf("ERR unknown command '%s%s'", name, suffix)
 }
