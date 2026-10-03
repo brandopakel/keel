@@ -37,6 +37,10 @@ on:
         description: "Interleave exact baseline and candidate SHAs (\"<baseline> <candidate>\") for the slow-reader reservation test and full suites on Intel"
         type: string
         default: ''
+      diagnose_native_repeats:
+        description: "Repeat the native job's go test ./... on fresh Intel runners for exact SHAs (\"<baseline> <candidate>\")"
+        type: string
+        default: ''
   workflow_call:
     inputs:
       long_filesystem_soak:
@@ -370,8 +374,92 @@ jobs:
           path: dist/reservation-diagnostic
           retention-days: 30
 
+  native_repeat:
+    if: github.event_name == 'workflow_dispatch' && inputs.diagnose_native_repeats != ''
+    name: Native go test repeat ${{ matrix.leg }} / ${{ matrix.arm }}
+    strategy:
+      fail-fast: false
+      # Leave a macOS slot for pull requests' own jobs.
+      max-parallel: 4
+      matrix:
+        include:
+          - { leg: 1, arm: baseline }
+          - { leg: 2, arm: candidate }
+          - { leg: 3, arm: candidate }
+          - { leg: 4, arm: baseline }
+          - { leg: 5, arm: baseline }
+          - { leg: 6, arm: candidate }
+          - { leg: 7, arm: candidate }
+          - { leg: 8, arm: baseline }
+          - { leg: 9, arm: baseline }
+          - { leg: 10, arm: candidate }
+          - { leg: 11, arm: candidate }
+          - { leg: 12, arm: baseline }
+          - { leg: 13, arm: baseline }
+          - { leg: 14, arm: candidate }
+          - { leg: 15, arm: candidate }
+          - { leg: 16, arm: baseline }
+          - { leg: 17, arm: baseline }
+          - { leg: 18, arm: candidate }
+          - { leg: 19, arm: candidate }
+          - { leg: 20, arm: baseline }
+    runs-on: macos-15-intel
+    timeout-minutes: 25
+    steps:
+      - name: Choose the exact revision for this arm
+        id: arm
+        env:
+          ARMS: ${{ inputs.diagnose_native_repeats }}
+          ARM: ${{ matrix.arm }}
+        run: |
+          read -r baseline candidate <<< "$ARMS"
+          if [ "$ARM" = baseline ]; then echo "sha=$baseline" >> "$GITHUB_OUTPUT"; else echo "sha=$candidate" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+          ref: ${{ steps.arm.outputs.sha }}
+      # The native job's toolchain. No cache: every leg is a fresh runner that
+      # compiles and runs everything, so no leg can inherit another's results.
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: stable
+          cache: false
+      - name: The native job's first step, unchanged
+        id: test
+        env:
+          ARM: ${{ matrix.arm }}
+          LEG: ${{ matrix.leg }}
+        shell: bash
+        run: |
+          set +e +o pipefail
+          out="dist/native-repeat/leg-$LEG-$ARM"
+          mkdir -p "$out"
+          git rev-parse HEAD > "$out/revision.log"
+          counter() { netstat -m | awk -v k="$1" '$0 ~ k {print $1; exit}'; }
+          d0=$(counter "requests for memory denied"); l0=$(counter "requests for memory delayed")
+          start=$SECONDS
+          uname -a
+          python3 -m unittest discover -s scripts -p 'test_check_archive.py'
+          go test ./... 2>&1 | tee "$out/test.log"
+          code=${PIPESTATUS[0]}
+          d1=$(counter "requests for memory denied"); l1=$(counter "requests for memory delayed")
+          failed=$(grep -oE -- '--- FAIL: [A-Za-z0-9_/]+' "$out/test.log" | sed 's/--- FAIL: //' | sort -u | paste -sd, -)
+          keel=$(grep -E '^(ok|FAIL)[[:space:]]+github.com/brandopakel/keel/cmd/keel[[:space:]]' "$out/test.log" | awk '{print $NF}' | tail -1)
+          printf 'leg\tarm\tsha\texit\tseconds\tcmd_keel\tmbuf_denied_delta\tmbuf_delayed_delta\tfailed_tests\n%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "$LEG" "$ARM" "$(git rev-parse --short HEAD)" "$code" "$((SECONDS - start))" "${keel:-?}" "$(( ${d1:-0} - ${d0:-0} ))" "$(( ${l1:-0} - ${l0:-0} ))" "${failed:--}" | tee "$out/outcome.tsv"
+          sysctl hw.ncpu hw.memsize kern.ipc.nmbclusters > "$out/host.log" 2>&1
+          netstat -m > "$out/netstat.log"
+          if [ "$code" -eq 0 ]; then rm -f "$out/test.log"; fi
+          exit "$code"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: native-repeat-${{ matrix.leg }}-${{ matrix.arm }}
+          path: dist/native-repeat
+          retention-days: 30
+
   native:
-    if: ${{ !inputs.long_filesystem_soak && inputs.diagnose_reservations == '' }}
+    if: ${{ !inputs.long_filesystem_soak && inputs.diagnose_reservations == '' && inputs.diagnose_native_repeats == '' }}
     name: Native recovery / ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -456,7 +544,7 @@ jobs:
           retention-days: 7
 
   filesystems:
-    if: ${{ inputs.diagnose_reservations == '' }}
+    if: ${{ inputs.diagnose_reservations == '' && inputs.diagnose_native_repeats == '' }}
     name: Recovery on ${{ matrix.fs }}
     runs-on: ubuntu-24.04
     timeout-minutes: ${{ inputs.long_filesystem_soak && 270 || 15 }}
