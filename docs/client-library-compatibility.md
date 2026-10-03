@@ -60,7 +60,9 @@ Coverage is limited to these commands and connection modes. Raw-command methods
 exercise each library's wire codec and handshake; native pipelines exercise its
 reply association, and transaction APIs its MULTI/EXEC handling. `WATCH`, RESP3,
 cluster routing, pub/sub, scripting, blocking commands, TLS and every high-level
-client method are outside this matrix. Clean restart checks complement the separate crash/failure suites;
+client method are outside this matrix. RESP3 is covered by the default-settings
+probe below, and by the RESP3 differential against Redis described in
+[RESP3](resp3.md#validation). Clean restart checks complement the separate crash/failure suites;
 they do not establish application compatibility or a durability guarantee for
 other fsync policies. Other application traces remain useful pilot work.
 
@@ -82,26 +84,30 @@ beside the outcome.
 On October 2, 2026, against Redis 8.10.1 every scenario passed for every
 library, with and without a password. Against Keel:
 
-| Library (default settings) | develop `acb547b` | with the connection commands | with transactions |
-| --- | --- | --- | --- |
-| go-redis 9.22.0 | client name fails (`CLIENT`) | all pass except transactions | all pass |
-| Redigo 1.9.3 | client name fails (`CLIENT`) | all pass except transactions | all pass |
-| redis-py 5.3.1 | client name (`CLIENT`), `quit()` (`QUIT`) fail | all pass except transactions | all pass |
-| node-redis 4.7.1 | client name (`CLIENT`), `quit()` (`QUIT`) fail | all pass except transactions | all pass |
-| ioredis 5.11.1 | `quit()` fails (`QUIT`) | all pass except transactions | all pass |
-| ioredis 6.0.0 | nothing connects with a password (`NOAUTH` to `HELLO 3 AUTH`) | all pass except transactions | all pass |
-| redis-py 8.1.0 | nothing connects (`HELLO 3`) | nothing connects (`NOPROTO`) | nothing connects (`NOPROTO`) |
-| node-redis 6.2.1 | nothing connects (`HELLO 3`) | nothing connects (`NOPROTO`) | nothing connects (`NOPROTO`) |
+| Library (default settings) | develop `acb547b` | with the connection commands | with transactions | with RESP3 |
+| --- | --- | --- | --- | --- |
+| go-redis 9.22.0 | client name fails (`CLIENT`) | all pass except transactions | all pass | all pass, over RESP3 |
+| Redigo 1.9.3 | client name fails (`CLIENT`) | all pass except transactions | all pass | unchanged (RESP2) |
+| redis-py 5.3.1 | client name (`CLIENT`), `quit()` (`QUIT`) fail | all pass except transactions | all pass | unchanged (RESP2) |
+| node-redis 4.7.1 | client name (`CLIENT`), `quit()` (`QUIT`) fail | all pass except transactions | all pass | unchanged (RESP2) |
+| ioredis 5.11.1 | `quit()` fails (`QUIT`) | all pass except transactions | all pass | unchanged (RESP2) |
+| ioredis 6.0.0 | nothing connects with a password (`NOAUTH` to `HELLO 3 AUTH`) | all pass except transactions | all pass | all pass, over RESP3 |
+| redis-py 8.1.0 | nothing connects (`HELLO 3`) | nothing connects (`NOPROTO`) | nothing connects (`NOPROTO`) | all pass, over RESP3 |
+| node-redis 6.2.1 | nothing connects (`HELLO 3`) | nothing connects (`NOPROTO`) | nothing connects (`NOPROTO`) | all pass, over RESP3 |
 
 Before [transactions](transactions.md), every library's transaction scenario
 failed on `MULTI`/`EXEC`. With them, every library that connects passes it,
 with and without a password: hosted run 37092508827 moved the `tx` scenario
 from fail to ok for all six, and changed nothing else.
 redis-py 8 and node-redis 6 default to RESP3 and treat a refused `HELLO 3` as
-fatal - neither has a fallback path - so they need `protocol=2` and `RESP: 2`
-until Keel speaks RESP3. ioredis 6 falls back on `NOPROTO`, and go-redis on
-any error. Raw results for both runs, with binary checksums, are in
-`bench/results/client-defaults-2026-10-02.json.gz`.
+fatal - neither has a fallback path. With RESP3 they connect with default
+settings and pass every scenario, transactions included, and so do go-redis 9 and ioredis 6, which now use RESP3 rather than
+falling back. Three of them also send `CLIENT MAINT_NOTIFICATIONS ON` while
+connecting over RESP3 (redis-py 8, node-redis 6 and go-redis 9) and continue
+past `ERR unknown subcommand`, the answer a standalone Redis 8.10.1 gives too.
+The wire logs show the four that send `HELLO 3` and the four that send
+nothing about protocol and stay on RESP2. Raw results for every run, with
+binary checksums, are in `bench/results/client-defaults-2026-10-02.json.gz`.
 
 `run.py` compares Keel's outcomes with `expected.json` and fails on any
 difference: a scenario that stops passing is a regression, and one that starts

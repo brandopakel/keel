@@ -28,10 +28,10 @@
       "tx": "ok"
     },
     "node-redis 6.2.1": {
-      "close": "fail",
-      "default": "fail",
-      "named": "fail",
-      "pipeline": "fail",
+      "close": "ok",
+      "default": "ok",
+      "named": "ok",
+      "pipeline": "ok",
       "tx": "fail"
     },
     "redigo v1.9.3": {
@@ -48,10 +48,10 @@
       "tx": "ok"
     },
     "redis-py 8.1.0": {
-      "close": "fail",
-      "default": "fail",
-      "named": "fail",
-      "pipeline": "fail",
+      "close": "ok",
+      "default": "ok",
+      "named": "ok",
+      "pipeline": "ok",
       "tx": "fail"
     }
   },
@@ -84,10 +84,10 @@
       "tx": "ok"
     },
     "node-redis 6.2.1": {
-      "close": "fail",
-      "default": "fail",
-      "named": "fail",
-      "pipeline": "fail",
+      "close": "ok",
+      "default": "ok",
+      "named": "ok",
+      "pipeline": "ok",
       "tx": "fail"
     },
     "redigo v1.9.3": {
@@ -104,10 +104,10 @@
       "tx": "ok"
     },
     "redis-py 8.1.0": {
-      "close": "fail",
-      "default": "fail",
-      "named": "fail",
-      "pipeline": "fail",
+      "close": "ok",
+      "default": "ok",
+      "named": "ok",
+      "pipeline": "ok",
       "tx": "fail"
     }
   }

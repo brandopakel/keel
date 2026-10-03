@@ -140,8 +140,13 @@ with `core.EncodeAs`.
   RESP2 mode does: set and map ordering, and the arrays that mode sorts. With
   `--redis-module` naming RedisBloom it adds `BF`, `CF` and `CMS`. Locally,
   against Redis 8.10.1 with RedisBloom, 20,000 seeded steps covered 94
-  commands, and the run made 20,023 reply checks, 20 state comparisons, 1,296
-  geo checks and two crash/restarts. CI runs it on every pull request against
+  commands, and the run made 20,019 reply checks, 20 state comparisons, 46
+  shape checks, 1,296 geo checks and two crash/restarts. The reports, with
+  the failures found on the way, are in
+  `bench/results/resp3-differential-2026-10-02.json.gz`. One failure was not
+  about RESP3: `LCS ... IDX` placed matches differently from Redis among
+  equally good choices, in both protocols, and now places them where Redis
+  does. CI runs it on every pull request against
   Redis 8.10.1 built from the release tarball, pinned by checksum, without the
   module.
 - `bench/clients/defaults` runs each library with only a host, port and
