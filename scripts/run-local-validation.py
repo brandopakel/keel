@@ -180,7 +180,11 @@ def diagnose(report, root, stopped, exit_code):
         if limit == 'output':
             # Say what filled the budget: often the disposable Go cache.
             usage = []
-            for child in sorted(root.iterdir()):
+            try:
+                children = sorted(root.iterdir())
+            except OSError:
+                children = []
+            for child in children:
                 try:
                     usage.append((scan_output(child)[0] if child.is_dir() and not child.is_symlink()
                                   else child.lstat().st_size, child.name))
