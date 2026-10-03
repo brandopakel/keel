@@ -13,7 +13,8 @@ few percent a change might cost, and a gate on it would fail at random. The
 repo's rule for a change on the command path is a median paired ratio of at
 least 0.98 in matched runs, which this prints for a reviewer to apply.
 Allocations are deterministic, so a candidate allocating more per operation
-than its baseline fails the comparison.
+than its baseline fails the comparison, as do unequal run counts for a
+benchmark and having no benchmark in common at all.
 """
 import argparse
 import json
@@ -45,6 +46,11 @@ def main():
     base, cand = runs(args.baseline), runs(args.candidate)
     rows, failures = [], []
     for name in sorted(set(base) & set(cand)):
+        if len(base[name]) != len(cand[name]):
+            # A run missing from the middle would shift every later pair onto
+            # the wrong baseline run, so unequal counts are refused, not zipped.
+            failures.append(f"{name}: {len(base[name])} baseline runs but {len(cand[name])} candidate runs")
+            continue
         pairs = list(zip(base[name], cand[name]))
         ratio = statistics.median(c[0] / b[0] for b, c in pairs)
         base_allocs = [b[1] for b, _ in pairs if b[1] is not None]
@@ -59,6 +65,10 @@ def main():
                 failures.append(f"{name}: {row['base_allocs']:g} -> {row['cand_allocs']:g} allocs/op")
         rows.append(row)
     only = sorted(set(base) ^ set(cand))
+    if not rows:
+        # A candidate that produced no results would otherwise pass, having
+        # measured nothing.
+        failures.append('no benchmark is present on both sides')
 
     print('| Benchmark | Pairs | Baseline ns/op | Candidate ns/op | Median paired ratio | Allocs/op |')
     print('| --- | --- | --- | --- | --- | --- |')
@@ -69,10 +79,10 @@ def main():
     if only:
         print(f"\nIn one side only, not compared: {', '.join(only)}")
     for f in failures:
-        print(f"\nALLOCATION REGRESSION {f}")
+        print(f"\nFAILED {f}")
     if args.json:
         with open(args.json, 'w') as f:
-            json.dump({'rows': rows, 'one_side_only': only, 'allocation_regressions': failures}, f, indent=2)
+            json.dump({'rows': rows, 'one_side_only': only, 'failures': failures}, f, indent=2)
     sys.exit(1 if failures else 0)
 
 

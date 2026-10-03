@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/brandopakel/keel/internal/config"
+	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // The sharded keyspace adds a hash of the key name to every store operation.
@@ -90,6 +91,9 @@ func BenchmarkCommandPath(b *testing.B) {
 		{"BF.ADD", ring(1000, func(i int) *Command { return &Command{Cmd: "BF.ADD", Args: []string{"bench:bloom", strconv.Itoa(i)}} })},
 	} {
 		b.Run(family.name, func(b *testing.B) {
+			for _, cmd := range family.cmds {
+				mustSucceed(b, cmd)
+			}
 			var w replyWriter
 			b.ReportAllocs()
 			b.ResetTimer()
@@ -105,6 +109,8 @@ func BenchmarkCommandPath(b *testing.B) {
 		var w replyWriter
 		push := &Command{Cmd: "LPUSH", Args: []string{"bench:list", "value"}}
 		pop := &Command{Cmd: "RPOP", Args: []string{"bench:list"}}
+		mustSucceed(b, push)
+		mustSucceed(b, pop)
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
@@ -134,20 +140,41 @@ func BenchmarkCommandPathUnderEviction(b *testing.B) {
 			for i := range cmds {
 				cmds[i] = &Command{Cmd: "SET", Args: []string{"bench:evict:" + strconv.Itoa(i), value}}
 			}
-			var w replyWriter
 			for _, cmd := range cmds {
-				w.b = w.b[:0]
-				EvalAndResponse(cmd, &w)
+				mustSucceed(b, cmd)
 			}
+			var w replyWriter
+			before := data_structure.Evicted()
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				w.b = w.b[:0]
-				// Cycling through more names than the budget holds keeps
-				// every write a new key and every write an eviction.
+				// Cycling through four times the names the budget holds keeps
+				// nearly every write a new key, and so an eviction.
 				EvalAndResponse(cmds[i%len(cmds)], &w)
 			}
+			b.StopTimer()
+			// A result for this benchmark is only about eviction if the timed
+			// writes evicted; one that stopped would otherwise just look fast.
+			evicted := data_structure.Evicted() - before
+			b.ReportMetric(float64(evicted)/float64(b.N), "evictions/op")
+			if evicted < uint64(b.N/2) {
+				b.Fatalf("%d evictions over %d writes: the timed path is not the eviction path", evicted, b.N)
+			}
 		})
+	}
+}
+
+// mustSucceed runs cmd once and fails the benchmark if it errors, so a family
+// whose command was removed or broke cannot report the cost of an error reply.
+func mustSucceed(b *testing.B, cmd *Command) {
+	b.Helper()
+	var w replyWriter
+	if err := EvalAndResponse(cmd, &w); err != nil {
+		b.Fatalf("%s: %v", cmd.Cmd, err)
+	}
+	if len(w.b) > 0 && w.b[0] == '-' {
+		b.Fatalf("%s %v answered %q", cmd.Cmd, cmd.Args, w.b)
 	}
 }
 
