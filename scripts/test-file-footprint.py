@@ -62,8 +62,10 @@ def sample(roots, entries, peak):
                         paths += [os.path.join(path, name) for name in os.listdir(path)]
                         continue
                     length = os.lstat(path).st_size
-                except FileNotFoundError:
-                    continue  # Tests remove their directories while running.
+                except OSError:
+                    # Tests remove their directories while running, and may
+                    # make one unreadable on purpose; neither stops the record.
+                    continue
                 size += length
                 if length > largest:
                     largest, largest_path = length, path
@@ -81,6 +83,11 @@ def sample(roots, entries, peak):
 
 def mib(n):
     return f'{n/2**20:.1f} MiB'
+
+
+def annotation(text):
+    """Escape text for a GitHub workflow command."""
+    return text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
 
 
 def main():
@@ -110,19 +117,26 @@ def main():
     for root in roots.values():
         root.mkdir()
     env = dict(os.environ, **{name: str(root) for name, root in roots.items()})
-    entries, peak, samples = {}, dict(test_bytes=0), 0
+    entries, peak, samples, errors = {}, dict(test_bytes=0), 0, []
+    def take_sample():
+        # A failed sample is recorded rather than raised: the record must
+        # never end the run early or leave the test command running alone.
+        try:
+            sample(roots, entries, peak)
+        except Exception as exc:
+            errors.append(repr(exc))
     started = time.monotonic()
     process = subprocess.Popen(command, env=env)
     try:
         while process.poll() is None:
-            sample(roots, entries, peak)
+            take_sample()
             samples += 1
             time.sleep(args.interval)
-    except KeyboardInterrupt:
-        process.terminate()
-        process.wait()
-        raise
-    sample(roots, entries, peak)
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            process.wait()
+    take_sample()
     elapsed = time.monotonic() - started
     tests = sorted((e for e in entries.values() if not e['name'].startswith('go-build')),
                    key=lambda e: (e['peak_file_bytes'], e['peak_bytes']), reverse=True)
@@ -147,10 +161,10 @@ def main():
                   warn_file_bytes=int(warn_file), warn_test_bytes=int(warn_test),
                   peak_concurrent_test_bytes=peak['test_bytes'],
                   peak_build_bytes=max((e['peak_bytes'] for e in build), default=0),
-                  warnings=warnings, tests=tests)
+                  sampling_errors=errors[:20], warnings=warnings, tests=tests)
     (out/'test-file-footprint.json').write_text(json.dumps(record, indent=2)+'\n')
     for warning in warnings:
-        print(f'::warning title=Test outgrows the local validation budget::{warning}')
+        print(f'::warning title=Test outgrows the local validation budget::{annotation(warning)}')
     lines = ['### Test file footprint', '',
              f"Sampled every {args.interval:g} s ({samples} samples) while `{' '.join(command)}` ran. "
              f"Peak of all test temporaries at once: {mib(peak['test_bytes'])}; go test build work: "

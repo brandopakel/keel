@@ -70,6 +70,24 @@ class FootprintTests(unittest.TestCase):
             self.assertEqual(record['warnings'], [])
             self.assertNotIn('::warning', result.stdout)
 
+    def test_unreadable_directory_does_not_stop_the_record(self):
+        if os.geteuid() == 0:
+            self.skipTest('root can traverse mode-000 directories')
+        code = ("import os,sys,time; from pathlib import Path; p=Path(os.environ['TMPDIR'])/'TestHidden1'; "
+                "p.mkdir(); (p/'f').write_bytes(b'x'); p.chmod(0); time.sleep(.3); p.chmod(0o700)")
+        # Keep the deliberately unreadable fixture outside an enclosing local
+        # validation wrapper's monitored root, which would refuse it.
+        enclosing = os.environ.get('KEEL_LOCAL_VALIDATION_ROOT')
+        with tempfile.TemporaryDirectory(dir=Path(enclosing).parent if enclosing else None,
+                                         prefix='keel-unreadable-footprint-') as temp:
+            out = Path(temp)/'footprint'
+            result = subprocess.run([sys.executable, str(SCRIPT), '--out', str(out), '--interval', '.05',
+                                     '--', sys.executable, '-c', code], text=True, capture_output=True, timeout=20)
+            self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+            record = json.loads((out/'test-file-footprint.json').read_text())
+            self.assertEqual(record['sampling_errors'], [])
+            self.assertIn('TestHidden', [t['name'] for t in record['tests']])
+
     def test_existing_output_is_refused(self):
         with tempfile.TemporaryDirectory() as temp:
             result = self.record(Path(temp), 0)
