@@ -82,18 +82,21 @@ beside the outcome.
 On October 2, 2026, against Redis 8.10.1 every scenario passed for every
 library, with and without a password. Against Keel:
 
-| Library (default settings) | develop `acb547b` | with the connection commands |
-| --- | --- | --- |
-| go-redis 9.22.0 | client name fails (`CLIENT`) | all pass except transactions |
-| Redigo 1.9.3 | client name fails (`CLIENT`) | all pass except transactions |
-| redis-py 5.3.1 | client name (`CLIENT`), `quit()` (`QUIT`) fail | all pass except transactions |
-| node-redis 4.7.1 | client name (`CLIENT`), `quit()` (`QUIT`) fail | all pass except transactions |
-| ioredis 5.11.1 | `quit()` fails (`QUIT`) | all pass except transactions |
-| ioredis 6.0.0 | nothing connects with a password (`NOAUTH` to `HELLO 3 AUTH`) | all pass except transactions |
-| redis-py 8.1.0 | nothing connects (`HELLO 3`) | nothing connects (`NOPROTO`) |
-| node-redis 6.2.1 | nothing connects (`HELLO 3`) | nothing connects (`NOPROTO`) |
+| Library (default settings) | develop `acb547b` | with the connection commands | with transactions |
+| --- | --- | --- | --- |
+| go-redis 9.22.0 | client name fails (`CLIENT`) | all pass except transactions | all pass |
+| Redigo 1.9.3 | client name fails (`CLIENT`) | all pass except transactions | all pass |
+| redis-py 5.3.1 | client name (`CLIENT`), `quit()` (`QUIT`) fail | all pass except transactions | all pass |
+| node-redis 4.7.1 | client name (`CLIENT`), `quit()` (`QUIT`) fail | all pass except transactions | all pass |
+| ioredis 5.11.1 | `quit()` fails (`QUIT`) | all pass except transactions | all pass |
+| ioredis 6.0.0 | nothing connects with a password (`NOAUTH` to `HELLO 3 AUTH`) | all pass except transactions | all pass |
+| redis-py 8.1.0 | nothing connects (`HELLO 3`) | nothing connects (`NOPROTO`) | nothing connects (`NOPROTO`) |
+| node-redis 6.2.1 | nothing connects (`HELLO 3`) | nothing connects (`NOPROTO`) | nothing connects (`NOPROTO`) |
 
-Transactions fail everywhere on `MULTI`/`EXEC`, which Keel does not implement.
+Before [transactions](transactions.md), every library's transaction scenario
+failed on `MULTI`/`EXEC`. With them, every library that connects passes it,
+with and without a password: hosted run 37092508827 moved the `tx` scenario
+from fail to ok for all six, and changed nothing else.
 redis-py 8 and node-redis 6 default to RESP3 and treat a refused `HELLO 3` as
 fatal - neither has a fallback path - so they need `protocol=2` and `RESP: 2`
 until Keel speaks RESP3. ioredis 6 falls back on `NOPROTO`, and go-redis on
