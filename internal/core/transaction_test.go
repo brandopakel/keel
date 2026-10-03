@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -20,8 +21,9 @@ import (
 // session drives Transact the way a connection does, keeping the open
 // transaction between commands.
 type session struct {
-	t  *testing.T
-	tx *Transaction
+	t    *testing.T
+	tx   *Transaction
+	conn Connection
 }
 
 // send answers one command and returns its raw reply.
@@ -31,7 +33,7 @@ func (s *session) send(parts ...string) string {
 	var err error
 	cmd := &Command{Cmd: strings.ToUpper(parts[0]), Args: parts[1:]}
 	if s.tx != nil || IsTransactionCommand(cmd.Cmd) {
-		s.tx, err = Transact(s.tx, cmd, &w)
+		s.tx, err = Transact(s.tx, cmd, &w, s.conn)
 	} else {
 		err = EvalAndResponse(cmd, &w)
 	}
@@ -63,7 +65,7 @@ func TestTransactionRefusalWhileQueueingAbortsIt(t *testing.T) {
 		"unknown":     {"NOSUCHCOMMAND", "k"},
 		"arity":       {"GET"},
 		"exact arity": {"GET", "k", "extra"},
-		"admin":       {"BGREWRITEAOF"},
+		"replication": {"KEEL.REPL.PULL", "", "0"},
 		"term":        {"KEEL.FENCE", "9"},
 		"watch":       {"WATCH", "k"},
 	} {
@@ -84,7 +86,7 @@ func TestTransactionRefusalWhileQueueingAbortsIt(t *testing.T) {
 	s := newSession(t)
 	s.send("MULTI")
 	require.Equal(t, "-ERR unknown command 'NOSUCHCOMMAND'\r\n", s.send("NOSUCHCOMMAND"))
-	require.Equal(t, "-ERR wrong number of arguments for 'GET' command\r\n", s.send("GET"))
+	require.Equal(t, "-ERR wrong number of arguments for 'get' command\r\n", s.send("GET"))
 	require.Equal(t, "-ERR Command not allowed inside a transaction\r\n", s.send("KEEL.PROMOTE", "1"))
 }
 
@@ -106,7 +108,7 @@ func TestTransactionControlCommands(t *testing.T) {
 	s := newSession(t)
 	require.Equal(t, "-ERR EXEC without MULTI\r\n", s.send("EXEC"))
 	require.Equal(t, "-ERR DISCARD without MULTI\r\n", s.send("DISCARD"))
-	require.Equal(t, "-ERR wrong number of arguments for 'MULTI' command\r\n", s.send("MULTI", "now"))
+	require.Equal(t, "-ERR wrong number of arguments for 'multi' command\r\n", s.send("MULTI", "now"))
 	require.Nil(t, s.tx)
 
 	// A nested MULTI is an error that leaves the transaction open and intact.
@@ -126,17 +128,89 @@ func TestTransactionControlCommands(t *testing.T) {
 	// A malformed EXEC inside a transaction discards it and says why.
 	s.send("MULTI")
 	s.send("SET", "k", "3")
-	require.Equal(t, "-EXECABORT Transaction discarded because of: wrong number of arguments for 'EXEC' command\r\n", s.send("EXEC", "now"))
+	require.Equal(t, "-EXECABORT Transaction discarded because of: wrong number of arguments for 'exec' command\r\n", s.send("EXEC", "now"))
 	require.Nil(t, s.tx)
 	require.Equal(t, "1", run(t, "GET", "k"))
 
 	// A malformed DISCARD is refused like any command, and aborts.
 	s.send("MULTI")
 	s.send("SET", "k", "4")
-	require.Equal(t, "-ERR wrong number of arguments for 'DISCARD' command\r\n", s.send("DISCARD", "now"))
+	require.Equal(t, "-ERR wrong number of arguments for 'discard' command\r\n", s.send("DISCARD", "now"))
 	require.NotNil(t, s.tx)
 	require.Equal(t, "-EXECABORT Transaction discarded because of previous errors.\r\n", s.send("EXEC"))
 	require.Equal(t, "1", run(t, "GET", "k"))
+}
+
+// fakeConnection answers one command the way a transport answers AUTH.
+type fakeConnection struct{ answered []string }
+
+func (f *fakeConnection) ConnectionArity(name string) (int, bool) { return -2, name == "AUTH" }
+func (f *fakeConnection) AnswerConnection(cmd *Command, w io.ReadWriter) {
+	f.answered = append(f.answered, cmd.Args[0])
+	if cmd.Args[0] != "silent" {
+		w.Write([]byte("+OK\r\n"))
+	}
+}
+
+// The transport's own commands are queued and run in their place, as Redis
+// queues AUTH; their count is checked while queueing like any other command's.
+func TestTransactionQueuesTheTransportsOwnCommands(t *testing.T) {
+	conn := &fakeConnection{}
+	s := newSession(t)
+	s.conn = conn
+	s.send("MULTI")
+	require.Equal(t, "+QUEUED\r\n", s.send("SET", "k", "1"))
+	require.Equal(t, "+QUEUED\r\n", s.send("AUTH", "secret"))
+	require.Equal(t, "+QUEUED\r\n", s.send("AUTH", "silent"))
+	require.Equal(t, "+QUEUED\r\n", s.send("GET", "k"))
+	require.Empty(t, conn.answered, "nothing runs before EXEC")
+	require.Equal(t, "*4\r\n+OK\r\n+OK\r\n-ERR command produced no reply\r\n$1\r\n1\r\n", s.send("EXEC"),
+		"an answer missing from the array would shift every reply after it")
+	require.Equal(t, []string{"secret", "silent"}, conn.answered)
+
+	s.send("MULTI")
+	require.Equal(t, "-ERR wrong number of arguments for 'auth' command\r\n", s.send("AUTH"))
+	require.Equal(t, "-EXECABORT Transaction discarded because of previous errors.\r\n", s.send("EXEC"))
+	require.Len(t, conn.answered, 2)
+}
+
+// BGREWRITEAOF runs inside a transaction as Redis runs it. The rewrite starts
+// part way through the block, so the old log holds the block whole and the
+// rewritten one holds its effects, including the writes after the rewrite began.
+func TestTransactionStartsARewriteInPlace(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rewrite.aof")
+	ResetStores()
+	require.NoError(t, OpenAOF(path))
+	t.Cleanup(func() {
+		if RewriteActive() {
+			abortRewrite(errors.New("test cleanup"))
+		}
+		CloseAOF()
+	})
+	s := &session{t: t}
+	run(t, "SET", "before", "0")
+	s.send("MULTI")
+	s.send("SET", "a", "1")
+	s.send("BGREWRITEAOF")
+	s.send("SET", "b", "2")
+	require.Equal(t, "*3\r\n+OK\r\n+Background append only file rewriting started\r\n+OK\r\n", s.send("EXEC"))
+	require.True(t, RewriteActive())
+	old := aofBody(t)
+	require.Contains(t, old, "*1\r\n$5\r\nMULTI\r\n"+string(appendCommand(nil, "SET", "a", "1"))+
+		string(appendCommand(nil, "SET", "b", "2"))+"*1\r\n$4\r\nEXEC\r\n", "the old log holds the block whole")
+	for n := 0; RewriteActive() && n < 1000; n++ {
+		require.NoError(t, FlushAOF())
+		waitForRewriteSync(t)
+	}
+	require.False(t, RewriteActive())
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.NotContains(t, string(body), "MULTI", "a rewrite writes state, not frames")
+	require.NoError(t, CloseAOF())
+	restart(t, path)
+	require.Equal(t, "1", run(t, "GET", "a"))
+	require.Equal(t, "2", run(t, "GET", "b"))
+	require.Equal(t, "0", run(t, "GET", "before"))
 }
 
 func TestTransactionQueueLimitRefusesAndReleases(t *testing.T) {
@@ -189,7 +263,7 @@ func TestCommandArityIsNeverStricterThanTheHandler(t *testing.T) {
 			limit = -limit
 		}
 		for args := 0; args <= limit+2; args++ {
-			if arityAccepts(name, args) {
+			if arityAccepts(arity, args) {
 				continue
 			}
 			ResetStores()
@@ -225,13 +299,13 @@ func TestTransactionReplyBeyondTheLimitClosesAfterRunning(t *testing.T) {
 	commandArity["TEST.MEGABYTE"] = 1
 	t.Cleanup(func() { delete(commandTable, "TEST.MEGABYTE"); delete(commandArity, "TEST.MEGABYTE") })
 	ResetStores()
-	tx, _ := Transact(nil, &Command{Cmd: "MULTI"}, &replyWriter{})
+	tx, _ := Transact(nil, &Command{Cmd: "MULTI"}, &replyWriter{}, nil)
 	for i := 0; i < 70; i++ {
-		Transact(tx, &Command{Cmd: "TEST.MEGABYTE"}, &replyWriter{})
+		Transact(tx, &Command{Cmd: "TEST.MEGABYTE"}, &replyWriter{}, nil)
 	}
-	Transact(tx, &Command{Cmd: "SET", Args: []string{"last", "ran"}}, &replyWriter{})
+	Transact(tx, &Command{Cmd: "SET", Args: []string{"last", "ran"}}, &replyWriter{}, nil)
 	var w replyWriter
-	tx, err := Transact(tx, &Command{Cmd: "EXEC"}, &w)
+	tx, err := Transact(tx, &Command{Cmd: "EXEC"}, &w, nil)
 	require.ErrorIs(t, err, ErrTransactionReplyTooLarge)
 	require.Nil(t, tx)
 	require.Empty(t, w.b)

@@ -73,14 +73,23 @@ func TestAuthenticationStillGatesTransactions(t *testing.T) {
 	require.Nil(t, c.tx)
 	require.Equal(t, "-NOAUTH Authentication required\r\n", runOnce(t, c, command("EXEC")))
 
-	require.Equal(t, "+OK\r\n+OK\r\n+QUEUED\r\n-ERR Command not allowed inside a transaction\r\n"+
-		"-EXECABORT Transaction discarded because of previous errors.\r\n",
+	// AUTH inside a transaction is queued and runs in its place, as in Redis.
+	// The commands queued while the connection was authenticated still run;
+	// a failed AUTH leaves it unauthenticated afterwards, as it does outside.
+	require.Equal(t, "+OK\r\n+OK\r\n+QUEUED\r\n+QUEUED\r\n+QUEUED\r\n+QUEUED\r\n"+
+		"*4\r\n+OK\r\n+OK\r\n-WRONGPASS invalid username-password pair\r\n+OK\r\n",
 		runOnce(t, c, command("AUTH", "secret"), command("MULTI"), command("SET", "k", "v"),
-			command("AUTH", "wrong"), command("EXEC")))
-	require.True(t, c.authenticated, "a refused AUTH changes nothing")
+			command("AUTH", "default", "secret"), command("AUTH", "wrong"), command("SET", "after", "v"), command("EXEC")))
+	require.False(t, c.authenticated)
+	require.Nil(t, c.tx)
+	require.Equal(t, "-NOAUTH Authentication required\r\n", runOnce(t, c, command("GET", "k")))
 	var sink replyBuffer
-	responseRw(command("EXISTS", "k"), &sink)
-	require.Equal(t, ":0\r\n", sink.buf.String())
+	responseRw(command("EXISTS", "k", "after"), &sink)
+	require.Equal(t, ":2\r\n", sink.buf.String())
+
+	require.Equal(t, "+OK\r\n+OK\r\n-ERR wrong number of arguments for 'auth' command\r\n"+
+		"-EXECABORT Transaction discarded because of previous errors.\r\n",
+		runOnce(t, c, command("AUTH", "secret"), command("MULTI"), command("AUTH"), command("EXEC")))
 }
 
 // A transaction whose reply cannot be delivered has still run; its connection

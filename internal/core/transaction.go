@@ -69,28 +69,28 @@ var (
 	queuedReply    = []byte("+QUEUED\r\n")
 	execAbortReply = []byte("-EXECABORT Transaction discarded because of previous errors.\r\n")
 
-	errNestedMulti    = errors.New("ERR MULTI calls can not be nested")
-	errExecNoMulti    = errors.New("ERR EXEC without MULTI")
-	errDiscardNoMulti = errors.New("ERR DISCARD without MULTI")
-	// ErrNotInTransaction is also how the server refuses the commands it
-	// answers itself, such as AUTH, when they arrive inside a transaction.
-	ErrNotInTransaction    = errors.New("ERR Command not allowed inside a transaction")
+	errNestedMulti         = errors.New("ERR MULTI calls can not be nested")
+	errExecNoMulti         = errors.New("ERR EXEC without MULTI")
+	errDiscardNoMulti      = errors.New("ERR DISCARD without MULTI")
+	errNotInTransaction    = errors.New("ERR Command not allowed inside a transaction")
 	errTransactionTooLarge = fmt.Errorf("ERR transaction exceeds the %d MiB queued command limit", maxTransactionBytes>>20)
+	errNoReply             = errors.New("ERR command produced no reply")
 	// ErrTransactionReplyTooLarge is returned to the transport, not to the
 	// client: the transaction has run, and its reply cannot be delivered.
 	ErrTransactionReplyTooLarge = errors.New("output buffer limit exceeded")
 )
 
 // notInTransaction are commands with no meaning as part of a transaction, and
-// refused inside one with Redis's error for that. Changing terms acts on the
-// node, not on the data, and is made durable outside the log; a replication
-// pull serves the stream as it stands between commands, and can change what
-// the node may write; and a rewrite has to start between two transactions, not
-// inside one, so that every block it reconciles is whole.
+// refused inside one with Redis's error for that. A replication pull serves the
+// stream as it stands between commands, can start a snapshot rewrite and can
+// fence the node, and Redis refuses its own replication commands, SYNC and
+// PSYNC, inside MULTI the same way. Changing terms has no Redis counterpart:
+// it acts on the node rather than the data, and is made durable outside the
+// log. Everything else Redis queues is queued here, BGREWRITEAOF and AUTH
+// included.
 var notInTransaction = map[string]bool{
 	"KEEL.PROMOTE": true, "KEEL.FENCE": true,
 	"KEEL.REPL.PULL": true, "KEEL.REPL.PULL2": true,
-	"BGREWRITEAOF": true,
 }
 
 // commandArity is how many words, the name included, each command accepts, as
@@ -116,7 +116,7 @@ var commandArity = map[string]int{
 	"TTL": 2, "PTTL": 2, "EXPIRE": -3, "PEXPIREAT": -3,
 	"PEXPIRE": -3, "EXPIREAT": -3, "PERSIST": 2,
 
-	"DBSIZE": 1, "FLUSHDB": -1, "MEMORY": -2, "INFO": -1,
+	"DBSIZE": 1, "FLUSHDB": -1, "MEMORY": -2, "INFO": -1, "BGREWRITEAOF": 1,
 	"KEEL.DUMP": 2, "KEEL.RESTORE": 3, "MEMKV.DUMP": 2, "MEMKV.RESTORE": 3,
 
 	"HSET": -4, "HSETNX": 4, "HGET": 3, "HMGET": -3,
@@ -148,20 +148,36 @@ var commandArity = map[string]int{
 	"CF.COUNT": 3, "CF.INFO": 2,
 }
 
-func arityAccepts(name string, args int) bool {
-	arity, known := commandArity[name]
-	switch {
-	case !known:
-		return true
-	case arity >= 0:
+func arityAccepts(arity, args int) bool {
+	if arity >= 0 {
 		return args+1 == arity
-	default:
-		return args+1 >= -arity
 	}
+	return args+1 >= -arity
 }
 
+// wrongArguments is Redis's refusal, which names the command in lower case.
 func wrongArguments(name string) error {
-	return fmt.Errorf("ERR wrong number of arguments for '%s' command", name)
+	return fmt.Errorf("ERR wrong number of arguments for '%s' command", strings.ToLower(name))
+}
+
+// Connection is the transport's part in a transaction: the commands it answers
+// itself, about the connection rather than the data, which the command table
+// does not hold. Redis queues AUTH and its kind like any other command and runs
+// each in its place at EXEC, and so does this.
+type Connection interface {
+	// ConnectionArity reports the arity of a command the transport answers
+	// itself, and false for any other command.
+	ConnectionArity(name string) (int, bool)
+	// AnswerConnection runs one such command and writes its reply.
+	AnswerConnection(cmd *Command, w io.ReadWriter)
+}
+
+// answers reports whether conn, which may be nil, answers name itself.
+func answers(conn Connection, name string) (int, bool) {
+	if conn == nil {
+		return 0, false
+	}
+	return conn.ConnectionArity(name)
 }
 
 // Transaction is one connection's open MULTI. The connection keeps a pointer
@@ -208,18 +224,19 @@ func IsTransactionCommand(name string) bool {
 // Transact answers cmd for a connection whose open transaction is tx, nil if it
 // has none, and returns the transaction that is open afterwards. The transport
 // calls it for every command while one is open, and for MULTI, EXEC and
-// DISCARD always.
+// DISCARD always; conn, which may be nil, answers the commands it handles
+// itself when EXEC reaches them.
 //
 // Like EvalAndResponse, the error is the connection's rather than the
 // command's: ErrTransactionReplyTooLarge means a transaction ran and its reply
 // cannot be delivered, so the connection has to be closed, which is what any
 // reply over the output limit already costs.
-func Transact(tx *Transaction, cmd *Command, w io.ReadWriter) (*Transaction, error) {
+func Transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn Connection) (*Transaction, error) {
 	if !IsTransactionCommand(cmd.Cmd) {
 		if tx == nil {
 			return nil, EvalAndResponse(cmd, w)
 		}
-		_, err := w.Write(tx.queue(cmd))
+		_, err := w.Write(tx.queue(cmd, conn))
 		return tx, err
 	}
 	if len(cmd.Args) != 0 {
@@ -249,15 +266,14 @@ func Transact(tx *Transaction, cmd *Command, w io.ReadWriter) (*Transaction, err
 	case cmd.Cmd == "DISCARD":
 		tx, reply = nil, constant.RespOk
 	default:
-		return nil, tx.exec(w)
+		return nil, tx.exec(w, conn)
 	}
 	_, err := w.Write(reply)
 	return tx, err
 }
 
-// Refuse answers a command the transport will not queue, and aborts the
-// transaction as a command refused while queueing does.
-func (tx *Transaction) Refuse(err error) []byte {
+// refuse answers a command refused while queueing, which aborts the transaction.
+func (tx *Transaction) refuse(err error) []byte {
 	tx.abort()
 	return Encode(err, false)
 }
@@ -272,30 +288,38 @@ func (tx *Transaction) abort() {
 }
 
 // queue checks cmd as Redis does before queueing it, and holds it if it passes.
-func (tx *Transaction) queue(cmd *Command) []byte {
-	if err := queueRefusal(cmd); err != nil {
-		return tx.Refuse(err)
+func (tx *Transaction) queue(cmd *Command, conn Connection) []byte {
+	if err := queueRefusal(cmd, conn); err != nil {
+		return tx.refuse(err)
 	}
 	if tx.aborted {
 		return queuedReply
 	}
 	size := CommandRetainedBytes(cmd) + queueSlotBytes
 	if size > maxTransactionBytes-tx.bytes {
-		return tx.Refuse(errTransactionTooLarge)
+		return tx.refuse(errTransactionTooLarge)
 	}
 	tx.commands = append(tx.commands, cmd)
 	tx.bytes += size
 	return queuedReply
 }
 
-func queueRefusal(cmd *Command) error {
+func queueRefusal(cmd *Command, conn Connection) error {
+	if arity, own := answers(conn, cmd.Cmd); own {
+		// The transport's own commands are not about the data, so neither a
+		// replica nor a fenced primary refuses them; only their count matters.
+		if !arityAccepts(arity, len(cmd.Args)) {
+			return wrongArguments(cmd.Cmd)
+		}
+		return nil
+	}
 	if _, known := commandTable[cmd.Cmd]; !known {
 		return unknownCommand(cmd.Cmd)
 	}
 	if notInTransaction[cmd.Cmd] {
-		return ErrNotInTransaction
+		return errNotInTransaction
 	}
-	if !arityAccepts(cmd.Cmd, len(cmd.Args)) {
+	if arity, counted := commandArity[cmd.Cmd]; counted && !arityAccepts(arity, len(cmd.Args)) {
 		return wrongArguments(cmd.Cmd)
 	}
 	// A replica refuses writes, and reads once it has lost its primary, as it
@@ -318,7 +342,7 @@ func writeExecAbort(w io.Writer, cause error) error {
 // covers an integer, a status or a typical error.
 const transactionReplySlack = 128
 
-func (tx *Transaction) exec(w io.Writer) error {
+func (tx *Transaction) exec(w io.Writer, conn Connection) error {
 	if tx.aborted {
 		_, err := w.Write(execAbortReply)
 		return err
@@ -328,6 +352,9 @@ func (tx *Transaction) exec(w io.Writer) error {
 	// lost its primary. Either all of a transaction runs or none of it does, so
 	// every command is checked before the first one runs, as Redis checks EXEC.
 	for _, cmd := range tx.commands {
+		if _, own := answers(conn, cmd.Cmd); own {
+			continue
+		}
 		if err := replicaCommandError(cmd.Cmd); err != nil {
 			return writeExecAbort(w, err)
 		}
@@ -356,7 +383,19 @@ func (tx *Transaction) exec(w io.Writer) error {
 	}
 	replyCeiling = ceiling(0)
 	defer func() { replyCeiling = MaxReplyBytes }()
-	runTransaction(tx.commands, func(i int, reply []byte, err error) {
+	run := func(cmd *Command, sink io.ReadWriter) error {
+		if _, own := answers(conn, cmd.Cmd); own {
+			conn.AnswerConnection(cmd, sink)
+			return nil
+		}
+		return EvalAndResponse(cmd, sink)
+	}
+	runTransaction(tx.commands, run, func(i int, reply []byte, err error) {
+		if err == nil && len(reply) == 0 {
+			// An empty element would shift every reply after it, and the
+			// client would read each as the answer to the command before.
+			err = errNoReply
+		}
 		if err != nil {
 			reply = Encode(err, false)
 		}
@@ -382,21 +421,21 @@ func (tx *Transaction) exec(w io.Writer) error {
 	return err
 }
 
-// runTransaction runs commands as one unit, for EXEC and for a block a replica
-// has received. The unit is framed in the log and in the protocol 2 stream, and
+// runTransaction runs commands as one unit through run, for EXEC and for a
+// block a replica has received. The unit is framed in the log and in the protocol 2 stream, and
 // eviction waits until the block is closed, so a block holds what its
 // transaction did and not the removal of whatever unrelated key the budget
 // chose. Redis evicts before EXEC rather than between its commands, for the
 // same reason; the budget can be passed by up to one transaction meanwhile,
 // which the queue limit bounds. reply hears each command's answer in order.
-func runTransaction(commands []*Command, reply func(int, []byte, error)) {
+func runTransaction(commands []*Command, run func(*Command, io.ReadWriter) error, reply func(int, []byte, error)) {
 	aof.transaction, aof.transactionLogged = true, false
 	replicationTransaction = replicationBlock{active: true}
 	suspended := data_structure.SuspendEviction
 	data_structure.SuspendEviction = true
 	for i, cmd := range commands {
 		var sink transactionSink
-		err := EvalAndResponse(cmd, &sink)
+		err := run(cmd, &sink)
 		reply(i, sink.p, err)
 	}
 	closeAOFTransaction()

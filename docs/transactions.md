@@ -20,43 +20,53 @@ order; `DISCARD` drops it. The replies clients match on are Redis's:
 | A command that fails while `EXEC` runs it | Its error in that position of `EXEC`'s array; the rest still run, and there is no rollback |
 | `MULTI` inside `MULTI` | `ERR MULTI calls can not be nested`; the transaction stays open |
 | `EXEC` or `DISCARD` without `MULTI` | `ERR EXEC without MULTI`, `ERR DISCARD without MULTI` |
-| `EXEC` with arguments inside a transaction | `EXECABORT Transaction discarded because of: wrong number of arguments for 'EXEC' command`; the transaction is discarded |
+| `EXEC` with arguments inside a transaction | `EXECABORT Transaction discarded because of: wrong number of arguments for 'exec' command`; the transaction is discarded |
 | Writability lost between queueing and `EXEC` | `EXECABORT Transaction discarded because of:` and the reason, for example `FENCED ...` or `MASTERDOWN ...`; nothing runs |
 
 Argument counts are checked while queueing with Redis's arity for Redis's
 commands, and each handler's own count for Keel's, so a command Redis would
-refuse at queue time is refused at queue time here. A test runs every handler
-with every count the table refuses and requires it to refuse as well, so the
-table can never turn a valid command into an aborted transaction. Error class
-and wording match Redis except that Keel names commands in upper case, as its
-handlers do.
+refuse at queue time is refused at queue time here, with Redis's wording, which
+names the command in lower case. A test runs every handler with every count the
+table refuses and requires it to refuse as well, so the table can never turn a
+valid command into an aborted transaction. An unknown command keeps Keel's
+existing `ERR unknown command 'NAME'`, without Redis's `with args beginning
+with:` suffix; the error class is the same. Every reply in the table above was
+checked against Redis 8.10.1.
 
 A connection that closes inside a transaction runs nothing it queued, and the
 memory the queue held is released with the connection.
 
-### Commands refused inside a transaction
+### Commands inside a transaction
 
-Refused with Redis's `ERR Command not allowed inside a transaction`, which
-aborts the transaction:
+Every command Redis queues is queued, `AUTH` and `BGREWRITEAOF` included, and
+runs in its place at `EXEC`:
 
-- `AUTH`. It changes the connection rather than the data, and queued it would
-  make what the transaction may do depend on where `AUTH` sat. Redis queues it;
-  no client library sends it inside `MULTI`. A transaction can only be opened by
-  an authenticated connection, so `MULTI` does not bypass `AUTH`.
-- `KEEL.PROMOTE` and `KEEL.FENCE`. A term acts on the node, not the dataset,
-  and is made durable outside the log.
-- `KEEL.REPL.PULL` and `KEEL.REPL.PULL2`. A pull serves the stream as it stands
-  between commands, can start a snapshot rewrite and can fence the node.
-- `BGREWRITEAOF`. A rewrite must begin between transactions so that every block
-  it reconciles is whole. Redis queues it.
+- `AUTH` is answered by the connection rather than the command table, and is
+  handed back to it when `EXEC` reaches it. Only an authenticated connection can
+  open a transaction, so `MULTI` does not bypass `AUTH`. A failed `AUTH` inside
+  `EXEC` is a `WRONGPASS` element; the commands queued while the connection was
+  authenticated still run, and the connection is unauthenticated afterwards, as
+  after a failed `AUTH` outside a transaction.
+- `BGREWRITEAOF` starts the rewrite at that point of the transaction, as Redis
+  does; see [rewrites](#rewrites).
+- `FLUSHDB`, `KEEL.DUMP`, `KEEL.RESTORE`, `INFO`, `MEMORY`, `DBSIZE`, `KEYS` and
+  `SCAN` run like any other command.
 
-`FLUSHDB`, `KEEL.DUMP`, `KEEL.RESTORE`, `INFO`, `MEMORY`, `DBSIZE`, `KEYS` and
-`SCAN` run inside a transaction like any other command.
+Refused with Redis's `ERR Command not allowed inside a transaction`, which aborts
+the transaction:
+
+- `KEEL.REPL.PULL` and `KEEL.REPL.PULL2`, as Redis refuses its own replication
+  commands, `SYNC` and `PSYNC`. A pull serves the stream as it stands between
+  commands, can start a snapshot rewrite and can fence the node.
+- `KEEL.PROMOTE` and `KEEL.FENCE`, which have no Redis counterpart: a term acts
+  on the node, not the dataset, and is made durable outside the log.
 
 `WATCH` and `UNWATCH` are not implemented. They remain unknown commands, so
 optimistic-locking APIs (go-redis `Watch`, redis-py `pipeline.watch`,
 node-redis and ioredis `watch`) fail with an error instead of silently not
-watching, and inside `MULTI` they abort the transaction.
+watching. Inside `MULTI`, `WATCH` is therefore refused as an unknown command,
+which aborts the transaction; Redis answers `ERR WATCH inside MULTI is not
+allowed` there and leaves the transaction open.
 
 ## Atomicity
 
@@ -112,11 +122,15 @@ any other malformed record.
 
 ### Rewrites
 
-A rewrite emits current key state, never frames. Dirty keys are tracked per
-command inside `EXEC`, as for any command, and the final handoff happens between
-event-loop cycles, never inside `EXEC`; `BGREWRITEAOF` and replication pulls,
-which can start rewrites, are refused inside a transaction. A rewritten log
-therefore holds whole transactions or none of them.
+A rewrite emits current key state, never frames. It walks the keyspace as it
+stands and rewrites every key written after it began from that key's state at
+the end, so a rewrite started by `BGREWRITEAOF` part way through a transaction
+captures the writes before it in the walk and those after it as dirty keys,
+while the old log, which stays authoritative until the handoff, holds the block
+whole. The handoff itself happens between event-loop cycles, never inside
+`EXEC`, so a rewritten log holds whole transactions or none of them. Under
+`-aof-async-append`, `BGREWRITEAOF` after a write in the same batch returns its
+existing retry error as its element, inside a transaction or not.
 
 ### Upgrade and rollback
 
@@ -202,10 +216,12 @@ Transactions require the event loop (the default `-mode kqueue`). The benchmark
 
 ## Validation
 
-Unit tests cover queueing and execution order, every queue-time refusal,
+Unit tests cover queueing and execution order, every queue-time refusal, the
+connection's own commands queued and run in place,
 runtime errors inside `EXEC`, nested and stray control commands, the queue limit
 and its release, the arity table against every handler, the reply ceiling and
-an undeliverable reply, replica and fenced-primary refusals, log framing for
+an undeliverable reply, replica and fenced-primary refusals, a rewrite started
+inside a transaction, log framing for
 writes, reads, failed writes and lazy expiry, eviction after the block, torn
 tails at six positions inside an open block with their backups, malformed
 frames, protocol 2 delivery of a block split over several frames with an
@@ -225,6 +241,7 @@ The seeded Redis differential mixes `MULTI` blocks into its operations, with
 queue-time refusals, nested `MULTI` and `DISCARD`, and compares every reply,
 including each element of `EXEC`'s array by error class. A local 4,000-step run
 against Redis 8.10.1 passed with 399 transactions, its state checks and two
-crash restarts. The [client-library matrix](client-library-compatibility.md)
+crash restarts, and the hosted 20,000-step run against Redis 7.0.15 passed with
+1,985. The [client-library matrix](client-library-compatibility.md)
 now runs each library's transaction API; all 35 invocations passed locally.
 Hosted results are recorded on the pull request.

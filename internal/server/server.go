@@ -1270,13 +1270,13 @@ func aofReadPath(current, legacy string) string {
 // them: HELLO because it can carry the credentials, and QUIT because a client
 // that never logged in can still hang up.
 //
-// A connection in a transaction hands every command to core.Transact, which
-// queues it; MULTI, EXEC and DISCARD go there always. Only an authenticated
-// connection gets that far, so MULTI cannot open a way around AUTH.
+// Inside MULTI every command but QUIT is queued, the connection's own included,
+// as Redis queues them; QUIT still closes the connection at once, discarding
+// the transaction. Only an authenticated connection can have opened the
+// transaction, so queueing is no way around AUTH.
 func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
-	if c.tx != nil && (cmd.Cmd == "AUTH" || cmd.Cmd == "HELLO" || cmd.Cmd == "CLIENT") {
-		// These change the connection, not the data.
-		w.Write(c.tx.Refuse(core.ErrNotInTransaction))
+	if c.tx != nil && cmd.Cmd != "QUIT" {
+		c.transact(cmd, w)
 		return
 	}
 	switch cmd.Cmd {
@@ -1306,13 +1306,8 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 		responseErrorRw(fmt.Errorf("NOAUTH Authentication required"), w)
 		return
 	}
-	if c.tx != nil || core.IsTransactionCommand(cmd.Cmd) {
-		var err error
-		if c.tx, err = core.Transact(c.tx, cmd, w); err != nil {
-			// The transaction ran and its reply cannot be delivered; executeRun
-			// closes the connection, as for any reply over the output limit.
-			c.err = err
-		}
+	if core.IsTransactionCommand(cmd.Cmd) {
+		c.transact(cmd, w)
 		return
 	}
 	if cmd.Cmd == "CLIENT" {
@@ -1320,6 +1315,40 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 		return
 	}
 	responseRw(cmd, w)
+}
+
+// transact hands a command to the connection's transaction, or to MULTI, EXEC
+// or DISCARD outside one.
+func (c *client) transact(cmd *core.Command, w io.ReadWriter) {
+	var err error
+	if c.tx, err = core.Transact(c.tx, cmd, w, c); err != nil {
+		// The transaction ran and its reply cannot be delivered; executeRun
+		// closes the connection, as for any reply over the output limit.
+		c.err = err
+	}
+}
+
+// ConnectionArity and AnswerConnection let a transaction queue the commands
+// respond answers itself rather than through the command table, and run them
+// in their place at EXEC. The counts are Redis's. QUIT is absent: it is never
+// queued.
+func (c *client) ConnectionArity(name string) (int, bool) {
+	switch name {
+	case "AUTH", "CLIENT":
+		return -2, true
+	case "HELLO":
+		return -1, true
+	}
+	return 0, false
+}
+
+func (c *client) AnswerConnection(cmd *core.Command, w io.ReadWriter) {
+	// Answered as it would be outside a transaction. EXEC is still running,
+	// so the transaction is set aside rather than queued into again.
+	tx := c.tx
+	c.tx = nil
+	defer func() { c.tx = tx }()
+	c.respond(cmd, w)
 }
 
 // accountClient bounds retained user-space request/reply storage across connections.
