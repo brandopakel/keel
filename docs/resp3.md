@@ -155,9 +155,10 @@ with `core.EncodeAs`.
   and `HELLO 3`, so their replies switch protocol inside `EXEC`. Those leave
   out `CF.MEXISTS`, whose RESP2 reply is Keel's own (see above). With
   `--redis-module` naming RedisBloom it adds `BF`, `CF` and `CMS`. Locally,
-  against Redis 8.10.1 with RedisBloom, 20,000 seeded steps covered 94
-  commands, and the run made 20,019 reply checks, 20 state comparisons, 46
-  shape checks, 1,296 geo checks and two crash/restarts. The reports, with
+  against Redis 8.10.1 with RedisBloom, 20,000 seeded steps covered 99
+  commands, and the run made 20,019 reply checks, 1,933 of them transactions,
+  20 state comparisons, 46 shape checks, 1,296 geo checks and two
+  crash/restarts. The reports, with
   the failures found on the way, are in
   `bench/results/resp3-differential-2026-10-02.json.gz`. One failure was not
   about RESP3: `LCS ... IDX` placed matches differently from Redis among
