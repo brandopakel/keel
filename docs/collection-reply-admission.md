@@ -32,6 +32,15 @@ barrier and concurrent modes; AOF-off is also checked. Full local Go tests and
 vet pass. Raw before/after output is retained in
 `bench/results/collection-reply-admission-2026-09-07.txt`.
 
+In October 2026 the process test was changed to give each collection type its
+own server and log, pipelining LPOP and RPOP, SPOP, or ZPOPMIN and ZPOPMAX
+before PING. Each log is about 65 MiB, where the single shared log had been
+about 195 MiB. Automatic rewriting is now off, so the restarts replay the whole
+command history. With it on, the shared log's timing-dependent `.rewrite` file
+could pass the local validation wrapper's 256 MiB per-file limit and fail as
+`file too large`. The checks now cover both ends of the list and the sorted set,
+and one set member.
+
 These are per-command payload, record and metadata limits. The output buffer,
 canonical record and parsed input may coexist. Aggregate transient admission,
 per-client execution scheduling and a latency bound for an individual large

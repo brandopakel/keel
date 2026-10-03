@@ -81,6 +81,11 @@ five seconds and command idle deadlines are unchanged. Matched baseline/candidat
 Intel repetitions will measure the recovery cost with identical assertions.
 The original failed log remains in `command-allocation-review-2026-09-07.json.gz`;
 a later pass is not a runtime fix or an explanation of older Mac observations.
+In October 2026 the fixture was split into one log of about 65 MiB per
+collection type, with automatic rewriting off (see
+[collection reply admission](collection-reply-admission.md)). Later runs of the
+`replication-v2` large-replay diagnostic therefore replay 65 MiB per server, not
+195 MiB.
 
 Hosted matched run 34161677678 compares runtime `5d86e67` against its verified
 parent `9aa66d1` on one Linux runner, five alternating 15-second repetitions of
