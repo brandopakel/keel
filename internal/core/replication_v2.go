@@ -61,6 +61,11 @@ func replicationV2Enabled() bool {
 }
 
 func invalidateReplicationV2() {
+	// A transaction running now loses its place in the stream with the rest
+	// of the history; the snapshot that replaces it will contain all of it.
+	if replicationTransaction.active {
+		replicationTransaction.dropped = true
+	}
 	var id [16]byte
 	if _, err := rand.Read(id[:]); err != nil {
 		replicationV2.failed = err
@@ -76,9 +81,16 @@ func invalidateReplicationV2() {
 }
 
 func recordReplicationV2Body(body []byte) {
-	if !replicationV2Enabled() {
+	if !replicationV2Enabled() || len(body) == 0 {
 		return
 	}
+	if replicationTransaction.active && !admitReplicationTransaction(len(body)) {
+		return
+	}
+	appendReplicationV2History(body)
+}
+
+func appendReplicationV2History(body []byte) {
 	for len(body) > 0 {
 		// Pack small commands into byte-sized pieces. A per-command entry cap
 		// would otherwise discard history after only milliseconds of busy traffic.

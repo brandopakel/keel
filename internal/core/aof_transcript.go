@@ -87,6 +87,10 @@ func appendAOFCommand(name string, args ...string) {
 	if aof.failed != nil {
 		return
 	}
+	if aof.transaction && !aof.transactionLogged {
+		aof.transactionLogged = true
+		openAOFTransaction()
+	}
 	aof.commandChanged = true
 	// Most commands stay on the same coalesced fast path. Bound the size walk
 	// by subtraction so even an enormous argument list cannot overflow it.

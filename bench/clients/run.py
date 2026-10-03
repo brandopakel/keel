@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run real RESP2 clients against owned servers, then verify two AOF restarts."""
+"""Run real RESP2 clients, their transaction APIs included, against owned servers, then verify two AOF restarts."""
 import argparse
 import json
 import os
@@ -16,6 +16,10 @@ from validation_lib import Client, sha256
 ROOT = Path(__file__).resolve().parent
 LIBRARIES = ('go-redis', 'redigo', 'redis-py', 'node-redis', 'ioredis')
 VALUE = {'hex': '00ff0d0a62696e'}
+# Transactions carry framing bytes and a multibyte character inside the EXEC
+# array, but valid UTF-8: node-redis decodes an EXEC reply with its default
+# string mapping, whatever mapping the queued commands asked for.
+TX_VALUE = 'committed\r\nvalue-\u00e9'
 
 
 def fixture(library, verify_only):
@@ -53,10 +57,19 @@ def fixture(library, verify_only):
         ('persistent list', ['LRANGE', key('list'), '0', '-1'], ['b', 'a']),
         ('persistent set', ['SISMEMBER', key('set'), 'b'], 1),
         ('persistent sorted set', ['ZRANGE', key('zset'), '0', '-1'], ['a', 'b']),
-        ('expired key absent', ['GET', key('expiry')], None))]
+        ('expired key absent', ['GET', key('expiry')], None),
+        ('transaction string', ['GET', key('tx:string')], TX_VALUE),
+        ('transaction counter', ['GET', key('tx:counter')], '1'),
+        ('aborted transaction absent', ['GET', key('tx:aborted')], None))]
+    # Each library's own transaction API: one block that commits with a
+    # runtime error inside it, and one aborted by a command refused while
+    # queueing. The verification above checks both across restarts.
+    transaction = dict(string_key=key('tx:string'), counter_key=key('tx:counter'),
+                       aborted_key=key('tx:aborted'), value=TX_VALUE)
     return dict(prefix=prefix, commands=commands, verification=verification, verify_only=verify_only,
                 marker_key=key('marker'), marker_value=VALUE, counter_key=key('counter'),
-                expiry_key=key('expiry'), scan_keys=[key(x) for x in ('string', 'counter', 'marker')])
+                expiry_key=key('expiry'), scan_keys=[key(x) for x in ('string', 'counter', 'marker')],
+                transaction=transaction)
 
 
 

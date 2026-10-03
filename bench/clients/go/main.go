@@ -34,11 +34,19 @@ type fixture struct {
 	CounterKey             string   `json:"counter_key"`
 	ExpiryKey              string   `json:"expiry_key"`
 	ScanKeys               []string `json:"scan_keys"`
+	Transaction            txFixture
+}
+type txFixture struct {
+	StringKey  string `json:"string_key"`
+	CounterKey string `json:"counter_key"`
+	AbortedKey string `json:"aborted_key"`
+	Value      any
 }
 type client struct {
-	call     func([]any) (any, error)
-	pipeline func(string) ([]int64, error)
-	close    func() error
+	call        func([]any) (any, error)
+	pipeline    func(string) ([]int64, error)
+	transaction func(txFixture)
+	close       func() error
 }
 
 func connect(library string) client {
@@ -66,6 +74,40 @@ func connect(library string) client {
 					out[i] = cmd.Val()
 				}
 				return out, nil
+			},
+			transaction: func(x txFixture) {
+				ctx := context.Background()
+				value := arguments([]any{x.Value})[0]
+				var set *redis.StatusCmd
+				var incr, push *redis.IntCmd
+				var get *redis.StringCmd
+				// TxPipelined's own error is not asserted: callers read each
+				// command's result, and LPUSH is meant to fail.
+				_, _ = c.TxPipelined(ctx, func(p redis.Pipeliner) error {
+					set = p.Set(ctx, x.StringKey, value, 0)
+					incr = p.Incr(ctx, x.CounterKey)
+					push = p.LPush(ctx, x.StringKey, "x")
+					get = p.Get(ctx, x.StringKey)
+					return nil
+				})
+				must(set.Err())
+				equal(set.Val(), "OK", "transaction SET")
+				must(incr.Err())
+				equal(incr.Val(), 1, "transaction INCR")
+				if push.Err() == nil || !strings.Contains(push.Err().Error(), "WRONGTYPE") {
+					panic(fmt.Sprintf("transaction LPUSH: %v", push.Err()))
+				}
+				must(get.Err())
+				equal(get.Val(), x.Value, "transaction GET")
+				var queued *redis.StatusCmd
+				_, err := c.TxPipelined(ctx, func(p redis.Pipeliner) error {
+					queued = p.Set(ctx, x.AbortedKey, "never", 0)
+					p.Do(ctx, "NOSUCHCOMMAND")
+					return nil
+				})
+				if err == nil || queued.Err() == nil || !strings.Contains(err.Error()+queued.Err().Error(), "EXECABORT") {
+					panic(fmt.Sprintf("aborted transaction: %v / %v", err, queued.Err()))
+				}
 			}, close: c.Close}
 	}
 	if library != "redigo" {
@@ -96,6 +138,34 @@ func connect(library string) client {
 				out[i] = v
 			}
 			return out, nil
+		},
+		transaction: func(x txFixture) {
+			// Redigo's transaction is MULTI and the queued commands sent, then
+			// Do("EXEC"), which reads every pending reply and returns EXEC's.
+			value := arguments([]any{x.Value})[0]
+			must(c.Send("MULTI"))
+			must(c.Send("SET", x.StringKey, value))
+			must(c.Send("INCR", x.CounterKey))
+			must(c.Send("LPUSH", x.StringKey, "x"))
+			must(c.Send("GET", x.StringKey))
+			replies, err := redigo.Values(c.Do("EXEC"))
+			must(err)
+			if len(replies) != 4 {
+				panic(fmt.Sprintf("transaction: %d replies", len(replies)))
+			}
+			equal(replies[0], "OK", "transaction SET")
+			equal(replies[1], 1, "transaction INCR")
+			if e, ok := replies[2].(redigo.Error); !ok || !strings.Contains(string(e), "WRONGTYPE") {
+				panic(fmt.Sprintf("transaction LPUSH: %v", replies[2]))
+			}
+			equal(replies[3], x.Value, "transaction GET")
+			must(c.Send("MULTI"))
+			must(c.Send("SET", x.AbortedKey, "never"))
+			must(c.Send("NOSUCHCOMMAND"))
+			reply, err := c.Do("EXEC")
+			if e, ok := reply.(redigo.Error); !ok || !strings.HasPrefix(string(e), "EXECABORT") || err == nil {
+				panic(fmt.Sprintf("aborted transaction: %v / %v", reply, err))
+			}
 		}, close: c.Close}
 }
 func must(err error) {
@@ -220,6 +290,7 @@ func main() {
 		if !reflect.DeepEqual(keys, f.ScanKeys) {
 			panic(fmt.Sprintf("SCAN: %v expected %v", keys, f.ScanKeys))
 		}
+		c.transaction(f.Transaction)
 	}
 	for _, test := range f.Verification {
 		check(c, test)

@@ -18,7 +18,7 @@ not counted as Keel improvements. Spending remains capped at $0.
 | Availability design | Verified external fencing and incarnation-specific activation before promotion | Corrected proposal/model in PR #27; provider implementation remains future work |
 | Compatibility | Seeded Redis reply/state differential, rewrite and two crash/restarts; canonical counters; SETEX/PSETEX | Initial suite passes; wider command surface remains |
 
-Embedding, partitioning, transactions and broad Redis compatibility require
+Embedding, partitioning and broad Redis compatibility require
 their own supported contracts; a Redis-compatible cache does not imply every
 Redis feature or arbitrary use-case compatibility.
 
@@ -130,8 +130,9 @@ with other diagnostic captures rather than using their timing or RSS as an
 unprofiled performance result. Allocation profiles include preload and warmup.
 
 The differential test compares supported common RESP2 replies and canonical
-state against Redis. It normalizes unordered collections and compares errors by
-class, not wording. It includes binary strings and integer boundaries; it does
+state against Redis, alone and inside MULTI/EXEC/DISCARD blocks that include
+queue-time refusals and nested MULTI. It normalizes unordered collections and
+compares errors by class, not wording, including errors inside an EXEC reply. It includes binary strings and integer boundaries; it does
 not claim cross-type SET equivalence, identical clocks or all Redis commands.
 Every seed and typed command trace is retained for reproduction.
 

@@ -104,8 +104,8 @@ func geoSearchReply(z *data_structure.ZSet, radius data_structure.GeoHashRadius,
 	if !fits || size > MaxReplyBytes-header {
 		return replyTooLarge
 	}
-	if !reserveReplyMemory(size + header) {
-		return allocationPressure
+	if refusal := admitReply(size + header); refusal != nil {
+		return refusal
 	}
 	out := appendArrayHeader(make([]byte, 0, size+header), count)
 	walk(func(p data_structure.GeoPoint) bool { out = appendGeoPoint(out, p, s); return true })

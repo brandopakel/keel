@@ -53,8 +53,8 @@ func encodeLookupArray(count int, lookup func(int) (string, bool)) []byte {
 			return replyTooLarge
 		}
 	}
-	if !reserveReplyMemory(size) {
-		return allocationPressure
+	if refusal := admitReply(size); refusal != nil {
+		return refusal
 	}
 	out := appendArrayHeader(make([]byte, 0, size), count)
 	for i := 0; i < count; i++ {
@@ -93,8 +93,8 @@ func encodeRepeatedMembers(s *data_structure.Set, count int) []byte {
 			return replyTooLarge
 		}
 	}
-	if !reserveReplyMemory(size) {
-		return allocationPressure
+	if refusal := admitReply(size); refusal != nil {
+		return refusal
 	}
 	out := appendArrayHeader(make([]byte, 0, size), count)
 	for _, index := range indices {

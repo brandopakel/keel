@@ -26,3 +26,7 @@ binary/nil, index-ceiling and process/restart checks pass. Hosted validation is
 pending. Whole-collection reads, mutating pop commands, aggregate transient
 allocation admission and per-client scheduling still need their own work. This
 change does not establish a process RSS ceiling or a command latency bound.
+
+Inside `EXEC` these replies are admitted against what the transaction's earlier
+replies left of the 64 MiB limit, since the transaction answers with one array;
+see [transactions](transactions.md#limits-and-admission).

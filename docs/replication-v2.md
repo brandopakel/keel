@@ -34,6 +34,14 @@ requires a new full snapshot. A continuously changing dataset can outpace this
 history window and require repeated snapshots; there is no guaranteed catch-up
 rate under arbitrary load.
 
+A [transaction](transactions.md) reaches the stream as one block framed by
+`MULTI` and `EXEC`. The replica holds a block, parsed, until its `EXEC` arrives,
+then applies all of it in one turn of its loop and frames it in its own log; a
+catch-up frame never ends inside a block. A block larger than the 16 MiB
+history invalidates the primary epoch, so replicas take a snapshot that already
+contains it. A protocol 2 replica built before transactions stops on its first
+block, so upgrade replicas before their primary.
+
 Snapshots are limited to 1 GiB of encoded AOF and the existing rewrite limit of
 one million keys. The receiver buffers at most 64 MiB for incomplete canonical
 operations. These bounds are experimental limits, not measured capacity claims.

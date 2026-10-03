@@ -125,8 +125,8 @@ func cmdSCAN(args []string) []byte {
 	if !fits {
 		return replyTooLarge
 	}
-	if !reserveReplyMemory(size) {
-		return allocationPressure
+	if refusal := admitReply(size); refusal != nil {
+		return refusal
 	}
 	out := appendArrayHeader(make([]byte, 0, size), 2)
 	out = appendBulkString(out, position)

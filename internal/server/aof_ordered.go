@@ -127,10 +127,7 @@ func (q *orderedAppend) gate(writable []*client, arena *replyArena, mux io_multi
 func parsedBytes(commands []*core.Command) int {
 	used := cap(commands) * 8
 	for _, cmd := range commands {
-		used += 64 + len(cmd.Cmd) + cap(cmd.Args)*16
-		for _, arg := range cmd.Args {
-			used += len(arg)
-		}
+		used += core.CommandRetainedBytes(cmd)
 	}
 	return used
 }

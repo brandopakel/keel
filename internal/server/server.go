@@ -160,6 +160,10 @@ type client struct {
 	cmds []*core.Command
 	err  error
 
+	// tx is the connection's open MULTI, nil outside one. Its queued commands
+	// are input the connection holds, and are accounted as input.
+	tx *core.Transaction
+
 	// out is the reply to send in the write phase. When inArena it is a window
 	// into the cycle's arena, recorded as offsets because appending to the
 	// arena can move it, and resolved to a slice once the cycle stops growing.
@@ -474,6 +478,8 @@ func closeClient(c *client) {
 	retainedReplyBytes -= c.accountedReply
 	c.accountedInput, c.accountedReply = 0, 0
 	c.cmds = nil
+	// A transaction ends with its connection: what it queued never runs.
+	c.tx = nil
 	delete(clients, c.fd)
 	c.buf = nil
 	c.out = nil
@@ -661,6 +667,9 @@ func executeRun(c *client, arena *replyArena) bool {
 	if len(c.cmds) == 1 {
 		respond(c, c.cmds[0], &capture)
 		consumed = 1
+		if c.err != nil {
+			return false
+		}
 		if len(capture.p) > maxOutputBuffer {
 			c.err = fmt.Errorf("output buffer limit exceeded")
 			return false
@@ -678,6 +687,10 @@ func executeRun(c *client, arena *replyArena) bool {
 		capture.p = nil
 		respond(c, cmd, &capture)
 		consumed++
+		if c.err != nil {
+			arena.buf = arena.buf[:c.outStart]
+			return false
+		}
 		if c.closeAfterWrite {
 			// QUIT: the commands pipelined after it are dropped unanswered,
 			// as Redis drops them, and the batch ends with its reply.
@@ -1256,7 +1269,16 @@ func aofReadPath(current, legacy string) string {
 // AUTH, HELLO and QUIT are answered before authentication, as Redis answers
 // them: HELLO because it can carry the credentials, and QUIT because a client
 // that never logged in can still hang up.
+//
+// Inside MULTI every command but QUIT is queued, the connection's own included,
+// as Redis queues them; QUIT still closes the connection at once, discarding
+// the transaction. Only an authenticated connection can have opened the
+// transaction, so queueing is no way around AUTH.
 func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
+	if c.tx != nil && cmd.Cmd != "QUIT" {
+		c.transact(cmd, w)
+		return
+	}
 	switch cmd.Cmd {
 	case "AUTH":
 		valid := len(cmd.Args) == 1 || (len(cmd.Args) == 2 && cmd.Args[0] == "default")
@@ -1284,11 +1306,49 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 		responseErrorRw(fmt.Errorf("NOAUTH Authentication required"), w)
 		return
 	}
+	if core.IsTransactionCommand(cmd.Cmd) {
+		c.transact(cmd, w)
+		return
+	}
 	if cmd.Cmd == "CLIENT" {
 		c.clientCommand(cmd.Args, w)
 		return
 	}
 	responseRw(cmd, w)
+}
+
+// transact hands a command to the connection's transaction, or to MULTI, EXEC
+// or DISCARD outside one.
+func (c *client) transact(cmd *core.Command, w io.ReadWriter) {
+	var err error
+	if c.tx, err = core.Transact(c.tx, cmd, w, c); err != nil {
+		// The transaction ran and its reply cannot be delivered; executeRun
+		// closes the connection, as for any reply over the output limit.
+		c.err = err
+	}
+}
+
+// ConnectionArity and AnswerConnection let a transaction queue the commands
+// respond answers itself rather than through the command table, and run them
+// in their place at EXEC. The counts are Redis's. QUIT is absent: it is never
+// queued.
+func (c *client) ConnectionArity(name string) (int, bool) {
+	switch name {
+	case "AUTH", "CLIENT":
+		return -2, true
+	case "HELLO":
+		return -1, true
+	}
+	return 0, false
+}
+
+func (c *client) AnswerConnection(cmd *core.Command, w io.ReadWriter) {
+	// Answered as it would be outside a transaction. EXEC is still running,
+	// so the transaction is set aside rather than queued into again.
+	tx := c.tx
+	c.tx = nil
+	defer func() { c.tx = tx }()
+	c.respond(cmd, w)
 }
 
 // accountClient bounds retained user-space request/reply storage across connections.
@@ -1303,7 +1363,7 @@ func accountClient(c *client) bool {
 	// Frames describe reply write boundaries; parsed commands and the query
 	// buffer belong to input. Keep c.outBytes limited to the payload itself.
 	reply += cap(c.frames) * 8
-	input := parsedBytes(c.cmds)
+	input := parsedBytes(c.cmds) + c.tx.RetainedBytes()
 	if c.buf != nil {
 		input += cap(c.buf.data)
 	}

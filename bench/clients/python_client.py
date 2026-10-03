@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise redis-py's RESP2 callbacks, binary values and ordinary pipelines."""
+"""Exercise redis-py's RESP2 callbacks, binary values, ordinary pipelines and transactions."""
 import json
 import os
 from pathlib import Path
@@ -53,6 +53,28 @@ def check_case(case):
         assert result == case['expected'], (case['name'], result, case['expected'])
 
 
+def check_transaction(x):
+    """redis-py's pipeline() is a MULTI/EXEC transaction unless told otherwise."""
+    with client.pipeline() as pipeline:
+        pipeline.set(x['string_key'], argument(x['value']))
+        pipeline.incr(x['counter_key'])
+        pipeline.lpush(x['string_key'], 'x')
+        pipeline.get(x['string_key'])
+        results = pipeline.execute(raise_on_error=False)
+    assert results[0] is True and results[1] == 1, ('transaction', results)
+    assert isinstance(results[2], redis.ResponseError) and 'WRONGTYPE' in str(results[2]), ('transaction', results)
+    assert normalize(results[3]) == x['value'], ('transaction', results)
+    with client.pipeline() as pipeline:
+        pipeline.set(x['aborted_key'], 'never')
+        pipeline.execute_command('NOSUCHCOMMAND')
+        try:
+            pipeline.execute()
+        except redis.ResponseError as exc:
+            assert 'unknown command' in str(exc) or 'EXECABORT' in str(exc), ('aborted transaction', str(exc))
+        else:
+            raise AssertionError('aborted transaction executed')
+
+
 client = connect()
 try:
     if not fixture['verify_only']:
@@ -69,6 +91,7 @@ try:
         assert client.get(fixture['counter_key']) == b'257'
         found = set(client.scan_iter(match=fixture['prefix']+'*', count=7, _type='STRING'))
         assert found == {x.encode() for x in fixture['scan_keys']}, found
+        check_transaction(fixture['transaction'])
     for case in fixture['verification']:
         check_case(case)
     client.close()

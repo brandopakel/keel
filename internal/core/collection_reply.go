@@ -29,8 +29,8 @@ func encodeWalkReply(walk replyWalk, scalar bool) []byte {
 		}
 		size += header
 	}
-	if !reserveReplyMemory(size) {
-		return allocationPressure
+	if refusal := admitReply(size); refusal != nil {
+		return refusal
 	}
 	out := make([]byte, 0, size)
 	if !scalar {
