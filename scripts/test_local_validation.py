@@ -307,6 +307,23 @@ class LocalValidationTests(unittest.TestCase):
             self.assertEqual(report['peak_file'], 'tmp/store.aof.rewrite')
             self.assertTrue(any('file too large' in line for line in report['limit_hit']['evidence']), report)
 
+    def test_shell_status_for_sigxfsz_names_file_limit(self):
+        # A shell reports a child killed by SIGXFSZ as 128+25 and goes on.
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)/'run'
+            result = self.invoke(root, f"import sys; sys.exit({128+signal.SIGXFSZ})")
+            report = self.assertLimitHit(result, root, 'file_size', '--max-file-mib', 'likely')
+            self.assertIn('SIGXFSZ', report['limit_hit']['evidence'][0])
+
+    def test_file_limit_before_a_hang_is_kept_beside_the_time_limit(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)/'run'
+            result = self.invoke(root, "import time; print('write store.aof: file too large', flush=True); time.sleep(60)",
+                                 '--seconds', '.6')
+            report = self.assertLimitHit(result, root, 'time', '--seconds')
+            self.assertIn('--max-file-mib', report['limit_hit']['evidence'][-1])
+            self.assertIn('file too large', report['limit_hit']['evidence'][-1])
+
     def test_unrelated_file_size_error_is_only_possible(self):
         # A test may impose a far smaller limit of its own. Name the wrapper's
         # limit as a possibility without claiming it was the cause.

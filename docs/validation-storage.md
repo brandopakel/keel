@@ -58,9 +58,12 @@ hit when the command died of `SIGXFSZ`, when a file under the output directory
 reached the ceiling, or when the command log reports a refused write while some
 file was seen at half the ceiling or more. The last case covers a file that is
 deleted after hitting the limit, as an abandoned AOF rewrite deletes its
-`.rewrite` file. A refused write with no file near the ceiling is named as a
-`possible` hit and keeps exit status 1. Some tests set a much smaller limit of
-their own (`KEEL_TEST_FILE_LIMIT`). If the calling shell's `ulimit -f` is below
+`.rewrite` file. A shell's exit status 153 (128 + `SIGXFSZ`) counts as likely. A
+refused write with no file near the ceiling is named as a `possible` hit and
+keeps exit status 1. Some tests set a much smaller limit of their own
+(`KEEL_TEST_FILE_LIMIT`). When another limit stopped the command, any
+refused-write evidence is kept beside it, because a command can hit the file
+limit first and then hang until the time limit. If the calling shell's `ulimit -f` is below
 `--max-file-mib`, the advice says to raise that limit instead. A passing run that
 leaves a file exactly at the ceiling records a `file_limit_warning`. The kernel
 shortens the write that crosses the ceiling without an error, so a command that
