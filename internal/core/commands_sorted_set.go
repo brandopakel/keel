@@ -309,5 +309,9 @@ func cmdZRANGE(args []string) []byte {
 	if !ok {
 		return constant.RespEmptyArray
 	}
-	return scoredReply(func(yield func(string, float64) bool) { zs.VisitRangeByRank(start, stop, reverse, yield) }, withScores, true)
+	walk := func(yield func(string, float64) bool) { zs.VisitRangeByRank(start, stop, reverse, yield) }
+	if withScores && replyRESP3 {
+		return scoredReply3(walk, true)
+	}
+	return scoredReply(walk, withScores)
 }

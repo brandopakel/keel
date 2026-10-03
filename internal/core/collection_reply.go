@@ -92,18 +92,26 @@ func hashReply(h *data_structure.Hash, fields, values bool) []byte {
 }
 
 // scoredReply answers sorted-set members, each followed by its score when
-// withScores is set. RESP2 lays both out flat as bulk strings. RESP3 sends the
-// score as a double and, when nested, each member and its score as a pair of
-// their own - Redis's form for ZRANGE and ZRANGEBYSCORE WITHSCORES and for a
-// ZPOPMIN given a count. A ZPOPMIN without one stays flat: [member, score].
-func scoredReply(walk func(func(string, float64) bool), withScores, nested bool) []byte {
-	if !withScores || !replyRESP3 {
-		return encodeWalkReply(func(yield func(string) bool) {
-			walk(func(member string, score float64) bool {
-				return yield(member) && (!withScores || yield(formatZScore(score)))
-			})
-		}, shapeArray)
-	}
+// withScores is set, laid out flat as bulk strings: the RESP2 form, and the
+// RESP3 one without scores. With scores a RESP3 connection gets scoredReply3.
+//
+// Callers choose between the two rather than this choosing for them, because
+// this has to stay small enough to inline. Inlined, the closure it hands walk
+// stays on the stack; called, it escapes, twice per reply, and the
+// command-path benchmark holds the RESP2 path to the allocations it had.
+func scoredReply(walk func(func(string, float64) bool), withScores bool) []byte {
+	return encodeWalkReply(func(yield func(string) bool) {
+		walk(func(member string, score float64) bool {
+			return yield(member) && (!withScores || yield(formatZScore(score)))
+		})
+	}, shapeArray)
+}
+
+// scoredReply3 answers members with their scores to a RESP3 connection: each
+// score a double and, when nested, each member and its score a pair of their
+// own - Redis's form for ZRANGE and ZRANGEBYSCORE WITHSCORES and for a ZPOPMIN
+// given a count. A ZPOPMIN without one stays flat: [member, score].
+func scoredReply3(walk func(func(string, float64) bool), nested bool) []byte {
 	size, pairs, fits := 0, 0, true
 	walk(func(member string, score float64) bool {
 		pairs++

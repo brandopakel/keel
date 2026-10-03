@@ -74,9 +74,13 @@ func scoreRange(args []string, reverse bool) []byte {
 	if !ok {
 		return constant.RespEmptyArray
 	}
-	return scoredReply(func(yield func(string, float64) bool) {
+	walk := func(yield func(string, float64) bool) {
 		z.VisitRangeByScore(min, max, minEx, maxEx, offset, count, reverse, yield)
-	}, withScores, true)
+	}
+	if withScores && replyRESP3 {
+		return scoredReply3(walk, true)
+	}
+	return scoredReply(walk, withScores)
 }
 
 func cmdZINCRBY(args []string) []byte {
@@ -130,7 +134,12 @@ func zpop(args []string, reverse bool) []byte {
 	}
 	// Given a count, RESP3 nests each member with its score; without one the
 	// single pair stays flat, as it does in Redis.
-	out := scoredReply(walk, true, len(args) == 2)
+	var out []byte
+	if replyRESP3 {
+		out = scoredReply3(walk, len(args) == 2)
+	} else {
+		out = scoredReply(walk, true)
+	}
 	if len(out) > 0 && out[0] == '-' {
 		return out
 	}
