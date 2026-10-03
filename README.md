@@ -80,7 +80,8 @@ Important boundaries:
   closes after a write, its outcome may be unknown. Retrying increments can duplicate effects.
 - [Transactions](docs/transactions.md) run with no other client's command between
   theirs, and the log and replicas receive all of one or none. There is no rollback.
-  `WATCH`/`UNWATCH` are unknown commands, so optimistic-locking APIs fail.
+  `WATCH`/`UNWATCH` are unknown commands, so optimistic-locking APIs fail; inside
+  `MULTI`, `WATCH` gets Redis's `ERR WATCH inside MULTI is not allowed`.
   `KEEL.PROMOTE`/`KEEL.FENCE` and `KEEL.REPL.*` are refused inside `MULTI`; every
   command Redis queues, `AUTH` included, is queued. A connection may queue 16 MiB,
   counted as retained input; `EXEC`'s reply shares the 64 MiB output limit, and one

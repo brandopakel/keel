@@ -52,6 +52,8 @@ import (
 //
 // WATCH and UNWATCH are not implemented and stay unknown commands, so a
 // client's optimistic-locking API fails loudly instead of quietly not watching.
+// Inside MULTI, WATCH gets Redis's own refusal, which leaves the transaction
+// open.
 
 // maxTransactionBytes bounds what one connection may hold queued, measured the
 // way parsed input is measured for the buffer limits. It is the per-client
@@ -73,6 +75,7 @@ var (
 	errExecNoMulti         = errors.New("ERR EXEC without MULTI")
 	errDiscardNoMulti      = errors.New("ERR DISCARD without MULTI")
 	errNotInTransaction    = errors.New("ERR Command not allowed inside a transaction")
+	errWatchInMulti        = errors.New("ERR WATCH inside MULTI is not allowed")
 	errTransactionTooLarge = fmt.Errorf("ERR transaction exceeds the %d MiB queued command limit", maxTransactionBytes>>20)
 	errNoReply             = errors.New("ERR command produced no reply")
 	// ErrTransactionReplyTooLarge is returned to the transport, not to the
@@ -106,13 +109,13 @@ var notInTransaction = map[string]bool{
 // rules out. Every command in commandTable needs an entry here, apart from the
 // ones refused in a transaction anyway.
 var commandArity = map[string]int{
-	"PING": -1,
+	"PING": -1, "ECHO": 2, "SELECT": 2,
 
-	"SET": -3, "GET": 2, "INCR": 2, "INCRBY": 3, "DECR": 2, "DECRBY": 3, "MGET": -2, "MSET": -3,
+	"SET": -3, "SETNX": 3, "GET": 2, "INCR": 2, "INCRBY": 3, "DECR": 2, "DECRBY": 3, "MGET": -2, "MSET": -3,
 	"SETEX": 4, "PSETEX": 4,
 	"LCS": -3,
 
-	"DEL": -2, "EXISTS": -2, "TYPE": 2, "KEYS": 2, "SCAN": -2,
+	"DEL": -2, "UNLINK": -2, "EXISTS": -2, "TYPE": 2, "KEYS": 2, "SCAN": -2,
 	"TTL": 2, "PTTL": 2, "EXPIRE": -3, "PEXPIREAT": -3,
 	"PEXPIRE": -3, "EXPIREAT": -3, "PERSIST": 2,
 
@@ -235,6 +238,18 @@ func Transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn Connection) (
 	if !IsTransactionCommand(cmd.Cmd) {
 		if tx == nil {
 			return nil, EvalAndResponse(cmd, w)
+		}
+		if cmd.Cmd == "WATCH" {
+			// WATCH is not implemented, and outside a transaction it is an
+			// unknown command. Inside one Redis refuses it without aborting
+			// the transaction, after counting its arguments as it counts any
+			// command's, and clients get the same answers here.
+			reply := Encode(errWatchInMulti, false)
+			if len(cmd.Args) == 0 {
+				reply = tx.refuse(wrongArguments(cmd.Cmd))
+			}
+			_, err := w.Write(reply)
+			return tx, err
 		}
 		_, err := w.Write(tx.queue(cmd, conn))
 		return tx, err

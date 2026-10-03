@@ -67,7 +67,7 @@ func TestTransactionRefusalWhileQueueingAbortsIt(t *testing.T) {
 		"exact arity": {"GET", "k", "extra"},
 		"replication": {"KEEL.REPL.PULL", "", "0"},
 		"term":        {"KEEL.FENCE", "9"},
-		"watch":       {"WATCH", "k"},
+		"keyless":     {"WATCH"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			s := newSession(t)
@@ -211,6 +211,21 @@ func TestTransactionStartsARewriteInPlace(t *testing.T) {
 	require.Equal(t, "1", run(t, "GET", "a"))
 	require.Equal(t, "2", run(t, "GET", "b"))
 	require.Equal(t, "0", run(t, "GET", "before"))
+}
+
+// WATCH is not implemented. Outside a transaction it is an unknown command;
+// inside one it gets Redis's refusal, which leaves the transaction open.
+func TestWatchIsRefusedInsideMultiAsRedisRefusesIt(t *testing.T) {
+	s := newSession(t)
+	require.Equal(t, "ERR unknown command 'WATCH'", run(t, "WATCH", "k"))
+	s.send("MULTI")
+	s.send("SET", "k", "1")
+	require.Equal(t, "-ERR WATCH inside MULTI is not allowed\r\n", s.send("WATCH", "k"))
+	require.Equal(t, "*1\r\n+OK\r\n", s.send("EXEC"))
+	require.Equal(t, "1", run(t, "GET", "k"))
+	s.send("MULTI")
+	require.Equal(t, "-ERR wrong number of arguments for 'watch' command\r\n", s.send("WATCH"))
+	require.Equal(t, "-EXECABORT Transaction discarded because of previous errors.\r\n", s.send("EXEC"))
 }
 
 func TestTransactionQueueLimitRefusesAndReleases(t *testing.T) {

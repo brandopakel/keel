@@ -19,6 +19,7 @@ order; `DISCARD` drops it. The replies clients match on are Redis's:
 | A command refused while queueing: unknown, wrong number of arguments, not allowed in a transaction, or refused by a replica | That command's error, then `EXECABORT Transaction discarded because of previous errors.` from `EXEC`; nothing runs |
 | A command that fails while `EXEC` runs it | Its error in that position of `EXEC`'s array; the rest still run, and there is no rollback |
 | `MULTI` inside `MULTI` | `ERR MULTI calls can not be nested`; the transaction stays open |
+| `WATCH key` inside `MULTI` | `ERR WATCH inside MULTI is not allowed`; the transaction stays open |
 | `EXEC` or `DISCARD` without `MULTI` | `ERR EXEC without MULTI`, `ERR DISCARD without MULTI` |
 | `EXEC` with arguments inside a transaction | `EXECABORT Transaction discarded because of: wrong number of arguments for 'exec' command`; the transaction is discarded |
 | Writability lost between queueing and `EXEC` | `EXECABORT Transaction discarded because of:` and the reason, for example `FENCED ...` or `MASTERDOWN ...`; nothing runs |
@@ -41,12 +42,16 @@ memory the queue held is released with the connection.
 Every command Redis queues is queued, `AUTH` and `BGREWRITEAOF` included, and
 runs in its place at `EXEC`:
 
-- `AUTH` is answered by the connection rather than the command table, and is
-  handed back to it when `EXEC` reaches it. Only an authenticated connection can
-  open a transaction, so `MULTI` does not bypass `AUTH`. A failed `AUTH` inside
-  `EXEC` is a `WRONGPASS` element; the commands queued while the connection was
+- `AUTH`, `HELLO` and `CLIENT` are answered by the connection rather than the
+  command table, and are handed back to it when `EXEC` reaches them; their
+  argument counts are Redis's. Only an authenticated connection can open a
+  transaction, so `MULTI` does not bypass `AUTH`. A failed `AUTH` inside `EXEC`
+  is a `WRONGPASS` element; the commands queued while the connection was
   authenticated still run, and the connection is unauthenticated afterwards, as
   after a failed `AUTH` outside a transaction.
+- `QUIT` is never queued: it answers `+OK` and closes the connection at once,
+  which discards the transaction, as in Redis.
+- `SELECT 0`, `ECHO`, `SETNX` and `UNLINK` are ordinary commands and are queued.
 - `BGREWRITEAOF` starts the rewrite at that point of the transaction, as Redis
   does; see [rewrites](#rewrites).
 - `FLUSHDB`, `KEEL.DUMP`, `KEEL.RESTORE`, `INFO`, `MEMORY`, `DBSIZE`, `KEYS` and
@@ -64,9 +69,10 @@ the transaction:
 `WATCH` and `UNWATCH` are not implemented. They remain unknown commands, so
 optimistic-locking APIs (go-redis `Watch`, redis-py `pipeline.watch`,
 node-redis and ioredis `watch`) fail with an error instead of silently not
-watching. Inside `MULTI`, `WATCH` is therefore refused as an unknown command,
-which aborts the transaction; Redis answers `ERR WATCH inside MULTI is not
-allowed` there and leaves the transaction open.
+watching. Inside `MULTI`, `WATCH` gets Redis's own answer, `ERR WATCH inside
+MULTI is not allowed`, which leaves the transaction open; `WATCH` with no keys
+is refused for its argument count and aborts the transaction, as in Redis.
+`UNWATCH`, which Redis would queue, is an unknown command and aborts it.
 
 ## Atomicity
 

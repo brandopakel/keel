@@ -92,6 +92,31 @@ func TestAuthenticationStillGatesTransactions(t *testing.T) {
 		runOnce(t, c, command("AUTH", "secret"), command("MULTI"), command("AUTH"), command("EXEC")))
 }
 
+// HELLO and CLIENT are queued and run in their place, as Redis runs them; QUIT
+// is never queued, and closing the connection discards the transaction.
+func TestConnectionCommandsInsideATransaction(t *testing.T) {
+	core.ResetStores()
+	t.Cleanup(core.ResetStores)
+	c := &client{fd: -1, id: 7}
+	got := runOnce(t, c, command("MULTI"), command("CLIENT", "SETNAME", "app"), command("HELLO", "2"),
+		command("SELECT", "0"), command("ECHO", "hi"), command("CLIENT", "GETNAME"), command("EXEC"))
+	require.True(t, strings.HasPrefix(got, "+OK\r\n+QUEUED\r\n+QUEUED\r\n+QUEUED\r\n+QUEUED\r\n+QUEUED\r\n*5\r\n+OK\r\n*14\r\n"), got)
+	require.True(t, strings.HasSuffix(got, "+OK\r\n$2\r\nhi\r\n$3\r\napp\r\n"), got)
+	require.Equal(t, "app", c.name)
+	require.Nil(t, c.tx)
+
+	require.Equal(t, "+OK\r\n-ERR wrong number of arguments for 'client' command\r\n"+
+		"-EXECABORT Transaction discarded because of previous errors.\r\n",
+		runOnce(t, c, command("MULTI"), command("CLIENT"), command("EXEC")))
+
+	got = runOnce(t, c, command("MULTI"), command("SET", "k", "v"), command("QUIT"), command("EXEC"))
+	require.Equal(t, "+OK\r\n+QUEUED\r\n+OK\r\n", got, "QUIT answers at once and nothing after it runs")
+	require.True(t, c.closeAfterWrite)
+	var sink replyBuffer
+	responseRw(command("EXISTS", "k"), &sink)
+	require.Equal(t, ":0\r\n", sink.buf.String())
+}
+
 // A transaction whose reply cannot be delivered has still run; its connection
 // is closed, as any reply over the output limit closes one.
 func TestUndeliverableTransactionReplyClosesTheConnection(t *testing.T) {
