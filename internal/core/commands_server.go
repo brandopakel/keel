@@ -102,6 +102,14 @@ type ClientBufferStats struct {
 // after they close. Core-only and alternate transports leave it nil.
 var ClientBuffers func() ClientBufferStats
 
+// RedisCompatibleVersion is the Redis release whose command forms this server's
+// subset follows - EXPIRE NX/XX/GT/LT, SET GET/EXAT/PXAT, LCS - and the version
+// clients are told in INFO and HELLO. Libraries gate features on it: Rails'
+// cache store reads redis_version before choosing EXPIRE NX, and fails without
+// one. It is not a claim to implement all of Redis 7.0; the README's integration
+// contract is that.
+const RedisCompatibleVersion = "7.0.0"
+
 // cmdINFO reports server state, in the section format redis-cli expects.
 //
 // It exists because eviction is otherwise invisible: without used_memory and
@@ -159,7 +167,8 @@ func cmdINFO(args []string) []byte {
 		fmt.Fprintf(&b, "replication_protocol:%d\r\nrole:%s\r\nreplica_ready:%d\r\nreplica_offset:%d\r\nreplica_last_update_ms:%d\r\nprimary_offset:%d\r\nreplication_history_bytes:%d\r\n\r\n", config.ReplicationProtocol, role, ready, replicaOffset, age, offset, history)
 	}
 	if want("server") {
-		fmt.Fprintf(&b, "# Server\r\nkeel_version:%s\r\nresp_version:2\r\n\r\n", config.BuildVersion())
+		fmt.Fprintf(&b, "# Server\r\nkeel_version:%s\r\nredis_version:%s\r\nredis_mode:standalone\r\nresp_version:2\r\n\r\n",
+			config.BuildVersion(), RedisCompatibleVersion)
 	}
 	if want("memory") {
 		used := data_structure.TotalMemUsed()

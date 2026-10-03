@@ -3,8 +3,11 @@ package core
 import (
 	"errors"
 	"fmt"
-	"github.com/brandopakel/keel/internal/data_structure"
 	"io"
+	"strconv"
+
+	"github.com/brandopakel/keel/internal/constant"
+	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // Command dispatch.
@@ -14,15 +17,15 @@ import (
 // changes anything - in the log's writeCommands; each of those is a list that
 // can be read against the others.
 var commandTable = map[string]func([]string) []byte{
-	"PING": cmdPING,
+	"PING": cmdPING, "ECHO": cmdECHO, "SELECT": cmdSELECT,
 
 	// Strings
-	"SET": cmdSET, "GET": cmdGET, "INCR": cmdINCR, "INCRBY": cmdINCRBY, "DECR": cmdDECR, "DECRBY": cmdDECRBY, "MGET": cmdMGET, "MSET": cmdMSET,
+	"SET": cmdSET, "SETNX": cmdSETNX, "GET": cmdGET, "INCR": cmdINCR, "INCRBY": cmdINCRBY, "DECR": cmdDECR, "DECRBY": cmdDECRBY, "MGET": cmdMGET, "MSET": cmdMSET,
 	"SETEX": cmdSETEX, "PSETEX": cmdPSETEX,
 	"LCS": cmdLCS,
 
 	// Keys and expiry
-	"DEL": cmdDEL, "EXISTS": cmdEXISTS, "TYPE": cmdTYPE, "KEYS": cmdKEYS, "SCAN": cmdSCAN,
+	"DEL": cmdDEL, "UNLINK": cmdUNLINK, "EXISTS": cmdEXISTS, "TYPE": cmdTYPE, "KEYS": cmdKEYS, "SCAN": cmdSCAN,
 	"TTL": cmdTTL, "PTTL": cmdPTTL, "EXPIRE": cmdEXPIRE, "PEXPIREAT": cmdPEXPIREAT,
 	"PEXPIRE": cmdPEXPIRE, "EXPIREAT": cmdEXPIREAT, "PERSIST": cmdPERSIST,
 
@@ -82,6 +85,33 @@ func cmdPING(args []string) []byte {
 		return encodeBoundedString(args[0])
 	}
 	return Encode(errors.New("ERR wrong number of arguments for 'PING' command"), false)
+}
+
+// cmdECHO answers its one argument, as PING does when given one.
+func cmdECHO(args []string) []byte {
+	if len(args) != 1 {
+		return Encode(errors.New("ERR wrong number of arguments for 'ECHO' command"), false)
+	}
+	return encodeBoundedString(args[0])
+}
+
+// cmdSELECT accepts database 0, the only one there is. Clients send SELECT when
+// a connection URL names a database, and for 0 that is harmless. Any other
+// number gets Redis's error for a database that does not exist rather than
+// being mapped onto 0, which would mix the keys of applications that each
+// believed they had a database to themselves.
+func cmdSELECT(args []string) []byte {
+	if len(args) != 1 {
+		return Encode(errors.New("ERR wrong number of arguments for 'SELECT' command"), false)
+	}
+	n, err := strconv.Atoi(args[0])
+	if err != nil {
+		return Encode(errNotAnInteger, false)
+	}
+	if n != 0 {
+		return Encode(errors.New("ERR DB index is out of range"), false)
+	}
+	return constant.RespOk
 }
 
 // EvalAndResponse runs one command and writes its reply to c.

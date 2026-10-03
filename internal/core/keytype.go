@@ -19,11 +19,11 @@ import (
 // added is the one that forgets it, and what it silently does instead is the
 // bug this is fixing.
 var commandKeyspace = map[string]string{
-	"SET": "string", "GET": "string", "INCR": "string", "INCRBY": "string", "DECR": "string", "DECRBY": "string", "MSET": "string",
+	"SET": "string", "SETNX": "string", "GET": "string", "INCR": "string", "INCRBY": "string", "DECR": "string", "DECRBY": "string", "MSET": "string",
 	"SETEX": "string", "PSETEX": "string",
 	"LCS": "string",
 
-	// EXISTS, TYPE, KEYS, DEL and FLUSHDB are deliberately absent: they answer
+	// EXISTS, TYPE, KEYS, DEL, UNLINK and FLUSHDB are deliberately absent: they answer
 	// about a name whatever type holds it, so constraining them to a keyspace
 	// would make them refuse exactly the keys they exist to report on. MGET is
 	// absent for a different reason - it answers nil for a key of another type,
@@ -125,7 +125,7 @@ func writtenKeys(cmd *Command) []string {
 		return nil
 	}
 	switch cmd.Cmd {
-	case "DEL":
+	case "DEL", "UNLINK":
 		// DEL names any number of keys and constrains none of them to a type,
 		// so it is absent from the table below and handled here.
 		return cmd.Args

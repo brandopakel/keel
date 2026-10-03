@@ -38,6 +38,38 @@ jobs:
           name: client-library-compatibility
           path: dist/clients
           retention-days: 14
+  defaults:
+    name: Client libraries with default settings
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version-file: go.mod }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: '24' }
+      - name: Build server and probes
+        run: |
+          go build -trimpath -o /tmp/keel-defaults ./cmd/keel
+          (cd bench/clients/defaults/go && go vet ./... && go build -trimpath -o /tmp/keel-default-go-probe .)
+          npm ci --ignore-scripts --no-audit --no-fund --prefix bench/clients/defaults/node
+          python3 -m venv /tmp/keel-redis8
+          /tmp/keel-redis8/bin/python -m pip install -r bench/clients/defaults/requirements-redis8.txt
+          python3 -m venv /tmp/keel-redis5
+          /tmp/keel-redis5/bin/python -m pip install -r bench/clients/defaults/requirements-redis5.txt
+      - name: Default settings against expected.json
+        run: >-
+          python3 bench/clients/defaults/run.py --bin /tmp/keel-defaults
+          --go-probe /tmp/keel-default-go-probe --node-dir bench/clients/defaults/node
+          --python /tmp/keel-redis8/bin/python --python /tmp/keel-redis5/bin/python
+          --out dist/clients/defaults
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: client-default-settings
+          path: dist/clients/defaults
+          retention-days: 14
   smoke:
     name: RESP adapters and provider packages
     runs-on: ubuntu-latest
