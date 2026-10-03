@@ -291,8 +291,9 @@ func (r *replicationReply) Read(b []byte) (int, error)  { return 0, errors.New("
 // answersWithoutData are the commands a replica can answer without primary
 // state, because what they reply does not come from the dataset. ECHO and
 // SELECT are here because clients send them while setting up a connection, and
-// a replica that refused them would fail the connection rather than the read.
-var answersWithoutData = map[string]bool{"PING": true, "INFO": true, "ECHO": true, "SELECT": true}
+// a replica that refused them would fail the connection rather than the read;
+// UNWATCH because they send it while putting one back.
+var answersWithoutData = map[string]bool{"PING": true, "INFO": true, "ECHO": true, "SELECT": true, "UNWATCH": true}
 
 func replicaCommandError(cmd string) error {
 	// Applying replicated state and replaying the log are not client writes:

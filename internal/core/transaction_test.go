@@ -213,6 +213,21 @@ func TestTransactionStartsARewriteInPlace(t *testing.T) {
 	require.Equal(t, "0", run(t, "GET", "before"))
 }
 
+// UNWATCH answers as Redis does with nothing watched: OK, and inside MULTI it
+// is queued and answers OK in its slot.
+func TestUnwatchAnswersOKAsWithNothingWatched(t *testing.T) {
+	s := newSession(t)
+	require.Equal(t, "+OK\r\n", s.send("UNWATCH"))
+	require.Equal(t, "-ERR wrong number of arguments for 'unwatch' command\r\n", s.send("UNWATCH", "k"))
+	s.send("MULTI")
+	require.Equal(t, "+QUEUED\r\n", s.send("SET", "k", "1"))
+	require.Equal(t, "+QUEUED\r\n", s.send("UNWATCH"))
+	require.Equal(t, "*2\r\n+OK\r\n+OK\r\n", s.send("EXEC"))
+	s.send("MULTI")
+	require.Equal(t, "-ERR wrong number of arguments for 'unwatch' command\r\n", s.send("UNWATCH", "k"))
+	require.Equal(t, "-EXECABORT Transaction discarded because of previous errors.\r\n", s.send("EXEC"))
+}
+
 // WATCH is not implemented. Outside a transaction it is an unknown command;
 // inside one it gets Redis's refusal, which leaves the transaction open.
 func TestWatchIsRefusedInsideMultiAsRedisRefusesIt(t *testing.T) {

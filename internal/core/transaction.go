@@ -50,10 +50,10 @@ import (
 // - one made only of reads - writes no frame at all, because the log grows with
 // changes, not with traffic.
 //
-// WATCH and UNWATCH are not implemented and stay unknown commands, so a
-// client's optimistic-locking API fails loudly instead of quietly not watching.
-// Inside MULTI, WATCH gets Redis's own refusal, which leaves the transaction
-// open.
+// WATCH is not implemented and stays an unknown command, so a client's
+// optimistic-locking API fails loudly instead of quietly not watching. Inside
+// MULTI it gets Redis's own refusal, which leaves the transaction open. UNWATCH
+// answers as Redis answers it when nothing is watched, which is always here.
 
 // maxTransactionBytes bounds what one connection may hold queued, measured the
 // way parsed input is measured for the buffer limits. It is the per-client
@@ -109,7 +109,7 @@ var notInTransaction = map[string]bool{
 // rules out. Every command in commandTable needs an entry here, apart from the
 // ones refused in a transaction anyway.
 var commandArity = map[string]int{
-	"PING": -1, "ECHO": 2, "SELECT": 2,
+	"PING": -1, "ECHO": 2, "SELECT": 2, "UNWATCH": 1,
 
 	"SET": -3, "SETNX": 3, "GET": 2, "INCR": 2, "INCRBY": 3, "DECR": 2, "DECRBY": 3, "MGET": -2, "MSET": -3,
 	"SETEX": 4, "PSETEX": 4,
@@ -159,6 +159,17 @@ func arityAccepts(arity, args int) bool {
 }
 
 // wrongArguments is Redis's refusal, which names the command in lower case.
+// cmdUNWATCH forgets every watched key. Nothing is ever watched, so it only
+// answers, as Redis answers it then. Clients send it when they finish with a
+// connection that may have watched something: go-redis's Tx.Close and
+// redis-py's pipeline reset both do.
+func cmdUNWATCH(args []string) []byte {
+	if len(args) != 0 {
+		return Encode(wrongArguments("UNWATCH"), false)
+	}
+	return constant.RespOk
+}
+
 func wrongArguments(name string) error {
 	return fmt.Errorf("ERR wrong number of arguments for '%s' command", strings.ToLower(name))
 }

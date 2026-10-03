@@ -66,13 +66,16 @@ the transaction:
 - `KEEL.PROMOTE` and `KEEL.FENCE`, which have no Redis counterpart: a term acts
   on the node, not the dataset, and is made durable outside the log.
 
-`WATCH` and `UNWATCH` are not implemented. They remain unknown commands, so
+`WATCH` is not implemented. It remains an unknown command, so
 optimistic-locking APIs (go-redis `Watch`, redis-py `pipeline.watch`,
 node-redis and ioredis `watch`) fail with an error instead of silently not
 watching. Inside `MULTI`, `WATCH` gets Redis's own answer, `ERR WATCH inside
 MULTI is not allowed`, which leaves the transaction open; `WATCH` with no keys
 is refused for its argument count and aborts the transaction, as in Redis.
-`UNWATCH`, which Redis would queue, is an unknown command and aborts it.
+`UNWATCH` answers as Redis does when nothing is watched, which here is always:
+`+OK`, and inside `MULTI` it is queued and answers `+OK` in its slot. Clients
+send it when they release a connection, as go-redis's `Tx.Close` and
+redis-py's pipeline reset do.
 
 ## Atomicity
 

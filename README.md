@@ -50,7 +50,7 @@ populate the variable; avoid putting secrets in process arguments or shell histo
 | Geo | `GEOADD`, `GEODIST`, `GEOHASH`, `GEOSEARCH`, `GEOPOS` |
 | Approximate analytics | Bloom `BF.*`, Count-Min `CMS.*`, Morris `MORRIS.*`, Cuckoo `CF.*`, and `PFADD`/`PFCOUNT`/`PFMERGE`; see the [command registry](internal/core/eval.go) for exact names |
 | Connection | `HELLO` (RESP2; `HELLO 3` answers `NOPROTO`), `AUTH`, `CLIENT ID`/`SETNAME`/`GETNAME`/`SETINFO`/`INFO`, `SELECT 0`, `QUIT`, `ECHO`, `PING` |
-| Transactions | `MULTI`, `EXEC`, `DISCARD`; a command refused while queueing makes `EXEC` answer `EXECABORT`, and one that fails inside `EXEC` is an error in its reply while the rest run; no `WATCH` |
+| Transactions | `MULTI`, `EXEC`, `DISCARD`, `UNWATCH`; a command refused while queueing makes `EXEC` answer `EXECABORT`, and one that fails inside `EXEC` is an error in its reply while the rest run; no `WATCH` |
 | Operations | `INFO` (reports `redis_version:7.0.0`, the command level followed), `MEMORY USAGE key`, `MEMORY STATS`, `BGREWRITEAOF`, `KEEL.DUMP`, `KEEL.RESTORE`, `KEEL.PROMOTE`/`KEEL.FENCE` |
 
 Important boundaries:
@@ -80,8 +80,9 @@ Important boundaries:
   closes after a write, its outcome may be unknown. Retrying increments can duplicate effects.
 - [Transactions](docs/transactions.md) run with no other client's command between
   theirs, and the log and replicas receive all of one or none. There is no rollback.
-  `WATCH`/`UNWATCH` are unknown commands, so optimistic-locking APIs fail; inside
-  `MULTI`, `WATCH` gets Redis's `ERR WATCH inside MULTI is not allowed`.
+  `WATCH` is an unknown command, so optimistic-locking APIs fail; inside `MULTI`
+  it gets Redis's `ERR WATCH inside MULTI is not allowed`. `UNWATCH` answers `+OK`,
+  as Redis does when nothing is watched.
   `KEEL.PROMOTE`/`KEEL.FENCE` and `KEEL.REPL.*` are refused inside `MULTI`; every
   command Redis queues, `AUTH` included, is queued. A connection may queue 16 MiB,
   counted as retained input; `EXEC`'s reply shares the 64 MiB output limit, and one

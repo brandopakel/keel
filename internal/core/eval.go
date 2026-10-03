@@ -19,6 +19,7 @@ import (
 // writeCommands; each of those is a list that can be read against the others.
 var commandTable = map[string]func([]string) []byte{
 	"PING": cmdPING, "ECHO": cmdECHO, "SELECT": cmdSELECT,
+	"UNWATCH": cmdUNWATCH,
 
 	// Strings
 	"SET": cmdSET, "SETNX": cmdSETNX, "GET": cmdGET, "INCR": cmdINCR, "INCRBY": cmdINCRBY, "DECR": cmdDECR, "DECRBY": cmdDECRBY, "MGET": cmdMGET, "MSET": cmdMSET,
