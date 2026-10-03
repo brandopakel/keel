@@ -200,7 +200,7 @@ func cmdReplicationPullV2(args []string) []byte {
 		return Encode(errors.New("ERR replication protocol 2 is disabled"), false)
 	}
 	if len(args) != 4 && len(args) != 5 {
-		return Encode(errSyntax, false)
+		return Encode(wrongArguments("KEEL.REPL.PULL2"), false)
 	}
 	if len(args) == 4 && CurrentTerm() != 0 {
 		return []byte(ReplicationTermRequiredReply)

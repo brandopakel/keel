@@ -159,11 +159,11 @@ func TestHello3WithAUTH(t *testing.T) {
 	if got := callRaw(t, c, r, "HELLO", "3"); !strings.HasPrefix(got, "-NOAUTH HELLO must be called with the client already authenticated") {
 		t.Fatalf("HELLO 3 without credentials = %q", got)
 	}
-	if got := callRaw(t, c, r, "HELLO", "3", "AUTH", "default", "wrong"); got != "-WRONGPASS invalid username-password pair\r\n" {
+	if got := callRaw(t, c, r, "HELLO", "3", "AUTH", "default", "wrong"); got != "-WRONGPASS invalid username-password pair or user is disabled.\r\n" {
 		t.Fatalf("HELLO 3 AUTH with the wrong password = %q", got)
 	}
 	// Neither switched the connection: it is still RESP2, and not logged in.
-	if got := callRaw(t, c, r, "GET", "missing"); got != "-NOAUTH Authentication required\r\n" {
+	if got := callRaw(t, c, r, "GET", "missing"); got != "-NOAUTH Authentication required.\r\n" {
 		t.Fatalf("GET after refused HELLOs = %q", got)
 	}
 	if got := callRaw(t, c, r, "AUTH", "integration-secret"); got != "+OK\r\n" {

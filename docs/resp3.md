@@ -53,7 +53,7 @@ same in both. The rest:
 | null `_` | Everywhere RESP2 sends `$-1` or `*-1`: `GET`, `HGET`, `LINDEX`, `ZSCORE`, `ZRANK`, `GEODIST`, `MEMORY USAGE`, `KEEL.DUMP` and `CLIENT GETNAME` of something missing; `SET` with `NX`/`XX` refused, and with `GET` of a missing key; `LPOP`/`RPOP` of a missing key, with or without a count; `SPOP`/`SRANDMEMBER` without a count; missing elements of `MGET`, `HMGET`, `GEOHASH` and `GEOPOS` |
 | map `%` | `HGETALL`, `HELLO`, `MEMORY STATS`, `LCS ... IDX`, `BF.INFO`, `CF.INFO`, `MORRIS.INFO` |
 | set `~` | `SMEMBERS`, and `SPOP` with a count. `SRANDMEMBER` with a count stays an array, as in Redis |
-| double `,` | `ZSCORE`, `ZINCRBY`; scores in `ZRANGE`, `ZRANGEBYSCORE`, `ZREVRANGEBYSCORE` and `ZPOPMIN`/`ZPOPMAX`; coordinates in `GEOPOS` and `GEOSEARCH ... WITHCOORD` |
+| double `,` | `ZSCORE`, `ZINCRBY`, the score of `ZRANK ... WITHSCORE`; scores in `ZRANGE`, `ZRANGEBYSCORE`, `ZREVRANGEBYSCORE` and `ZPOPMIN`/`ZPOPMAX`; coordinates in `GEOPOS` and `GEOSEARCH ... WITHCOORD` |
 | `[member, score]` pairs | `ZRANGE`/`ZRANGEBYSCORE`/`ZREVRANGEBYSCORE ... WITHSCORES` are arrays of pairs, and so is `ZPOPMIN`/`ZPOPMAX` given a count. Without a count the one pair stays flat, `[member, score]`, as in Redis |
 | boolean `#` | `BF.ADD`, `BF.EXISTS`, `CF.ADD`, `CF.ADDNX`, `CF.EXISTS`, `CF.DEL`, and the elements of `BF.MADD`, `BF.MEXISTS` and `CF.MEXISTS` |
 | verbatim string `=`, format `txt` | `INFO`, `CLIENT INFO` |

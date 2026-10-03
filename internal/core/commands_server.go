@@ -1,7 +1,6 @@
 package core
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -15,31 +14,49 @@ import (
 // USAGE reports one key and STATS reports estimated memory by type. It reports what the accounting believes one key
 // costs, which is an estimate - see entryBytes - so it is useful for comparing
 // keys against each other and for understanding why eviction chose what it did.
+//
+// The subcommand and its count have been checked against the command table by
+// the time this runs; see containerCommands.
 func cmdMEMORY(args []string) []byte {
-	if len(args) < 1 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'MEMORY' command"), false)
+	if err := CommandError(&Command{Cmd: "MEMORY", Args: args}); err != nil {
+		return Encode(err, false)
 	}
 	switch strings.ToUpper(args[0]) {
 	case "STATS":
-		if len(args) != 1 {
-			return Encode(errSyntax, false)
-		}
 		out := ReplyMap{"keyspace.bytes", int64(data_structure.TotalMemUsed()), "keys.count", int64(data_structure.TotalKeys()), "keys.expires", int64(KeysWithExpiry())}
 		data_structure.EachKeyspace(func(ks data_structure.Keyspace) { out = append(out, ks.KeyspaceName()+".bytes", int64(ks.MemUsed())) })
 		return Encode(out, false)
 	case "USAGE":
-		if len(args) != 2 {
-			return Encode(errors.New("(error) ERR wrong number of arguments for 'MEMORY USAGE' command"), false)
+		// SAMPLES is Redis's, and read as Redis reads it; the estimate here
+		// is not sampled, so its count changes nothing.
+		for i := 2; i < len(args); i += 2 {
+			if !strings.EqualFold(args[i], "SAMPLES") || i+1 == len(args) {
+				return Encode(errSyntax, false)
+			}
+			samples, valid := counterInteger(args[i+1])
+			if !valid {
+				return Encode(errNotAnInteger, false)
+			}
+			if samples < 0 {
+				return Encode(errSyntax, false)
+			}
 		}
 		bytes, exists := entryBytesAnywhere(args[1])
 		if !exists {
 			return nullReply()
 		}
 		return Encode(int64(bytes), false)
-	default:
-		return Encode(errors.New(fmt.Sprintf("ERR unknown MEMORY subcommand '%s'", args[0])), false)
 	}
+	return memoryHelp
 }
+
+// memoryHelp is Redis's MEMORY HELP, for the subcommands this server has.
+var memoryHelp = HelpReply("MEMORY",
+	"STATS",
+	"    Return information about the memory usage of the server.",
+	"USAGE <key> [SAMPLES <count>]",
+	"    Return memory in bytes used by <key> and its value, as this server",
+	"    estimates it. SAMPLES is accepted, and the estimate is not sampled.")
 
 // entryBytesAnywhere finds a key in whichever keyspace holds it.
 //
@@ -118,17 +135,18 @@ const RedisCompatibleVersion = "7.0.0"
 // The text is a verbatim string in RESP3, as Redis sends it. resp_version is
 // the protocol of the connection asking, the same as HELLO's proto: 2, or 3
 // after HELLO 3.
+//
+// Any number of sections may be named, as Redis allows; a name that is not a
+// section adds nothing, and all, default and everything are every section.
 func cmdINFO(args []string) []byte {
-	if len(args) > 1 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'INFO' command"), false)
+	sections := make(map[string]bool, len(args))
+	for _, arg := range args {
+		sections[strings.ToLower(arg)] = true
 	}
-	section := ""
-	if len(args) == 1 {
-		section = strings.ToLower(args[0])
-	}
+	every := len(args) == 0 || sections["all"] || sections["default"] || sections["everything"]
 
 	var b strings.Builder
-	want := func(name string) bool { return section == "" || section == name }
+	want := func(name string) bool { return every || sections[name] }
 	if want("clients") && ClientBuffers != nil {
 		stats := ClientBuffers()
 		fmt.Fprintf(&b, "# Clients\r\nconnected_clients:%d\r\nretained_input_bytes:%d\r\nretained_reply_bytes:%d\r\nretained_client_bytes:%d\r\n", stats.Connected, stats.InputBytes, stats.ReplyBytes, stats.TotalBytes)
@@ -246,7 +264,7 @@ func cmdINFO(args []string) []byte {
 // aof_rewrites, which is how a caller waits for one to finish.
 func cmdBGREWRITEAOF(args []string) []byte {
 	if len(args) != 0 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'BGREWRITEAOF' command"), false)
+		return Encode(wrongArguments("BGREWRITEAOF"), false)
 	}
 	if err := StartRewrite(); err != nil {
 		return Encode(fmt.Errorf("ERR %w", err), false)

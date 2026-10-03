@@ -46,7 +46,7 @@ func TestGEOADDRefusesBadInput(t *testing.T) {
 	assert.Contains(t, run(t, "GEOADD", "k", "13.361389", "38.115556"), "wrong number of arguments")
 	assert.Contains(t, run(t, "GEOADD", "k", "13.361389", "38.115556", "a", "1"), "syntax error",
 		"positions come in threes")
-	assert.Contains(t, run(t, "GEOADD", "k", "NX", "XX", "1", "1", "a"), "XX and NX")
+	assert.Equal(t, "ERR syntax error", run(t, "GEOADD", "k", "NX", "XX", "1", "1", "a"), "Redis's GEOADD calls NX with XX a syntax error")
 	assert.Contains(t, run(t, "GEOADD", "k", "1", "91", "a"), "invalid longitude,latitude pair")
 	assert.Contains(t, run(t, "GEOADD", "k", "181", "1", "a"), "invalid longitude,latitude pair")
 	assert.Contains(t, run(t, "GEOADD", "k", "x", "1", "a"), "not a valid float")
@@ -152,30 +152,41 @@ func TestGEOSEARCHCount(t *testing.T) {
 
 func TestGEOSEARCHRefusesHalfAQuestion(t *testing.T) {
 	addSicily(t)
-	assert.Contains(t, run(t, "GEOSEARCH", "Sicily", "BYRADIUS", "200", "km"), "FROMMEMBER or FROMLONLAT")
-	assert.Contains(t, run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37"), "BYRADIUS and BYBOX")
+	// Fewer than six arguments is the wrong number before anything is read.
+	assert.Equal(t, "ERR wrong number of arguments for 'geosearch' command", run(t, "GEOSEARCH", "Sicily", "BYRADIUS", "200", "km"))
+	assert.Equal(t, "ERR exactly one of FROMMEMBER or FROMLONLAT can be specified for GEOSEARCH",
+		run(t, "GEOSEARCH", "Sicily", "BYRADIUS", "200", "km", "ASC", "WITHDIST"))
+	assert.Equal(t, "ERR exactly one of BYRADIUS and BYBOX can be specified for GEOSEARCH",
+		run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "ASC", "WITHDIST"))
 	assert.Contains(t, run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "200", "leagues"), "unsupported unit")
 	assert.Contains(t, run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "-1", "km"), "cannot be negative")
 	assert.Contains(t, run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "abc", "km"), "need numeric radius")
 	assert.Contains(t, run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "FROMMEMBER", "Palermo", "BYRADIUS", "1", "km"), "syntax error",
-		"one centre only")
+		"one kind of centre only")
 	assert.Contains(t, run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "1", "km", "BYBOX", "1", "1", "km"), "syntax error",
-		"one extent only")
+		"one kind of extent only")
+	assert.Equal(t, []interface{}{"Palermo"},
+		run(t, "GEOSEARCH", "Sicily", "FROMMEMBER", "Catania", "FROMMEMBER", "Palermo", "BYRADIUS", "1", "km", "BYRADIUS", "5", "km"),
+		"the same option again replaces it, as in Redis")
+	assert.Equal(t, "ERR could not decode requested zset member",
+		run(t, "GEOSEARCH", "Sicily", "FROMMEMBER", "nobody", "BYRADIUS", "x", "km"),
+		"a member is resolved as it is read, ahead of a later argument's error")
 	assert.Contains(t, run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "1", "km", "SIDEWAYS"), "syntax error")
 	assert.Contains(t, run(t, "GEOSEARCH", "Sicily", "FROMMEMBER", "nobody", "BYRADIUS", "1", "km"), "could not decode requested zset member")
 	assert.Contains(t, run(t, "GEOSEARCH", "Sicily"), "wrong number of arguments")
 }
 
-// TestGEOSEARCHOldRadiusForm: before it took the Redis form, this server's
-// GEOSEARCH ended in a bare radius in metres. A log written then still replays.
-func TestGEOSEARCHOldRadiusForm(t *testing.T) {
+// TestGEOSEARCHOldRadiusFormIsRedisRefusal: before it took the Redis form,
+// this server's GEOSEARCH ended in a bare radius in metres. No log holds one -
+// GEOSEARCH is a read - and Redis counts and refuses the form, so it is
+// answered as Redis answers it.
+func TestGEOSEARCHOldRadiusFormIsRedisRefusal(t *testing.T) {
 	addSicily(t)
-	assert.ElementsMatch(t, []interface{}{"Catania", "Palermo"},
+	assert.Equal(t, "ERR wrong number of arguments for 'geosearch' command",
 		run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "200000"))
-	assert.Equal(t, []interface{}{"Palermo"},
+	assert.Equal(t, "ERR wrong number of arguments for 'geosearch' command",
 		run(t, "GEOSEARCH", "Sicily", "FROMMEMBER", "Palermo", "1000"))
-	assert.Contains(t, run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "-5"), "syntax error",
-		"a negative number is not a radius")
+	assert.Equal(t, "ERR syntax error", run(t, "GEOSEARCH", "Sicily", "FROMMEMBER", "Palermo", "ASC", "WITHDIST", "1000"))
 }
 
 // TestGEOSEARCHAgreesWithBruteForce checks the search end to end against a

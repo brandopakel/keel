@@ -20,7 +20,7 @@ import (
 
 func cmdCFRESERVE(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'CF.RESERVE' command"), false)
+		return Encode(wrongArguments("CF.RESERVE"), false)
 	}
 	key := args[0]
 	capacity, err := strconv.ParseUint(args[1], 10, 64)
@@ -56,7 +56,7 @@ func cfFor(key string) *data_structure.CuckooFilter {
 
 func cmdCFADD(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'CF.ADD' command"), false)
+		return Encode(wrongArguments("CF.ADD"), false)
 	}
 	if cfFor(args[0]).Insert(args[1]) {
 		return boolReply(true)
@@ -73,7 +73,7 @@ func cmdCFADD(args []string) []byte {
 // added. CF.ADD has no such failure mode.
 func cmdCFADDNX(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'CF.ADDNX' command"), false)
+		return Encode(wrongArguments("CF.ADDNX"), false)
 	}
 	cf := cfFor(args[0])
 	if cf.Lookup(args[1]) {
@@ -87,7 +87,7 @@ func cmdCFADDNX(args []string) []byte {
 
 func cmdCFEXISTS(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'CF.EXISTS' command"), false)
+		return Encode(wrongArguments("CF.EXISTS"), false)
 	}
 	cf, exist := cfStore.Get(args[0])
 	return boolReply(exist && cf.Lookup(args[1]))
@@ -95,7 +95,7 @@ func cmdCFEXISTS(args []string) []byte {
 
 func cmdCFMEXISTS(args []string) []byte {
 	if len(args) < 2 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'CF.MEXISTS' command"), false)
+		return Encode(wrongArguments("CF.MEXISTS"), false)
 	}
 	cf, exist := cfStore.Get(args[0])
 	res := make([]interface{}, 0, len(args)-1)
@@ -107,7 +107,7 @@ func cmdCFMEXISTS(args []string) []byte {
 
 func cmdCFDEL(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'CF.DEL' command"), false)
+		return Encode(wrongArguments("CF.DEL"), false)
 	}
 	cf, exist := cfStore.Get(args[0])
 	return boolReply(exist && cf.Delete(args[1]))
@@ -115,7 +115,7 @@ func cmdCFDEL(args []string) []byte {
 
 func cmdCFCOUNT(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'CF.COUNT' command"), false)
+		return Encode(wrongArguments("CF.COUNT"), false)
 	}
 	cf, exist := cfStore.Get(args[0])
 	if !exist {
@@ -126,7 +126,7 @@ func cmdCFCOUNT(args []string) []byte {
 
 func cmdCFINFO(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'CF.INFO' command"), false)
+		return Encode(wrongArguments("CF.INFO"), false)
 	}
 	key := args[0]
 	cf, exist := cfStore.Peek(key)

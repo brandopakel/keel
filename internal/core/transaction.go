@@ -96,69 +96,6 @@ var notInTransaction = map[string]bool{
 	"KEEL.REPL.PULL": true, "KEEL.REPL.PULL2": true,
 }
 
-// commandArity is how many words, the name included, each command accepts, as
-// Redis counts them: n means exactly n, -n means at least n. A transaction
-// needs it because Redis refuses a command with the wrong number of arguments
-// while queueing it, which aborts the transaction, rather than when EXEC runs
-// it - and the two outcomes differ to a client.
-//
-// The counts are Redis's for Redis's commands and the handler's own for the
-// rest. Every handler still checks its arguments, so a count looser than its
-// handler only moves the error into EXEC's reply; a count stricter than its
-// handler would refuse a valid command, which TestCommandArityIsNeverStricterThanTheHandler
-// rules out. Every command in commandTable needs an entry here, apart from the
-// ones refused in a transaction anyway.
-var commandArity = map[string]int{
-	"PING": -1, "ECHO": 2, "SELECT": 2, "UNWATCH": 1,
-
-	"SET": -3, "SETNX": 3, "GET": 2, "INCR": 2, "INCRBY": 3, "DECR": 2, "DECRBY": 3, "MGET": -2, "MSET": -3,
-	"SETEX": 4, "PSETEX": 4,
-	"LCS": -3,
-
-	"DEL": -2, "UNLINK": -2, "EXISTS": -2, "TYPE": 2, "KEYS": 2, "SCAN": -2,
-	"TTL": 2, "PTTL": 2, "EXPIRE": -3, "PEXPIREAT": -3,
-	"PEXPIRE": -3, "EXPIREAT": -3, "PERSIST": 2,
-
-	"DBSIZE": 1, "FLUSHDB": -1, "MEMORY": -2, "INFO": -1, "BGREWRITEAOF": 1,
-	"KEEL.DUMP": 2, "KEEL.RESTORE": 3, "MEMKV.DUMP": 2, "MEMKV.RESTORE": 3,
-
-	"HSET": -4, "HSETNX": 4, "HGET": 3, "HMGET": -3,
-	"HDEL": -3, "HEXISTS": 3, "HLEN": 2, "HKEYS": 2,
-	"HVALS": 2, "HGETALL": 2, "HINCRBY": 4,
-
-	"LPUSH": -3, "RPUSH": -3, "LPOP": -2, "RPOP": -2,
-	"LTRIM": 4, "LLEN": 2, "LINDEX": 3, "LSET": 4, "LRANGE": 4,
-
-	"SADD": -3, "SREM": -3, "SCARD": 2, "SMEMBERS": 2,
-	"SISMEMBER": 3, "SMISMEMBER": -3, "SPOP": -2,
-	"SRANDMEMBER": -2, "SRAND": -2,
-
-	"ZCOUNT": 4, "ZRANGEBYSCORE": -4, "ZREVRANGEBYSCORE": -4,
-	"ZINCRBY": 4, "ZPOPMIN": -2, "ZPOPMAX": -2,
-	"ZRANGE": -4, "ZADD": -4, "ZRANK": -3, "ZREM": -3, "ZSCORE": 3, "ZCARD": 2,
-	"GEOADD": -5, "GEODIST": -4, "GEOHASH": -2,
-	"GEOSEARCH": -7, "GEOPOS": -2,
-
-	"BF.RESERVE": -4, "BF.INFO": 2, "BF.ADD": 3,
-	"BF.MADD": -3, "BF.EXISTS": 3, "BF.MEXISTS": -3,
-	"CMS.INITBYDIM": 4, "CMS.INITBYPROB": 4,
-	"CMS.INCRBY": -4, "CMS.QUERY": -3,
-	"MORRIS.INITBYDIM": 4, "MORRIS.INITBYPROB": 4,
-	"MORRIS.INCRBY": -4, "MORRIS.QUERY": -3, "MORRIS.INFO": 2,
-	"PFADD": -2, "PFCOUNT": -2, "PFMERGE": -2,
-	"CF.RESERVE": 3, "CF.ADD": 3, "CF.ADDNX": 3,
-	"CF.EXISTS": 3, "CF.MEXISTS": -3, "CF.DEL": 3,
-	"CF.COUNT": 3, "CF.INFO": 2,
-}
-
-func arityAccepts(arity, args int) bool {
-	if arity >= 0 {
-		return args+1 == arity
-	}
-	return args+1 >= -arity
-}
-
-// wrongArguments is Redis's refusal, which names the command in lower case.
 // cmdUNWATCH forgets every watched key. Nothing is ever watched, so it only
 // answers, as Redis answers it then. Clients send it when they finish with a
 // connection that may have watched something: go-redis's Tx.Close and
@@ -170,18 +107,11 @@ func cmdUNWATCH(args []string) []byte {
 	return constant.RespOk
 }
 
-func wrongArguments(name string) error {
-	return fmt.Errorf("ERR wrong number of arguments for '%s' command", strings.ToLower(name))
-}
-
 // Connection is the transport's part in a transaction: the commands it answers
-// itself, about the connection rather than the data, which the command table
-// does not hold. Redis queues AUTH and its kind like any other command and runs
-// each in its place at EXEC, and so does this.
+// itself, about the connection rather than the data - connectionCommands -
+// which the command table does not hold. Redis queues AUTH and its kind like
+// any other command and runs each in its place at EXEC, and so does this.
 type Connection interface {
-	// ConnectionArity reports the arity of a command the transport answers
-	// itself, and false for any other command.
-	ConnectionArity(name string) (int, bool)
 	// AnswerConnection runs one such command and writes its reply.
 	AnswerConnection(cmd *Command, w io.ReadWriter)
 	// RESP3 reports whether the connection speaks RESP3 at this moment, which
@@ -190,11 +120,8 @@ type Connection interface {
 }
 
 // answers reports whether conn, which may be nil, answers name itself.
-func answers(conn Connection, name string) (int, bool) {
-	if conn == nil {
-		return 0, false
-	}
-	return conn.ConnectionArity(name)
+func answers(conn Connection, name string) bool {
+	return conn != nil && connectionCommands[name]
 }
 
 // Transaction is one connection's open MULTI. The connection keeps a pointer
@@ -221,11 +148,11 @@ func (tx *Transaction) RetainedBytes() int {
 const queueSlotBytes = 16
 
 // CommandRetainedBytes estimates what one parsed command holds: the struct,
-// its argument headers and their bytes. Parsed input and queued commands are
-// charged by the same estimate, so moving a command from one to the other
-// neither creates nor hides memory.
+// its name as upper-cased and as sent, its argument headers and their bytes.
+// Parsed input and queued commands are charged by the same estimate, so moving
+// a command from one to the other neither creates nor hides memory.
 func CommandRetainedBytes(cmd *Command) int {
-	used := 64 + len(cmd.Cmd) + cap(cmd.Args)*16
+	used := 64 + len(cmd.Cmd) + len(cmd.Name) + cap(cmd.Args)*16
 	for _, arg := range cmd.Args {
 		used += len(arg)
 	}
@@ -260,7 +187,7 @@ func Transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn Connection) (
 			// command's, and clients get the same answers here.
 			reply := Encode(errWatchInMulti, false)
 			if len(cmd.Args) == 0 {
-				reply = tx.refuse(wrongArguments(cmd.Cmd))
+				reply = tx.refuse(wrongArguments("WATCH"))
 			}
 			_, err := w.Write(reply)
 			return tx, err
@@ -268,17 +195,16 @@ func Transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn Connection) (
 		_, err := w.Write(tx.queue(cmd, conn))
 		return tx, err
 	}
-	if len(cmd.Args) != 0 {
+	if err := CommandError(cmd); err != nil {
 		// Redis counts arguments before it looks at what a command does, so a
 		// malformed MULTI, EXEC or DISCARD is refused as any command would be:
-		// inside a transaction that aborts it, and a malformed EXEC discards it
-		// there and then, naming the reason.
-		refused := wrongArguments(cmd.Cmd)
-		if tx != nil && cmd.Cmd == "EXEC" {
-			return nil, writeExecAbort(w, refused)
+		// inside a transaction that aborts it, and a malformed EXEC answers
+		// EXECABORT, discarding the transaction if there is one.
+		if cmd.Cmd == "EXEC" {
+			_, err := w.Write(Refusal(cmd, err))
+			return nil, err
 		}
-		tx.abort()
-		_, err := w.Write(Encode(refused, false))
+		_, err := w.Write(tx.refuse(err))
 		return tx, err
 	}
 	var reply []byte
@@ -333,35 +259,41 @@ func (tx *Transaction) queue(cmd *Command, conn Connection) []byte {
 	return queuedReply
 }
 
+// queueRefusal checks cmd in Redis's order: the name and the count of
+// arguments, then whether a transaction may hold it, then whether this node
+// may run it.
 func queueRefusal(cmd *Command, conn Connection) error {
-	if arity, own := answers(conn, cmd.Cmd); own {
+	if err := CommandError(cmd); err != nil {
+		return err
+	}
+	if answers(conn, cmd.Cmd) {
 		// The transport's own commands are not about the data, so neither a
-		// replica nor a fenced primary refuses them; only their count matters.
-		if !arityAccepts(arity, len(cmd.Args)) {
-			return wrongArguments(cmd.Cmd)
-		}
+		// replica nor a fenced primary refuses them.
 		return nil
 	}
-	if _, known := commandTable[cmd.Cmd]; !known {
-		return unknownCommand(cmd.Cmd)
+	if commands[cmd.Cmd].run == nil {
+		// A connection command with no transport to answer it.
+		return unknownCommand(cmd)
 	}
 	if notInTransaction[cmd.Cmd] {
 		return errNotInTransaction
-	}
-	if arity, counted := commandArity[cmd.Cmd]; counted && !arityAccepts(arity, len(cmd.Args)) {
-		return wrongArguments(cmd.Cmd)
 	}
 	// A replica refuses writes, and reads once it has lost its primary, as it
 	// would outside a transaction; and so does a primary that has been fenced.
 	return replicaCommandError(cmd.Cmd)
 }
 
-// writeExecAbort discards a transaction at EXEC and names the reason. Redis
-// drops the generic ERR prefix from the reason and keeps any other class, such
-// as READONLY or MASTERDOWN, which is the part a client can act on.
-func writeExecAbort(w io.Writer, cause error) error {
+// execAbort is EXEC's refusal, which discards the transaction and names the
+// reason. Redis drops the generic ERR prefix from the reason and keeps any
+// other class, such as NOAUTH, READONLY or MASTERDOWN, which is the part a
+// client can act on.
+func execAbort(cause error) []byte {
 	reason := strings.TrimPrefix(cause.Error(), "ERR ")
-	_, err := w.Write(Encode(fmt.Errorf("EXECABORT Transaction discarded because of: %s", reason), false))
+	return Encode(fmt.Errorf("EXECABORT Transaction discarded because of: %s", reason), false)
+}
+
+func writeExecAbort(w io.Writer, cause error) error {
+	_, err := w.Write(execAbort(cause))
 	return err
 }
 
@@ -381,7 +313,7 @@ func (tx *Transaction) exec(w io.Writer, conn Connection) error {
 	// lost its primary. Either all of a transaction runs or none of it does, so
 	// every command is checked before the first one runs, as Redis checks EXEC.
 	for _, cmd := range tx.commands {
-		if _, own := answers(conn, cmd.Cmd); own {
+		if answers(conn, cmd.Cmd) {
 			continue
 		}
 		if err := replicaCommandError(cmd.Cmd); err != nil {
@@ -413,7 +345,7 @@ func (tx *Transaction) exec(w io.Writer, conn Connection) error {
 	replyCeiling = ceiling(0)
 	defer func() { replyCeiling = MaxReplyBytes }()
 	run := func(cmd *Command, sink io.ReadWriter) error {
-		if _, own := answers(conn, cmd.Cmd); own {
+		if answers(conn, cmd.Cmd) {
 			conn.AnswerConnection(cmd, sink)
 			return nil
 		}

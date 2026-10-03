@@ -37,7 +37,7 @@ func TestCmdMemoryUsageOnMissingKey(t *testing.T) {
 func TestCmdMemoryRejectsUnknownSubcommand(t *testing.T) {
 	resetDictStore()
 	res, _ := Decode(cmdMEMORY([]string{"DOCTOR"}))
-	assert.Contains(t, res, "unknown MEMORY subcommand")
+	assert.Equal(t, "ERR unknown subcommand 'DOCTOR'. Try MEMORY HELP.", res)
 
 	res, _ = Decode(cmdMEMORY([]string{}))
 	assert.Contains(t, res, "wrong number of arguments")

@@ -1,8 +1,6 @@
 package core
 
 import (
-	"errors"
-
 	"github.com/brandopakel/keel/internal/constant"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
@@ -15,7 +13,7 @@ import (
 
 func cmdPFADD(args []string) []byte {
 	if len(args) < 1 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'PFADD' command"), false)
+		return Encode(wrongArguments("PFADD"), false)
 	}
 
 	key := args[0]
@@ -43,7 +41,7 @@ func cmdPFADD(args []string) []byte {
 
 func cmdPFCOUNT(args []string) []byte {
 	if len(args) < 1 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'PFCOUNT' command"), false)
+		return Encode(wrongArguments("PFCOUNT"), false)
 	}
 
 	if len(args) == 1 {
@@ -68,7 +66,7 @@ func cmdPFCOUNT(args []string) []byte {
 
 func cmdPFMERGE(args []string) []byte {
 	if len(args) < 1 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'PFMERGE' command"), false)
+		return Encode(wrongArguments("PFMERGE"), false)
 	}
 
 	dest := args[0]

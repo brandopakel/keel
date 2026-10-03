@@ -225,14 +225,20 @@ func TestFlushDBFreesTheMemoryItAccountedFor(t *testing.T) {
 			"balance would wrap rather than go negative")
 }
 
-// TestFlushDBRefusesArguments: Redis takes ASYNC and SYNC here, and neither
-// means anything on a server with no background free.
-func TestFlushDBRefusesArguments(t *testing.T) {
+// TestFlushDBArguments: SYNC and ASYNC are Redis's and both flush before the
+// reply; anything else is Redis's syntax error and flushes nothing.
+func TestFlushDBArguments(t *testing.T) {
 	ResetStores()
 	run(t, "SET", "k", "v")
-	res, _ := run(t, "FLUSHDB", "ASYNC").(string)
-	assert.Contains(t, res, "wrong number of arguments")
-	assert.Equal(t, int64(1), run(t, "DBSIZE"), "and flushes nothing")
+	for _, args := range [][]string{{"BAD"}, {"SYNC", "ASYNC"}} {
+		assert.Equal(t, "-ERR syntax error\r\n", string(rawReply(t, "FLUSHDB", args...)))
+		assert.Equal(t, int64(1), run(t, "DBSIZE"), "and flushes nothing")
+	}
+	for _, mode := range []string{"ASYNC", "sync"} {
+		run(t, "SET", "k", "v")
+		assert.Equal(t, "OK", run(t, "FLUSHDB", mode))
+		assert.Equal(t, int64(0), run(t, "DBSIZE"))
+	}
 }
 
 // TestMSetAndFlushDBSurviveARestart: both change the dataset, so both have to

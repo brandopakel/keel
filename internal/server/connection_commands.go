@@ -26,7 +26,10 @@ var (
 	errHelloNotAuthenticated = errors.New("NOAUTH HELLO must be called with the client already authenticated, " +
 		"otherwise the HELLO <proto> AUTH <user> <pass> option can be used to authenticate the client and " +
 		"select the RESP protocol version at the same time")
-	errWrongPass       = errors.New("WRONGPASS invalid username-password pair")
+	errWrongPass       = errors.New("WRONGPASS invalid username-password pair or user is disabled.")
+	errNoPassword      = errors.New("ERR AUTH <password> called without any password configured for the default user. Are you sure your configuration is correct?")
+	errNoAuth          = errors.New("NOAUTH Authentication required.")
+	errSyntax          = errors.New("ERR syntax error")
 	errInvalidName     = errors.New("ERR Client names cannot contain spaces, newlines or special characters.")
 	errProtocolVersion = errors.New("ERR Protocol version is not an integer or out of range")
 	// NOPROTO is the answer to a protocol version this server does not speak,
@@ -37,18 +40,47 @@ var (
 	errNoProto = errors.New("NOPROTO unsupported protocol version")
 )
 
-// authenticate checks a password the way AUTH does, for AUTH and for HELLO's
-// AUTH option, so the two cannot drift apart.
-func (c *client) authenticate(password string) error {
-	if config.RequirePass == "" {
-		return errors.New("ERR AUTH called without a configured password")
-	}
-	got, want := sha256.Sum256([]byte(password)), sha256.Sum256([]byte(config.RequirePass))
-	c.authenticated = subtle.ConstantTimeCompare(got[:], want[:]) == 1
-	if !c.authenticated {
+// authenticate checks a user and password the way Redis checks them for its
+// default user, for AUTH and for HELLO's AUTH option, so the two cannot drift
+// apart. There is one user, default. Without a password configured it takes
+// any password, as Redis's nopass default user does; with one, only that.
+// A failed attempt leaves the connection as it was, logged in or not, as it
+// does in Redis.
+func (c *client) authenticate(user, password string) error {
+	if user != "default" {
 		return errWrongPass
 	}
+	if config.RequirePass == "" {
+		return nil
+	}
+	got, want := sha256.Sum256([]byte(password)), sha256.Sum256([]byte(config.RequirePass))
+	if subtle.ConstantTimeCompare(got[:], want[:]) != 1 {
+		return errWrongPass
+	}
+	c.authenticated = true
 	return nil
+}
+
+// auth implements AUTH [username] password, as Redis answers each form.
+func (c *client) auth(args []string, w io.Writer) {
+	user := "default"
+	switch {
+	case len(args) > 2:
+		responseError(errSyntax, w)
+		return
+	case len(args) == 2:
+		user = args[0]
+	case config.RequirePass == "":
+		// The one-argument form names no user, and Redis refuses it when
+		// the default user has no password rather than accept anything.
+		responseError(errNoPassword, w)
+		return
+	}
+	if err := c.authenticate(user, args[len(args)-1]); err != nil {
+		responseError(err, w)
+		return
+	}
+	w.Write([]byte("+OK\r\n"))
 }
 
 // hello implements HELLO [protover [AUTH username password] [SETNAME name]].
@@ -93,16 +125,12 @@ func (c *client) hello(args []string, w io.Writer) {
 			name, withName = args[i+1], true
 			i++
 		default:
-			responseError(fmt.Errorf("ERR Syntax error in HELLO option '%s'", args[i]), w)
+			responseError(fmt.Errorf("ERR Syntax error in HELLO option '%s'", core.EchoArgument(args[i])), w)
 			return
 		}
 	}
 	if withAuth {
-		if user != "default" {
-			responseError(errWrongPass, w)
-			return
-		}
-		if err := c.authenticate(password); err != nil {
+		if err := c.authenticate(user, password); err != nil {
 			responseError(err, w)
 			return
 		}
@@ -147,8 +175,8 @@ func (c *client) encode(value interface{}, isSimpleString bool) []byte {
 // clientCommand implements the CLIENT subcommands a library sends on its own:
 // ID, SETNAME and GETNAME for applications that name their connections, and
 // SETINFO, which redis-py, node-redis, ioredis and go-redis all send on every
-// connection and ignore the failure of. INFO describes this connection.
-// Listing or killing other connections is not offered.
+// connection and ignore the failure of. INFO describes this connection, and
+// HELP lists these. Listing or killing other connections is not offered.
 //
 // Neither is anything RESP3 makes possible beyond its reply types: push
 // messages, and the TRACKING and MAINT_NOTIFICATIONS subcommands built on
@@ -156,28 +184,20 @@ func (c *client) encode(value interface{}, isSimpleString bool) []byte {
 // one it does not have - Redis 8.10 answers MAINT_NOTIFICATIONS exactly so -
 // and redis-py 8, node-redis 6 and go-redis 9, which send it while connecting
 // over RESP3, carry on without it.
-func (c *client) clientCommand(args []string, w io.Writer) {
-	if len(args) == 0 {
-		responseError(errors.New("ERR wrong number of arguments for 'client' command"), w)
+//
+// respond has checked the subcommand and its count against the command table
+// by the time this runs; it checks them again so that it is safe on its own,
+// and so each case below has the arguments it names.
+func (c *client) clientCommand(cmd *core.Command, w io.Writer) {
+	if err := core.CommandError(cmd); err != nil {
+		responseError(err, w)
 		return
 	}
-	sub := strings.ToUpper(args[0])
-	arity := func(n int) bool {
-		if len(args) == n {
-			return true
-		}
-		responseError(fmt.Errorf("ERR wrong number of arguments for 'client|%s' command", strings.ToLower(sub)), w)
-		return false
-	}
-	switch sub {
+	args := cmd.Args
+	switch strings.ToUpper(args[0]) {
 	case "ID":
-		if arity(1) {
-			w.Write(c.encode(int64(c.id), false))
-		}
+		w.Write(c.encode(int64(c.id), false))
 	case "SETNAME":
-		if !arity(2) {
-			return
-		}
 		if !validClientName(args[1]) {
 			responseError(errInvalidName, w)
 			return
@@ -185,18 +205,12 @@ func (c *client) clientCommand(args []string, w io.Writer) {
 		c.name = args[1]
 		w.Write(c.encode("OK", true))
 	case "GETNAME":
-		if !arity(1) {
-			return
-		}
 		if c.name == "" {
 			w.Write(c.encode(nil, false))
 			return
 		}
 		w.Write(c.encode(c.name, false))
 	case "SETINFO":
-		if !arity(3) {
-			return
-		}
 		var field *string
 		switch strings.ToUpper(args[1]) {
 		case "LIB-NAME":
@@ -204,24 +218,37 @@ func (c *client) clientCommand(args []string, w io.Writer) {
 		case "LIB-VER":
 			field = &c.libVersion
 		default:
-			responseError(fmt.Errorf("ERR Unrecognized option '%.128s'", args[1]), w)
+			responseError(fmt.Errorf("ERR Unrecognized option '%s'", core.EchoArgument(args[1])), w)
 			return
 		}
 		if !validClientName(args[2]) {
-			responseError(fmt.Errorf("ERR %s cannot contain spaces, newlines or special characters.", args[1]), w)
+			responseError(fmt.Errorf("ERR %s cannot contain spaces, newlines or special characters.", core.EchoArgument(args[1])), w)
 			return
 		}
 		*field = args[2]
 		w.Write(c.encode("OK", true))
 	case "INFO":
-		if arity(1) {
-			w.Write(c.encode(core.ReplyVerbatim(fmt.Sprintf("id=%d fd=%d name=%s db=0 resp=%d lib-name=%s lib-ver=%s\n",
-				c.id, c.fd, c.name, c.protocol(), c.libName, c.libVersion)), false))
-		}
-	default:
-		responseError(fmt.Errorf("ERR unknown subcommand '%.128s'. Try CLIENT HELP.", args[0]), w)
+		w.Write(c.encode(core.ReplyVerbatim(fmt.Sprintf("id=%d fd=%d name=%s db=0 resp=%d lib-name=%s lib-ver=%s\n",
+			c.id, c.fd, c.name, c.protocol(), c.libName, c.libVersion)), false))
+	case "HELP":
+		w.Write(clientHelp)
 	}
 }
+
+// clientHelp is Redis's CLIENT HELP, for the subcommands this server has.
+var clientHelp = core.HelpReply("CLIENT",
+	"GETNAME",
+	"    Return the name of the current connection.",
+	"ID",
+	"    Return the ID of the current connection.",
+	"INFO",
+	"    Return information about the current client connection.",
+	"SETNAME <name>",
+	"    Assign the name <name> to the current connection.",
+	"SETINFO <option> <value>",
+	"    Set client meta attr. Options are:",
+	"    * LIB-NAME: the client lib name.",
+	"    * LIB-VER: the client lib version.")
 
 // validClientName is Redis's rule for a client name and library information:
 // printable ASCII with no spaces, because CLIENT LIST output separates fields

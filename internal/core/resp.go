@@ -468,7 +468,7 @@ func ParseCmd(data []byte) (*Command, int, error) {
 		}
 		tokens = append(tokens, token)
 	}
-	return &Command{Cmd: strings.ToUpper(tokens[0]), Args: tokens[1:]}, r.pos, nil
+	return parsedCommand(tokens[0], tokens[1:]), r.pos, nil
 }
 
 // parseCmdGeneric is also used as the reference decoder by differential fuzz
@@ -496,8 +496,7 @@ func parseCmdGeneric(data []byte) (*Command, int, error) {
 		tokens[i] = token
 	}
 
-	res := &Command{Cmd: strings.ToUpper(tokens[0]), Args: tokens[1:]}
-	return res, n, nil
+	return parsedCommand(tokens[0], tokens[1:]), n, nil
 }
 
 // FrameShortfall reports how many more bytes must arrive before the command at

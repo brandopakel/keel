@@ -1269,9 +1269,15 @@ func aofReadPath(current, legacy string) string {
 // commands, and answers the commands that concern the connection itself - see
 // connection_commands.go.
 //
-// AUTH, HELLO and QUIT are answered before authentication, as Redis answers
-// them: HELLO because it can carry the credentials, and QUIT because a client
-// that never logged in can still hang up.
+// The order is Redis's. A command is named and counted first, so one this
+// server does not have, or one given the wrong number of arguments, is
+// refused as such whether or not the connection has logged in; the command
+// table checks its own commands again as they run, so here only those it
+// does not hold need checking once the connection is in. AUTH, HELLO and QUIT
+// are answered before authentication, as Redis answers them: HELLO because it
+// can carry the credentials, and QUIT because a client that never logged in
+// can still hang up. Everything else waits for a login, EXEC refused as Redis
+// refuses it, with EXECABORT.
 //
 // Inside MULTI every command but QUIT is queued, the connection's own included,
 // as Redis queues them; QUIT still closes the connection at once, discarding
@@ -1282,18 +1288,16 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 		c.transact(cmd, w)
 		return
 	}
+	locked := config.RequirePass != "" && !c.authenticated
+	if locked || core.IsConnectionCommand(cmd.Cmd) {
+		if err := core.CommandError(cmd); err != nil {
+			w.Write(core.Refusal(cmd, err))
+			return
+		}
+	}
 	switch cmd.Cmd {
 	case "AUTH":
-		valid := len(cmd.Args) == 1 || (len(cmd.Args) == 2 && cmd.Args[0] == "default")
-		if !valid {
-			responseErrorRw(fmt.Errorf("ERR wrong number of arguments or unsupported user for AUTH"), w)
-			return
-		}
-		if err := c.authenticate(cmd.Args[len(cmd.Args)-1]); err != nil {
-			responseErrorRw(err, w)
-			return
-		}
-		w.Write([]byte("+OK\r\n"))
+		c.auth(cmd.Args, w)
 		return
 	case "HELLO":
 		c.hello(cmd.Args, w)
@@ -1305,8 +1309,8 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 		c.closeAfterWrite = true
 		return
 	}
-	if config.RequirePass != "" && !c.authenticated {
-		responseErrorRw(fmt.Errorf("NOAUTH Authentication required"), w)
+	if locked {
+		w.Write(core.Refusal(cmd, errNoAuth))
 		return
 	}
 	if core.IsTransactionCommand(cmd.Cmd) {
@@ -1314,7 +1318,7 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 		return
 	}
 	if cmd.Cmd == "CLIENT" {
-		c.clientCommand(cmd.Args, w)
+		c.clientCommand(cmd, w)
 		return
 	}
 	// Set as the command runs rather than as it was parsed: a HELLO earlier
@@ -1334,24 +1338,12 @@ func (c *client) transact(cmd *core.Command, w io.ReadWriter) {
 	}
 }
 
-// ConnectionArity and AnswerConnection let a transaction queue the commands
-// respond answers itself rather than through the command table, and run them
-// in their place at EXEC. The counts are Redis's. QUIT is absent: it is never
-// queued.
-func (c *client) ConnectionArity(name string) (int, bool) {
-	switch name {
-	case "AUTH", "CLIENT":
-		return -2, true
-	case "HELLO":
-		return -1, true
-	}
-	return 0, false
-}
-
 // RESP3 tells a transaction which protocol to frame a queued command's reply
 // in as EXEC reaches it.
 func (c *client) RESP3() bool { return c.resp3 }
 
+// AnswerConnection lets a transaction run the commands respond answers itself
+// rather than through the command table, in their place at EXEC.
 func (c *client) AnswerConnection(cmd *core.Command, w io.ReadWriter) {
 	// Answered as it would be outside a transaction. EXEC is still running,
 	// so the transaction is set aside rather than queued into again.
