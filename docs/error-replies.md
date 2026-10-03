@@ -186,4 +186,4 @@ command, subcommand or option it does not have. The harness lists them in
 | `SET k v PX 9223372036854775807` | Redis's own answer depends on how it was compiled (signed overflow), and Homebrew's build answers `OK`. Keel refuses the expiry. It is not a harness case |
 | `SRANDMEMBER` counts past 16 million, `SCAN` `COUNT` past Keel's limit | Keel's allocation bounds, which Redis does not have |
 | Protocol errors and inline commands | Keel refuses anything that is not a RESP array of bulk strings, with its own `ERR Protocol error: invalid RESP input`. Redis accepts inline commands and words each protocol error separately |
-| RedisBloom's own replies and errors beyond counts and `WRONGTYPE` | Compared by the RedisBloom parity work, not here |
+| RedisBloom's own replies and errors beyond counts and `WRONGTYPE` | Compared byte for byte by `scripts/redisbloom-parity.py` (#94), which CI runs beside this harness |
