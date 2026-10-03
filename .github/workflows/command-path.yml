@@ -98,13 +98,22 @@ jobs:
           fi
           # One run of one side, from its own package directory, with the
           # round and the side that went first written before its output.
+          # Each run executes a fresh copy of its side's binary, so the
+          # physical pages its code is read into change from run to run. With
+          # one file per side for the whole job, an A/A pair of identical
+          # binaries ran the candidate slower in 10 of 12 rounds, 0.5% overall
+          # (run 37154602660): something fixed per file, which no interval
+          # within the run could show. A copy per run turns it into noise
+          # between pairs, which the intervals include.
           measure() {
             local side=$1 file=$2 round=$3 first=$4
+            cp "$RUNNER_TEMP/$side.test" "$RUNNER_TEMP/$side.run"
             { echo "keel-round: $round"
               echo "keel-first: $first"
-              (cd "$RUNNER_TEMP/$side/internal/core" && "$RUNNER_TEMP/$side.test" -test.run '^$' \
+              (cd "$RUNNER_TEMP/$side/internal/core" && "$RUNNER_TEMP/$side.run" -test.run '^$' \
                 -test.bench '^BenchmarkCommandPath' -test.benchmem -test.benchtime=200ms)
             } >> "dist/command-path/$file.txt"
+            rm "$RUNNER_TEMP/$side.run"
           }
           for round in $(seq "$ROUNDS"); do
             if (( round % 2 )); then
