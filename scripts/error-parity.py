@@ -276,7 +276,8 @@ GENERIC = [
     ['LRANGE', 'list', 'a', '1'], ['LRANGE', 'list', '0', 'b'], ['LTRIM', 'list', 'a', '1'], ['LLEN', 'str'],
     ['LINDEX', 'str', '0'], ['LSET', 'str', '0', 'v'], ['LINDEX', 'nokey', 'x'], ['LSET', 'nokey', 'x', 'v'],
     ['LINDEX', 'str', 'x'], ['LSET', 'str', 'x', 'v'], ['LPOP', 'str', 'x'], ['LRANGE', 'str', 'a', 'b'],
-    ['LTRIM', 'str', 'a', 'b'], ['LRANGE', 'list', '+0', '1'], ['LPOP', 'list', '-0'],
+    ['LTRIM', 'str', 'a', 'b'], ['LRANGE', 'list', '+0', '1'], ['LPOP', 'list', '-0'], ['LPOP', 'set', '1', '2'],
+    ['RPOP', 'str', '1', '2'],
     # Sets
     ['SADD', 'str', 'a'], ['SPOP', 'set', 'x'], ['SPOP', 'set', '-1'], ['SPOP', 'set', '1', '2'], ['SRANDMEMBER', 'set', 'x'],
     ['SRANDMEMBER', 'set', '-9223372036854775808'], ['SRANDMEMBER', 'set', '1', '2'], ['SISMEMBER', 'str', 'a'],
@@ -302,7 +303,8 @@ GENERIC = [
     ['ZRANK', 'zset', 'a', 'WITHSCORE'], ['ZRANK', 'zset', 'nobody', 'WITHSCORE'], ['ZRANK', 'nokey', 'a', 'withscore'],
     ['ZRANGE', 'zset', '0', '-1', 'BYSCORE'], ['ZRANGE', 'zset', '(1', '+inf', 'BYSCORE', 'LIMIT', '0', '1', 'WITHSCORES'],
     ['ZRANGE', 'zset', '+inf', '-inf', 'BYSCORE', 'REV'], ['ZRANGE', 'zset', '0', '1', 'BYSCORE', 'BYSCORE'],
-    ['ZRANGE', 'zset', '0', '1', 'LIMIT', 'x', '1'],
+    ['ZRANGE', 'zset', '0', '1', 'LIMIT', 'x', '1'], ['ZRANGE', 'zset', '0', '-1', 'LIMIT', '5', '-1'],
+    ['ZRANGE', 'zset', '0', '-1', 'LIMIT', '0', '1'],
     # Geo
     ['GEOADD', 'geo', 'x', '1', 'm'], ['GEOADD', 'geo', '200', '100', 'm'], ['GEOADD', 'geo', 'NX', 'XX', '1', '1', 'm'],
     ['GEOADD', 'geo', '1', '1', 'm', '2'], ['GEOADD', 'geo', 'CH', '1', '1'], ['GEOADD', 'str', '1', '1', 'm'],

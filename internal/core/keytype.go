@@ -154,7 +154,8 @@ var argumentsBeforeType = map[string]func(args []string) error{
 		}
 		return nil
 	},
-	"LPOP": popCountArgument, "RPOP": popCountArgument,
+	"LPOP":   func(args []string) error { return listPopArguments("LPOP", args) },
+	"RPOP":   func(args []string) error { return listPopArguments("RPOP", args) },
 	"LRANGE": rangeArgument, "LTRIM": rangeArgument,
 	"SPOP": func(args []string) error {
 		if len(args) > 2 {
@@ -227,6 +228,15 @@ func decrementArgument(args []string) error {
 		return errDecrOverflow
 	}
 	return nil
+}
+
+// listPopArguments is LPOP's and RPOP's reading: more than a count is the
+// wrong number of arguments, then the count.
+func listPopArguments(name string, args []string) error {
+	if len(args) > 2 {
+		return wrongArguments(name)
+	}
+	return popCountArgument(args)
 }
 
 func popCountArgument(args []string) error {

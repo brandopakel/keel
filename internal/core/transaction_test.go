@@ -337,6 +337,9 @@ func TestDispatchCountsArgumentsFromTheTable(t *testing.T) {
 	require.Equal(t, "-ERR wrong number of arguments for 'get' command\r\n", string(rawReply(t, "GET")))
 	require.Equal(t, "-ERR wrong number of arguments for 'hset' command\r\n", string(rawReply(t, "HSET", "list", "f")),
 		"counted before the key's type is looked at")
+	run(t, "SADD", "set", "a")
+	require.Equal(t, "-ERR wrong number of arguments for 'lpop' command\r\n", string(rawReply(t, "LPOP", "set", "1", "2")),
+		"LPOP's own upper bound comes before the key's type too")
 	require.Equal(t, "-ERR wrong number of arguments for 'memory|usage' command\r\n", string(rawReply(t, "MEMORY", "usage")))
 	require.Equal(t, "-ERR unknown subcommand 'nosuch'. Try MEMORY HELP.\r\n", string(rawReply(t, "MEMORY", "nosuch", "x")))
 	require.Equal(t, "-ERR wrong number of arguments for 'memkv.dump' command\r\n", string(rawReply(t, "MEMKV.DUMP")),

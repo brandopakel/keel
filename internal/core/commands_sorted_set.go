@@ -338,7 +338,6 @@ type zrangeArguments struct {
 // syntax error of any other word this server does not know there.
 func parseZRange(args []string) (z zrangeArguments, err error) {
 	z.count = -1
-	direction, byScore := false, false
 	for i := 3; i < len(args); i++ {
 		switch opt := strings.ToUpper(args[i]); {
 		case opt == "WITHSCORES":
@@ -348,10 +347,10 @@ func parseZRange(args []string) (z zrangeArguments, err error) {
 				return z, err
 			}
 			i += 2
-		case opt == "REV" && !direction:
-			direction, z.reverse = true, true
-		case opt == "BYSCORE" && !byScore:
-			byScore, z.byScore = true, true
+		case opt == "REV" && !z.reverse:
+			z.reverse = true
+		case opt == "BYSCORE" && !z.byScore:
+			z.byScore = true
 		default:
 			return z, errSyntax
 		}
