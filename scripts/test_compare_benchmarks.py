@@ -114,7 +114,7 @@ class ParsingTests(unittest.TestCase):
     def test_result_before_any_round_fails(self):
         base, cand = files()
         res = run(result('BenchmarkCommandPath/SET', 300) + base, cand)
-        self.assertTrue(failures_matching(res, 'result before any keel-round line'))
+        self.assertTrue(failures_matching(res, 'result outside a numbered round'))
 
     def test_benchmark_twice_in_a_round_fails(self):
         base, cand = files(base=lambda r, f: [result('BenchmarkX/a', 300)] * (2 if r == 2 else 1))
@@ -226,6 +226,14 @@ class CoverageTests(unittest.TestCase):
         self.assertTrue(failures_matching(res, 'BenchmarkX/b: 4 baseline samples but 3 candidate samples; '
                                                'no candidate sample in round 3'))
         self.assertEqual(res['rows'][1]['pairs'], 3)
+
+    def test_a_row_in_one_round_only_fails_without_breaking_the_intervals(self):
+        lines = lambda r, f: [result('BenchmarkX/a', 300)] + ([result('BenchmarkX/b', 300)] if r == 1 else [])
+        res = run(*files(rounds=4, base=lines))
+        self.assertEqual(len(failures_matching(res, 'BenchmarkX/b: 1 baseline samples but 1 candidate samples')), 2)
+        # Most draws leave out round 1, so b's interval rests on the few that include it.
+        self.assertEqual(res['rows'][1]['pairs'], 1)
+        self.assertIn('BenchmarkX/b', cb.markdown(res))
 
     def test_no_benchmark_in_common_fails(self):
         res = run('', '')

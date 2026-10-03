@@ -120,7 +120,7 @@ def parse(text, label):
             if problem:
                 run.problems.append(f'{where}: {problem}: {s!r}')
             elif current is None:
-                run.problems.append(f'{where}: result before any keel-round line: {s!r}')
+                run.problems.append(f'{where}: result outside a numbered round: {s!r}')
             elif (fields[0], current) in seen:
                 run.problems.append(f'{where}: {fields[0]} appears twice in round {current}')
             else:
@@ -174,6 +174,15 @@ def quantile(sorted_values, q):
     low = math.floor(position)
     high = min(low + 1, len(sorted_values) - 1)
     return sorted_values[low] + (sorted_values[high] - sorted_values[low]) * (position - low)
+
+
+def interval(draws):
+    """The central 95% of bootstrap draws. A row whose samples are missing
+    from most rounds, which already fails, may have none."""
+    if not draws:
+        return None
+    d = sorted(draws)
+    return [round(quantile(d, .025), 4), round(quantile(d, .975), 4)]
 
 
 def order_effect(pairs):
@@ -314,15 +323,15 @@ def summarise(rows, by_order, resamples, seed):
             if sample:
                 draws[name].append(gmedian(sample))
                 medians.append(draws[name][-1])
-        overall.append(gmedian(medians))
+        if medians:
+            overall.append(gmedian(medians))
     for row in rows:
-        d = sorted(draws[row['name']])
-        row['interval_95'] = [round(quantile(d, .025), 4), round(quantile(d, .975), 4)]
+        row['interval_95'] = interval(draws[row['name']])
     overall.sort()
     effects = [row['order_effect'] for row in rows if row['order_effect'] is not None]
     medians = [row['median_ratio'] for row in rows]
     return {'median_ratio': round(gmedian(medians), 4),
-            'interval_95': [round(quantile(overall, .025), 4), round(quantile(overall, .975), 4)],
+            'interval_95': interval(overall),
             'row_range': [min(medians), max(medians)],
             'order_effect': round(gmedian(effects), 4) if effects else None,
             'resamples': resamples}
@@ -330,6 +339,10 @@ def summarise(rows, by_order, resamples, seed):
 
 def fmt(value):
     return '-' if value is None else f'{value:g}'
+
+
+def span(bounds):
+    return '-' if bounds is None else f'{bounds[0]:.3f} to {bounds[1]:.3f}'
 
 
 def markdown(result):
@@ -343,7 +356,7 @@ def markdown(result):
                           if u not in ('allocs/op', 'B/op'))
         mark = ' (over the 0.98 budget)' if r['median_ratio'] > BUDGET else ''
         out.append(f"| {r['name']} | {r['pairs']} | {r['base_ns']:g} | {r['cand_ns']:g} "
-                   f"| {r['median_ratio']:.3f}{mark} | {r['interval_95'][0]:.3f} to {r['interval_95'][1]:.3f} "
+                   f"| {r['median_ratio']:.3f}{mark} | {span(r['interval_95'])} "
                    f"| {r['pair_range'][0]:.3f} to {r['pair_range'][1]:.3f} | {sides('allocs/op')} "
                    f"| {sides('B/op')} | {other} |")
     o, rounds = result['overall'], result['rounds']
@@ -352,7 +365,7 @@ def markdown(result):
                   f"Running second rather than first scales time by {o['order_effect']:.3f}, and the "
                   'alternating order cancels that.')
         out += ['', f"Across {len(result['rows'])} benchmarks: median paired ratio {o['median_ratio']:.3f}, "
-                f"95% interval {o['interval_95'][0]:.3f} to {o['interval_95'][1]:.3f}. Benchmark medians "
+                f"95% interval {span(o['interval_95'])}. Benchmark medians "
                 f"range from {o['row_range'][0]:.3f} to {o['row_range'][1]:.3f}. {effect}"]
     out += ['', f"{rounds['count']} rounds: {len(rounds['baseline_first'])} ran the baseline first and "
             f"{len(rounds['candidate_first'])} the candidate first. Each ratio pairs a candidate run with the "
