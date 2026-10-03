@@ -21,7 +21,7 @@ import (
 func setupReplicationV2(t *testing.T) {
 	t.Helper()
 	oldFeed, oldReplica, oldProtocol, oldPolicy := config.ReplicationFeed, config.ReplicaOf, config.ReplicationProtocol, config.AOFFsync
-	oldExpiry, oldEviction := data_structure.SuspendExpiry, data_structure.SuspendEviction
+	oldExpiry, oldEviction := data_structure.DefaultSpace.SuspendExpiry, data_structure.DefaultSpace.SuspendEviction
 	t.Cleanup(func() {
 		if RewriteActive() {
 			abortRewrite(errors.New("test cleanup"))
@@ -29,7 +29,7 @@ func setupReplicationV2(t *testing.T) {
 		CloseAOF()
 		resetReplicationV2()
 		config.ReplicationFeed, config.ReplicaOf, config.ReplicationProtocol, config.AOFFsync = oldFeed, oldReplica, oldProtocol, oldPolicy
-		data_structure.SuspendExpiry, data_structure.SuspendEviction = oldExpiry, oldEviction
+		data_structure.DefaultSpace.SuspendExpiry, data_structure.DefaultSpace.SuspendEviction = oldExpiry, oldEviction
 	})
 	ResetStores()
 	config.ReplicationProtocol, config.AOFFsync = 2, config.FsyncNever

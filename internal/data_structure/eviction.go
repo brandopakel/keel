@@ -16,31 +16,31 @@ const evictionPoolSize = 16
 
 // poolInsert adds a candidate, keeping the pool ordered worst-first and no
 // longer than evictionPoolSize.
-func poolInsert(c Candidate) {
-	for i := range evictionPool {
-		if evictionPool[i].Key == c.Key && evictionPool[i].Space == c.Space {
+func (s *Space) poolInsert(c Candidate) {
+	for i := range s.pool {
+		if s.pool[i].Key == c.Key && s.pool[i].Keyspace == c.Keyspace {
 			// Already a candidate. Refresh rather than holding it twice, which
 			// would make the second attempt to evict it a guaranteed miss.
-			evictionPool[i].Score = c.Score
-			sortPool()
+			s.pool[i].Score = c.Score
+			s.sortPool()
 			return
 		}
 	}
 
-	if len(evictionPool) >= evictionPoolSize && c.Score >= evictionPool[len(evictionPool)-1].Score {
+	if len(s.pool) >= evictionPoolSize && c.Score >= s.pool[len(s.pool)-1].Score {
 		// Better than everything already held, so it cannot displace anything.
 		return
 	}
 
-	evictionPool = append(evictionPool, c)
-	sortPool()
-	if len(evictionPool) > evictionPoolSize {
-		evictionPool = evictionPool[:evictionPoolSize]
+	s.pool = append(s.pool, c)
+	s.sortPool()
+	if len(s.pool) > evictionPoolSize {
+		s.pool = s.pool[:evictionPoolSize]
 	}
 }
 
-func sortPool() {
-	sort.Slice(evictionPool, func(i, j int) bool {
-		return evictionPool[i].Score < evictionPool[j].Score
+func (s *Space) sortPool() {
+	sort.Slice(s.pool, func(i, j int) bool {
+		return s.pool[i].Score < s.pool[j].Score
 	})
 }

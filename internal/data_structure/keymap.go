@@ -37,6 +37,10 @@ type keyPageRef[V any] struct {
 }
 
 // Lookup identity is independent of traversal; collisions never merge keys.
+//
+// The seed stays a package variable while the rest of the shared state moves
+// into Space: it is chosen once per process and never written again, so every
+// space can hash with it without sharing anything mutable.
 var keyLookupSeed = maphash.MakeSeed()
 
 type keyMap[V any] struct {
@@ -267,7 +271,8 @@ func (m *keyMap[V]) sample(n int, visit func(string, V)) {
 // ScanKeyspaces packs a store index and stable slot into an opaque cursor.
 // Empty stores consume work too. A caller that filters everything out still
 // receives a resumable cursor without an unbounded traversal.
-func ScanKeyspaces(cursor uint64, budget int, keep func(Keyspace, string) bool, dst []string) ([]string, uint64) {
+func (s *Space) ScanKeyspaces(cursor uint64, budget int, keep func(Keyspace, string) bool, dst []string) ([]string, uint64) {
+	keyspaces := s.keyspaces
 	index, slot := int(cursor>>scanStoreShift), cursor&scanSlotMask
 	for index < len(keyspaces) && keyspaces[index].Len() == 0 {
 		index++
@@ -296,22 +301,23 @@ func ScanKeyspaces(cursor uint64, budget int, keep func(Keyspace, string) bool, 
 // Mutations are permitted; rewrite's dirty reconciliation supplies the final
 // state. Keys that survive the whole walk cannot move behind its cursor.
 type KeyspaceWalk struct {
+	space   *Space
 	ends    []uint64
 	index   int
 	cursor  uint64
 	version uint64
 }
 
-func NewKeyspaceWalk() *KeyspaceWalk {
-	w := &KeyspaceWalk{ends: make([]uint64, len(keyspaces)), version: keyspaceVersion}
-	for i, ks := range keyspaces {
+func (s *Space) NewKeyspaceWalk() *KeyspaceWalk {
+	w := &KeyspaceWalk{space: s, ends: make([]uint64, len(s.keyspaces)), version: s.version}
+	for i, ks := range s.keyspaces {
 		w.ends[i] = ks.ScanEnd()
 	}
 	return w
 }
 func (w *KeyspaceWalk) Done() bool { return w.index >= len(w.ends) }
 func (w *KeyspaceWalk) Next(budget int, dst []string) ([]string, int, error) {
-	if w.version != keyspaceVersion {
+	if w.version != w.space.version {
 		return dst, 0, fmt.Errorf("keyspace registry changed during traversal")
 	}
 	for !w.Done() && w.ends[w.index] == 0 {
@@ -322,7 +328,7 @@ func (w *KeyspaceWalk) Next(budget int, dst []string) ([]string, int, error) {
 	}
 	var examined int
 	var next uint64
-	dst, examined, next = keyspaces[w.index].ScanUntil(w.cursor, w.ends[w.index], budget, nil, dst)
+	dst, examined, next = w.space.keyspaces[w.index].ScanUntil(w.cursor, w.ends[w.index], budget, nil, dst)
 	w.cursor = next
 	if next == 0 {
 		w.index++

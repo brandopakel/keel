@@ -12,15 +12,15 @@ import (
 func TestLookupCompactionRecoversPartlyOccupiedTable(t *testing.T) {
 	for _, kind := range []string{"string", "collection"} {
 		t.Run(kind, func(t *testing.T) {
-			ResetKeyspaces()
+			space := NewSpace(configuredLimits())
 			var ks Keyspace
 			var put func(string)
 			if kind == "string" {
-				d := CreateDict()
+				d := CreateDict(space)
 				ks = d
 				put = func(k string) { d.Put(k, d.NewObj("v")) }
 			} else {
-				d := NewKeyed[retentionValue]("retention")
+				d := NewKeyed[retentionValue](space, "retention")
 				ks = d
 				put = func(k string) { d.Put(k, 1) }
 			}
