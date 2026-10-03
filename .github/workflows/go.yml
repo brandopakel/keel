@@ -66,7 +66,25 @@ jobs:
           done
 
       - name: Test
+        if: matrix.os != 'ubuntu-latest' || matrix.go != 'stable'
         run: go test -v ./...
+
+      # The same suite on one leg, recording the files each test leaves on
+      # disk. A test that nears the local validation wrapper's budget
+      # (scripts/run-local-validation.py: 256 MiB per file, 512 MiB in all)
+      # becomes a warning here, rather than a local failure that looks like a
+      # product bug. -count=1 so every package runs and is measured.
+      - name: Test, recording each test's file footprint
+        if: matrix.os == 'ubuntu-latest' && matrix.go == 'stable'
+        run: python3 scripts/test-file-footprint.py --out "$RUNNER_TEMP/test-footprint" -- go test -v -count=1 ./...
+
+      - name: Keep the test file footprint
+        if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' && matrix.go == 'stable' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: test-file-footprint
+          path: ${{ runner.temp }}/test-footprint/test-file-footprint.json
+          retention-days: 30
 
       - name: Redis client integration
         if: matrix.go == 'stable'
@@ -76,9 +94,17 @@ jobs:
           /tmp/keel-client-venv/bin/python -m pip install 'redis==5.2.1'
           BIN=/tmp/keel-client-test /tmp/keel-client-venv/bin/python examples/test_client.py
 
-      - name: Failover authority model
+      # Every scripts/test_*.py: the failover model, soak tooling, and the local
+      # validation wrapper and footprint record.
+      - name: Python script tests
         if: matrix.os == 'ubuntu-latest' && matrix.go == 'stable'
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+
+      # The wrapper is mostly run on macOS, whose file-size limit, signal and
+      # process behaviour it depends on.
+      - name: Local validation wrapper tests on macOS
+        if: matrix.os == 'macos-latest' && matrix.go == 'stable'
+        run: python3 -m unittest discover -s scripts -p 'test_local_validation.py' -v
 
       - name: Restore fuzz smoke
         if: matrix.go == 'stable'
