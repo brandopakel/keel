@@ -29,12 +29,12 @@ import sys
 import time
 
 
-def wrapper_defaults():
+def local_wrapper():
     path = Path(__file__).with_name('run-local-validation.py')
     spec = importlib.util.spec_from_file_location('local_validation_defaults', path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module.DEFAULT_MAX_FILE_MIB, module.DEFAULT_MAX_OUTPUT_MIB
+    return module
 
 
 def entry_name(name):
@@ -109,7 +109,8 @@ def annotation(text):
 
 
 def main():
-    file_default, output_default = wrapper_defaults()
+    wrapper = local_wrapper()
+    file_default, output_default = wrapper.DEFAULT_MAX_FILE_MIB, wrapper.DEFAULT_MAX_OUTPUT_MIB
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--out', type=Path, required=True, help='fresh directory for temporaries and the record')
@@ -162,6 +163,12 @@ def main():
     tests = sorted((e for e in entries.values() if not e['name'].startswith('go-build')),
                    key=lambda e: (e['peak_file_bytes'], e['peak_bytes']), reverse=True)
     build = [e for e in entries.values() if e['name'].startswith('go-build')]
+    try:
+        packages = wrapper.test_packages([f"tmp/{e['name']}" for e in tests])
+    except Exception:
+        packages = {}
+    for entry in tests:
+        entry['package'] = packages.get(entry['name'])
     warn_file, warn_test = args.warn_file_mib*2**20, args.warn_test_mib*2**20
     warnings = []
     for entry in tests:
@@ -171,7 +178,8 @@ def main():
         if entry['peak_bytes'] >= warn_test:
             reasons.append(f"{mib(entry['peak_bytes'])} on disk at once")
         if reasons:
-            warnings.append(f"{entry['name']} wrote {' and '.join(reasons)}. The local validation "
+            where = f" (in {entry['package']})" if entry['package'] else ''
+            warnings.append(f"{entry['name']}{where} wrote {' and '.join(reasons)}. The local validation "
                             f"wrapper allows {file_default} MiB per file (--max-file-mib) and "
                             f"{output_default} MiB in all, Go cache included (--max-output-mib). "
                             'Make the test write less, or skip it under testing.Short() so local '
@@ -192,9 +200,10 @@ def main():
              f"{mib(record['peak_build_bytes'])}. Warnings at {mib(warn_file)} per file or "
              f"{mib(warn_test)} per test; the local wrapper allows {file_default} MiB per file and "
              f'{output_default} MiB in all.', '',
-             '| Test temp directory | Peak on disk | Largest file | File |', '| --- | ---: | ---: | --- |']
-    lines += [f"| {e['name']} | {mib(e['peak_bytes'])} | {mib(e['peak_file_bytes'])} | {e['peak_file'] or ''} |"
-              for e in tests[:args.top]]
+             '| Test temp directory | Package | Peak on disk | Largest file | File |',
+             '| --- | --- | ---: | ---: | --- |']
+    lines += [f"| {e['name']} | {e['package'] or ''} | {mib(e['peak_bytes'])} | {mib(e['peak_file_bytes'])} "
+              f"| {e['peak_file'] or ''} |" for e in tests[:args.top]]
     lines += [''] + [f'- Warning: {w}' for w in warnings] + ['']
     summary = os.environ.get('GITHUB_STEP_SUMMARY')
     if summary:

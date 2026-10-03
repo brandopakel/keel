@@ -32,21 +32,25 @@ sys.exit(int(sys.argv[1]))
 
 
 class FootprintTests(unittest.TestCase):
-    def record(self, out, code, *flags, env=None):
+    def record(self, out, code, *flags, env=None, cwd=None):
         return subprocess.run([sys.executable, str(SCRIPT), '--out', str(out), '--interval', '.05',
                                *flags, '--', sys.executable, '-c', WRITER, str(code)],
-                              text=True, capture_output=True, timeout=20, env=env)
+                              text=True, capture_output=True, timeout=20, env=env, cwd=cwd)
 
     def test_records_removed_test_files_and_keeps_exit_status(self):
         with tempfile.TemporaryDirectory() as temp:
             out = Path(temp)/'footprint'
             summary = Path(temp)/'summary.md'
+            repo = Path(temp)/'repo'/'cmd'/'keel'
+            repo.mkdir(parents=True)
+            (repo/'log_test.go').write_text('package main\n\nfunc TestLargeLog(t *testing.T) {}\n')
             result = self.record(out, 4, '--warn-file-mib', '2', '--warn-test-mib', '100',
-                                 env=dict(os.environ, GITHUB_STEP_SUMMARY=str(summary)))
+                                 env=dict(os.environ, GITHUB_STEP_SUMMARY=str(summary)), cwd=Path(temp)/'repo')
             self.assertEqual(result.returncode, 4, result.stdout+result.stderr)
             record = json.loads((out/'test-file-footprint.json').read_text())
             test = record['tests'][0]
             self.assertEqual(test['name'], 'TestLargeLogbarrierset')
+            self.assertEqual(test['package'], './cmd/keel')
             self.assertEqual(test['peak_file_bytes'], 3<<20)
             self.assertEqual(test['peak_bytes'], 4<<20)
             self.assertEqual(test['peak_file'], os.path.join('TestLargeLogbarrierset2682266309', '001', 'store.aof'))
@@ -55,10 +59,10 @@ class FootprintTests(unittest.TestCase):
             self.assertNotIn('go-build', ' '.join(t['name'] for t in record['tests']))
             self.assertGreaterEqual(record['peak_concurrent_test_bytes'], (4<<20)+1024)
             self.assertEqual(len(record['warnings']), 1)
-            self.assertIn('::warning title=Test outgrows the local validation budget::TestLargeLogbarrierset wrote a 3.0 MiB file',
-                          result.stdout)
+            self.assertIn('::warning title=Test outgrows the local validation budget::TestLargeLogbarrierset '
+                          '(in ./cmd/keel) wrote a 3.0 MiB file', result.stdout)
             self.assertIn('--max-file-mib', record['warnings'][0])
-            self.assertIn('| TestLargeLogbarrierset | 4.0 MiB | 3.0 MiB |', summary.read_text())
+            self.assertIn('| TestLargeLogbarrierset | ./cmd/keel | 4.0 MiB | 3.0 MiB |', summary.read_text())
 
     def test_default_thresholds_follow_the_local_wrapper(self):
         with tempfile.TemporaryDirectory() as temp:

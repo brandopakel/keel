@@ -64,6 +64,7 @@ class LocalValidationTests(unittest.TestCase):
             self.assertEqual(report['status'], 'passed')
             self.assertNotIn('limit_hit', report)
             self.assertGreaterEqual(report['peak_file_bytes'], len('verified'))
+            self.assertEqual(report['peak_usage_bytes_by_entry']['result.txt'], len('verified'))
             self.assertEqual(result.stderr, '')
 
     def test_timeout_stops_owned_descendant(self):
@@ -91,8 +92,9 @@ class LocalValidationTests(unittest.TestCase):
             result = self.invoke(root, "import sys,time; from pathlib import Path; [(Path(sys.argv[1])/str(i)).write_bytes(b'x'*(1<<20)) for i in range(3)]; time.sleep(60)")
             report = self.assertLimitHit(result, root, 'output', '--max-output-mib')
             self.assertIn('output budget', report['failure'])
-            self.assertIn('usage by entry: ', report['limit_hit']['evidence'][1])
+            self.assertIn('usage by entry when the budget was reached: ', report['limit_hit']['evidence'][1])
             self.assertIn('0 1.0 MiB', report['limit_hit']['evidence'][1])
+            self.assertIn('0 1.0 MiB', report['limit_hit']['message'])
             # A second invocation must not overwrite the earlier failure.
             original = (root/'local-resource-report.json').read_bytes()
             result = self.invoke(root, 'pass')
@@ -130,7 +132,7 @@ class LocalValidationTests(unittest.TestCase):
                 min_free_gib=2, command=[sys.executable, '-c', code, '{out}'])
             actual_scan = guard.scan_output
             sampled = False
-            def delayed_first_sample(path):
+            def delayed_first_sample(path, usage=None):
                 nonlocal sampled
                 if not sampled:
                     sampled = True
@@ -143,7 +145,7 @@ class LocalValidationTests(unittest.TestCase):
                     # after its last write and immediately before poll sees exit.
                     time.sleep(.05)
                     return 0, 0, None
-                return actual_scan(path)
+                return actual_scan(path, usage)
             with patch.object(guard, 'scan_output', delayed_first_sample):
                 self.assertEqual(guard.run(args), 3)
             report = json.loads((root/'local-resource-report.json').read_text())
@@ -270,6 +272,33 @@ class LocalValidationTests(unittest.TestCase):
             result = self.invoke(root, "from pathlib import Path; import sys; (Path(sys.argv[1])/'payload').write_bytes(b'x'*((1<<20)-1))", '--max-output-mib', '1')
             report = self.assertLimitHit(result, root, 'output', '--max-output-mib')
             self.assertIn('output budget', report.get('failure', '')+report.get('cleanup_failure', ''))
+
+    def test_output_budget_names_the_test_and_package_that_filled_it(self):
+        # Model a whole-suite run: the Go cache, go test build work, and a
+        # t.TempDir parent named after its subtest, all under the wrapper.
+        code = ("import os,sys,time; from pathlib import Path; g=Path(os.environ['GOTMPDIR']); "
+                "t=g/'TestBigLogbarrierlist2682266309'/'001'; t.mkdir(parents=True); "
+                "(t/'store.aof').write_bytes(b'x'*((1<<20)-1)); (t/'x').write_bytes(b'x'*(600<<10)); "
+                "b=g/'go-build1234'/'b001'; b.mkdir(parents=True); (b/'pkg.test').write_bytes(b'x'*(300<<10)); "
+                "(Path(os.environ['GOCACHE'])/'00').write_bytes(b'x'*(200<<10)); time.sleep(60)")
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp)/'repo'
+            (repo/'internal'/'core').mkdir(parents=True)
+            (repo/'internal'/'core'/'big_test.go').write_text('package core\n\nfunc TestBigLog(t *testing.T) {}\nfunc TestBig(t *testing.T) {}\n')
+            root = Path(temp)/'run'
+            result = subprocess.run([sys.executable, str(SCRIPT), '--out', str(root), '--seconds', '5',
+                '--max-output-mib', '2', '--max-file-mib', '1', '--min-free-gib', '2', '--',
+                sys.executable, '-c', code], cwd=repo, text=True, capture_output=True, timeout=10)
+            report = self.assertLimitHit(result, root, 'output', '--max-output-mib')
+            usage = report['limit_hit']['evidence'][1]
+            first = usage.split(': ', 1)[1].split(', ')[0]
+            self.assertEqual(first, 'go-tmp/TestBigLogbarrierlist (test in ./internal/core) 1.6 MiB', usage)
+            self.assertIn('go-tmp/go-build work (compiled packages, linked test binaries) 0.3 MiB', usage)
+            self.assertIn('go-cache (disposable Go build cache) 0.2 MiB', usage)
+            self.assertIn('TestBigLogbarrierlist (test in ./internal/core)', report['limit_hit']['message'])
+            self.assertIn('narrow the command', report['limit_hit']['advice'])
+            peaks = report['peak_usage_bytes_by_entry']
+            self.assertEqual(list(peaks)[0], 'go-tmp/TestBigLogbarrierlist')
 
     def test_sigxfsz_child_is_reported_as_file_limit(self):
         # Unlike Go and Python, most C programs keep SIGXFSZ's default action

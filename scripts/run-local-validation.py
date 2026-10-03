@@ -22,6 +22,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import resource
 import shutil
 import signal
@@ -52,15 +53,39 @@ class LimitReached(RuntimeError):
         self.limit = limit
 
 
-def scan_output(root):
-    """Return total bytes, the largest file's bytes and that file's path."""
+GO_BUILD_WORK = 'go-build work (compiled packages, linked test binaries)'
+
+
+def usage_entry(parts):
+    """Name what a directory under the output root holds, for usage reports.
+
+    The wrapper's tmp and go-tmp directories are split by their children. Go
+    names a t.TempDir parent after its test, with "/" removed and random digits
+    appended; with GOTMPDIR set (Go 1.26), that is under go-tmp, beside go
+    test's go-build* work directories.
+    """
+    if parts[0] in ('tmp', 'go-tmp') and len(parts) > 1:
+        if parts[1].startswith('go-build'):
+            return f'{parts[0]}/{GO_BUILD_WORK}'
+        return f"{parts[0]}/{re.sub(r'[0-9]+$', '', parts[1]) or parts[1]}"
+    return parts[0]
+
+
+def scan_output(root, usage=None):
+    """Return total bytes, the largest file's bytes and that file's path.
+
+    With a usage dict, also add each entry's bytes to it (see usage_entry).
+    """
     total, largest, largest_path = 0, 0, None
     def traversal_failed(error):
         if isinstance(error, FileNotFoundError):
             return  # Go and test harnesses remove temporary directories during a sample.
         raise error
+    prefix = len(str(root).rstrip(os.sep)) + 1
     for folder, directories, files in os.walk(root, followlinks=False, onerror=traversal_failed):
         directories[:] = [name for name in directories if not (Path(folder)/name).is_symlink()]
+        parts = folder[prefix:].split(os.sep) if len(folder) >= prefix else []
+        entry = usage_entry(parts) if parts else None
         for name in files:
             try:
                 size = (Path(folder)/name).lstat().st_size
@@ -69,7 +94,62 @@ def scan_output(root):
             total += size
             if size > largest:
                 largest, largest_path = size, Path(folder)/name
+            if usage is not None:
+                key = entry or name
+                usage[key] = usage.get(key, 0) + size
     return total, largest, largest_path
+
+
+def test_packages(entries, base='.', most_files=20000):
+    """Map usage entries named after a Go test to the package declaring it.
+
+    Reads the *_test.go files below base, the command's working directory,
+    and picks the longest test function name each entry starts with.
+    """
+    names = {entry.split('/', 1)[1] for entry in entries
+             if entry.startswith(('tmp/Test', 'go-tmp/Test'))}
+    if not names:
+        return {}
+    declared, seen = {}, 0
+    for folder, directories, files in os.walk(base):
+        directories[:] = [d for d in directories
+                          if not d.startswith('.') and d not in ('dist', 'node_modules', 'vendor', 'testdata')]
+        for name in files:
+            seen += 1
+            if seen > most_files:
+                break
+            if not name.endswith('_test.go'):
+                continue
+            try:
+                text = (Path(folder)/name).read_text(errors='replace')
+            except OSError:
+                continue
+            package = os.path.relpath(folder, base)
+            for test in re.findall(r'^func (Test\w+)\(', text, re.M):
+                declared.setdefault(test, './' + package if package != '.' else '.')
+        if seen > most_files:
+            break
+    found = {}
+    for name in names:
+        match = max((test for test in declared if name.startswith(test)), key=len, default=None)
+        if match:
+            found[name] = declared[match]
+    return found
+
+
+def describe_usage(usage, most=6):
+    """The largest entries, with the package of any test named among them."""
+    top = sorted(usage.items(), key=lambda item: item[1], reverse=True)[:most]
+    try:
+        packages = test_packages([entry for entry, _ in top])
+    except Exception:
+        packages = {}
+    def label(entry):
+        if entry == 'go-cache':
+            return 'go-cache (disposable Go build cache)'
+        package = packages.get(entry.split('/', 1)[-1])
+        return f'{entry} (test in {package})' if package else entry
+    return ', '.join(f'{label(entry)} {size/2**20:.1f} MiB' for entry, size in top)
 
 
 def directory_bytes(root):
@@ -125,8 +205,9 @@ def describe_limit(report, limit):
                 'to one package or test, or run it on hosted CI')
     if limit == 'output':
         return (mib(report['output_limit_bytes']), '--max-output-mib',
-                'raise --max-output-mib (at most 1024; the disposable Go cache counts '
-                'toward it) or run the check on hosted CI')
+                'narrow the command to the packages or tests you changed, raise '
+                '--max-output-mib (at most 1024; the disposable Go cache counts toward it), '
+                'or run the whole suite on hosted CI')
     if limit == 'free_space':
         return (f"{report['minimum_free_bytes']/2**30:g} GiB kept free", '--min-free-gib',
                 'free disk space, or lower --min-free-gib (at least 2)')
@@ -184,21 +265,10 @@ def diagnose(report, root, stopped, exit_code):
         limit = 'file_size'
     else:
         confidence, evidence, limit = 'confirmed', [str(stopped)], stopped.limit
-        if limit == 'output':
-            # Say what filled the budget: often the disposable Go cache.
-            usage = []
-            try:
-                children = sorted(root.iterdir())
-            except OSError:
-                children = []
-            for child in children:
-                try:
-                    usage.append((scan_output(child)[0] if child.is_dir() and not child.is_symlink()
-                                  else child.lstat().st_size, child.name))
-                except OSError:
-                    pass
-            evidence.append('usage by entry: ' + ', '.join(
-                f'{name} {size/2**20:.1f} MiB' for size, name in sorted(usage, reverse=True)[:6]))
+        if limit == 'output' and getattr(stopped, 'usage', None):
+            # Say what filled the budget: often the disposable Go cache and
+            # build work, then the largest tests' temporary files.
+            evidence.append('usage by entry when the budget was reached: ' + describe_usage(stopped.usage))
         # A command can hit the per-file ceiling first, then hang until the
         # time limit; keep that evidence beside the limit that stopped it.
         earlier, file_evidence = file_size_evidence(report, root, None)
@@ -212,8 +282,9 @@ def diagnose(report, root, stopped, exit_code):
                    f'came near the local {name} limit ({value}, {flag}); the error may be the '
                    f'command\'s own: {evidence[0]}')
     else:
+        detail = '; '.join(evidence[:2] if limit == 'output' else evidence[:1])
         message = (f'stopped by the local {name} limit ({value}, {flag}), which belongs to this '
-                   f'harness rather than the code under test: {evidence[0]}. To proceed, {advice}')
+                   f'harness rather than the code under test: {detail}. To proceed, {advice}')
     report['limit_hit'] = dict(limit=limit, flag=flag, value=value, confidence=confidence,
                                evidence=evidence, advice=advice, message=message)
 
@@ -269,14 +340,20 @@ def run(args):
     previous_limit = resource.getrlimit(resource.RLIMIT_FSIZE)
     started = time.monotonic()
     previous_handlers = {}
+    peak_usage = {}
     def check_limits():
-        used, largest, largest_path = scan_output(root)
+        usage = {}
+        used, largest, largest_path = scan_output(root, usage)
         report['peak_output_bytes'] = max(used, report.get('peak_output_bytes', 0))
         record_peak_file(report, root, largest, largest_path)
+        for entry, size in usage.items():
+            peak_usage[entry] = max(size, peak_usage.get(entry, 0))
         if time.monotonic()-started >= args.seconds:
             raise LimitReached('time', 'local validation time budget exhausted')
         if used + REPORT_RESERVE_BYTES > report['output_limit_bytes']:
-            raise LimitReached('output', 'local validation output budget exhausted')
+            hit = LimitReached('output', 'local validation output budget exhausted')
+            hit.usage = usage
+            raise hit
         if shutil.disk_usage(root).free < report['minimum_free_bytes'] + REPORT_RESERVE_BYTES:
             raise LimitReached('free_space', 'local validation minimum free-space reserve reached')
     try:
@@ -341,6 +418,9 @@ def run(args):
             resource.setrlimit(resource.RLIMIT_FSIZE, previous_limit)
             for sig, handler in previous_handlers.items():
                 signal.signal(sig, handler)
+            # Each entry's own peak, largest first; they need not coincide.
+            report['peak_usage_bytes_by_entry'] = dict(
+                sorted(peak_usage.items(), key=lambda item: item[1], reverse=True)[:12])
             # An interrupted run was stopped by its caller, not by a limit,
             # even if a file happened to sit at the ceiling.
             if report['status'] != 'passed' and interrupted_by is None:
