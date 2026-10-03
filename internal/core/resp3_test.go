@@ -391,6 +391,15 @@ func TestRESP3RepliesAreSizedExactly(t *testing.T) {
 		run(t, "ZADD", "z", []string{"1", "2.5", "-0.125", "inf", "1e300", "-7"}[i%6], "member"+strconv.Itoa(i))
 		run(t, "GEOADD", "g", strconv.Itoa(i), strconv.Itoa(i), "place"+strconv.Itoa(i))
 	}
+	// build runs a handler directly in the given protocol, restoring the
+	// protocol whatever happens, so a failure here cannot leave the rest of
+	// the package's tests encoding RESP3.
+	build := func(args []string, resp3 bool) []byte {
+		saved := replyRESP3
+		replyRESP3 = resp3
+		defer func() { replyRESP3 = saved }()
+		return commandTable[args[0]](args[1:])
+	}
 	for _, args := range [][]string{
 		{"HGETALL", "h"}, {"HKEYS", "h"}, {"HMGET", "h", "field1", "missing", "field2"}, {"MGET", "missing", "missing"},
 		{"LRANGE", "l", "0", "-1"}, {"LPOP", "l", "2"}, {"SMEMBERS", "s"}, {"SPOP", "s", "2"}, {"SRANDMEMBER", "s", "3"},
@@ -402,10 +411,7 @@ func TestRESP3RepliesAreSizedExactly(t *testing.T) {
 	} {
 		for _, resp3 := range []bool{false, true} {
 			CommandAllocations = &CommandAllocationBudget{Limit: 64 << 20}
-			saved := replyRESP3
-			replyRESP3 = resp3
-			out := commandTable[args[0]](args[1:])
-			replyRESP3 = saved
+			out := build(args, resp3)
 			require.NotEqual(t, byte('-'), out[0], "%v: %q", args, out)
 			assert.Equal(t, len(out), cap(out), "%v resp3=%v is sized to the byte", args, resp3)
 			assert.Equal(t, 3*((len(out)+4095)&^4095), CommandAllocations.ReplyReserved,

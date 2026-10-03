@@ -160,14 +160,14 @@ func randomPairs(t *testing.T, seed int64, each int, visit func(a, b string)) {
 	randomPairsUpTo(t, seed, each, 14, visit)
 }
 
-// randomPairsUpTo is randomPairs with lengths up to max.
-func randomPairsUpTo(t *testing.T, seed int64, each, max int, visit func(a, b string)) {
+// randomPairsUpTo is randomPairs with lengths below maxLen.
+func randomPairsUpTo(t *testing.T, seed int64, each, maxLen int, visit func(a, b string)) {
 	t.Helper()
 	rng := rand.New(rand.NewSource(seed))
 	for _, alpha := range []string{"ab", "abc", "abcdefgh", "ab cdefghijklmnop"} {
 		for trial := 0; trial < each; trial++ {
 			mk := func() string {
-				s := make([]byte, rng.Intn(max))
+				s := make([]byte, rng.Intn(maxLen))
 				for i := range s {
 					s[i] = alpha[rng.Intn(len(alpha))]
 				}

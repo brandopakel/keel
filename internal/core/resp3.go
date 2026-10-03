@@ -221,8 +221,6 @@ func appendDouble[T string | []byte](dst []byte, text T) []byte {
 	return append(dst, '\r', '\n')
 }
 
-func appendBool(dst []byte, b bool) []byte { return append(dst, boolReply(b)...) }
-
 // appendVerbatim writes text as a RESP3 verbatim string of format txt - the
 // format redis-cli prints as it is - or a RESP2 bulk string. The length counts
 // the format and its colon.
