@@ -103,15 +103,60 @@ crash, which can be up to about a second of writes on either server.
 
 ## Hosted results
 
-<!-- same-runner results -->
+Run [37088056992](https://github.com/brandopakel/keel/actions/runs/37088056992)
+tested Keel at the pull request's merge commit `30a0d1d` (binary SHA-256
+`9e5c9ccd…3edfbfbc`) against Redis 8.10.2 (binary `40ece39a…b9538a0ba`, from
+the tarball checked against `b9ffee22…c02b3`), with Gitea 28.0.0 built from
+`15b8a5805adf` (binary `37758935…ef21737`). Every job passed. Both application
+arms ran on the same runner (`runnervm8df0l`, 4 vCPU, Ubuntu 24.04), Redis
+first, with the command lines in the settings table above.
+
+| Measure | Keel | Redis |
+| --- | --- | --- |
+| Gating regression suites | all pass: Gitea 3 tests / 44 subtests, go-redis/cache 4 tests / 45 Ginkgo specs, gin-contrib/sessions 8 tests / 1 subtest | identical counts |
+| Known-unsupported Gitea tests | 14/23 subtests; fail on `EVALSHA` (lock) and `SUBSCRIBE`, `PUBLISH`, `PUBSUB NUMSUB` (broker) | 23/23 |
+| Requests; errors outside the restart window | 3,720; 0 | 3,344; 0 |
+| Errors inside the restart window | 23 | 20 |
+| Steady GET latency p50 / p95 / p99 | 37.5 / 102.5 / 169.8 ms | 38.3 / 111.8 / 242.1 ms |
+| Server RSS, peak | 17.4 MiB | 11.9 MiB |
+| Server `used_memory` at the end | 0.99 MB (8.4k keys) | 1.66 MB |
+| Gitea RSS, peak | 262 MiB | 257 MiB |
+| Kill to PING; of which restart to PING | 3.026 s; 0.021 s (1.51 MB AOF) | 3.021 s; 0.016 s (1.17 MB AOF) |
+| Last signed-in page working after PING | 0.018 s | 0.017 s |
+| Sessions surviving SIGKILL | 6/6 | 6/6 |
+| Acknowledged probe writes lost (RPO) | 0 of 8,557 (0 ms) | 0 of 8,035 (0 ms) |
+| Webhooks lost, all inside the restart window | 2 of 318 | 3 of 281 |
+| Unsupported commands | `HELLO` ×38, `CLIENT SETINFO` ×76, both handled by go-redis | `CLIENT MAINT_NOTIFICATIONS` ×3, likewise |
+
+Gitea's command mix was the same on both arms: `EXISTS`, `GET`, `SET` (with
+`EX`), `LPOP`, `RPUSH`, `LLEN`, `SADD`, `SREM`, `HSET`, `HDEL`, `DEL` and
+`PING`. The load phase is timed, so Keel's arm served more requests in it.
+At p50 every page view was within about 3 ms between the arms; writes varied
+more (web comments 93 vs 80 ms, `git push` 804 vs 784 ms). At p99 Keel was
+lower on most pages and Redis on `git push` and API issue creation. That is
+one run on one machine, with Keel second, so treat the tail differences as
+indicative only.
+
+Both servers started at about 11.6 MiB RSS. Redis peaked at 11.9 MiB; Keel
+grew to 17.4 MiB under load and stayed near it. The `used_memory` figures are
+not comparable: Keel's counts keyspace storage only, while Redis's includes its
+own buffers and overhead.
+
+So the pilot's recovery numbers are, for a process crash: RTO about 20 ms
+from restart to serving, and about 20 ms more until every signed-in page
+worked, with RPO zero acknowledged writes. Both servers write to the log
+before replying, so a SIGKILL loses nothing they acknowledged; an
+operating-system crash under `everysec` would still lose up to about a second
+on either.
 
 Run [37073427133](https://github.com/brandopakel/keel/actions/runs/37073427133)
 (Keel at the pull request's merge commit `c33fb57`, binary SHA-256
 `507736d2…ab876c5`; Redis 8.10.2 binary `a0642818…a16758f`; Gitea 28.0.0
-binary `37758935…ef21737`) passed every job. Its two application arms ran on
+binary `37758935…ef21737`) passed every job too. Its two application arms ran on
 separate runners at the same time, before the arms were moved onto one
-machine, so its latencies compare two hosts as much as two servers. Its
-correctness and restart results stand:
+machine and before every server setting was made explicit, so its latencies
+compare two hosts as much as two servers. Its correctness and restart results
+agree with the later run:
 
 | Measure | Keel | Redis |
 | --- | --- | --- |
@@ -126,12 +171,18 @@ correctness and restart results stand:
 | Server RSS, peak | 16.3 MiB | 13.6 MiB |
 | Unsupported commands | `HELLO`, `CLIENT SETINFO` (handled by go-redis) | `CLIENT MAINT_NOTIFICATIONS` (likewise) |
 
-The lost webhooks were Gitea's own: an issue created as the server died, or
-just after it returned on a pooled connection that had died with it, logged
-`PrepareWebhooks: EOF` and never queued its delivery. That happened on both
-arms. Redis additionally answered seven commands with `LOADING` while it
-replayed its log after the restart; Keel accepts connections only once replay
-is complete.
+In both runs the lost webhooks were Gitea's own: an issue created as the
+server died, or just after it returned on a pooled connection that had died
+with it, logged `PrepareWebhooks: EOF` and never queued its delivery; a few
+issue-indexer updates were dropped the same way. That happened on both arms.
+Redis also answered a few commands with `LOADING` while it replayed its log
+after the restart (seven in the earlier run, one in the later); Keel accepts
+connections only once replay is complete.
+
+That run's summary also showed Ginkgo's pass count as unknown: `go test
+-json` drops the escape byte of Ginkgo's colour codes, which the parser did not
+expect. The spec totals (45 of 45 ran) were in its raw output, and the parser
+was fixed before the later run.
 
 The first run, [37072819250](https://github.com/brandopakel/keel/actions/runs/37072819250),
 failed before any test: Redis 8's top-level Makefile also builds the bundled
@@ -216,7 +267,7 @@ sessions survived the crash, and no acknowledged probe write was lost.
 Per-run counts, wrapper reports, command mixes and a SHA-256 manifest of every
 evidence file are in
 [`bench/results/application-pilot-local-2026-10-02.json.gz`](../bench/results/application-pilot-local-2026-10-02.json.gz).
-(SHA-256 `3b94f828887d1028b9e7fe36b9a756b06667462c06b74ea75a92a4f2100cf8d7`).
+(SHA-256 `1fd3668f3a4ba8b6deb65616457e7314fc9e1d610f2964ea948df504b028caa6`).
 The raw directories were deleted after this publication; the clones,
 `node_modules`, virtual environments, module caches and binaries were never
 kept.
