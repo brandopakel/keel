@@ -132,6 +132,10 @@ func cmdMORRISQUERY(args []string) []byte {
 // An estimate read back without that figure invites being read as exact, which
 // is the one thing it is not. The comparable Count-Min sketch's memory is
 // reported alongside so the trade is legible from the client.
+//
+// RedisBloom has no Morris counter to follow under RESP3, so the reply takes
+// RESP3's framing for name/value pairs, a map, and keeps the bulk-string names
+// and values RESP2 sends - as MORRIS.QUERY keeps its bulk-string counts.
 func cmdMORRISINFO(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'MORRIS.INFO' command"), false)
@@ -141,7 +145,7 @@ func cmdMORRISINFO(args []string) []byte {
 	if !exist {
 		return Encode(errors.New(fmt.Sprintf("Morris counter with key '%s' does not exist", key)), false)
 	}
-	res := []string{
+	res := ReplyMap{
 		"Width", fmt.Sprintf("%d", m.Width()),
 		"Depth", fmt.Sprintf("%d", m.Depth()),
 		"Size", fmt.Sprintf("%d", m.MemUsage()),

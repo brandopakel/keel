@@ -11,7 +11,9 @@ import (
 )
 
 // Bloom filter commands, with the names and replies of RedisBloom's BF.*
-// family so a client written for that module works here.
+// family so a client written for that module works here. Under RESP3 they
+// answer as RedisBloom does: yes-or-no answers are booleans and BF.INFO is a
+// map.
 
 var (
 	errBFExists    = errors.New("ERR item exists")
@@ -86,8 +88,8 @@ func cmdBFRESERVE(args []string) []byte {
 	return constant.RespOk
 }
 
-// cmdBFADD implements BF.ADD key item: 1 if the item was new, 0 if it may have
-// been there already.
+// cmdBFADD implements BF.ADD key item: 1 (true) if the item was new, 0 (false)
+// if it may have been there already.
 func cmdBFADD(args []string) []byte {
 	if len(args) != 2 {
 		return Encode(errors.New("ERR wrong number of arguments for 'BF.ADD' command"), false)
@@ -101,13 +103,10 @@ func cmdBFADD(args []string) []byte {
 	if err != nil {
 		return Encode(err, false)
 	}
-	if added {
-		return constant.RespOne
-	}
-	return constant.RespZero
+	return boolReply(added)
 }
 
-// cmdBFMADD implements BF.MADD key item [item ...]: one integer per item, as
+// cmdBFMADD implements BF.MADD key item [item ...]: one answer per item, as
 // BF.ADD would have answered for it.
 func cmdBFMADD(args []string) []byte {
 	if len(args) < 2 {
@@ -118,18 +117,15 @@ func cmdBFMADD(args []string) []byte {
 	out := make([]interface{}, 0, len(args)-1)
 	for _, item := range args[1:] {
 		added, err := sb.Add(item)
-		switch {
-		case err != nil:
+		if err != nil {
 			// The filter could not grow to take this item. The error stands in
 			// its position, as RedisBloom answers a filter that cannot take
 			// more, and the items after it are tried in turn: one that is
 			// already present still answers 0.
 			out = append(out, err)
-		case added:
-			out = append(out, int64(1))
-		default:
-			out = append(out, int64(0))
+			continue
 		}
+		out = append(out, ReplyBool(added))
 	}
 	sbStore.Resize(key)
 	return Encode(out, false)
@@ -140,10 +136,7 @@ func cmdBFEXISTS(args []string) []byte {
 		return Encode(errors.New("ERR wrong number of arguments for 'BF.EXISTS' command"), false)
 	}
 	sb, ok := bloomFor(args[0])
-	if !ok || !sb.Exists(args[1]) {
-		return constant.RespZero
-	}
-	return constant.RespOne
+	return boolReply(ok && sb.Exists(args[1]))
 }
 
 func cmdBFMEXISTS(args []string) []byte {
@@ -153,11 +146,7 @@ func cmdBFMEXISTS(args []string) []byte {
 	sb, ok := bloomFor(args[0])
 	out := make([]interface{}, 0, len(args)-1)
 	for _, item := range args[1:] {
-		if ok && sb.Exists(item) {
-			out = append(out, int64(1))
-		} else {
-			out = append(out, int64(0))
-		}
+		out = append(out, ReplyBool(ok && sb.Exists(item)))
 	}
 	return Encode(out, false)
 }
@@ -172,11 +161,11 @@ func cmdBFINFO(args []string) []byte {
 	if !ok {
 		return Encode(errBFNotFound, false)
 	}
-	return Encode([]interface{}{
-		"Capacity", int64(sb.Capacity()),
-		"Size", int64(sb.MemUsage()),
-		"Number of filters", int64(sb.Filters()),
-		"Number of items inserted", int64(sb.Count()),
-		"Expansion rate", int64(sb.Expansion()),
+	return infoReply([]infoEntry{
+		{"Capacity", int64(sb.Capacity())},
+		{"Size", int64(sb.MemUsage())},
+		{"Number of filters", int64(sb.Filters())},
+		{"Number of items inserted", int64(sb.Count())},
+		{"Expansion rate", int64(sb.Expansion())},
 	}, false)
 }

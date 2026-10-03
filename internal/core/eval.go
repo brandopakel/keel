@@ -123,6 +123,14 @@ func cmdSELECT(args []string) []byte {
 // command this server does not have, which is returned as an error so that a
 // log replay stops on it rather than skipping past a command it cannot run.
 func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
+	// The reply is framed for the connection's protocol, held for exactly this
+	// command - see resp3.go. Log replay and replica apply answer nobody, and
+	// run as RESP2 whatever the command says: what they produce has to be the
+	// same however the command first arrived.
+	saved := replyRESP3
+	replyRESP3 = cmd.RESP3 && !aof.replaying && !replicaApplying
+	defer func() { replyRESP3 = saved }()
+
 	if err := replicaCommandError(cmd.Cmd); err != nil {
 		_, werr := c.Write(Encode(err, false))
 		return werr

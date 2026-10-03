@@ -32,19 +32,21 @@ func addBulkSize(size, length int) (int, bool) {
 
 // encodeLookupArray sizes the complete reply before allocating it. Lookup must
 // not grow values between passes; command execution is single-threaded. Expiry
-// may turn a value into nil, which only reduces the required space.
-func encodeLookupArray(count int, lookup func(int) (string, bool)) []byte {
-	size := decimalDigits(count) + 3
-	if count > (MaxReplyBytes-size)/5 {
+// may turn a value into nil, which only reduces the required space. The shape
+// is an array or, for SMEMBERS, a set.
+func encodeLookupArray(count int, lookup func(int) (string, bool), shape replyShape) []byte {
+	size := shapeHeaderSize(shape, count)
+	// A null is the smallest element either protocol has.
+	if count > (MaxReplyBytes-size)/nullSize() {
 		return replyTooLarge
 	}
 	for i := 0; i < count; i++ {
 		value, found := lookup(i)
 		if !found {
-			if size > MaxReplyBytes-5 {
+			if size > MaxReplyBytes-nullSize() {
 				return replyTooLarge
 			}
-			size += 5
+			size += nullSize()
 			continue
 		}
 		var fits bool
@@ -56,13 +58,13 @@ func encodeLookupArray(count int, lookup func(int) (string, bool)) []byte {
 	if refusal := admitReply(size); refusal != nil {
 		return refusal
 	}
-	out := appendArrayHeader(make([]byte, 0, size), count)
+	out := appendShapeHeader(make([]byte, 0, size), shape, count)
 	for i := 0; i < count; i++ {
 		value, found := lookup(i)
 		if found {
 			out = appendBulkString(out, value)
 		} else {
-			out = append(out, '$', '-', '1', '\r', '\n')
+			out = appendNull(out)
 		}
 	}
 	return out

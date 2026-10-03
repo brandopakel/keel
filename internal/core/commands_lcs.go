@@ -122,8 +122,9 @@ func cmdLCS(args []string) []byte {
 
 	// MINMATCHLEN filters which ranges are listed but not the reported length,
 	// which stays the length of the whole subsequence. Redis does the same: the
-	// filter is about what is worth looking at, not about what was found.
-	return Encode([]interface{}{"matches", out, "len", len(seq)}, false)
+	// filter is about what is worth looking at, not about what was found. The
+	// two are a map, flattened in RESP2.
+	return Encode(ReplyMap{"matches", out, "len", len(seq)}, false)
 }
 
 // lcsValue reads a key as a string, treating a missing key as empty.

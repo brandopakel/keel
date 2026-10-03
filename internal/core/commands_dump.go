@@ -184,7 +184,7 @@ func cmdDUMP(args []string) []byte {
 	}
 	plan, ok := planDump(args[0], MaxReplyBytes)
 	if !ok {
-		return constant.RespNil
+		return nullReply()
 	}
 	size, fits := addBulkSize(0, plan.size+9)
 	if !fits {

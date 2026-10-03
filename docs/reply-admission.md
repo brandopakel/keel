@@ -13,6 +13,11 @@ Negative-count SRANDMEMBER fixes its draw in a bounded index array, sizes the
 exact selected payload, and encodes it directly. Both that index storage and the
 encoded response have a 64 MiB ceiling. The set's contents/order do not change.
 
+On a connection that negotiated RESP3 the same sizing counts RESP3's framing: a
+missing value is the three-byte `_` rather than `$-1`, and `SMEMBERS` has a set
+header. The buffer is still allocated once, to the exact size, and reserved as
+such; see [RESP3](resp3.md#what-does-not-change).
+
 An oversized result returns `ERR reply exceeds the 64 MiB output limit`. This is
 Keel's resource limit, not a Redis compatibility claim for oversized responses.
 The connection can continue processing its pipeline. The checks apply with AOF

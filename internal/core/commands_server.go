@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/brandopakel/keel/internal/config"
-	"github.com/brandopakel/keel/internal/constant"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
@@ -25,7 +24,7 @@ func cmdMEMORY(args []string) []byte {
 		if len(args) != 1 {
 			return Encode(errSyntax, false)
 		}
-		out := []interface{}{"keyspace.bytes", int64(data_structure.TotalMemUsed()), "keys.count", int64(data_structure.TotalKeys()), "keys.expires", int64(KeysWithExpiry())}
+		out := ReplyMap{"keyspace.bytes", int64(data_structure.TotalMemUsed()), "keys.count", int64(data_structure.TotalKeys()), "keys.expires", int64(KeysWithExpiry())}
 		data_structure.EachKeyspace(func(ks data_structure.Keyspace) { out = append(out, ks.KeyspaceName()+".bytes", int64(ks.MemUsed())) })
 		return Encode(out, false)
 	case "USAGE":
@@ -34,7 +33,7 @@ func cmdMEMORY(args []string) []byte {
 		}
 		bytes, exists := entryBytesAnywhere(args[1])
 		if !exists {
-			return constant.RespNil
+			return nullReply()
 		}
 		return Encode(int64(bytes), false)
 	default:
@@ -115,6 +114,10 @@ const RedisCompatibleVersion = "7.0.0"
 // It exists because eviction is otherwise invisible: without used_memory and
 // evicted_keys there is no way to tell a cache that is working from one that is
 // thrashing.
+//
+// The text is a verbatim string in RESP3, as Redis sends it. resp_version is
+// the protocol of the connection asking, the same as HELLO's proto: 2, or 3
+// after HELLO 3.
 func cmdINFO(args []string) []byte {
 	if len(args) > 1 {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'INFO' command"), false)
@@ -167,8 +170,8 @@ func cmdINFO(args []string) []byte {
 		fmt.Fprintf(&b, "replication_protocol:%d\r\nrole:%s\r\nreplica_ready:%d\r\nreplica_offset:%d\r\nreplica_last_update_ms:%d\r\nprimary_offset:%d\r\nreplication_history_bytes:%d\r\n\r\n", config.ReplicationProtocol, role, ready, replicaOffset, age, offset, history)
 	}
 	if want("server") {
-		fmt.Fprintf(&b, "# Server\r\nkeel_version:%s\r\nredis_version:%s\r\nredis_mode:standalone\r\nresp_version:2\r\n\r\n",
-			config.BuildVersion(), RedisCompatibleVersion)
+		fmt.Fprintf(&b, "# Server\r\nkeel_version:%s\r\nredis_version:%s\r\nredis_mode:standalone\r\nresp_version:%d\r\n\r\n",
+			config.BuildVersion(), RedisCompatibleVersion, replyProtocol())
 	}
 	if want("memory") {
 		used := data_structure.TotalMemUsed()
@@ -228,7 +231,7 @@ func cmdINFO(args []string) []byte {
 			data_structure.TotalKeys(), KeysWithExpiry())
 	}
 
-	return Encode(b.String(), false)
+	return Encode(ReplyVerbatim(b.String()), false)
 }
 
 // cmdBGREWRITEAOF starts rewriting the append-only file and returns at once.

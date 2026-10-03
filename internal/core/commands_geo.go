@@ -117,7 +117,9 @@ func geoPosition(zs *data_structure.ZSet, member string) (longitude, latitude fl
 // cmdGEODIST implements GEODIST key member1 member2 [M|KM|FT|MI].
 //
 // The distance assumes a spherical Earth, so it can be off by up to 0.5% in
-// the worst case. A missing key or member answers nil.
+// the worst case. A missing key or member answers nil. The distance is a bulk
+// string in RESP3 as well as RESP2: Redis keeps it one, at four decimals,
+// rather than sending a double.
 func cmdGEODIST(args []string) []byte {
 	if len(args) != 3 && len(args) != 4 {
 		return Encode(errors.New("ERR wrong number of arguments for 'GEODIST' command"), false)
@@ -131,12 +133,12 @@ func cmdGEODIST(args []string) []byte {
 	}
 	zs, ok := zsetFor(args[0])
 	if !ok {
-		return constant.RespNil
+		return nullReply()
 	}
 	long1, lat1, ok1 := geoPosition(zs, args[1])
 	long2, lat2, ok2 := geoPosition(zs, args[2])
 	if !ok1 || !ok2 {
-		return constant.RespNil
+		return nullReply()
 	}
 	return Encode(formatDistance(data_structure.GeohashGetDistance(long1, lat1, long2, lat2)/toMeters), false)
 }
@@ -172,6 +174,7 @@ func cmdGEOHASH(args []string) []byte {
 
 // cmdGEOPOS implements GEOPOS key [member ...]: a longitude, latitude pair per
 // member, in the order asked, with a null array for a member that is not there.
+// The coordinates are doubles in RESP3 and bulk strings in RESP2.
 func cmdGEOPOS(args []string) []byte {
 	if len(args) < 1 {
 		return Encode(errors.New("ERR wrong number of arguments for 'GEOPOS' command"), false)
@@ -180,15 +183,17 @@ func cmdGEOPOS(args []string) []byte {
 	out := appendArrayHeader(nil, len(args)-1)
 	for _, member := range args[1:] {
 		if !exists {
-			out = append(out, constant.RespNilArray...)
+			out = appendNullArray(out)
 			continue
 		}
 		longitude, latitude, ok := geoPosition(zs, member)
 		if !ok {
-			out = append(out, constant.RespNilArray...)
+			out = appendNullArray(out)
 			continue
 		}
-		out = append(out, Encode([]string{formatCoordinate(longitude), formatCoordinate(latitude)}, false)...)
+		out = appendArrayHeader(out, 2)
+		out = appendDouble(out, formatCoordinate(longitude))
+		out = appendDouble(out, formatCoordinate(latitude))
 	}
 	return out
 }

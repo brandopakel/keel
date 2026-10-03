@@ -6,8 +6,8 @@ structures under one estimated memory budget, with expiry and optional persisten
 
 **Status: alpha.** See [Releases](https://github.com/brandopakel/keel/releases) for
 published builds. Documentation on a development branch can include unreleased changes.
-Keel implements a documented RESP2 command subset; Redis protocol support does
-not imply that every Redis client feature or application works unchanged.
+Keel implements a documented command subset over RESP2 and RESP3; Redis protocol
+support does not imply that every Redis client feature or application works unchanged.
 
 ## Run locally
 
@@ -27,7 +27,8 @@ redis-cli -p 8081 GET greeting
 The default bind is `127.0.0.1:8081`. The production event loop uses epoll on
 Linux and kqueue on macOS; its historical flag name is `-mode kqueue` on both.
 Command execution is serial. `-io-threads 4` parallelizes socket I/O and parsing.
-Other `-mode` variants are benchmark implementations; AOF is rejected on them.
+Other `-mode` variants are benchmark implementations; AOF is rejected on them, and
+they speak RESP2 only.
 
 For password authentication, pass the name of an environment variable containing
 the secret, using `-requirepass-env KEEL_PASSWORD`. An empty or missing variable
@@ -49,18 +50,19 @@ populate the variable; avoid putting secrets in process arguments or shell histo
 | Sorted sets | `ZADD` with `NX`/`XX`/`CH`, `ZRANK`, `ZREM`, `ZSCORE`, `ZCARD`, `ZCOUNT`, `ZINCRBY`, `ZPOPMIN`/`ZPOPMAX`; `ZRANGEBYSCORE`/`ZREVRANGEBYSCORE`; `ZRANGE` rank ranges with `REV`/`WITHSCORES` |
 | Geo | `GEOADD`, `GEODIST`, `GEOHASH`, `GEOSEARCH`, `GEOPOS` |
 | Approximate analytics | Bloom `BF.*`, Count-Min `CMS.*`, Morris `MORRIS.*`, Cuckoo `CF.*`, and `PFADD`/`PFCOUNT`/`PFMERGE`; see the [command registry](internal/core/eval.go) for exact names |
-| Connection | `HELLO` (RESP2; `HELLO 3` answers `NOPROTO`), `AUTH`, `CLIENT ID`/`SETNAME`/`GETNAME`/`SETINFO`/`INFO`, `SELECT 0`, `QUIT`, `ECHO`, `PING` |
+| Connection | `HELLO` (`HELLO 3` switches the connection to RESP3, `HELLO 2` back), `AUTH`, `CLIENT ID`/`SETNAME`/`GETNAME`/`SETINFO`/`INFO`, `SELECT 0`, `QUIT`, `ECHO`, `PING` |
+| Protocol | RESP2 by default. After `HELLO 3`, optionally with `AUTH` and `SETNAME`, every reply on that connection is RESP3 in the shape Redis 8 sends: maps, sets, doubles, nulls, booleans and verbatim strings. `HELLO`'s `proto`, `CLIENT INFO`'s `resp=` and `INFO`'s `resp_version` report the asking connection's protocol. See [RESP3](docs/resp3.md) |
 | Transactions | `MULTI`, `EXEC`, `DISCARD`, `UNWATCH`; a command refused while queueing makes `EXEC` answer `EXECABORT`, and one that fails inside `EXEC` is an error in its reply while the rest run; no `WATCH` |
 | Operations | `INFO` (reports `redis_version:7.0.0`, the command level followed), `MEMORY USAGE key`, `MEMORY STATS`, `BGREWRITEAOF`, `KEEL.DUMP`, `KEEL.RESTORE`, `KEEL.PROMOTE`/`KEEL.FENCE` |
 
 Important boundaries:
 
-- One database, RESP2, IPv4. No Lua, Pub/Sub, blocking list commands,
+- One database, IPv4. No Lua, Pub/Sub, blocking list commands,
   ACL roles, native TLS, cluster routing, or supported embedding API.
   Opt-in [replication](docs/replication-alpha.md) is experimental and bounded.
-  `HELLO 3` is refused with `NOPROTO`, which go-redis and ioredis answer by
-  falling back to RESP2. redis-py 8 and node-redis 6 default to RESP3 and do not
-  fall back: set `protocol=2` / `RESP: 2`. See [client defaults](docs/client-library-compatibility.md#default-configurations).
+  RESP3 has its reply types but no push messages, client tracking or
+  client-side caching. redis-py 8, node-redis 6, go-redis 9 and ioredis 6
+  negotiate RESP3 with default settings; see [client defaults](docs/client-library-compatibility.md#default-configurations).
 - `SET`, `SETEX`, `PSETEX` and `MSET` replace a key of any type, as Redis does;
   `SET NX`/`SETNX` treat a key of any type as existing, and `SET ... GET` answers
   `WRONGTYPE` for a non-string. Other commands refuse a key of another type.
@@ -220,8 +222,8 @@ In order of distance, not size.
   externally assigned higher term. Nonzero terms require protocol 2 throughout
   the replication path; see [restart and upgrade rules](docs/term-guard-recovery.md).
 - **Command surface outside the contract.** `WATCH`, Lua, Pub/Sub, blocking list
-  commands, RESP3, ACL roles, and cluster routing are absent. Unreleased development
-  adds `MULTI`/`EXEC`/`DISCARD`. `ZRANGE` lacks
+  commands, RESP3 push messages and client tracking, ACL roles, and cluster routing
+  are absent. Unreleased development adds `MULTI`/`EXEC`/`DISCARD`. `ZRANGE` lacks
   `BYSCORE`, `BYLEX`, and `LIMIT`; `ZADD` lacks `GT`, `LT`, and `INCR`.
   `LREM`, `LINSERT`, `GEOSEARCHSTORE`, the `GEORADIUS` family, `CMS.INFO`, `CMS.MERGE`,
   and `BF.CARD` are also missing.

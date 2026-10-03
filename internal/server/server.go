@@ -140,8 +140,11 @@ type client struct {
 	authenticated   bool
 	// id numbers the connection for HELLO and CLIENT ID; name, libName and
 	// libVersion are what CLIENT SETNAME and CLIENT SETINFO recorded.
-	id                         uint64
-	name, libName, libVersion  string
+	id                        uint64
+	name, libName, libVersion string
+	// resp3 is set by HELLO 3 and cleared by HELLO 2, and frames every reply
+	// the connection is sent from the command after it.
+	resp3                      bool
 	interestKnown              bool
 	interest                   io_multiplexing.Operation
 	accountedInput             int
@@ -1314,6 +1317,9 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 		c.clientCommand(cmd.Args, w)
 		return
 	}
+	// Set as the command runs rather than as it was parsed: a HELLO earlier
+	// in the same pipeline has already changed it.
+	cmd.RESP3 = c.resp3
 	responseRw(cmd, w)
 }
 

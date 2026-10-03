@@ -12,7 +12,8 @@ import (
 // Client libraries send HELLO, CLIENT and QUIT on their own: redis-py 8 and
 // node-redis 6 open every connection with HELLO 3, ioredis 6 sends HELLO 3 with
 // the password in it, all of them send CLIENT SETINFO, and quit() sends QUIT.
-// These tests are the exchanges those libraries depend on.
+// These tests are the exchanges those libraries depend on; resp3_test.go has
+// the RESP3 ones.
 
 // helloFields reads a HELLO reply - the RESP2 array form of a map - into a map.
 func helloFields(t *testing.T, r *bufio.Reader, header string) map[string]string {
@@ -48,13 +49,14 @@ func TestHelloNegotiatesRESP2(t *testing.T) {
 		t.Fatalf("CLIENT GETNAME after HELLO SETNAME = %q", got)
 	}
 
-	// The answers clients branch on when they fall back to RESP2.
+	// The answers clients branch on when they fall back. RESP3 is in
+	// resp3_test.go; a version this server does not speak is NOPROTO.
 	for _, tc := range []struct {
 		args []string
 		want string
 	}{
-		{[]string{"HELLO", "3"}, "-NOPROTO unsupported protocol version"},
 		{[]string{"HELLO", "1"}, "-NOPROTO unsupported protocol version"},
+		{[]string{"HELLO", "4"}, "-NOPROTO unsupported protocol version"},
 		{[]string{"HELLO", "x"}, "-ERR Protocol version is not an integer or out of range"},
 		{[]string{"HELLO", "2", "BOGUS"}, "-ERR Syntax error in HELLO option 'BOGUS'"},
 		{[]string{"HELLO", "2", "SETNAME", "has space"}, "-ERR Client names cannot contain spaces, newlines or special characters."},
@@ -72,11 +74,12 @@ func TestHelloBeforeAuthentication(t *testing.T) {
 	s := startTestServer(t, "-requirepass-env", "KEEL_TEST_PASSWORD")
 	c, r := connectTest(t, s)
 
-	// ioredis 6 sends exactly this and falls back to RESP2 and AUTH only if
-	// the answer is NOPROTO. The version is refused before the password is
-	// looked at, so the connection is still not logged in afterwards.
-	if got := call(t, c, r, "HELLO", "3", "AUTH", "default", "integration-secret"); got != "-NOPROTO unsupported protocol version" {
-		t.Fatalf("HELLO 3 AUTH = %q", got)
+	// A version this server does not speak is refused before the password is
+	// looked at, so the connection is still not logged in afterwards. HELLO 3
+	// with the password, which ioredis 6 and redis-py 8 send, is in
+	// resp3_test.go.
+	if got := call(t, c, r, "HELLO", "4", "AUTH", "default", "integration-secret"); got != "-NOPROTO unsupported protocol version" {
+		t.Fatalf("HELLO 4 AUTH = %q", got)
 	}
 	if got := call(t, c, r, "GET", "k"); got != "-NOAUTH Authentication required" {
 		t.Fatalf("GET after refused HELLO = %q", got)

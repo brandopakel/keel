@@ -17,6 +17,15 @@ var (
 	// expiry.
 	TtlKeyNotExist      = []byte(":-2\r\n")
 	TtlKeyExistNoExpire = []byte(":-1\r\n")
+
+	// The RESP3 forms a connection that negotiated HELLO 3 is answered with
+	// where RESP2 has another. RESP3 has one null for both of RESP2's, and
+	// types of its own for an empty map, an empty set and a boolean.
+	Resp3Null     = []byte("_\r\n")
+	Resp3EmptyMap = []byte("%0\r\n")
+	Resp3EmptySet = []byte("~0\r\n")
+	Resp3True     = []byte("#t\r\n")
+	Resp3False    = []byte("#f\r\n")
 )
 
 // A stored string carries one byte saying what it is and how it is held: the
