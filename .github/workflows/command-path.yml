@@ -3,10 +3,26 @@
 # The embedding plan (docs/embedding-plan.md) moves every store, the evictor
 # and the log into an engine, a step at a time, and each step adds an
 # indirection to the path a command takes. This job runs BenchmarkCommandPath
-# and BenchmarkCommandPathUnderEviction on the base and the change alternately,
-# on the same runner, so drift between runs cancels out of each paired ratio.
-# More allocations per operation fail the job; time is reported for review,
-# because a shared runner moves by more than the budget a step is allowed.
+# and BenchmarkCommandPathUnderEviction on the base and the change, on the same
+# runner, and scripts/compare-benchmarks.py compares them.
+#
+# How the runs are paired:
+# - Both sides are built with -trimpath, from worktrees whose paths have the
+#   same length, and each runs from its own package directory. The build
+#   directory is not in either binary, so two builds of the same source are
+#   byte-identical, and the provenance says when they are. Without -trimpath, an
+#   A/A build from two directories differed by 4 KiB from the paths alone, and
+#   its candidate ran 9.8% slower in every round (run 37091722334).
+# - Each round runs the two binaries back to back, and the order alternates:
+#   odd rounds run the baseline first, even rounds the candidate (ABBA). Each
+#   candidate run is paired with the baseline run next to it, so drift between
+#   rounds cancels out of each ratio, and a cost of running second falls on
+#   both sides equally. The comparison fails if the orders do not balance.
+#
+# What fails the job: more allocations per operation on any row, eviction
+# rows whose evictions/op is not sane on both sides, and any row that does not
+# parse, is missing from one side or one round, or reports different metrics
+# on the two sides. Time is reported with an interval and is not gated.
 name: Command path
 
 on:
@@ -15,9 +31,16 @@ on:
       baseline:
         description: Revision to compare against (default develop)
         default: develop
+      candidate:
+        description: Revision to measure (default the revision this runs on)
+        default: ''
+      rounds:
+        description: Rounds, an even number from 4 to 40; each runs both sides once
+        default: '12'
   pull_request:
     branches: [develop]
-    paths: ['internal/**', 'cmd/**', 'go.mod', 'go.sum', '.github/workflows/command-path.yml', 'scripts/compare-benchmarks.py']
+    paths: ['internal/**', 'cmd/**', 'go.mod', 'go.sum', '.github/workflows/command-path.yml',
+            'scripts/compare-benchmarks.py', 'scripts/test_compare_benchmarks.py']
 
 permissions:
   contents: read
@@ -27,36 +50,78 @@ jobs:
     name: Paired command-path benchmarks
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    defaults:
+      run:
+        # An explicit bash runs with -o pipefail, so the comparison's exit
+        # status survives its pipe into the step summary.
+        shell: bash
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with: { persist-credentials: false, fetch-depth: 0 }
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with: { go-version-file: go.mod }
-      - name: Baseline worktree
+      - name: Comparison tests
+        run: python3 -m unittest discover -s scripts -p 'test_compare_benchmarks.py' -v
+      - name: Build both sides
         env:
           BASELINE: ${{ github.event.pull_request.base.sha || inputs.baseline }}
+          CANDIDATE: ${{ inputs.candidate }}
         run: |
           mkdir -p dist/command-path
           # A branch name from the dispatch input exists only as origin/<name>.
-          rev=$(git rev-parse --verify --quiet "$BASELINE^{commit}" || git rev-parse --verify "origin/$BASELINE^{commit}")
-          git worktree add --detach "$RUNNER_TEMP/baseline" "$rev"
-          { echo "baseline $(git -C "$RUNNER_TEMP/baseline" rev-parse HEAD)"
-            echo "candidate $(git rev-parse HEAD)"
-            echo "runner $(uname -srm) cpus $(nproc)"; go version; } | tee dist/command-path/provenance.txt
-          # Each side runs its own benchmark file, so a change to the setup
-          # code is measured where it lands; names present on both sides are
-          # compared and the rest are listed.
-          go -C "$RUNNER_TEMP/baseline" test -c -o "$RUNNER_TEMP/baseline.test" ./internal/core
-          go test -c -o "$RUNNER_TEMP/candidate.test" ./internal/core
-      - name: Interleaved runs
+          resolve() { git rev-parse --verify --quiet "$1^{commit}" || git rev-parse --verify "origin/$1^{commit}"; }
+          base=$(resolve "$BASELINE")
+          cand=$(resolve "${CANDIDATE:-HEAD}")
+          # Each side builds and runs its own benchmark file, so a change to
+          # the setup code is measured where it lands.
+          for side in base cand; do
+            rev=$base; [ "$side" = cand ] && rev=$cand
+            git worktree add --detach "$RUNNER_TEMP/$side" "$rev"
+            go -C "$RUNNER_TEMP/$side" test -c -trimpath -o "$RUNNER_TEMP/$side.test" ./internal/core
+          done
+          { echo "baseline $base"
+            echo "candidate $cand"
+            echo "runner $(uname -srm) cpus $(nproc) $(grep -m1 'model name' /proc/cpuinfo | sed 's/.*: //')"
+            go version
+            (cd "$RUNNER_TEMP" && sha256sum base.test cand.test)
+            if cmp -s "$RUNNER_TEMP/base.test" "$RUNNER_TEMP/cand.test"; then
+              echo 'binaries identical: an A/A run'
+            fi; } | tee dist/command-path/provenance.txt
+      - name: Alternating rounds
+        id: rounds
+        env:
+          ROUNDS: ${{ inputs.rounds || '12' }}
         run: |
-          bench='^BenchmarkCommandPath'
-          for i in 1 2 3 4 5 6; do
-            (cd "$RUNNER_TEMP/baseline/internal/core" && "$RUNNER_TEMP/baseline.test" -test.run '^$' -test.bench "$bench" -test.benchmem -test.benchtime=200ms) >> dist/command-path/baseline.txt
-            (cd internal/core && "$RUNNER_TEMP/candidate.test" -test.run '^$' -test.bench "$bench" -test.benchmem -test.benchtime=200ms) >> dist/command-path/candidate.txt
+          if ! [[ $ROUNDS =~ ^[0-9]+$ ]] || (( ROUNDS < 4 || ROUNDS > 40 || ROUNDS % 2 )); then
+            echo "rounds must be an even number from 4 to 40, not '$ROUNDS'" >&2
+            exit 1
+          fi
+          # One run of one side, from its own package directory, with the
+          # round and the side that went first written before its output.
+          measure() {
+            local side=$1 file=$2 round=$3 first=$4
+            { echo "keel-round: $round"
+              echo "keel-first: $first"
+              (cd "$RUNNER_TEMP/$side/internal/core" && "$RUNNER_TEMP/$side.test" -test.run '^$' \
+                -test.bench '^BenchmarkCommandPath' -test.benchmem -test.benchtime=200ms)
+            } >> "dist/command-path/$file.txt"
+          }
+          for round in $(seq "$ROUNDS"); do
+            if (( round % 2 )); then
+              measure base baseline "$round" baseline
+              measure cand candidate "$round" baseline
+            else
+              measure cand candidate "$round" candidate
+              measure base baseline "$round" candidate
+            fi
           done
       - name: Compare
-        run: python3 scripts/compare-benchmarks.py dist/command-path/baseline.txt dist/command-path/candidate.txt --json dist/command-path/comparison.json | tee -a "$GITHUB_STEP_SUMMARY"
+        # A run that stopped partway is still compared, so that its missing
+        # rounds and failure output are listed in the summary.
+        if: ${{ !cancelled() && (steps.rounds.outcome == 'success' || steps.rounds.outcome == 'failure') }}
+        run: |
+          python3 scripts/compare-benchmarks.py dist/command-path/baseline.txt dist/command-path/candidate.txt \
+            --json dist/command-path/comparison.json | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
