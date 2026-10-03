@@ -92,6 +92,19 @@ names and values it sends in RESP2. `MORRIS.QUERY` and `MORRIS.INCRBY` keep
 their arrays of bulk-string counts. `PFADD`, `PFCOUNT` and `PFMERGE` answer
 exactly as Redis does in both protocols.
 
+## Transactions
+
+`EXEC` answers with an array of each queued command's reply, and each reply is
+framed in the protocol the connection has when that command runs. On a RESP3
+connection that is RESP3 throughout. A `HELLO` queued inside the transaction
+runs in its place, as Redis runs it, so it switches the protocol partway
+through: from RESP2, `MULTI`, `HELLO 3`, `GET missing`, `HGETALL missing`,
+`EXEC` answers the RESP3 `HELLO` map, `_` and `%0`, and the connection stays on
+RESP3 afterwards. A queued `HELLO 2` does the reverse, and a queued `HELLO`
+that fails changes nothing. `+QUEUED`, `MULTI`'s `+OK` and the `EXECABORT`
+errors are the same in both protocols. Each queued command's protocol is read
+as `EXEC` reaches it, through the connection, rather than when it was queued.
+
 ## What does not change
 
 - **Persistence and replication.** The append-only file, both replication
@@ -137,7 +150,10 @@ with `core.EncodeAs`.
 - `scripts/differential.py --protocol 3` connects to Keel and Redis with
   `HELLO 3 AUTH` and compares every reply with its RESP3 type: map against
   map, double against double, null against null. It normalizes only what the
-  RESP2 mode does: set and map ordering, and the arrays that mode sorts. With
+  RESP2 mode does: set and map ordering, and the arrays that mode sorts. It
+  runs transactions as the RESP2 mode does, and some of them queue `HELLO 2`
+  and `HELLO 3`, so their replies switch protocol inside `EXEC`. Those leave
+  out `CF.MEXISTS`, whose RESP2 reply is Keel's own (see above). With
   `--redis-module` naming RedisBloom it adds `BF`, `CF` and `CMS`. Locally,
   against Redis 8.10.1 with RedisBloom, 20,000 seeded steps covered 94
   commands, and the run made 20,019 reply checks, 20 state comparisons, 46

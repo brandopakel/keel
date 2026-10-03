@@ -280,3 +280,61 @@ func TestRESP2WireBytesUnchanged(t *testing.T) {
 		t.Fatalf("INFO server = %q", got)
 	}
 }
+
+// helloMap2 is the RESP2 HELLO reply for a connection with the given id: the
+// same map as helloMap, flattened.
+func helloMap2(id string) string {
+	return "*14\r\n$6\r\nserver\r\n$4\r\nkeel\r\n$7\r\nversion\r\n$5\r\n7.0.0\r\n$5\r\nproto\r\n:2\r\n" +
+		"$2\r\nid\r\n" + id + "\r\n$4\r\nmode\r\n$10\r\nstandalone\r\n$4\r\nrole\r\n$6\r\nmaster\r\n" +
+		"$7\r\nmodules\r\n*0\r\n"
+}
+
+// TestRESP3Transactions: EXEC answers with each queued command's reply in
+// RESP3 on a RESP3 connection, and a HELLO queued inside the transaction
+// switches the protocol in its place. Redis 8.10.1 answers these exchanges
+// exactly so, apart from HELLO's own fields: from RESP2, MULTI, HELLO 3,
+// GET missing, HGETALL missing, EXEC is [the RESP3 HELLO map, _, %0], and the
+// connection stays on RESP3 afterwards.
+func TestRESP3Transactions(t *testing.T) {
+	s := startTestServer(t)
+	c, r := connectTest(t, s)
+	id := call(t, c, r, "CLIENT", "ID")
+
+	for _, step := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"SET", "k", "v"}, "+OK\r\n"},
+		{[]string{"MULTI"}, "+OK\r\n"},
+		{[]string{"HELLO", "3"}, "+QUEUED\r\n"},
+		{[]string{"GET", "missing"}, "+QUEUED\r\n"},
+		{[]string{"HGETALL", "missing"}, "+QUEUED\r\n"},
+		{[]string{"EXEC"}, "*3\r\n" + helloMap(id) + "_\r\n%0\r\n"},
+		{[]string{"GET", "missing"}, "_\r\n"},
+
+		// Already on RESP3: every reply in RESP3, until a queued HELLO 2.
+		{[]string{"HSET", "h", "f", "v"}, ":1\r\n"},
+		{[]string{"ZADD", "z", "2.5", "m"}, ":1\r\n"},
+		{[]string{"MULTI"}, "+OK\r\n"},
+		{[]string{"HGETALL", "h"}, "+QUEUED\r\n"},
+		{[]string{"ZSCORE", "z", "m"}, "+QUEUED\r\n"},
+		{[]string{"ZRANGE", "z", "0", "-1", "WITHSCORES"}, "+QUEUED\r\n"},
+		{[]string{"CLIENT", "GETNAME"}, "+QUEUED\r\n"},
+		{[]string{"HELLO", "2"}, "+QUEUED\r\n"},
+		{[]string{"GET", "missing"}, "+QUEUED\r\n"},
+		{[]string{"ZSCORE", "z", "m"}, "+QUEUED\r\n"},
+		{[]string{"EXEC"}, "*7\r\n%1\r\n$1\r\nf\r\n$1\r\nv\r\n,2.5\r\n*1\r\n*2\r\n$1\r\nm\r\n,2.5\r\n_\r\n" +
+			helloMap2(id) + "$-1\r\n$3\r\n2.5\r\n"},
+		{[]string{"GET", "missing"}, "$-1\r\n"},
+
+		// A queued HELLO that fails changes nothing, here as outside one.
+		{[]string{"MULTI"}, "+OK\r\n"},
+		{[]string{"HELLO", "4"}, "+QUEUED\r\n"},
+		{[]string{"GET", "missing"}, "+QUEUED\r\n"},
+		{[]string{"EXEC"}, "*2\r\n-NOPROTO unsupported protocol version\r\n$-1\r\n"},
+	} {
+		if got := callRaw(t, c, r, step.args...); got != step.want {
+			t.Fatalf("%v = %q, want %q", step.args, got, step.want)
+		}
+	}
+}

@@ -301,6 +301,10 @@ def check_geo(candidate, reference, *, populate=False):
 # here too, with SRANDMEMBER, which is only sent where it returns a whole set.
 
 UNORDERED_ARRAYS = ('HKEYS', 'HVALS', 'KEYS', 'SRANDMEMBER')
+# A set's members and a hash's pairs as RESP2 frames them, which a RESP3
+# connection receives between a queued HELLO 2 and HELLO 3: the RESP2 mode's
+# normalization for the same replies.
+UNORDERED_RESP2 = ('SMEMBERS', 'SPOP')
 ITEMS = [f'item:{i}' for i in range(32)]
 
 
@@ -337,8 +341,11 @@ def normalize3(command, value):
             return ('map', sorted(((walk(k), walk(x)) for k, x in v[1]), key=repr))
         return v
     value = walk(value)
-    if command[0] in UNORDERED_ARRAYS and value[0] == 'array':
+    if command[0] in UNORDERED_ARRAYS + UNORDERED_RESP2 and value[0] == 'array':
         value = ('array', sorted(value[1], key=repr))
+    if command[0] == 'HGETALL' and value[0] == 'array':
+        assert len(value[1]) % 2 == 0, 'truncated HGETALL response'
+        value = ('array', sorted(zip(value[1][::2], value[1][1::2]), key=repr))
     return value
 
 
@@ -484,6 +491,11 @@ def transaction3(rng, modules):
     elif shape < .22:
         refusal = ['MULTI']
     elif shape < .4:
+        # Between the two HELLOs replies are RESP2, where CF.MEXISTS keeps
+        # Keel's own form, "1" and "0" as strings, rather than RedisBloom's
+        # integers; RESP2 replies are unchanged by RESP3 support, so that
+        # difference is outside this mode and these blocks leave it out.
+        commands = [command for command in commands if command[0] != 'CF.MEXISTS']
         down = rng.randrange(len(commands)+1)
         commands.insert(down, ['HELLO', 2])
         commands.insert(rng.randrange(down+1, len(commands)+1), ['HELLO', 3])
@@ -798,7 +810,8 @@ def run(args):
                              'TTL/PTTL of a live key and module INFO compared by type and field names. BF/CF/CMS only with '
                              '--redis-module. Not compared: Keel-only commands (KEEL.*, MEMKV.*, MORRIS.*, SRAND), '
                              'BGREWRITEAOF, SELECT of another database, and random picks other than those determined by the set. '
-                             'Transactions as in the RESP2 mode, with HELLO 2 and HELLO 3 queued inside some; no WATCH claim.')
+                             'Transactions as in the RESP2 mode, with HELLO 2 and HELLO 3 queued inside some (those leave out CF.MEXISTS, whose '
+                             'RESP2 form is Keel\'s own); no WATCH claim.')
     server = Server(args.bin, root/'keel', policy=args.policy, async_append=args.concurrent,
                     extra=['-aof-concurrent-append'] if args.concurrent else ())
     server.env = {key: value for key,value in server.env.items() if key in ('PATH','HOME','TMPDIR','KEEL_VALIDATION_PASSWORD')}

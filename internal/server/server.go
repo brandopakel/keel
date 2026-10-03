@@ -1348,6 +1348,10 @@ func (c *client) ConnectionArity(name string) (int, bool) {
 	return 0, false
 }
 
+// RESP3 tells a transaction which protocol to frame a queued command's reply
+// in as EXEC reaches it.
+func (c *client) RESP3() bool { return c.resp3 }
+
 func (c *client) AnswerConnection(cmd *core.Command, w io.ReadWriter) {
 	// Answered as it would be outside a transaction. EXEC is still running,
 	// so the transaction is set aside rather than queued into again.

@@ -137,8 +137,8 @@ func scoredReply3(walk func(func(string, float64) bool), nested bool) []byte {
 		return replyTooLarge
 	}
 	size += header
-	if !reserveReplyMemory(size) {
-		return allocationPressure
+	if refusal := admitReply(size); refusal != nil {
+		return refusal
 	}
 	out := appendArrayHeader(make([]byte, 0, size), values)
 	walk(func(member string, score float64) bool {

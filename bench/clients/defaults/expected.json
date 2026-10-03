@@ -32,7 +32,7 @@
       "default": "ok",
       "named": "ok",
       "pipeline": "ok",
-      "tx": "fail"
+      "tx": "ok"
     },
     "redigo v1.9.3": {
       "default": "ok",
@@ -52,7 +52,7 @@
       "default": "ok",
       "named": "ok",
       "pipeline": "ok",
-      "tx": "fail"
+      "tx": "ok"
     }
   },
   "keel-noauth": {
@@ -88,7 +88,7 @@
       "default": "ok",
       "named": "ok",
       "pipeline": "ok",
-      "tx": "fail"
+      "tx": "ok"
     },
     "redigo v1.9.3": {
       "default": "ok",
@@ -108,7 +108,7 @@
       "default": "ok",
       "named": "ok",
       "pipeline": "ok",
-      "tx": "fail"
+      "tx": "ok"
     }
   }
 }
