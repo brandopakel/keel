@@ -83,15 +83,16 @@ func cmdSCARD(args []string) []byte {
 	return Encode(s.Len(), false)
 }
 
+// cmdSMEMBERS answers every member, as a set.
 func cmdSMEMBERS(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(errors.New("ERR wrong number of arguments for 'SMEMBERS' command"), false)
 	}
 	s, ok := setFor(args[0])
 	if !ok {
-		return constant.RespEmptyArray
+		return emptySetReply()
 	}
-	return encodeLookupArray(s.Len(), s.MemberAt)
+	return encodeLookupArray(s.Len(), s.MemberAt, shapeSet)
 }
 
 func cmdSISMEMBER(args []string) []byte {
@@ -136,7 +137,9 @@ func parseCount(args []string) (count int64, given bool, err error) {
 	return n, true, nil
 }
 
-// cmdSPOP implements SPOP key [count]: it removes and returns random members.
+// cmdSPOP implements SPOP key [count]: it removes and returns random members,
+// as a set when a count was given - which is Redis's reply, though
+// SRANDMEMBER's with a count is an array.
 func cmdSPOP(args []string) []byte {
 	if len(args) != 1 && len(args) != 2 {
 		return Encode(errors.New("ERR wrong number of arguments for 'SPOP' command"), false)
@@ -153,9 +156,9 @@ func cmdSPOP(args []string) []byte {
 	s, ok := setFor(key)
 	if !ok {
 		if given {
-			return constant.RespEmptyArray
+			return emptySetReply()
 		}
-		return constant.RespNil
+		return nullReply()
 	}
 
 	// Without a count the command pops one member, not zero. Asking for zero
@@ -181,7 +184,11 @@ func cmdSPOP(args []string) []byte {
 	if refusal := reserveRemoval("SREM", key, int(count), walk); refusal != nil {
 		return refusal
 	}
-	out := encodeWalkReply(walk, !given)
+	shape := shapeSet
+	if !given {
+		shape = shapeOne
+	}
+	out := encodeWalkReply(walk, shape)
 	if len(out) > 0 && out[0] == '-' {
 		return out
 	}
@@ -214,7 +221,7 @@ func cmdSRANDMEMBER(args []string) []byte {
 		if given {
 			return constant.RespEmptyArray
 		}
-		return constant.RespNil
+		return nullReply()
 	}
 	if !given || count > 0 {
 		// Distinct sampling shuffles the internal order even though the set's
@@ -225,7 +232,7 @@ func cmdSRANDMEMBER(args []string) []byte {
 		// One member, for the same reason SPOP takes one.
 		picked := s.RandomMembers(1)
 		if len(picked) == 0 {
-			return constant.RespNil
+			return nullReply()
 		}
 		return Encode(picked[0], false)
 	}
@@ -239,5 +246,5 @@ func cmdSRANDMEMBER(args []string) []byte {
 		count = maxRandomMemberCount
 	}
 	count = int64(s.ShufflePrefix(int(count)))
-	return encodeLookupArray(int(count), s.MemberAt)
+	return encodeLookupArray(int(count), s.MemberAt, shapeArray)
 }

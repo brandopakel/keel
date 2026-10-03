@@ -29,11 +29,11 @@ var (
 	errWrongPass       = errors.New("WRONGPASS invalid username-password pair")
 	errInvalidName     = errors.New("ERR Client names cannot contain spaces, newlines or special characters.")
 	errProtocolVersion = errors.New("ERR Protocol version is not an integer or out of range")
-	// NOPROTO is the answer clients test for before falling back to RESP2:
-	// ioredis checks for it by name, and go-redis falls back on any error.
-	// Answering "unknown command" works for a client that is not logging in
-	// at the same time; answering NOAUTH, which is what a password used to
-	// produce, makes ioredis give up.
+	// NOPROTO is the answer to a protocol version this server does not speak,
+	// and the one clients test for before falling back: ioredis checks for it
+	// by name, and go-redis falls back on any error. Answering "unknown
+	// command" works for a client that is not logging in at the same time;
+	// answering NOAUTH makes ioredis give up.
 	errNoProto = errors.New("NOPROTO unsupported protocol version")
 )
 
@@ -53,21 +53,30 @@ func (c *client) authenticate(password string) error {
 
 // hello implements HELLO [protover [AUTH username password] [SETNAME name]].
 //
-// The order is Redis's, and it matters to clients. The protocol version is
-// checked first, so a client asking for RESP3 learns NOPROTO before anything
-// about its password and can fall back to RESP2 and AUTH. Only then are the
-// credentials tried, and only an authenticated connection gets the reply.
+// HELLO 3 switches the connection to RESP3 and HELLO 2 back to RESP2; without
+// a version HELLO reports the protocol in use. The order is Redis's, and it
+// matters to clients. The version is checked first, so a client asking for
+// one this server does not speak learns NOPROTO before anything about its
+// password and can fall back. Only then are the credentials tried, and only an
+// authenticated connection gets the reply or a new protocol: a HELLO that
+// fails leaves the connection on the protocol it had.
+//
+// The reply is in the protocol just chosen, which is how a client knows the
+// switch took: a map for RESP3, and for RESP2 the same map flattened into an
+// array, as Redis sends it.
 func (c *client) hello(args []string, w io.Writer) {
+	resp3 := c.resp3
 	if len(args) > 0 {
 		version, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
 			responseError(errProtocolVersion, w)
 			return
 		}
-		if version != 2 {
+		if version != 2 && version != 3 {
 			responseError(errNoProto, w)
 			return
 		}
+		resp3 = version == 3
 	}
 	var user, password, name string
 	var withAuth, withName bool
@@ -105,16 +114,15 @@ func (c *client) hello(args []string, w io.Writer) {
 	if withName {
 		c.name = name
 	}
+	c.resp3 = resp3
 	role := "master"
 	if config.ReplicaOf != "" {
 		role = "replica"
 	}
-	// The map RESP3 would send, flattened into an array as Redis does for a
-	// RESP2 connection.
-	w.Write(core.Encode([]interface{}{
+	w.Write(c.encode(core.ReplyMap{
 		"server", "keel",
 		"version", core.RedisCompatibleVersion,
-		"proto", int64(2),
+		"proto", int64(c.protocol()),
 		"id", int64(c.id),
 		"mode", "standalone",
 		"role", role,
@@ -122,11 +130,32 @@ func (c *client) hello(args []string, w io.Writer) {
 	}, false))
 }
 
+// protocol is the RESP version the connection speaks, as HELLO and CLIENT
+// INFO report it.
+func (c *client) protocol() int {
+	if c.resp3 {
+		return 3
+	}
+	return 2
+}
+
+// encode frames a reply for this connection's protocol.
+func (c *client) encode(value interface{}, isSimpleString bool) []byte {
+	return core.EncodeAs(value, isSimpleString, c.resp3)
+}
+
 // clientCommand implements the CLIENT subcommands a library sends on its own:
 // ID, SETNAME and GETNAME for applications that name their connections, and
 // SETINFO, which redis-py, node-redis, ioredis and go-redis all send on every
 // connection and ignore the failure of. INFO describes this connection.
 // Listing or killing other connections is not offered.
+//
+// Neither is anything RESP3 makes possible beyond its reply types: push
+// messages, and the TRACKING and MAINT_NOTIFICATIONS subcommands built on
+// them. A subcommand this server does not have gets the error Redis gives for
+// one it does not have - Redis 8.10 answers MAINT_NOTIFICATIONS exactly so -
+// and redis-py 8, node-redis 6 and go-redis 9, which send it while connecting
+// over RESP3, carry on without it.
 func (c *client) clientCommand(args []string, w io.Writer) {
 	if len(args) == 0 {
 		responseError(errors.New("ERR wrong number of arguments for 'client' command"), w)
@@ -143,7 +172,7 @@ func (c *client) clientCommand(args []string, w io.Writer) {
 	switch sub {
 	case "ID":
 		if arity(1) {
-			w.Write(core.Encode(int64(c.id), false))
+			w.Write(c.encode(int64(c.id), false))
 		}
 	case "SETNAME":
 		if !arity(2) {
@@ -154,16 +183,16 @@ func (c *client) clientCommand(args []string, w io.Writer) {
 			return
 		}
 		c.name = args[1]
-		w.Write(core.Encode("OK", true))
+		w.Write(c.encode("OK", true))
 	case "GETNAME":
 		if !arity(1) {
 			return
 		}
 		if c.name == "" {
-			w.Write(core.Encode(nil, false))
+			w.Write(c.encode(nil, false))
 			return
 		}
-		w.Write(core.Encode(c.name, false))
+		w.Write(c.encode(c.name, false))
 	case "SETINFO":
 		if !arity(3) {
 			return
@@ -183,11 +212,11 @@ func (c *client) clientCommand(args []string, w io.Writer) {
 			return
 		}
 		*field = args[2]
-		w.Write(core.Encode("OK", true))
+		w.Write(c.encode("OK", true))
 	case "INFO":
 		if arity(1) {
-			w.Write(core.Encode(fmt.Sprintf("id=%d fd=%d name=%s db=0 resp=2 lib-name=%s lib-ver=%s\n",
-				c.id, c.fd, c.name, c.libName, c.libVersion), false))
+			w.Write(c.encode(core.ReplyVerbatim(fmt.Sprintf("id=%d fd=%d name=%s db=0 resp=%d lib-name=%s lib-ver=%s\n",
+				c.id, c.fd, c.name, c.protocol(), c.libName, c.libVersion)), false))
 		}
 	default:
 		responseError(fmt.Errorf("ERR unknown subcommand '%.128s'. Try CLIENT HELP.", args[0]), w)

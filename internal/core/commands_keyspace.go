@@ -99,7 +99,7 @@ func cmdKEYS(args []string) []byte {
 			}
 		})
 	})
-	return encodeWalkReply(walk, false)
+	return encodeWalkReply(walk, shapeArray)
 }
 
 // cmdMGET reads several string keys at once.
@@ -122,7 +122,7 @@ func cmdMGET(args []string) []byte {
 			return "", false
 		}
 		return obj.Value, true
-	})
+	}, shapeArray)
 }
 
 // cmdMSET writes several string keys at once.

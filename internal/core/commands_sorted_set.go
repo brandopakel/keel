@@ -228,11 +228,11 @@ func cmdZRANK(args []string) []byte {
 	}
 	zs, ok := zsetFor(args[0])
 	if !ok {
-		return constant.RespNil
+		return nullReply()
 	}
 	rank, ok := zs.Rank(args[1], false)
 	if !ok {
-		return constant.RespNil
+		return nullReply()
 	}
 	return Encode(rank, false)
 }
@@ -256,21 +256,21 @@ func cmdZREM(args []string) []byte {
 	return Encode(removed, false)
 }
 
-// cmdZSCORE answers a member's score as a bulk string, or nil when the member
-// or the key is absent.
+// cmdZSCORE answers a member's score - a double in RESP3, a bulk string in
+// RESP2 - or nil when the member or the key is absent.
 func cmdZSCORE(args []string) []byte {
 	if len(args) != 2 {
 		return Encode(errors.New("ERR wrong number of arguments for 'ZSCORE' command"), false)
 	}
 	zs, ok := zsetFor(args[0])
 	if !ok {
-		return constant.RespNil
+		return nullReply()
 	}
 	score, ok := zs.Score(args[1])
 	if !ok {
-		return constant.RespNil
+		return nullReply()
 	}
-	return Encode(formatZScore(score), false)
+	return Encode(ReplyDouble(formatZScore(score)), false)
 }
 
 func cmdZCARD(args []string) []byte {
@@ -309,5 +309,9 @@ func cmdZRANGE(args []string) []byte {
 	if !ok {
 		return constant.RespEmptyArray
 	}
-	return scoredReply(func(yield func(string, float64) bool) { zs.VisitRangeByRank(start, stop, reverse, yield) }, withScores)
+	walk := func(yield func(string, float64) bool) { zs.VisitRangeByRank(start, stop, reverse, yield) }
+	if withScores && replyRESP3 {
+		return scoredReply3(walk, true)
+	}
+	return scoredReply(walk, withScores)
 }

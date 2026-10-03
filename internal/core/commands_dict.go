@@ -37,7 +37,7 @@ func cmdSETNX(args []string) []byte {
 	switch reply := cmdSET([]string{args[0], args[1], "NX"}); {
 	case bytes.Equal(reply, constant.RespOk):
 		return constant.RespOne
-	case bytes.Equal(reply, constant.RespNil):
+	case bytes.Equal(reply, nullReply()):
 		return constant.RespZero
 	default:
 		return reply
@@ -127,7 +127,7 @@ func cmdSET(args []string) []byte {
 	obj := dictStore.Get(key)
 	reply := constant.RespOk
 	if get {
-		reply = constant.RespNil
+		reply = nullReply()
 		if obj != nil {
 			reply = encodeBoundedString(obj.Value)
 			if len(reply) > 0 && reply[0] == '-' {
@@ -141,7 +141,7 @@ func cmdSET(args []string) []byte {
 		if get {
 			return reply
 		}
-		return constant.RespNil
+		return nullReply()
 	}
 	if keep && exists {
 		// KEEPTTL keeps the key's expiry, and the key is the name: a hash
@@ -199,7 +199,7 @@ func cmdGET(args []string) []byte {
 	// Get reaps a key whose TTL has passed, so what comes back is live.
 	obj := dictStore.Get(args[0])
 	if obj == nil {
-		return constant.RespNil
+		return nullReply()
 	}
 	return encodeBoundedString(obj.Value)
 }

@@ -9,7 +9,8 @@ import (
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
-// Cuckoo filter commands, following the shape RedisBloom uses.
+// Cuckoo filter commands, following the shape RedisBloom uses, including its
+// RESP3 one: booleans for yes-or-no answers and a map for CF.INFO.
 //
 // The reason to pick one over the Bloom filter next door is deletion: a Bloom
 // filter shares bits between items, so clearing them for one item would erase
@@ -58,7 +59,7 @@ func cmdCFADD(args []string) []byte {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'CF.ADD' command"), false)
 	}
 	if cfFor(args[0]).Insert(args[1]) {
-		return constant.RespOne
+		return boolReply(true)
 	}
 	// The filter is too full to take another fingerprint. Unlike a Bloom
 	// filter, which degrades by growing less accurate, a cuckoo filter refuses.
@@ -76,10 +77,10 @@ func cmdCFADDNX(args []string) []byte {
 	}
 	cf := cfFor(args[0])
 	if cf.Lookup(args[1]) {
-		return constant.RespZero
+		return boolReply(false)
 	}
 	if cf.Insert(args[1]) {
-		return constant.RespOne
+		return boolReply(true)
 	}
 	return Encode(errors.New("CF: filter is full"), false)
 }
@@ -89,10 +90,7 @@ func cmdCFEXISTS(args []string) []byte {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'CF.EXISTS' command"), false)
 	}
 	cf, exist := cfStore.Get(args[0])
-	if !exist || !cf.Lookup(args[1]) {
-		return constant.RespZero
-	}
-	return constant.RespOne
+	return boolReply(exist && cf.Lookup(args[1]))
 }
 
 func cmdCFMEXISTS(args []string) []byte {
@@ -100,13 +98,9 @@ func cmdCFMEXISTS(args []string) []byte {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'CF.MEXISTS' command"), false)
 	}
 	cf, exist := cfStore.Get(args[0])
-	var res []string
+	res := make([]interface{}, 0, len(args)-1)
 	for _, item := range args[1:] {
-		if exist && cf.Lookup(item) {
-			res = append(res, "1")
-		} else {
-			res = append(res, "0")
-		}
+		res = append(res, replyTextBool(exist && cf.Lookup(item)))
 	}
 	return Encode(res, false)
 }
@@ -116,10 +110,7 @@ func cmdCFDEL(args []string) []byte {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'CF.DEL' command"), false)
 	}
 	cf, exist := cfStore.Get(args[0])
-	if !exist || !cf.Delete(args[1]) {
-		return constant.RespZero
-	}
-	return constant.RespOne
+	return boolReply(exist && cf.Delete(args[1]))
 }
 
 func cmdCFCOUNT(args []string) []byte {
@@ -142,14 +133,15 @@ func cmdCFINFO(args []string) []byte {
 	if !exist {
 		return Encode(errors.New(fmt.Sprintf("Cuckoo filter with key '%s' does not exist", key)), false)
 	}
-	res := []string{
-		"Capacity", fmt.Sprintf("%d", cf.Capacity()),
-		"Size", fmt.Sprintf("%d", cf.MemUsage()),
-		"Number of buckets", fmt.Sprintf("%d", cf.NumBuckets()),
-		"Bucket size", fmt.Sprintf("%d", data_structure.CuckooBucketSize),
-		"Max iterations", fmt.Sprintf("%d", data_structure.CuckooMaxKicks),
-		"Number of items inserted", fmt.Sprintf("%d", cf.Inserted()),
-		"Number of items deleted", fmt.Sprintf("%d", cf.Deleted()),
-	}
-	return Encode(res, false)
+	// RESP2 has always sent these numbers as strings here; RESP3 sends the
+	// integers RedisBloom does.
+	return infoReply([]infoEntry{
+		{"Capacity", int64(cf.Capacity())},
+		{"Size", int64(cf.MemUsage())},
+		{"Number of buckets", int64(cf.NumBuckets())},
+		{"Bucket size", int64(data_structure.CuckooBucketSize)},
+		{"Max iterations", int64(data_structure.CuckooMaxKicks)},
+		{"Number of items inserted", int64(cf.Inserted())},
+		{"Number of items deleted", int64(cf.Deleted())},
+	}, true)
 }

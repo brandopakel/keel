@@ -80,11 +80,11 @@ func cmdHGET(args []string) []byte {
 	}
 	h, ok := hashFor(args[0])
 	if !ok {
-		return constant.RespNil
+		return nullReply()
 	}
 	value, has := h.Get(args[1])
 	if !has {
-		return constant.RespNil
+		return nullReply()
 	}
 	return encodeBoundedString(value)
 }
@@ -100,7 +100,7 @@ func cmdHMGET(args []string) []byte {
 			return "", false
 		}
 		return h.Get(args[i+1])
-	})
+	}, shapeArray)
 }
 
 func cmdHDEL(args []string) []byte {
@@ -162,7 +162,8 @@ func cmdHVALS(args []string) []byte {
 	return hashReply(h, false, true)
 }
 
-// cmdHGETALL answers a flat array of field, value, field, value.
+// cmdHGETALL answers a map of field to value: in RESP2 a flat array of field,
+// value, field, value.
 //
 // Flat rather than nested because that is what RESP2 clients decode into a map,
 // and it is what Redis sends.
@@ -172,7 +173,7 @@ func cmdHGETALL(args []string) []byte {
 	}
 	h, ok := hashFor(args[0])
 	if !ok {
-		return constant.RespEmptyArray
+		return emptyMapReply()
 	}
 
 	return hashReply(h, true, true)

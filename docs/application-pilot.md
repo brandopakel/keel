@@ -225,7 +225,10 @@ first request. The newest default clients ask for RESP3 with `HELLO 3`:
 | redigo 1.9.3, redis-rb 5, node-redis 5.12.1, redis-py 7.4.1 | never send `HELLO` | yes |
 
 Replying `NOPROTO` would not help node-redis 6 or redis-py 8, which have no
-fallback path at all. Separately, Keel's `INFO` has no `redis_version`; keyv
+fallback path at all. Keel has since answered `HELLO 3` with RESP3 (see
+[RESP3](resp3.md)): both connect unmodified with their default settings in
+`bench/clients/defaults`. The trials below predate that, and none was re-run
+against it. Separately, Keel's `INFO` has no `redis_version`; keyv
 tolerates that, but Rails' RedisCacheStore would raise on every counter with an
 expiry.
 
@@ -279,5 +282,6 @@ kept.
 - Gitea features configured to use Redis Lua scripts or Pub/Sub, and Gitea's
   cluster mode.
 - Long-running behaviour: the pilot runs for minutes, not days.
-- Clients that require RESP3; rack-attack and Rails' RedisCacheStore, which need
-  a Ruby toolchain this machine lacks.
+- Clients that require RESP3, which the build trialled here did not speak;
+  rack-attack and Rails' RedisCacheStore, which need a Ruby toolchain this
+  machine lacks.

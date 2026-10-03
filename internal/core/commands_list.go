@@ -80,11 +80,12 @@ func pop(args []string, front bool, name string) []byte {
 		// one belongs here depends on what the command was going to answer.
 		// Checked against Redis 8.10.1, which sends *-1 for the counted form
 		// and $-1 for the bare one; sending $-1 for both is a type error in any
-		// client that decodes the counted reply into a list.
+		// client that decodes the counted reply into a list. RESP3 has one
+		// null for both.
 		if counted {
-			return constant.RespNilArray
+			return nullArrayReply()
 		}
-		return constant.RespNil
+		return nullReply()
 	}
 
 	count = min(count, l.Len())
@@ -100,7 +101,11 @@ func pop(args []string, front bool, name string) []byte {
 			}
 		}
 	})
-	out := encodeWalkReply(walk, !counted)
+	shape := shapeArray
+	if !counted {
+		shape = shapeOne
+	}
+	out := encodeWalkReply(walk, shape)
 	if len(out) > 0 && out[0] == '-' {
 		return out
 	}
@@ -140,11 +145,11 @@ func cmdLINDEX(args []string) []byte {
 
 	l, ok := listFor(args[0])
 	if !ok {
-		return constant.RespNil
+		return nullReply()
 	}
 	value, found := l.Index(index)
 	if !found {
-		return constant.RespNil
+		return nullReply()
 	}
 	return encodeBoundedString(value)
 }
@@ -190,7 +195,7 @@ func cmdLRANGE(args []string) []byte {
 	if !ok {
 		return constant.RespEmptyArray
 	}
-	return encodeWalkReply(func(yield func(string) bool) { l.VisitRange(start, stop, yield) }, false)
+	return encodeWalkReply(func(yield func(string) bool) { l.VisitRange(start, stop, yield) }, shapeArray)
 }
 
 func cmdLTRIM(args []string) []byte {

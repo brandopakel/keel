@@ -7,7 +7,11 @@ could already have removed the members before the server refused its output.
 
 Hash, list and sorted-set visitors now traverse without materializing arrays.
 HGETALL/HKEYS/HVALS, LRANGE and rank/score ranges count exact RESP framing before
-allocating one output buffer. SMEMBERS and distinct SRANDMEMBER use indexed
+allocating one output buffer. The framing counted is the connection's protocol.
+Under RESP3, HGETALL has a map header, SMEMBERS and SPOP with a count have a set
+header, and scores are doubles nested in `[member, score]` pairs, each with a
+header of its own; a test sizes a ZRANGE reply ten bytes under the limit in
+RESP2 and checks that its RESP3 form, 55 bytes larger, is refused. SMEMBERS and distinct SRANDMEMBER use indexed
 members. LPOP/RPOP, SPOP and ZPOPMIN/ZPOPMAX admit the reply before removal.
 Random distinct draws can reorder set positions, so they invalidate active
 rewrite cursors even when admission fails; logical membership remains intact.

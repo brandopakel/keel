@@ -145,6 +145,7 @@ func TestTransactionControlCommands(t *testing.T) {
 type fakeConnection struct{ answered []string }
 
 func (f *fakeConnection) ConnectionArity(name string) (int, bool) { return -2, name == "AUTH" }
+func (f *fakeConnection) RESP3() bool                             { return false }
 func (f *fakeConnection) AnswerConnection(cmd *Command, w io.ReadWriter) {
 	f.answered = append(f.answered, cmd.Args[0])
 	if cmd.Args[0] != "silent" {

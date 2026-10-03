@@ -28,11 +28,11 @@
       "tx": "ok"
     },
     "node-redis 6.2.1": {
-      "close": "fail",
-      "default": "fail",
-      "named": "fail",
-      "pipeline": "fail",
-      "tx": "fail"
+      "close": "ok",
+      "default": "ok",
+      "named": "ok",
+      "pipeline": "ok",
+      "tx": "ok"
     },
     "redigo v1.9.3": {
       "default": "ok",
@@ -48,11 +48,11 @@
       "tx": "ok"
     },
     "redis-py 8.1.0": {
-      "close": "fail",
-      "default": "fail",
-      "named": "fail",
-      "pipeline": "fail",
-      "tx": "fail"
+      "close": "ok",
+      "default": "ok",
+      "named": "ok",
+      "pipeline": "ok",
+      "tx": "ok"
     }
   },
   "keel-noauth": {
@@ -84,11 +84,11 @@
       "tx": "ok"
     },
     "node-redis 6.2.1": {
-      "close": "fail",
-      "default": "fail",
-      "named": "fail",
-      "pipeline": "fail",
-      "tx": "fail"
+      "close": "ok",
+      "default": "ok",
+      "named": "ok",
+      "pipeline": "ok",
+      "tx": "ok"
     },
     "redigo v1.9.3": {
       "default": "ok",
@@ -104,11 +104,11 @@
       "tx": "ok"
     },
     "redis-py 8.1.0": {
-      "close": "fail",
-      "default": "fail",
-      "named": "fail",
-      "pipeline": "fail",
-      "tx": "fail"
+      "close": "ok",
+      "default": "ok",
+      "named": "ok",
+      "pipeline": "ok",
+      "tx": "ok"
     }
   }
 }

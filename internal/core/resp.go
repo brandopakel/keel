@@ -7,8 +7,6 @@ import (
 	"math"
 	"strconv"
 	"strings"
-
-	"github.com/brandopakel/keel/internal/constant"
 )
 
 // RESP, the Redis serialisation protocol, as a client speaks it to a server.
@@ -24,6 +22,13 @@ import (
 //
 // A command is an array of bulk strings. Everything a client sends is read by
 // ParseCmd, and everything sent back is built by Encode or the append helpers.
+//
+// Those five are RESP2. A connection that negotiates RESP3 still sends
+// commands the same way, but is answered with RESP3's further types; resp3.go
+// has them, and the helpers that choose between the two. The append helpers
+// here write only what both protocols share, which is also why the log and
+// the replication feed, which are commands rather than replies, are built from
+// them alone.
 
 const CRLF = "\r\n"
 
@@ -339,10 +344,38 @@ func encodeStringArray(sa []string) []byte {
 // slices become arrays of whatever they hold. A value of a type not listed is
 // a bug in the command that produced it, and is answered as an error naming
 // the type rather than as a silent nil.
+//
+// The reply is framed for the protocol of the command running - see resp3.go.
+// Only nil and the Reply types defined there come out differently in RESP3.
 func Encode(value interface{}, isSimpleString bool) []byte {
 	switch v := value.(type) {
 	case nil:
-		return constant.RespNil
+		return nullReply()
+	case ReplyMap:
+		b := appendMapHeader(nil, len(v)/2)
+		for _, x := range v {
+			b = append(b, Encode(x, false)...)
+		}
+		return b
+	case ReplyDouble:
+		return appendDouble(make([]byte, 0, len(v)+16), string(v))
+	case ReplyBool:
+		return boolReply(bool(v))
+	case replyTextBool:
+		if replyRESP3 {
+			return boolReply(bool(v))
+		}
+		if v {
+			return encodeString("1")
+		}
+		return encodeString("0")
+	case ReplyVerbatim:
+		return appendVerbatim(make([]byte, 0, len(v)+24), string(v))
+	case infoField:
+		if replyRESP3 {
+			return appendSimpleString(make([]byte, 0, len(v)+3), string(v))
+		}
+		return encodeString(string(v))
 	case string:
 		if isSimpleString {
 			return appendSimpleString(make([]byte, 0, len(v)+3), v)

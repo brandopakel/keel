@@ -30,54 +30,67 @@ func TestLargeCollectionRepliesRejectBeforeAllocationOrRemoval(t *testing.T) {
 		{"zset-pop-min", "zset", []string{"ZPOPMIN", "large", "65"}},
 		{"zset-pop-max", "zset", []string{"ZPOPMAX", "large", "65"}},
 	}
+	// RESP3 frames these replies differently - a map, a set, nested pairs and
+	// doubles - and is sized and refused by its own framing.
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			ResetStores()
-			t.Cleanup(ResetStores)
-			h, l, s, z := data_structure.NewHash(), data_structure.NewList(), data_structure.NewSet(), data_structure.CreateZSet()
-			value := strings.Repeat("x", 1<<20)
-			for i := 0; i < 65; i++ {
-				v := fmt.Sprintf("%03d", i) + value
-				switch tc.kind {
-				case "hash":
-					h.Set(v, v)
-				case "list":
-					l.PushBack(v)
-				case "set":
-					s.Add(v)
-				case "zset":
-					z.Add(float64(i), v, 0)
-				}
+		for _, resp3 := range []bool{false, true} {
+			name := tc.name
+			if resp3 {
+				name += "/resp3"
 			}
-			switch tc.kind {
-			case "hash":
-				hashStore.Put("large", h)
-			case "list":
-				listStore.Put("large", l)
-			case "set":
-				setStore.Put("large", s)
-			case "zset":
-				zsetStore.Put("large", z)
-			}
-			runtime.GC()
-			var before, after runtime.MemStats
-			runtime.ReadMemStats(&before)
-			got := rawReply(t, tc.args[0], tc.args[1:]...)
-			runtime.ReadMemStats(&after)
-			require.Less(t, len(got), 1024, "oversized payload must not be built")
-			require.Equal(t, replyTooLarge, got)
-			require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(256<<10))
-			switch tc.kind {
-			case "hash":
-				require.Equal(t, 65, h.Len())
-			case "list":
-				require.Equal(t, 65, l.Len())
-			case "set":
-				require.Equal(t, 65, s.Len())
-			case "zset":
-				require.Equal(t, 65, z.Len())
-			}
-		})
+			t.Run(name, func(t *testing.T) { largeCollectionReplyRejects(t, tc.kind, tc.args, resp3) })
+		}
+	}
+}
+
+// largeCollectionReplyRejects builds a 65 MiB collection of the given kind
+// at "large", runs args against it in the given protocol, and requires the
+// refusal to come before the payload is built or anything is removed.
+func largeCollectionReplyRejects(t *testing.T, kind string, args []string, resp3 bool) {
+	ResetStores()
+	t.Cleanup(ResetStores)
+	h, l, s, z := data_structure.NewHash(), data_structure.NewList(), data_structure.NewSet(), data_structure.CreateZSet()
+	value := strings.Repeat("x", 1<<20)
+	for i := 0; i < 65; i++ {
+		v := fmt.Sprintf("%03d", i) + value
+		switch kind {
+		case "hash":
+			h.Set(v, v)
+		case "list":
+			l.PushBack(v)
+		case "set":
+			s.Add(v)
+		case "zset":
+			z.Add(float64(i), v, 0)
+		}
+	}
+	switch kind {
+	case "hash":
+		hashStore.Put("large", h)
+	case "list":
+		listStore.Put("large", l)
+	case "set":
+		setStore.Put("large", s)
+	case "zset":
+		zsetStore.Put("large", z)
+	}
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	got := rawReplyAs(t, resp3, args[0], args[1:]...)
+	runtime.ReadMemStats(&after)
+	require.Less(t, len(got), 1024, "oversized payload must not be built")
+	require.Equal(t, replyTooLarge, got)
+	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(256<<10))
+	switch kind {
+	case "hash":
+		require.Equal(t, 65, h.Len())
+	case "list":
+		require.Equal(t, 65, l.Len())
+	case "set":
+		require.Equal(t, 65, s.Len())
+	case "zset":
+		require.Equal(t, 65, z.Len())
 	}
 }
 

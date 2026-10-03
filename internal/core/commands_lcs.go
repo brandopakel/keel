@@ -82,18 +82,15 @@ func cmdLCS(args []string) []byte {
 		return Encode(int64(data_structure.LCSLen(a, b)), false)
 	}
 
-	// Reversed copies of both strings, four rows, pair/run slice growth, the
-	// subsequence and encoded output coexist. IDX also builds nested arrays.
+	// The checkpointed rows, pair/run slice growth, the subsequence and the
+	// encoded output coexist. IDX also builds nested arrays.
 	perByte := 128
 	if wantIdx {
 		perByte = 1024
 	}
 	shorter := min(len(a), len(b))
 	maxInt := int(^uint(0) >> 1)
-	if len(a) > (maxInt-16384)/4 || len(b) > (maxInt-16384-4*len(a))/4 {
-		return allocationPressure
-	}
-	base := 4*(len(a)+len(b)) + 16384
+	base := data_structure.LCSWorkspaceBytes(len(a), len(b)) + 16384
 	if shorter == 0 {
 		base = 64
 	}
@@ -125,8 +122,9 @@ func cmdLCS(args []string) []byte {
 
 	// MINMATCHLEN filters which ranges are listed but not the reported length,
 	// which stays the length of the whole subsequence. Redis does the same: the
-	// filter is about what is worth looking at, not about what was found.
-	return Encode([]interface{}{"matches", out, "len", len(seq)}, false)
+	// filter is about what is worth looking at, not about what was found. The
+	// two are a map, flattened in RESP2.
+	return Encode(ReplyMap{"matches", out, "len", len(seq)}, false)
 }
 
 // lcsValue reads a key as a string, treating a missing key as empty.

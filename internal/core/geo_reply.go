@@ -141,8 +141,10 @@ func geoPointReplySize(p data_structure.GeoPoint, s *geoSearch) (int, bool) {
 			return 0, false
 		}
 		size += 4
+		// Coordinates are doubles in RESP3; the distance above stays a bulk
+		// string in both protocols, as Redis sends it.
 		for _, v := range [2]float64{p.Longitude, p.Latitude} {
-			size, fits = addBulkSize(size, len(strconv.AppendFloat(scratch[:0], v, 'f', -1, 64)))
+			size, fits = addDoubleSize(size, len(strconv.AppendFloat(scratch[:0], v, 'f', -1, 64)))
 			if !fits {
 				return 0, false
 			}
@@ -185,8 +187,8 @@ func appendGeoPoint(dst []byte, p data_structure.GeoPoint, s *geoSearch) []byte 
 	}
 	if s.withCoord {
 		dst = appendArrayHeader(dst, 2)
-		dst = appendGeoBulk(dst, strconv.AppendFloat(scratch[:0], p.Longitude, 'f', -1, 64))
-		dst = appendGeoBulk(dst, strconv.AppendFloat(scratch[:0], p.Latitude, 'f', -1, 64))
+		dst = appendDouble(dst, strconv.AppendFloat(scratch[:0], p.Longitude, 'f', -1, 64))
+		dst = appendDouble(dst, strconv.AppendFloat(scratch[:0], p.Latitude, 'f', -1, 64))
 	}
 	return dst
 }

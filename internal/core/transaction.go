@@ -184,6 +184,9 @@ type Connection interface {
 	ConnectionArity(name string) (int, bool)
 	// AnswerConnection runs one such command and writes its reply.
 	AnswerConnection(cmd *Command, w io.ReadWriter)
+	// RESP3 reports whether the connection speaks RESP3 at this moment, which
+	// a HELLO run earlier in the same EXEC may have just changed.
+	RESP3() bool
 }
 
 // answers reports whether conn, which may be nil, answers name itself.
@@ -414,6 +417,10 @@ func (tx *Transaction) exec(w io.Writer, conn Connection) error {
 			conn.AnswerConnection(cmd, sink)
 			return nil
 		}
+		// Each reply is framed in the protocol the connection has when the
+		// command runs, not when it was queued: Redis runs a queued HELLO in
+		// its place, and frames every reply after it in the new protocol.
+		cmd.RESP3 = conn != nil && conn.RESP3()
 		return EvalAndResponse(cmd, sink)
 	}
 	runTransaction(tx.commands, run, func(i int, reply []byte, err error) {

@@ -134,7 +134,10 @@ state against Redis, alone and inside MULTI/EXEC/DISCARD blocks that include
 queue-time refusals and nested MULTI. It normalizes unordered collections and
 compares errors by class, not wording, including errors inside an EXEC reply. It includes binary strings and integer boundaries; it does
 not claim cross-type SET equivalence, identical clocks or all Redis commands.
-Every seed and typed command trace is retained for reproduction.
+Every seed and typed command trace is retained for reproduction. With
+`--protocol 3` it negotiates `HELLO 3` on both servers and compares RESP3
+replies with their types, over the wider command surface described in
+[RESP3](resp3.md#validation); CI runs both modes.
 
 Operational checks default to both `v1-async` and `v2-concurrent` modes; select
 one with `--mode`. They cover each eviction policy under key/byte limits, replica

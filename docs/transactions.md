@@ -48,7 +48,10 @@ runs in its place at `EXEC`:
   transaction, so `MULTI` does not bypass `AUTH`. A failed `AUTH` inside `EXEC`
   is a `WRONGPASS` element; the commands queued while the connection was
   authenticated still run, and the connection is unauthenticated afterwards, as
-  after a failed `AUTH` outside a transaction.
+  after a failed `AUTH` outside a transaction. A queued `HELLO 3` or `HELLO 2`
+  switches the protocol at its place in `EXEC`, so the replies after it in the
+  `EXEC` array are in the new protocol, as in Redis; see
+  [RESP3](resp3.md#transactions).
 - `QUIT` is never queued: it answers `+OK` and closes the connection at once,
   which discards the transaction, as in Redis.
 - `SELECT 0`, `ECHO`, `SETNX` and `UNLINK` are ordinary commands and are queued.

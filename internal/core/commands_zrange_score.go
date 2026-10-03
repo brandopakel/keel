@@ -74,9 +74,13 @@ func scoreRange(args []string, reverse bool) []byte {
 	if !ok {
 		return constant.RespEmptyArray
 	}
-	return scoredReply(func(yield func(string, float64) bool) {
+	walk := func(yield func(string, float64) bool) {
 		z.VisitRangeByScore(min, max, minEx, maxEx, offset, count, reverse, yield)
-	}, withScores)
+	}
+	if withScores && replyRESP3 {
+		return scoredReply3(walk, true)
+	}
+	return scoredReply(walk, withScores)
 }
 
 func cmdZINCRBY(args []string) []byte {
@@ -100,7 +104,7 @@ func cmdZINCRBY(args []string) []byte {
 	zaddApply(args[0], []float64{score}, []string{args[2]}, 0)
 	// Canonical commands keep the log readable by older Keel versions.
 	aofRecord("ZADD", args[0], formatZScore(score), args[2])
-	return Encode(formatZScore(score), false)
+	return Encode(ReplyDouble(formatZScore(score)), false)
 }
 
 func cmdZPOPMIN(args []string) []byte { return zpop(args, false) }
@@ -128,7 +132,14 @@ func zpop(args []string, reverse bool) []byte {
 	if refusal := reserveRemoval("ZREM", args[0], count, names); refusal != nil {
 		return refusal
 	}
-	out := scoredReply(walk, true)
+	// Given a count, RESP3 nests each member with its score; without one the
+	// single pair stays flat, as it does in Redis.
+	var out []byte
+	if replyRESP3 {
+		out = scoredReply3(walk, len(args) == 2)
+	} else {
+		out = scoredReply(walk, true)
+	}
 	if len(out) > 0 && out[0] == '-' {
 		return out
 	}
