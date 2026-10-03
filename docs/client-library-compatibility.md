@@ -125,3 +125,32 @@ python3 bench/clients/defaults/run.py --bin /tmp/keel --go-probe /tmp/keel-defau
   --node-dir bench/clients/defaults/node --python /tmp/redis8/bin/python --python /tmp/redis5/bin/python \
   --redis-server "$(command -v redis-server)" --out dist/client-defaults
 ```
+
+## Bloom and cuckoo filter helpers
+
+Libraries with RedisBloom helpers decode `BF.*` and `CF.*` replies as
+RedisBloom sends them. redis-py's `cf().info()`, for example, reads named
+fields from `CF.INFO`. Keel's filter commands now send RedisBloom's replies in
+both protocols. The [RESP3 notes](resp3.md#the-probabilistic-commands) list
+what changed and the differences that remain.
+
+On October 3, 2026, redis-py 8.1.0's `bf()` and `cf()` helpers ran the same
+session over `protocol=2` and `protocol=3` against Keel and against Redis
+8.10.1 with RedisBloom 8.10.1. On develop at `6567ca7`, eight calls answered
+differently in RESP2 and seven in RESP3:
+
+- `cf().info()` raised `KeyError: 'Number of filters'` in RESP2. In RESP3 it
+  returned Keel's own fields.
+- `cf().mexists()` returned `[b'1', b'0']` in RESP2.
+- `cf().delete()` of a missing key returned `0`/`False`, not `Not found`.
+- A second `cf().reserve()` raised `CF: key already exists`, not `item exists`.
+- `cf().info()` of a missing key raised Keel's own message.
+- `bf().reserve(..., noScale=True)` was refused.
+
+With this change every call answered the same on both servers, in both
+protocols. The info fields that describe memory and cuckoo geometry were left
+out of the comparison. The one exception was `bf().insert()`, because Keel
+has no `BF.INSERT`. Both sets of results are in
+`bench/results/redisbloom-parity-2026-10-03.json.gz`. This was a local check,
+not a CI job. `scripts/redisbloom-parity.py`, which CI runs, compares the
+commands themselves byte for byte.

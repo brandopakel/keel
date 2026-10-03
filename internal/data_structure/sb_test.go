@@ -30,7 +30,8 @@ func TestSBChainStartsWithOneFilter(t *testing.T) {
 	assert.Nil(t, CreateSBChain(10, 0, 2))
 	assert.Nil(t, CreateSBChain(10, 1, 2))
 	assert.Nil(t, CreateSBChain(10, math.NaN(), 2), "NaN is not a rate, and compares false against the bounds")
-	assert.Nil(t, CreateSBChain(10, 0.01, 0), "a chain that grew by nothing would grow an empty filter")
+	assert.True(t, CreateSBChain(10, 0.01, 0).NonScaling(), "an expansion of 0 is a chain that does not grow")
+	assert.False(t, sb.NonScaling())
 	assert.Nil(t, CreateSBChain(1<<40, 0.01, 2), "a first filter past the per-key cap is refused")
 	assert.NotNil(t, CreateSBChain(100000000, 0.01, 2), "a hundred million items at one percent fits under it")
 }
@@ -171,4 +172,47 @@ func TestSBChainFalsePositivesStayBounded(t *testing.T) {
 		}
 	}
 	assert.Less(t, float64(hits)/probes, 0.02*1.5, "%d filters", sb.Filters())
+}
+
+// TestSBChainThatDoesNotGrowRefusesWhenFull is RedisBloom's NONSCALING: the
+// one filter takes what it was sized for, a new item after that is refused
+// with RedisBloom's words, an item already there is still answered, and the
+// chain survives a dump unchanged.
+func TestSBChainThatDoesNotGrowRefusesWhenFull(t *testing.T) {
+	sb := CreateSBChain(3, 0.0001, 0)
+	for _, item := range []string{"a", "b", "c"} {
+		added, err := sb.Add(item)
+		assert.NoError(t, err)
+		assert.True(t, added, item)
+	}
+	added, err := sb.Add("d")
+	assert.False(t, added)
+	assert.Equal(t, ErrNonScalingFull, err)
+	assert.Equal(t, "ERR non scaling filter is full", err.Error())
+	added, err = sb.Add("a")
+	assert.NoError(t, err, "an item it holds is not a new one")
+	assert.False(t, added)
+	assert.Equal(t, 1, sb.Filters())
+	assert.EqualValues(t, 3, sb.Count())
+	assert.False(t, sb.Exists("d"))
+
+	back, err := UnmarshalSBChain(sb.Marshal())
+	assert.NoError(t, err)
+	assert.True(t, back.NonScaling())
+	assert.Equal(t, sb.Marshal(), back.Marshal())
+	_, err = back.Add("d")
+	assert.Equal(t, ErrNonScalingFull, err)
+}
+
+// TestUnmarshalSBChainRefusesAGrownChainThatDoesNotGrow: a chain with no
+// growth factor has the one filter it was reserved with, so an image claiming
+// more is not one this server wrote.
+func TestUnmarshalSBChainRefusesAGrownChainThatDoesNotGrow(t *testing.T) {
+	sb := CreateSBChain(1, 0.01, 2)
+	add(sb, "a")
+	add(sb, "b")
+	assert.Equal(t, 2, sb.Filters())
+	sb.growthFactor = 0
+	_, err := UnmarshalSBChain(sb.Marshal())
+	assert.ErrorContains(t, err, "does not grow")
 }

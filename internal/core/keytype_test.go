@@ -40,11 +40,14 @@ func TestWrongTypeCoversEveryKeyspace(t *testing.T) {
 		{"string", func() { run(t, "SET", "k", "v") }, []string{"GET", "k"}},
 		{"set", func() { run(t, "SADD", "k", "m") }, []string{"SCARD", "k"}},
 		{"zset", func() { run(t, "ZADD", "k", "1", "m") }, []string{"ZCARD", "k"}},
-		{"bloom", func() { run(t, "BF.MADD", "k", "m") }, []string{"BF.EXISTS", "k", "m"}},
+		// BF.EXISTS and CF.EXISTS answer no for another type, as RedisBloom's
+		// do - see TestBFReadsAnswerNoForAnotherType - so the filters are read
+		// with their INFO commands, which answer WRONGTYPE.
+		{"bloom", func() { run(t, "BF.MADD", "k", "m") }, []string{"BF.INFO", "k"}},
 		{"cms", func() { run(t, "CMS.INITBYDIM", "k", "100", "5") }, []string{"CMS.QUERY", "k", "m"}},
 		{"morris", func() { run(t, "MORRIS.INITBYDIM", "k", "100", "5") }, []string{"MORRIS.QUERY", "k", "m"}},
 		{"hll", func() { run(t, "PFADD", "k", "m") }, []string{"PFCOUNT", "k"}},
-		{"cuckoo", func() { run(t, "CF.ADD", "k", "m") }, []string{"CF.EXISTS", "k", "m"}},
+		{"cuckoo", func() { run(t, "CF.ADD", "k", "m") }, []string{"CF.INFO", "k"}},
 	}
 
 	for _, holder := range makers {

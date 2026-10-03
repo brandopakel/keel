@@ -87,38 +87,36 @@ type (
 	ReplyVerbatim string
 )
 
-// replyTextBool is a yes-or-no that RESP2 has always spelled as the bulk string
-// "1" or "0" here, where RedisBloom sends an integer: CF.MEXISTS. RESP3 sends
-// RedisBloom's boolean; a RESP2 client of this server keeps the strings it
-// already decodes.
-type replyTextBool bool
-
-// infoField is a field name in BF.INFO and CF.INFO. RedisBloom sends these as
-// simple strings, and RESP3 follows it; this server's RESP2 replies have always
-// sent them as bulk strings, which a RESP2 client reads the same way, and keep
-// doing so.
+// infoField is a field name in BF.INFO and CF.INFO, which RedisBloom sends as
+// a simple string in both protocols.
 type infoField string
 
-// infoEntry is one field of BF.INFO or CF.INFO.
+// infoEntry is one field of BF.INFO or CF.INFO: an integer, or nil for a value
+// the filter does not have - the expansion rate of one that does not grow.
 type infoEntry struct {
 	name  string
-	value int64
+	value interface{}
 }
 
-// infoReply answers BF.INFO and CF.INFO. RESP3 is RedisBloom's form, a map
-// from simple-string names to integers. RESP2 is what each has always sent
-// here: bulk-string names, and integers - or, for CF.INFO, textValues, the
-// same numbers as decimal bulk strings.
-func infoReply(entries []infoEntry, textValues bool) []byte {
+// infoReply answers BF.INFO and CF.INFO as RedisBloom does: a map from
+// simple-string names to integers, which RESP2 lays out as the flat array of
+// its names and values.
+func infoReply(entries []infoEntry) []byte {
 	out := make(ReplyMap, 0, 2*len(entries))
 	for _, e := range entries {
-		var value interface{} = e.value
-		if textValues && !replyRESP3 {
-			value = strconv.FormatInt(e.value, 10)
-		}
-		out = append(out, infoField(e.name), value)
+		out = append(out, infoField(e.name), e.value)
 	}
 	return Encode(out, false)
+}
+
+// infoFieldReply answers BF.INFO for the one field asked for, as RedisBloom
+// does: a map of that one name in RESP3, and in RESP2 an array holding only
+// the value, with no name.
+func infoFieldReply(e infoEntry) []byte {
+	if replyRESP3 {
+		return infoReply([]infoEntry{e})
+	}
+	return Encode([]interface{}{e.value}, false)
 }
 
 // nullReply is the null bulk string: a key, field or member that is not there.

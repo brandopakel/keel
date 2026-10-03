@@ -139,14 +139,14 @@ var commandArity = map[string]int{
 	"GEOADD": -5, "GEODIST": -4, "GEOHASH": -2,
 	"GEOSEARCH": -7, "GEOPOS": -2,
 
-	"BF.RESERVE": -4, "BF.INFO": 2, "BF.ADD": 3,
+	"BF.RESERVE": -4, "BF.INFO": -2, "BF.ADD": 3,
 	"BF.MADD": -3, "BF.EXISTS": 3, "BF.MEXISTS": -3,
 	"CMS.INITBYDIM": 4, "CMS.INITBYPROB": 4,
 	"CMS.INCRBY": -4, "CMS.QUERY": -3,
 	"MORRIS.INITBYDIM": 4, "MORRIS.INITBYPROB": 4,
 	"MORRIS.INCRBY": -4, "MORRIS.QUERY": -3, "MORRIS.INFO": 2,
 	"PFADD": -2, "PFCOUNT": -2, "PFMERGE": -2,
-	"CF.RESERVE": 3, "CF.ADD": 3, "CF.ADDNX": 3,
+	"CF.RESERVE": -3, "CF.ADD": 3, "CF.ADDNX": 3,
 	"CF.EXISTS": 3, "CF.MEXISTS": -3, "CF.DEL": 3,
 	"CF.COUNT": 3, "CF.INFO": 2,
 }
