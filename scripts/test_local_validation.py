@@ -217,7 +217,11 @@ class LocalValidationTests(unittest.TestCase):
             self.assertEqual(result.returncode, 1, result.stdout+result.stderr)
             report = json.loads(result.stdout)
             fallback = Path(report['fallback_report_path'])
-            self.assertEqual(fallback.parent, root.parent)
+            # The wrapper resolves its output root to pin its identity, so it
+            # reports real paths; macOS's temporary directory is under /var,
+            # a symlink to /private/var.
+            self.assertEqual(fallback.parent, root.parent.resolve())
+            self.assertEqual(Path(report['command'][-1]), root.resolve())
             self.assertEqual(json.loads(fallback.read_text())['status'], 'failed')
             self.assertTrue((root/'local-resource-report.json').is_dir())
 
