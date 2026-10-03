@@ -24,7 +24,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pilot_lib  # noqa: E402
 from pins import PINS  # noqa: E402
 
-ANSI = re.compile(r"\x1b\[[0-9;]*m")
+# Colour codes, with or without their escape byte: test2json drops the
+# non-printing ESC from Ginkgo's output and leaves the rest of the code.
+ANSI = re.compile(r"\x1b?\[[0-9;]*m")
 GINKGO_RAN = re.compile(r"Ran (\d+) of (\d+) Specs")
 GINKGO_RESULT = re.compile(r"(\d+) Passed \| (\d+) Failed \| (\d+) Pending \| (\d+) Skipped")
 

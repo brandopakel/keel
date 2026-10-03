@@ -505,7 +505,7 @@ def run(args):
     recorder = Recorder()
     results = {"arm": args.arm, "config": {k: getattr(args, k) for k in
                                            ("users", "repos_per_user", "issues_per_repo", "rounds",
-                                            "load_seconds", "outage_seconds", "maxmemory")},
+                                            "load_seconds", "outage_seconds", "maxmemory", "position")},
                "gitea": {"tag": PINS["gitea_app"]["tag"], "commit": PINS["gitea_app"]["commit"],
                          "binary_sha256": pilot_lib.sha256(args.gitea_bin)},
                "tools": pilot_lib.tool_versions(), "phases": {}, "info": {}, "checks": {}}
@@ -758,6 +758,7 @@ def main():
     ap.add_argument("--load-seconds", type=float, default=20, help="mixed load before the kill")
     ap.add_argument("--outage-seconds", type=float, default=3, help="how long the server stays down")
     ap.add_argument("--drain-seconds", type=float, default=90, help="how long to wait for queued deliveries")
+    ap.add_argument("--position", type=int, help="this arm's place in a sequence of arms on one machine")
     return run(ap.parse_args())
 
 

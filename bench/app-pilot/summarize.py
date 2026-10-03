@@ -76,6 +76,8 @@ def compact(summary):
         req = app.get("requests", {})
         out["app"][arm] = {
             "passed": app.get("passed"), "checks": app.get("checks"), "harness_error": app.get("harness_error"),
+            "host": (app.get("tools") or {}).get("host"), "position": (app.get("config") or {}).get("position"),
+            "server_command": (app.get("server") or {}).get("command"),
             "requests": {k: req.get(k) for k in ("total", "errors", "error_count_outside_restart", "by_phase")},
             "steady_get_latency": req.get("steady_all"),
             "endpoints": {k: v for k, v in (req.get("endpoints") or {}).items() if k in KEY_ENDPOINTS},
@@ -156,6 +158,8 @@ def markdown(summary, compact_summary):
         return value
 
     rows = [
+        ("Host (both arms should match)", lambda a: get(a, "host")),
+        ("Position on that host", lambda a: get(a, "position")),
         ("Checks passed", lambda a: get(a, "passed")),
         ("Requests / errors", lambda a: f"{get(a, 'requests', 'total')} / {get(a, 'requests', 'errors')}"),
         ("Errors outside the restart window", lambda a: get(a, "requests", "error_count_outside_restart")),
@@ -186,6 +190,9 @@ def markdown(summary, compact_summary):
                 values.append("–")
         lines.append(f"| {label} | {values[0]} | {values[1]} |")
 
+    for arm in ARMS:
+        if get(arm, "server_command"):
+            lines += ["", f"{arm} server command line: `" + " ".join(get(arm, "server_command")[1:]) + "`"]
     lines += ["", "### Latency by endpoint (ms, outside the restart window)", "",
               "| Endpoint | Keel p50 / p95 / p99 | Redis p50 / p95 / p99 |", "| --- | --- | --- |"]
     for endpoint in KEY_ENDPOINTS:

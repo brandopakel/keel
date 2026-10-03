@@ -79,16 +79,29 @@ class CacheServer:
         self.starts = []
 
     def command(self):
+        # Every setting either server would otherwise choose for itself is
+        # spelled out, with Redis's value wherever Keel offers the same knob,
+        # so the two command lines can be read against each other. Keel's own
+        # default of 20000 clients becomes Redis's 10000. Eviction is the one
+        # place Redis's default cannot be followed: Keel has no noeviction, so
+        # both evict by sampled LRU over all keys.
         if self.arm == "keel":
             return [self.binary, "-host", "127.0.0.1", "-port", str(self.port),
                     "-appendonly", "-appendfilename", str(self.directory / "keel.aof"),
-                    "-appendfsync", "everysec", "-maxmemory", self.maxmemory, "-evict", "lru"]
+                    "-appendfsync", "everysec",
+                    "-auto-aof-rewrite-percentage", "100", "-auto-aof-rewrite-min-size", "64mb",
+                    "-maxmemory", self.maxmemory, "-evict", "lru", "-lru-samples", "5",
+                    "-maxclients", "10000", "-io-threads", "1",
+                    "-active-expire-samples", "20", "-cron-interval-ms", "100"]
         # RDB snapshots are off so that the append-only file is the only
         # persistence on both arms, and a restart replays the same kind of log.
         return [self.binary, "--bind", "127.0.0.1", "--port", str(self.port),
                 "--dir", str(self.directory), "--appendonly", "yes",
-                "--appendfsync", "everysec", "--save", "", "--maxmemory", self.maxmemory,
-                "--maxmemory-policy", "allkeys-lru", "--daemonize", "no"]
+                "--appendfsync", "everysec", "--save", "",
+                "--auto-aof-rewrite-percentage", "100", "--auto-aof-rewrite-min-size", "64mb",
+                "--maxmemory", self.maxmemory, "--maxmemory-policy", "allkeys-lru",
+                "--maxmemory-samples", "5", "--maxclients", "10000", "--io-threads", "1",
+                "--active-expire-effort", "1", "--hz", "10", "--daemonize", "no"]
 
     def start(self, timeout=60):
         """Start the server and return the seconds until it answered PING."""
@@ -336,7 +349,10 @@ def tool_versions():
             return None
     return {"go": run("go", "version"), "git": run("git", "--version"),
             "python": sys.version.split()[0], "kernel": run("uname", "-sr"),
-            "runner_image": os.environ.get("ImageOS", "") + " " + os.environ.get("ImageVersion", "")}
+            "runner_image": os.environ.get("ImageOS", "") + " " + os.environ.get("ImageVersion", ""),
+            # Identifies the machine, so arms meant to share one can be shown to.
+            "host": os.uname().nodename, "runner_name": os.environ.get("RUNNER_NAME"),
+            "cpus": os.cpu_count()}
 
 
 def write_json(path, data):

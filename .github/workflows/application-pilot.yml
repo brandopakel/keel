@@ -179,17 +179,16 @@ jobs:
           path: dist/pilot/regression-${{ matrix.arm }}
           retention-days: 14
 
+  # Both arms of the application run on one runner, one after the other.
+  # Separate runners differ in CPU and disk, which would show up as a latency
+  # or memory difference between Keel and Redis that neither server caused.
+  # Which arm goes first alternates with the run number, so neither always
+  # gets the colder or the warmer machine.
   app:
-    name: Gitea web application / ${{ matrix.arm }}
+    name: Gitea web application / both arms on one runner
     needs: [servers, gitea]
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        arm: [keel, redis]
-    env:
-      ARM: ${{ matrix.arm }}
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with: { persist-credentials: false }
@@ -201,24 +200,43 @@ jobs:
         with:
           name: pilot-gitea
           path: dist/gitea
-      - name: Run Gitea on ${{ matrix.arm }}, crash the server under load and restart it
+      - name: Run Gitea on each arm, crash the server under load and restart it
         run: |
           chmod +x dist/servers/keel dist/servers/redis-server dist/gitea/gitea
-          server=dist/servers/keel; [ "$ARM" = redis ] && server=dist/servers/redis-server
-          python3 bench/app-pilot/gitea_pilot.py --arm "$ARM" --server-bin "$server" \
-            --gitea-bin dist/gitea/gitea --out "dist/pilot/app-$ARM" --maxmemory "$MAXMEMORY"
+          if [ $((GITHUB_RUN_NUMBER % 2)) -eq 0 ]; then order="keel redis"; else order="redis keel"; fi
+          echo "arm order: $order"
+          status=0 position=0
+          for arm in $order; do
+            position=$((position + 1))
+            server=dist/servers/keel; [ "$arm" = redis ] && server=dist/servers/redis-server
+            # A failing arm does not stop the other one: both results are kept.
+            python3 bench/app-pilot/gitea_pilot.py --arm "$arm" --server-bin "$server" \
+              --gitea-bin dist/gitea/gitea --out "dist/pilot/app-$arm" --maxmemory "$MAXMEMORY" \
+              --position "$position" || status=1
+          done
+          exit "$status"
       # Repositories, indexes and the database are the application's working
       # state rather than results; the logs, measurements and the server's
       # append-only file are kept.
-      - name: Keep raw results, including from a failed run
+      - name: Keep the Keel arm's raw results, including from a failed run
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: pilot-app-${{ matrix.arm }}
+          name: pilot-app-keel
           path: |
-            dist/pilot/app-${{ matrix.arm }}
-            !dist/pilot/app-${{ matrix.arm }}/gitea-work
-            !dist/pilot/app-${{ matrix.arm }}/git
+            dist/pilot/app-keel
+            !dist/pilot/app-keel/gitea-work
+            !dist/pilot/app-keel/git
+          retention-days: 14
+      - name: Keep the Redis arm's raw results, including from a failed run
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pilot-app-redis
+          path: |
+            dist/pilot/app-redis
+            !dist/pilot/app-redis/gitea-work
+            !dist/pilot/app-redis/git
           retention-days: 14
 
   summary:

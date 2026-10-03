@@ -97,11 +97,19 @@ class GoTestJson(unittest.TestCase):
             {"Action": "output", "Package": "p", "Test": "TestGinkgo",
              "Output": "SUCCESS! -- 45 Passed | 0 Failed | 0 Pending | 0 Skipped\n"},
             {"Action": "fail", "Package": "p"},
+            # test2json keeps Ginkgo's colour codes but not their ESC byte.
+            {"Action": "output", "Package": "q", "Test": "TestGinkgo",
+             "Output": "[1m[32mRan 3 of 3 Specs in 0.1 seconds[0m\n"},
+            {"Action": "output", "Package": "q", "Test": "TestGinkgo",
+             "Output": "[1m[32mSUCCESS![0m -- [32m[1m3 Passed[0m | [91m[1m0 Failed[0m | "
+                       "[33m[1m0 Pending[0m | [36m[1m0 Skipped[0m\n"},
         ])
         parsed = regression.parse_go_test_json(path)
         self.assertEqual(parsed["top_level"], {"fail": 1, "pass": 1})
         self.assertEqual(parsed["subtests"], {"fail": 1, "pass": 1})
         self.assertEqual(parsed["ginkgo"], [{"package": "p", "ran": 45, "of": 45, "passed": 45, "failed": 0,
+                                             "pending": 0, "skipped": 0},
+                                            {"package": "q", "ran": 3, "of": 3, "passed": 3, "failed": 0,
                                              "pending": 0, "skipped": 0}])
         self.assertEqual({f["test"] for f in parsed["failing"]}, {"TestA", "TestA/Round_7"})
 
