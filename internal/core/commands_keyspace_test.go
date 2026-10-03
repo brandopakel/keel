@@ -174,19 +174,17 @@ func TestMSetRefusesAnOddNumberOfArguments(t *testing.T) {
 	assert.Equal(t, int64(0), run(t, "DBSIZE"), "and writes nothing")
 }
 
-// TestMSetChecksTheTypeOfEveryKeyNotOnlyTheFirst is why MSET needed a stride
-// rather than being folded in with the commands whose every argument is a key.
-func TestMSetChecksTheTypeOfEveryKeyNotOnlyTheFirst(t *testing.T) {
+// TestMSetReplacesEveryKeyWhateverItsType, as Redis's MSET does, the second
+// key included: a stride of two is still what finds it.
+func TestMSetReplacesEveryKeyWhateverItsType(t *testing.T) {
 	ResetStores()
 	run(t, "SADD", "theset", "m")
 
-	res, _ := run(t, "MSET", "fine", "1", "theset", "2").(string)
-	assert.Contains(t, res, "WRONGTYPE",
-		"the offending key is second, and checking only the first would miss it")
-
-	assert.Equal(t, int64(0), run(t, "EXISTS", "fine"),
-		"a refused MSET writes none of its pairs, not the ones before the bad key")
-	assert.Equal(t, "set", run(t, "TYPE", "theset"))
+	assert.Equal(t, "OK", run(t, "MSET", "fine", "1", "theset", "2"))
+	assert.Equal(t, "string", run(t, "TYPE", "theset"))
+	assert.Equal(t, "2", run(t, "GET", "theset"))
+	assert.Equal(t, "1", run(t, "GET", "fine"))
+	assert.Equal(t, 2, data_structure.TotalKeys(), "the set is gone, not shadowed")
 }
 
 // TestMSetDoesNotTypeCheckItsValues is the other half of the stride being two.

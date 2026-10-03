@@ -22,7 +22,7 @@ var (
 )
 
 // SETEX/PSETEX share SET's validation and canonical SET/PEXPIREAT persistence.
-// Like SET here, they refuse a key already holding another data type.
+// Like SET, they replace a key whatever type held it.
 func cmdSETEX(args []string) []byte  { return setWithTTL(args, "EX") }
 func cmdPSETEX(args []string) []byte { return setWithTTL(args, "PX") }
 
@@ -116,6 +116,14 @@ func cmdSET(args []string) []byte {
 		return Encode(errSyntax, false)
 	}
 	key, value := args[0], args[1]
+	// A name another type holds is a key that exists, so NX leaves it and XX
+	// replaces it, and GET cannot read it as a string - Redis's rules, see
+	// replacingWrites.
+	other, otherHeld := data_structure.OwnerOf(key)
+	otherHeld = otherHeld && other.KeyspaceName() != dictStore.KeyspaceName()
+	if otherHeld && get {
+		return Encode(errWrongType, false)
+	}
 	obj := dictStore.Get(key)
 	reply := constant.RespOk
 	if get {
@@ -127,18 +135,30 @@ func cmdSET(args []string) []byte {
 			}
 		}
 	}
-	if (nx && obj != nil) || (xx && obj == nil) {
+	exists := obj != nil || otherHeld
+	if (nx && exists) || (xx && !exists) {
 		aof.skip = true
 		if get {
 			return reply
 		}
 		return constant.RespNil
 	}
-	if keep && obj != nil {
-		old, has := dictStore.GetExpiry(key)
+	if keep && exists {
+		// KEEPTTL keeps the key's expiry, and the key is the name: a hash
+		// replaced by a string under KEEPTTL keeps the hash's deadline.
+		var old uint64
+		var has bool
+		if obj != nil {
+			old, has = dictStore.GetExpiry(key)
+		} else {
+			old, has = other.GetExpiry(key)
+		}
 		if has {
 			at, expiry = int64(old), true
 		}
+	}
+	if otherHeld {
+		dropOtherType(other, key)
 	}
 	dictStore.Put(key, dictStore.NewObj(value))
 	aofRecord("SET", key, value)
@@ -147,6 +167,18 @@ func cmdSET(args []string) []byte {
 		aofRecord("PEXPIREAT", key, strconv.FormatInt(at, 10))
 	}
 	return reply
+}
+
+// dropOtherType deletes a key another type holds, for a write that replaces
+// it, and stages the DEL that amounts to ahead of the write's own record.
+//
+// Replay would reach the same state without the DEL, because it runs the same
+// SET. It is logged anyway for the build before this one: there SET over a
+// hash answers WRONGTYPE, a replay command that fails stops startup, and so a
+// rollback could not read a log that relied on SET replacing it.
+func dropOtherType(owner data_structure.Keyspace, key string) {
+	owner.Delete(key)
+	aofRecord("DEL", key)
 }
 
 // expiryInstant turns a positive duration in milliseconds into the instant it

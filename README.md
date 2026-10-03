@@ -60,8 +60,9 @@ Important boundaries:
   `HELLO 3` is refused with `NOPROTO`, which go-redis and ioredis answer by
   falling back to RESP2. redis-py 8 and node-redis 6 default to RESP3 and do not
   fall back: set `protocol=2` / `RESP: 2`. See [client defaults](docs/client-library-compatibility.md#default-configurations).
-- `SET` and `MSET` refuse keys of another type with `WRONGTYPE`; unlike Redis SET,
-  they do not overwrite collections. Delete explicitly when changing type.
+- `SET`, `SETEX`, `PSETEX` and `MSET` replace a key of any type, as Redis does;
+  `SET NX`/`SETNX` treat a key of any type as existing, and `SET ... GET` answers
+  `WRONGTYPE` for a non-string. Other commands refuse a key of another type.
 - `ZRANGE` does not support `BYSCORE`, `BYLEX`, or `LIMIT`. ZADD `GT`/`LT`/`INCR`
   are not implemented. Options outside the documented subset return errors.
 - Expiry belongs to the key, including hashes, lists, filters, and sketches.
@@ -224,8 +225,8 @@ In order of distance, not size.
   and [hosted validation](docs/post-alpha3-hosted-validation.md) adds Bencher execution. The
   [delivery checklist](docs/engineering-delivery.md#4-alpha-preparation-and-evidence)
   says what counts.
-- **Boundaries that stay.** No native TLS (use a proxy), `SET` refuses to overwrite a
-  collection where Redis would, and `MEMORY USAGE` measures the keyspace, not RSS.
+- **Boundaries that stay.** No native TLS (use a proxy), and `MEMORY USAGE` measures
+  the keyspace, not RSS.
 
 Keel was formerly named memkv and grew from [quangh33/memkv](https://github.com/quangh33/memkv).
 The original lineage is retained in Git history. Project code is under the [MIT license](LICENSE);

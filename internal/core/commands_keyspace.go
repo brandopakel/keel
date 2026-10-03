@@ -143,9 +143,19 @@ func cmdMSET(args []string) []byte {
 		return Encode(errors.New("ERR wrong number of arguments for 'MSET' command"), false)
 	}
 
+	replaced := false
 	for i := 0; i < len(args); i += 2 {
 		key, value := args[i], args[i+1]
+		if other, held := data_structure.OwnerOf(key); held && other.KeyspaceName() != dictStore.KeyspaceName() {
+			dropOtherType(other, key)
+			replaced = true
+		}
 		dictStore.Put(key, dictStore.NewObj(value))
+	}
+	if replaced {
+		// Staged records replace the command in the log, so once a DEL is
+		// staged the MSET has to be staged after it too.
+		aofRecord(append([]string{"MSET"}, args...)...)
 	}
 	return constant.RespOk
 }
