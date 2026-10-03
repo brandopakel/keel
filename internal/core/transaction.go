@@ -464,8 +464,8 @@ func (tx *Transaction) exec(w io.Writer, conn Connection) error {
 func runTransaction(commands []*Command, run func(*Command, io.ReadWriter) error, reply func(int, []byte, error)) {
 	aof.transaction, aof.transactionLogged = true, false
 	replicationTransaction = replicationBlock{active: true}
-	suspended := data_structure.SuspendEviction
-	data_structure.SuspendEviction = true
+	suspended := data_structure.DefaultSpace.SuspendEviction
+	data_structure.DefaultSpace.SuspendEviction = true
 	for i, cmd := range commands {
 		var sink transactionSink
 		err := run(cmd, &sink)
@@ -473,7 +473,7 @@ func runTransaction(commands []*Command, run func(*Command, io.ReadWriter) error
 	}
 	closeAOFTransaction()
 	closeReplicationTransaction()
-	data_structure.SuspendEviction = suspended
+	data_structure.DefaultSpace.SuspendEviction = suspended
 	data_structure.EnforceLimits()
 }
 

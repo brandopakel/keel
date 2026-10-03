@@ -11,6 +11,7 @@ import (
 )
 
 func TestLFUStateRoundTripsThroughOneField(t *testing.T) {
+	t.Parallel()
 	var o Obj
 	for _, decayAt := range []uint64{0, 1, 1 << 20, (1 << 56) - 1} {
 		for _, freq := range []uint8{0, 1, 5, 128, 255} {
@@ -25,13 +26,14 @@ func TestLFUStateRoundTripsThroughOneField(t *testing.T) {
 // cost is per key, so it is multiplied by the size of the keyspace: separate
 // fields would expand the typed string object beyond its three machine words.
 func TestObjStaysOneWordPerPolicyField(t *testing.T) {
+	t.Parallel()
 	assert.Equal(t, uintptr(24), unsafe.Sizeof(Obj{}),
 		"adding per-policy state must not grow the per-key object")
 }
 
 func TestNewKeysStartWithCredit(t *testing.T) {
-	withEviction(t, config.LFU, 5, 100)
-	d := newTestDict(t)
+	t.Parallel()
+	d := newTestDict(evictionLimits(config.LFU, 5, 100))
 	obj := d.NewObj("v")
 	assert.Equal(t, uint8(lfuInitVal), lfuFreqOf(obj.Access),
 		"a new key needs credit, or it is by definition the least frequently used thing present")
@@ -40,9 +42,10 @@ func TestNewKeysStartWithCredit(t *testing.T) {
 // TestCounterRiseSlowsDown is the property that lets eight bits span millions of
 // accesses: the counter is a rank, not a count.
 func TestCounterRiseSlowsDown(t *testing.T) {
-	withEviction(t, config.LFU, 5, 1000000)
-	config.LFUDecayPeriod = 0 // isolate the increment from decay
-	d := newTestDict(t)
+	t.Parallel()
+	limits := evictionLimits(config.LFU, 5, 1000000)
+	limits.LFUDecayPeriod = 0 // isolate the increment from decay
+	d := newTestDict(limits)
 
 	obj := d.NewObj("v")
 	start := lfuFreqOf(obj.Access)
@@ -50,7 +53,7 @@ func TestCounterRiseSlowsDown(t *testing.T) {
 	accessesFor := func(target uint8) int {
 		n := 0
 		for lfuFreqOf(obj.Access) < target && n < 10000000 {
-			touchLFU(&obj.Access)
+			d.space.touchLFU(&obj.Access)
 			n++
 		}
 		return n
@@ -63,40 +66,45 @@ func TestCounterRiseSlowsDown(t *testing.T) {
 }
 
 func TestCounterSaturatesRatherThanWrapping(t *testing.T) {
-	withEviction(t, config.LFU, 5, 100)
+	t.Parallel()
+	s := NewSpace(evictionLimits(config.LFU, 5, 100))
 	var o Obj
 	o.Access = packLFU(0, 255)
-	assert.Equal(t, uint8(255), lfuLogIncr(lfuFreqOf(o.Access)),
+	assert.Equal(t, uint8(255), s.lfuLogIncr(lfuFreqOf(o.Access)),
 		"the counter must saturate; wrapping would turn the hottest key into the coldest")
 }
 
 func TestDecayLowersAnIdleCounter(t *testing.T) {
-	withEviction(t, config.LFU, 5, 1000000)
-	config.LFUDecayPeriod = 100
-	d := newTestDict(t)
+	t.Parallel()
+	limits := evictionLimits(config.LFU, 5, 1000000)
+	limits.LFUDecayPeriod = 100
+	d := newTestDict(limits)
+	s := d.space
 
 	obj := d.NewObj("v")
-	obj.Access = packLFU(evictionClock, 50)
+	obj.Access = packLFU(s.clock, 50)
 
-	assert.Equal(t, uint8(50), decayedFreq(obj.Access), "no time has passed")
+	assert.Equal(t, uint8(50), s.decayedFreq(obj.Access), "no time has passed")
 
-	evictionClock += 100 * 10
-	assert.Equal(t, uint8(40), decayedFreq(obj.Access), "ten periods should cost ten points")
+	s.clock += 100 * 10
+	assert.Equal(t, uint8(40), s.decayedFreq(obj.Access), "ten periods should cost ten points")
 
-	evictionClock += 100 * 1000
-	assert.Equal(t, uint8(0), decayedFreq(obj.Access), "decay must floor at zero, not wrap")
+	s.clock += 100 * 1000
+	assert.Equal(t, uint8(0), s.decayedFreq(obj.Access), "decay must floor at zero, not wrap")
 }
 
 func TestDecayIsLazyAndDoesNotMutate(t *testing.T) {
-	withEviction(t, config.LFU, 5, 1000000)
-	config.LFUDecayPeriod = 100
-	d := newTestDict(t)
+	t.Parallel()
+	limits := evictionLimits(config.LFU, 5, 1000000)
+	limits.LFUDecayPeriod = 100
+	d := newTestDict(limits)
+	s := d.space
 	obj := d.NewObj("v")
-	obj.Access = packLFU(evictionClock, 50)
+	obj.Access = packLFU(s.clock, 50)
 	stored := obj.Access
 
-	evictionClock += 100 * 10
-	_ = decayedFreq(obj.Access)
+	s.clock += 100 * 10
+	_ = s.decayedFreq(obj.Access)
 	assert.Equal(t, stored, obj.Access,
 		"reading the decayed value must not write; decay is applied when the key is touched")
 }
@@ -105,9 +113,7 @@ func TestDecayIsLazyAndDoesNotMutate(t *testing.T) {
 // followed by a long stream of keys nobody will ask for again.
 func scanResistance(t *testing.T, strategy, limit int) float64 {
 	t.Helper()
-	withEviction(t, strategy, 5, limit)
-
-	d := newTestDict(t)
+	d := newTestDict(evictionLimits(strategy, 5, limit))
 	hot := limit / 2
 	for i := 0; i < limit; i++ {
 		d.Put("k"+strconv.Itoa(i), d.NewObj("v"))
@@ -135,6 +141,7 @@ func scanResistance(t *testing.T, strategy, limit int) float64 {
 // set to make room for data nobody will read again. Measured: LRU keeps none of
 // it.
 func TestLFUSurvivesAScanThatDestroysLRU(t *testing.T) {
+	t.Parallel()
 	lru := scanResistance(t, config.LRU, 1000)
 	lfu := scanResistance(t, config.LFU, 1000)
 
@@ -147,8 +154,8 @@ func TestLFUSurvivesAScanThatDestroysLRU(t *testing.T) {
 // starting from the initial value can never outrank them, and the cache fills
 // with history it will never serve again.
 func TestLFUFollowsAWorkingSetThatMoves(t *testing.T) {
-	withEviction(t, config.LFU, 5, 1000)
-	d := newTestDict(t)
+	t.Parallel()
+	d := newTestDict(evictionLimits(config.LFU, 5, 1000))
 
 	hammer := func(prefix string) {
 		for i := 0; i < 500; i++ {
@@ -180,8 +187,8 @@ func TestLFUFollowsAWorkingSetThatMoves(t *testing.T) {
 }
 
 func TestLFUHoldsTheDictAtTheLimit(t *testing.T) {
-	withEviction(t, config.LFU, 5, 100)
-	d := newTestDict(t)
+	t.Parallel()
+	d := newTestDict(evictionLimits(config.LFU, 5, 100))
 	for i := 0; i < 1000; i++ {
 		d.Put("k"+strconv.Itoa(i), d.NewObj("v"))
 		assert.LessOrEqual(t, d.Len(), 100)

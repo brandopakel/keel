@@ -33,16 +33,17 @@ func ResetStores() {
 	expiredKeys = 0
 	aof.recovered = nil
 
-	dictStore = data_structure.CreateDict()
-	zsetStore = data_structure.NewKeyed[*data_structure.ZSet]("zset")
-	setStore = data_structure.NewKeyed[*data_structure.Set]("set")
-	hashStore = data_structure.NewKeyed[*data_structure.Hash]("hash")
-	listStore = data_structure.NewKeyed[*data_structure.List]("list")
-	sbStore = data_structure.NewKeyed[*data_structure.SBChain]("bloom")
-	cmsStore = data_structure.NewKeyed[*data_structure.CMS]("cms")
-	morrisStore = data_structure.NewKeyed[*data_structure.Morris]("morris")
-	hllStore = data_structure.NewKeyed[*data_structure.HLL]("hll")
-	cfStore = data_structure.NewKeyed[*data_structure.CuckooFilter]("cuckoo")
+	space := data_structure.DefaultSpace
+	dictStore = data_structure.CreateDict(space)
+	zsetStore = data_structure.NewKeyed[*data_structure.ZSet](space, "zset")
+	setStore = data_structure.NewKeyed[*data_structure.Set](space, "set")
+	hashStore = data_structure.NewKeyed[*data_structure.Hash](space, "hash")
+	listStore = data_structure.NewKeyed[*data_structure.List](space, "list")
+	sbStore = data_structure.NewKeyed[*data_structure.SBChain](space, "bloom")
+	cmsStore = data_structure.NewKeyed[*data_structure.CMS](space, "cms")
+	morrisStore = data_structure.NewKeyed[*data_structure.Morris](space, "morris")
+	hllStore = data_structure.NewKeyed[*data_structure.HLL](space, "hll")
+	cfStore = data_structure.NewKeyed[*data_structure.CuckooFilter](space, "cuckoo")
 
 	data_structure.RegisterKeyspace(dictStore)
 	data_structure.RegisterKeyspace(zsetStore)
