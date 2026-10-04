@@ -37,7 +37,7 @@ func parseScoreInterval(lower, upper string) (r scoreInterval, err error) {
 	return r, nil
 }
 
-func cmdZCOUNT(args []string) []byte {
+func (e *Engine) cmdZCOUNT(args []string) []byte {
 	if len(args) != 3 {
 		return Encode(wrongArguments("ZCOUNT"), false)
 	}
@@ -45,15 +45,19 @@ func cmdZCOUNT(args []string) []byte {
 	if err != nil {
 		return Encode(err, false)
 	}
-	z, ok := zsetFor(args[0])
+	z, ok := e.zsetFor(args[0])
 	if !ok {
 		return constant.RespZero
 	}
 	return Encode(z.CountByScore(r.min, r.max, r.minEx, r.maxEx), false)
 }
 
-func cmdZRANGEBYSCORE(args []string) []byte    { return scoreRange("ZRANGEBYSCORE", args, false) }
-func cmdZREVRANGEBYSCORE(args []string) []byte { return scoreRange("ZREVRANGEBYSCORE", args, true) }
+func (e *Engine) cmdZRANGEBYSCORE(args []string) []byte {
+	return e.scoreRange("ZRANGEBYSCORE", args, false)
+}
+func (e *Engine) cmdZREVRANGEBYSCORE(args []string) []byte {
+	return e.scoreRange("ZREVRANGEBYSCORE", args, true)
+}
 
 // parseScoreRange reads ZRANGEBYSCORE's and ZREVRANGEBYSCORE's arguments in
 // Redis's order, the options before the range.
@@ -80,7 +84,7 @@ func parseScoreRange(args []string, reverse bool) (r scoreInterval, withScores b
 	return r, withScores, offset, count, err
 }
 
-func scoreRange(name string, args []string, reverse bool) []byte {
+func (e *Engine) scoreRange(name string, args []string, reverse bool) []byte {
 	if len(args) < 3 {
 		return Encode(wrongArguments(name), false)
 	}
@@ -88,12 +92,12 @@ func scoreRange(name string, args []string, reverse bool) []byte {
 	if err != nil {
 		return Encode(err, false)
 	}
-	return scoreRangeReply(args[0], r, offset, count, reverse, withScores)
+	return e.scoreRangeReply(args[0], r, offset, count, reverse, withScores)
 }
 
 // scoreRangeReply answers the members of key whose scores are within r.
-func scoreRangeReply(key string, r scoreInterval, offset, count int, reverse, withScores bool) []byte {
-	z, ok := zsetFor(key)
+func (e *Engine) scoreRangeReply(key string, r scoreInterval, offset, count int, reverse, withScores bool) []byte {
+	z, ok := e.zsetFor(key)
 	if !ok {
 		return constant.RespEmptyArray
 	}
@@ -106,7 +110,7 @@ func scoreRangeReply(key string, r scoreInterval, offset, count int, reverse, wi
 	return scoredReply(walk, withScores)
 }
 
-func cmdZINCRBY(args []string) []byte {
+func (e *Engine) cmdZINCRBY(args []string) []byte {
 	if len(args) != 3 {
 		return Encode(wrongArguments("ZINCRBY"), false)
 	}
@@ -114,7 +118,7 @@ func cmdZINCRBY(args []string) []byte {
 	if err != nil {
 		return Encode(err, false)
 	}
-	z, ok := zsetFor(args[0])
+	z, ok := e.zsetFor(args[0])
 	score := increment
 	if ok {
 		if old, present := z.Score(args[2]); present {
@@ -124,13 +128,13 @@ func cmdZINCRBY(args []string) []byte {
 	if math.IsNaN(score) {
 		return Encode(errors.New("ERR resulting score is not a number (NaN)"), false)
 	}
-	zaddApply(args[0], []float64{score}, []string{args[2]}, 0)
+	e.zaddApply(args[0], []float64{score}, []string{args[2]}, 0)
 	// Canonical commands keep the log readable by older Keel versions.
 	aofRecord("ZADD", args[0], formatZScore(score), args[2])
 	return Encode(ReplyDouble(formatZScore(score)), false)
 }
 
-func cmdZPOPMIN(args []string) []byte { return zpop("ZPOPMIN", args, false) }
+func (e *Engine) cmdZPOPMIN(args []string) []byte { return e.zpop("ZPOPMIN", args, false) }
 
 // zpopCount reads ZPOPMIN's and ZPOPMAX's optional count, refused as Redis
 // refuses it before the key is looked at.
@@ -147,13 +151,13 @@ func zpopCount(name string, args []string) (int, error) {
 	n, err := positiveCount(args[1])
 	return int(n), err
 }
-func cmdZPOPMAX(args []string) []byte { return zpop("ZPOPMAX", args, true) }
-func zpop(name string, args []string, reverse bool) []byte {
+func (e *Engine) cmdZPOPMAX(args []string) []byte { return e.zpop("ZPOPMAX", args, true) }
+func (e *Engine) zpop(name string, args []string, reverse bool) []byte {
 	count, err := zpopCount(name, args)
 	if err != nil {
 		return Encode(err, false)
 	}
-	z, ok := zsetFor(args[0])
+	z, ok := e.zsetFor(args[0])
 	if !ok || count == 0 {
 		aof.skip = true
 		return constant.RespEmptyArray
@@ -181,7 +185,7 @@ func zpop(name string, args []string, reverse bool) []byte {
 	for _, member := range record[2:] {
 		z.Remove(member)
 	}
-	zsetSettle(args[0], z)
+	e.zsetSettle(args[0], z)
 	aofRecord(record...)
 	return out
 }

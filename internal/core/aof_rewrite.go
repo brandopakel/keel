@@ -319,7 +319,7 @@ func emitRewriteKey(dst []byte, key string, reset bool) []byte {
 	if s, ok := defaultEngine.setStore.Peek(key); ok && (s.Len() > 256 || s.MemUsage() > 64<<10 || len(key) > rewriteRecordSlice) {
 		kind = "set"
 	}
-	if z, ok := zsetStore.Peek(key); ok && (z.Len() > 256 || z.MemUsage() > 64<<10 || len(key) > rewriteRecordSlice) {
+	if z, ok := defaultEngine.zsetStore.Peek(key); ok && (z.Len() > 256 || z.MemUsage() > 64<<10 || len(key) > rewriteRecordSlice) {
 		kind = "zset"
 	}
 	if h, ok := defaultEngine.hashStore.Peek(key); ok && (h.Len() > 256 || h.MemUsage() > 64<<10 || len(key) > rewriteRecordSlice) {
@@ -392,12 +392,12 @@ func emitCollectionSlice(dst []byte) []byte {
 		command, length, expiry = "SADD", s.Len(), defaultEngine.setStore.GetExpiry
 		valueAt = func(i int) (string, string) { v, _ := s.MemberAt(i); return v, "" }
 	case "zset":
-		z, ok := zsetStore.Peek(key)
+		z, ok := defaultEngine.zsetStore.Peek(key)
 		if !ok {
 			rewrite.collectionActive = false
 			return dst
 		}
-		command, length, expiry = "ZADD", z.Len(), zsetStore.GetExpiry
+		command, length, expiry = "ZADD", z.Len(), defaultEngine.zsetStore.GetExpiry
 		start := rewrite.collectionPos
 		members, scores := z.RangeByRank(start, start+255, false)
 		valueAt = func(i int) (string, string) { return members[i-start], formatScore(scores[i-start]) }
@@ -677,7 +677,7 @@ func emitValue(dst []byte, key string) []byte {
 		// RPUSH in order, so the list rebuilds left to right exactly as it is.
 		return appendCommand(dst, append([]string{"RPUSH", key}, l.All()...)...)
 	}
-	if zset, ok := zsetStore.Peek(key); ok {
+	if zset, ok := defaultEngine.zsetStore.Peek(key); ok {
 		members, scores := zset.Entries()
 		parts := make([]string, 0, 2+2*len(members))
 		parts = append(parts, "ZADD", key)

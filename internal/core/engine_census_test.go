@@ -41,8 +41,8 @@ const (
 var packageVars = map[string]string{
 	"defaultEngine": defaultInstance,
 
-	"dictStore": store, "zsetStore": store,
-	"sbStore": store, "cmsStore": store, "morrisStore": store, "hllStore": store, "cfStore": store,
+	"dictStore": store, "sbStore": store, "cmsStore": store, "morrisStore": store, "hllStore": store,
+	"cfStore": store,
 
 	"expiredKeys": maintenance, "expireCursor": maintenance,
 	"memoryCursor": maintenance, "memoryFirstPhase": maintenance,

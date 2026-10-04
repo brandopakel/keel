@@ -91,7 +91,7 @@ func replicationKeyExpiry(key string, tag byte) uint64 {
 	case dumpTagSet:
 		ks = defaultEngine.setStore
 	case dumpTagZSet:
-		ks = zsetStore
+		ks = defaultEngine.zsetStore
 	case dumpTagBloom:
 		ks = sbStore
 	case dumpTagCMS:

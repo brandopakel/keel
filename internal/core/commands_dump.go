@@ -143,7 +143,7 @@ func decodeRestorePayload(key string, tag byte, body []byte) (store func(), err 
 			}
 			zset.Add(score, parts[i+1], 0)
 		}
-		return func() { zsetStore.Put(key, zset) }, nil
+		return func() { defaultEngine.zsetStore.Put(key, zset) }, nil
 	case dumpTagBloom:
 		sb, err := data_structure.UnmarshalSBChain(body)
 		if err != nil {
