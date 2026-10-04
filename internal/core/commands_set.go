@@ -14,17 +14,17 @@ import (
 // command that takes members out goes through setSettle, which drops an emptied
 // set and otherwise re-measures it for the memory budget.
 
-func setFor(key string) (*data_structure.Set, bool) {
-	return setStore.Get(key)
+func (e *Engine) setFor(key string) (*data_structure.Set, bool) {
+	return e.setStore.Get(key)
 }
 
 // setSettle records that a set was changed in place.
-func setSettle(key string, s *data_structure.Set) {
+func (e *Engine) setSettle(key string, s *data_structure.Set) {
 	if s.Len() == 0 {
-		setStore.Delete(key)
+		e.setStore.Delete(key)
 		return
 	}
-	setStore.Resize(key)
+	e.setStore.Resize(key)
 }
 
 var (
@@ -40,43 +40,43 @@ var (
 // no server could make. Sixteen million members is past any use of the command.
 const maxRandomMemberCount = 1 << 24
 
-func cmdSADD(args []string) []byte {
+func (e *Engine) cmdSADD(args []string) []byte {
 	if len(args) < 2 {
 		return Encode(wrongArguments("SADD"), false)
 	}
 	key := args[0]
-	s, ok := setFor(key)
+	s, ok := e.setFor(key)
 	if !ok {
 		s = data_structure.NewSet()
-		setStore.Put(key, s)
+		e.setStore.Put(key, s)
 	}
 	added := s.Add(args[1:]...)
 	// Members change the set's size without going through Put, so the keyspace
 	// has to re-measure it or the memory budget keeps believing the old figure.
-	setStore.Resize(key)
+	e.setStore.Resize(key)
 	return Encode(added, false)
 }
 
-func cmdSREM(args []string) []byte {
+func (e *Engine) cmdSREM(args []string) []byte {
 	if len(args) < 2 {
 		return Encode(wrongArguments("SREM"), false)
 	}
 	key := args[0]
-	s, ok := setFor(key)
+	s, ok := e.setFor(key)
 	if !ok {
 		// Nothing to remove from, and nothing is created to say so.
 		return constant.RespZero
 	}
 	removed := s.Remove(args[1:]...)
-	setSettle(key, s)
+	e.setSettle(key, s)
 	return Encode(removed, false)
 }
 
-func cmdSCARD(args []string) []byte {
+func (e *Engine) cmdSCARD(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(wrongArguments("SCARD"), false)
 	}
-	s, ok := setFor(args[0])
+	s, ok := e.setFor(args[0])
 	if !ok {
 		return constant.RespZero
 	}
@@ -84,22 +84,22 @@ func cmdSCARD(args []string) []byte {
 }
 
 // cmdSMEMBERS answers every member, as a set.
-func cmdSMEMBERS(args []string) []byte {
+func (e *Engine) cmdSMEMBERS(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(wrongArguments("SMEMBERS"), false)
 	}
-	s, ok := setFor(args[0])
+	s, ok := e.setFor(args[0])
 	if !ok {
 		return emptySetReply()
 	}
 	return encodeLookupArray(s.Len(), s.MemberAt, shapeSet)
 }
 
-func cmdSISMEMBER(args []string) []byte {
+func (e *Engine) cmdSISMEMBER(args []string) []byte {
 	if len(args) != 2 {
 		return Encode(wrongArguments("SISMEMBER"), false)
 	}
-	s, ok := setFor(args[0])
+	s, ok := e.setFor(args[0])
 	if !ok || !s.Contains(args[1]) {
 		return constant.RespZero
 	}
@@ -107,11 +107,11 @@ func cmdSISMEMBER(args []string) []byte {
 }
 
 // cmdSMISMEMBER answers one integer per member asked about, in the order asked.
-func cmdSMISMEMBER(args []string) []byte {
+func (e *Engine) cmdSMISMEMBER(args []string) []byte {
 	if len(args) < 2 {
 		return Encode(wrongArguments("SMISMEMBER"), false)
 	}
-	s, ok := setFor(args[0])
+	s, ok := e.setFor(args[0])
 	out := make([]interface{}, 0, len(args)-1)
 	for _, member := range args[1:] {
 		if ok && s.Contains(member) {
@@ -144,7 +144,7 @@ func randomCount(args []string) (count int64, given bool, err error) {
 // as a set when a count was given - which is Redis's reply, though
 // SRANDMEMBER's with a count is an array. The count is read before the key is
 // looked up, and more than one is Redis's syntax error.
-func cmdSPOP(args []string) []byte {
+func (e *Engine) cmdSPOP(args []string) []byte {
 	if len(args) < 1 {
 		return Encode(wrongArguments("SPOP"), false)
 	}
@@ -161,7 +161,7 @@ func cmdSPOP(args []string) []byte {
 		}
 	}
 
-	s, ok := setFor(key)
+	s, ok := e.setFor(key)
 	if !ok {
 		if given {
 			return emptySetReply()
@@ -207,7 +207,7 @@ func cmdSPOP(args []string) []byte {
 		s.Remove(record[2:]...)
 		aofRecord(record...)
 	}
-	setSettle(key, s)
+	e.setSettle(key, s)
 	return out
 }
 
@@ -215,7 +215,7 @@ func cmdSPOP(args []string) []byte {
 // name this server used for it before. A positive count returns up to that
 // many distinct members; a negative one returns exactly that many, drawn
 // independently, so the same member may come back more than once.
-func cmdSRANDMEMBER(args []string) []byte {
+func (e *Engine) cmdSRANDMEMBER(args []string) []byte {
 	if len(args) < 1 {
 		return Encode(wrongArguments("SRANDMEMBER"), false)
 	}
@@ -227,7 +227,7 @@ func cmdSRANDMEMBER(args []string) []byte {
 		return Encode(err, false)
 	}
 
-	s, ok := setFor(args[0])
+	s, ok := e.setFor(args[0])
 	if !ok {
 		if given {
 			return constant.RespEmptyArray

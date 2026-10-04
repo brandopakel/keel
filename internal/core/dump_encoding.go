@@ -64,7 +64,7 @@ func planDump(key string, limit int) (dumpPlan, bool) {
 			return append(dst, obj.Value...)
 		}}, true
 	}
-	if set, ok := setStore.Peek(key); ok {
+	if set, ok := defaultEngine.setStore.Peek(key); ok {
 		return partsDumpPlan(dumpTagSet, func(yield func(string) bool) {
 			for i := 0; i < set.Len(); i++ {
 				value, _ := set.MemberAt(i)

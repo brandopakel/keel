@@ -248,7 +248,7 @@ func collectionReplyBound(key string, writtenThisRun int) int {
 	held, elements := uint64(0), 0
 	if h, ok := defaultEngine.hashStore.Peek(key); ok {
 		held, elements = h.MemUsage(), 2*h.Len()
-	} else if s, ok := setStore.Peek(key); ok {
+	} else if s, ok := defaultEngine.setStore.Peek(key); ok {
 		held, elements = s.MemUsage(), s.Len()
 	} else if l, ok := defaultEngine.listStore.Peek(key); ok {
 		held, elements = l.MemUsage(), l.Len()

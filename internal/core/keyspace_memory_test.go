@@ -33,7 +33,7 @@ func TestEveryKeyspaceIsAccounted(t *testing.T) {
 		fill func(i int)
 	}{
 		{"string", func(i int) { cmdSET([]string{"s" + strconv.Itoa(i), strings.Repeat("v", 500)}) }},
-		{"set", func(i int) { cmdSADD([]string{"set" + strconv.Itoa(i), "a", "b", "c", "d", "e"}) }},
+		{"set", func(i int) { defaultEngine.cmdSADD([]string{"set" + strconv.Itoa(i), "a", "b", "c", "d", "e"}) }},
 		{"sorted set", func(i int) { cmdZADD([]string{"z" + strconv.Itoa(i), "1", "a", "2", "b"}) }},
 		{"hyperloglog", func(i int) { cmdPFADD([]string{"h" + strconv.Itoa(i), "x"}) }},
 		{"cuckoo filter", func(i int) { cmdCFADD([]string{"c" + strconv.Itoa(i), "x"}) }},
@@ -68,7 +68,7 @@ func TestBudgetIsSharedAcrossKeyspaces(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		n := strconv.Itoa(i)
 		cmdSET([]string{"s" + n, strings.Repeat("v", 500)})
-		cmdSADD([]string{"set" + n, "a", "b", "c"})
+		defaultEngine.cmdSADD([]string{"set" + n, "a", "b", "c"})
 		cmdPFADD([]string{"h" + n, "x"})
 		cmdZADD([]string{"z" + n, "1", "a"})
 	}
@@ -107,19 +107,19 @@ func TestEvictionCrossesKeyspaces(t *testing.T) {
 func TestSetGrowthIsRemeasured(t *testing.T) {
 	withBudget(t, 0, config.LRU) // unbounded, so nothing is evicted mid-test
 
-	cmdSADD([]string{"s", "a"})
-	small := setStore.MemUsed()
+	defaultEngine.cmdSADD([]string{"s", "a"})
+	small := defaultEngine.setStore.MemUsed()
 
 	for i := 0; i < 5000; i++ {
-		cmdSADD([]string{"s", "member:" + strconv.Itoa(i)})
+		defaultEngine.cmdSADD([]string{"s", "member:" + strconv.Itoa(i)})
 	}
-	grown := setStore.MemUsed()
+	grown := defaultEngine.setStore.MemUsed()
 
 	assert.Greater(t, grown, small+5000*20,
 		"adding 5000 members must be reflected in the keyspace's accounting")
 
-	cmdSREM([]string{"s", "member:1", "member:2", "member:3"})
-	assert.Less(t, setStore.MemUsed(), grown, "removing members must shrink it again")
+	defaultEngine.cmdSREM([]string{"s", "member:1", "member:2", "member:3"})
+	assert.Less(t, defaultEngine.setStore.MemUsed(), grown, "removing members must shrink it again")
 }
 
 // TestMemoryUsageFindsKeysInEveryKeyspace covers the reporting side. MEMORY
@@ -130,7 +130,7 @@ func TestMemoryUsageFindsKeysInEveryKeyspace(t *testing.T) {
 	withBudget(t, 0, config.LRU)
 
 	cmdSET([]string{"str", strings.Repeat("v", 100)})
-	cmdSADD([]string{"set", "a", "b", "c"})
+	defaultEngine.cmdSADD([]string{"set", "a", "b", "c"})
 	cmdZADD([]string{"zset", "1", "a"})
 	cmdPFADD([]string{"hll", "x"})
 	cmdCFADD([]string{"cf", "x"})

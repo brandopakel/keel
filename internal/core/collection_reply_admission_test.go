@@ -70,7 +70,7 @@ func largeCollectionReplyRejects(t *testing.T, kind string, args []string, resp3
 	case "list":
 		defaultEngine.listStore.Put("large", l)
 	case "set":
-		setStore.Put("large", s)
+		defaultEngine.setStore.Put("large", s)
 	case "zset":
 		zsetStore.Put("large", z)
 	}
@@ -110,7 +110,7 @@ func TestPopRecordAdmissionIncludesLargeKeyBeforeRemoval(t *testing.T) {
 				}
 			}
 			if command == "SPOP" {
-				setStore.Put(key, s)
+				defaultEngine.setStore.Put(key, s)
 			} else {
 				zsetStore.Put(key, z)
 			}
