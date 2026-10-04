@@ -158,14 +158,15 @@ func StartRewrite() error {
 	}
 
 	if keyCountForRewrite() > rewriteKeyCeiling {
-		return fmt.Errorf("rewrite limit: at most %d keys", rewriteKeyCeiling)
+		return refuseRewriteStart(fmt.Errorf("rewrite limit: at most %d keys", rewriteKeyCeiling))
 	}
 	path := aof.path
 	tmpPath := path + ".rewrite"
 	f, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
-		return err
+		return refuseRewriteStart(err)
 	}
+	aofLog("Background append only file rewriting started")
 
 	rewrite.active = true
 	rewrite.started = time.Now()
@@ -194,6 +195,11 @@ func StartRewrite() error {
 
 // AdvanceRewrite emits the next slice of the walk, and finishes if that was the
 // last of it. The event loop calls it once a cycle while a rewrite is active.
+//
+// Its error is the log's, never the rewrite's: a rewrite that fails is
+// abandoned, reported and retried later while the log it would have replaced
+// stays the log (see aof_rewrite_status.go), so nothing a rewrite does on its
+// own file stops the server.
 func AdvanceRewrite() error {
 	if AppendPending() {
 		return nil
@@ -207,13 +213,12 @@ func AdvanceRewrite() error {
 	}
 
 	if time.Since(rewrite.started) > 30*time.Second {
-		rewriteBudgetAborts++
-		abortRewrite(fmt.Errorf("rewrite exceeded duration or dirty-key budget"))
+		abandonOverBudget(fmt.Errorf("rewrite exceeded its 30-second duration budget"))
 		return nil // the original log continues to contain every write
 	}
 	if ready, err := pollRewriteIO(false); err != nil {
 		abortRewrite(err)
-		return err
+		return nil
 	} else if !ready {
 		return nil
 	}
@@ -234,7 +239,6 @@ func AdvanceRewrite() error {
 	if rewrite.stream != nil {
 		if err := rewriteWrite(emitRewriteRecordSlice(nil)); err != nil {
 			abortRewrite(err)
-			return err
 		}
 		return nil
 	}
@@ -242,7 +246,6 @@ func AdvanceRewrite() error {
 		body := emitCollectionSlice(nil)
 		if err := rewriteWrite(body); err != nil {
 			abortRewrite(err)
-			return err
 		}
 		return nil
 	}
@@ -252,7 +255,7 @@ func AdvanceRewrite() error {
 		rewrite.batchPos = 0
 		if err != nil {
 			abortRewrite(err)
-			return err
+			return nil
 		}
 	}
 	deadline := time.Now().Add(time.Millisecond)
@@ -284,13 +287,14 @@ func AdvanceRewrite() error {
 	}
 	if err := rewriteWrite(body); err != nil {
 		abortRewrite(err)
-		return err
+		return nil
 	}
 	if rewrite.stream != nil || rewrite.collectionActive || !rewriteWalkDone() || len(rewrite.dirty) > 0 {
 		return nil
 	}
 
-	return finishRewrite()
+	finishRewrite()
+	return nil
 }
 
 // Lists and sets have O(1) indexed access. Hashes retain one map cursor; sorted
@@ -443,8 +447,7 @@ func noteRewriteDirty(key string) {
 		if _, exists := rewrite.dirty[key]; !exists {
 			charge := len(key) + 64
 			if len(rewrite.dirty) >= rewriteDirtyKeys || charge > rewriteDirtyBytes-rewrite.dirtyBytes {
-				rewriteBudgetAborts++
-				abortRewrite(fmt.Errorf("rewrite exceeded dirty-key budget"))
+				abandonOverBudget(fmt.Errorf("rewrite exceeded dirty-key budget"))
 				return
 			}
 			rewrite.dirty[key] = struct{}{}
@@ -461,19 +464,29 @@ func noteRewriteDirty(key string) {
 
 // finishRewrite writes the keys that changed during the walk, then swaps the
 // new log in.
-func finishRewrite() (finalErr error) {
+//
+// Every step up to the rename fails by abandoning the rewrite, which leaves
+// the old log as it was: still the log, holding every write. After the rename
+// the new file is the log whatever else happens; see aof_rewrite_status.go for
+// the directory sync that follows it.
+func finishRewrite() {
 	// Never close or replace a descriptor owned by the worker.
 	if aof.syncPending != nil || pendingRewriteIO != nil {
-		return nil
+		return
 	}
 
 	if !rewrite.preSyncComplete {
 		startRewriteSync()
-		return nil
+		return
 	}
 	rewriteFinalizeStats.active.Add(1)
 	finalStarted := time.Now()
+	var finalErr error
 	defer func() { rewriteFinalizeStats.finish(finalStarted, finalErr) }()
+	fail := func(err error) {
+		finalErr = err
+		abortRewrite(err)
+	}
 	if rewrite.syncedBytes != rewrite.written {
 		// Preflush the bulk snapshot once, then synchronize only the dirty
 		// suffix at the existing atomic handoff. Repeated asynchronous retries
@@ -481,44 +494,53 @@ func finishRewrite() (finalErr error) {
 		if err := timedPersistenceSync(&rewriteFinalSyncStats, rewrite.file, func(f *os.File) error {
 			return timedPersistenceSync(&rewriteSyncStats, f, rewriteFileSync)
 		}); err != nil {
-			abortRewrite(err)
-			return err
+			fail(err)
+			return
 		}
 		rewrite.syncedBytes = rewrite.written
 	}
-	if err := rewrite.file.Close(); err != nil {
-		abortRewrite(err)
-		return err
-	}
+	written := rewrite.file
 	rewrite.file = nil
+	if err := written.Close(); err != nil {
+		fail(err)
+		return
+	}
+	// Appending must continue into the new file, not the one the old
+	// descriptor points at - which, once renamed over, no longer has a name,
+	// so anything written to it vanishes at the next restart. Opening it
+	// before the rename means nothing after the rename can fail to reach it.
+	next, err := rewriteOpenLog(rewrite.tmpPath)
+	if err != nil {
+		fail(err)
+		return
+	}
 
 	// Rename is atomic within a directory, so a crash at any point leaves
 	// either the whole old log or the whole new one, never a half-written file
 	// that replay would read as a truncated tail and quietly accept.
-	if err := os.Rename(rewrite.tmpPath, rewrite.path); err != nil {
-		abortRewrite(err)
-		return err
+	if err := rewriteRename(rewrite.tmpPath, rewrite.path); err != nil {
+		if !renamedAnyway(next, rewrite.path) {
+			next.Close()
+			fail(err)
+			return
+		}
+		aofLog("rename of %s reported %v, but the rewritten file has the log's name; appending to it", rewrite.tmpPath, err)
 	}
-	// The directory entry has to reach disk too, or a crash can leave the
-	// rename unrecorded and the old file back in place.
-	if err := syncDir(filepath.Dir(rewrite.path)); err != nil {
-		aof.failed = err
-		return err
+	// From here the new file is the log. The directory entry has to reach disk
+	// too, or a crash can leave the rename unrecorded and the old file back in
+	// place; if it cannot yet, the log's next sync tries again first.
+	dir := filepath.Dir(rewrite.path)
+	if err := rewriteSyncDir(dir); err != nil {
+		finalErr = err
+		unsyncedLogDir = dir
+		aofLog("syncing %s after the rewrite's rename: %v; the rewritten file is the log, and the next sync of it retries the directory first", dir, err)
 	}
-
-	// Appending must continue into the file that is now there, not the one the
-	// old descriptor still points at - which, having been renamed over, no
-	// longer has a name at all, so its contents vanish at the next restart.
-	if err := aof.file.Close(); err != nil {
-		return err
+	replaced := aof.file
+	aof.file = next
+	if err := replaced.Close(); err != nil {
+		// Its contents are superseded by the file that now has its name.
+		aofLog("closing the replaced log: %v", err)
 	}
-	f, err := os.OpenFile(rewrite.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		aof.file = nil
-		rewrite.active = false
-		return err
-	}
-	aof.file = f
 	aof.digest, aof.digestBytes = rewrite.digest, rewrite.written
 	aof.baseSize = rewrite.written
 	aof.rewriteBase = rewrite.written
@@ -526,6 +548,7 @@ func finishRewrite() (finalErr error) {
 	aof.written = 0
 	aof.rewrites++
 	aof.lastKeys = rewrite.initialKeys
+	noteRewriteFinished(rewrite.started)
 
 	rewrite.active = false
 	rewrite.keys = nil
@@ -535,21 +558,39 @@ func finishRewrite() (finalErr error) {
 	rewrite.stream = nil
 	rewrite.collectionKey, rewrite.collectionKind = "", ""
 	rewrite.collectionActive = false
-	return captureReplicationSnapshot()
+	if err := captureReplicationSnapshot(); err != nil {
+		// The log is unaffected. A protocol 2 replica still waiting gets its
+		// snapshot from a later rewrite, which its pulls start no sooner than
+		// a minute from now rather than one after another.
+		snapshotRetryAt = time.Now().Add(time.Minute)
+		aofLog("replication snapshot after the rewrite: %v", err)
+	}
+}
+
+// abandonOverBudget abandons a rewrite the load outran. The next automatic
+// attempt waits a minute, since it would be outrun again straight away.
+func abandonOverBudget(cause error) {
+	rewriteBudgetAborts++
+	abortRewrite(cause)
+	nextAutoRewrite = time.Now().Add(time.Minute)
 }
 
 // abortRewrite gives up on a rewrite without touching the log in use. The old
 // file has had every write appended to it throughout, so abandoning the new one
-// loses nothing.
+// loses nothing. A cause makes it a failed rewrite, reported as Redis reports
+// one; without one it is a cancellation, which Redis reports as nothing.
 func abortRewrite(cause error) {
+	active, started, path := rewrite.active, rewrite.started, rewrite.path
 	rewrite.hashCursor = nil
-	nextAutoRewrite = time.Now().Add(time.Minute)
+	nextAutoRewrite = time.Now().Add(rewriteRetryTick)
 	workerOwnsFile := pendingRewriteIO != nil && pendingRewriteIO.abandon()
 	if !workerOwnsFile && rewrite.file != nil {
 		rewrite.file.Close()
 	}
 	if !workerOwnsFile {
-		os.Remove(rewrite.tmpPath)
+		if err := os.Remove(rewrite.tmpPath); err != nil && !os.IsNotExist(err) {
+			aofLog("rewrite temp file left behind %s: %v", rewrite.tmpPath, err)
+		}
 		pendingRewriteIO = nil
 	}
 	rewrite.active = false
@@ -561,8 +602,8 @@ func abortRewrite(cause error) {
 	rewrite.collectionKey, rewrite.collectionKind = "", ""
 	rewrite.collectionActive = false
 	rewrite.file = nil
-	if cause != nil {
-		aofLog("rewrite abandoned: %v", cause)
+	if cause != nil && active {
+		noteRewriteFailed(cause, started, path)
 	}
 }
 
@@ -668,7 +709,9 @@ func RewriteAOF() error {
 			return err
 		}
 	}
-	return nil
+	// A rewrite that failed has been abandoned and reported like any other;
+	// its caller is told why.
+	return rewriteOutcome.lastErr
 }
 
 func syncDir(dir string) error {
@@ -688,11 +731,20 @@ func syncDir(dir string) error {
 // superseded rather than how large it is: a 100MB log for 100MB of data has
 // nothing to gain from being rewritten, and a 100MB log for 1MB of data is
 // almost entirely history.
+//
+// After failures it waits as Redis's does; see aof_rewrite_status.go. A
+// BGREWRITEAOF scheduled inside a transaction starts here too, whatever the
+// automatic settings are.
 func maybeRewrite() {
-	if time.Now().Before(nextAutoRewrite) {
+	if aof.file == nil || rewrite.active {
 		return
 	}
-	if aof.file == nil || rewrite.active || config.AOFAutoRewritePercentage <= 0 {
+	now := time.Now()
+	if rewriteOutcome.scheduled {
+		startScheduledRewrite(now)
+		return
+	}
+	if now.Before(nextAutoRewrite) || config.AOFAutoRewritePercentage <= 0 {
 		return
 	}
 	size := aof.baseSize + aof.written
@@ -705,6 +757,11 @@ func maybeRewrite() {
 			return
 		}
 	}
+	if rewriteLimited(now) {
+		return
+	}
+	// Redis's line, which measures growth against a base of at least one byte.
+	aofLog("Starting automatic rewriting of AOF on %d%% growth", size*100/max(aof.rewriteBase, 1)-100)
 	if err := StartRewrite(); err != nil {
 		nextAutoRewrite = time.Now().Add(time.Minute)
 		aofLog("automatic rewrite failed to start: %v", err)

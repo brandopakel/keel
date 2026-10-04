@@ -205,6 +205,7 @@ func cmdINFO(args []string) []byte {
 			status = "err"
 		}
 		fmt.Fprintf(&b, "aof_rewrite_in_progress:%d\r\naof_last_write_status:%s\r\naof_buffer_length:%d\r\n", active, status, len(aof.buf))
+		rewriteStatusInfo(&b)
 		pending := 0
 		if aof.syncPending != nil {
 			pending = 1
@@ -243,13 +244,13 @@ func cmdINFO(args []string) []byte {
 //
 // Redis gets that by forking; a Go runtime does not survive a bare fork, so
 // here it comes from slicing the walk instead. INFO persistence reports
-// aof_rewrites, which is how a caller waits for one to finish.
+// aof_rewrites, which is how a caller waits for one to finish, and
+// aof_last_bgrewrite_status, which says whether the last one did. A rewrite
+// that fails leaves the log as it was and the server serving; see
+// aof_rewrite_status.go, which also has the replies.
 func cmdBGREWRITEAOF(args []string) []byte {
 	if len(args) != 0 {
 		return Encode(errors.New("(error) ERR wrong number of arguments for 'BGREWRITEAOF' command"), false)
 	}
-	if err := StartRewrite(); err != nil {
-		return Encode(fmt.Errorf("ERR %w", err), false)
-	}
-	return Encode("Background append only file rewriting started", true)
+	return bgRewriteAOF()
 }

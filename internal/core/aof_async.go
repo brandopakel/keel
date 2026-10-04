@@ -87,10 +87,18 @@ func FlushAOFAsync(wake func()) (ready bool, err error) {
 		aof.failed = fmt.Errorf("async AOF batch exceeds %d bytes", maxAsyncAppendBytes)
 		return false, aof.failed
 	}
+	always := config.AOFFsync == config.FsyncAlways
+	if always {
+		// As in flushAOF: a rewrite's rename whose directory sync failed is
+		// finished before this batch can be acknowledged as synced.
+		if err := syncPendingLogDir(); err != nil {
+			aof.failed = err
+			return false, err
+		}
+	}
 	body := aof.buf
 	aof.buf = nil
 	file, writeFile, syncFile := aof.file, aofWrite, aofSync
-	always := config.AOFFsync == config.FsyncAlways
 	result := make(chan appendResult, 1)
 	appendPending = result
 	appendBytes = len(body)

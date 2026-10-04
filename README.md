@@ -142,10 +142,21 @@ collection members and their key names stream in at most 64 KiB fragments.
 Partly written records finish before dirty-key reconciliation replaces their old
 state. A rewrite is abandoned after 30 seconds, 100,000 dirty keys or an 8 MiB
 dirty-name accounting budget; the original log remains authoritative. Snapshot
-creation refuses more than one million keys. Bulk snapshot sync runs on a worker
+creation refuses more than four million keys. Bulk snapshot sync runs on a worker
 while commands continue; dirty-tail reconciliation precedes the final synchronous
 handoff. Opaque sketch serialization, disk writes and final sync can still stall.
 There is no hard rewrite latency SLA.
+
+A rewrite that fails, for example on `ENOSPC` or `EFBIG` while writing its
+`.rewrite` file, does not stop the server, as in Redis: it is logged as
+`Background AOF rewrite terminated with error` with its cause, the temporary file
+is removed, and the old log stays the log and keeps taking writes. `INFO
+persistence` reports `aof_last_bgrewrite_status:err` and
+`aof_rewrites_consecutive_failures`. Automatic rewrites retry with Redis's
+backoff: twice more straight away, then after one minute, doubling to an hour.
+`BGREWRITEAOF` always starts one at once. Only a failure of the log itself stops
+the server, including a directory sync after the rename that still fails when
+retried. See [rewrite failures](docs/rewrite-failure.md).
 
 Keep Keel on a private network. AUTH does not encrypt traffic and grants access to
 all commands, including destructive ones. Use a TLS proxy for untrusted network hops,

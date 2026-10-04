@@ -55,8 +55,12 @@ runs in its place at `EXEC`:
 - `QUIT` is never queued: it answers `+OK` and closes the connection at once,
   which discards the transaction, as in Redis.
 - `SELECT 0`, `ECHO`, `SETNX` and `UNLINK` are ordinary commands and are queued.
-- `BGREWRITEAOF` starts the rewrite at that point of the transaction, as Redis
-  does; see [rewrites](#rewrites).
+- `BGREWRITEAOF` is scheduled, as Redis 8.10.1 schedules it inside `EXEC`: its
+  element is `Background append only file rewriting scheduled`, `INFO
+  persistence` reports `aof_rewrite_scheduled:1`, and the rewrite starts once
+  the transaction is over. If a rewrite is already running, the element is
+  Redis's `ERR Background append only file rewriting already in progress`. See
+  [rewrites](#rewrites).
 - `FLUSHDB`, `KEEL.DUMP`, `KEEL.RESTORE`, `INFO`, `MEMORY`, `DBSIZE`, `KEYS` and
   `SCAN` run like any other command.
 
@@ -136,13 +140,17 @@ any other malformed record.
 
 A rewrite emits current key state, never frames. It walks the keyspace as it
 stands and rewrites every key written after it began from that key's state at
-the end, so a rewrite started by `BGREWRITEAOF` part way through a transaction
-captures the writes before it in the walk and those after it as dirty keys,
-while the old log, which stays authoritative until the handoff, holds the block
-whole. The handoff itself happens between event-loop cycles, never inside
-`EXEC`, so a rewritten log holds whole transactions or none of them. Under
+the end. A `BGREWRITEAOF` inside a transaction starts nothing until the
+transaction is over, so the block reaches the old log whole before the walk
+begins, and the old log, which stays the log until the handoff, keeps it. The
+handoff itself happens between event-loop cycles, never inside `EXEC`, so a
+rewritten log holds whole transactions or none of them. Under
 `-aof-async-append`, `BGREWRITEAOF` after a write in the same batch returns its
-existing retry error as its element, inside a transaction or not.
+existing retry error.
+
+A rewrite that fails leaves the old log as the log, so a transaction written
+while a rewrite was running and then failed is in that log framed and whole,
+and replays whole; see [rewrite failures](rewrite-failure.md).
 
 ### Upgrade and rollback
 
@@ -232,8 +240,8 @@ Unit tests cover queueing and execution order, every queue-time refusal, the
 connection's own commands queued and run in place,
 runtime errors inside `EXEC`, nested and stray control commands, the queue limit
 and its release, the arity table against every handler, the reply ceiling and
-an undeliverable reply, replica and fenced-primary refusals, a rewrite started
-inside a transaction, log framing for
+an undeliverable reply, replica and fenced-primary refusals, a rewrite scheduled
+inside a transaction, a transaction logged during a failed rewrite, log framing for
 writes, reads, failed writes and lazy expiry, eviction after the block, torn
 tails at six positions inside an open block with their backups, malformed
 frames, protocol 2 delivery of a block split over several frames with an

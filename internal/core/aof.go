@@ -178,6 +178,7 @@ func OpenAOF(path string) error {
 	aof.rewrites = 0
 	rewriteBudgetAborts = 0
 	nextAutoRewrite = time.Time{}
+	resetRewriteOutcome()
 	aof.lastKeys = 0
 	// Whatever is already on disk is the base the growth trigger measures
 	// against, so a server restarted onto an existing log does not immediately
@@ -248,6 +249,7 @@ func CloseAOF() error {
 	}
 	aof.file = nil
 	aof.path = ""
+	unsyncedLogDir = ""
 	aof.buf, aof.staged = nil, nil
 	data_structure.DefaultSpace.OnRemove = nil
 	return err
@@ -407,6 +409,12 @@ func flushAOF(closing bool) error {
 	syncDue := closing || config.AOFFsync == config.FsyncAlways ||
 		(config.AOFFsync == config.FsyncEverySec && time.Since(aof.lastSync) >= time.Second)
 	if aof.dirty && syncDue && aof.syncPending == nil {
+		// A rewrite's rename whose directory sync failed is finished first:
+		// what is about to be synced is in the file that rename named.
+		if err := syncPendingLogDir(); err != nil {
+			aof.failed = err
+			return err
+		}
 		if !closing && config.AOFFsync == config.FsyncEverySec {
 			result := make(chan error, 1)
 			file, syncFile := aof.file, aofSync
