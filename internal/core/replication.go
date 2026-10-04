@@ -152,7 +152,7 @@ func frameChecksum(f ReplicationFrame) string {
 	sum := sha256.Sum256(encoded)
 	return hex.EncodeToString(sum[:])
 }
-func cmdReplicationPull(args []string) []byte {
+func (e *Engine) cmdReplicationPull(args []string) []byte {
 	if !config.ReplicationFeed || config.ReplicationProtocol != 1 {
 		return Encode(errors.New("ERR replication protocol 1 is disabled"), false)
 	}

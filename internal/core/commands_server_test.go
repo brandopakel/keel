@@ -55,7 +55,7 @@ func TestCmdInfoReportsMemoryAndKeyspace(t *testing.T) {
 	defaultEngine.cmdSET([]string{"a", "1"})
 	defaultEngine.cmdSET([]string{"b", "2"})
 
-	res, err := Decode(cmdINFO([]string{}))
+	res, err := Decode(defaultEngine.cmdINFO([]string{}))
 	assert.Nil(t, err)
 	out := res.(string)
 
@@ -68,12 +68,12 @@ func TestCmdInfoReportsMemoryAndKeyspace(t *testing.T) {
 
 func TestCmdInfoSectionFiltering(t *testing.T) {
 	resetDictStore()
-	res, _ := Decode(cmdINFO([]string{"memory"}))
+	res, _ := Decode(defaultEngine.cmdINFO([]string{"memory"}))
 	out := res.(string)
 	assert.Contains(t, out, "# Memory")
 	assert.NotContains(t, out, "# Keyspace", "a section filter must exclude the others")
 
-	res, _ = Decode(cmdINFO([]string{"keyspace"}))
+	res, _ = Decode(defaultEngine.cmdINFO([]string{"keyspace"}))
 	out = res.(string)
 	assert.Contains(t, out, "# Keyspace")
 	assert.NotContains(t, out, "# Memory")
@@ -90,7 +90,7 @@ func TestCmdInfoReportsTheActivePolicy(t *testing.T) {
 		config.EvictFirst: "allkeys-random",
 	} {
 		config.EvictStrategy = strategy
-		res, _ := Decode(cmdINFO([]string{"memory"}))
+		res, _ := Decode(defaultEngine.cmdINFO([]string{"memory"}))
 		assert.Contains(t, res.(string), "maxmemory_policy:"+want)
 	}
 }

@@ -117,7 +117,7 @@ func TestEveryRegisteredCommandIsTypeCheckedOrDeliberatelyNot(t *testing.T) {
 		"KEEL.DUMP": true, "KEEL.RESTORE": true, "MEMKV.DUMP": true, "MEMKV.RESTORE": true,
 		"TTL": true, "PTTL": true, "EXPIRE": true, "PEXPIRE": true, "EXPIREAT": true, "PEXPIREAT": true, "PERSIST": true, "MORRIS.INFO": true,
 	}
-	for _, name := range dispatchedNames() {
+	for name := range commandTable {
 		if exempt[name] {
 			continue
 		}
@@ -125,56 +125,18 @@ func TestEveryRegisteredCommandIsTypeCheckedOrDeliberatelyNot(t *testing.T) {
 		assert.True(t, checked, "%s is dispatched but not type-checked", name)
 	}
 	for name := range commandKeyspace {
-		_, dispatched := dispatchedHandler(name)
+		_, dispatched := commandTable[name]
 		assert.True(t, dispatched, "%s is type-checked but not dispatched", name)
 	}
 	for name := range writeCommands {
-		_, dispatched := dispatchedHandler(name)
+		_, dispatched := commandTable[name]
 		assert.True(t, dispatched, "%s is logged but not dispatched", name)
 	}
 	// The exemptions have to name real commands too, or one removed from the
 	// dispatch table would sit here unnoticed.
 	for name := range exempt {
-		_, dispatched := dispatchedHandler(name)
+		_, dispatched := commandTable[name]
 		assert.True(t, dispatched, "%s is exempted from the type check but no longer dispatched", name)
-	}
-}
-
-// dispatchedNames is every name the dispatch table holds, in either of its
-// parts.
-func dispatchedNames() []string {
-	names := make([]string, 0, len(commandTable)+len(engineCommandTable))
-	for name := range commandTable {
-		names = append(names, name)
-	}
-	for name := range engineCommandTable {
-		names = append(names, name)
-	}
-	return names
-}
-
-// dispatchedHandler is the handler dispatch runs for name, from whichever
-// part of the table holds it; a family that has moved into Engine runs on the
-// default engine, as EvalAndResponse runs it.
-func dispatchedHandler(name string) (func([]string) []byte, bool) {
-	if run, ok := commandTable[name]; ok {
-		return run, true
-	}
-	if run, ok := engineCommandTable[name]; ok {
-		return func(args []string) []byte { return run(defaultEngine, args) }, true
-	}
-	return nil, false
-}
-
-// TestCommandTablePartsAreDisjoint: a command in both parts of the table would
-// run one handler and leave the other dead, and which one is dispatch's
-// choice rather than anything a reader of either table can see.
-func TestCommandTablePartsAreDisjoint(t *testing.T) {
-	for name := range engineCommandTable {
-		_, both := commandTable[name]
-		assert.False(t, both, "%s is in both parts of the dispatch table", name)
-		assert.NotNil(t, commands[name].onEngine, "%s is not indexed", name)
-		assert.Nil(t, commands[name].run, name)
 	}
 }
 

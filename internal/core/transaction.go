@@ -100,7 +100,7 @@ var notInTransaction = map[string]bool{
 // answers, as Redis answers it then. Clients send it when they finish with a
 // connection that may have watched something: go-redis's Tx.Close and
 // redis-py's pipeline reset both do.
-func cmdUNWATCH(args []string) []byte {
+func (e *Engine) cmdUNWATCH(args []string) []byte {
 	if len(args) != 0 {
 		return Encode(wrongArguments("UNWATCH"), false)
 	}
@@ -271,7 +271,7 @@ func queueRefusal(cmd *Command, conn Connection) error {
 		// replica nor a fenced primary refuses them.
 		return nil
 	}
-	if !commands[cmd.Cmd].runs() {
+	if commands[cmd.Cmd].run == nil {
 		// A connection command with no transport to answer it.
 		return unknownCommand(cmd)
 	}

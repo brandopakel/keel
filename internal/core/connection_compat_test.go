@@ -67,7 +67,7 @@ func TestECHO(t *testing.T) {
 }
 
 func TestINFOReportsTheRedisVersionClientsGateOn(t *testing.T) {
-	res, _ := Decode(cmdINFO([]string{"server"}))
+	res, _ := Decode(defaultEngine.cmdINFO([]string{"server"}))
 	out := res.(string)
 	assert.Contains(t, out, "redis_version:"+RedisCompatibleVersion+"\r\n")
 	assert.Contains(t, out, "redis_mode:standalone\r\n")

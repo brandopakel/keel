@@ -195,7 +195,7 @@ const ReplicationTermRequiredReply = "-REPLTERM term-aware protocol 2 request re
 
 // KEEL.REPL.PULL2 epoch byte-offset snapshot-id snapshot-byte-offset [term].
 // An explicit command and version prevent older peers interpreting new frames.
-func cmdReplicationPullV2(args []string) []byte {
+func (e *Engine) cmdReplicationPullV2(args []string) []byte {
 	if !config.ReplicationFeed || config.ReplicationProtocol != 2 {
 		return Encode(errors.New("ERR replication protocol 2 is disabled"), false)
 	}

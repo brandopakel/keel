@@ -28,7 +28,6 @@ const (
 
 	// Until the step that moves it.
 	defaultInstance = "the server's engine until callers open their own (plan step 2.7)"
-	maintenance     = "a cursor or count over the stores' keys; moves with the stores (plan step 2.1)"
 	commandScope    = "held for the command running; becomes engine state (plan step 2.2)"
 	persistence     = "the log, the rewrite or their I/O and counters; becomes engine state (plan step 2.3)"
 	replicated      = "replication or failover state, or its I/O; becomes engine state (plan step 2.4)"
@@ -39,9 +38,6 @@ const (
 // the reason each one is allowed.
 var packageVars = map[string]string{
 	"defaultEngine": defaultInstance,
-
-	"expiredKeys": maintenance, "expireCursor": maintenance,
-	"memoryCursor": maintenance, "memoryFirstPhase": maintenance,
 
 	"runningName": commandScope, "replyRESP3": commandScope, "replyCeiling": commandScope,
 	"CommandAllocations": commandScope,
@@ -67,7 +63,7 @@ var packageVars = map[string]string{
 
 	"ClientBuffers": transport,
 
-	"commandTable": table, "engineCommandTable": table, "commandArity": table, "commands": table,
+	"commandTable": table, "commandArity": table, "commands": table,
 	"connectionCommands": table, "containerCommands": table, "clientSubcommands": table,
 	"memorySubcommands": table, "commandKeyspace": table, "multiKeyCommands": table,
 	"strideKeyCommands": table, "argumentsBeforeType": table, "replacingWrites": table,

@@ -9,11 +9,13 @@ import "github.com/brandopakel/keel/internal/data_structure"
 // two tests able to run side by side. The embedding plan
 // (docs/embedding-plan.md) gives all of it an owner, so that a process can hold
 // several independent instances and the server becomes one caller of the
-// engine among others. Step 2.1 moves the stores here, one command family at
-// a time. A family that has moved has Engine methods for handlers, which read
-// its store, and ask its space who holds a key, on the engine dispatching them
-// - see engineCommandTable. The code later steps move (the log, the rewrite,
-// replication) reaches the stores through defaultEngine until it moves.
+// engine among others. Step 2.1 moved the stores here, with the expiry and
+// memory-maintenance cursors over them. Every command handler is an Engine
+// method, which reads the stores, and asks the space who holds a key, on the
+// engine dispatching it - see commandTable. The command-scope, persistence and
+// replication state are still package variables until steps 2.2 to 2.4 move
+// them, and the code that owns them reaches the stores through defaultEngine
+// until then.
 //
 // Until callers open engines of their own (plan phase 3) the server and the
 // tests run on defaultEngine, as the stores run on data_structure.DefaultSpace.
@@ -26,7 +28,7 @@ type Engine struct {
 	// draws from, its clock and its limits.
 	space *data_structure.Space
 
-	// The stores, in the order ResetStores registers them, under the names
+	// The stores, in the order resetStores registers them, under the names
 	// they had as package variables.
 	dictStore   *data_structure.Dict
 	zsetStore   *data_structure.Keyed[*data_structure.ZSet]
@@ -38,6 +40,20 @@ type Engine struct {
 	morrisStore *data_structure.Keyed[*data_structure.Morris]
 	hllStore    *data_structure.Keyed[*data_structure.HLL]
 	cfStore     *data_structure.Keyed[*data_structure.CuckooFilter]
+
+	// expiredKeys counts what active expiry has reclaimed, for INFO. Keys
+	// reaped lazily by a read are not counted here, because the number is here
+	// to answer whether the cycle is keeping up. It describes the stores, so
+	// ResetStores clears it with them.
+	expiredKeys uint64
+	// expireCursor and memoryCursor are where the expiry cycle and memory
+	// maintenance resume, as positions in the space's registry, and
+	// memoryFirstPhase is the compaction family maintenance starts with next.
+	// They survive ResetStores, as they always have: the registry they index
+	// is rebuilt in the same order.
+	expireCursor     int
+	memoryCursor     int
+	memoryFirstPhase int
 }
 
 // defaultEngine is the engine the server and the tests run on until each
