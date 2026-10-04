@@ -43,7 +43,10 @@ contains it. A protocol 2 replica built before transactions stops on its first
 block, so upgrade replicas before their primary.
 
 Snapshots are limited to 1 GiB of encoded AOF and the existing rewrite limit of
-one million keys. The receiver buffers at most 64 MiB for incomplete canonical
+four million keys. A snapshot is a rewrite, so one that fails leaves the replica
+waiting (`pending`) while its pulls are paced by the automatic rewrites' retry
+limit; the next rewrite that finishes serves it. Replicas already streaming are
+unaffected; see [rewrite failures](rewrite-failure.md#replication). The receiver buffers at most 64 MiB for incomplete canonical
 operations. These bounds are experimental limits, not measured capacity claims.
 Opaque image construction remains synchronous. A complete value record can
 exceed the receiver command limit even when emitted in fragments; such a transfer cannot establish a readable

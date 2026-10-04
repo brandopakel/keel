@@ -261,18 +261,19 @@ func TestRewriteDirtyTailSyncFailureKeepsAllAcknowledgedWrites(t *testing.T) {
 	waitForRewriteSync(t)
 	// The completed preflush covers only the original snapshot.
 	require.Equal(t, "OK", run(t, "SET", "during", "survives"))
-	var err error
-	for i := 0; RewriteActive() && err == nil && i < 100; i++ {
+	for i := 0; RewriteActive() && i < 100; i++ {
 		waitForRewriteSync(t)
-		err = FlushAOF()
+		// The failure is the rewrite's, which the log survives, so the loop
+		// carries on rather than stopping the server.
+		require.NoError(t, FlushAOF())
 	}
-	require.ErrorIs(t, err, diskErr)
 	require.False(t, RewriteActive())
+	require.ErrorIs(t, rewriteOutcome.lastErr, diskErr)
 	require.Equal(t, int32(2), calls.Load())
 	require.Equal(t, "OK", run(t, "SET", "after", "survives"))
 	require.NoError(t, CloseAOF())
 	ResetStores()
-	_, err = LoadAOF(path)
+	_, err := LoadAOF(path)
 	require.NoError(t, err)
 	for _, key := range []string{"during", "after"} {
 		require.Equal(t, "survives", run(t, "GET", key))

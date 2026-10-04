@@ -271,8 +271,11 @@ func cmdReplicationPullV2(args []string) []byte {
 	if !valid {
 		closeReplicationSnapshot()
 		replicationV2.snapshotRequested = true
-		if !RewriteActive() {
-			if err := StartRewrite(); err != nil {
+		// After repeated failures the snapshot's rewrite waits as an
+		// automatic one does, so a waiting replica cannot drive a failing
+		// disk round a loop; any rewrite that finishes meanwhile serves it.
+		if !RewriteActive() && snapshotRewriteAllowed() {
+			if err := startSnapshotRewrite(); err != nil {
 				return Encode(fmt.Errorf("ERR preparing replication snapshot: %w", err), false)
 			}
 		}

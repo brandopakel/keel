@@ -174,10 +174,12 @@ func TestTransactionQueuesTheTransportsOwnCommands(t *testing.T) {
 	require.Len(t, conn.answered, 2)
 }
 
-// BGREWRITEAOF runs inside a transaction as Redis runs it. The rewrite starts
-// part way through the block, so the old log holds the block whole and the
-// rewritten one holds its effects, including the writes after the rewrite began.
-func TestTransactionStartsARewriteInPlace(t *testing.T) {
+// BGREWRITEAOF inside a transaction is scheduled, as Redis 8.10.1 schedules it
+// (bgrewriteaofCommand with server.in_exec): EXEC answers "scheduled" in its
+// place, INFO reports aof_rewrite_scheduled:1, and the rewrite starts once the
+// transaction is over. So the block reaches the old log whole before any
+// rewrite begins, and the rewritten log holds its effects without its frames.
+func TestTransactionSchedulesARewriteAsRedisDoes(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "rewrite.aof")
 	ResetStores()
 	require.NoError(t, OpenAOF(path))
@@ -193,10 +195,19 @@ func TestTransactionStartsARewriteInPlace(t *testing.T) {
 	s.send("SET", "a", "1")
 	s.send("BGREWRITEAOF")
 	s.send("SET", "b", "2")
-	require.Equal(t, "*3\r\n+OK\r\n+Background append only file rewriting started\r\n+OK\r\n", s.send("EXEC"))
+	require.Equal(t, "*3\r\n+OK\r\n+Background append only file rewriting scheduled\r\n+OK\r\n", s.send("EXEC"))
+	require.False(t, RewriteActive(), "nothing starts in the middle of EXEC")
+	require.Contains(t, infoPersistence(t), "aof_rewrite_scheduled:1\r\n")
+	old, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.NotContains(t, string(old), "MULTI", "nothing of the block was flushed while it ran")
+	// The loop's flush writes the block, then starts the scheduled rewrite.
+	require.NoError(t, FlushAOF())
 	require.True(t, RewriteActive())
-	old := aofBody(t)
-	require.Contains(t, old, "*1\r\n$5\r\nMULTI\r\n"+string(appendCommand(nil, "SET", "a", "1"))+
+	require.Contains(t, infoPersistence(t), "aof_rewrite_scheduled:0\r\n")
+	old, err = os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(old), "*1\r\n$5\r\nMULTI\r\n"+string(appendCommand(nil, "SET", "a", "1"))+
 		string(appendCommand(nil, "SET", "b", "2"))+"*1\r\n$4\r\nEXEC\r\n", "the old log holds the block whole")
 	for n := 0; RewriteActive() && n < 1000; n++ {
 		require.NoError(t, FlushAOF())
