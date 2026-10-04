@@ -16,32 +16,32 @@ import (
 // fields would answer EXISTS 1 and HGETALL nothing, and would be written into
 // the log as an HSET with no pairs - which is a syntax error on replay.
 
-func hashFor(key string) (*data_structure.Hash, bool) {
-	return hashStore.Get(key)
+func (e *Engine) hashFor(key string) (*data_structure.Hash, bool) {
+	return e.hashStore.Get(key)
 }
 
 // dropIfEmpty removes a hash that has no fields left, and reports whether it
 // did. The store is told about the size change either way, since a hash that
 // shrank still costs less than it did.
-func dropIfEmpty(key string, h *data_structure.Hash) bool {
+func (e *Engine) dropIfEmpty(key string, h *data_structure.Hash) bool {
 	if h.Len() == 0 {
-		hashStore.Delete(key)
+		e.hashStore.Delete(key)
 		return true
 	}
-	hashStore.Resize(key)
+	e.hashStore.Resize(key)
 	return false
 }
 
-func cmdHSET(args []string) []byte {
+func (e *Engine) cmdHSET(args []string) []byte {
 	if len(args) < 3 || len(args)%2 != 1 {
 		return Encode(wrongArguments("HSET"), false)
 	}
 	key := args[0]
 
-	h, ok := hashFor(key)
+	h, ok := e.hashFor(key)
 	if !ok {
 		h = data_structure.NewHash()
-		hashStore.Put(key, h)
+		e.hashStore.Put(key, h)
 	}
 
 	added := 0
@@ -51,34 +51,34 @@ func cmdHSET(args []string) []byte {
 		}
 	}
 	// After the writes, so the budget sees what the hash actually costs now.
-	hashStore.Resize(key)
+	e.hashStore.Resize(key)
 	return Encode(added, false)
 }
 
-func cmdHSETNX(args []string) []byte {
+func (e *Engine) cmdHSETNX(args []string) []byte {
 	if len(args) != 3 {
 		return Encode(wrongArguments("HSETNX"), false)
 	}
 	key, field, value := args[0], args[1], args[2]
 
-	h, ok := hashFor(key)
+	h, ok := e.hashFor(key)
 	if ok && h.Exists(field) {
 		return constant.RespZero
 	}
 	if !ok {
 		h = data_structure.NewHash()
-		hashStore.Put(key, h)
+		e.hashStore.Put(key, h)
 	}
 	h.Set(field, value)
-	hashStore.Resize(key)
+	e.hashStore.Resize(key)
 	return constant.RespOne
 }
 
-func cmdHGET(args []string) []byte {
+func (e *Engine) cmdHGET(args []string) []byte {
 	if len(args) != 2 {
 		return Encode(wrongArguments("HGET"), false)
 	}
-	h, ok := hashFor(args[0])
+	h, ok := e.hashFor(args[0])
 	if !ok {
 		return nullReply()
 	}
@@ -89,11 +89,11 @@ func cmdHGET(args []string) []byte {
 	return encodeBoundedString(value)
 }
 
-func cmdHMGET(args []string) []byte {
+func (e *Engine) cmdHMGET(args []string) []byte {
 	if len(args) < 2 {
 		return Encode(wrongArguments("HMGET"), false)
 	}
-	h, ok := hashFor(args[0])
+	h, ok := e.hashFor(args[0])
 
 	return encodeLookupArray(len(args)-1, func(i int) (string, bool) {
 		if !ok {
@@ -103,59 +103,59 @@ func cmdHMGET(args []string) []byte {
 	}, shapeArray)
 }
 
-func cmdHDEL(args []string) []byte {
+func (e *Engine) cmdHDEL(args []string) []byte {
 	if len(args) < 2 {
 		return Encode(wrongArguments("HDEL"), false)
 	}
 	key := args[0]
-	h, ok := hashFor(key)
+	h, ok := e.hashFor(key)
 	if !ok {
 		return constant.RespZero
 	}
 
 	removed := h.Del(args[1:]...)
-	dropIfEmpty(key, h)
+	e.dropIfEmpty(key, h)
 	return Encode(removed, false)
 }
 
-func cmdHEXISTS(args []string) []byte {
+func (e *Engine) cmdHEXISTS(args []string) []byte {
 	if len(args) != 2 {
 		return Encode(wrongArguments("HEXISTS"), false)
 	}
-	h, ok := hashFor(args[0])
+	h, ok := e.hashFor(args[0])
 	if !ok || !h.Exists(args[1]) {
 		return constant.RespZero
 	}
 	return constant.RespOne
 }
 
-func cmdHLEN(args []string) []byte {
+func (e *Engine) cmdHLEN(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(wrongArguments("HLEN"), false)
 	}
-	h, ok := hashFor(args[0])
+	h, ok := e.hashFor(args[0])
 	if !ok {
 		return constant.RespZero
 	}
 	return Encode(h.Len(), false)
 }
 
-func cmdHKEYS(args []string) []byte {
+func (e *Engine) cmdHKEYS(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(wrongArguments("HKEYS"), false)
 	}
-	h, ok := hashFor(args[0])
+	h, ok := e.hashFor(args[0])
 	if !ok {
 		return constant.RespEmptyArray
 	}
 	return hashReply(h, true, false)
 }
 
-func cmdHVALS(args []string) []byte {
+func (e *Engine) cmdHVALS(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(wrongArguments("HVALS"), false)
 	}
-	h, ok := hashFor(args[0])
+	h, ok := e.hashFor(args[0])
 	if !ok {
 		return constant.RespEmptyArray
 	}
@@ -167,11 +167,11 @@ func cmdHVALS(args []string) []byte {
 //
 // Flat rather than nested because that is what RESP2 clients decode into a map,
 // and it is what Redis sends.
-func cmdHGETALL(args []string) []byte {
+func (e *Engine) cmdHGETALL(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(wrongArguments("HGETALL"), false)
 	}
-	h, ok := hashFor(args[0])
+	h, ok := e.hashFor(args[0])
 	if !ok {
 		return emptyMapReply()
 	}
@@ -184,7 +184,7 @@ func cmdHGETALL(args []string) []byte {
 // The reply is the value after the increment, so a client needs no second
 // round trip. A field holding something that is not an integer is an error and
 // leaves the field alone - it is not reset to the increment.
-func cmdHINCRBY(args []string) []byte {
+func (e *Engine) cmdHINCRBY(args []string) []byte {
 	if len(args) != 3 {
 		return Encode(wrongArguments("HINCRBY"), false)
 	}
@@ -199,7 +199,7 @@ func cmdHINCRBY(args []string) []byte {
 	// here and then abandoned by an error below would be an empty one, and an
 	// empty hash is a key that answers EXISTS 1 and HGETALL nothing, and that a
 	// rewrite writes as "HSET key" with no pairs - a syntax error on replay.
-	h, existed := hashFor(key)
+	h, existed := e.hashFor(key)
 
 	current := int64(0)
 	if existed {
@@ -219,10 +219,10 @@ func cmdHINCRBY(args []string) []byte {
 
 	if !existed {
 		h = data_structure.NewHash()
-		hashStore.Put(key, h)
+		e.hashStore.Put(key, h)
 	}
 	updated := current + delta
 	h.Set(field, strconv.FormatInt(updated, 10))
-	hashStore.Resize(key)
+	e.hashStore.Resize(key)
 	return Encode(updated, false)
 }

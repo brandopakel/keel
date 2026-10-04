@@ -49,7 +49,7 @@ func opaqueDumpPlan(tag byte, value dumpMarshaler) dumpPlan {
 }
 
 func planDump(key string, limit int) (dumpPlan, bool) {
-	if h, ok := hashStore.Peek(key); ok {
+	if h, ok := defaultEngine.hashStore.Peek(key); ok {
 		return partsDumpPlan(dumpTagHash, func(yield func(string) bool) {
 			h.Visit(func(field, value string) bool { return yield(field) && yield(value) })
 		}, limit), true

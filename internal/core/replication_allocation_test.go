@@ -85,10 +85,10 @@ func TestOpaqueReplicationExpiryBelongsToSelectedValue(t *testing.T) {
 	setupReplicationV2(t)
 	hash := data_structure.NewHash()
 	hash.Set("field", "value")
-	hashStore.Put("overlap", hash)
+	defaultEngine.hashStore.Put("overlap", hash)
 	cmsStore.Put("overlap", data_structure.CreateCMS(16, 1))
 	wantExpiry := uint64(time.Now().UnixMilli() + 600000)
-	hashStore.SetExpiryAt("overlap", wantExpiry)
+	defaultEngine.hashStore.SetExpiryAt("overlap", wantExpiry)
 	cmsStore.SetExpiryAt("overlap", 1)
 	replication.dirty["overlap"] = struct{}{}
 	body, fits := opaqueReplicationBody()
@@ -100,7 +100,7 @@ func TestOpaqueReplicationExpiryBelongsToSelectedValue(t *testing.T) {
 	_, err := LoadAOF(path)
 	require.NoError(t, err)
 	require.Equal(t, "value", run(t, "HGET", "overlap", "field"))
-	expiry, exists := hashStore.GetExpiry("overlap")
+	expiry, exists := defaultEngine.hashStore.GetExpiry("overlap")
 	require.True(t, exists)
 	require.Equal(t, wantExpiry, expiry)
 }

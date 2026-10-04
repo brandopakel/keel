@@ -322,7 +322,7 @@ func emitRewriteKey(dst []byte, key string, reset bool) []byte {
 	if z, ok := zsetStore.Peek(key); ok && (z.Len() > 256 || z.MemUsage() > 64<<10 || len(key) > rewriteRecordSlice) {
 		kind = "zset"
 	}
-	if h, ok := hashStore.Peek(key); ok && (h.Len() > 256 || h.MemUsage() > 64<<10 || len(key) > rewriteRecordSlice) {
+	if h, ok := defaultEngine.hashStore.Peek(key); ok && (h.Len() > 256 || h.MemUsage() > 64<<10 || len(key) > rewriteRecordSlice) {
 		kind = "hash"
 		rewrite.hashCursor = h.Cursor()
 	}
@@ -367,13 +367,13 @@ func emitCollectionSlice(dst []byte) []byte {
 	var expiry func(string) (uint64, bool)
 	switch rewrite.collectionKind {
 	case "hash":
-		h, ok := hashStore.Peek(key)
+		h, ok := defaultEngine.hashStore.Peek(key)
 		if !ok || rewrite.hashCursor == nil {
 			rewrite.collectionActive = false
 			rewrite.hashCursor = nil
 			return dst
 		}
-		command, length, expiry = "HSET", h.Len(), hashStore.GetExpiry
+		command, length, expiry = "HSET", h.Len(), defaultEngine.hashStore.GetExpiry
 		valueAt = func(int) (string, string) { field, value, _ := rewrite.hashCursor.Entry(); return value, field }
 	case "list":
 		l, ok := listStore.Peek(key)
@@ -664,7 +664,7 @@ func emitValue(dst []byte, key string) []byte {
 	if set, ok := setStore.Peek(key); ok {
 		return appendCommand(dst, append([]string{"SADD", key}, set.Members()...)...)
 	}
-	if h, ok := hashStore.Peek(key); ok {
+	if h, ok := defaultEngine.hashStore.Peek(key); ok {
 		fields, values := h.Entries()
 		parts := make([]string, 0, 2+2*len(fields))
 		parts = append(parts, "HSET", key)

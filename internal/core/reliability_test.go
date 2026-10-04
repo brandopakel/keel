@@ -214,11 +214,11 @@ func TestExpirySamplingDoesNotStarveCollections(t *testing.T) {
 		run(t, "SET", key, "v", "EX", "600")
 	}
 	run(t, "HSET", "h", "f", "v")
-	hashStore.SetExpiryAt("h", 1)
+	defaultEngine.hashStore.SetExpiryAt("h", 1)
 	for i := 0; i < 20; i++ {
 		ExpireCycle()
 	}
-	require.Zero(t, hashStore.Len())
+	require.Zero(t, defaultEngine.hashStore.Len())
 }
 
 func TestReplayExpiryDoesNotResurrectHistoricalMutations(t *testing.T) {

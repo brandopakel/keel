@@ -221,7 +221,7 @@ func AppendAdmission(commands []*Command) (logBytes, replyBytes int, ok bool) {
 // HMGET may request the same field repeatedly. Bound every requested result,
 // including values created by earlier commands in this not-yet-executed run.
 func hashReadReplyBound(key string, fields []string, written int) int {
-	h, exists := hashStore.Peek(key)
+	h, exists := defaultEngine.hashStore.Peek(key)
 	total := 0
 	for _, field := range fields {
 		size := written
@@ -246,7 +246,7 @@ func hashReadReplyBound(key string, fields []string, written int) int {
 // runs before any of it has executed and cannot know where it landed.
 func collectionReplyBound(key string, writtenThisRun int) int {
 	held, elements := uint64(0), 0
-	if h, ok := hashStore.Peek(key); ok {
+	if h, ok := defaultEngine.hashStore.Peek(key); ok {
 		held, elements = h.MemUsage(), 2*h.Len()
 	} else if s, ok := setStore.Peek(key); ok {
 		held, elements = s.MemUsage(), s.Len()
