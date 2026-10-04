@@ -126,7 +126,7 @@ func decodeRestorePayload(key string, tag byte, body []byte) (store func(), err 
 		if len(members) > 0 {
 			set.Add(members...)
 		}
-		return func() { setStore.Put(key, set) }, nil
+		return func() { defaultEngine.setStore.Put(key, set) }, nil
 	case dumpTagZSet:
 		parts, err := decodeParts(body)
 		if err != nil {

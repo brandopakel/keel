@@ -21,7 +21,7 @@ func TestAmplifiedReadsRejectBeforeResponseAllocation(t *testing.T) {
 			defaultEngine.hashStore.Put("hash", h)
 			s := data_structure.NewSet()
 			s.Add(value)
-			setStore.Put("set", s)
+			defaultEngine.setStore.Put("set", s)
 			args := []string{name}
 			switch name {
 			case "MGET":

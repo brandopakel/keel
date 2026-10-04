@@ -92,7 +92,7 @@ func TestCmdLCSMissingKeyIsAnEmptyString(t *testing.T) {
 func TestCmdLCSOnAKeyOfAnotherType(t *testing.T) {
 	ResetStores()
 	setString("str", "hello")
-	assert.EqualValues(t, 1, mustDecode(t, cmdSADD([]string{"aset", "hello"})))
+	assert.EqualValues(t, 1, mustDecode(t, defaultEngine.cmdSADD([]string{"aset", "hello"})))
 
 	res, _ := Decode(cmdLCS([]string{"str", "aset"}))
 	assert.EqualValues(t, "", res, "a set key reads as absent, as it does for GET")

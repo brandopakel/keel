@@ -45,13 +45,6 @@ var commandTable = map[string]func([]string) []byte{
 	// still replays; a command is written to the log under its current name.
 	"MEMKV.DUMP": cmdDUMP, "MEMKV.RESTORE": cmdRESTORE,
 
-	// Sets
-	"SADD": cmdSADD, "SREM": cmdSREM, "SCARD": cmdSCARD, "SMEMBERS": cmdSMEMBERS,
-	"SISMEMBER": cmdSISMEMBER, "SMISMEMBER": cmdSMISMEMBER, "SPOP": cmdSPOP,
-	"SRANDMEMBER": cmdSRANDMEMBER,
-	// SRAND is what this server called SRANDMEMBER before it took the Redis name.
-	"SRAND": cmdSRANDMEMBER,
-
 	// Sorted sets, and the geospatial index built on them
 	"ZCOUNT": cmdZCOUNT, "ZRANGEBYSCORE": cmdZRANGEBYSCORE, "ZREVRANGEBYSCORE": cmdZREVRANGEBYSCORE,
 	"ZINCRBY": cmdZINCRBY, "ZPOPMIN": cmdZPOPMIN, "ZPOPMAX": cmdZPOPMAX,
@@ -87,6 +80,13 @@ var engineCommandTable = map[string]func(*Engine, []string) []byte{
 	"LPUSH": (*Engine).cmdLPUSH, "RPUSH": (*Engine).cmdRPUSH, "LPOP": (*Engine).cmdLPOP,
 	"RPOP": (*Engine).cmdRPOP, "LTRIM": (*Engine).cmdLTRIM, "LLEN": (*Engine).cmdLLEN,
 	"LINDEX": (*Engine).cmdLINDEX, "LSET": (*Engine).cmdLSET, "LRANGE": (*Engine).cmdLRANGE,
+
+	// Sets
+	"SADD": (*Engine).cmdSADD, "SREM": (*Engine).cmdSREM, "SCARD": (*Engine).cmdSCARD,
+	"SMEMBERS": (*Engine).cmdSMEMBERS, "SISMEMBER": (*Engine).cmdSISMEMBER,
+	"SMISMEMBER": (*Engine).cmdSMISMEMBER, "SPOP": (*Engine).cmdSPOP, "SRANDMEMBER": (*Engine).cmdSRANDMEMBER,
+	// SRAND is what this server called SRANDMEMBER before it took the Redis name.
+	"SRAND": (*Engine).cmdSRANDMEMBER,
 }
 
 // cmdPING answers PONG, or echoes the one argument it is given.

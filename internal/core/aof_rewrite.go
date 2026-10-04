@@ -316,7 +316,7 @@ func emitRewriteKey(dst []byte, key string, reset bool) []byte {
 	if l, ok := defaultEngine.listStore.Peek(key); ok && (l.Len() > 256 || l.MemUsage() > 64<<10 || len(key) > rewriteRecordSlice) {
 		kind = "list"
 	}
-	if s, ok := setStore.Peek(key); ok && (s.Len() > 256 || s.MemUsage() > 64<<10 || len(key) > rewriteRecordSlice) {
+	if s, ok := defaultEngine.setStore.Peek(key); ok && (s.Len() > 256 || s.MemUsage() > 64<<10 || len(key) > rewriteRecordSlice) {
 		kind = "set"
 	}
 	if z, ok := zsetStore.Peek(key); ok && (z.Len() > 256 || z.MemUsage() > 64<<10 || len(key) > rewriteRecordSlice) {
@@ -384,12 +384,12 @@ func emitCollectionSlice(dst []byte) []byte {
 		command, length, expiry = "RPUSH", l.Len(), defaultEngine.listStore.GetExpiry
 		valueAt = func(i int) (string, string) { v, _ := l.Index(i); return v, "" }
 	case "set":
-		s, ok := setStore.Peek(key)
+		s, ok := defaultEngine.setStore.Peek(key)
 		if !ok {
 			rewrite.collectionActive = false
 			return dst
 		}
-		command, length, expiry = "SADD", s.Len(), setStore.GetExpiry
+		command, length, expiry = "SADD", s.Len(), defaultEngine.setStore.GetExpiry
 		valueAt = func(i int) (string, string) { v, _ := s.MemberAt(i); return v, "" }
 	case "zset":
 		z, ok := zsetStore.Peek(key)
@@ -661,7 +661,7 @@ func emitValue(dst []byte, key string) []byte {
 	if obj := dictStore.Peek(key); obj != nil {
 		return appendCommand(dst, "SET", key, obj.Value)
 	}
-	if set, ok := setStore.Peek(key); ok {
+	if set, ok := defaultEngine.setStore.Peek(key); ok {
 		return appendCommand(dst, append([]string{"SADD", key}, set.Members()...)...)
 	}
 	if h, ok := defaultEngine.hashStore.Peek(key); ok {

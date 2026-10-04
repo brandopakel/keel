@@ -30,6 +30,7 @@ type Engine struct {
 	// had, so that what a family reads is found by the same search as before.
 	hashStore *data_structure.Keyed[*data_structure.Hash]
 	listStore *data_structure.Keyed[*data_structure.List]
+	setStore  *data_structure.Keyed[*data_structure.Set]
 }
 
 // defaultEngine is the engine the server and the tests run on until each
