@@ -144,8 +144,7 @@ func TestTransactionControlCommands(t *testing.T) {
 // fakeConnection answers one command the way a transport answers AUTH.
 type fakeConnection struct{ answered []string }
 
-func (f *fakeConnection) ConnectionArity(name string) (int, bool) { return -2, name == "AUTH" }
-func (f *fakeConnection) RESP3() bool                             { return false }
+func (f *fakeConnection) RESP3() bool { return false }
 func (f *fakeConnection) AnswerConnection(cmd *Command, w io.ReadWriter) {
 	f.answered = append(f.answered, cmd.Args[0])
 	if cmd.Args[0] != "silent" {
@@ -233,7 +232,7 @@ func TestUnwatchAnswersOKAsWithNothingWatched(t *testing.T) {
 // inside one it gets Redis's refusal, which leaves the transaction open.
 func TestWatchIsRefusedInsideMultiAsRedisRefusesIt(t *testing.T) {
 	s := newSession(t)
-	require.Equal(t, "ERR unknown command 'WATCH'", run(t, "WATCH", "k"))
+	require.Equal(t, "ERR unknown command 'WATCH', with args beginning with: 'k' ", run(t, "WATCH", "k"))
 	s.send("MULTI")
 	s.send("SET", "k", "1")
 	require.Equal(t, "-ERR WATCH inside MULTI is not allowed\r\n", s.send("WATCH", "k"))
@@ -273,22 +272,41 @@ func TestTransactionCommandsTakeTheAppendBarrier(t *testing.T) {
 	}
 }
 
-func TestEveryCommandHasAnArityOrIsRefusedInATransaction(t *testing.T) {
+// TestEveryCommandHasAnArity: the count is checked from the table before any
+// command runs, so a command the table did not hold could never run, and an
+// entry for a command nothing answers would be a name that is never unknown.
+func TestEveryCommandHasAnArity(t *testing.T) {
 	for name := range commandTable {
 		_, counted := commandArity[name]
-		require.True(t, counted != notInTransaction[name], "%s needs exactly one of an arity or a refusal", name)
+		require.True(t, counted, "%s has no arity", name)
 	}
 	for name := range commandArity {
-		_, known := commandTable[name]
-		require.True(t, known, "arity for unknown command %s", name)
+		_, table := commandTable[name]
+		require.True(t, table || connectionCommands[name] || IsTransactionCommand(name), "arity for unknown command %s", name)
+	}
+	for name, subcommands := range containerCommands {
+		require.Contains(t, commandArity, name)
+		for _, sub := range subcommands {
+			require.Equal(t, strings.ToLower(sub.name), sub.name, "%s|%s is named as Redis names it", name, sub.name)
+			require.True(t, sub.arity >= 2 || sub.arity <= -2, "%s|%s counts its container and itself", name, sub.name)
+		}
 	}
 }
 
 // TestCommandArityIsNeverStricterThanTheHandler: a count that refused what the
-// handler would have accepted would make a valid command abort a transaction.
-// Wherever the table refuses, the handler run directly must refuse too.
+// handler would have accepted would refuse a valid command, and abort the
+// transaction it was queued in. Wherever the table refuses, the handler run
+// directly, past the table, must refuse too - in the same words, apart from
+// a handler shared with an old name, which names the current one, and the
+// replication pulls, which refuse a node not serving them first.
 func TestCommandArityIsNeverStricterThanTheHandler(t *testing.T) {
+	ownWords := map[string]bool{"MEMKV.DUMP": true, "MEMKV.RESTORE": true, "SRAND": true,
+		"KEEL.REPL.PULL": true, "KEEL.REPL.PULL2": true}
 	for name, arity := range commandArity {
+		handler, table := commandTable[name]
+		if !table || containerCommands[name] != nil {
+			continue
+		}
 		limit := arity
 		if limit < 0 {
 			limit = -limit
@@ -302,10 +320,30 @@ func TestCommandArityIsNeverStricterThanTheHandler(t *testing.T) {
 			for i := range parts {
 				parts[i] = "1"
 			}
-			reply := rawReply(t, name, parts...)
+			reply := handler(parts)
 			require.True(t, bytes.HasPrefix(reply, []byte("-")), "%s with %d arguments: table refuses, handler answered %q", name, args, reply)
+			if !ownWords[name] {
+				require.Equal(t, string(Encode(wrongArguments(name), false)), string(reply), "%s with %d arguments", name, args)
+			}
 		}
 	}
+}
+
+// TestDispatchCountsArgumentsFromTheTable: a command is counted before it runs,
+// and before a replica or a type check looks at it, in Redis's words.
+func TestDispatchCountsArgumentsFromTheTable(t *testing.T) {
+	ResetStores()
+	run(t, "RPUSH", "list", "a")
+	require.Equal(t, "-ERR wrong number of arguments for 'get' command\r\n", string(rawReply(t, "GET")))
+	require.Equal(t, "-ERR wrong number of arguments for 'hset' command\r\n", string(rawReply(t, "HSET", "list", "f")),
+		"counted before the key's type is looked at")
+	run(t, "SADD", "set", "a")
+	require.Equal(t, "-ERR wrong number of arguments for 'lpop' command\r\n", string(rawReply(t, "LPOP", "set", "1", "2")),
+		"LPOP's own upper bound comes before the key's type too")
+	require.Equal(t, "-ERR wrong number of arguments for 'memory|usage' command\r\n", string(rawReply(t, "MEMORY", "usage")))
+	require.Equal(t, "-ERR unknown subcommand 'nosuch'. Try MEMORY HELP.\r\n", string(rawReply(t, "MEMORY", "nosuch", "x")))
+	require.Equal(t, "-ERR wrong number of arguments for 'memkv.dump' command\r\n", string(rawReply(t, "MEMKV.DUMP")),
+		"an old name is counted under the name it was sent as")
 }
 
 func TestTransactionReplyCeiling(t *testing.T) {
@@ -328,7 +366,8 @@ func TestTransactionReplyBeyondTheLimitClosesAfterRunning(t *testing.T) {
 	// output limit. The transaction runs whole and the connection is told so.
 	commandTable["TEST.MEGABYTE"] = func([]string) []byte { return bytes.Repeat([]byte("+"), 1<<20) }
 	commandArity["TEST.MEGABYTE"] = 1
-	t.Cleanup(func() { delete(commandTable, "TEST.MEGABYTE"); delete(commandArity, "TEST.MEGABYTE") })
+	indexCommands()
+	t.Cleanup(func() { delete(commandTable, "TEST.MEGABYTE"); delete(commandArity, "TEST.MEGABYTE"); indexCommands() })
 	ResetStores()
 	tx, _ := Transact(nil, &Command{Cmd: "MULTI"}, &replyWriter{}, nil)
 	for i := 0; i < 70; i++ {
@@ -353,7 +392,7 @@ func TestTransactionOnAReplica(t *testing.T) {
 	replicaApplying = false
 
 	s.send("MULTI")
-	require.Equal(t, "-READONLY replica rejects writes\r\n", s.send("SET", "k", "local"))
+	require.Equal(t, "-READONLY You can't write against a read only replica.\r\n", s.send("SET", "k", "local"))
 	s.send("GET", "k")
 	require.Equal(t, "-EXECABORT Transaction discarded because of previous errors.\r\n", s.send("EXEC"))
 
@@ -367,6 +406,40 @@ func TestTransactionOnAReplica(t *testing.T) {
 	s.send("GET", "k")
 	replicaUpdated = time.Now().Add(-time.Minute)
 	require.Equal(t, "-EXECABORT Transaction discarded because of: MASTERDOWN replica has no recent primary state\r\n", s.send("EXEC"))
+}
+
+// TestReplicaAndFencedPrimaryNameAndCountFirst: a replica, even one without
+// its primary, and a fenced primary refuse a command they do not have, or one
+// with the wrong number of arguments, in those words before their own
+// refusals, as Redis orders them - outside a transaction and while queueing.
+func TestReplicaAndFencedPrimaryNameAndCountFirst(t *testing.T) {
+	check := func(t *testing.T, refusal string) {
+		t.Helper()
+		var w replyWriter
+		require.EqualError(t, EvalAndResponse(&Command{Cmd: "NOSUCH", Name: "nosuch", Args: []string{"x"}}, &w),
+			"ERR unknown command 'nosuch', with args beginning with: 'x' ")
+		require.Equal(t, "-ERR wrong number of arguments for 'set' command\r\n", string(rawReply(t, "SET", "k")))
+		require.Equal(t, refusal, string(rawReply(t, "SET", "k", "v")))
+		s := &session{t: t}
+		s.send("MULTI")
+		require.Equal(t, "-ERR unknown command 'NOSUCH'\r\n", s.send("NOSUCH"))
+		require.Equal(t, "-ERR wrong number of arguments for 'set' command\r\n", s.send("SET", "k"))
+		require.Equal(t, "-EXECABORT Transaction discarded because of previous errors.\r\n", s.send("EXEC"))
+	}
+	t.Run("replica without its primary", func(t *testing.T) {
+		oldReplica, oldReady := config.ReplicaOf, replicaReady
+		t.Cleanup(func() { config.ReplicaOf, replicaReady = oldReplica, oldReady })
+		ResetStores()
+		config.ReplicaOf, replicaReady = "primary.test:6379", false
+		check(t, "-READONLY You can't write against a read only replica.\r\n")
+		require.Equal(t, "-MASTERDOWN replica has no recent primary state\r\n", string(rawReply(t, "GET", "k")))
+	})
+	t.Run("fenced primary", func(t *testing.T) {
+		setupFailover(t)
+		require.Equal(t, "OK", run(t, "KEEL.PROMOTE", "2"))
+		require.Equal(t, "OK", run(t, "KEEL.FENCE", "3"))
+		check(t, "-"+errFenced.Error()+"\r\n")
+	})
 }
 
 func TestTransactionFencedBeforeExecRunsNothing(t *testing.T) {

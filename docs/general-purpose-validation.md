@@ -132,7 +132,8 @@ unprofiled performance result. Allocation profiles include preload and warmup.
 The differential test compares supported common RESP2 replies and canonical
 state against Redis, alone and inside MULTI/EXEC/DISCARD blocks that include
 queue-time refusals and nested MULTI. It normalizes unordered collections and
-compares errors by class, not wording, including errors inside an EXEC reply. It includes binary strings and integer boundaries; it does
+compares errors byte for byte, wording included, inside an EXEC reply too, against
+Redis 8.10.1. It includes binary strings and integer boundaries; it does
 not claim cross-type SET equivalence, identical clocks or all Redis commands.
 Every seed and typed command trace is retained for reproduction. With
 `--protocol 3` it negotiates `HELLO 3` on both servers and compares RESP3

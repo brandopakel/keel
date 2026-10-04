@@ -2,7 +2,6 @@ package core
 
 import (
 	"errors"
-	"strconv"
 	"strings"
 
 	"github.com/brandopakel/keel/internal/data_structure"
@@ -19,7 +18,7 @@ import (
 
 func cmdLCS(args []string) []byte {
 	if len(args) < 2 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'LCS' command"), false)
+		return Encode(wrongArguments("LCS"), false)
 	}
 
 	var (
@@ -40,9 +39,9 @@ func cmdLCS(args []string) []byte {
 			if i+1 >= len(args) {
 				return Encode(errors.New("ERR syntax error"), false)
 			}
-			n, err := strconv.ParseInt(args[i+1], 10, 64)
-			if err != nil {
-				return Encode(errors.New("ERR value is not an integer or out of range"), false)
+			n, valid := counterInteger(args[i+1])
+			if !valid {
+				return Encode(errNotAnInteger, false)
 			}
 			minMatchLen = n
 			i++
@@ -133,12 +132,8 @@ func cmdLCS(args []string) []byte {
 // makes LCS of a key and a missing one return nothing rather than an error -
 // the answer is genuinely "they have nothing in common".
 //
-// A key holding some other type reads as absent here where Redis would answer
-// WRONGTYPE, because each type has its own map and a set key is simply not in
-// the string dictionary. That is what GET already does with the same key, so
-// LCS is consistent with the rest of the server rather than with Redis; making
-// it right needs a key directory shared across the keyspaces, which is a change
-// to the keyspace and not to this command.
+// A key holding some other type never reaches here: the type check refuses
+// it first, in the words Redis's LCS uses - see typeError.
 func lcsValue(key string) (string, error) {
 	obj := dictStore.Get(key)
 	if obj == nil {

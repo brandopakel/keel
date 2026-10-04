@@ -81,7 +81,7 @@ func TestHelloBeforeAuthentication(t *testing.T) {
 	if got := call(t, c, r, "HELLO", "4", "AUTH", "default", "integration-secret"); got != "-NOPROTO unsupported protocol version" {
 		t.Fatalf("HELLO 4 AUTH = %q", got)
 	}
-	if got := call(t, c, r, "GET", "k"); got != "-NOAUTH Authentication required" {
+	if got := call(t, c, r, "GET", "k"); got != "-NOAUTH Authentication required." {
 		t.Fatalf("GET after refused HELLO = %q", got)
 	}
 	if got := call(t, c, r, "HELLO", "2"); !strings.HasPrefix(got, "-NOAUTH HELLO must be called with the client already authenticated") {
@@ -91,11 +91,11 @@ func TestHelloBeforeAuthentication(t *testing.T) {
 		{"HELLO", "2", "AUTH", "default", "wrong"},
 		{"HELLO", "2", "AUTH", "someone", "integration-secret"},
 	} {
-		if got := call(t, c, r, args...); got != "-WRONGPASS invalid username-password pair" {
+		if got := call(t, c, r, args...); got != "-WRONGPASS invalid username-password pair or user is disabled." {
 			t.Fatalf("%v = %q", args, got)
 		}
 	}
-	if got := call(t, c, r, "CLIENT", "ID"); got != "-NOAUTH Authentication required" {
+	if got := call(t, c, r, "CLIENT", "ID"); got != "-NOAUTH Authentication required." {
 		t.Fatalf("CLIENT before AUTH = %q", got)
 	}
 	helloFields(t, r, call(t, c, r, "HELLO", "2", "AUTH", "default", "integration-secret"))

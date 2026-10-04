@@ -71,38 +71,79 @@ func formatDistance(v float64) string { return strconv.FormatFloat(v, 'f', 4, 64
 // leaves the key as it was.
 func cmdGEOADD(args []string) []byte {
 	if len(args) < 4 {
-		return Encode(errors.New("ERR wrong number of arguments for 'GEOADD' command"), false)
+		return Encode(wrongArguments("GEOADD"), false)
 	}
-	key := args[0]
-	flags, ch, next := zaddOptions(args[1:])
-	if flags&data_structure.ZAddNX != 0 && flags&data_structure.ZAddXX != 0 {
-		return Encode(errNXWithXX, false)
+	flags, ch, triples, err := geoaddShape(args)
+	if err != nil {
+		return Encode(err, false)
 	}
-	triples := args[1+next:]
-	if len(triples) == 0 || len(triples)%3 != 0 {
-		return Encode(errSyntax, false)
-	}
-
 	scores := make([]float64, 0, len(triples)/3)
 	members := make([]string, 0, len(triples)/3)
 	for i := 0; i < len(triples); i += 3 {
-		longitude, latitude, err := parseLongLat(triples[i], triples[i+1])
+		score, err := geoaddScore(triples[i], triples[i+1])
 		if err != nil {
 			return Encode(err, false)
 		}
-		score, ok := data_structure.GeoScore(longitude, latitude)
-		if !ok {
-			return Encode(fmt.Errorf("ERR invalid longitude,latitude pair %f,%f", longitude, latitude), false)
-		}
-		scores = append(scores, float64(score))
+		scores = append(scores, score)
 		members = append(members, triples[i+2])
 	}
-
-	added, changed := zaddApply(key, scores, members, flags)
+	added, changed := zaddApply(args[0], scores, members, flags)
 	if ch {
 		return Encode(changed, false)
 	}
 	return Encode(added, false)
+}
+
+// geoaddShape reads GEOADD's options in Redis's order, then whether what
+// follows comes in threes and NX and XX were not both given, either refused as
+// a syntax error, and returns the triples. The positions are read after this.
+func geoaddShape(args []string) (flags int, ch bool, triples []string, err error) {
+	flags, ch, next := zaddOptions(args[1:])
+	triples = args[1+next:]
+	if len(triples) == 0 || len(triples)%3 != 0 ||
+		flags&data_structure.ZAddNX != 0 && flags&data_structure.ZAddXX != 0 {
+		return 0, false, nil, errSyntax
+	}
+	return flags, ch, triples, nil
+}
+
+// geoaddScore reads one position as the score that indexes it.
+func geoaddScore(longS, latS string) (float64, error) {
+	longitude, latitude, err := parseLongLat(longS, latS)
+	if err != nil {
+		return 0, err
+	}
+	score, ok := data_structure.GeoScore(longitude, latitude)
+	if !ok {
+		return 0, fmt.Errorf("ERR invalid longitude,latitude pair %f,%f", longitude, latitude)
+	}
+	return float64(score), nil
+}
+
+// geoaddArguments is GEOADD's refusal of its arguments, or nil: its shape,
+// then every position, as Redis reads them before it looks at the key.
+func geoaddArguments(args []string) error {
+	_, _, triples, err := geoaddShape(args)
+	for i := 0; err == nil && i < len(triples); i += 3 {
+		_, err = geoaddScore(triples[i], triples[i+1])
+	}
+	return err
+}
+
+// geodistUnit reads GEODIST's optional unit, refused as Redis refuses it
+// before the key is looked at; anything after it is a syntax error.
+func geodistUnit(args []string) (float64, error) {
+	if len(args) > 4 {
+		return 0, errSyntax
+	}
+	if len(args) < 4 {
+		return 1, nil
+	}
+	toMeters, ok := geoUnitToMeters(args[3])
+	if !ok {
+		return 0, errGeoUnit
+	}
+	return toMeters, nil
 }
 
 // geoPosition is where a member of a geo key is, if it has one.
@@ -121,15 +162,12 @@ func geoPosition(zs *data_structure.ZSet, member string) (longitude, latitude fl
 // string in RESP3 as well as RESP2: Redis keeps it one, at four decimals,
 // rather than sending a double.
 func cmdGEODIST(args []string) []byte {
-	if len(args) != 3 && len(args) != 4 {
-		return Encode(errors.New("ERR wrong number of arguments for 'GEODIST' command"), false)
+	if len(args) < 3 {
+		return Encode(wrongArguments("GEODIST"), false)
 	}
-	toMeters := 1.0
-	if len(args) == 4 {
-		var ok bool
-		if toMeters, ok = geoUnitToMeters(args[3]); !ok {
-			return Encode(errGeoUnit, false)
-		}
+	toMeters, err := geodistUnit(args)
+	if err != nil {
+		return Encode(err, false)
 	}
 	zs, ok := zsetFor(args[0])
 	if !ok {
@@ -148,7 +186,7 @@ func cmdGEODIST(args []string) []byte {
 // that is not there.
 func cmdGEOHASH(args []string) []byte {
 	if len(args) < 1 {
-		return Encode(errors.New("ERR wrong number of arguments for 'GEOHASH' command"), false)
+		return Encode(wrongArguments("GEOHASH"), false)
 	}
 	zs, exists := zsetFor(args[0])
 	out := make([]interface{}, 0, len(args)-1)
@@ -177,7 +215,7 @@ func cmdGEOHASH(args []string) []byte {
 // The coordinates are doubles in RESP3 and bulk strings in RESP2.
 func cmdGEOPOS(args []string) []byte {
 	if len(args) < 1 {
-		return Encode(errors.New("ERR wrong number of arguments for 'GEOPOS' command"), false)
+		return Encode(wrongArguments("GEOPOS"), false)
 	}
 	zs, exists := zsetFor(args[0])
 	out := appendArrayHeader(nil, len(args)-1)
@@ -223,31 +261,25 @@ type geoSearch struct {
 //	              <BYRADIUS radius M|KM|FT|MI | BYBOX width height M|KM|FT|MI>
 //	              [ASC|DESC] [COUNT count [ANY]] [WITHCOORD] [WITHDIST] [WITHHASH]
 //
-// A bare number in the last position is also accepted as a radius in metres,
-// which is how this server's GEOSEARCH used to be called before it took the
-// Redis form; a log written then still has to replay.
+// The arguments are read as Redis reads them, in order, so the first one Redis
+// would refuse is the one refused here, and in its words: FROMMEMBER is
+// resolved as it is read, and a centre or an extent may be given again, the
+// last one counting, but not alongside the other kind.
 //
 // Without WITH options the reply is an array of members. With any of them each
 // member becomes an array of the member followed by, in this order, its
 // distance in the search's unit, its raw geohash score and its coordinates,
 // whichever were asked for.
 func cmdGEOSEARCH(args []string) []byte {
-	if len(args) < 2 {
-		return Encode(errors.New("ERR wrong number of arguments for 'GEOSEARCH' command"), false)
+	if len(args) < 6 {
+		return Encode(wrongArguments("GEOSEARCH"), false)
 	}
 	key := args[0]
 	zs, exists := zsetFor(key)
 
-	s, err := parseGeoSearch(args[1:])
+	s, err := parseGeoSearch(zs, exists, args[1:])
 	if err != nil {
 		return Encode(err, false)
-	}
-	if s.centre == "FROMMEMBER" && exists {
-		var ok bool
-		s.shape.Longitude, s.shape.Latitude, ok = geoPosition(zs, s.fromMember)
-		if !ok {
-			return Encode(errors.New("ERR could not decode requested zset member"), false)
-		}
 	}
 	if !exists {
 		return constant.RespEmptyArray
@@ -263,20 +295,27 @@ func cmdGEOSEARCH(args []string) []byte {
 	return geoSearchReply(zs, radius, s)
 }
 
-// parseGeoSearch reads everything after the key.
-func parseGeoSearch(args []string) (*geoSearch, error) {
+// parseGeoSearch reads everything after the key, which zs holds if exists.
+func parseGeoSearch(zs *data_structure.ZSet, exists bool, args []string) (*geoSearch, error) {
 	s := &geoSearch{}
 	for i := 0; i < len(args); i++ {
 		remaining := len(args) - i - 1
 		switch strings.ToUpper(args[i]) {
 		case "FROMMEMBER":
-			if remaining < 1 || s.centre != "" {
+			if remaining < 1 || s.centre == "FROMLONLAT" {
 				return nil, errSyntax
 			}
 			s.centre, s.fromMember = "FROMMEMBER", args[i+1]
+			if exists {
+				var ok bool
+				s.shape.Longitude, s.shape.Latitude, ok = geoPosition(zs, s.fromMember)
+				if !ok {
+					return nil, errors.New("ERR could not decode requested zset member")
+				}
+			}
 			i++
 		case "FROMLONLAT":
-			if remaining < 2 || s.centre != "" {
+			if remaining < 2 || s.centre == "FROMMEMBER" {
 				return nil, errSyntax
 			}
 			longitude, latitude, err := parseLongLat(args[i+1], args[i+2])
@@ -287,7 +326,7 @@ func parseGeoSearch(args []string) (*geoSearch, error) {
 			s.shape.Longitude, s.shape.Latitude = longitude, latitude
 			i += 2
 		case "BYRADIUS":
-			if remaining < 2 || s.area != "" {
+			if remaining < 2 || s.area == "BYBOX" {
 				return nil, errSyntax
 			}
 			radius, err := parseGeoDistance(args[i+1], "ERR need numeric radius", "ERR radius cannot be negative")
@@ -302,7 +341,7 @@ func parseGeoSearch(args []string) (*geoSearch, error) {
 			s.shape.Type, s.shape.Radius, s.shape.Conversion = data_structure.GeoShapeCircle, radius, toMeters
 			i += 2
 		case "BYBOX":
-			if remaining < 3 || s.area != "" {
+			if remaining < 3 || s.area == "BYRADIUS" {
 				return nil, errSyntax
 			}
 			width, err := parseGeoDistance(args[i+1], "ERR need numeric width", "ERR height or width cannot be negative")
@@ -326,9 +365,9 @@ func parseGeoSearch(args []string) (*geoSearch, error) {
 			if remaining < 1 {
 				return nil, errSyntax
 			}
-			n, err := strconv.ParseInt(args[i+1], 10, 64)
-			if err != nil {
-				return nil, errors.New("ERR value is not an integer or out of range")
+			n, valid := counterInteger(args[i+1])
+			if !valid {
+				return nil, errNotAnInteger
 			}
 			if n <= 0 {
 				return nil, errors.New("ERR COUNT must be > 0")
@@ -344,22 +383,15 @@ func parseGeoSearch(args []string) (*geoSearch, error) {
 		case "WITHHASH":
 			s.withHash = true
 		default:
-			// The old form: a radius in metres and nothing after it.
-			if remaining == 0 && s.area == "" {
-				if radius, err := strconv.ParseFloat(args[i], 64); err == nil && radius >= 0 {
-					s.area = "BYRADIUS"
-					s.shape.Type, s.shape.Radius, s.shape.Conversion = data_structure.GeoShapeCircle, radius, 1
-					continue
-				}
-			}
 			return nil, errSyntax
 		}
 	}
+	// Redis names the command as it was sent in these two.
 	if s.centre == "" {
-		return nil, errors.New("ERR exactly one of FROMMEMBER or FROMLONLAT can be specified for GEOSEARCH")
+		return nil, fmt.Errorf("ERR exactly one of FROMMEMBER or FROMLONLAT can be specified for %s", EchoArgument(runningName))
 	}
 	if s.area == "" {
-		return nil, errors.New("ERR exactly one of BYRADIUS and BYBOX can be specified for GEOSEARCH")
+		return nil, fmt.Errorf("ERR exactly one of BYRADIUS and BYBOX can be specified for %s", EchoArgument(runningName))
 	}
 	if s.any && s.count == 0 {
 		return nil, errors.New("ERR the ANY argument requires COUNT argument")

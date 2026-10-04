@@ -43,17 +43,17 @@ populate the variable; avoid putting secrets in process arguments or shell histo
 | Strings | `GET`, `SET`, `SETNX`, `SETEX`, `PSETEX`, `MGET`, `MSET`, `INCR`, `INCRBY`, `DECR`, `DECRBY`, `LCS` |
 | SET options | `NX`, `XX`, `GET`, `KEEPTTL`, `EX`, `PX`, `EXAT`, `PXAT`; conditional failures return null, or the old value with `GET` |
 | Expiry, every type | `TTL`, `PTTL`, `EXPIRE`, `PEXPIRE`, `EXPIREAT`, `PEXPIREAT`, `PERSIST`; expiry setters accept `NX`, `XX`, `GT`, `LT` |
-| Keys | `DEL`, `UNLINK` (same as `DEL`), `EXISTS`, `TYPE`, `KEYS`, `SCAN` with `MATCH`/`COUNT`/`TYPE`, `DBSIZE`, `FLUSHDB` |
+| Keys | `DEL`, `UNLINK` (same as `DEL`), `EXISTS`, `TYPE`, `KEYS`, `SCAN` with `MATCH`/`COUNT`/`TYPE`, `DBSIZE`, `FLUSHDB` (`SYNC` and `ASYNC` both flush before the reply) |
 | Hashes | `HSET`, `HSETNX`, `HGET`, `HMGET`, `HDEL`, `HEXISTS`, `HLEN`, `HKEYS`, `HVALS`, `HGETALL`, `HINCRBY` |
 | Lists | `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LLEN`, `LINDEX`, `LSET`, `LRANGE`, `LTRIM`; pops accept an optional count |
 | Sets | `SADD`, `SREM`, `SCARD`, `SMEMBERS`, `SISMEMBER`, `SMISMEMBER`, `SPOP`, `SRANDMEMBER` |
-| Sorted sets | `ZADD` with `NX`/`XX`/`CH`, `ZRANK`, `ZREM`, `ZSCORE`, `ZCARD`, `ZCOUNT`, `ZINCRBY`, `ZPOPMIN`/`ZPOPMAX`; `ZRANGEBYSCORE`/`ZREVRANGEBYSCORE`; `ZRANGE` rank ranges with `REV`/`WITHSCORES` |
+| Sorted sets | `ZADD` with `NX`/`XX`/`CH`, `ZRANK` with `WITHSCORE`, `ZREM`, `ZSCORE`, `ZCARD`, `ZCOUNT`, `ZINCRBY`, `ZPOPMIN`/`ZPOPMAX`; `ZRANGEBYSCORE`/`ZREVRANGEBYSCORE`; `ZRANGE` by rank or `BYSCORE`, with `REV`, `LIMIT` and `WITHSCORES` |
 | Geo | `GEOADD`, `GEODIST`, `GEOHASH`, `GEOSEARCH`, `GEOPOS` |
 | Approximate analytics | Bloom `BF.*`, Count-Min `CMS.*`, Morris `MORRIS.*`, Cuckoo `CF.*`, and `PFADD`/`PFCOUNT`/`PFMERGE`; see the [command registry](internal/core/eval.go) for exact names |
-| Connection | `HELLO` (`HELLO 3` switches the connection to RESP3, `HELLO 2` back), `AUTH`, `CLIENT ID`/`SETNAME`/`GETNAME`/`SETINFO`/`INFO`, `SELECT 0`, `QUIT`, `ECHO`, `PING` |
+| Connection | `HELLO` (`HELLO 3` switches the connection to RESP3, `HELLO 2` back), `AUTH`, `CLIENT ID`/`SETNAME`/`GETNAME`/`SETINFO`/`INFO`/`HELP`, `SELECT 0`, `QUIT`, `ECHO`, `PING` |
 | Protocol | RESP2 by default. After `HELLO 3`, optionally with `AUTH` and `SETNAME`, every reply on that connection is RESP3 in the shape Redis 8 sends: maps, sets, doubles, nulls, booleans and verbatim strings. `HELLO`'s `proto`, `CLIENT INFO`'s `resp=` and `INFO`'s `resp_version` report the asking connection's protocol. See [RESP3](docs/resp3.md) |
 | Transactions | `MULTI`, `EXEC`, `DISCARD`, `UNWATCH`; a command refused while queueing makes `EXEC` answer `EXECABORT`, and one that fails inside `EXEC` is an error in its reply while the rest run; no `WATCH` |
-| Operations | `INFO` (reports `redis_version:7.0.0`, the command level followed), `MEMORY USAGE key`, `MEMORY STATS`, `BGREWRITEAOF`, `KEEL.DUMP`, `KEEL.RESTORE`, `KEEL.PROMOTE`/`KEEL.FENCE` |
+| Operations | `INFO [section ...]` (reports `redis_version:7.0.0`, the command level followed), `MEMORY USAGE key [SAMPLES count]`, `MEMORY STATS`, `MEMORY HELP`, `BGREWRITEAOF`, `KEEL.DUMP`, `KEEL.RESTORE`, `KEEL.PROMOTE`/`KEEL.FENCE` |
 
 Important boundaries:
 
@@ -66,8 +66,15 @@ Important boundaries:
 - `SET`, `SETEX`, `PSETEX` and `MSET` replace a key of any type, as Redis does;
   `SET NX`/`SETNX` treat a key of any type as existing, and `SET ... GET` answers
   `WRONGTYPE` for a non-string. Other commands refuse a key of another type.
-- `ZRANGE` does not support `BYSCORE`, `BYLEX`, or `LIMIT`. ZADD `GT`/`LT`/`INCR`
-  are not implemented. Options outside the documented subset return errors.
+- `ZRANGE` does not support `BYLEX`. ZADD `GT`/`LT`/`INCR` are not implemented.
+  Options outside the documented subset return errors.
+- Errors are Redis 8.10.1's, byte for byte, wherever Keel has the command:
+  an unknown command or subcommand, the wrong number of arguments, `WRONGTYPE`,
+  malformed arguments, `NOAUTH` and `WRONGPASS`, `READONLY` on a replica. They
+  come in Redis's order, so a command is named and counted before `NOAUTH`, a
+  replica's refusal or a transaction queues it. Keel's own commands use the same
+  form. [Error replies](docs/error-replies.md) lists what was checked and the
+  differences that stay.
 - Expiry belongs to the key, including hashes, lists, filters, and sketches.
   In-place mutations preserve it; replacement clears it unless explicitly kept.
   Past deadlines delete immediately or make a key inaccessible on its next lookup.
@@ -224,7 +231,7 @@ In order of distance, not size.
 - **Command surface outside the contract.** `WATCH`, Lua, Pub/Sub, blocking list
   commands, RESP3 push messages and client tracking, ACL roles, and cluster routing
   are absent. Unreleased development adds `MULTI`/`EXEC`/`DISCARD`. `ZRANGE` lacks
-  `BYSCORE`, `BYLEX`, and `LIMIT`; `ZADD` lacks `GT`, `LT`, and `INCR`.
+  `BYLEX`; `ZADD` lacks `GT`, `LT`, and `INCR`.
   `LREM`, `LINSERT`, `GEOSEARCHSTORE`, the `GEORADIUS` family, `CMS.INFO` and `CMS.MERGE`
   are also missing. So are RedisBloom's `BF.INSERT`, `BF.CARD`, `CF.INSERT`,
   `CF.INSERTNX`, `CF.COMPACT`, the `SCANDUMP`/`LOADCHUNK` pairs and the `DEBUG` forms.

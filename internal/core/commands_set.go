@@ -3,7 +3,6 @@ package core
 import (
 	"errors"
 	"math"
-	"strconv"
 
 	"github.com/brandopakel/keel/internal/constant"
 	"github.com/brandopakel/keel/internal/data_structure"
@@ -30,7 +29,8 @@ func setSettle(key string, s *data_structure.Set) {
 
 var (
 	errIntegerOutOfRange = errors.New("ERR value is not an integer or out of range")
-	errCountNegative     = errors.New("ERR value is out of range, must be positive")
+	// Redis's words for a count past what it can negate, as they are.
+	errRandomCountRange = errors.New("ERR value is out of range, value must between -9223372036854775807 and 9223372036854775807")
 )
 
 // maxRandomMemberCount bounds what SRANDMEMBER may be asked for with a negative
@@ -42,7 +42,7 @@ const maxRandomMemberCount = 1 << 24
 
 func cmdSADD(args []string) []byte {
 	if len(args) < 2 {
-		return Encode(errors.New("ERR wrong number of arguments for 'SADD' command"), false)
+		return Encode(wrongArguments("SADD"), false)
 	}
 	key := args[0]
 	s, ok := setFor(key)
@@ -59,7 +59,7 @@ func cmdSADD(args []string) []byte {
 
 func cmdSREM(args []string) []byte {
 	if len(args) < 2 {
-		return Encode(errors.New("ERR wrong number of arguments for 'SREM' command"), false)
+		return Encode(wrongArguments("SREM"), false)
 	}
 	key := args[0]
 	s, ok := setFor(key)
@@ -74,7 +74,7 @@ func cmdSREM(args []string) []byte {
 
 func cmdSCARD(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("ERR wrong number of arguments for 'SCARD' command"), false)
+		return Encode(wrongArguments("SCARD"), false)
 	}
 	s, ok := setFor(args[0])
 	if !ok {
@@ -86,7 +86,7 @@ func cmdSCARD(args []string) []byte {
 // cmdSMEMBERS answers every member, as a set.
 func cmdSMEMBERS(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("ERR wrong number of arguments for 'SMEMBERS' command"), false)
+		return Encode(wrongArguments("SMEMBERS"), false)
 	}
 	s, ok := setFor(args[0])
 	if !ok {
@@ -97,7 +97,7 @@ func cmdSMEMBERS(args []string) []byte {
 
 func cmdSISMEMBER(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(errors.New("ERR wrong number of arguments for 'SISMEMBER' command"), false)
+		return Encode(wrongArguments("SISMEMBER"), false)
 	}
 	s, ok := setFor(args[0])
 	if !ok || !s.Contains(args[1]) {
@@ -109,7 +109,7 @@ func cmdSISMEMBER(args []string) []byte {
 // cmdSMISMEMBER answers one integer per member asked about, in the order asked.
 func cmdSMISMEMBER(args []string) []byte {
 	if len(args) < 2 {
-		return Encode(errors.New("ERR wrong number of arguments for 'SMISMEMBER' command"), false)
+		return Encode(wrongArguments("SMISMEMBER"), false)
 	}
 	s, ok := setFor(args[0])
 	out := make([]interface{}, 0, len(args)-1)
@@ -123,34 +123,42 @@ func cmdSMISMEMBER(args []string) []byte {
 	return Encode(out, false)
 }
 
-// parseCount reads the optional count SPOP and SRANDMEMBER take, reporting
-// whether one was given at all: without one they answer a single member rather
-// than an array of one.
-func parseCount(args []string) (count int64, given bool, err error) {
+// randomCount reads SRANDMEMBER's optional count, reporting whether one was
+// given at all: without one it answers a single member rather than an array
+// of one. Any count is allowed whose negation is one too.
+func randomCount(args []string) (count int64, given bool, err error) {
 	if len(args) < 2 {
 		return 0, false, nil
 	}
-	n, err := strconv.ParseInt(args[1], 10, 64)
-	if err != nil || n == math.MinInt64 {
+	n, valid := counterInteger(args[1])
+	if !valid {
 		return 0, true, errIntegerOutOfRange
+	}
+	if n == math.MinInt64 {
+		return 0, true, errRandomCountRange
 	}
 	return n, true, nil
 }
 
 // cmdSPOP implements SPOP key [count]: it removes and returns random members,
 // as a set when a count was given - which is Redis's reply, though
-// SRANDMEMBER's with a count is an array.
+// SRANDMEMBER's with a count is an array. The count is read before the key is
+// looked up, and more than one is Redis's syntax error.
 func cmdSPOP(args []string) []byte {
-	if len(args) != 1 && len(args) != 2 {
-		return Encode(errors.New("ERR wrong number of arguments for 'SPOP' command"), false)
+	if len(args) < 1 {
+		return Encode(wrongArguments("SPOP"), false)
+	}
+	if len(args) > 2 {
+		return Encode(errSyntax, false)
 	}
 	key := args[0]
-	count, given, err := parseCount(args)
-	if err != nil {
-		return Encode(err, false)
-	}
-	if count < 0 {
-		return Encode(errCountNegative, false)
+	var count int64
+	given := len(args) == 2
+	if given {
+		var err error
+		if count, err = positiveCount(args[1]); err != nil {
+			return Encode(err, false)
+		}
 	}
 
 	s, ok := setFor(key)
@@ -208,10 +216,13 @@ func cmdSPOP(args []string) []byte {
 // many distinct members; a negative one returns exactly that many, drawn
 // independently, so the same member may come back more than once.
 func cmdSRANDMEMBER(args []string) []byte {
-	if len(args) != 1 && len(args) != 2 {
-		return Encode(errors.New("ERR wrong number of arguments for 'SRANDMEMBER' command"), false)
+	if len(args) < 1 {
+		return Encode(wrongArguments("SRANDMEMBER"), false)
 	}
-	count, given, err := parseCount(args)
+	if len(args) > 2 {
+		return Encode(errSyntax, false)
+	}
+	count, given, err := randomCount(args)
 	if err != nil {
 		return Encode(err, false)
 	}

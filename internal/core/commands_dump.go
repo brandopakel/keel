@@ -180,7 +180,7 @@ func decodeRestorePayload(key string, tag byte, body []byte) (store func(), err 
 
 func cmdDUMP(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'KEEL.DUMP' command"), false)
+		return Encode(wrongArguments("KEEL.DUMP"), false)
 	}
 	plan, ok := planDump(args[0], MaxReplyBytes)
 	if !ok {
@@ -203,7 +203,7 @@ func cmdDUMP(args []string) []byte {
 
 func cmdRESTORE(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(errors.New("(error) ERR wrong number of arguments for 'KEEL.RESTORE' command"), false)
+		return Encode(wrongArguments("KEEL.RESTORE"), false)
 	}
 	if err := restoreKey(args[0], []byte(args[1])); err != nil {
 		return Encode(err, false)

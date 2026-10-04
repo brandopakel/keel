@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"math"
 
 	"github.com/brandopakel/keel/internal/data_structure"
 )
@@ -114,6 +115,145 @@ func commandKeys(cmd *Command) []string {
 // Redis handles it here.
 var errWrongType = errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
 
+// Two commands refuse a key of another type in words of their own, and so
+// they do here. A HyperLogLog is a string in Redis, so a string key is one
+// that does not hold a valid HyperLogLog; any other type is the plain
+// WRONGTYPE.
+var (
+	errLCSType = errors.New("ERR The specified keys must contain string values")
+	errNotHLL  = errors.New("WRONGTYPE Key is not a valid HyperLogLog string value.")
+)
+
+// typeError is the refusal of cmd for a key owner holds.
+func typeError(cmd string, owner data_structure.Keyspace) error {
+	switch cmd {
+	case "LCS":
+		return errLCSType
+	case "PFADD", "PFCOUNT", "PFMERGE":
+		if owner.KeyspaceName() == dictStore.KeyspaceName() {
+			return errNotHLL
+		}
+	}
+	return errWrongType
+}
+
+// argumentsBeforeType are the commands Redis reads some of the arguments of
+// before it looks at the key, so a malformed argument is refused in its own
+// words even when the key holds another type. Each returns the error the
+// command's own reading of those arguments gives, from the same function the
+// command reads them with, or nil. The type check asks only once it has found
+// a key of another type: a command is never run against a key it should have
+// refused, and a well-formed command pays nothing for it.
+var argumentsBeforeType = map[string]func(args []string) error{
+	"INCRBY":  incrementArgument,
+	"DECRBY":  decrementArgument,
+	"HINCRBY": func(args []string) error { return integerArgument(args[2]) },
+	"HSET": func(args []string) error {
+		if len(args)%2 != 1 {
+			return wrongArguments("HSET")
+		}
+		return nil
+	},
+	"LPOP":   func(args []string) error { return listPopArguments("LPOP", args) },
+	"RPOP":   func(args []string) error { return listPopArguments("RPOP", args) },
+	"LRANGE": rangeArgument, "LTRIM": rangeArgument,
+	"SPOP": func(args []string) error {
+		if len(args) > 2 {
+			return errSyntax
+		}
+		return popCountArgument(args)
+	},
+	"SRANDMEMBER": randomCountArgument, "SRAND": randomCountArgument,
+	"ZADD": zaddArguments,
+	"ZINCRBY": func(args []string) error {
+		_, err := parseZScore(args[1])
+		return err
+	},
+	"ZRANGE": func(args []string) error {
+		_, err := parseZRange(args)
+		return err
+	},
+	"ZRANGEBYSCORE": func(args []string) error {
+		_, _, _, _, err := parseScoreRange(args, false)
+		return err
+	},
+	"ZREVRANGEBYSCORE": func(args []string) error {
+		_, _, _, _, err := parseScoreRange(args, true)
+		return err
+	},
+	"ZCOUNT": func(args []string) error {
+		_, err := parseScoreInterval(args[1], args[2])
+		return err
+	},
+	"ZPOPMIN": func(args []string) error {
+		_, err := zpopCount("ZPOPMIN", args)
+		return err
+	},
+	"ZPOPMAX": func(args []string) error {
+		_, err := zpopCount("ZPOPMAX", args)
+		return err
+	},
+	"ZRANK": func(args []string) error {
+		_, err := zrankArguments(args)
+		return err
+	},
+	"GEOADD": geoaddArguments,
+	"GEODIST": func(args []string) error {
+		_, err := geodistUnit(args)
+		return err
+	},
+}
+
+func integerArgument(v string) error {
+	if _, valid := counterInteger(v); !valid {
+		return errNotAnInteger
+	}
+	return nil
+}
+
+func incrementArgument(args []string) error { return integerArgument(args[1]) }
+
+func decrementArgument(args []string) error {
+	n, valid := counterInteger(args[1])
+	switch {
+	case !valid:
+		return errNotAnInteger
+	case n == math.MinInt64:
+		return errDecrOverflow
+	}
+	return nil
+}
+
+// listPopArguments is LPOP's and RPOP's reading: more than a count is the
+// wrong number of arguments, then the count.
+func listPopArguments(name string, args []string) error {
+	if len(args) > 2 {
+		return wrongArguments(name)
+	}
+	return popCountArgument(args)
+}
+
+func popCountArgument(args []string) error {
+	if len(args) == 2 {
+		_, err := positiveCount(args[1])
+		return err
+	}
+	return nil
+}
+
+func rangeArgument(args []string) error {
+	_, _, err := integerRange(args[1], args[2])
+	return err
+}
+
+func randomCountArgument(args []string) error {
+	if len(args) > 2 {
+		return errSyntax
+	}
+	_, _, err := randomCount(args)
+	return err
+}
+
 // writtenKeys returns the keys a command changes, for the rewrite that has to
 // know which of its findings went stale.
 //
@@ -167,11 +307,8 @@ var filterCommands = map[string]bool{
 }
 
 // checkKeyTypes reports an error if any key the command names is already held
-// by a different kind of store.
-//
-// LCS is deliberately absent from the table: it reads two keys and treats a
-// missing one as empty, which is what it should also do for a key of another
-// type - see the comment on lcsValue.
+// by a different kind of store: the command's own refusal of its arguments,
+// where Redis reads those first, and otherwise Redis's refusal of the type.
 func checkKeyTypes(cmd *Command) error {
 	space, checked := commandKeyspace[cmd.Cmd]
 	if !checked || len(cmd.Args) == 0 || replacingWrites[cmd.Cmd] || filterCommands[cmd.Cmd] {
@@ -180,7 +317,12 @@ func checkKeyTypes(cmd *Command) error {
 
 	for _, key := range commandKeys(cmd) {
 		if owner, held := data_structure.OwnerOf(key); held && owner.KeyspaceName() != space {
-			return errWrongType
+			if arguments := argumentsBeforeType[cmd.Cmd]; arguments != nil {
+				if err := arguments(cmd.Args); err != nil {
+					return err
+				}
+			}
+			return typeError(cmd.Cmd, owner)
 		}
 	}
 	return nil

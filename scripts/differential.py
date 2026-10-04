@@ -4,9 +4,10 @@
 Compare replies and final state for the supported common command contract,
 including transactions: MULTI blocks of the same operations, with queueing
 refusals, nested MULTI and DISCARD mixed in.
-Unordered sets/hash fields are normalized; error text is compared by RESP error
-class. Deliberate differences (Redis dumps/modules) are outside this test, not
-silently accepted mismatches. String writes also land on names other types
+Unordered sets/hash fields are normalized; an error is compared byte for byte,
+its whole text and not only its class, inside EXEC replies too. Deliberate
+differences (Redis dumps/modules) are outside this test, not silently accepted
+mismatches. String writes also land on names other types
 hold, because SET, MSET, SETEX, PSETEX and SETNX replace or find those as
 Redis's do.
 
@@ -16,8 +17,9 @@ a null against a null. That mode also covers the rest of the supported command
 surface whose replies Redis gives deterministically, transactions among them,
 including a HELLO queued inside one, and, with --redis-module naming
 RedisBloom, the BF, CF and CMS commands. The same normalization applies and
-nothing else is relaxed; replies whose content legitimately differs (HELLO,
-INFO, MEMORY, module INFO) are compared by type and field names.
+nothing else is relaxed, errors included, compared byte for byte; replies
+whose content legitimately differs (HELLO, INFO, MEMORY, module INFO) are
+compared by type and field names.
 """
 import argparse
 import hashlib
@@ -43,15 +45,11 @@ def normalize(command, value):
     return value
 
 
-def error_class(message):
-    return message.removeprefix('(error) ').split()[0]
-
-
 def execute(client, command):
     try:
         return ('ok', normalize(command, client.call(*command)))
     except RuntimeError as exc:
-        return ('error', error_class(str(exc)))
+        return ('error', str(exc))
 
 
 def read_tolerant(client, depth=0):
@@ -59,7 +57,7 @@ def read_tolerant(client, depth=0):
 
     The shared client raises on any error, which would abandon the rest of an
     EXEC array on the wire; a transaction's reply holds an error per command
-    that failed, so each one is kept and compared by class instead.
+    that failed, so each one is kept, as the bytes it was sent as.
     """
     if depth > 16:
         raise ValueError('RESP nesting limit')
@@ -68,7 +66,7 @@ def read_tolerant(client, depth=0):
         raise ValueError('invalid RESP header')
     kind, body = line[:1], line[1:-2]
     if kind == b'-':
-        return ('error', error_class(body.decode(errors='replace')))
+        return ('error', body)
     if kind == b'+':
         return body
     if kind == b':':
@@ -308,10 +306,6 @@ UNORDERED_RESP2 = ('SMEMBERS', 'SPOP')
 ITEMS = [f'item:{i}' for i in range(32)]
 
 
-def error_class3(text):
-    return text.removeprefix(b'(error) ').split()[0] if text.strip() else b''
-
-
 def hello_shape(value):
     """A HELLO reply as its protocol and field names: the values (server name,
     version, connection id, modules) are each server's own. RESP2 sends the
@@ -332,7 +326,7 @@ def normalize3(command, value):
     def walk(v):
         kind = v[0]
         if kind == 'error':
-            return ('error', error_class3(v[1]))
+            return ('error', v[1])
         if kind in ('array', 'push'):
             return (kind, [walk(x) for x in v[1]])
         if kind == 'set':
@@ -353,7 +347,7 @@ def execute3(client, command):
     try:
         return ('ok', normalize3(command, client.call(*command)))
     except RuntimeError as exc:
-        return ('error', str(exc).removeprefix('(error) ').split()[0])
+        return ('error', str(exc))
 
 
 def close_numbers(got, want, tolerance):
@@ -801,13 +795,13 @@ def run(args):
               'binary_sha256': sha256(args.bin), 'redis_sha256': sha256(args.redis),
               'harness_sha256': sha256(__file__), 'policy': args.policy, 'concurrent': args.concurrent,
               'reply_checks': 0, 'transaction_checks': 0, 'state_checks': 0, 'restarts': 0,
-              'limits': 'Supported common RESP2 commands, alone and in MULTI/EXEC/DISCARD blocks; unordered collections normalized; errors compared by class, inside EXEC replies too. No timing-based TTL differential or WATCH claim.'}
+              'limits': 'Supported common RESP2 commands, alone and in MULTI/EXEC/DISCARD blocks; unordered collections normalized; errors compared byte for byte, inside EXEC replies too. No timing-based TTL differential or WATCH claim.'}
     if args.protocol == 3:
         report.update(protocol=3, redis_module=str(args.redis_module) if args.redis_module else None,
                       redis_module_sha256=sha256(args.redis_module) if args.redis_module else None,
                       limits='Supported commands over RESP3 (HELLO 3 AUTH on both servers), replies compared with their '
                              'RESP3 types; sets, maps and the RESP2 mode\'s unordered arrays normalized; errors compared '
-                             'by class; geo floats within the RESP2 mode\'s tolerances. HELLO, INFO, CLIENT INFO/ID, MEMORY, '
+                             'byte for byte; geo floats within the RESP2 mode\'s tolerances. HELLO, INFO, CLIENT INFO/ID, MEMORY, '
                              'TTL/PTTL of a live key and module INFO compared by type and field names. BF/CF/CMS only with '
                              '--redis-module. Not compared: Keel-only commands (KEEL.*, MEMKV.*, MORRIS.*, SRAND), '
                              'BGREWRITEAOF, SELECT of another database, and random picks other than those determined by the set. '

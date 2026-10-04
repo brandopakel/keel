@@ -23,14 +23,19 @@ func TestUnknownCommandIsAnError(t *testing.T) {
 	ResetStores()
 	var w replyWriter
 	err := EvalAndResponse(&Command{Cmd: "NOSUCH", Args: []string{"a"}}, &w)
-	assert.EqualError(t, err, "ERR unknown command 'NOSUCH'")
+	assert.EqualError(t, err, "ERR unknown command 'NOSUCH', with args beginning with: 'a' ")
 	assert.Empty(t, w.b, "nothing is written for it here; the caller replies")
 }
 
+// TestUnknownCommandDiagnosticIsBoundedBeforeFormatting: a name or argument
+// can fill the query buffer, and the error echoes no more of either than
+// Redis does - 128 bytes of the name, and arguments until 128 bytes of them -
+// without copying the rest first.
 func TestUnknownCommandDiagnosticIsBoundedBeforeFormatting(t *testing.T) {
 	ResetStores()
 	defer ResetStores()
-	cmd := &Command{Cmd: strings.Repeat("NO\r\n", 256<<10)}
+	huge := strings.Repeat("NO\r\n", 256<<10)
+	cmd := &Command{Cmd: huge, Args: []string{huge, huge, huge}}
 	var w replyWriter
 	runtime.GC()
 	var before, after runtime.MemStats
@@ -40,10 +45,45 @@ func TestUnknownCommandDiagnosticIsBoundedBeforeFormatting(t *testing.T) {
 	runtime.ReadMemStats(&after)
 	assert.Error(t, err)
 	assert.Empty(t, w.b, "replay must still receive a fatal unknown-command error")
-	assert.LessOrEqual(t, len(reply), 160)
+	echo := strings.Repeat("NO  ", 32)
+	assert.Equal(t, "-ERR unknown command '"+echo+"', with args beginning with: '"+echo+"' \r\n", string(reply),
+		"the first argument fills the 128 bytes, and none follows it")
 	assert.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(64<<10), "formatting and sanitizing an unknown name must stay small")
-	assert.Contains(t, string(reply), "...'")
 	assert.Equal(t, 1, bytes.Count(reply, []byte("\r\n")))
+}
+
+// TestUnknownCommandIsWordedAsRedis8WordsIt, checked against Redis 8.10.1: the
+// name as it was sent, the arguments only when there are some, each cut to
+// the room left of 128 bytes, a NUL ending one as it ends a C string.
+func TestUnknownCommandIsWordedAsRedis8WordsIt(t *testing.T) {
+	for _, c := range []struct {
+		cmd  *Command
+		want string
+	}{
+		{&Command{Cmd: "FOO", Name: "foo"}, "ERR unknown command 'foo'"},
+		{&Command{Cmd: "FOO", Name: "FoO", Args: []string{"a", "b"}}, "ERR unknown command 'FoO', with args beginning with: 'a' 'b' "},
+		{&Command{Cmd: "FOO", Args: []string{""}}, "ERR unknown command 'FOO', with args beginning with: '' "},
+		{&Command{Cmd: "", Args: []string{"a"}}, "ERR unknown command '', with args beginning with: 'a' "},
+		{&Command{Cmd: strings.Repeat("X", 129)}, "ERR unknown command '" + strings.Repeat("X", 128) + "'"},
+		{&Command{Cmd: "FOO", Args: []string{strings.Repeat("a", 125), "b"}},
+			"ERR unknown command 'FOO', with args beginning with: '" + strings.Repeat("a", 125) + "' "},
+		{&Command{Cmd: "FOO", Args: []string{strings.Repeat("a", 124), "b", "c"}},
+			"ERR unknown command 'FOO', with args beginning with: '" + strings.Repeat("a", 124) + "' 'b' "},
+		{&Command{Cmd: "FOO", Args: []string{strings.Repeat("a", 200)}},
+			"ERR unknown command 'FOO', with args beginning with: '" + strings.Repeat("a", 128) + "' "},
+		{&Command{Cmd: "F", Name: "f\x00oo", Args: []string{"a\x00b", "c"}}, "ERR unknown command 'f', with args beginning with: 'a' 'c' "},
+		{&Command{Cmd: "FOO", Args: []string{"a\r\nb"}}, "ERR unknown command 'FOO', with args beginning with: 'a  b' "},
+		{&Command{Cmd: "FOO", Args: []string{strings.Repeat("\u00e9", 70)}},
+			"ERR unknown command 'FOO', with args beginning with: '" + strings.Repeat("\u00e9", 64) + "' "},
+	} {
+		assert.EqualError(t, unknownCommand(c.cmd), c.want)
+	}
+	args := make([]string, 60)
+	for i := range args {
+		args[i] = "ab"
+	}
+	assert.EqualError(t, unknownCommand(&Command{Cmd: "FOO", Args: args}),
+		"ERR unknown command 'FOO', with args beginning with: "+strings.Repeat("'ab' ", 26), "five bytes each, until 128 are passed")
 }
 
 // TestAnErrorQuotingClientInputStaysOneFrame: a command name or argument can
@@ -58,8 +98,8 @@ func TestAnErrorQuotingClientInputStaysOneFrame(t *testing.T) {
 	assert.Equal(t, 1, bytes.Count(reply, []byte("\r\n")), "one frame")
 
 	// A handler that quotes an argument goes through the same encoder.
-	raw := rawReply(t, "GEOSEARCH", "g", "FROMLONLAT", "1", "1", "BYRADIUS", "1", "km\r\n:1")
-	assert.Equal(t, byte('-'), raw[0])
+	raw := rawReply(t, "EXPIRE", "k", "1", "NX\r\n:1")
+	assert.Equal(t, "-ERR Unsupported option NX  :1\r\n", string(raw))
 	assert.Equal(t, 1, bytes.Count(raw, []byte("\r\n")), "one frame: %q", raw)
 }
 

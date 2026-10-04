@@ -3,7 +3,6 @@ package core
 import (
 	"errors"
 	"math"
-	"strconv"
 	"strings"
 
 	"github.com/brandopakel/keel/internal/constant"
@@ -18,64 +17,88 @@ func scoreBound(text string) (value float64, exclusive bool, err error) {
 	return
 }
 
+// scoreInterval is a range of scores, each end open or closed.
+type scoreInterval struct {
+	min, max     float64
+	minEx, maxEx bool
+}
+
+var errMinMaxNotFloat = errors.New("ERR min or max is not a float")
+
+// parseScoreInterval reads a range of scores lowest first, refused in Redis's
+// words for either end.
+func parseScoreInterval(lower, upper string) (r scoreInterval, err error) {
+	var e1, e2 error
+	r.min, r.minEx, e1 = scoreBound(lower)
+	r.max, r.maxEx, e2 = scoreBound(upper)
+	if e1 != nil || e2 != nil {
+		return r, errMinMaxNotFloat
+	}
+	return r, nil
+}
+
 func cmdZCOUNT(args []string) []byte {
 	if len(args) != 3 {
-		return Encode(errSyntax, false)
+		return Encode(wrongArguments("ZCOUNT"), false)
 	}
-	min, minEx, e1 := scoreBound(args[1])
-	max, maxEx, e2 := scoreBound(args[2])
-	if e1 != nil || e2 != nil {
-		return Encode(errNotAFloat, false)
+	r, err := parseScoreInterval(args[1], args[2])
+	if err != nil {
+		return Encode(err, false)
 	}
 	z, ok := zsetFor(args[0])
 	if !ok {
 		return constant.RespZero
 	}
-	return Encode(z.CountByScore(min, max, minEx, maxEx), false)
+	return Encode(z.CountByScore(r.min, r.max, r.minEx, r.maxEx), false)
 }
 
-func cmdZRANGEBYSCORE(args []string) []byte    { return scoreRange(args, false) }
-func cmdZREVRANGEBYSCORE(args []string) []byte { return scoreRange(args, true) }
-func scoreRange(args []string, reverse bool) []byte {
-	if len(args) < 3 {
-		return Encode(errSyntax, false)
+func cmdZRANGEBYSCORE(args []string) []byte    { return scoreRange("ZRANGEBYSCORE", args, false) }
+func cmdZREVRANGEBYSCORE(args []string) []byte { return scoreRange("ZREVRANGEBYSCORE", args, true) }
+
+// parseScoreRange reads ZRANGEBYSCORE's and ZREVRANGEBYSCORE's arguments in
+// Redis's order, the options before the range.
+func parseScoreRange(args []string, reverse bool) (r scoreInterval, withScores bool, offset, count int, err error) {
+	count = -1
+	for i := 3; i < len(args); i++ {
+		switch opt := strings.ToUpper(args[i]); {
+		case opt == "WITHSCORES":
+			withScores = true
+		case opt == "LIMIT" && i+2 < len(args):
+			if offset, count, err = integerRange(args[i+1], args[i+2]); err != nil {
+				return r, false, 0, 0, err
+			}
+			i += 2
+		default:
+			return r, false, 0, 0, errSyntax
+		}
 	}
 	lower, upper := args[1], args[2]
 	if reverse {
 		lower, upper = upper, lower
 	}
-	min, minEx, e1 := scoreBound(lower)
-	max, maxEx, e2 := scoreBound(upper)
-	if e1 != nil || e2 != nil {
-		return Encode(errNotAFloat, false)
+	r, err = parseScoreInterval(lower, upper)
+	return r, withScores, offset, count, err
+}
+
+func scoreRange(name string, args []string, reverse bool) []byte {
+	if len(args) < 3 {
+		return Encode(wrongArguments(name), false)
 	}
-	withScores := false
-	offset, count := 0, -1
-	for i := 3; i < len(args); i++ {
-		switch strings.ToUpper(args[i]) {
-		case "WITHSCORES":
-			withScores = true
-		case "LIMIT":
-			if i+2 >= len(args) {
-				return Encode(errSyntax, false)
-			}
-			var e1, e2 error
-			offset, e1 = strconv.Atoi(args[i+1])
-			count, e2 = strconv.Atoi(args[i+2])
-			i += 2
-			if e1 != nil || e2 != nil {
-				return Encode(errNotAnInteger, false)
-			}
-		default:
-			return Encode(errSyntax, false)
-		}
+	r, withScores, offset, count, err := parseScoreRange(args, reverse)
+	if err != nil {
+		return Encode(err, false)
 	}
-	z, ok := zsetFor(args[0])
+	return scoreRangeReply(args[0], r, offset, count, reverse, withScores)
+}
+
+// scoreRangeReply answers the members of key whose scores are within r.
+func scoreRangeReply(key string, r scoreInterval, offset, count int, reverse, withScores bool) []byte {
+	z, ok := zsetFor(key)
 	if !ok {
 		return constant.RespEmptyArray
 	}
 	walk := func(yield func(string, float64) bool) {
-		z.VisitRangeByScore(min, max, minEx, maxEx, offset, count, reverse, yield)
+		z.VisitRangeByScore(r.min, r.max, r.minEx, r.maxEx, offset, count, reverse, yield)
 	}
 	if withScores && replyRESP3 {
 		return scoredReply3(walk, true)
@@ -85,7 +108,7 @@ func scoreRange(args []string, reverse bool) []byte {
 
 func cmdZINCRBY(args []string) []byte {
 	if len(args) != 3 {
-		return Encode(errSyntax, false)
+		return Encode(wrongArguments("ZINCRBY"), false)
 	}
 	increment, err := parseZScore(args[1])
 	if err != nil {
@@ -107,19 +130,28 @@ func cmdZINCRBY(args []string) []byte {
 	return Encode(ReplyDouble(formatZScore(score)), false)
 }
 
-func cmdZPOPMIN(args []string) []byte { return zpop(args, false) }
-func cmdZPOPMAX(args []string) []byte { return zpop(args, true) }
-func zpop(args []string, reverse bool) []byte {
-	if len(args) < 1 || len(args) > 2 {
-		return Encode(errSyntax, false)
+func cmdZPOPMIN(args []string) []byte { return zpop("ZPOPMIN", args, false) }
+
+// zpopCount reads ZPOPMIN's and ZPOPMAX's optional count, refused as Redis
+// refuses it before the key is looked at.
+func zpopCount(name string, args []string) (int, error) {
+	if len(args) < 1 {
+		return 0, wrongArguments(name)
 	}
-	count := 1
-	if len(args) == 2 {
-		var err error
-		count, err = strconv.Atoi(args[1])
-		if err != nil || count < 0 {
-			return Encode(errNotAnInteger, false)
-		}
+	if len(args) > 2 {
+		return 0, errSyntax
+	}
+	if len(args) == 1 {
+		return 1, nil
+	}
+	n, err := positiveCount(args[1])
+	return int(n), err
+}
+func cmdZPOPMAX(args []string) []byte { return zpop("ZPOPMAX", args, true) }
+func zpop(name string, args []string, reverse bool) []byte {
+	count, err := zpopCount(name, args)
+	if err != nil {
+		return Encode(err, false)
 	}
 	z, ok := zsetFor(args[0])
 	if !ok || count == 0 {
