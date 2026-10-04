@@ -23,19 +23,19 @@ const (
 	shapeMap
 )
 
-func appendShapeHeader(dst []byte, shape replyShape, values int) []byte {
+func (f framing) appendShapeHeader(dst []byte, shape replyShape, values int) []byte {
 	switch shape {
 	case shapeSet:
-		return appendSetHeader(dst, values)
+		return f.appendSetHeader(dst, values)
 	case shapeMap:
-		return appendMapHeader(dst, values/2)
+		return f.appendMapHeader(dst, values/2)
 	}
 	return appendArrayHeader(dst, values)
 }
 
-func shapeHeaderSize(shape replyShape, values int) int {
+func (f framing) shapeHeaderSize(shape replyShape, values int) int {
 	if shape == shapeMap {
-		return mapHeaderSize(values / 2)
+		return f.mapHeaderSize(values / 2)
 	}
 	return decimalDigits(values) + 3
 }
@@ -54,10 +54,10 @@ func (e *Engine) encodeWalkReply(walk replyWalk, shape replyShape) []byte {
 	}
 	if shape == shapeOne {
 		if count == 0 {
-			return nullReply()
+			return e.nullReply()
 		}
 	} else {
-		header := shapeHeaderSize(shape, count)
+		header := e.shapeHeaderSize(shape, count)
 		if size > MaxReplyBytes-header {
 			return replyTooLarge
 		}
@@ -68,7 +68,7 @@ func (e *Engine) encodeWalkReply(walk replyWalk, shape replyShape) []byte {
 	}
 	out := make([]byte, 0, size)
 	if shape != shapeOne {
-		out = appendShapeHeader(out, shape, count)
+		out = e.appendShapeHeader(out, shape, count)
 	}
 	walk(func(value string) bool { out = appendBulkString(out, value); return true })
 	return out
@@ -112,19 +112,22 @@ func (e *Engine) scoredReply(walk func(func(string, float64) bool), withScores b
 // own - Redis's form for ZRANGE and ZRANGEBYSCORE WITHSCORES and for a ZPOPMIN
 // given a count. A ZPOPMIN without one stays flat: [member, score].
 func (e *Engine) scoredReply3(walk func(func(string, float64) bool), nested bool) []byte {
+	// The closures handed to walk escape, so they capture the framing, not
+	// the engine, and leave the engine's escape analysis as it was.
+	f := e.framing
 	size, pairs, fits := 0, 0, true
 	walk(func(member string, score float64) bool {
 		pairs++
 		if nested {
-			if size > MaxReplyBytes-pairHeaderSize() {
+			if size > MaxReplyBytes-f.pairHeaderSize() {
 				fits = false
 				return false
 			}
-			size += pairHeaderSize()
+			size += f.pairHeaderSize()
 		}
 		size, fits = addBulkSize(size, len(member))
 		if fits {
-			size, fits = addDoubleSize(size, len(formatZScore(score)))
+			size, fits = f.addDoubleSize(size, len(formatZScore(score)))
 		}
 		return fits
 	})
@@ -143,10 +146,10 @@ func (e *Engine) scoredReply3(walk func(func(string, float64) bool), nested bool
 	out := appendArrayHeader(make([]byte, 0, size), values)
 	walk(func(member string, score float64) bool {
 		if nested {
-			out = appendPairHeader(out)
+			out = f.appendPairHeader(out)
 		}
 		out = appendBulkString(out, member)
-		out = appendDouble(out, formatZScore(score))
+		out = appendDouble(f, out, formatZScore(score))
 		return true
 	})
 	return out

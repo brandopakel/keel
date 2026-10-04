@@ -42,7 +42,7 @@ const maxRandomMemberCount = 1 << 24
 
 func (e *Engine) cmdSADD(args []string) []byte {
 	if len(args) < 2 {
-		return Encode(wrongArguments("SADD"), false)
+		return e.encode(wrongArguments("SADD"), false)
 	}
 	key := args[0]
 	s, ok := e.setFor(key)
@@ -54,12 +54,12 @@ func (e *Engine) cmdSADD(args []string) []byte {
 	// Members change the set's size without going through Put, so the keyspace
 	// has to re-measure it or the memory budget keeps believing the old figure.
 	e.setStore.Resize(key)
-	return Encode(added, false)
+	return e.encode(added, false)
 }
 
 func (e *Engine) cmdSREM(args []string) []byte {
 	if len(args) < 2 {
-		return Encode(wrongArguments("SREM"), false)
+		return e.encode(wrongArguments("SREM"), false)
 	}
 	key := args[0]
 	s, ok := e.setFor(key)
@@ -69,35 +69,35 @@ func (e *Engine) cmdSREM(args []string) []byte {
 	}
 	removed := s.Remove(args[1:]...)
 	e.setSettle(key, s)
-	return Encode(removed, false)
+	return e.encode(removed, false)
 }
 
 func (e *Engine) cmdSCARD(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(wrongArguments("SCARD"), false)
+		return e.encode(wrongArguments("SCARD"), false)
 	}
 	s, ok := e.setFor(args[0])
 	if !ok {
 		return constant.RespZero
 	}
-	return Encode(s.Len(), false)
+	return e.encode(s.Len(), false)
 }
 
 // cmdSMEMBERS answers every member, as a set.
 func (e *Engine) cmdSMEMBERS(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(wrongArguments("SMEMBERS"), false)
+		return e.encode(wrongArguments("SMEMBERS"), false)
 	}
 	s, ok := e.setFor(args[0])
 	if !ok {
-		return emptySetReply()
+		return e.emptySetReply()
 	}
 	return e.encodeLookupArray(s.Len(), s.MemberAt, shapeSet)
 }
 
 func (e *Engine) cmdSISMEMBER(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(wrongArguments("SISMEMBER"), false)
+		return e.encode(wrongArguments("SISMEMBER"), false)
 	}
 	s, ok := e.setFor(args[0])
 	if !ok || !s.Contains(args[1]) {
@@ -109,7 +109,7 @@ func (e *Engine) cmdSISMEMBER(args []string) []byte {
 // cmdSMISMEMBER answers one integer per member asked about, in the order asked.
 func (e *Engine) cmdSMISMEMBER(args []string) []byte {
 	if len(args) < 2 {
-		return Encode(wrongArguments("SMISMEMBER"), false)
+		return e.encode(wrongArguments("SMISMEMBER"), false)
 	}
 	s, ok := e.setFor(args[0])
 	out := make([]interface{}, 0, len(args)-1)
@@ -120,7 +120,7 @@ func (e *Engine) cmdSMISMEMBER(args []string) []byte {
 			out = append(out, int64(0))
 		}
 	}
-	return Encode(out, false)
+	return e.encode(out, false)
 }
 
 // randomCount reads SRANDMEMBER's optional count, reporting whether one was
@@ -146,10 +146,10 @@ func randomCount(args []string) (count int64, given bool, err error) {
 // looked up, and more than one is Redis's syntax error.
 func (e *Engine) cmdSPOP(args []string) []byte {
 	if len(args) < 1 {
-		return Encode(wrongArguments("SPOP"), false)
+		return e.encode(wrongArguments("SPOP"), false)
 	}
 	if len(args) > 2 {
-		return Encode(errSyntax, false)
+		return e.encode(errSyntax, false)
 	}
 	key := args[0]
 	var count int64
@@ -157,16 +157,16 @@ func (e *Engine) cmdSPOP(args []string) []byte {
 	if given {
 		var err error
 		if count, err = positiveCount(args[1]); err != nil {
-			return Encode(err, false)
+			return e.encode(err, false)
 		}
 	}
 
 	s, ok := e.setFor(key)
 	if !ok {
 		if given {
-			return emptySetReply()
+			return e.emptySetReply()
 		}
-		return nullReply()
+		return e.nullReply()
 	}
 
 	// Without a count the command pops one member, not zero. Asking for zero
@@ -217,14 +217,14 @@ func (e *Engine) cmdSPOP(args []string) []byte {
 // independently, so the same member may come back more than once.
 func (e *Engine) cmdSRANDMEMBER(args []string) []byte {
 	if len(args) < 1 {
-		return Encode(wrongArguments("SRANDMEMBER"), false)
+		return e.encode(wrongArguments("SRANDMEMBER"), false)
 	}
 	if len(args) > 2 {
-		return Encode(errSyntax, false)
+		return e.encode(errSyntax, false)
 	}
 	count, given, err := randomCount(args)
 	if err != nil {
-		return Encode(err, false)
+		return e.encode(err, false)
 	}
 
 	s, ok := e.setFor(args[0])
@@ -232,7 +232,7 @@ func (e *Engine) cmdSRANDMEMBER(args []string) []byte {
 		if given {
 			return constant.RespEmptyArray
 		}
-		return nullReply()
+		return e.nullReply()
 	}
 	if !given || count > 0 {
 		// Distinct sampling shuffles the internal order even though the set's
@@ -243,13 +243,13 @@ func (e *Engine) cmdSRANDMEMBER(args []string) []byte {
 		// One member, for the same reason SPOP takes one.
 		picked := s.RandomMembers(1)
 		if len(picked) == 0 {
-			return nullReply()
+			return e.nullReply()
 		}
-		return Encode(picked[0], false)
+		return e.encode(picked[0], false)
 	}
 	if count < 0 {
 		if -count > maxRandomMemberCount {
-			return Encode(errIntegerOutOfRange, false)
+			return e.encode(errIntegerOutOfRange, false)
 		}
 		return e.encodeRepeatedMembers(s, int(-count))
 	}

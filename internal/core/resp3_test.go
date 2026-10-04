@@ -368,10 +368,10 @@ func TestRESP3IsScopedToOneCommand(t *testing.T) {
 	assert.Equal(t, "$-1\r\n", string(rawReplyAs(t, false, "GET", "missing")))
 	var w replyWriter
 	assert.Error(t, EvalAndResponse(&Command{Cmd: "NOSUCH", RESP3: true}, &w))
-	assert.False(t, replyRESP3)
+	assert.False(t, defaultEngine.replyRESP3)
 	assert.Equal(t, "$-1\r\n", string(Encode(nil, false)), "Encode outside a command is RESP2")
 	assert.Equal(t, "_\r\n", string(EncodeAs(nil, false, true)))
-	assert.False(t, replyRESP3, "EncodeAs restores what it found")
+	assert.False(t, defaultEngine.replyRESP3, "EncodeAs leaves the engine's framing alone")
 }
 
 // TestRESP3RepliesAreSizedExactly: the collection replies count their framing
@@ -396,9 +396,9 @@ func TestRESP3RepliesAreSizedExactly(t *testing.T) {
 	// protocol whatever happens, so a failure here cannot leave the rest of
 	// the package's tests encoding RESP3.
 	build := func(args []string, resp3 bool) []byte {
-		saved := replyRESP3
-		replyRESP3 = resp3
-		defer func() { replyRESP3 = saved }()
+		saved := defaultEngine.framing
+		defaultEngine.framing = framing{replyRESP3: resp3}
+		defer func() { defaultEngine.framing = saved }()
 		return commandTable[args[0]](defaultEngine, args[1:])
 	}
 	for _, args := range [][]string{
@@ -447,15 +447,15 @@ func TestRESP3OutputLimitCountsRESP3Framing(t *testing.T) {
 	}
 	defaultEngine.zsetStore.Put("z", z)
 
-	saved := replyRESP3
-	defer func() { replyRESP3 = saved }()
-	replyRESP3 = false
+	saved := defaultEngine.framing
+	defer func() { defaultEngine.framing = saved }()
+	defaultEngine.framing = framing{}
 	resp2 := defaultEngine.cmdZRANGE([]string{"z", "0", "-1", "WITHSCORES"})
 	require.Equal(t, byte('*'), resp2[0])
 	assert.Equal(t, target, len(resp2))
 	resp2 = nil
 
-	replyRESP3 = true
+	defaultEngine.framing = framing{replyRESP3: true}
 	assert.Equal(t, replyTooLarge, defaultEngine.cmdZRANGE([]string{"z", "0", "-1", "WITHSCORES"}))
 	assert.Equal(t, replyTooLarge, defaultEngine.cmdZPOPMIN([]string{"z", "65"}))
 	assert.Equal(t, pairs, z.Len(), "a refused pop removes nothing")

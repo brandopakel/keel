@@ -33,22 +33,22 @@ func (e *Engine) cmsFor(key string) (*data_structure.CMS, bool) {
 // what the server will allocate before anything is made.
 func (e *Engine) cmsCreate(key string, width, depth uint32) []byte {
 	if width == 0 {
-		return Encode(errCMSWidth, false)
+		return e.encode(errCMSWidth, false)
 	}
 	if depth == 0 {
-		return Encode(errCMSDepth, false)
+		return e.encode(errCMSDepth, false)
 	}
 	// The cell count is checked before the byte count: two 32-bit dimensions
 	// multiply to a number of cells that fits in 64 bits, but four bytes each
 	// can wrap, and a wrapped size would look small.
 	if uint64(width)*uint64(depth) > maxStructureBytes/4 {
-		return Encode(errTooLargeForOneKey, false)
+		return e.encode(errTooLargeForOneKey, false)
 	}
 	if err := affordable(data_structure.CMSMemUsageFor(width, depth)); err != nil {
-		return Encode(err, false)
+		return e.encode(err, false)
 	}
 	if e.cmsStore.Exists(key) {
-		return Encode(errCMSExists, false)
+		return e.encode(errCMSExists, false)
 	}
 	e.cmsStore.Put(key, data_structure.CreateCMS(width, depth))
 	return constant.RespOk
@@ -57,15 +57,15 @@ func (e *Engine) cmsCreate(key string, width, depth uint32) []byte {
 // cmdCMSINITBYDIM implements CMS.INITBYDIM key width depth.
 func (e *Engine) cmdCMSINITBYDIM(args []string) []byte {
 	if len(args) != 3 {
-		return Encode(wrongArguments("CMS.INITBYDIM"), false)
+		return e.encode(wrongArguments("CMS.INITBYDIM"), false)
 	}
 	width, err := strconv.ParseUint(args[1], 10, 32)
 	if err != nil {
-		return Encode(errCMSWidth, false)
+		return e.encode(errCMSWidth, false)
 	}
 	depth, err := strconv.ParseUint(args[2], 10, 32)
 	if err != nil {
-		return Encode(errCMSDepth, false)
+		return e.encode(errCMSDepth, false)
 	}
 	return e.cmsCreate(args[0], uint32(width), uint32(depth))
 }
@@ -75,17 +75,17 @@ func (e *Engine) cmdCMSINITBYDIM(args []string) []byte {
 // given probability of failing to be.
 func (e *Engine) cmdCMSINITBYPROB(args []string) []byte {
 	if len(args) != 3 {
-		return Encode(wrongArguments("CMS.INITBYPROB"), false)
+		return e.encode(wrongArguments("CMS.INITBYPROB"), false)
 	}
 	// NaN parses and compares false against both bounds, so both rates refuse
 	// it by name.
 	errRate, err := strconv.ParseFloat(args[1], 64)
 	if err != nil || math.IsNaN(errRate) || errRate <= 0 || errRate >= 1 {
-		return Encode(errCMSErrRate, false)
+		return e.encode(errCMSErrRate, false)
 	}
 	prob, err := strconv.ParseFloat(args[2], 64)
 	if err != nil || math.IsNaN(prob) || prob <= 0 || prob >= 1 {
-		return Encode(errCMSProb, false)
+		return e.encode(errCMSProb, false)
 	}
 	width, depth := data_structure.CalcCMSDim(errRate, prob)
 	return e.cmsCreate(args[0], width, depth)
@@ -97,11 +97,11 @@ func (e *Engine) cmdCMSINITBYPROB(args []string) []byte {
 // reports an error in its position rather than a number that is wrong.
 func (e *Engine) cmdCMSINCRBY(args []string) []byte {
 	if len(args) < 3 || len(args)%2 == 0 {
-		return Encode(wrongArguments("CMS.INCRBY"), false)
+		return e.encode(wrongArguments("CMS.INCRBY"), false)
 	}
 	cms, ok := e.cmsFor(args[0])
 	if !ok {
-		return Encode(errCMSMissing, false)
+		return e.encode(errCMSMissing, false)
 	}
 
 	pairs := args[1:]
@@ -109,7 +109,7 @@ func (e *Engine) cmdCMSINCRBY(args []string) []byte {
 	for i := 1; i < len(pairs); i += 2 {
 		n, err := strconv.ParseUint(pairs[i], 10, 32)
 		if err != nil {
-			return Encode(errCMSNumber, false)
+			return e.encode(errCMSNumber, false)
 		}
 		increments = append(increments, uint32(n))
 	}
@@ -123,21 +123,21 @@ func (e *Engine) cmdCMSINCRBY(args []string) []byte {
 		}
 		out = append(out, int64(estimate))
 	}
-	return Encode(out, false)
+	return e.encode(out, false)
 }
 
 // cmdCMSQUERY implements CMS.QUERY key item [item ...]: one estimate per item.
 func (e *Engine) cmdCMSQUERY(args []string) []byte {
 	if len(args) < 2 {
-		return Encode(wrongArguments("CMS.QUERY"), false)
+		return e.encode(wrongArguments("CMS.QUERY"), false)
 	}
 	cms, ok := e.cmsFor(args[0])
 	if !ok {
-		return Encode(errCMSMissing, false)
+		return e.encode(errCMSMissing, false)
 	}
 	out := make([]interface{}, 0, len(args)-1)
 	for _, item := range args[1:] {
 		out = append(out, int64(cms.Count(item)))
 	}
-	return Encode(out, false)
+	return e.encode(out, false)
 }

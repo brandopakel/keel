@@ -71,27 +71,27 @@ func formatDistance(v float64) string { return strconv.FormatFloat(v, 'f', 4, 64
 // leaves the key as it was.
 func (e *Engine) cmdGEOADD(args []string) []byte {
 	if len(args) < 4 {
-		return Encode(wrongArguments("GEOADD"), false)
+		return e.encode(wrongArguments("GEOADD"), false)
 	}
 	flags, ch, triples, err := geoaddShape(args)
 	if err != nil {
-		return Encode(err, false)
+		return e.encode(err, false)
 	}
 	scores := make([]float64, 0, len(triples)/3)
 	members := make([]string, 0, len(triples)/3)
 	for i := 0; i < len(triples); i += 3 {
 		score, err := geoaddScore(triples[i], triples[i+1])
 		if err != nil {
-			return Encode(err, false)
+			return e.encode(err, false)
 		}
 		scores = append(scores, score)
 		members = append(members, triples[i+2])
 	}
 	added, changed := e.zaddApply(args[0], scores, members, flags)
 	if ch {
-		return Encode(changed, false)
+		return e.encode(changed, false)
 	}
-	return Encode(added, false)
+	return e.encode(added, false)
 }
 
 // geoaddShape reads GEOADD's options in Redis's order, then whether what
@@ -163,22 +163,22 @@ func geoPosition(zs *data_structure.ZSet, member string) (longitude, latitude fl
 // rather than sending a double.
 func (e *Engine) cmdGEODIST(args []string) []byte {
 	if len(args) < 3 {
-		return Encode(wrongArguments("GEODIST"), false)
+		return e.encode(wrongArguments("GEODIST"), false)
 	}
 	toMeters, err := geodistUnit(args)
 	if err != nil {
-		return Encode(err, false)
+		return e.encode(err, false)
 	}
 	zs, ok := e.zsetFor(args[0])
 	if !ok {
-		return nullReply()
+		return e.nullReply()
 	}
 	long1, lat1, ok1 := geoPosition(zs, args[1])
 	long2, lat2, ok2 := geoPosition(zs, args[2])
 	if !ok1 || !ok2 {
-		return nullReply()
+		return e.nullReply()
 	}
-	return Encode(formatDistance(data_structure.GeohashGetDistance(long1, lat1, long2, lat2)/toMeters), false)
+	return e.encode(formatDistance(data_structure.GeohashGetDistance(long1, lat1, long2, lat2)/toMeters), false)
 }
 
 // cmdGEOHASH implements GEOHASH key [member ...]: one standard eleven-character
@@ -186,7 +186,7 @@ func (e *Engine) cmdGEODIST(args []string) []byte {
 // that is not there.
 func (e *Engine) cmdGEOHASH(args []string) []byte {
 	if len(args) < 1 {
-		return Encode(wrongArguments("GEOHASH"), false)
+		return e.encode(wrongArguments("GEOHASH"), false)
 	}
 	zs, exists := e.zsetFor(args[0])
 	out := make([]interface{}, 0, len(args)-1)
@@ -207,7 +207,7 @@ func (e *Engine) cmdGEOHASH(args []string) []byte {
 		}
 		out = append(out, hash)
 	}
-	return Encode(out, false)
+	return e.encode(out, false)
 }
 
 // cmdGEOPOS implements GEOPOS key [member ...]: a longitude, latitude pair per
@@ -215,23 +215,23 @@ func (e *Engine) cmdGEOHASH(args []string) []byte {
 // The coordinates are doubles in RESP3 and bulk strings in RESP2.
 func (e *Engine) cmdGEOPOS(args []string) []byte {
 	if len(args) < 1 {
-		return Encode(wrongArguments("GEOPOS"), false)
+		return e.encode(wrongArguments("GEOPOS"), false)
 	}
 	zs, exists := e.zsetFor(args[0])
 	out := appendArrayHeader(nil, len(args)-1)
 	for _, member := range args[1:] {
 		if !exists {
-			out = appendNullArray(out)
+			out = e.appendNullArray(out)
 			continue
 		}
 		longitude, latitude, ok := geoPosition(zs, member)
 		if !ok {
-			out = appendNullArray(out)
+			out = e.appendNullArray(out)
 			continue
 		}
 		out = appendArrayHeader(out, 2)
-		out = appendDouble(out, formatCoordinate(longitude))
-		out = appendDouble(out, formatCoordinate(latitude))
+		out = appendDouble(e.framing, out, formatCoordinate(longitude))
+		out = appendDouble(e.framing, out, formatCoordinate(latitude))
 	}
 	return out
 }
@@ -272,14 +272,14 @@ type geoSearch struct {
 // whichever were asked for.
 func (e *Engine) cmdGEOSEARCH(args []string) []byte {
 	if len(args) < 6 {
-		return Encode(wrongArguments("GEOSEARCH"), false)
+		return e.encode(wrongArguments("GEOSEARCH"), false)
 	}
 	key := args[0]
 	zs, exists := e.zsetFor(key)
 
 	s, err := e.parseGeoSearch(zs, exists, args[1:])
 	if err != nil {
-		return Encode(err, false)
+		return e.encode(err, false)
 	}
 	if !exists {
 		return constant.RespEmptyArray

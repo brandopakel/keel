@@ -35,18 +35,18 @@ func addBulkSize(size, length int) (int, bool) {
 // may turn a value into nil, which only reduces the required space. The shape
 // is an array or, for SMEMBERS, a set.
 func (e *Engine) encodeLookupArray(count int, lookup func(int) (string, bool), shape replyShape) []byte {
-	size := shapeHeaderSize(shape, count)
+	size := e.shapeHeaderSize(shape, count)
 	// A null is the smallest element either protocol has.
-	if count > (MaxReplyBytes-size)/nullSize() {
+	if count > (MaxReplyBytes-size)/e.nullSize() {
 		return replyTooLarge
 	}
 	for i := 0; i < count; i++ {
 		value, found := lookup(i)
 		if !found {
-			if size > MaxReplyBytes-nullSize() {
+			if size > MaxReplyBytes-e.nullSize() {
 				return replyTooLarge
 			}
-			size += nullSize()
+			size += e.nullSize()
 			continue
 		}
 		var fits bool
@@ -58,13 +58,13 @@ func (e *Engine) encodeLookupArray(count int, lookup func(int) (string, bool), s
 	if refusal := e.admitReply(size); refusal != nil {
 		return refusal
 	}
-	out := appendShapeHeader(make([]byte, 0, size), shape, count)
+	out := e.appendShapeHeader(make([]byte, 0, size), shape, count)
 	for i := 0; i < count; i++ {
 		value, found := lookup(i)
 		if found {
 			out = appendBulkString(out, value)
 		} else {
-			out = appendNull(out)
+			out = e.appendNull(out)
 		}
 	}
 	return out

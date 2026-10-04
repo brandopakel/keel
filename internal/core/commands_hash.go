@@ -34,7 +34,7 @@ func (e *Engine) dropIfEmpty(key string, h *data_structure.Hash) bool {
 
 func (e *Engine) cmdHSET(args []string) []byte {
 	if len(args) < 3 || len(args)%2 != 1 {
-		return Encode(wrongArguments("HSET"), false)
+		return e.encode(wrongArguments("HSET"), false)
 	}
 	key := args[0]
 
@@ -52,12 +52,12 @@ func (e *Engine) cmdHSET(args []string) []byte {
 	}
 	// After the writes, so the budget sees what the hash actually costs now.
 	e.hashStore.Resize(key)
-	return Encode(added, false)
+	return e.encode(added, false)
 }
 
 func (e *Engine) cmdHSETNX(args []string) []byte {
 	if len(args) != 3 {
-		return Encode(wrongArguments("HSETNX"), false)
+		return e.encode(wrongArguments("HSETNX"), false)
 	}
 	key, field, value := args[0], args[1], args[2]
 
@@ -76,22 +76,22 @@ func (e *Engine) cmdHSETNX(args []string) []byte {
 
 func (e *Engine) cmdHGET(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(wrongArguments("HGET"), false)
+		return e.encode(wrongArguments("HGET"), false)
 	}
 	h, ok := e.hashFor(args[0])
 	if !ok {
-		return nullReply()
+		return e.nullReply()
 	}
 	value, has := h.Get(args[1])
 	if !has {
-		return nullReply()
+		return e.nullReply()
 	}
 	return e.encodeBoundedString(value)
 }
 
 func (e *Engine) cmdHMGET(args []string) []byte {
 	if len(args) < 2 {
-		return Encode(wrongArguments("HMGET"), false)
+		return e.encode(wrongArguments("HMGET"), false)
 	}
 	h, ok := e.hashFor(args[0])
 
@@ -105,7 +105,7 @@ func (e *Engine) cmdHMGET(args []string) []byte {
 
 func (e *Engine) cmdHDEL(args []string) []byte {
 	if len(args) < 2 {
-		return Encode(wrongArguments("HDEL"), false)
+		return e.encode(wrongArguments("HDEL"), false)
 	}
 	key := args[0]
 	h, ok := e.hashFor(key)
@@ -115,12 +115,12 @@ func (e *Engine) cmdHDEL(args []string) []byte {
 
 	removed := h.Del(args[1:]...)
 	e.dropIfEmpty(key, h)
-	return Encode(removed, false)
+	return e.encode(removed, false)
 }
 
 func (e *Engine) cmdHEXISTS(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(wrongArguments("HEXISTS"), false)
+		return e.encode(wrongArguments("HEXISTS"), false)
 	}
 	h, ok := e.hashFor(args[0])
 	if !ok || !h.Exists(args[1]) {
@@ -131,18 +131,18 @@ func (e *Engine) cmdHEXISTS(args []string) []byte {
 
 func (e *Engine) cmdHLEN(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(wrongArguments("HLEN"), false)
+		return e.encode(wrongArguments("HLEN"), false)
 	}
 	h, ok := e.hashFor(args[0])
 	if !ok {
 		return constant.RespZero
 	}
-	return Encode(h.Len(), false)
+	return e.encode(h.Len(), false)
 }
 
 func (e *Engine) cmdHKEYS(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(wrongArguments("HKEYS"), false)
+		return e.encode(wrongArguments("HKEYS"), false)
 	}
 	h, ok := e.hashFor(args[0])
 	if !ok {
@@ -153,7 +153,7 @@ func (e *Engine) cmdHKEYS(args []string) []byte {
 
 func (e *Engine) cmdHVALS(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(wrongArguments("HVALS"), false)
+		return e.encode(wrongArguments("HVALS"), false)
 	}
 	h, ok := e.hashFor(args[0])
 	if !ok {
@@ -169,11 +169,11 @@ func (e *Engine) cmdHVALS(args []string) []byte {
 // and it is what Redis sends.
 func (e *Engine) cmdHGETALL(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(wrongArguments("HGETALL"), false)
+		return e.encode(wrongArguments("HGETALL"), false)
 	}
 	h, ok := e.hashFor(args[0])
 	if !ok {
-		return emptyMapReply()
+		return e.emptyMapReply()
 	}
 
 	return e.hashReply(h, true, true)
@@ -186,13 +186,13 @@ func (e *Engine) cmdHGETALL(args []string) []byte {
 // leaves the field alone - it is not reset to the increment.
 func (e *Engine) cmdHINCRBY(args []string) []byte {
 	if len(args) != 3 {
-		return Encode(wrongArguments("HINCRBY"), false)
+		return e.encode(wrongArguments("HINCRBY"), false)
 	}
 	key, field := args[0], args[1]
 
 	delta, valid := counterInteger(args[2])
 	if !valid {
-		return Encode(errors.New("ERR value is not an integer or out of range"), false)
+		return e.encode(errors.New("ERR value is not an integer or out of range"), false)
 	}
 
 	// Nothing is created until the increment is known to be valid. A hash put
@@ -206,7 +206,7 @@ func (e *Engine) cmdHINCRBY(args []string) []byte {
 		if existing, has := h.Get(field); has {
 			current, valid = counterInteger(existing)
 			if !valid {
-				return Encode(errors.New("ERR hash value is not an integer"), false)
+				return e.encode(errors.New("ERR hash value is not an integer"), false)
 			}
 		}
 	}
@@ -214,7 +214,7 @@ func (e *Engine) cmdHINCRBY(args []string) []byte {
 	// Overflow wraps in Go and would answer a number the client did not ask
 	// for. Redis refuses instead, and so does INCR here.
 	if (delta > 0 && current > (1<<63-1)-delta) || (delta < 0 && current < -(1<<63)-delta) {
-		return Encode(errors.New("ERR increment or decrement would overflow"), false)
+		return e.encode(errors.New("ERR increment or decrement would overflow"), false)
 	}
 
 	if !existed {
@@ -224,5 +224,5 @@ func (e *Engine) cmdHINCRBY(args []string) []byte {
 	updated := current + delta
 	h.Set(field, strconv.FormatInt(updated, 10))
 	e.hashStore.Resize(key)
-	return Encode(updated, false)
+	return e.encode(updated, false)
 }

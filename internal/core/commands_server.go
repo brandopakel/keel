@@ -19,33 +19,33 @@ import (
 // the time this runs; see containerCommands.
 func (e *Engine) cmdMEMORY(args []string) []byte {
 	if err := CommandError(&Command{Cmd: "MEMORY", Args: args}); err != nil {
-		return Encode(err, false)
+		return e.encode(err, false)
 	}
 	switch strings.ToUpper(args[0]) {
 	case "STATS":
 		out := ReplyMap{"keyspace.bytes", int64(e.space.TotalMemUsed()), "keys.count", int64(e.space.TotalKeys()), "keys.expires", int64(e.KeysWithExpiry())}
 		e.space.EachKeyspace(func(ks data_structure.Keyspace) { out = append(out, ks.KeyspaceName()+".bytes", int64(ks.MemUsed())) })
-		return Encode(out, false)
+		return e.encode(out, false)
 	case "USAGE":
 		// SAMPLES is Redis's, and read as Redis reads it; the estimate here
 		// is not sampled, so its count changes nothing.
 		for i := 2; i < len(args); i += 2 {
 			if !strings.EqualFold(args[i], "SAMPLES") || i+1 == len(args) {
-				return Encode(errSyntax, false)
+				return e.encode(errSyntax, false)
 			}
 			samples, valid := counterInteger(args[i+1])
 			if !valid {
-				return Encode(errNotAnInteger, false)
+				return e.encode(errNotAnInteger, false)
 			}
 			if samples < 0 {
-				return Encode(errSyntax, false)
+				return e.encode(errSyntax, false)
 			}
 		}
 		bytes, exists := e.entryBytesAnywhere(args[1])
 		if !exists {
-			return nullReply()
+			return e.nullReply()
 		}
-		return Encode(int64(bytes), false)
+		return e.encode(int64(bytes), false)
 	}
 	return memoryHelp
 }
@@ -189,7 +189,7 @@ func (e *Engine) cmdINFO(args []string) []byte {
 	}
 	if want("server") {
 		fmt.Fprintf(&b, "# Server\r\nkeel_version:%s\r\nredis_version:%s\r\nredis_mode:standalone\r\nresp_version:%d\r\n\r\n",
-			config.BuildVersion(), RedisCompatibleVersion, replyProtocol())
+			config.BuildVersion(), RedisCompatibleVersion, e.replyProtocol())
 	}
 	if want("memory") {
 		used := e.space.TotalMemUsed()
@@ -250,7 +250,7 @@ func (e *Engine) cmdINFO(args []string) []byte {
 			e.space.TotalKeys(), e.KeysWithExpiry())
 	}
 
-	return Encode(ReplyVerbatim(b.String()), false)
+	return e.encode(ReplyVerbatim(b.String()), false)
 }
 
 // cmdBGREWRITEAOF starts rewriting the append-only file and returns at once.
@@ -268,7 +268,7 @@ func (e *Engine) cmdINFO(args []string) []byte {
 // aof_rewrite_status.go, which also has the replies.
 func (e *Engine) cmdBGREWRITEAOF(args []string) []byte {
 	if len(args) != 0 {
-		return Encode(wrongArguments("BGREWRITEAOF"), false)
+		return e.encode(wrongArguments("BGREWRITEAOF"), false)
 	}
 	return bgRewriteAOF()
 }

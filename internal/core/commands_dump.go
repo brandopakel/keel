@@ -180,11 +180,11 @@ func (e *Engine) decodeRestorePayload(key string, tag byte, body []byte) (store 
 
 func (e *Engine) cmdDUMP(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(wrongArguments("KEEL.DUMP"), false)
+		return e.encode(wrongArguments("KEEL.DUMP"), false)
 	}
 	plan, ok := e.planDump(args[0], MaxReplyBytes)
 	if !ok {
-		return nullReply()
+		return e.nullReply()
 	}
 	size, fits := addBulkSize(0, plan.size+9)
 	if !fits {
@@ -203,10 +203,10 @@ func (e *Engine) cmdDUMP(args []string) []byte {
 
 func (e *Engine) cmdRESTORE(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(wrongArguments("KEEL.RESTORE"), false)
+		return e.encode(wrongArguments("KEEL.RESTORE"), false)
 	}
 	if err := e.restoreKey(args[0], []byte(args[1])); err != nil {
-		return Encode(err, false)
+		return e.encode(err, false)
 	}
 	return constant.RespOk
 }

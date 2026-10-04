@@ -38,13 +38,13 @@ const scanMatchWork = 1 << 20
 // on an empty reply. That is Redis's rule too.
 func (e *Engine) cmdSCAN(args []string) []byte {
 	if len(args) < 1 {
-		return Encode(wrongArguments("SCAN"), false)
+		return e.encode(wrongArguments("SCAN"), false)
 	}
 	cursor, err := strconv.ParseUint(args[0], 10, 64)
 	if err != nil {
 		// Redis says "invalid cursor" rather than the integer error, and
 		// clients that retry from zero test for it.
-		return Encode(errors.New("ERR invalid cursor"), false)
+		return e.encode(errors.New("ERR invalid cursor"), false)
 	}
 
 	count := scanDefaultCount
@@ -54,31 +54,31 @@ func (e *Engine) cmdSCAN(args []string) []byte {
 		switch strings.ToUpper(args[i]) {
 		case "MATCH":
 			if i+1 >= len(args) {
-				return Encode(errSyntax, false)
+				return e.encode(errSyntax, false)
 			}
 			pattern, i = args[i+1], i+2
 			matchSet = true
 		case "COUNT":
 			if i+1 >= len(args) {
-				return Encode(errSyntax, false)
+				return e.encode(errSyntax, false)
 			}
 			parsed, valid := counterInteger(args[i+1])
 			if !valid {
-				return Encode(errNotAnInteger, false)
+				return e.encode(errNotAnInteger, false)
 			}
 			n := int(parsed)
 			if n < 1 || n > scanMaxCount {
-				return Encode(errSyntax, false)
+				return e.encode(errSyntax, false)
 			}
 			count, i = n, i+2
 		case "TYPE":
 			if i+1 >= len(args) {
-				return Encode(errSyntax, false)
+				return e.encode(errSyntax, false)
 			}
 			keyspace, i = strings.ToLower(args[i+1]), i+2
 			typeSet = true
 		default:
-			return Encode(errSyntax, false)
+			return e.encode(errSyntax, false)
 		}
 	}
 
@@ -111,7 +111,7 @@ func (e *Engine) cmdSCAN(args []string) []byte {
 	}
 	keys, next := e.space.ScanKeyspaces(cursor, count, keep, nil)
 	if matchExhausted {
-		return Encode(errors.New("ERR SCAN pattern work limit exceeded; use a simpler MATCH or smaller COUNT"), false)
+		return e.encode(errors.New("ERR SCAN pattern work limit exceeded; use a simpler MATCH or smaller COUNT"), false)
 	}
 	position := strconv.FormatUint(next, 10)
 	size := 4 + decimalDigits(len(keys)) + 3

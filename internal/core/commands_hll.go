@@ -13,7 +13,7 @@ import (
 
 func (e *Engine) cmdPFADD(args []string) []byte {
 	if len(args) < 1 {
-		return Encode(wrongArguments("PFADD"), false)
+		return e.encode(wrongArguments("PFADD"), false)
 	}
 
 	key := args[0]
@@ -41,7 +41,7 @@ func (e *Engine) cmdPFADD(args []string) []byte {
 
 func (e *Engine) cmdPFCOUNT(args []string) []byte {
 	if len(args) < 1 {
-		return Encode(wrongArguments("PFCOUNT"), false)
+		return e.encode(wrongArguments("PFCOUNT"), false)
 	}
 
 	if len(args) == 1 {
@@ -49,7 +49,7 @@ func (e *Engine) cmdPFCOUNT(args []string) []byte {
 		if !exist {
 			return constant.RespZero
 		}
-		return Encode(int64(hll.Count()), false)
+		return e.encode(int64(hll.Count()), false)
 	}
 
 	// Several keys means the cardinality of their union. It is computed into a
@@ -61,12 +61,12 @@ func (e *Engine) cmdPFCOUNT(args []string) []byte {
 			union.Merge(hll)
 		}
 	}
-	return Encode(int64(union.Count()), false)
+	return e.encode(int64(union.Count()), false)
 }
 
 func (e *Engine) cmdPFMERGE(args []string) []byte {
 	if len(args) < 1 {
-		return Encode(wrongArguments("PFMERGE"), false)
+		return e.encode(wrongArguments("PFMERGE"), false)
 	}
 
 	dest := args[0]

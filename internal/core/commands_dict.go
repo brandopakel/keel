@@ -38,12 +38,12 @@ func (e *Engine) cmdPSETEX(args []string) []byte { return e.setWithTTL("PSETEX",
 // replays on a build that predates the name.
 func (e *Engine) cmdSETNX(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(wrongArguments("SETNX"), false)
+		return e.encode(wrongArguments("SETNX"), false)
 	}
 	switch reply := e.cmdSET([]string{args[0], args[1], "NX"}); {
 	case bytes.Equal(reply, constant.RespOk):
 		return constant.RespOne
-	case bytes.Equal(reply, nullReply()):
+	case bytes.Equal(reply, e.nullReply()):
 		return constant.RespZero
 	default:
 		return reply
@@ -52,7 +52,7 @@ func (e *Engine) cmdSETNX(args []string) []byte {
 
 func (e *Engine) setWithTTL(name string, args []string, unit string) []byte {
 	if len(args) != 3 {
-		return Encode(wrongArguments(name), false)
+		return e.encode(wrongArguments(name), false)
 	}
 	return e.setCommand(name, []string{args[0], args[2], unit, args[1]})
 }
@@ -76,7 +76,7 @@ func (e *Engine) cmdSET(args []string) []byte { return e.setCommand("SET", args)
 // read, so a malformed option is refused ahead of a malformed expiry.
 func (e *Engine) setCommand(name string, args []string) []byte {
 	if len(args) < 2 {
-		return Encode(wrongArguments(name), false)
+		return e.encode(wrongArguments(name), false)
 	}
 	nx, xx, get, keep := false, false, false, false
 	unit, expire := "", ""
@@ -95,7 +95,7 @@ func (e *Engine) setCommand(name string, args []string) []byte {
 			unit, expire = opt, args[i+1]
 			i++
 		default:
-			return Encode(errSyntax, false)
+			return e.encode(errSyntax, false)
 		}
 	}
 	var at int64
@@ -103,14 +103,14 @@ func (e *Engine) setCommand(name string, args []string) []byte {
 	if expiry {
 		n, valid := counterInteger(expire)
 		if !valid {
-			return Encode(errNotAnInteger, false)
+			return e.encode(errNotAnInteger, false)
 		}
 		if n <= 0 {
-			return Encode(invalidExpireTime(name), false)
+			return e.encode(invalidExpireTime(name), false)
 		}
 		if unit == "EX" || unit == "EXAT" {
 			if n > math.MaxInt64/1000 {
-				return Encode(invalidExpireTime(name), false)
+				return e.encode(invalidExpireTime(name), false)
 			}
 			n *= 1000
 		}
@@ -119,7 +119,7 @@ func (e *Engine) setCommand(name string, args []string) []byte {
 			var ok bool
 			at, ok = expiryInstant(n)
 			if !ok {
-				return Encode(invalidExpireTime(name), false)
+				return e.encode(invalidExpireTime(name), false)
 			}
 		}
 	}
@@ -141,11 +141,11 @@ func (e *Engine) setCommand(name string, args []string) []byte {
 		otherHeld = otherHeld && other.KeyspaceName() != e.dictStore.KeyspaceName()
 	}
 	if otherHeld && get {
-		return Encode(errWrongType, false)
+		return e.encode(errWrongType, false)
 	}
 	reply := constant.RespOk
 	if get {
-		reply = nullReply()
+		reply = e.nullReply()
 		if obj != nil {
 			reply = e.encodeBoundedString(obj.Value)
 			if len(reply) > 0 && reply[0] == '-' {
@@ -159,7 +159,7 @@ func (e *Engine) setCommand(name string, args []string) []byte {
 		if get {
 			return reply
 		}
-		return nullReply()
+		return e.nullReply()
 	}
 	if keep && exists {
 		// KEEPTTL keeps the key's expiry, and the key is the name: a hash
@@ -212,12 +212,12 @@ func expiryInstant(ttlMs int64) (int64, bool) {
 
 func (e *Engine) cmdGET(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(wrongArguments("GET"), false)
+		return e.encode(wrongArguments("GET"), false)
 	}
 	// Get reaps a key whose TTL has passed, so what comes back is live.
 	obj := e.dictStore.Get(args[0])
 	if obj == nil {
-		return nullReply()
+		return e.nullReply()
 	}
 	return e.encodeBoundedString(obj.Value)
 }
@@ -241,21 +241,21 @@ func (e *Engine) remainingTTL(key string) int64 {
 // as Redis rounds it.
 func (e *Engine) cmdTTL(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(wrongArguments("TTL"), false)
+		return e.encode(wrongArguments("TTL"), false)
 	}
 	left := e.remainingTTL(args[0])
 	if left < 0 {
-		return Encode(left, false)
+		return e.encode(left, false)
 	}
-	return Encode((left+500)/1000, false)
+	return e.encode((left+500)/1000, false)
 }
 
 // cmdPTTL is TTL in milliseconds.
 func (e *Engine) cmdPTTL(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(wrongArguments("PTTL"), false)
+		return e.encode(wrongArguments("PTTL"), false)
 	}
-	return Encode(e.remainingTTL(args[0]), false)
+	return e.encode(e.remainingTTL(args[0]), false)
 }
 
 // cmdDEL removes keys from whichever keyspace holds them.
@@ -267,7 +267,7 @@ func (e *Engine) cmdPTTL(args []string) []byte {
 // answers.
 func (e *Engine) cmdDEL(args []string) []byte {
 	if len(args) == 0 {
-		return Encode(wrongArguments("DEL"), false)
+		return e.encode(wrongArguments("DEL"), false)
 	}
 	deleted := 0
 	for _, key := range args {
@@ -275,7 +275,7 @@ func (e *Engine) cmdDEL(args []string) []byte {
 			deleted++
 		}
 	}
-	return Encode(deleted, false)
+	return e.encode(deleted, false)
 }
 
 // cmdUNLINK is DEL. Redis hands an unlinked value to a background thread to
@@ -283,7 +283,7 @@ func (e *Engine) cmdDEL(args []string) []byte {
 // and UNLINK is logged as DEL - see persistedName.
 func (e *Engine) cmdUNLINK(args []string) []byte {
 	if len(args) == 0 {
-		return Encode(wrongArguments("UNLINK"), false)
+		return e.encode(wrongArguments("UNLINK"), false)
 	}
 	return e.cmdDEL(args)
 }
@@ -309,7 +309,7 @@ func (e *Engine) cmdPEXPIREAT(args []string) []byte {
 // them in Redis's words.
 func (e *Engine) expireCommand(name string, args []string, scale int64, absolute bool) []byte {
 	if len(args) < 2 {
-		return Encode(wrongArguments(name), false)
+		return e.encode(wrongArguments(name), false)
 	}
 	nx, xx, gt, lt := false, false, false, false
 	for _, opt := range args[2:] {
@@ -323,28 +323,28 @@ func (e *Engine) expireCommand(name string, args []string, scale int64, absolute
 		case "LT":
 			lt = true
 		default:
-			return Encode(fmt.Errorf("ERR Unsupported option %s", EchoArgument(opt)), false)
+			return e.encode(fmt.Errorf("ERR Unsupported option %s", EchoArgument(opt)), false)
 		}
 	}
 	if nx && (xx || gt || lt) {
-		return Encode(errors.New("ERR NX and XX, GT or LT options at the same time are not compatible"), false)
+		return e.encode(errors.New("ERR NX and XX, GT or LT options at the same time are not compatible"), false)
 	}
 	if gt && lt {
-		return Encode(errors.New("ERR GT and LT options at the same time are not compatible"), false)
+		return e.encode(errors.New("ERR GT and LT options at the same time are not compatible"), false)
 	}
 	n, valid := counterInteger(args[1])
 	if !valid {
-		return Encode(errNotAnInteger, false)
+		return e.encode(errNotAnInteger, false)
 	}
 	if n > math.MaxInt64/scale || n < math.MinInt64/scale {
-		return Encode(invalidExpireTime(name), false)
+		return e.encode(invalidExpireTime(name), false)
 	}
 	at := n * scale
 	if !absolute && at > 0 {
 		var ok bool
 		at, ok = expiryInstant(at)
 		if !ok {
-			return Encode(invalidExpireTime(name), false)
+			return e.encode(invalidExpireTime(name), false)
 		}
 	}
 	owner, ok := e.space.OwnerOf(args[0])
@@ -369,7 +369,7 @@ func (e *Engine) expireCommand(name string, args []string, scale int64, absolute
 
 func (e *Engine) cmdPERSIST(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(wrongArguments("PERSIST"), false)
+		return e.encode(wrongArguments("PERSIST"), false)
 	}
 	owner, ok := e.space.OwnerOf(args[0])
 	if ok && owner.ClearExpiry(args[0]) {
@@ -392,17 +392,17 @@ func (e *Engine) increment(name string, args []string, sign int64, explicit bool
 		want = 2
 	}
 	if len(args) != want {
-		return Encode(wrongArguments(name), false)
+		return e.encode(wrongArguments(name), false)
 	}
 	delta := sign
 	if explicit {
 		n, valid := counterInteger(args[1])
 		if !valid {
-			return Encode(errNotAnInteger, false)
+			return e.encode(errNotAnInteger, false)
 		}
 		if sign == -1 && n == math.MinInt64 {
 			// Negating it would overflow before anything is added.
-			return Encode(errDecrOverflow, false)
+			return e.encode(errDecrOverflow, false)
 		}
 		delta = n * sign
 	}
@@ -413,11 +413,11 @@ func (e *Engine) increment(name string, args []string, sign int64, explicit bool
 		var valid bool
 		current, valid = canonicalInteger(obj.Value)
 		if !valid {
-			return Encode(errNotAnInteger, false)
+			return e.encode(errNotAnInteger, false)
 		}
 	}
 	if (delta > 0 && current > math.MaxInt64-delta) || (delta < 0 && current < math.MinInt64-delta) {
-		return Encode(errIncrOverflow, false)
+		return e.encode(errIncrOverflow, false)
 	}
 	current += delta
 	value := strconv.FormatInt(current, 10)
@@ -426,7 +426,7 @@ func (e *Engine) increment(name string, args []string, sign int64, explicit bool
 	} else {
 		e.dictStore.UpdateValue(key, value)
 	}
-	return Encode(current, false)
+	return e.encode(current, false)
 }
 
 // cmdDBSIZE counts the keys in every keyspace, not only the strings.
@@ -439,7 +439,7 @@ func (e *Engine) increment(name string, args []string, sign int64, explicit bool
 // next to a DBSIZE of zero.
 func (e *Engine) cmdDBSIZE(args []string) []byte {
 	if len(args) != 0 {
-		return Encode(wrongArguments("DBSIZE"), false)
+		return e.encode(wrongArguments("DBSIZE"), false)
 	}
-	return Encode(int64(e.space.TotalKeys()), false)
+	return e.encode(int64(e.space.TotalKeys()), false)
 }

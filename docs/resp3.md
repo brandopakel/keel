@@ -187,13 +187,15 @@ handshake, and carry on without it on that answer.
 
 The protocol belongs to the connection (`client.resp3` in the server, set by
 `HELLO`). The server copies it onto each `core.Command` as the command runs.
-`EvalAndResponse` holds it in a command-scoped variable for exactly that
-command, the way the log's staging state is held, and restores the previous
-value when the command returns. Handlers do not read it directly. They say what
-they are answering (a map, a set, a score, a yes-or-no, a null) through the
-helpers in `internal/core/resp3.go`, which hold every byte that differs between
-the protocols. The connection layer frames its own replies (`HELLO`, `CLIENT`)
-with `core.EncodeAs`.
+`EvalAndResponse` holds it on the engine running the command (its `framing`)
+for exactly that command, the way the log's staging state is held, and
+restores the previous value when the command returns. Handlers do not test it
+themselves. They say what they are answering (a map, a set, a score, a
+yes-or-no, a null) through the framing's methods in `internal/core/resp3.go`,
+which hold every byte that differs between the protocols, and encode every
+reply through the engine (`e.encode`). A reply built outside any command names
+its protocol: `core.Encode` is RESP2, and the connection layer frames its own
+replies (`HELLO`, `CLIENT`) with `core.EncodeAs`.
 
 ## Validation
 

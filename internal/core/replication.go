@@ -154,20 +154,20 @@ func frameChecksum(f ReplicationFrame) string {
 }
 func (e *Engine) cmdReplicationPull(args []string) []byte {
 	if !config.ReplicationFeed || config.ReplicationProtocol != 1 {
-		return Encode(errors.New("ERR replication protocol 1 is disabled"), false)
+		return e.encode(errors.New("ERR replication protocol 1 is disabled"), false)
 	}
 	if CurrentTerm() != 0 || !Writable() {
-		return Encode(errors.New("ERR nonzero terms require replication protocol 2"), false)
+		return e.encode(errors.New("ERR nonzero terms require replication protocol 2"), false)
 	}
 	if len(args) != 2 {
-		return Encode(wrongArguments("KEEL.REPL.PULL"), false)
+		return e.encode(wrongArguments("KEEL.REPL.PULL"), false)
 	}
 	offset, err := strconv.ParseUint(args[1], 10, 64)
 	if err != nil {
-		return Encode(errNotAnInteger, false)
+		return e.encode(errNotAnInteger, false)
 	}
 	if err := sealReplication(); err != nil {
-		return Encode(err, false)
+		return e.encode(err, false)
 	}
 	full := args[0] != replication.epoch || offset > replication.offset
 	if len(replication.history) > 0 && offset < replication.history[0].offset-1 {
@@ -176,7 +176,7 @@ func (e *Engine) cmdReplicationPull(args []string) []byte {
 	frame := ReplicationFrame{Version: 1, Epoch: replication.epoch, From: offset, To: offset, Full: full}
 	if full {
 		if data_structure.TotalMemUsed() > replicationLimit || data_structure.TotalKeys() > 100000 {
-			return Encode(errors.New("ERR replication snapshot limit"), false)
+			return e.encode(errors.New("ERR replication snapshot limit"), false)
 		}
 		frame.Body = appendCommand(nil, "FLUSHDB")
 		walk := data_structure.NewKeyspaceWalk()
@@ -185,12 +185,12 @@ func (e *Engine) cmdReplicationPull(args []string) []byte {
 			var err error
 			keys, _, err = walk.Next(1024, keys[:0])
 			if err != nil {
-				return Encode(err, false)
+				return e.encode(err, false)
 			}
 			for _, key := range keys {
 				frame.Body = emitKey(frame.Body, key)
 				if len(frame.Body) > replicationLimit {
-					return Encode(errors.New("ERR replication snapshot exceeds 8 MiB"), false)
+					return e.encode(errors.New("ERR replication snapshot exceeds 8 MiB"), false)
 				}
 			}
 		}
@@ -210,9 +210,9 @@ func (e *Engine) cmdReplicationPull(args []string) []byte {
 	frame.Checksum = frameChecksum(frame)
 	encoded, err := json.Marshal(frame)
 	if err != nil {
-		return Encode(err, false)
+		return e.encode(err, false)
 	}
-	return Encode(string(encoded), false)
+	return e.encode(string(encoded), false)
 }
 
 // ApplyReplication is called only on the event loop. Any failure is fatal to

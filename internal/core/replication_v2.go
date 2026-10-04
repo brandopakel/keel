@@ -197,10 +197,10 @@ const ReplicationTermRequiredReply = "-REPLTERM term-aware protocol 2 request re
 // An explicit command and version prevent older peers interpreting new frames.
 func (e *Engine) cmdReplicationPullV2(args []string) []byte {
 	if !config.ReplicationFeed || config.ReplicationProtocol != 2 {
-		return Encode(errors.New("ERR replication protocol 2 is disabled"), false)
+		return e.encode(errors.New("ERR replication protocol 2 is disabled"), false)
 	}
 	if len(args) != 4 && len(args) != 5 {
-		return Encode(wrongArguments("KEEL.REPL.PULL2"), false)
+		return e.encode(wrongArguments("KEEL.REPL.PULL2"), false)
 	}
 	if len(args) == 4 && CurrentTerm() != 0 {
 		return []byte(ReplicationTermRequiredReply)
@@ -213,31 +213,31 @@ func (e *Engine) cmdReplicationPullV2(args []string) []byte {
 		var termErr error
 		callerTerm, termErr = strconv.ParseUint(args[4], 10, 64)
 		if termErr != nil {
-			return Encode(errNotAnInteger, false)
+			return e.encode(errNotAnInteger, false)
 		}
 	}
 	if err := observeTerm(callerTerm); err != nil {
-		return Encode(fmt.Errorf("ERR recording term: %w", err), false)
+		return e.encode(fmt.Errorf("ERR recording term: %w", err), false)
 	}
 	if !Writable() {
 		// A deposed primary must stop feeding replicas as well as stop taking
 		// writes: serving its own history would hand a replica a past the
 		// cluster has left.
-		return Encode(errFenced, false)
+		return e.encode(errFenced, false)
 	}
 	offset, e1 := strconv.ParseUint(args[1], 10, 64)
 	part, e2 := strconv.ParseUint(args[3], 10, 64)
 	if e1 != nil || e2 != nil {
-		return Encode(errNotAnInteger, false)
+		return e.encode(errNotAnInteger, false)
 	}
 	if replicationV2.failed != nil {
-		return Encode(replicationV2.failed, false)
+		return e.encode(replicationV2.failed, false)
 	}
 	frame := ReplicationFrame{Version: 2, Epoch: replication.epoch, From: offset, To: offset, Term: failover.term}
 	full := args[2] != "" || args[0] != replication.epoch || !historyV2Contains(offset)
 	if !full {
 		if part != 0 {
-			return Encode(errSyntax, false)
+			return e.encode(errSyntax, false)
 		}
 		for _, piece := range replicationV2.history {
 			end := piece.from + uint64(len(piece.body))
@@ -245,7 +245,7 @@ func (e *Engine) cmdReplicationPullV2(args []string) []byte {
 				continue
 			}
 			if piece.from > frame.To {
-				return Encode(errors.New("ERR replication history gap"), false)
+				return e.encode(errors.New("ERR replication history gap"), false)
 			}
 			begin := int(frame.To - piece.from)
 			n := min(len(piece.body)-begin, replicationChunkBytes-len(frame.Body))
@@ -276,30 +276,30 @@ func (e *Engine) cmdReplicationPullV2(args []string) []byte {
 		// disk round a loop; any rewrite that finishes meanwhile serves it.
 		if !RewriteActive() && snapshotRewriteAllowed() {
 			if err := startSnapshotRewrite(); err != nil {
-				return Encode(fmt.Errorf("ERR preparing replication snapshot: %w", err), false)
+				return e.encode(fmt.Errorf("ERR preparing replication snapshot: %w", err), false)
 			}
 		}
 		frame.Pending = true
 		return encodeReplicationFrame(frame)
 	}
 	if replicationV2.snapshotBytes > maxReplicationSnapshotBytes {
-		return Encode(errors.New("ERR replication snapshot exceeds 1 GiB"), false)
+		return e.encode(errors.New("ERR replication snapshot exceeds 1 GiB"), false)
 	}
 	if args[2] == "" && part != 0 {
-		return Encode(errSyntax, false)
+		return e.encode(errSyntax, false)
 	}
 	if part > uint64(replicationV2.snapshotBytes) {
-		return Encode(errors.New("ERR invalid snapshot position"), false)
+		return e.encode(errors.New("ERR invalid snapshot position"), false)
 	}
 	n := min(int64(replicationChunkBytes), replicationV2.snapshotBytes-int64(part))
 	frame.Body = make([]byte, n)
 	if n > 0 {
 		got, err := replicationV2.snapshot.ReadAt(frame.Body, int64(part))
 		if err != nil && err != io.EOF {
-			return Encode(err, false)
+			return e.encode(err, false)
 		}
 		if got != int(n) {
-			return Encode(io.ErrUnexpectedEOF, false)
+			return e.encode(io.ErrUnexpectedEOF, false)
 		}
 	}
 	frame.To = replicationV2.snapshotBase

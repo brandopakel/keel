@@ -46,8 +46,8 @@ func engineLimits(maxKeys int) data_structure.Limits {
 // that evicts and the expiry cycle each act on one engine only; and neither
 // touches the default engine the server runs on.
 //
-// Not parallel: the reply's protocol and the log are still package state
-// until the rest of step 2.2 and step 2.3 of the plan move them.
+// Not parallel: the log is still package state until step 2.3 of the plan
+// moves it.
 func TestEnginesShareNoKeys(t *testing.T) {
 	ResetStores()
 	a := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
@@ -100,10 +100,11 @@ func TestEnginesShareNoKeys(t *testing.T) {
 }
 
 // TestEnginesShareNoCommandScope: what an engine holds for the command running
-// on it is its own - the allocation budget its commands reserve from, the
-// reply ceiling and eviction suspension of its EXEC, and the name GEOSEARCH
-// was sent as - and a command on another engine sees none of it, whether that
-// command runs after it, at the same time, or in the middle of its EXEC.
+// on it is its own - the protocol its reply is framed in, the allocation
+// budget its commands reserve from, the reply ceiling and eviction suspension
+// of its EXEC, and the name GEOSEARCH was sent as - and a command on another
+// engine sees none of it, whether that command runs after it, at the same
+// time, or in the middle of its EXEC.
 func TestEnginesShareNoCommandScope(t *testing.T) {
 	ResetStores()
 	const bound = 8
@@ -115,7 +116,15 @@ func TestEnginesShareNoCommandScope(t *testing.T) {
 		require.Nil(t, e.commandAllocations)
 		require.Equal(t, "OK", on(t, e, "SET", "large", value))
 		require.Equal(t, int64(1), on(t, e, "GEOADD", "g", "0", "0", "here"))
+		require.Equal(t, int64(1), on(t, e, "HSET", "h", "f", "v"))
 	}
+
+	// A RESP3 command on a frames its own reply, and nothing of b's.
+	var w3 replyWriter
+	require.NoError(t, a.evalAndResponse(&Command{Cmd: "HGETALL", Args: []string{"h"}, RESP3: true}, &w3))
+	assert.Equal(t, "%1\r\n$1\r\nf\r\n$1\r\nv\r\n", string(w3.b))
+	assert.Equal(t, "*2\r\n$1\r\nf\r\n$1\r\nv\r\n", string(rawOn(t, b, "HGETALL", "h")))
+	assert.False(t, a.replyRESP3, "a's command is over")
 
 	// A budget too small for the reply, on a alone, refuses a's read and
 	// none of b's; then b's own budget holds b's reservation and not a's.
@@ -144,30 +153,41 @@ func TestEnginesShareNoCommandScope(t *testing.T) {
 	assert.Equal(t, "GeoSearch", b.runningName, "a's commands leave b's name")
 
 	// Side by side, as two engines will run once each has a lock of its own
-	// (plan phase 3). Each goroutine sets its engine's scope the way
-	// evalAndResponse and an event-loop run do and calls the handlers
+	// (plan phase 3): a in RESP3 with a budget too small for the large value,
+	// b in RESP2 with room for it. Each goroutine sets its engine's scope the
+	// way evalAndResponse and an event-loop run do and calls the handlers
 	// directly, since the log is package state until step 2.3. Under -race,
 	// command-scope state the engines shared would fail here.
 	a.commandAllocations = &CommandAllocationBudget{Limit: 16 << 10}
 	b.commandAllocations = &CommandAllocationBudget{Limit: 1 << 20}
 	var wg sync.WaitGroup
 	for _, side := range []struct {
-		e          *Engine
-		name       string
-		refused    bool
-		allocation *CommandAllocationBudget
-	}{{a, "geosearch", true, a.commandAllocations}, {b, "GeoSearch", false, b.commandAllocations}} {
+		e             *Engine
+		resp3         bool
+		name          string
+		hash, missing string
+		refused       bool
+		allocation    *CommandAllocationBudget
+	}{
+		{a, true, "geosearch", "%1\r\n$1\r\nf\r\n$1\r\nv\r\n", "_\r\n", true, a.commandAllocations},
+		{b, false, "GeoSearch", "*2\r\n$1\r\nf\r\n$1\r\nv\r\n", "$-1\r\n", false, b.commandAllocations},
+	} {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for range 200 {
+				side.e.framing = framing{replyRESP3: side.resp3}
 				side.e.runningName = side.name
-				refusal := string(side.e.cmdGEOSEARCH(geosearch))
 				side.allocation.Begin(0)
-				reply := side.e.cmdGET([]string{"large"})
+				refusal := string(side.e.cmdGEOSEARCH(geosearch))
+				hash := string(side.e.cmdHGETALL([]string{"h"}))
+				missing := string(side.e.cmdGET([]string{"missing"}))
+				large := side.e.cmdGET([]string{"large"})
 				side.allocation.End()
+				side.e.framing = framing{}
 				if !assert.True(t, strings.HasSuffix(refusal, " for "+side.name+"\r\n"), refusal) ||
-					!assert.Equal(t, side.refused, string(reply) == string(allocationPressure), side.name) {
+					!assert.Equal(t, side.hash, hash) || !assert.Equal(t, side.missing, missing) ||
+					!assert.Equal(t, side.refused, string(large) == string(allocationPressure), side.name) {
 					return
 				}
 			}
@@ -183,9 +203,12 @@ func TestEnginesShareNoCommandScope(t *testing.T) {
 	// meanwhile. A command run on b in the middle of it has the whole output
 	// limit, and b evicts at once when it passes its own bound. Last, because
 	// what eviction removes is the LRU's choice.
+	// Each engine holds the same keys, and this many writes take one a key
+	// past its bound.
+	past := bound + 1 - a.space.TotalKeys()
 	writes := func(prefix string) [][]string {
 		var out [][]string
-		for i := range bound - 1 {
+		for i := range past {
 			out = append(out, []string{"SET", prefix + strconv.Itoa(i), "v"})
 		}
 		return out
@@ -218,7 +241,7 @@ func TestEnginesShareNoCommandScope(t *testing.T) {
 	require.NoError(t, err)
 	replies, _ := Decode(w.b)
 	want := []interface{}{value}
-	for range bound - 1 {
+	for range past {
 		want = append(want, "OK")
 	}
 	assert.Equal(t, append(want, "OK", value), replies)

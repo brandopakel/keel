@@ -1,8 +1,8 @@
 # Embedding plan: Keel as a Go library
 
-Status: accepted plan, October 2, 2026. Phases 0 and 1 are done (#88, #90), and so is step 2.1,
-the stores (see "Step 2.1: the stores" below). Step 2.2, the command scope, is
-under way (see "Step 2.2: the command scope").
+Status: accepted plan, October 2, 2026. Phases 0 and 1 are done (#88, #90), and so are step 2.1,
+the stores, and step 2.2, the command scope (see "Step 2.1: the stores" and
+"Step 2.2: the command scope" below).
 
 The owner asked for Keel to be usable as a Go library, not only as a server:
 several independent instances per process, safe for concurrent use, a typed
@@ -274,9 +274,9 @@ settles it this way:
 Step 2.2 moves into `core.Engine` what is held for the command running, and
 for the transport running it: the name GEOSEARCH was sent as, the reply
 ceiling EXEC lowers, the transport's allocation budget, EXEC's suspension of
-eviction, and the protocol each reply is framed in. It takes two PRs. The
-first moves everything but the protocol; the second moves the protocol, which
-every reply helper reads. Where the plan above leaves a choice open, step 2.2
+eviction, and the protocol each reply is framed in. It took two PRs: #110
+moved everything but the protocol, and #111 moved the protocol, which every
+reply helper reads. Where the plan above leaves a choice open, step 2.2
 settles it this way:
 
 - **On the engine, not passed down.** The state is held in fields of the
@@ -313,11 +313,22 @@ settles it this way:
   `Command`, and `evalAndResponse` holds it on the engine for exactly that
   command and restores it afterwards, so nothing after the command inherits
   it, and log replay and replica apply, which answer nobody, run as RESP2
-  whatever the command says. It moves in the second PR.
+  whatever the command says.
+  - The reply helpers in `resp3.go` are methods of `framing`, a one-field
+    value the engine embeds, so a handler writes `e.nullReply()` where it
+    wrote `nullReply()`. `appendDouble` takes the framing as an argument,
+    because a method cannot have a type parameter.
+  - Every reply a handler encodes goes through `e.encode`. A reply built
+    outside any command names its protocol and reads no engine: `Encode` is
+    RESP2, as it always was there, and the connection layer's `EncodeAs`
+    takes the connection's. The `Encode` calls left are errors and strings,
+    which are the same bytes in both protocols.
+  - A closure handed to an unknown walk escapes, so the RESP3 reply builders
+    give their walks the framing rather than the engine.
 - **Isolation.** `TestEnginesShareNoCommandScope` gives two engines different
-  budgets, ceilings and names, and runs them one after the other, one inside
-  the other's EXEC, and side by side on two goroutines, which the race job
-  runs under `-race`.
+  protocols, budgets, ceilings and names, and runs them one after the other,
+  one inside the other's EXEC, and side by side on two goroutines, which the
+  race job runs under `-race`.
 - **Census.** Each PR removes the entries it moves. After step 2.2 the census
   lists no command-scope state: what remains is the default engine, the
   persistence state of step 2.3, the replication state of step 2.4, the
