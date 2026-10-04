@@ -160,7 +160,7 @@ func TestMorrisKeyspaceIsAccountedAndEvictable(t *testing.T) {
 	ResetStores()
 	assert.EqualValues(t, "OK", mustDecode(t, defaultEngine.cmdMORRISINITBYDIM([]string{"m", "5000", "5"})))
 
-	res, _ := Decode(cmdMEMORY([]string{"USAGE", "m"}))
+	res, _ := Decode(defaultEngine.cmdMEMORY([]string{"USAGE", "m"}))
 	assert.EqualValues(t, 25000+64+len("m")+100, res,
 		"MEMORY USAGE must find a Morris key, not report nil for it")
 

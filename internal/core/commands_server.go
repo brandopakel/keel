@@ -17,14 +17,14 @@ import (
 //
 // The subcommand and its count have been checked against the command table by
 // the time this runs; see containerCommands.
-func cmdMEMORY(args []string) []byte {
+func (e *Engine) cmdMEMORY(args []string) []byte {
 	if err := CommandError(&Command{Cmd: "MEMORY", Args: args}); err != nil {
 		return Encode(err, false)
 	}
 	switch strings.ToUpper(args[0]) {
 	case "STATS":
-		out := ReplyMap{"keyspace.bytes", int64(data_structure.TotalMemUsed()), "keys.count", int64(data_structure.TotalKeys()), "keys.expires", int64(KeysWithExpiry())}
-		data_structure.EachKeyspace(func(ks data_structure.Keyspace) { out = append(out, ks.KeyspaceName()+".bytes", int64(ks.MemUsed())) })
+		out := ReplyMap{"keyspace.bytes", int64(e.space.TotalMemUsed()), "keys.count", int64(e.space.TotalKeys()), "keys.expires", int64(KeysWithExpiry())}
+		e.space.EachKeyspace(func(ks data_structure.Keyspace) { out = append(out, ks.KeyspaceName()+".bytes", int64(ks.MemUsed())) })
 		return Encode(out, false)
 	case "USAGE":
 		// SAMPLES is Redis's, and read as Redis reads it; the estimate here
@@ -41,7 +41,7 @@ func cmdMEMORY(args []string) []byte {
 				return Encode(errSyntax, false)
 			}
 		}
-		bytes, exists := entryBytesAnywhere(args[1])
+		bytes, exists := e.entryBytesAnywhere(args[1])
 		if !exists {
 			return nullReply()
 		}
@@ -64,8 +64,8 @@ var memoryHelp = HelpReply("MEMORY",
 // and a sorted set in another; the first match wins, which is the same order
 // the command tables resolve in. Looking only in the string dictionary - as
 // this did at first - reported nil for every set, sketch and filter.
-func entryBytesAnywhere(key string) (uint64, bool) {
-	if owner, ok := data_structure.OwnerOf(key); ok {
+func (e *Engine) entryBytesAnywhere(key string) (uint64, bool) {
+	if owner, ok := e.space.OwnerOf(key); ok {
 		return owner.EntryBytes(key)
 	}
 	return 0, false

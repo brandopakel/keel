@@ -29,7 +29,7 @@ func TestSketchDumpSlicesPreserveEnvelopeAcrossAllBoundaries(t *testing.T) {
 				got = stream.appendSlice(got, offset, min(slice, stream.size()-offset))
 			}
 			require.Equal(t, want, got, "%s slice=%d", kind, slice)
-			require.NoError(t, restoreKey("restored", got))
+			require.NoError(t, defaultEngine.restoreKey("restored", got))
 		}
 	}
 	ResetStores()

@@ -36,7 +36,7 @@ const scanMatchWork = 1 << 20
 // paid for. A selective filter therefore returns short or empty batches with a
 // cursor still to follow, and a client must stop on a zero cursor rather than
 // on an empty reply. That is Redis's rule too.
-func cmdSCAN(args []string) []byte {
+func (e *Engine) cmdSCAN(args []string) []byte {
 	if len(args) < 1 {
 		return Encode(wrongArguments("SCAN"), false)
 	}
@@ -109,7 +109,7 @@ func cmdSCAN(args []string) []byte {
 	if !reserveCommandMemory(4*min(count, data_structure.ScanMaxWork)*16 + 8192) {
 		return allocationPressure
 	}
-	keys, next := data_structure.ScanKeyspaces(cursor, count, keep, nil)
+	keys, next := e.space.ScanKeyspaces(cursor, count, keep, nil)
 	if matchExhausted {
 		return Encode(errors.New("ERR SCAN pattern work limit exceeded; use a simpler MATCH or smaller COUNT"), false)
 	}

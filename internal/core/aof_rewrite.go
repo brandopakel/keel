@@ -339,7 +339,7 @@ func emitRewriteKey(dst []byte, key string, reset bool) []byte {
 			}
 			return dst
 		}
-		if plan, ok := planOpaqueDump(key); ok && (plan.size > rewriteRecordSlice || len(key) > rewriteRecordSlice-plan.size-256) {
+		if plan, ok := defaultEngine.planOpaqueDump(key); ok && (plan.size > rewriteRecordSlice || len(key) > rewriteRecordSlice-plan.size-256) {
 			var expiry uint64
 			data_structure.EachKeyspace(func(ks data_structure.Keyspace) {
 				if at, ok := ks.GetExpiry(key); ok {

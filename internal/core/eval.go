@@ -5,7 +5,6 @@ import (
 	"io"
 
 	"github.com/brandopakel/keel/internal/constant"
-	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // Command dispatch.
@@ -24,21 +23,11 @@ var commandTable = map[string]func([]string) []byte{
 	"PING": cmdPING, "ECHO": cmdECHO, "SELECT": cmdSELECT,
 	"UNWATCH": cmdUNWATCH,
 
-	// Keys and expiry
-	"DEL": cmdDEL, "UNLINK": cmdUNLINK, "EXISTS": cmdEXISTS, "TYPE": cmdTYPE, "KEYS": cmdKEYS, "SCAN": cmdSCAN,
-	"TTL": cmdTTL, "PTTL": cmdPTTL, "EXPIRE": cmdEXPIRE, "PEXPIREAT": cmdPEXPIREAT,
-	"PEXPIRE": cmdPEXPIRE, "EXPIREAT": cmdEXPIREAT, "PERSIST": cmdPERSIST,
-
 	// Server
 	"KEEL.PROMOTE": cmdPROMOTE, "KEEL.FENCE": cmdFENCE,
 	"KEEL.REPL.PULL":  cmdReplicationPull,
 	"KEEL.REPL.PULL2": cmdReplicationPullV2,
-	"DBSIZE":          cmdDBSIZE, "FLUSHDB": cmdFLUSHDB, "MEMORY": cmdMEMORY, "INFO": cmdINFO,
-	"BGREWRITEAOF": cmdBGREWRITEAOF,
-	"KEEL.DUMP":    cmdDUMP, "KEEL.RESTORE": cmdRESTORE,
-	// The names from before the server was renamed, so a log written then
-	// still replays; a command is written to the log under its current name.
-	"MEMKV.DUMP": cmdDUMP, "MEMKV.RESTORE": cmdRESTORE,
+	"INFO":            cmdINFO, "BGREWRITEAOF": cmdBGREWRITEAOF,
 }
 
 // engineCommandTable is the part of the dispatch table whose handlers are
@@ -99,6 +88,20 @@ var engineCommandTable = map[string]func(*Engine, []string) []byte{
 	"INCRBY": (*Engine).cmdINCRBY, "DECR": (*Engine).cmdDECR, "DECRBY": (*Engine).cmdDECRBY,
 	"MGET": (*Engine).cmdMGET, "MSET": (*Engine).cmdMSET, "SETEX": (*Engine).cmdSETEX,
 	"PSETEX": (*Engine).cmdPSETEX, "LCS": (*Engine).cmdLCS,
+
+	// Keys and expiry, whatever type holds the key
+	"DEL": (*Engine).cmdDEL, "UNLINK": (*Engine).cmdUNLINK, "EXISTS": (*Engine).cmdEXISTS,
+	"TYPE": (*Engine).cmdTYPE, "KEYS": (*Engine).cmdKEYS, "SCAN": (*Engine).cmdSCAN,
+	"TTL": (*Engine).cmdTTL, "PTTL": (*Engine).cmdPTTL, "EXPIRE": (*Engine).cmdEXPIRE,
+	"PEXPIREAT": (*Engine).cmdPEXPIREAT, "PEXPIRE": (*Engine).cmdPEXPIRE, "EXPIREAT": (*Engine).cmdEXPIREAT,
+	"PERSIST": (*Engine).cmdPERSIST,
+
+	// The keyspace as a whole, and keys dumped and restored whatever their type
+	"DBSIZE": (*Engine).cmdDBSIZE, "FLUSHDB": (*Engine).cmdFLUSHDB, "MEMORY": (*Engine).cmdMEMORY,
+	"KEEL.DUMP": (*Engine).cmdDUMP, "KEEL.RESTORE": (*Engine).cmdRESTORE,
+	// The names from before the server was renamed, so a log written then
+	// still replays; a command is written to the log under its current name.
+	"MEMKV.DUMP": (*Engine).cmdDUMP, "MEMKV.RESTORE": (*Engine).cmdRESTORE,
 }
 
 // cmdPING answers PONG, or echoes the one argument it is given.
@@ -207,8 +210,8 @@ func (e *Engine) evalAndResponse(cmd *Command, c io.ReadWriter) error {
 		return werr
 	}
 
-	suspended := data_structure.DefaultSpace.SuspendEviction
-	data_structure.DefaultSpace.SuspendEviction = true
+	suspended := e.space.SuspendEviction
+	e.space.SuspendEviction = true
 	var res []byte
 	if entry.onEngine != nil {
 		res = entry.onEngine(e, cmd.Args)
@@ -221,9 +224,9 @@ func (e *Engine) evalAndResponse(cmd *Command, c io.ReadWriter) error {
 	// the write phase, so under appendfsync always the client hears "OK" only
 	// once the log holding that OK is on disk.
 	aofCommit(cmd, res)
-	data_structure.DefaultSpace.SuspendEviction = suspended
+	e.space.SuspendEviction = suspended
 	// The removal hook writes eviction DELs directly after the canonical body.
-	data_structure.EnforceLimits()
+	e.space.EnforceLimits()
 
 	_, err := c.Write(res)
 	return err

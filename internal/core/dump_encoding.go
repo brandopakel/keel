@@ -48,23 +48,23 @@ func opaqueDumpPlan(tag byte, value dumpMarshaler) dumpPlan {
 	return dumpPlan{tag, value.MarshalSize(), value.AppendMarshal}
 }
 
-func planDump(key string, limit int) (dumpPlan, bool) {
-	if h, ok := defaultEngine.hashStore.Peek(key); ok {
+func (e *Engine) planDump(key string, limit int) (dumpPlan, bool) {
+	if h, ok := e.hashStore.Peek(key); ok {
 		return partsDumpPlan(dumpTagHash, func(yield func(string) bool) {
 			h.Visit(func(field, value string) bool { return yield(field) && yield(value) })
 		}, limit), true
 	}
-	if l, ok := defaultEngine.listStore.Peek(key); ok {
+	if l, ok := e.listStore.Peek(key); ok {
 		return partsDumpPlan(dumpTagList, func(yield func(string) bool) {
 			l.VisitRange(0, l.Len()-1, yield)
 		}, limit), true
 	}
-	if obj := defaultEngine.dictStore.Peek(key); obj != nil {
+	if obj := e.dictStore.Peek(key); obj != nil {
 		return dumpPlan{dumpTagString, len(obj.Value), func(dst []byte) []byte {
 			return append(dst, obj.Value...)
 		}}, true
 	}
-	if set, ok := defaultEngine.setStore.Peek(key); ok {
+	if set, ok := e.setStore.Peek(key); ok {
 		return partsDumpPlan(dumpTagSet, func(yield func(string) bool) {
 			for i := 0; i < set.Len(); i++ {
 				value, _ := set.MemberAt(i)
@@ -74,7 +74,7 @@ func planDump(key string, limit int) (dumpPlan, bool) {
 			}
 		}, limit), true
 	}
-	if z, ok := defaultEngine.zsetStore.Peek(key); ok {
+	if z, ok := e.zsetStore.Peek(key); ok {
 		size := 0
 		var scoreBuffer [32]byte
 		z.VisitRangeByRank(0, z.Len()-1, false, func(member string, score float64) bool {
@@ -99,23 +99,23 @@ func planDump(key string, limit int) (dumpPlan, bool) {
 			return dst
 		}}, true
 	}
-	return planOpaqueDump(key)
+	return e.planOpaqueDump(key)
 }
 
-func planOpaqueDump(key string) (dumpPlan, bool) {
-	if v, ok := defaultEngine.sbStore.Peek(key); ok {
+func (e *Engine) planOpaqueDump(key string) (dumpPlan, bool) {
+	if v, ok := e.sbStore.Peek(key); ok {
 		return opaqueDumpPlan(dumpTagBloom, v), true
 	}
-	if v, ok := defaultEngine.cmsStore.Peek(key); ok {
+	if v, ok := e.cmsStore.Peek(key); ok {
 		return opaqueDumpPlan(dumpTagCMS, v), true
 	}
-	if v, ok := defaultEngine.morrisStore.Peek(key); ok {
+	if v, ok := e.morrisStore.Peek(key); ok {
 		return opaqueDumpPlan(dumpTagMorris, v), true
 	}
-	if v, ok := defaultEngine.hllStore.Peek(key); ok {
+	if v, ok := e.hllStore.Peek(key); ok {
 		return opaqueDumpPlan(dumpTagHLL, v), true
 	}
-	if v, ok := defaultEngine.cfStore.Peek(key); ok {
+	if v, ok := e.cfStore.Peek(key); ok {
 		return opaqueDumpPlan(dumpTagCuckoo, v), true
 	}
 	return dumpPlan{}, false
