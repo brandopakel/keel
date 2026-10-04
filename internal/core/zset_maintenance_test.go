@@ -28,7 +28,7 @@ func TestZSetMaintenancePreservesRankScoresAndPersistence(t *testing.T) {
 	require.NoError(t, FlushAOF())
 	before, err := os.ReadFile(path)
 	require.NoError(t, err)
-	z, ok := zsetStore.Peek("ranking")
+	z, ok := defaultEngine.zsetStore.Peek("ranking")
 	require.True(t, ok)
 	expected := run(t, "ZRANGE", "ranking", "0", "-1", "WITHSCORES")
 	require.Equal(t, 1, z.CompactIndex(1), "fixture requires a pending rebuild")

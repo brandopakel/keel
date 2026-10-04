@@ -17,18 +17,18 @@ import (
 // Every command that changes a set in place goes through zsetSettle, which
 // applies that rule and re-measures the set for the memory budget.
 
-func zsetFor(key string) (*data_structure.ZSet, bool) {
-	return zsetStore.Get(key)
+func (e *Engine) zsetFor(key string) (*data_structure.ZSet, bool) {
+	return e.zsetStore.Get(key)
 }
 
 // zsetSettle records that a sorted set was changed in place: it is dropped when
 // empty and re-measured otherwise.
-func zsetSettle(key string, zs *data_structure.ZSet) {
+func (e *Engine) zsetSettle(key string, zs *data_structure.ZSet) {
 	if zs.Len() == 0 {
-		zsetStore.Delete(key)
+		e.zsetStore.Delete(key)
 		return
 	}
-	zsetStore.Resize(key)
+	e.zsetStore.Resize(key)
 }
 
 var (
@@ -161,14 +161,14 @@ func shortestDouble(v float64) string {
 //
 // The set is created on demand, except under XX, where nothing new may be added
 // and so a key that does not exist stays that way.
-func zaddApply(key string, scores []float64, members []string, flags int) (added, changed int) {
-	zs, ok := zsetFor(key)
+func (e *Engine) zaddApply(key string, scores []float64, members []string, flags int) (added, changed int) {
+	zs, ok := e.zsetFor(key)
 	if !ok {
 		if flags&data_structure.ZAddXX != 0 {
 			return 0, 0
 		}
 		zs = data_structure.CreateZSet()
-		zsetStore.Put(key, zs)
+		e.zsetStore.Put(key, zs)
 	}
 	for i, score := range scores {
 		switch zs.Add(score, members[i], flags) {
@@ -179,7 +179,7 @@ func zaddApply(key string, scores []float64, members []string, flags int) (added
 			changed++
 		}
 	}
-	zsetSettle(key, zs)
+	e.zsetSettle(key, zs)
 	return added, changed
 }
 
@@ -213,7 +213,7 @@ func zaddArguments(args []string) error {
 // The reply is the number of members added, or with CH the number added or
 // rescored. Every score is checked before any is applied, so a bad one leaves
 // the set exactly as it was.
-func cmdZADD(args []string) []byte {
+func (e *Engine) cmdZADD(args []string) []byte {
 	if len(args) < 3 {
 		return Encode(wrongArguments("ZADD"), false)
 	}
@@ -231,7 +231,7 @@ func cmdZADD(args []string) []byte {
 		scores = append(scores, score)
 		members = append(members, pairs[i+1])
 	}
-	added, changed := zaddApply(args[0], scores, members, flags)
+	added, changed := e.zaddApply(args[0], scores, members, flags)
 	if ch {
 		return Encode(changed, false)
 	}
@@ -257,7 +257,7 @@ func zrankArguments(args []string) (withScore bool, err error) {
 // cmdZRANK answers a member's 0-based position from the lowest score, or nil
 // for a member or key that is not there; with WITHSCORE, the position and the
 // score, or a null array.
-func cmdZRANK(args []string) []byte {
+func (e *Engine) cmdZRANK(args []string) []byte {
 	if len(args) < 2 {
 		return Encode(wrongArguments("ZRANK"), false)
 	}
@@ -269,7 +269,7 @@ func cmdZRANK(args []string) []byte {
 	if withScore {
 		missing = nullArrayReply
 	}
-	zs, ok := zsetFor(args[0])
+	zs, ok := e.zsetFor(args[0])
 	if !ok {
 		return missing()
 	}
@@ -284,12 +284,12 @@ func cmdZRANK(args []string) []byte {
 	return Encode(rank, false)
 }
 
-func cmdZREM(args []string) []byte {
+func (e *Engine) cmdZREM(args []string) []byte {
 	if len(args) < 2 {
 		return Encode(wrongArguments("ZREM"), false)
 	}
 	key := args[0]
-	zs, ok := zsetFor(key)
+	zs, ok := e.zsetFor(key)
 	if !ok {
 		return constant.RespZero
 	}
@@ -299,17 +299,17 @@ func cmdZREM(args []string) []byte {
 			removed++
 		}
 	}
-	zsetSettle(key, zs)
+	e.zsetSettle(key, zs)
 	return Encode(removed, false)
 }
 
 // cmdZSCORE answers a member's score - a double in RESP3, a bulk string in
 // RESP2 - or nil when the member or the key is absent.
-func cmdZSCORE(args []string) []byte {
+func (e *Engine) cmdZSCORE(args []string) []byte {
 	if len(args) != 2 {
 		return Encode(wrongArguments("ZSCORE"), false)
 	}
-	zs, ok := zsetFor(args[0])
+	zs, ok := e.zsetFor(args[0])
 	if !ok {
 		return nullReply()
 	}
@@ -320,11 +320,11 @@ func cmdZSCORE(args []string) []byte {
 	return Encode(ReplyDouble(formatZScore(score)), false)
 }
 
-func cmdZCARD(args []string) []byte {
+func (e *Engine) cmdZCARD(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(wrongArguments("ZCARD"), false)
 	}
-	zs, ok := zsetFor(args[0])
+	zs, ok := e.zsetFor(args[0])
 	if !ok {
 		return constant.RespZero
 	}
@@ -381,7 +381,7 @@ func parseZRange(args []string) (z zrangeArguments, err error) {
 
 // cmdZRANGE answers a range of ranks, or of scores with BYSCORE, in either
 // direction, with or without scores.
-func cmdZRANGE(args []string) []byte {
+func (e *Engine) cmdZRANGE(args []string) []byte {
 	if len(args) < 3 {
 		return Encode(wrongArguments("ZRANGE"), false)
 	}
@@ -390,9 +390,9 @@ func cmdZRANGE(args []string) []byte {
 		return Encode(err, false)
 	}
 	if z.byScore {
-		return scoreRangeReply(args[0], z.scores, z.offset, z.count, z.reverse, z.withScores)
+		return e.scoreRangeReply(args[0], z.scores, z.offset, z.count, z.reverse, z.withScores)
 	}
-	zs, ok := zsetFor(args[0])
+	zs, ok := e.zsetFor(args[0])
 	if !ok {
 		return constant.RespEmptyArray
 	}

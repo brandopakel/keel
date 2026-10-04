@@ -34,7 +34,7 @@ func TestEveryKeyspaceIsAccounted(t *testing.T) {
 	}{
 		{"string", func(i int) { cmdSET([]string{"s" + strconv.Itoa(i), strings.Repeat("v", 500)}) }},
 		{"set", func(i int) { defaultEngine.cmdSADD([]string{"set" + strconv.Itoa(i), "a", "b", "c", "d", "e"}) }},
-		{"sorted set", func(i int) { cmdZADD([]string{"z" + strconv.Itoa(i), "1", "a", "2", "b"}) }},
+		{"sorted set", func(i int) { defaultEngine.cmdZADD([]string{"z" + strconv.Itoa(i), "1", "a", "2", "b"}) }},
 		{"hyperloglog", func(i int) { cmdPFADD([]string{"h" + strconv.Itoa(i), "x"}) }},
 		{"cuckoo filter", func(i int) { cmdCFADD([]string{"c" + strconv.Itoa(i), "x"}) }},
 		{"count-min sketch", func(i int) { cmdCMSINITBYDIM([]string{"m" + strconv.Itoa(i), "200", "5"}) }},
@@ -70,7 +70,7 @@ func TestBudgetIsSharedAcrossKeyspaces(t *testing.T) {
 		cmdSET([]string{"s" + n, strings.Repeat("v", 500)})
 		defaultEngine.cmdSADD([]string{"set" + n, "a", "b", "c"})
 		cmdPFADD([]string{"h" + n, "x"})
-		cmdZADD([]string{"z" + n, "1", "a"})
+		defaultEngine.cmdZADD([]string{"z" + n, "1", "a"})
 	}
 	used := data_structure.TotalMemUsed()
 	assert.LessOrEqual(t, used, uint64(1<<20)*11/10,
@@ -131,7 +131,7 @@ func TestMemoryUsageFindsKeysInEveryKeyspace(t *testing.T) {
 
 	cmdSET([]string{"str", strings.Repeat("v", 100)})
 	defaultEngine.cmdSADD([]string{"set", "a", "b", "c"})
-	cmdZADD([]string{"zset", "1", "a"})
+	defaultEngine.cmdZADD([]string{"zset", "1", "a"})
 	cmdPFADD([]string{"hll", "x"})
 	cmdCFADD([]string{"cf", "x"})
 	cmdCMSINITBYDIM([]string{"cms", "200", "5"})

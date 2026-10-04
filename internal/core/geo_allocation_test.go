@@ -22,11 +22,11 @@ func TestGeoSearchRefusesOversizedReplyBeforeEncoding(t *testing.T) {
 	for i := 0; i < 6; i++ {
 		z.Add(float64(score), fmt.Sprintf("%d", i)+strings.Repeat("x", 11<<20), 0)
 	}
-	zsetStore.Put("geo", z)
+	defaultEngine.zsetStore.Put("geo", z)
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	reply := cmdGEOSEARCH([]string{"geo", "FROMLONLAT", "0", "0", "BYRADIUS", "1000", "km"})
+	reply := defaultEngine.cmdGEOSEARCH([]string{"geo", "FROMLONLAT", "0", "0", "BYRADIUS", "1000", "km"})
 	runtime.ReadMemStats(&after)
 	t.Logf("oversized GEOSEARCH allocated %d bytes", after.TotalAlloc-before.TotalAlloc)
 	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(256<<10))
@@ -50,7 +50,7 @@ func TestGeoSearchSelectionAndEncodingAgainstFullSort(t *testing.T) {
 		points = append(points, data_structure.GeoPoint{Longitude: lon, Latitude: lat,
 			Dist: data_structure.GeohashGetDistance(0, 0, lon, lat), Score: float64(score), Member: member})
 	}
-	zsetStore.Put("geo", z)
+	defaultEngine.zsetStore.Put("geo", z)
 	for _, order := range []string{"ASC", "DESC"} {
 		sort.Slice(points, func(i, j int) bool {
 			if order == "ASC" {
@@ -84,7 +84,7 @@ func TestGeoSearchSelectionAndEncodingAgainstFullSort(t *testing.T) {
 					}
 					want = append(want, entry)
 				}
-				require.Equal(t, Encode(want, false), cmdGEOSEARCH(args), "order=%s count=%d flags=%d", order, count, flags)
+				require.Equal(t, Encode(want, false), defaultEngine.cmdGEOSEARCH(args), "order=%s count=%d flags=%d", order, count, flags)
 			}
 		}
 	}
@@ -128,11 +128,11 @@ func TestGeoSearchCountDoesNotCollectEveryMatch(t *testing.T) {
 		require.True(t, ok)
 		z.Add(float64(score), fmt.Sprintf("%05d", i), 0)
 	}
-	zsetStore.Put("geo", z)
+	defaultEngine.zsetStore.Put("geo", z)
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	reply := cmdGEOSEARCH([]string{"geo", "FROMLONLAT", "0", "0", "BYRADIUS", "1000", "km", "COUNT", "1"})
+	reply := defaultEngine.cmdGEOSEARCH([]string{"geo", "FROMLONLAT", "0", "0", "BYRADIUS", "1000", "km", "COUNT", "1"})
 	runtime.ReadMemStats(&after)
 	t.Logf("COUNT 1 across 50000 matches allocated %d bytes", after.TotalAlloc-before.TotalAlloc)
 	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(64<<10))
@@ -151,12 +151,12 @@ func TestGeoSearchLargeCountWithSparseMatches(t *testing.T) {
 	near, ok := data_structure.GeoScore(0, 0)
 	require.True(t, ok)
 	z.Add(float64(near), "near", 0)
-	zsetStore.Put("geo", z)
+	defaultEngine.zsetStore.Put("geo", z)
 	for _, count := range []string{"50000", "1000000", "10000000"} {
 		runtime.GC()
 		var before, after runtime.MemStats
 		runtime.ReadMemStats(&before)
-		reply := cmdGEOSEARCH([]string{"geo", "FROMLONLAT", "0", "0", "BYRADIUS", "1", "m", "COUNT", count})
+		reply := defaultEngine.cmdGEOSEARCH([]string{"geo", "FROMLONLAT", "0", "0", "BYRADIUS", "1", "m", "COUNT", count})
 		runtime.ReadMemStats(&after)
 		t.Logf("sparse COUNT %s allocated %d bytes", count, after.TotalAlloc-before.TotalAlloc)
 		require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(128<<10))

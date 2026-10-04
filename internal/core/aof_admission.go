@@ -252,7 +252,7 @@ func collectionReplyBound(key string, writtenThisRun int) int {
 		held, elements = s.MemUsage(), s.Len()
 	} else if l, ok := defaultEngine.listStore.Peek(key); ok {
 		held, elements = l.MemUsage(), l.Len()
-	} else if z, ok := zsetStore.Peek(key); ok {
+	} else if z, ok := defaultEngine.zsetStore.Peek(key); ok {
 		held, elements = z.MemUsage(), z.Len()
 	}
 	return int(held) + elements*replyFraming + writtenThisRun + replyFraming

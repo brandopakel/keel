@@ -45,13 +45,6 @@ var commandTable = map[string]func([]string) []byte{
 	// still replays; a command is written to the log under its current name.
 	"MEMKV.DUMP": cmdDUMP, "MEMKV.RESTORE": cmdRESTORE,
 
-	// Sorted sets, and the geospatial index built on them
-	"ZCOUNT": cmdZCOUNT, "ZRANGEBYSCORE": cmdZRANGEBYSCORE, "ZREVRANGEBYSCORE": cmdZREVRANGEBYSCORE,
-	"ZINCRBY": cmdZINCRBY, "ZPOPMIN": cmdZPOPMIN, "ZPOPMAX": cmdZPOPMAX,
-	"ZRANGE": cmdZRANGE, "ZADD": cmdZADD, "ZRANK": cmdZRANK, "ZREM": cmdZREM, "ZSCORE": cmdZSCORE, "ZCARD": cmdZCARD,
-	"GEOADD": cmdGEOADD, "GEODIST": cmdGEODIST, "GEOHASH": cmdGEOHASH,
-	"GEOSEARCH": cmdGEOSEARCH, "GEOPOS": cmdGEOPOS,
-
 	// Probabilistic structures
 	"BF.RESERVE": cmdBFRESERVE, "BF.INFO": cmdBFINFO, "BF.ADD": cmdBFADD,
 	"BF.MADD": cmdBFMADD, "BF.EXISTS": cmdBFEXISTS, "BF.MEXISTS": cmdBFMEXISTS,
@@ -87,6 +80,15 @@ var engineCommandTable = map[string]func(*Engine, []string) []byte{
 	"SMISMEMBER": (*Engine).cmdSMISMEMBER, "SPOP": (*Engine).cmdSPOP, "SRANDMEMBER": (*Engine).cmdSRANDMEMBER,
 	// SRAND is what this server called SRANDMEMBER before it took the Redis name.
 	"SRAND": (*Engine).cmdSRANDMEMBER,
+
+	// Sorted sets, and the geospatial index built on them
+	"ZCOUNT": (*Engine).cmdZCOUNT, "ZRANGEBYSCORE": (*Engine).cmdZRANGEBYSCORE,
+	"ZREVRANGEBYSCORE": (*Engine).cmdZREVRANGEBYSCORE, "ZINCRBY": (*Engine).cmdZINCRBY,
+	"ZPOPMIN": (*Engine).cmdZPOPMIN, "ZPOPMAX": (*Engine).cmdZPOPMAX, "ZRANGE": (*Engine).cmdZRANGE,
+	"ZADD": (*Engine).cmdZADD, "ZRANK": (*Engine).cmdZRANK, "ZREM": (*Engine).cmdZREM,
+	"ZSCORE": (*Engine).cmdZSCORE, "ZCARD": (*Engine).cmdZCARD, "GEOADD": (*Engine).cmdGEOADD,
+	"GEODIST": (*Engine).cmdGEODIST, "GEOHASH": (*Engine).cmdGEOHASH, "GEOSEARCH": (*Engine).cmdGEOSEARCH,
+	"GEOPOS": (*Engine).cmdGEOPOS,
 }
 
 // cmdPING answers PONG, or echoes the one argument it is given.

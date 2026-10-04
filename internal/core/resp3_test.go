@@ -446,18 +446,18 @@ func TestRESP3OutputLimitCountsRESP3Framing(t *testing.T) {
 		}
 		z.Add(0.5, strconv.Itoa(100+i)+strings.Repeat("x", n-3), 0)
 	}
-	zsetStore.Put("z", z)
+	defaultEngine.zsetStore.Put("z", z)
 
 	saved := replyRESP3
 	defer func() { replyRESP3 = saved }()
 	replyRESP3 = false
-	resp2 := cmdZRANGE([]string{"z", "0", "-1", "WITHSCORES"})
+	resp2 := defaultEngine.cmdZRANGE([]string{"z", "0", "-1", "WITHSCORES"})
 	require.Equal(t, byte('*'), resp2[0])
 	assert.Equal(t, target, len(resp2))
 	resp2 = nil
 
 	replyRESP3 = true
-	assert.Equal(t, replyTooLarge, cmdZRANGE([]string{"z", "0", "-1", "WITHSCORES"}))
-	assert.Equal(t, replyTooLarge, cmdZPOPMIN([]string{"z", "65"}))
+	assert.Equal(t, replyTooLarge, defaultEngine.cmdZRANGE([]string{"z", "0", "-1", "WITHSCORES"}))
+	assert.Equal(t, replyTooLarge, defaultEngine.cmdZPOPMIN([]string{"z", "65"}))
 	assert.Equal(t, pairs, z.Len(), "a refused pop removes nothing")
 }

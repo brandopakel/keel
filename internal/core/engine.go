@@ -31,6 +31,7 @@ type Engine struct {
 	hashStore *data_structure.Keyed[*data_structure.Hash]
 	listStore *data_structure.Keyed[*data_structure.List]
 	setStore  *data_structure.Keyed[*data_structure.Set]
+	zsetStore *data_structure.Keyed[*data_structure.ZSet]
 }
 
 // defaultEngine is the engine the server and the tests run on until each

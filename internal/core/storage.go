@@ -15,7 +15,6 @@ import (
 // 2.1). The ones below have yet to; Engine holds those that have.
 var (
 	dictStore   *data_structure.Dict
-	zsetStore   *data_structure.Keyed[*data_structure.ZSet]
 	sbStore     *data_structure.Keyed[*data_structure.SBChain]
 	cmsStore    *data_structure.Keyed[*data_structure.CMS]
 	morrisStore *data_structure.Keyed[*data_structure.Morris]
@@ -40,7 +39,7 @@ func ResetStores() {
 	aof.recovered = nil
 
 	dictStore = data_structure.CreateDict(space)
-	zsetStore = data_structure.NewKeyed[*data_structure.ZSet](space, "zset")
+	e.zsetStore = data_structure.NewKeyed[*data_structure.ZSet](space, "zset")
 	e.setStore = data_structure.NewKeyed[*data_structure.Set](space, "set")
 	e.hashStore = data_structure.NewKeyed[*data_structure.Hash](space, "hash")
 	e.listStore = data_structure.NewKeyed[*data_structure.List](space, "list")
@@ -51,7 +50,7 @@ func ResetStores() {
 	cfStore = data_structure.NewKeyed[*data_structure.CuckooFilter](space, "cuckoo")
 
 	space.RegisterKeyspace(dictStore)
-	space.RegisterKeyspace(zsetStore)
+	space.RegisterKeyspace(e.zsetStore)
 	space.RegisterKeyspace(e.setStore)
 	space.RegisterKeyspace(e.hashStore)
 	space.RegisterKeyspace(e.listStore)

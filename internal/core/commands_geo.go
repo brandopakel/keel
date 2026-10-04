@@ -69,7 +69,7 @@ func formatDistance(v float64) string { return strconv.FormatFloat(v, 'f', 4, 64
 //
 // Every position is checked before any is stored, so one bad pair in a batch
 // leaves the key as it was.
-func cmdGEOADD(args []string) []byte {
+func (e *Engine) cmdGEOADD(args []string) []byte {
 	if len(args) < 4 {
 		return Encode(wrongArguments("GEOADD"), false)
 	}
@@ -87,7 +87,7 @@ func cmdGEOADD(args []string) []byte {
 		scores = append(scores, score)
 		members = append(members, triples[i+2])
 	}
-	added, changed := zaddApply(args[0], scores, members, flags)
+	added, changed := e.zaddApply(args[0], scores, members, flags)
 	if ch {
 		return Encode(changed, false)
 	}
@@ -161,7 +161,7 @@ func geoPosition(zs *data_structure.ZSet, member string) (longitude, latitude fl
 // the worst case. A missing key or member answers nil. The distance is a bulk
 // string in RESP3 as well as RESP2: Redis keeps it one, at four decimals,
 // rather than sending a double.
-func cmdGEODIST(args []string) []byte {
+func (e *Engine) cmdGEODIST(args []string) []byte {
 	if len(args) < 3 {
 		return Encode(wrongArguments("GEODIST"), false)
 	}
@@ -169,7 +169,7 @@ func cmdGEODIST(args []string) []byte {
 	if err != nil {
 		return Encode(err, false)
 	}
-	zs, ok := zsetFor(args[0])
+	zs, ok := e.zsetFor(args[0])
 	if !ok {
 		return nullReply()
 	}
@@ -184,11 +184,11 @@ func cmdGEODIST(args []string) []byte {
 // cmdGEOHASH implements GEOHASH key [member ...]: one standard eleven-character
 // geohash per member, in the order asked, with nil standing in for a member
 // that is not there.
-func cmdGEOHASH(args []string) []byte {
+func (e *Engine) cmdGEOHASH(args []string) []byte {
 	if len(args) < 1 {
 		return Encode(wrongArguments("GEOHASH"), false)
 	}
-	zs, exists := zsetFor(args[0])
+	zs, exists := e.zsetFor(args[0])
 	out := make([]interface{}, 0, len(args)-1)
 	for _, member := range args[1:] {
 		if !exists {
@@ -213,11 +213,11 @@ func cmdGEOHASH(args []string) []byte {
 // cmdGEOPOS implements GEOPOS key [member ...]: a longitude, latitude pair per
 // member, in the order asked, with a null array for a member that is not there.
 // The coordinates are doubles in RESP3 and bulk strings in RESP2.
-func cmdGEOPOS(args []string) []byte {
+func (e *Engine) cmdGEOPOS(args []string) []byte {
 	if len(args) < 1 {
 		return Encode(wrongArguments("GEOPOS"), false)
 	}
-	zs, exists := zsetFor(args[0])
+	zs, exists := e.zsetFor(args[0])
 	out := appendArrayHeader(nil, len(args)-1)
 	for _, member := range args[1:] {
 		if !exists {
@@ -270,12 +270,12 @@ type geoSearch struct {
 // member becomes an array of the member followed by, in this order, its
 // distance in the search's unit, its raw geohash score and its coordinates,
 // whichever were asked for.
-func cmdGEOSEARCH(args []string) []byte {
+func (e *Engine) cmdGEOSEARCH(args []string) []byte {
 	if len(args) < 6 {
 		return Encode(wrongArguments("GEOSEARCH"), false)
 	}
 	key := args[0]
-	zs, exists := zsetFor(key)
+	zs, exists := e.zsetFor(key)
 
 	s, err := parseGeoSearch(zs, exists, args[1:])
 	if err != nil {

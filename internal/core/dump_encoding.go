@@ -74,7 +74,7 @@ func planDump(key string, limit int) (dumpPlan, bool) {
 			}
 		}, limit), true
 	}
-	if z, ok := zsetStore.Peek(key); ok {
+	if z, ok := defaultEngine.zsetStore.Peek(key); ok {
 		size := 0
 		var scoreBuffer [32]byte
 		z.VisitRangeByRank(0, z.Len()-1, false, func(member string, score float64) bool {
