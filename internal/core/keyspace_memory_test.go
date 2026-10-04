@@ -138,7 +138,7 @@ func TestMemoryUsageFindsKeysInEveryKeyspace(t *testing.T) {
 	defaultEngine.cmdBFMADD([]string{"bf", "x"})
 
 	for _, key := range []string{"str", "set", "zset", "hll", "cf", "cms", "bf"} {
-		res, err := Decode(cmdMEMORY([]string{"USAGE", key}))
+		res, err := Decode(defaultEngine.cmdMEMORY([]string{"USAGE", key}))
 		assert.Nil(t, err)
 		n, ok := res.(int64)
 		assert.True(t, ok, "MEMORY USAGE %s should report a size, got %v", key, res)
@@ -147,12 +147,12 @@ func TestMemoryUsageFindsKeysInEveryKeyspace(t *testing.T) {
 
 	// Small sketches retain compact registers; after promotion the full dense
 	// allocation must be charged through the same MEMORY USAGE command.
-	res, _ := Decode(cmdMEMORY([]string{"USAGE", "hll"}))
+	res, _ := Decode(defaultEngine.cmdMEMORY([]string{"USAGE", "hll"}))
 	assert.Less(t, res.(int64), int64(1000))
 	for i := 0; i < 1000; i++ {
 		defaultEngine.cmdPFADD([]string{"hll", strconv.Itoa(i)})
 	}
-	res, _ = Decode(cmdMEMORY([]string{"USAGE", "hll"}))
+	res, _ = Decode(defaultEngine.cmdMEMORY([]string{"USAGE", "hll"}))
 	assert.Greater(t, res.(int64), int64(12000))
 }
 
@@ -166,7 +166,7 @@ func TestBloomFilterSizeIsTheBitArray(t *testing.T) {
 	defaultEngine.cmdBFRESERVE([]string{"bf", "0.01", "100000"})
 	defaultEngine.cmdBFMADD([]string{"bf", "x"})
 
-	res, _ := Decode(cmdMEMORY([]string{"USAGE", "bf"}))
+	res, _ := Decode(defaultEngine.cmdMEMORY([]string{"USAGE", "bf"}))
 	assert.Greater(t, res.(int64), int64(100000),
 		"a filter sized for 100,000 items at 1%% error holds ~120KB of bits")
 }

@@ -215,8 +215,8 @@ func (e *Engine) cmdGET(args []string) []byte {
 // remainingTTL is how long a key has left, in milliseconds. The two negative
 // answers are Redis's: -2 for a key that is not there, -1 for one with no
 // expiry.
-func remainingTTL(key string) int64 {
-	owner, ok := data_structure.OwnerOf(key)
+func (e *Engine) remainingTTL(key string) int64 {
+	owner, ok := e.space.OwnerOf(key)
 	if !ok {
 		return -2
 	}
@@ -229,11 +229,11 @@ func remainingTTL(key string) int64 {
 
 // cmdTTL answers a key's time to live in whole seconds, rounded to the nearest
 // as Redis rounds it.
-func cmdTTL(args []string) []byte {
+func (e *Engine) cmdTTL(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(wrongArguments("TTL"), false)
 	}
-	left := remainingTTL(args[0])
+	left := e.remainingTTL(args[0])
 	if left < 0 {
 		return Encode(left, false)
 	}
@@ -241,11 +241,11 @@ func cmdTTL(args []string) []byte {
 }
 
 // cmdPTTL is TTL in milliseconds.
-func cmdPTTL(args []string) []byte {
+func (e *Engine) cmdPTTL(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(wrongArguments("PTTL"), false)
 	}
-	return Encode(remainingTTL(args[0]), false)
+	return Encode(e.remainingTTL(args[0]), false)
 }
 
 // cmdDEL removes keys from whichever keyspace holds them.
@@ -255,13 +255,13 @@ func cmdPTTL(args []string) []byte {
 // a name was held by two types at once it removed the string and left the rest.
 // A delete that cannot delete is worse than a missing command, because it
 // answers.
-func cmdDEL(args []string) []byte {
+func (e *Engine) cmdDEL(args []string) []byte {
 	if len(args) == 0 {
 		return Encode(wrongArguments("DEL"), false)
 	}
 	deleted := 0
 	for _, key := range args {
-		if data_structure.DeleteAnywhere(key) {
+		if e.space.DeleteAnywhere(key) {
 			deleted++
 		}
 	}
@@ -271,24 +271,33 @@ func cmdDEL(args []string) []byte {
 // cmdUNLINK is DEL. Redis hands an unlinked value to a background thread to
 // free; here deleting costs the same either way, so the two are one command,
 // and UNLINK is logged as DEL - see persistedName.
-func cmdUNLINK(args []string) []byte {
+func (e *Engine) cmdUNLINK(args []string) []byte {
 	if len(args) == 0 {
 		return Encode(wrongArguments("UNLINK"), false)
 	}
-	return cmdDEL(args)
+	return e.cmdDEL(args)
 }
 
 // cmdEXPIRE implements EXPIRE key seconds. A time already passed - zero or
 // negative - deletes the key, as it does in Redis, and is logged as the DEL
 // it amounts to.
-func cmdEXPIRE(args []string) []byte    { return expireCommand("EXPIRE", args, 1000, false) }
-func cmdPEXPIRE(args []string) []byte   { return expireCommand("PEXPIRE", args, 1, false) }
-func cmdEXPIREAT(args []string) []byte  { return expireCommand("EXPIREAT", args, 1000, true) }
-func cmdPEXPIREAT(args []string) []byte { return expireCommand("PEXPIREAT", args, 1, true) }
+func (e *Engine) cmdEXPIRE(args []string) []byte {
+	return e.expireCommand("EXPIRE", args, 1000, false)
+}
+
+func (e *Engine) cmdPEXPIRE(args []string) []byte { return e.expireCommand("PEXPIRE", args, 1, false) }
+
+func (e *Engine) cmdEXPIREAT(args []string) []byte {
+	return e.expireCommand("EXPIREAT", args, 1000, true)
+}
+
+func (e *Engine) cmdPEXPIREAT(args []string) []byte {
+	return e.expireCommand("PEXPIREAT", args, 1, true)
+}
 
 // expireCommand reads its options before its time, as Redis does, and refuses
 // them in Redis's words.
-func expireCommand(name string, args []string, scale int64, absolute bool) []byte {
+func (e *Engine) expireCommand(name string, args []string, scale int64, absolute bool) []byte {
 	if len(args) < 2 {
 		return Encode(wrongArguments(name), false)
 	}
@@ -328,7 +337,7 @@ func expireCommand(name string, args []string, scale int64, absolute bool) []byt
 			return Encode(invalidExpireTime(name), false)
 		}
 	}
-	owner, ok := data_structure.OwnerOf(args[0])
+	owner, ok := e.space.OwnerOf(args[0])
 	if !ok {
 		aof.skip = true
 		return constant.RespZero
@@ -348,11 +357,11 @@ func expireCommand(name string, args []string, scale int64, absolute bool) []byt
 	return constant.RespOne
 }
 
-func cmdPERSIST(args []string) []byte {
+func (e *Engine) cmdPERSIST(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(wrongArguments("PERSIST"), false)
 	}
-	owner, ok := data_structure.OwnerOf(args[0])
+	owner, ok := e.space.OwnerOf(args[0])
 	if ok && owner.ClearExpiry(args[0]) {
 		return constant.RespOne
 	}
@@ -418,9 +427,9 @@ func (e *Engine) increment(name string, args []string, sign int64, explicit bool
 // followed by DBSIZE answered 0 while the key was plainly there, and adding
 // EXISTS and KEYS made the contradiction visible - KEYS * listing three keys
 // next to a DBSIZE of zero.
-func cmdDBSIZE(args []string) []byte {
+func (e *Engine) cmdDBSIZE(args []string) []byte {
 	if len(args) != 0 {
 		return Encode(wrongArguments("DBSIZE"), false)
 	}
-	return Encode(int64(data_structure.TotalKeys()), false)
+	return Encode(int64(e.space.TotalKeys()), false)
 }

@@ -26,11 +26,11 @@ func TestDumpPreservesLegacyPayloadsAcrossEveryType(t *testing.T) {
 			t.Cleanup(ResetStores)
 			payload, err := hex.DecodeString(encoded)
 			require.NoError(t, err)
-			require.NoError(t, restoreKey("legacy", payload))
+			require.NoError(t, defaultEngine.restoreKey("legacy", payload))
 			actual, ok := dumpKey("legacy")
 			require.True(t, ok)
 			require.Equal(t, payload, actual, "the pre-change binary produced this payload")
-			reply := cmdDUMP([]string{"legacy"})
+			reply := defaultEngine.cmdDUMP([]string{"legacy"})
 			require.Equal(t, Encode(string(payload), false), reply, "complete RESP framing")
 		})
 	}
@@ -48,7 +48,7 @@ func TestDumpRejectsAmplifiedListBeforeAllocation(t *testing.T) {
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	reply := cmdDUMP([]string{"large"})
+	reply := defaultEngine.cmdDUMP([]string{"large"})
 	runtime.ReadMemStats(&after)
 	t.Logf("reply bytes=%d allocated=%d", len(reply), after.TotalAlloc-before.TotalAlloc)
 	if len(reply) > 1024 {
@@ -71,7 +71,7 @@ func TestDumpAcceptedPayloadUsesOneSizedBuffer(t *testing.T) {
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	reply := cmdDUMP([]string{"large"})
+	reply := defaultEngine.cmdDUMP([]string{"large"})
 	runtime.ReadMemStats(&after)
 	t.Logf("reply bytes=%d allocated=%d", len(reply), after.TotalAlloc-before.TotalAlloc)
 	require.Greater(t, len(reply), 4<<20)
@@ -83,7 +83,7 @@ func TestDumpAcceptedPayloadUsesOneSizedBuffer(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, header+2+length+2, len(reply))
 	require.Equal(t, []byte("\r\n"), reply[len(reply)-2:])
-	require.NoError(t, restoreKey("restored", reply[header+2:len(reply)-2]))
+	require.NoError(t, defaultEngine.restoreKey("restored", reply[header+2:len(reply)-2]))
 	restored, ok := defaultEngine.listStore.Peek("restored")
 	require.True(t, ok)
 	require.Equal(t, 4, restored.Len())
@@ -103,7 +103,7 @@ func TestDumpLargeSketchRejectsBeforeMarshalling(t *testing.T) {
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	reply := cmdDUMP([]string{"large"})
+	reply := defaultEngine.cmdDUMP([]string{"large"})
 	runtime.ReadMemStats(&after)
 	require.Equal(t, replyTooLarge, reply)
 	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(256<<10))

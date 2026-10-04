@@ -20,16 +20,16 @@ func TestCmdSetReadsTheExpiryKeyword(t *testing.T) {
 	assert.EqualValues(t, "OK", mustDecode(t, defaultEngine.cmdSET([]string{"s", "v", "EX", "100"})))
 	// Within one second, not exactly 100: TTL reports whole seconds and rounds
 	// down, so a millisecond spent between the two commands shows as 99.
-	assert.InDelta(t, 100, mustDecode(t, cmdTTL([]string{"s"})), 1)
+	assert.InDelta(t, 100, mustDecode(t, defaultEngine.cmdTTL([]string{"s"})), 1)
 
 	// 100 milliseconds is under a second, so TTL in whole seconds is 0 - not
 	// the 100 it reported when PX was read as EX.
 	assert.EqualValues(t, "OK", mustDecode(t, defaultEngine.cmdSET([]string{"ms", "v", "PX", "100"})))
-	assert.EqualValues(t, 0, mustDecode(t, cmdTTL([]string{"ms"})))
+	assert.EqualValues(t, 0, mustDecode(t, defaultEngine.cmdTTL([]string{"ms"})))
 
 	// Lower case is the same keyword.
 	assert.EqualValues(t, "OK", mustDecode(t, defaultEngine.cmdSET([]string{"lower", "v", "px", "100"})))
-	assert.EqualValues(t, 0, mustDecode(t, cmdTTL([]string{"lower"})))
+	assert.EqualValues(t, 0, mustDecode(t, defaultEngine.cmdTTL([]string{"lower"})))
 }
 
 func TestCmdSetRejectsWhatItDoesNotImplement(t *testing.T) {
@@ -59,5 +59,5 @@ func TestCmdSetWithoutExpiryIsUnchanged(t *testing.T) {
 	ResetStores()
 	assert.EqualValues(t, "OK", mustDecode(t, defaultEngine.cmdSET([]string{"plain", "value"})))
 	assert.EqualValues(t, "value", mustDecode(t, defaultEngine.cmdGET([]string{"plain"})))
-	assert.EqualValues(t, -1, mustDecode(t, cmdTTL([]string{"plain"})), "no TTL means no expiry")
+	assert.EqualValues(t, -1, mustDecode(t, defaultEngine.cmdTTL([]string{"plain"})), "no TTL means no expiry")
 }

@@ -49,7 +49,7 @@ const (
 
 // dumpKey preserves the existing KEL1 envelope for internal persistence callers.
 func dumpKey(key string) ([]byte, bool) {
-	plan, ok := planDump(key, math.MaxInt-9)
+	plan, ok := defaultEngine.planDump(key, math.MaxInt-9)
 	if !ok {
 		return nil, false
 	}
@@ -61,7 +61,7 @@ func dumpKey(key string) ([]byte, bool) {
 // The payload is decoded in full before anything is touched, so a payload that
 // turns out to be malformed leaves the key exactly as it was. Deleting first
 // and decoding second lost the old value on every bad payload.
-func restoreKey(key string, payload []byte) error {
+func (e *Engine) restoreKey(key string, payload []byte) error {
 	if err := affordable(uint64(len(payload))); err != nil {
 		return err
 	}
@@ -78,20 +78,20 @@ func restoreKey(key string, payload []byte) error {
 	if len(payload) == 0 {
 		return errors.New("MEMKV: empty payload")
 	}
-	store, err := decodeRestorePayload(key, payload[0], payload[1:])
+	store, err := e.decodeRestorePayload(key, payload[0], payload[1:])
 	if err != nil {
 		return err
 	}
 	// Whatever type used to hold this name gives it up, or restoring a set over
 	// a string would leave both - the bug the keyspace check exists to prevent.
-	data_structure.DeleteAnywhere(key)
+	e.space.DeleteAnywhere(key)
 	store()
 	return nil
 }
 
 // decodeRestorePayload turns a payload into the value it describes and returns
 // the step that puts that value in its keyspace, having changed nothing yet.
-func decodeRestorePayload(key string, tag byte, body []byte) (store func(), err error) {
+func (e *Engine) decodeRestorePayload(key string, tag byte, body []byte) (store func(), err error) {
 	switch tag {
 	case dumpTagHash, dumpTagList:
 		parts, err := decodeParts(body)
@@ -106,14 +106,14 @@ func decodeRestorePayload(key string, tag byte, body []byte) (store func(), err 
 			for i := 0; i < len(parts); i += 2 {
 				h.Set(parts[i], parts[i+1])
 			}
-			return func() { defaultEngine.hashStore.Put(key, h) }, nil
+			return func() { e.hashStore.Put(key, h) }, nil
 		}
 		l := data_structure.NewList()
 		l.PushBack(parts...)
-		return func() { defaultEngine.listStore.Put(key, l) }, nil
+		return func() { e.listStore.Put(key, l) }, nil
 	case dumpTagString:
 		value := string(body)
-		return func() { defaultEngine.dictStore.Put(key, defaultEngine.dictStore.NewObj(value)) }, nil
+		return func() { e.dictStore.Put(key, e.dictStore.NewObj(value)) }, nil
 	case dumpTagSet:
 		members, err := decodeParts(body)
 		if err != nil {
@@ -126,7 +126,7 @@ func decodeRestorePayload(key string, tag byte, body []byte) (store func(), err 
 		if len(members) > 0 {
 			set.Add(members...)
 		}
-		return func() { defaultEngine.setStore.Put(key, set) }, nil
+		return func() { e.setStore.Put(key, set) }, nil
 	case dumpTagZSet:
 		parts, err := decodeParts(body)
 		if err != nil {
@@ -143,46 +143,46 @@ func decodeRestorePayload(key string, tag byte, body []byte) (store func(), err 
 			}
 			zset.Add(score, parts[i+1], 0)
 		}
-		return func() { defaultEngine.zsetStore.Put(key, zset) }, nil
+		return func() { e.zsetStore.Put(key, zset) }, nil
 	case dumpTagBloom:
 		sb, err := data_structure.UnmarshalSBChain(body)
 		if err != nil {
 			return nil, err
 		}
-		return func() { defaultEngine.sbStore.Put(key, sb) }, nil
+		return func() { e.sbStore.Put(key, sb) }, nil
 	case dumpTagCMS:
 		cms, err := data_structure.UnmarshalCMS(body)
 		if err != nil {
 			return nil, err
 		}
-		return func() { defaultEngine.cmsStore.Put(key, cms) }, nil
+		return func() { e.cmsStore.Put(key, cms) }, nil
 	case dumpTagMorris:
 		m, err := data_structure.UnmarshalMorris(body)
 		if err != nil {
 			return nil, err
 		}
-		return func() { defaultEngine.morrisStore.Put(key, m) }, nil
+		return func() { e.morrisStore.Put(key, m) }, nil
 	case dumpTagHLL:
 		h, err := data_structure.UnmarshalHLL(body)
 		if err != nil {
 			return nil, err
 		}
-		return func() { defaultEngine.hllStore.Put(key, h) }, nil
+		return func() { e.hllStore.Put(key, h) }, nil
 	case dumpTagCuckoo:
 		cf, err := data_structure.UnmarshalCuckoo(body)
 		if err != nil {
 			return nil, err
 		}
-		return func() { defaultEngine.cfStore.Put(key, cf) }, nil
+		return func() { e.cfStore.Put(key, cf) }, nil
 	}
 	return nil, fmt.Errorf("MEMKV: unknown payload type %d", tag)
 }
 
-func cmdDUMP(args []string) []byte {
+func (e *Engine) cmdDUMP(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(wrongArguments("KEEL.DUMP"), false)
 	}
-	plan, ok := planDump(args[0], MaxReplyBytes)
+	plan, ok := e.planDump(args[0], MaxReplyBytes)
 	if !ok {
 		return nullReply()
 	}
@@ -201,11 +201,11 @@ func cmdDUMP(args []string) []byte {
 	return append(out, '\r', '\n')
 }
 
-func cmdRESTORE(args []string) []byte {
+func (e *Engine) cmdRESTORE(args []string) []byte {
 	if len(args) != 2 {
 		return Encode(wrongArguments("KEEL.RESTORE"), false)
 	}
-	if err := restoreKey(args[0], []byte(args[1])); err != nil {
+	if err := e.restoreKey(args[0], []byte(args[1])); err != nil {
 		return Encode(err, false)
 	}
 	return constant.RespOk

@@ -20,7 +20,7 @@ import (
 // name here means one thing whatever type holds it. That is what makes EXISTS
 // and TYPE answerable at all: OwnerOf already arbitrates between the stores.
 
-func cmdEXISTS(args []string) []byte {
+func (e *Engine) cmdEXISTS(args []string) []byte {
 	if len(args) == 0 {
 		return Encode(wrongArguments("EXISTS"), false)
 	}
@@ -29,7 +29,7 @@ func cmdEXISTS(args []string) []byte {
 	// EXISTS k k is 2. It reads oddly and it is what clients expect.
 	found := 0
 	for _, key := range args {
-		if _, held := data_structure.OwnerOf(key); held {
+		if _, held := e.space.OwnerOf(key); held {
 			found++
 		}
 	}
@@ -43,12 +43,12 @@ func cmdEXISTS(args []string) []byte {
 // Redis equivalent to agree with - Redis keeps a Bloom filter in a module and a
 // HyperLogLog in a plain string - so they answer with their own keyspace name
 // rather than borrowing a word that would be a lie.
-func cmdTYPE(args []string) []byte {
+func (e *Engine) cmdTYPE(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(wrongArguments("TYPE"), false)
 	}
 
-	owner, held := data_structure.OwnerOf(args[0])
+	owner, held := e.space.OwnerOf(args[0])
 	if !held {
 		// Redis answers +none rather than an error or a nil, and clients test
 		// for exactly that string.
@@ -64,7 +64,7 @@ func cmdTYPE(args []string) []byte {
 // That is Redis's KEYS too, and the reason Redis tells you to use SCAN instead.
 // SCAN is in commands_scan.go and is the one to reach for; KEYS stays because
 // it is the honest answer when a caller really does want the whole keyspace.
-func cmdKEYS(args []string) []byte {
+func (e *Engine) cmdKEYS(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(wrongArguments("KEYS"), false)
 	}
@@ -77,7 +77,7 @@ func cmdKEYS(args []string) []byte {
 	var scratch [256]string
 	walk := replyWalk(func(yield func(string) bool) {
 		more := true
-		data_structure.EachKeyspace(func(ks data_structure.Keyspace) {
+		e.space.EachKeyspace(func(ks data_structure.Keyspace) {
 			if !more {
 				return
 			}
@@ -173,7 +173,7 @@ func (e *Engine) cmdMSET(args []string) []byte {
 // is a syntax error. Either way the keys are gone before the reply, which is
 // all ASYNC changes in Redis too: only when their memory is freed. What is
 // logged is the plain FLUSHDB, which every release replays.
-func cmdFLUSHDB(args []string) []byte {
+func (e *Engine) cmdFLUSHDB(args []string) []byte {
 	if len(args) > 1 || len(args) == 1 && !strings.EqualFold(args[0], "SYNC") && !strings.EqualFold(args[0], "ASYNC") {
 		return Encode(errSyntax, false)
 	}
@@ -181,7 +181,7 @@ func cmdFLUSHDB(args []string) []byte {
 		aofRecord("FLUSHDB")
 	}
 
-	data_structure.EachKeyspace(func(ks data_structure.Keyspace) {
+	e.space.EachKeyspace(func(ks data_structure.Keyspace) {
 		for _, key := range ks.Keys() {
 			noteRewriteDirty(key)
 			noteReplicationDirty(key)

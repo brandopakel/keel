@@ -11,10 +11,9 @@ import "github.com/brandopakel/keel/internal/data_structure"
 // several independent instances and the server becomes one caller of the
 // engine among others. Step 2.1 moves the stores here, one command family at
 // a time. A family that has moved has Engine methods for handlers, which read
-// its store from the engine dispatching them - see engineCommandTable. The
-// commands that act on a key whatever its type move last; until they do, they
-// find the stores through the default engine's space, as does the code that
-// later steps move (the log, the rewrite, replication).
+// its store, and ask its space who holds a key, on the engine dispatching them
+// - see engineCommandTable. The code later steps move (the log, the rewrite,
+// replication) reaches the stores through defaultEngine until it moves.
 //
 // Until callers open engines of their own (plan phase 3) the server and the
 // tests run on defaultEngine, as the stores run on data_structure.DefaultSpace.

@@ -13,7 +13,7 @@ import (
 func opaqueReplicationBody() ([]byte, bool) {
 	size := 0
 	for key := range replication.dirty {
-		plan, present := planDump(key, replicationCommandBytes)
+		plan, present := defaultEngine.planDump(key, replicationCommandBytes)
 		var ok bool
 		size, ok = replicationRecordSize(size, len("DEL"), len(key))
 		if !ok {
@@ -43,7 +43,7 @@ func opaqueReplicationBody() ([]byte, bool) {
 	body := make([]byte, 0, size)
 	for key := range replication.dirty {
 		body = appendCommand(body, "DEL", key)
-		plan, present := planDump(key, replicationCommandBytes)
+		plan, present := defaultEngine.planDump(key, replicationCommandBytes)
 		if !present {
 			continue
 		}

@@ -48,7 +48,7 @@ func TestOpaqueReplicationBodyAllocatesOneAcceptedImage(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, len(body), n+used)
 	require.Equal(t, "KEEL.RESTORE", second.Cmd)
-	require.NoError(t, restoreKey("restored", []byte(second.Args[1])))
+	require.NoError(t, defaultEngine.restoreKey("restored", []byte(second.Args[1])))
 	require.Equal(t, []interface{}{int64(7)}, run(t, "CMS.QUERY", "restored", "item"))
 }
 

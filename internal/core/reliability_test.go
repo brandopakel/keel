@@ -29,7 +29,7 @@ func TestUntrustedSizingAndRestore(t *testing.T) {
 		payload = binary.LittleEndian.AppendUint64(payload, n)
 	}
 	run(t, "SET", "keep", "value")
-	require.Error(t, restoreKey("keep", payload))
+	require.Error(t, defaultEngine.restoreKey("keep", payload))
 	require.Equal(t, "value", run(t, "GET", "keep"))
 	require.Zero(t, data_structure.TotalKeys()-1)
 }
@@ -162,10 +162,10 @@ func TestDumpCollectionsAndChecksum(t *testing.T) {
 	for _, cmd := range [][]string{{"HSET", "h", "f", "v"}, {"RPUSH", "l", "a", "b"}} {
 		run(t, cmd[0], cmd[1:]...)
 		payload, _ := dumpKey(cmd[1])
-		require.NoError(t, restoreKey("copy", payload))
+		require.NoError(t, defaultEngine.restoreKey("copy", payload))
 		require.Equal(t, run(t, "TYPE", cmd[1]), run(t, "TYPE", "copy"))
 		payload[len(payload)-1] ^= 1
-		require.Error(t, restoreKey("copy", payload))
+		require.Error(t, defaultEngine.restoreKey("copy", payload))
 	}
 }
 
@@ -178,7 +178,7 @@ func FuzzRestoreValidation(f *testing.F) {
 			return
 		}
 		ResetStores()
-		_ = restoreKey("fuzz", p)
+		_ = defaultEngine.restoreKey("fuzz", p)
 	})
 }
 
@@ -202,7 +202,7 @@ func TestSmallBloomDumpRoundTrip(t *testing.T) {
 	run(t, "BF.RESERVE", "b", "0.9", "1")
 	payload, ok := dumpKey("b")
 	require.True(t, ok)
-	require.NoError(t, restoreKey("copy", payload))
+	require.NoError(t, defaultEngine.restoreKey("copy", payload))
 	run(t, "BF.ADD", "copy", "member")
 	require.Equal(t, int64(1), run(t, "BF.EXISTS", "copy", "member"))
 }

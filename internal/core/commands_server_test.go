@@ -17,8 +17,8 @@ func TestCmdMemoryUsage(t *testing.T) {
 	defaultEngine.cmdSET([]string{"small", "v"})
 	defaultEngine.cmdSET([]string{"large", strings.Repeat("v", 5000)})
 
-	small, _ := Decode(cmdMEMORY([]string{"USAGE", "small"}))
-	large, _ := Decode(cmdMEMORY([]string{"USAGE", "large"}))
+	small, _ := Decode(defaultEngine.cmdMEMORY([]string{"USAGE", "small"}))
+	large, _ := Decode(defaultEngine.cmdMEMORY([]string{"USAGE", "large"}))
 
 	assert.Greater(t, small.(int64), int64(0))
 	assert.Greater(t, large.(int64), small.(int64)+4000,
@@ -30,19 +30,19 @@ func TestCmdMemoryUsageOnMissingKey(t *testing.T) {
 	// Asserted on the wire bytes rather than the decoded value: DecodeOne maps
 	// the RESP null bulk string to an empty string, so a decoded comparison
 	// could not tell nil from a zero-length reply.
-	assert.Equal(t, constant.RespNil, cmdMEMORY([]string{"USAGE", "nosuchkey"}),
+	assert.Equal(t, constant.RespNil, defaultEngine.cmdMEMORY([]string{"USAGE", "nosuchkey"}),
 		"a missing key reports nil, not zero")
 }
 
 func TestCmdMemoryRejectsUnknownSubcommand(t *testing.T) {
 	resetDictStore()
-	res, _ := Decode(cmdMEMORY([]string{"DOCTOR"}))
+	res, _ := Decode(defaultEngine.cmdMEMORY([]string{"DOCTOR"}))
 	assert.Equal(t, "ERR unknown subcommand 'DOCTOR'. Try MEMORY HELP.", res)
 
-	res, _ = Decode(cmdMEMORY([]string{}))
+	res, _ = Decode(defaultEngine.cmdMEMORY([]string{}))
 	assert.Contains(t, res, "wrong number of arguments")
 
-	res, _ = Decode(cmdMEMORY([]string{"USAGE"}))
+	res, _ = Decode(defaultEngine.cmdMEMORY([]string{"USAGE"}))
 	assert.Contains(t, res, "wrong number of arguments")
 }
 
@@ -114,14 +114,14 @@ func TestHumanBytes(t *testing.T) {
 
 func TestCmdDbsize(t *testing.T) {
 	resetDictStore()
-	res, _ := Decode(cmdDBSIZE([]string{}))
+	res, _ := Decode(defaultEngine.cmdDBSIZE([]string{}))
 	assert.EqualValues(t, 0, res)
 
 	defaultEngine.cmdSET([]string{"a", "1"})
 	defaultEngine.cmdSET([]string{"b", "2"})
-	res, _ = Decode(cmdDBSIZE([]string{}))
+	res, _ = Decode(defaultEngine.cmdDBSIZE([]string{}))
 	assert.EqualValues(t, 2, res)
 
-	res, _ = Decode(cmdDBSIZE([]string{"extra"}))
+	res, _ = Decode(defaultEngine.cmdDBSIZE([]string{"extra"}))
 	assert.Contains(t, res, "wrong number of arguments")
 }
