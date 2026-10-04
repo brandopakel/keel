@@ -184,7 +184,7 @@ func (e *Engine) evalAndResponse(cmd *Command, c io.ReadWriter) error {
 	// A name may only mean one thing at a time, and the stores cannot enforce
 	// that individually because none of them knows about the others. Checked
 	// before execution, so a refused command has not half-run.
-	if err := e.checkKeyTypes(cmd); err != nil {
+	if err := e.checkKeyTypes(cmd, entry); err != nil {
 		res := Encode(err, false)
 		aofCommit(cmd, res)
 		_, werr := c.Write(res)
