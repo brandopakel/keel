@@ -534,6 +534,8 @@ func finishRewrite() {
 		finalErr = err
 		unsyncedLogDir = dir
 		aofLog("syncing %s after the rewrite's rename: %v; the rewritten file is the log, and the next sync of it retries the directory first", dir, err)
+	} else {
+		unsyncedLogDir = "" // this sync covers an earlier rename's entry too
 	}
 	replaced := aof.file
 	aof.file = next
@@ -764,7 +766,7 @@ func maybeRewrite() {
 	aofLog("Starting automatic rewriting of AOF on %d%% growth", size*100/max(aof.rewriteBase, 1)-100)
 	if err := StartRewrite(); err != nil {
 		nextAutoRewrite = time.Now().Add(time.Minute)
-		aofLog("automatic rewrite failed to start: %v", err)
+		logStartFailure("automatic rewrite", err)
 	}
 }
 

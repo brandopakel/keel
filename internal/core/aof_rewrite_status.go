@@ -190,6 +190,29 @@ func snapshotRewriteAllowed() bool {
 	return !now.Before(snapshotRetryAt) && !rewriteLimited(now)
 }
 
+// startSnapshotRewrite starts the rewrite a protocol 2 pull needs. A replica
+// pulls several times a second, so one that cannot start for a reason that
+// will not pass by itself is not tried again for a minute, as an automatic one
+// is not; a pull meanwhile is told to wait. A transient refusal, such as a
+// pending append, is retried by the next pull.
+func startSnapshotRewrite() error {
+	err := StartRewrite()
+	var refused *rewriteStartError
+	if errors.As(err, &refused) {
+		snapshotRetryAt = time.Now().Add(time.Minute)
+	}
+	return err
+}
+
+// logStartFailure logs a rewrite the server started itself that could not
+// start, unless refuseRewriteStart has logged it already.
+func logStartFailure(what string, err error) {
+	var refused *rewriteStartError
+	if !errors.As(err, &refused) {
+		aofLog("%s failed to start: %v", what, err)
+	}
+}
+
 // startScheduledRewrite starts a BGREWRITEAOF that could not start when it
 // was asked for. Redis keeps one scheduled through a failed start and tries
 // again ten times a second; here it is dropped after a failed start, which is
@@ -203,7 +226,7 @@ func startScheduledRewrite(now time.Time) {
 	}
 	rewriteOutcome.scheduled = false
 	if err := StartRewrite(); err != nil {
-		aofLog("scheduled rewrite failed to start: %v", err)
+		logStartFailure("scheduled rewrite", err)
 	}
 }
 

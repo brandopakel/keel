@@ -605,3 +605,31 @@ func TestReplicationV2ThroughFailedRewrites(t *testing.T) {
 	require.True(t, f.Full)
 	require.False(t, f.Pending)
 }
+
+// A replica pulls several times a second. A snapshot rewrite that cannot start
+// for a lasting reason is refused once, logged once, and not tried again for a
+// minute; pulls meanwhile are told to wait.
+func TestReplicationV2SnapshotStartFailureIsNotRetriedEveryPull(t *testing.T) {
+	setupReplicationV2(t)
+	restoreRewriteHooks(t)
+	logs := captureLog(t)
+	run(t, "SET", "k", "v")
+	require.NoError(t, os.Mkdir(aof.path+".rewrite", 0o755))
+	reply := run(t, "KEEL.REPL.PULL2", "", "0", "", "0", strconv.FormatUint(failover.term, 10))
+	require.Contains(t, reply, "ERR preparing replication snapshot: ")
+	for i := 0; i < 5; i++ {
+		require.True(t, pullV2(t, "", 0, "", 0).Pending)
+		require.False(t, RewriteActive())
+	}
+	require.Equal(t, 1, strings.Count(logs.String(), "Can't rewrite append only file in background: "))
+	require.Equal(t, "err", persistenceField(t, "aof_last_bgrewrite_status"))
+
+	require.NoError(t, os.Remove(aof.path+".rewrite"))
+	snapshotRetryAt = time.Now().Add(-time.Second) // the minute has passed
+	require.True(t, pullV2(t, "", 0, "", 0).Pending)
+	require.True(t, RewriteActive())
+	driveRewrite(t)
+	f := pullV2(t, "", 0, "", 0)
+	require.True(t, f.Full)
+	require.False(t, f.Pending)
+}
