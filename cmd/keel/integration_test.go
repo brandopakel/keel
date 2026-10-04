@@ -115,6 +115,18 @@ func (s *testServer) captureFailure(t *testing.T) {
 	cancel()
 	t.Logf("failed server process state:\n%s", state)
 	if runtime.GOOS == "darwin" {
+		// The process's state is its busiest thread's, so U says only that some
+		// thread is in uninterruptible kernel wait. Per-thread states and the
+		// kernel's network buffers say which, and whether the buffers had run
+		// out: a loop parked in kevent is idle, a thread at U in write(2) is the
+		// kernel's doing.
+		ctx, cancel = context.WithTimeout(context.Background(), 2*time.Second)
+		threads, _ := exec.CommandContext(ctx, "ps", "-M", "-o", "pid,pcpu,state,utime,stime", "-p", strconv.Itoa(s.cmd.Process.Pid)).CombinedOutput()
+		cancel()
+		ctx, cancel = context.WithTimeout(context.Background(), 2*time.Second)
+		buffers, _ := exec.CommandContext(ctx, "netstat", "-mm").CombinedOutput()
+		cancel()
+		t.Logf("failed server threads:\n%s\nkernel network buffers:\n%s", threads, buffers)
 		// SIGQUIT cannot always unwind the loop's running thread. Sample only
 		// this owned failed process before terminating it; bound diagnostic time.
 		path := filepath.Join(t.TempDir(), "server.sample")
@@ -326,6 +338,7 @@ func TestAuthenticatedPersistenceAndTornTail(t *testing.T) {
 func TestSlowReaderDoesNotBlockOtherClients(t *testing.T) {
 	for _, threads := range []string{"1", "4"} {
 		t.Run(threads, func(t *testing.T) {
+			growLoopbackSendBuffers(t, 1)
 			s := startTestServer(t, "-io-threads", threads)
 			c, r := connectTest(t, s)
 			if got := call(t, c, r, "SET", "large", strings.Repeat("x", 1<<20)); got != "+OK" {

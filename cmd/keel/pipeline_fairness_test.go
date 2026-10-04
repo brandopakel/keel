@@ -70,6 +70,7 @@ func TestPipelineYieldsWithCommandsStillPending(t *testing.T) {
 	for _, threads := range []string{"1", "4"} {
 		for _, mode := range []string{"off", "barrier", "concurrent"} {
 			t.Run(threads+"/"+mode, func(t *testing.T) {
+				growLoopbackSendBuffers(t, 1)
 				args := []string{"-io-threads", threads}
 				if mode != "off" {
 					args = append(args, "-appendonly", "-aof-async-append", "-appendfsync", "always", "-appendfilename", filepath.Join(t.TempDir(), "log"))
