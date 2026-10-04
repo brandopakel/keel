@@ -15,11 +15,9 @@ import (
 // 2.1). The ones below have yet to; Engine holds those that have.
 var (
 	dictStore   *data_structure.Dict
-	sbStore     *data_structure.Keyed[*data_structure.SBChain]
 	cmsStore    *data_structure.Keyed[*data_structure.CMS]
 	morrisStore *data_structure.Keyed[*data_structure.Morris]
 	hllStore    *data_structure.Keyed[*data_structure.HLL]
-	cfStore     *data_structure.Keyed[*data_structure.CuckooFilter]
 )
 
 func init() { ResetStores() }
@@ -43,20 +41,20 @@ func ResetStores() {
 	e.setStore = data_structure.NewKeyed[*data_structure.Set](space, "set")
 	e.hashStore = data_structure.NewKeyed[*data_structure.Hash](space, "hash")
 	e.listStore = data_structure.NewKeyed[*data_structure.List](space, "list")
-	sbStore = data_structure.NewKeyed[*data_structure.SBChain](space, "bloom")
+	e.sbStore = data_structure.NewKeyed[*data_structure.SBChain](space, "bloom")
 	cmsStore = data_structure.NewKeyed[*data_structure.CMS](space, "cms")
 	morrisStore = data_structure.NewKeyed[*data_structure.Morris](space, "morris")
 	hllStore = data_structure.NewKeyed[*data_structure.HLL](space, "hll")
-	cfStore = data_structure.NewKeyed[*data_structure.CuckooFilter](space, "cuckoo")
+	e.cfStore = data_structure.NewKeyed[*data_structure.CuckooFilter](space, "cuckoo")
 
 	space.RegisterKeyspace(dictStore)
 	space.RegisterKeyspace(e.zsetStore)
 	space.RegisterKeyspace(e.setStore)
 	space.RegisterKeyspace(e.hashStore)
 	space.RegisterKeyspace(e.listStore)
-	space.RegisterKeyspace(sbStore)
+	space.RegisterKeyspace(e.sbStore)
 	space.RegisterKeyspace(cmsStore)
 	space.RegisterKeyspace(morrisStore)
 	space.RegisterKeyspace(hllStore)
-	space.RegisterKeyspace(cfStore)
+	space.RegisterKeyspace(e.cfStore)
 }

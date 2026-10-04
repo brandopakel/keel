@@ -93,7 +93,7 @@ func replicationKeyExpiry(key string, tag byte) uint64 {
 	case dumpTagZSet:
 		ks = defaultEngine.zsetStore
 	case dumpTagBloom:
-		ks = sbStore
+		ks = defaultEngine.sbStore
 	case dumpTagCMS:
 		ks = cmsStore
 	case dumpTagMorris:
@@ -101,7 +101,7 @@ func replicationKeyExpiry(key string, tag byte) uint64 {
 	case dumpTagHLL:
 		ks = hllStore
 	case dumpTagCuckoo:
-		ks = cfStore
+		ks = defaultEngine.cfStore
 	default:
 		return 0
 	}

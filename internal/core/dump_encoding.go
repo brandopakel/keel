@@ -103,7 +103,7 @@ func planDump(key string, limit int) (dumpPlan, bool) {
 }
 
 func planOpaqueDump(key string) (dumpPlan, bool) {
-	if v, ok := sbStore.Peek(key); ok {
+	if v, ok := defaultEngine.sbStore.Peek(key); ok {
 		return opaqueDumpPlan(dumpTagBloom, v), true
 	}
 	if v, ok := cmsStore.Peek(key); ok {
@@ -115,7 +115,7 @@ func planOpaqueDump(key string) (dumpPlan, bool) {
 	if v, ok := hllStore.Peek(key); ok {
 		return opaqueDumpPlan(dumpTagHLL, v), true
 	}
-	if v, ok := cfStore.Peek(key); ok {
+	if v, ok := defaultEngine.cfStore.Peek(key); ok {
 		return opaqueDumpPlan(dumpTagCuckoo, v), true
 	}
 	return dumpPlan{}, false

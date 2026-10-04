@@ -36,9 +36,9 @@ func TestEveryKeyspaceIsAccounted(t *testing.T) {
 		{"set", func(i int) { defaultEngine.cmdSADD([]string{"set" + strconv.Itoa(i), "a", "b", "c", "d", "e"}) }},
 		{"sorted set", func(i int) { defaultEngine.cmdZADD([]string{"z" + strconv.Itoa(i), "1", "a", "2", "b"}) }},
 		{"hyperloglog", func(i int) { cmdPFADD([]string{"h" + strconv.Itoa(i), "x"}) }},
-		{"cuckoo filter", func(i int) { cmdCFADD([]string{"c" + strconv.Itoa(i), "x"}) }},
+		{"cuckoo filter", func(i int) { defaultEngine.cmdCFADD([]string{"c" + strconv.Itoa(i), "x"}) }},
 		{"count-min sketch", func(i int) { cmdCMSINITBYDIM([]string{"m" + strconv.Itoa(i), "200", "5"}) }},
-		{"bloom filter", func(i int) { cmdBFMADD([]string{"b" + strconv.Itoa(i), "x"}) }},
+		{"bloom filter", func(i int) { defaultEngine.cmdBFMADD([]string{"b" + strconv.Itoa(i), "x"}) }},
 	}
 
 	const budget = 1 << 20 // 1 MB
@@ -133,9 +133,9 @@ func TestMemoryUsageFindsKeysInEveryKeyspace(t *testing.T) {
 	defaultEngine.cmdSADD([]string{"set", "a", "b", "c"})
 	defaultEngine.cmdZADD([]string{"zset", "1", "a"})
 	cmdPFADD([]string{"hll", "x"})
-	cmdCFADD([]string{"cf", "x"})
+	defaultEngine.cmdCFADD([]string{"cf", "x"})
 	cmdCMSINITBYDIM([]string{"cms", "200", "5"})
-	cmdBFMADD([]string{"bf", "x"})
+	defaultEngine.cmdBFMADD([]string{"bf", "x"})
 
 	for _, key := range []string{"str", "set", "zset", "hll", "cf", "cms", "bf"} {
 		res, err := Decode(cmdMEMORY([]string{"USAGE", key}))
@@ -163,8 +163,8 @@ func TestMemoryUsageFindsKeysInEveryKeyspace(t *testing.T) {
 func TestBloomFilterSizeIsTheBitArray(t *testing.T) {
 	withBudget(t, 0, config.LRU)
 
-	cmdBFRESERVE([]string{"bf", "0.01", "100000"})
-	cmdBFMADD([]string{"bf", "x"})
+	defaultEngine.cmdBFRESERVE([]string{"bf", "0.01", "100000"})
+	defaultEngine.cmdBFMADD([]string{"bf", "x"})
 
 	res, _ := Decode(cmdMEMORY([]string{"USAGE", "bf"}))
 	assert.Greater(t, res.(int64), int64(100000),

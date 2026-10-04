@@ -46,16 +46,11 @@ var commandTable = map[string]func([]string) []byte{
 	"MEMKV.DUMP": cmdDUMP, "MEMKV.RESTORE": cmdRESTORE,
 
 	// Probabilistic structures
-	"BF.RESERVE": cmdBFRESERVE, "BF.INFO": cmdBFINFO, "BF.ADD": cmdBFADD,
-	"BF.MADD": cmdBFMADD, "BF.EXISTS": cmdBFEXISTS, "BF.MEXISTS": cmdBFMEXISTS,
 	"CMS.INITBYDIM": cmdCMSINITBYDIM, "CMS.INITBYPROB": cmdCMSINITBYPROB,
 	"CMS.INCRBY": cmdCMSINCRBY, "CMS.QUERY": cmdCMSQUERY,
 	"MORRIS.INITBYDIM": cmdMORRISINITBYDIM, "MORRIS.INITBYPROB": cmdMORRISINITBYPROB,
 	"MORRIS.INCRBY": cmdMORRISINCRBY, "MORRIS.QUERY": cmdMORRISQUERY, "MORRIS.INFO": cmdMORRISINFO,
 	"PFADD": cmdPFADD, "PFCOUNT": cmdPFCOUNT, "PFMERGE": cmdPFMERGE,
-	"CF.RESERVE": cmdCFRESERVE, "CF.ADD": cmdCFADD, "CF.ADDNX": cmdCFADDNX,
-	"CF.EXISTS": cmdCFEXISTS, "CF.MEXISTS": cmdCFMEXISTS, "CF.DEL": cmdCFDEL,
-	"CF.COUNT": cmdCFCOUNT, "CF.INFO": cmdCFINFO,
 }
 
 // engineCommandTable is the part of the dispatch table whose handlers are
@@ -89,6 +84,15 @@ var engineCommandTable = map[string]func(*Engine, []string) []byte{
 	"ZSCORE": (*Engine).cmdZSCORE, "ZCARD": (*Engine).cmdZCARD, "GEOADD": (*Engine).cmdGEOADD,
 	"GEODIST": (*Engine).cmdGEODIST, "GEOHASH": (*Engine).cmdGEOHASH, "GEOSEARCH": (*Engine).cmdGEOSEARCH,
 	"GEOPOS": (*Engine).cmdGEOPOS,
+
+	// Bloom filters
+	"BF.RESERVE": (*Engine).cmdBFRESERVE, "BF.INFO": (*Engine).cmdBFINFO, "BF.ADD": (*Engine).cmdBFADD,
+	"BF.MADD": (*Engine).cmdBFMADD, "BF.EXISTS": (*Engine).cmdBFEXISTS, "BF.MEXISTS": (*Engine).cmdBFMEXISTS,
+
+	// Cuckoo filters
+	"CF.RESERVE": (*Engine).cmdCFRESERVE, "CF.ADD": (*Engine).cmdCFADD, "CF.ADDNX": (*Engine).cmdCFADDNX,
+	"CF.EXISTS": (*Engine).cmdCFEXISTS, "CF.MEXISTS": (*Engine).cmdCFMEXISTS, "CF.DEL": (*Engine).cmdCFDEL,
+	"CF.COUNT": (*Engine).cmdCFCOUNT, "CF.INFO": (*Engine).cmdCFINFO,
 }
 
 // cmdPING answers PONG, or echoes the one argument it is given.
