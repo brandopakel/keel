@@ -1,10 +1,6 @@
 package data_structure
 
-import (
-	"math"
-
-	"github.com/brandopakel/keel/internal/config"
-)
+import "math"
 
 // Approximate LFU.
 //
@@ -44,9 +40,9 @@ func lfuFreqOf(access uint64) uint8             { return uint8(access) }
 func lfuDecayAtOf(access uint64) uint64         { return access >> 8 }
 
 // touchLFU applies any decay owed and then attempts to increment.
-func touchLFU(access *uint64) {
-	freq := decayedFreq(*access)
-	*access = packLFU(evictionClock, lfuLogIncr(freq))
+func (s *Space) touchLFU(access *uint64) {
+	freq := s.decayedFreq(*access)
+	*access = packLFU(s.clock, s.lfuLogIncr(freq))
 }
 
 // decayedFreq reads the counter with any owed decay applied, without writing.
@@ -54,14 +50,14 @@ func touchLFU(access *uint64) {
 // Decay is lazy. Sweeping the keyspace once per period would be O(n) work at
 // intervals, for keys that may never be looked at again; computing it from the
 // stored timestamp costs nothing until someone asks.
-func decayedFreq(access uint64) uint8 {
+func (s *Space) decayedFreq(access uint64) uint8 {
 	freq := lfuFreqOf(access)
-	period := uint64(config.LFUDecayPeriod)
+	period := uint64(*s.limits.lfuDecayPeriod)
 	if period == 0 || freq == 0 {
 		return freq
 	}
 
-	periods := (evictionClock - lfuDecayAtOf(access)) / period
+	periods := (s.clock - lfuDecayAtOf(access)) / period
 	switch {
 	case periods == 0:
 		return freq
@@ -78,7 +74,7 @@ func decayedFreq(access uint64) uint8 {
 // later ones mostly do not. That is what lets eight bits distinguish a key read
 // ten times from one read ten million times, at the cost of the value being a
 // rank rather than a count - which is all eviction needs.
-func lfuLogIncr(freq uint8) uint8 {
+func (s *Space) lfuLogIncr(freq uint8) uint8 {
 	if freq >= lfuMaxVal {
 		return lfuMaxVal
 	}
@@ -86,13 +82,13 @@ func lfuLogIncr(freq uint8) uint8 {
 	if base < 0 {
 		base = 0
 	}
-	p := 1.0 / (base*float64(config.LFULogFactor) + 1)
-	if evictionRandFloat() < p {
+	p := 1.0 / (base*float64(*s.limits.lfuLogFactor) + 1)
+	if s.randFloat() < p {
 		return freq + 1
 	}
 	return freq
 }
 
-func evictionRandFloat() float64 {
-	return float64(nextEvictionRand()>>11) / float64(uint64(1)<<53)
+func (s *Space) randFloat() float64 {
+	return float64(s.nextRand()>>11) / float64(uint64(1)<<53)
 }

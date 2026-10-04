@@ -13,13 +13,13 @@ import (
 
 func TestReplicationCanonicalImagesAndOrdering(t *testing.T) {
 	oldFeed, oldReplica := config.ReplicationFeed, config.ReplicaOf
-	oldExpiry, oldEviction := data_structure.SuspendExpiry, data_structure.SuspendEviction
+	oldExpiry, oldEviction := data_structure.DefaultSpace.SuspendExpiry, data_structure.DefaultSpace.SuspendEviction
 	defer func() {
 		CloseAOF()
 		config.ReplicationFeed = oldFeed
 		config.ReplicaOf = oldReplica
-		data_structure.SuspendExpiry = oldExpiry
-		data_structure.SuspendEviction = oldEviction
+		data_structure.DefaultSpace.SuspendExpiry = oldExpiry
+		data_structure.DefaultSpace.SuspendEviction = oldEviction
 	}()
 	ResetStores()
 	config.ReplicationFeed = true
@@ -123,10 +123,10 @@ func TestReplicationHistoryAndDirtyOverflowRequireFullSync(t *testing.T) {
 func TestReplicationApplyFailureDisablesReadsUntilFullSync(t *testing.T) {
 	ResetStores()
 	oldReplica := config.ReplicaOf
-	oldExpiry, oldEviction := data_structure.SuspendExpiry, data_structure.SuspendEviction
+	oldExpiry, oldEviction := data_structure.DefaultSpace.SuspendExpiry, data_structure.DefaultSpace.SuspendEviction
 	defer func() {
 		config.ReplicaOf = oldReplica
-		data_structure.SuspendExpiry, data_structure.SuspendEviction = oldExpiry, oldEviction
+		data_structure.DefaultSpace.SuspendExpiry, data_structure.DefaultSpace.SuspendEviction = oldExpiry, oldEviction
 	}()
 	config.ReplicaOf = "test:1"
 	require.NoError(t, InitReplication())

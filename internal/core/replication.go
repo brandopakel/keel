@@ -76,8 +76,8 @@ func InitReplication() error {
 	}
 	replication.epoch = hex.EncodeToString(id[:])
 	if config.ReplicaOf != "" {
-		data_structure.SuspendExpiry = true
-		data_structure.SuspendEviction = true
+		data_structure.DefaultSpace.SuspendExpiry = true
+		data_structure.DefaultSpace.SuspendEviction = true
 	}
 	if config.ReplicaOf != "" && config.ReplicationProtocol == 2 {
 		return loadReplicaCheckpoint()

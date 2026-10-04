@@ -11,20 +11,19 @@ import (
 func TestPartlyOccupiedExpiryTableReleasesRetainedHeap(t *testing.T) {
 	for _, kind := range []string{"string", "collection"} {
 		t.Run(kind, func(t *testing.T) {
-			withEviction(t, config.EvictFirst, 5, 1000000)
-			ResetKeyspaces()
+			space := NewSpace(evictionLimits(config.EvictFirst, 5, 1000000))
 			var ks Keyspace
 			var put func(string)
 			if kind == "string" {
-				d := CreateDict()
+				d := CreateDict(space)
 				ks = d
 				put = func(key string) { d.Put(key, d.NewObj("value")) }
 			} else {
-				k := NewKeyed[retentionValue]("retention")
+				k := NewKeyed[retentionValue](space, "retention")
 				ks = k
 				put = func(key string) { k.Put(key, 1) }
 			}
-			RegisterKeyspace(ks)
+			space.RegisterKeyspace(ks)
 			keys := make([]string, 100000)
 			for i := range keys {
 				keys[i] = "ttl:" + strconv.Itoa(i)
@@ -61,22 +60,22 @@ func TestPartlyOccupiedExpiryTableReleasesRetainedHeap(t *testing.T) {
 }
 
 func TestExpiryCompactionMirrorsMutationsAcrossCursor(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"string", "collection"} {
 		t.Run(kind, func(t *testing.T) {
-			withEviction(t, config.EvictFirst, 5, 1000000)
-			ResetKeyspaces()
+			space := NewSpace(evictionLimits(config.EvictFirst, 5, 1000000))
 			var ks Keyspace
 			var put func(string)
 			if kind == "string" {
-				d := CreateDict()
+				d := CreateDict(space)
 				ks = d
 				put = func(key string) { d.Put(key, d.NewObj("v")) }
 			} else {
-				k := NewKeyed[retentionValue]("ttl")
+				k := NewKeyed[retentionValue](space, "ttl")
 				ks = k
 				put = func(key string) { k.Put(key, 1) }
 			}
-			RegisterKeyspace(ks)
+			space.RegisterKeyspace(ks)
 			expected := map[string]uint64{}
 			for i := 0; i < 5120; i++ {
 				key := strconv.Itoa(i)
@@ -127,10 +126,10 @@ func TestExpiryCompactionMirrorsMutationsAcrossCursor(t *testing.T) {
 }
 
 func TestExpiryCompactionCancelsRegrowthAndEmptyTable(t *testing.T) {
-	withEviction(t, config.EvictFirst, 5, 1000000)
-	ResetKeyspaces()
-	d := CreateDict()
-	RegisterKeyspace(d)
+	t.Parallel()
+	space := NewSpace(evictionLimits(config.EvictFirst, 5, 1000000))
+	d := CreateDict(space)
+	space.RegisterKeyspace(d)
 	for i := 0; i < 4096; i++ {
 		key := strconv.Itoa(i)
 		d.Put(key, d.NewObj("v"))
@@ -161,10 +160,9 @@ func TestExpiryCompactionCancelsRegrowthAndEmptyTable(t *testing.T) {
 }
 
 func TestExpiryCompactionStartDoesNotCopyTheTableOrAllKeyNames(t *testing.T) {
-	withEviction(t, config.EvictFirst, 5, 1000000)
-	ResetKeyspaces()
-	d := CreateDict()
-	RegisterKeyspace(d)
+	space := NewSpace(evictionLimits(config.EvictFirst, 5, 1000000))
+	d := CreateDict(space)
+	space.RegisterKeyspace(d)
 	for i := 0; i < 420000; i++ {
 		key := strconv.Itoa(i)
 		d.Put(key, d.NewObj("v"))

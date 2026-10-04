@@ -50,9 +50,10 @@ import (
 //     instant instead of a duration. Replaying "expire in ten seconds" a day
 //     later grants ten fresh seconds, so every restart would renew every TTL in
 //     the keyspace.
-//   - Expiry and eviction are recorded as DEL, through data_structure.OnRemove.
-//     Neither has a command behind it, and a log that omits them replays into a
-//     keyspace holding keys the original had already dropped.
+//   - Expiry and eviction are recorded as DEL, through the OnRemove hook of
+//     data_structure.DefaultSpace. Neither has a command behind it, and a log
+//     that omits them replays into a keyspace holding keys the original had
+//     already dropped.
 //
 // Redis arrives at all five of these rules, by the same route.
 type aofState struct {
@@ -209,7 +210,7 @@ func OpenAOF(path string) error {
 		appendAOFCommand("DEL", key)
 	}
 	aof.recovered = nil
-	data_structure.OnRemove = func(keyspace, key string) {
+	data_structure.DefaultSpace.OnRemove = func(keyspace, key string) {
 		if aof.file == nil || aof.replaying {
 			return
 		}
@@ -248,7 +249,7 @@ func CloseAOF() error {
 	aof.file = nil
 	aof.path = ""
 	aof.buf, aof.staged = nil, nil
-	data_structure.OnRemove = nil
+	data_structure.DefaultSpace.OnRemove = nil
 	return err
 }
 
@@ -461,20 +462,20 @@ func LoadAOF(path string) (int, error) {
 	}
 	defer f.Close()
 	aof.replaying = true
-	data_structure.SuspendEviction = true
-	data_structure.SuspendExpiry = true
+	data_structure.DefaultSpace.SuspendEviction = true
+	data_structure.DefaultSpace.SuspendExpiry = true
 	defer func() {
-		priorRemovalHook := data_structure.OnRemove
-		data_structure.OnRemove = func(_, key string) { aof.recovered = append(aof.recovered, key) }
-		defer func() { data_structure.OnRemove = priorRemovalHook }()
+		priorRemovalHook := data_structure.DefaultSpace.OnRemove
+		data_structure.DefaultSpace.OnRemove = func(_, key string) { aof.recovered = append(aof.recovered, key) }
+		defer func() { data_structure.DefaultSpace.OnRemove = priorRemovalHook }()
 		if config.ReplicaOf != "" && config.ReplicationProtocol == 2 {
 			aof.replaying = false
 			return // preserve the exact primary-decided prefix for checkpoints
 		}
-		data_structure.SuspendExpiry = false
+		data_structure.DefaultSpace.SuspendExpiry = false
 		data_structure.EachKeyspace(func(ks data_structure.Keyspace) { ks.ActiveExpire(ks.KeysWithExpiry()) })
 		aof.replaying = false
-		data_structure.SuspendEviction = false
+		data_structure.DefaultSpace.SuspendEviction = false
 		data_structure.EnforceLimits()
 	}()
 	reader := bufio.NewReaderSize(f, 64*1024)

@@ -32,10 +32,15 @@ type Dict struct {
 	// memUsed is the estimated bytes held, maintained incrementally: totalling
 	// it on demand would be O(n) and a budget check runs on every write.
 	memUsed uint64
+
+	// space is where this store's accesses are clocked and its limits enforced.
+	space *Space
 }
 
-func CreateDict() *Dict {
-	return &Dict{}
+// CreateDict returns an empty string keyspace for space. It does not register
+// it: that is the caller's, which chooses the order OwnerOf consults stores in.
+func CreateDict(space *Space) *Dict {
+	return &Dict{space: space}
 }
 
 // NewObj builds a value for the dictionary.
@@ -47,16 +52,14 @@ func CreateDict() *Dict {
 func (d *Dict) NewObj(value string) *Obj {
 	return &Obj{
 		Value:  value,
-		Access: NewAccess(),
+		Access: d.space.NewAccess(),
 	}
 }
 
-// nowMs is the clock every expiry is compared against.
-// SuspendExpiry keeps historical AOF mutations independent of the replay wall clock.
-var SuspendExpiry bool
-
-func nowMs() uint64 {
-	if SuspendExpiry {
+// nowMs is the clock every expiry is compared against. SuspendExpiry keeps
+// historical AOF mutations independent of the replay wall clock.
+func (s *Space) nowMs() uint64 {
+	if s.SuspendExpiry {
 		return 0
 	}
 	return uint64(time.Now().UnixMilli())
@@ -65,7 +68,7 @@ func nowMs() uint64 {
 // HasExpired reports whether a key has a TTL that has already passed.
 func (d *Dict) HasExpired(k string) bool {
 	at, has := d.expiredDictStore[k]
-	return has && at <= nowMs()
+	return has && at <= d.space.nowMs()
 }
 
 // GetExpiry returns when a key falls due, and whether it has a TTL at all.
@@ -76,7 +79,7 @@ func (d *Dict) GetExpiry(k string) (uint64, bool) {
 
 // SetExpiry gives a key ttlMs more milliseconds to live.
 func (d *Dict) SetExpiry(k string, ttlMs int64) {
-	d.SetExpiryAt(k, nowMs()+uint64(ttlMs))
+	d.SetExpiryAt(k, d.space.nowMs()+uint64(ttlMs))
 }
 
 // SetExpiryAt sets the expiry to an absolute time in milliseconds since the
@@ -106,7 +109,7 @@ func (d *Dict) SetExpiryAt(k string, atMs uint64) {
 		d.expiryCompaction.next[k] = atMs
 	}
 	d.expiryPeak = max(d.expiryPeak, len(d.expiredDictStore))
-	EnforceLimits()
+	d.space.EnforceLimits()
 }
 
 // ExpiryOf reports a key's absolute expiry, for a log that has to record when
@@ -136,10 +139,10 @@ func (d *Dict) Get(k string) *Obj {
 		// made at a moment a log has to be able to reproduce. Without it
 		// the key comes back on replay carrying an expiry that has already
 		// gone by, and lives until something next reads it.
-		noteRemoval(d, k)
+		d.space.noteRemoval(d, k)
 		return nil
 	}
-	Touch(&obj.Access)
+	d.space.Touch(&obj.Access)
 	return obj
 }
 
@@ -156,7 +159,7 @@ func (d *Dict) Put(k string, obj *Obj) {
 	// expiry table growing an entry per overwrite.
 	d.dropExpiry(k)
 
-	Touch(&obj.Access)
+	d.space.Touch(&obj.Access)
 	d.dictStore.set(k, *obj)
 	d.memUsed += d.entryBytes(k, obj)
 
@@ -164,7 +167,7 @@ func (d *Dict) Put(k string, obj *Obj) {
 	// known exactly only once it is in. The key just written is the most
 	// recently used and the most frequently accessed, so no policy will choose
 	// it while anything else remains.
-	EnforceLimits()
+	d.space.EnforceLimits()
 }
 
 // Has reports whether a live key is present.
@@ -178,7 +181,7 @@ func (d *Dict) Has(k string) bool {
 	}
 	if d.HasExpired(k) {
 		d.Del(k)
-		noteRemoval(d, k)
+		d.space.noteRemoval(d, k)
 		return false
 	}
 	return true
@@ -239,7 +242,7 @@ func (d *Dict) ScoreOf(key string) (uint64, bool) {
 	if !exists {
 		return 0, false
 	}
-	return Score(obj.Access), true
+	return d.space.Score(obj.Access), true
 }
 
 // SampleKeys draws up to n keys at random.
@@ -250,7 +253,7 @@ func (d *Dict) ScoreOf(key string) (uint64, bool) {
 // point moves every time, which is what the sampling needs.
 func (d *Dict) SampleKeys(dst []Candidate, n int) []Candidate {
 	d.dictStore.sample(n, func(key string, obj Obj) {
-		dst = append(dst, Candidate{Space: d, Key: key, Score: Score(obj.Access)})
+		dst = append(dst, Candidate{Keyspace: d, Key: key, Score: d.space.Score(obj.Access)})
 	})
 	return dst
 }
@@ -266,7 +269,7 @@ func (d *Dict) UpdateValue(key string, value string) {
 	d.memUsed -= d.entryBytes(key, obj)
 	obj.Value = value
 	d.memUsed += d.entryBytes(key, obj)
-	EnforceLimits()
+	d.space.EnforceLimits()
 }
 
 func (d *Dict) ClearExpiry(key string) bool {

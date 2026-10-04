@@ -3,8 +3,6 @@ package data_structure
 import (
 	"math"
 	"math/bits"
-
-	"github.com/brandopakel/keel/internal/config"
 )
 
 // Longest common subsequence.
@@ -47,14 +45,15 @@ import (
 // on 27% of 2008 sampled pairs. A placement is the output, so it is Redis's.
 
 // LCSTooLarge reports whether a pair of strings would cost more cell
-// comparisons than config.LCSMaxCells allows.
+// comparisons than the space's LCSMaxCells allows.
 //
 // The bound is on time rather than space, which is the whole reason it can be
 // as generous as it is - see the comment on that setting. What matters here is
 // that the cost is the product of the two lengths and not the larger of them:
 // a 10MB value against a three-character one is cheap.
-func LCSTooLarge(a, b string) bool {
-	return config.LCSMaxCells > 0 && uint64(len(a))*uint64(len(b)) > config.LCSMaxCells
+func (s *Space) LCSTooLarge(a, b string) bool {
+	limit := *s.limits.lcsMaxCells
+	return limit > 0 && uint64(len(a))*uint64(len(b)) > limit
 }
 
 // LCSMatch is one run of characters common to both strings, as the ranges it

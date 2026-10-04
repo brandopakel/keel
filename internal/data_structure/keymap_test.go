@@ -279,14 +279,13 @@ func TestPagedHashCollisionsPreserveDistinctKeysAndBoundScan(t *testing.T) {
 }
 
 func TestKeyspaceWalkFreezesLimitsWithoutSnapshottingNames(t *testing.T) {
-	ResetKeyspaces()
-	defer ResetKeyspaces()
-	d := CreateDict()
-	RegisterKeyspace(d)
+	t.Parallel()
+	d := newTestDict(configuredLimits())
+	s := d.space
 	for i := 0; i < 200; i++ {
 		d.Put(strconv.Itoa(i), d.NewObj("v"))
 	}
-	w := NewKeyspaceWalk()
+	w := s.NewKeyspaceWalk()
 	require.Len(t, w.ends, 1)
 	keys, examined, err := w.Next(5, nil)
 	require.NoError(t, err)
@@ -299,8 +298,8 @@ func TestKeyspaceWalkFreezesLimitsWithoutSnapshottingNames(t *testing.T) {
 		require.NoError(t, err)
 	}
 	require.Len(t, keys, 200, "new high slots are left for dirty reconciliation")
-	stale := NewKeyspaceWalk()
-	ResetKeyspaces()
+	stale := s.NewKeyspaceWalk()
+	s.ResetKeyspaces()
 	_, _, err = stale.Next(5, nil)
 	require.Error(t, err)
 }
