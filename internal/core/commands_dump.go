@@ -149,7 +149,7 @@ func decodeRestorePayload(key string, tag byte, body []byte) (store func(), err 
 		if err != nil {
 			return nil, err
 		}
-		return func() { sbStore.Put(key, sb) }, nil
+		return func() { defaultEngine.sbStore.Put(key, sb) }, nil
 	case dumpTagCMS:
 		cms, err := data_structure.UnmarshalCMS(body)
 		if err != nil {
@@ -173,7 +173,7 @@ func decodeRestorePayload(key string, tag byte, body []byte) (store func(), err 
 		if err != nil {
 			return nil, err
 		}
-		return func() { cfStore.Put(key, cf) }, nil
+		return func() { defaultEngine.cfStore.Put(key, cf) }, nil
 	}
 	return nil, fmt.Errorf("MEMKV: unknown payload type %d", tag)
 }

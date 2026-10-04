@@ -32,6 +32,8 @@ type Engine struct {
 	listStore *data_structure.Keyed[*data_structure.List]
 	setStore  *data_structure.Keyed[*data_structure.Set]
 	zsetStore *data_structure.Keyed[*data_structure.ZSet]
+	sbStore   *data_structure.Keyed[*data_structure.SBChain]
+	cfStore   *data_structure.Keyed[*data_structure.CuckooFilter]
 }
 
 // defaultEngine is the engine the server and the tests run on until each

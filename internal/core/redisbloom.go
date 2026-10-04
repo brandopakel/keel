@@ -41,8 +41,8 @@ const (
 // answer "no" for a key of another type where every other command answers
 // WRONGTYPE. Asking every keyspace, as checkKeyTypes does, also reaps an
 // expired key of any type, as checkKeyTypes did.
-func filterKeyStatus(key string, own data_structure.Keyspace) filterStatus {
-	owner, held := data_structure.OwnerOf(key)
+func (e *Engine) filterKeyStatus(key string, own data_structure.Keyspace) filterStatus {
+	owner, held := e.space.OwnerOf(key)
 	switch {
 	case !held:
 		return filterMissing
