@@ -231,3 +231,7 @@ Process tests (`cmd/keel/rewrite_failure_test.go`) run the real server under a
 The same process test against develop `2eeb94b` fails as the bug report
 describes: `rewrite abandoned: … file too large`, then `appendonly: write
 failed, stopping`.
+
+Local runs, failures included, are recorded with their reports and log checksums
+in `bench/results/rewrite-failure-2026-10-03.json.gz`, together with the Redis
+probe and its results.
