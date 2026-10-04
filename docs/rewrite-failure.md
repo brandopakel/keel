@@ -95,7 +95,7 @@ on. Redis counts rewrites started.
 | --- | --- |
 | No rewrite running, including after a failed one and while automatic rewrites are held back | `+Background append only file rewriting started` |
 | A rewrite running | `-ERR Background append only file rewriting already in progress` |
-| Inside `EXEC` | `+Background append only file rewriting scheduled` in its place; the rewrite starts once the transaction is over |
+| Inside `EXEC` | `+Background append only file rewriting scheduled` in its place; the rewrite starts once the transaction is over and the retry limit allows it. Redis's `serverCron` starts a scheduled rewrite only when `aofRewriteLimited()` is false, so a scheduled rewrite waits for the limit like an automatic one, and because protocol 2 snapshot rewrites share the failure count, that wait can reach an hour |
 | It cannot start | `-ERR Can't execute an AOF background rewriting. Please check the server logs for more information.` |
 
 Keel's own refusals keep their reasons: `ERR appendonly is off` (Redis would

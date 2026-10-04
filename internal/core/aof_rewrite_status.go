@@ -52,8 +52,12 @@ import (
 // is followed by the next one no sooner than 100 ms later. From the third
 // failure in a row each attempt waits, a minute at first and twice as long each
 // time after, up to an hour. A full disk therefore costs three attempts and
-// then one an hour at most, never a loop. A BGREWRITEAOF is not held back by
-// any of this, in Redis or here: it starts at once.
+// then one an hour at most, never a loop. A BGREWRITEAOF that can start is not
+// held back by any of this, in Redis or here: it starts at once. One that is
+// only scheduled, inside EXEC, waits for the limit like an automatic rewrite,
+// as Redis's serverCron starts aof_rewrite_scheduled only when
+// !aofRewriteLimited(). Protocol 2 snapshot rewrites share the failure count,
+// so that wait can reach the hour too.
 //
 // A rewrite abandoned on its duration or dirty-key budget is a failure too, but
 // the next automatic attempt also waits the minute it always has, since the
@@ -233,7 +237,8 @@ func startScheduledRewrite(now time.Time) {
 
 // bgRewriteAOF answers BGREWRITEAOF as Redis 8.10.1's bgrewriteaofCommand
 // does: an error if one is running, scheduled inside a transaction, started
-// otherwise - after a failed one too, and whatever the retry limit says - and
+// otherwise - after a failed one too, and whatever the retry limit says,
+// though a scheduled one waits for that limit before it starts - and
 // Redis's generic refusal when it cannot start. Keel's own refusals, a log
 // that is off or a rewrite waiting for a pending append, keep their reasons.
 func bgRewriteAOF() []byte {
