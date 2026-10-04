@@ -15,7 +15,7 @@ func TestSketchRewriteStartsWithoutConstructingAWholePayload(t *testing.T) {
 	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "store.aof")))
 	t.Cleanup(func() { CancelRewrite(); require.NoError(t, CloseAOF()); ResetStores() })
 	cms := data_structure.CreateCMS(1<<20, 1)
-	cmsStore.Put("large", cms)
+	defaultEngine.cmsStore.Put("large", cms)
 	require.NoError(t, StartRewrite())
 	runtime.GC()
 	var before, after runtime.MemStats

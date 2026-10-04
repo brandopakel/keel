@@ -44,13 +44,6 @@ var commandTable = map[string]func([]string) []byte{
 	// The names from before the server was renamed, so a log written then
 	// still replays; a command is written to the log under its current name.
 	"MEMKV.DUMP": cmdDUMP, "MEMKV.RESTORE": cmdRESTORE,
-
-	// Probabilistic structures
-	"CMS.INITBYDIM": cmdCMSINITBYDIM, "CMS.INITBYPROB": cmdCMSINITBYPROB,
-	"CMS.INCRBY": cmdCMSINCRBY, "CMS.QUERY": cmdCMSQUERY,
-	"MORRIS.INITBYDIM": cmdMORRISINITBYDIM, "MORRIS.INITBYPROB": cmdMORRISINITBYPROB,
-	"MORRIS.INCRBY": cmdMORRISINCRBY, "MORRIS.QUERY": cmdMORRISQUERY, "MORRIS.INFO": cmdMORRISINFO,
-	"PFADD": cmdPFADD, "PFCOUNT": cmdPFCOUNT, "PFMERGE": cmdPFMERGE,
 }
 
 // engineCommandTable is the part of the dispatch table whose handlers are
@@ -93,6 +86,18 @@ var engineCommandTable = map[string]func(*Engine, []string) []byte{
 	"CF.RESERVE": (*Engine).cmdCFRESERVE, "CF.ADD": (*Engine).cmdCFADD, "CF.ADDNX": (*Engine).cmdCFADDNX,
 	"CF.EXISTS": (*Engine).cmdCFEXISTS, "CF.MEXISTS": (*Engine).cmdCFMEXISTS, "CF.DEL": (*Engine).cmdCFDEL,
 	"CF.COUNT": (*Engine).cmdCFCOUNT, "CF.INFO": (*Engine).cmdCFINFO,
+
+	// Count-min sketches
+	"CMS.INITBYDIM": (*Engine).cmdCMSINITBYDIM, "CMS.INITBYPROB": (*Engine).cmdCMSINITBYPROB,
+	"CMS.INCRBY": (*Engine).cmdCMSINCRBY, "CMS.QUERY": (*Engine).cmdCMSQUERY,
+
+	// Morris counters
+	"MORRIS.INITBYDIM": (*Engine).cmdMORRISINITBYDIM, "MORRIS.INITBYPROB": (*Engine).cmdMORRISINITBYPROB,
+	"MORRIS.INCRBY": (*Engine).cmdMORRISINCRBY, "MORRIS.QUERY": (*Engine).cmdMORRISQUERY,
+	"MORRIS.INFO": (*Engine).cmdMORRISINFO,
+
+	// HyperLogLogs
+	"PFADD": (*Engine).cmdPFADD, "PFCOUNT": (*Engine).cmdPFCOUNT, "PFMERGE": (*Engine).cmdPFMERGE,
 }
 
 // cmdPING answers PONG, or echoes the one argument it is given.

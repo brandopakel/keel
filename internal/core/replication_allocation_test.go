@@ -13,7 +13,7 @@ import (
 
 func TestOversizedOpaqueReplicationUpdateIsSizedBeforeConstruction(t *testing.T) {
 	setupReplicationV2(t)
-	cmsStore.Put("large", data_structure.CreateCMS((replicationCommandBytes/4)+1, 1))
+	defaultEngine.cmsStore.Put("large", data_structure.CreateCMS((replicationCommandBytes/4)+1, 1))
 	epoch := replication.epoch
 	runtime.GC()
 	var before, after runtime.MemStats
@@ -31,7 +31,7 @@ func TestOpaqueReplicationBodyAllocatesOneAcceptedImage(t *testing.T) {
 	setupReplicationV2(t)
 	cms := data_structure.CreateCMS(1<<20, 1)
 	cms.IncrBy("item", 7)
-	cmsStore.Put("large", cms)
+	defaultEngine.cmsStore.Put("large", cms)
 	replication.dirty["large"] = struct{}{}
 	runtime.GC()
 	var before, after runtime.MemStats
@@ -86,10 +86,10 @@ func TestOpaqueReplicationExpiryBelongsToSelectedValue(t *testing.T) {
 	hash := data_structure.NewHash()
 	hash.Set("field", "value")
 	defaultEngine.hashStore.Put("overlap", hash)
-	cmsStore.Put("overlap", data_structure.CreateCMS(16, 1))
+	defaultEngine.cmsStore.Put("overlap", data_structure.CreateCMS(16, 1))
 	wantExpiry := uint64(time.Now().UnixMilli() + 600000)
 	defaultEngine.hashStore.SetExpiryAt("overlap", wantExpiry)
-	cmsStore.SetExpiryAt("overlap", 1)
+	defaultEngine.cmsStore.SetExpiryAt("overlap", 1)
 	replication.dirty["overlap"] = struct{}{}
 	body, fits := opaqueReplicationBody()
 	require.True(t, fits)
@@ -109,7 +109,7 @@ func TestOpaqueReplicationSizesAggregateBeforeAllocating(t *testing.T) {
 	setupReplicationV2(t)
 	// Each image fits alone; their combined delta does not.
 	for _, key := range []string{"first", "second"} {
-		cmsStore.Put(key, data_structure.CreateCMS(9<<20, 1))
+		defaultEngine.cmsStore.Put(key, data_structure.CreateCMS(9<<20, 1))
 		replication.dirty[key] = struct{}{}
 	}
 	runtime.GC()

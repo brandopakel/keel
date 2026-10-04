@@ -28,12 +28,15 @@ type Engine struct {
 
 	// The stores that have moved, under the names their package variables
 	// had, so that what a family reads is found by the same search as before.
-	hashStore *data_structure.Keyed[*data_structure.Hash]
-	listStore *data_structure.Keyed[*data_structure.List]
-	setStore  *data_structure.Keyed[*data_structure.Set]
-	zsetStore *data_structure.Keyed[*data_structure.ZSet]
-	sbStore   *data_structure.Keyed[*data_structure.SBChain]
-	cfStore   *data_structure.Keyed[*data_structure.CuckooFilter]
+	hashStore   *data_structure.Keyed[*data_structure.Hash]
+	listStore   *data_structure.Keyed[*data_structure.List]
+	setStore    *data_structure.Keyed[*data_structure.Set]
+	zsetStore   *data_structure.Keyed[*data_structure.ZSet]
+	sbStore     *data_structure.Keyed[*data_structure.SBChain]
+	cfStore     *data_structure.Keyed[*data_structure.CuckooFilter]
+	cmsStore    *data_structure.Keyed[*data_structure.CMS]
+	morrisStore *data_structure.Keyed[*data_structure.Morris]
+	hllStore    *data_structure.Keyed[*data_structure.HLL]
 }
 
 // defaultEngine is the engine the server and the tests run on until each

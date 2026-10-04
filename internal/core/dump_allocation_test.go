@@ -99,7 +99,7 @@ func TestDumpLargeSketchRejectsBeforeMarshalling(t *testing.T) {
 	t.Cleanup(ResetStores)
 	// A small INITBYDIM request can create a table larger than the reply limit.
 	cms := data_structure.CreateCMS(17<<20, 1)
-	cmsStore.Put("large", cms)
+	defaultEngine.cmsStore.Put("large", cms)
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)

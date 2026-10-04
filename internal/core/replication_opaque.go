@@ -95,11 +95,11 @@ func replicationKeyExpiry(key string, tag byte) uint64 {
 	case dumpTagBloom:
 		ks = defaultEngine.sbStore
 	case dumpTagCMS:
-		ks = cmsStore
+		ks = defaultEngine.cmsStore
 	case dumpTagMorris:
-		ks = morrisStore
+		ks = defaultEngine.morrisStore
 	case dumpTagHLL:
-		ks = hllStore
+		ks = defaultEngine.hllStore
 	case dumpTagCuckoo:
 		ks = defaultEngine.cfStore
 	default:

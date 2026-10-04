@@ -45,10 +45,10 @@ func (s *sketchDumpStream) appendSlice(dst []byte, offset, count int) []byte {
 }
 
 func newSketchDumpStream(key string) *sketchDumpStream {
-	if cms, ok := cmsStore.Peek(key); ok {
+	if cms, ok := defaultEngine.cmsStore.Peek(key); ok {
 		return &sketchDumpStream{image: cms.RewriteImage(), tag: dumpTagCMS}
 	}
-	if morris, ok := morrisStore.Peek(key); ok {
+	if morris, ok := defaultEngine.morrisStore.Peek(key); ok {
 		return &sketchDumpStream{image: morris.RewriteImage(), tag: dumpTagMorris}
 	}
 	return nil

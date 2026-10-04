@@ -21,7 +21,7 @@ import (
 // relative error on every read. Which is the better trade depends entirely on
 // what the count is for - ranking heavy hitters barely notices, billing does.
 
-func cmdMORRISINITBYDIM(args []string) []byte {
+func (e *Engine) cmdMORRISINITBYDIM(args []string) []byte {
 	if len(args) != 3 {
 		return Encode(wrongArguments("MORRIS.INITBYDIM"), false)
 	}
@@ -34,17 +34,17 @@ func cmdMORRISINITBYDIM(args []string) []byte {
 	if err != nil || depth == 0 {
 		return Encode(errors.New(fmt.Sprintf("depth must be a positive integer number %s", args[2])), false)
 	}
-	if morrisStore.Exists(key) {
+	if e.morrisStore.Exists(key) {
 		return Encode(errors.New("MORRIS: key already exists"), false)
 	}
 	if err := affordable(64 + width*depth); err != nil {
 		return Encode(err, false)
 	}
-	morrisStore.Put(key, data_structure.CreateMorris(uint32(width), uint32(depth)))
+	e.morrisStore.Put(key, data_structure.CreateMorris(uint32(width), uint32(depth)))
 	return constant.RespOk
 }
 
-func cmdMORRISINITBYPROB(args []string) []byte {
+func (e *Engine) cmdMORRISINITBYPROB(args []string) []byte {
 	if len(args) != 3 {
 		return Encode(wrongArguments("MORRIS.INITBYPROB"), false)
 	}
@@ -63,7 +63,7 @@ func cmdMORRISINITBYPROB(args []string) []byte {
 	if math.IsNaN(probability) || probability >= 1 || probability <= 0 {
 		return Encode(errors.New("MORRIS: invalid prob value"), false)
 	}
-	if morrisStore.Exists(key) {
+	if e.morrisStore.Exists(key) {
 		return Encode(errors.New("MORRIS: key already exists"), false)
 	}
 
@@ -77,16 +77,16 @@ func cmdMORRISINITBYPROB(args []string) []byte {
 	if err := affordable(64 + uint64(w)*uint64(d)); err != nil {
 		return Encode(err, false)
 	}
-	morrisStore.Put(key, data_structure.CreateMorris(w, d))
+	e.morrisStore.Put(key, data_structure.CreateMorris(w, d))
 	return constant.RespOk
 }
 
-func cmdMORRISINCRBY(args []string) []byte {
+func (e *Engine) cmdMORRISINCRBY(args []string) []byte {
 	if len(args) < 3 || len(args)%2 == 0 {
 		return Encode(wrongArguments("MORRIS.INCRBY"), false)
 	}
 	key := args[0]
-	m, exist := morrisStore.Get(key)
+	m, exist := e.morrisStore.Get(key)
 	if !exist {
 		return Encode(errors.New("MORRIS: key does not exist"), false)
 	}
@@ -109,12 +109,12 @@ func cmdMORRISINCRBY(args []string) []byte {
 	return Encode(res, false)
 }
 
-func cmdMORRISQUERY(args []string) []byte {
+func (e *Engine) cmdMORRISQUERY(args []string) []byte {
 	if len(args) < 2 {
 		return Encode(wrongArguments("MORRIS.QUERY"), false)
 	}
 	key := args[0]
-	m, exist := morrisStore.Get(key)
+	m, exist := e.morrisStore.Get(key)
 	if !exist {
 		return Encode(errors.New("MORRIS: key does not exist"), false)
 	}
@@ -136,12 +136,12 @@ func cmdMORRISQUERY(args []string) []byte {
 // RedisBloom has no Morris counter to follow under RESP3, so the reply takes
 // RESP3's framing for name/value pairs, a map, and keeps the bulk-string names
 // and values RESP2 sends - as MORRIS.QUERY keeps its bulk-string counts.
-func cmdMORRISINFO(args []string) []byte {
+func (e *Engine) cmdMORRISINFO(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(wrongArguments("MORRIS.INFO"), false)
 	}
 	key := args[0]
-	m, exist := morrisStore.Peek(key)
+	m, exist := e.morrisStore.Peek(key)
 	if !exist {
 		return Encode(errors.New(fmt.Sprintf("Morris counter with key '%s' does not exist", key)), false)
 	}

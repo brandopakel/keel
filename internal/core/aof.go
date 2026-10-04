@@ -198,7 +198,7 @@ func OpenAOF(path string) error {
 	// dense even when its in-memory representation is compact.
 	live := data_structure.TotalMemUsed()
 	const maxInt64 = uint64(1<<63 - 1)
-	hllWire := uint64(hllStore.Len()) * (16 << 10)
+	hllWire := uint64(defaultEngine.hllStore.Len()) * (16 << 10)
 	if live <= (maxInt64-hllWire)/3 {
 		if estimate := int64(live*3 + hllWire); estimate < aof.rewriteBase {
 			aof.rewriteBase = estimate

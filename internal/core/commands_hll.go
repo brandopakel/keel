@@ -11,19 +11,19 @@ import (
 // and Count-Min sketch, so a name used as a HyperLogLog and as a string are
 // separate keys rather than a type conflict.
 
-func cmdPFADD(args []string) []byte {
+func (e *Engine) cmdPFADD(args []string) []byte {
 	if len(args) < 1 {
 		return Encode(wrongArguments("PFADD"), false)
 	}
 
 	key := args[0]
-	hll, exist := hllStore.Get(key)
+	hll, exist := e.hllStore.Get(key)
 	// Creating the key is itself a change, which is why PFADD with no elements
 	// still reports 1 the first time it is called.
 	changed := !exist
 	if !exist {
 		hll = data_structure.CreateHLL()
-		hllStore.Put(key, hll)
+		e.hllStore.Put(key, hll)
 	}
 
 	for _, item := range args[1:] {
@@ -31,7 +31,7 @@ func cmdPFADD(args []string) []byte {
 			changed = true
 		}
 	}
-	hllStore.Resize(key)
+	e.hllStore.Resize(key)
 
 	if changed {
 		return constant.RespOne
@@ -39,13 +39,13 @@ func cmdPFADD(args []string) []byte {
 	return constant.RespZero
 }
 
-func cmdPFCOUNT(args []string) []byte {
+func (e *Engine) cmdPFCOUNT(args []string) []byte {
 	if len(args) < 1 {
 		return Encode(wrongArguments("PFCOUNT"), false)
 	}
 
 	if len(args) == 1 {
-		hll, exist := hllStore.Get(args[0])
+		hll, exist := e.hllStore.Get(args[0])
 		if !exist {
 			return constant.RespZero
 		}
@@ -57,14 +57,14 @@ func cmdPFCOUNT(args []string) []byte {
 	// read: the stored sketches must come out unchanged.
 	union := data_structure.CreateHLL()
 	for _, key := range args {
-		if hll, exist := hllStore.Get(key); exist {
+		if hll, exist := e.hllStore.Get(key); exist {
 			union.Merge(hll)
 		}
 	}
 	return Encode(int64(union.Count()), false)
 }
 
-func cmdPFMERGE(args []string) []byte {
+func (e *Engine) cmdPFMERGE(args []string) []byte {
 	if len(args) < 1 {
 		return Encode(wrongArguments("PFMERGE"), false)
 	}
@@ -73,15 +73,15 @@ func cmdPFMERGE(args []string) []byte {
 	merged := data_structure.CreateHLL()
 	// The destination takes part in its own merge, so PFMERGE accumulates
 	// rather than replacing what is already there.
-	if existing, exist := hllStore.Get(dest); exist {
+	if existing, exist := e.hllStore.Get(dest); exist {
 		merged.Merge(existing)
 	}
 	for _, key := range args[1:] {
-		if hll, exist := hllStore.Get(key); exist {
+		if hll, exist := e.hllStore.Get(key); exist {
 			merged.Merge(hll)
 		}
 	}
 
-	hllStore.Put(dest, merged)
+	e.hllStore.Put(dest, merged)
 	return constant.RespOk
 }

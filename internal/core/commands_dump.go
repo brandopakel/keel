@@ -155,19 +155,19 @@ func decodeRestorePayload(key string, tag byte, body []byte) (store func(), err 
 		if err != nil {
 			return nil, err
 		}
-		return func() { cmsStore.Put(key, cms) }, nil
+		return func() { defaultEngine.cmsStore.Put(key, cms) }, nil
 	case dumpTagMorris:
 		m, err := data_structure.UnmarshalMorris(body)
 		if err != nil {
 			return nil, err
 		}
-		return func() { morrisStore.Put(key, m) }, nil
+		return func() { defaultEngine.morrisStore.Put(key, m) }, nil
 	case dumpTagHLL:
 		h, err := data_structure.UnmarshalHLL(body)
 		if err != nil {
 			return nil, err
 		}
-		return func() { hllStore.Put(key, h) }, nil
+		return func() { defaultEngine.hllStore.Put(key, h) }, nil
 	case dumpTagCuckoo:
 		cf, err := data_structure.UnmarshalCuckoo(body)
 		if err != nil {

@@ -16,11 +16,11 @@ func TestSketchDumpSlicesPreserveEnvelopeAcrossAllBoundaries(t *testing.T) {
 			if kind == "cms" {
 				cms := data_structure.CreateCMS(129, 3)
 				cms.IncrBy("item", 123456)
-				cmsStore.Put("image", cms)
+				defaultEngine.cmsStore.Put("image", cms)
 			} else {
 				morris := data_structure.CreateMorris(129, 3)
 				morris.IncrBy("item", 123456)
-				morrisStore.Put("image", morris)
+				defaultEngine.morrisStore.Put("image", morris)
 			}
 			want, _ := dumpKey("image")
 			stream := newSketchDumpStream("image")
@@ -44,9 +44,9 @@ func TestSketchRewriteReconcilesWritesAcrossBodySlices(t *testing.T) {
 			t.Cleanup(func() { CancelRewrite(); require.NoError(t, CloseAOF()); ResetStores() })
 			command := "CMS.INCRBY"
 			if kind == "cms" {
-				cmsStore.Put("image", data_structure.CreateCMS(1<<20, 1))
+				defaultEngine.cmsStore.Put("image", data_structure.CreateCMS(1<<20, 1))
 			} else {
-				morrisStore.Put("image", data_structure.CreateMorris(4<<20, 1))
+				defaultEngine.morrisStore.Put("image", data_structure.CreateMorris(4<<20, 1))
 				command = "MORRIS.INCRBY"
 			}
 			run(t, "PEXPIRE", "image", "600000")

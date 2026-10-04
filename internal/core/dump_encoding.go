@@ -106,13 +106,13 @@ func planOpaqueDump(key string) (dumpPlan, bool) {
 	if v, ok := defaultEngine.sbStore.Peek(key); ok {
 		return opaqueDumpPlan(dumpTagBloom, v), true
 	}
-	if v, ok := cmsStore.Peek(key); ok {
+	if v, ok := defaultEngine.cmsStore.Peek(key); ok {
 		return opaqueDumpPlan(dumpTagCMS, v), true
 	}
-	if v, ok := morrisStore.Peek(key); ok {
+	if v, ok := defaultEngine.morrisStore.Peek(key); ok {
 		return opaqueDumpPlan(dumpTagMorris, v), true
 	}
-	if v, ok := hllStore.Peek(key); ok {
+	if v, ok := defaultEngine.hllStore.Peek(key); ok {
 		return opaqueDumpPlan(dumpTagHLL, v), true
 	}
 	if v, ok := defaultEngine.cfStore.Peek(key); ok {
