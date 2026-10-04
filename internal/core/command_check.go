@@ -121,10 +121,21 @@ func subcommandsOf(name string) []subcommand {
 
 // commandEntry is one command as dispatch finds it: the handler from
 // commandTable, nil for a command the transport or Transact answers, and the
-// count from commandArity.
+// count from commandArity. container marks CLIENT and MEMORY, whose count
+// depends on the subcommand, and namesItself the one handler that repeats the
+// name it was sent as - see runningName. Both are worked out once, here, so
+// that a well-formed command is checked with one comparison of its count.
 type commandEntry struct {
-	run   func([]string) []byte
-	arity int
+	run         func([]string) []byte
+	arity       int
+	container   bool
+	namesItself bool
+}
+
+// counted reports whether a command of entry's, given args arguments, needs
+// no further look before it runs: neither a container nor the wrong count.
+func (e commandEntry) counted(args int) bool {
+	return !e.container && arityAccepts(e.arity, args)
 }
 
 // commands indexes commandArity and commandTable by name together, so the one
@@ -137,7 +148,8 @@ func init() { indexCommands() }
 func indexCommands() {
 	commands = make(map[string]commandEntry, len(commandArity))
 	for name, arity := range commandArity {
-		commands[name] = commandEntry{commandTable[name], arity}
+		commands[name] = commandEntry{run: commandTable[name], arity: arity,
+			container: subcommandsOf(name) != nil, namesItself: name == "GEOSEARCH"}
 	}
 }
 

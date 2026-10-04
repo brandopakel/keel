@@ -164,10 +164,7 @@ var argumentsBeforeType = map[string]func(args []string) error{
 		return popCountArgument(args)
 	},
 	"SRANDMEMBER": randomCountArgument, "SRAND": randomCountArgument,
-	"ZADD": func(args []string) error {
-		_, _, _, _, err := zaddArguments(args)
-		return err
-	},
+	"ZADD": zaddArguments,
 	"ZINCRBY": func(args []string) error {
 		_, err := parseZScore(args[1])
 		return err
@@ -200,10 +197,7 @@ var argumentsBeforeType = map[string]func(args []string) error{
 		_, err := zrankArguments(args)
 		return err
 	},
-	"GEOADD": func(args []string) error {
-		_, _, _, _, err := geoaddArguments(args)
-		return err
-	},
+	"GEOADD": geoaddArguments,
 	"GEODIST": func(args []string) error {
 		_, err := geodistUnit(args)
 		return err

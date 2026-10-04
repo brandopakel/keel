@@ -73,9 +73,19 @@ func cmdGEOADD(args []string) []byte {
 	if len(args) < 4 {
 		return Encode(wrongArguments("GEOADD"), false)
 	}
-	flags, ch, scores, members, err := geoaddArguments(args)
+	flags, ch, triples, err := geoaddShape(args)
 	if err != nil {
 		return Encode(err, false)
+	}
+	scores := make([]float64, 0, len(triples)/3)
+	members := make([]string, 0, len(triples)/3)
+	for i := 0; i < len(triples); i += 3 {
+		score, err := geoaddScore(triples[i], triples[i+1])
+		if err != nil {
+			return Encode(err, false)
+		}
+		scores = append(scores, score)
+		members = append(members, triples[i+2])
 	}
 	added, changed := zaddApply(args[0], scores, members, flags)
 	if ch {
@@ -84,31 +94,40 @@ func cmdGEOADD(args []string) []byte {
 	return Encode(added, false)
 }
 
-// geoaddArguments reads GEOADD's arguments in Redis's order: the options;
-// then whether what follows comes in threes and NX and XX were not both given,
-// either refused as a syntax error; then every position.
-func geoaddArguments(args []string) (flags int, ch bool, scores []float64, members []string, err error) {
+// geoaddShape reads GEOADD's options in Redis's order, then whether what
+// follows comes in threes and NX and XX were not both given, either refused as
+// a syntax error, and returns the triples. The positions are read after this.
+func geoaddShape(args []string) (flags int, ch bool, triples []string, err error) {
 	flags, ch, next := zaddOptions(args[1:])
-	triples := args[1+next:]
+	triples = args[1+next:]
 	if len(triples) == 0 || len(triples)%3 != 0 ||
 		flags&data_structure.ZAddNX != 0 && flags&data_structure.ZAddXX != 0 {
-		return 0, false, nil, nil, errSyntax
+		return 0, false, nil, errSyntax
 	}
-	scores = make([]float64, 0, len(triples)/3)
-	members = make([]string, 0, len(triples)/3)
-	for i := 0; i < len(triples); i += 3 {
-		longitude, latitude, err := parseLongLat(triples[i], triples[i+1])
-		if err != nil {
-			return 0, false, nil, nil, err
-		}
-		score, ok := data_structure.GeoScore(longitude, latitude)
-		if !ok {
-			return 0, false, nil, nil, fmt.Errorf("ERR invalid longitude,latitude pair %f,%f", longitude, latitude)
-		}
-		scores = append(scores, float64(score))
-		members = append(members, triples[i+2])
+	return flags, ch, triples, nil
+}
+
+// geoaddScore reads one position as the score that indexes it.
+func geoaddScore(longS, latS string) (float64, error) {
+	longitude, latitude, err := parseLongLat(longS, latS)
+	if err != nil {
+		return 0, err
 	}
-	return flags, ch, scores, members, nil
+	score, ok := data_structure.GeoScore(longitude, latitude)
+	if !ok {
+		return 0, fmt.Errorf("ERR invalid longitude,latitude pair %f,%f", longitude, latitude)
+	}
+	return float64(score), nil
+}
+
+// geoaddArguments is GEOADD's refusal of its arguments, or nil: its shape,
+// then every position, as Redis reads them before it looks at the key.
+func geoaddArguments(args []string) error {
+	_, _, triples, err := geoaddShape(args)
+	for i := 0; err == nil && i < len(triples); i += 3 {
+		_, err = geoaddScore(triples[i], triples[i+1])
+	}
+	return err
 }
 
 // geodistUnit reads GEODIST's optional unit, refused as Redis refuses it

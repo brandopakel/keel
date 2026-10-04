@@ -115,8 +115,9 @@ func cmdSELECT(args []string) []byte {
 	return constant.RespOk
 }
 
-// runningName is the name of the command running, as its client spelled it,
-// held as replyRESP3 is: for the few errors in which Redis repeats it.
+// runningName is the name GEOSEARCH, the one command whose errors repeat the
+// name it was sent as, was last sent as. It is set only for that command,
+// before it runs, and read only while it runs.
 var runningName string
 
 // EvalAndResponse runs one command and writes its reply to c.
@@ -130,22 +131,29 @@ func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	// command - see resp3.go. Log replay and replica apply answer nobody, and
 	// run as RESP2 whatever the command says: what they produce has to be the
 	// same however the command first arrived.
-	saved, savedName := replyRESP3, runningName
+	saved := replyRESP3
 	replyRESP3 = cmd.RESP3 && !aof.replaying && !replicaApplying
-	runningName = cmd.sentName()
-	defer func() { replyRESP3, runningName = saved, savedName }()
+	defer func() { replyRESP3 = saved }()
 
 	// Redis names and counts a command before anything else, a replica's
 	// refusal of a write included. A command this server does not have is
-	// returned rather than answered, so that a log replay stops on it.
-	entry, known := commands[cmd.Cmd]
+	// returned rather than answered, so that a log replay stops on it. A
+	// well-formed command costs one comparison of its count here; anything
+	// else is looked at in full.
+	entry := commands[cmd.Cmd]
 	if entry.run == nil {
 		// Unknown, or one only the transport answers, with none here to.
 		return unknownCommand(cmd)
 	}
-	refused := commandRefusal(cmd, entry, known)
+	var refused error
+	if !entry.counted(len(cmd.Args)) {
+		refused = commandRefusal(cmd, entry, true)
+	}
 	if refused == nil {
 		refused = replicaCommandError(cmd.Cmd)
+	}
+	if entry.namesItself {
+		runningName = cmd.sentName()
 	}
 	if refused != nil {
 		_, err := c.Write(Encode(refused, false))

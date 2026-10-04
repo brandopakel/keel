@@ -317,8 +317,9 @@ func replicaCommandError(cmd string) error {
 		return nil
 	}
 	// Checked on every write rather than at a transition, so there is no window
-	// between losing authority and noticing it.
-	if writeCommands[cmd] && !Writable() {
+	// between losing authority and noticing it. Writable first: it is a few
+	// fields, and a writable primary then never looks the command up at all.
+	if !Writable() && writeCommands[cmd] {
 		return errFenced
 	}
 	return nil

@@ -183,30 +183,29 @@ func zaddApply(key string, scores []float64, members []string, flags int) (added
 	return added, changed
 }
 
-// zaddArguments reads ZADD's arguments in Redis's order: the options, then
-// whether what follows them comes in score/member pairs, then whether the
-// options agree, then every score, so a malformed command is refused before
-// the key is looked at and with the error Redis would give it.
-func zaddArguments(args []string) (flags int, ch bool, scores []float64, members []string, err error) {
+// zaddShape reads ZADD's options in Redis's order, then whether what follows
+// them comes in score/member pairs, then whether the options agree, and
+// returns the pairs. The scores are read by the caller, after this.
+func zaddShape(args []string) (flags int, ch bool, pairs []string, err error) {
 	flags, ch, next := zaddOptions(args[1:])
-	pairs := args[1+next:]
+	pairs = args[1+next:]
 	if len(pairs) == 0 || len(pairs)%2 != 0 {
-		return 0, false, nil, nil, errSyntax
+		return 0, false, nil, errSyntax
 	}
 	if flags&data_structure.ZAddNX != 0 && flags&data_structure.ZAddXX != 0 {
-		return 0, false, nil, nil, errNXWithXX
+		return 0, false, nil, errNXWithXX
 	}
-	scores = make([]float64, 0, len(pairs)/2)
-	members = make([]string, 0, len(pairs)/2)
-	for i := 0; i < len(pairs); i += 2 {
-		score, err := parseZScore(pairs[i])
-		if err != nil {
-			return 0, false, nil, nil, err
-		}
-		scores = append(scores, score)
-		members = append(members, pairs[i+1])
+	return flags, ch, pairs, nil
+}
+
+// zaddArguments is ZADD's refusal of its arguments, or nil: its shape, and
+// then every score, as Redis reads them before it looks at the key.
+func zaddArguments(args []string) error {
+	_, _, pairs, err := zaddShape(args)
+	for i := 0; err == nil && i < len(pairs); i += 2 {
+		_, err = parseZScore(pairs[i])
 	}
-	return flags, ch, scores, members, nil
+	return err
 }
 
 // cmdZADD implements ZADD key [NX|XX] [CH] score member [score member ...].
@@ -218,9 +217,19 @@ func cmdZADD(args []string) []byte {
 	if len(args) < 3 {
 		return Encode(wrongArguments("ZADD"), false)
 	}
-	flags, ch, scores, members, err := zaddArguments(args)
+	flags, ch, pairs, err := zaddShape(args)
 	if err != nil {
 		return Encode(err, false)
+	}
+	scores := make([]float64, 0, len(pairs)/2)
+	members := make([]string, 0, len(pairs)/2)
+	for i := 0; i < len(pairs); i += 2 {
+		score, err := parseZScore(pairs[i])
+		if err != nil {
+			return Encode(err, false)
+		}
+		scores = append(scores, score)
+		members = append(members, pairs[i+1])
 	}
 	added, changed := zaddApply(args[0], scores, members, flags)
 	if ch {
