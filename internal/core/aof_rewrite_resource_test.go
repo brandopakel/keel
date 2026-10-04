@@ -7,18 +7,28 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestRewriteStreamsOversizedRecordsAcrossMutation(t *testing.T) {
 	for _, kind := range []string{"string", "hash", "list", "set", "zset"} {
-		for _, mutation := range []string{"none", "replace", "delete"} {
+		for _, mutation := range []string{"none", "replace", "delete", "delete/slow-sync"} {
 			t.Run(kind+"/"+mutation, func(t *testing.T) {
 				ResetStores()
 				path := filepath.Join(t.TempDir(), "stream.aof")
 				require.NoError(t, OpenAOF(path))
 				t.Cleanup(func() { CancelRewrite(); require.NoError(t, CloseAOF()) })
+				// A slow disk: the log's own fsync is still running when the
+				// rewrite is ready to finish, as on a cold macOS runner.
+				slowSync := mutation == "delete/slow-sync"
+				if slowSync {
+					mutation = "delete"
+					oldSync := aofSync
+					aofSync = func(f *os.File) error { time.Sleep(300 * time.Millisecond); return f.Sync() }
+					t.Cleanup(func() { aofSync = oldSync })
+				}
 				// Stream both the name and value; neither may be copied as a whole.
 				key, value := strings.Repeat("k", 96<<10), strings.Repeat("v", 256<<10)
 				switch kind {
@@ -47,8 +57,21 @@ func TestRewriteStreamsOversizedRecordsAcrossMutation(t *testing.T) {
 				case "delete":
 					run(t, "DEL", key)
 				}
+				if slowSync {
+					// Write the DEL and start its everysec sync now.
+					aof.lastSync = time.Time{}
+					require.NoError(t, flushAOF(false))
+					require.NotNil(t, aof.syncPending, "the slow sync must be running while the rewrite advances")
+				}
 				for cycles := 0; RewriteActive(); cycles++ {
 					require.Less(t, cycles, 100)
+					// AdvanceRewrite makes no progress while the log's own
+					// append or sync is pending, as after the DEL above. Wait
+					// for both, as the event loop would, so that the bound
+					// counts cycles that can advance rather than polls of a
+					// slow disk.
+					pollAppend(true)
+					pollAOFSync(true)
 					before := rewrite.written
 					require.NoError(t, AdvanceRewrite())
 					waitForRewriteSync(t)
