@@ -10,6 +10,9 @@ import (
 )
 
 func TestCommandReservationsRecoverAfterSlowReaders(t *testing.T) {
+	// The 24 slow readers below pin about 14 MB of kernel send buffers; have
+	// the kernel find that memory before anything is timed.
+	growLoopbackSendBuffers(t, 24)
 	s := startTestServer(t)
 	c, reader := connectTest(t, s)
 	large := strings.Repeat("x", 8<<20)
