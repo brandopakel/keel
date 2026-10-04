@@ -39,8 +39,7 @@ const (
 var packageVars = map[string]string{
 	"defaultEngine": defaultInstance,
 
-	"runningName": commandScope, "replyRESP3": commandScope, "replyCeiling": commandScope,
-	"CommandAllocations": commandScope,
+	"replyRESP3": commandScope,
 
 	"aof": persistence, "aofSync": persistence, "aofWrite": persistence,
 	"appendPending": persistence, "appendBytes": persistence, "appendRetained": persistence,

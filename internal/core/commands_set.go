@@ -92,7 +92,7 @@ func (e *Engine) cmdSMEMBERS(args []string) []byte {
 	if !ok {
 		return emptySetReply()
 	}
-	return encodeLookupArray(s.Len(), s.MemberAt, shapeSet)
+	return e.encodeLookupArray(s.Len(), s.MemberAt, shapeSet)
 }
 
 func (e *Engine) cmdSISMEMBER(args []string) []byte {
@@ -189,14 +189,14 @@ func (e *Engine) cmdSPOP(args []string) []byte {
 			}
 		}
 	})
-	if refusal := reserveRemoval("SREM", key, int(count), walk); refusal != nil {
+	if refusal := e.reserveRemoval("SREM", key, int(count), walk); refusal != nil {
 		return refusal
 	}
 	shape := shapeSet
 	if !given {
 		shape = shapeOne
 	}
-	out := encodeWalkReply(walk, shape)
+	out := e.encodeWalkReply(walk, shape)
 	if len(out) > 0 && out[0] == '-' {
 		return out
 	}
@@ -251,11 +251,11 @@ func (e *Engine) cmdSRANDMEMBER(args []string) []byte {
 		if -count > maxRandomMemberCount {
 			return Encode(errIntegerOutOfRange, false)
 		}
-		return encodeRepeatedMembers(s, int(-count))
+		return e.encodeRepeatedMembers(s, int(-count))
 	}
 	if count > maxRandomMemberCount {
 		count = maxRandomMemberCount
 	}
 	count = int64(s.ShufflePrefix(int(count)))
-	return encodeLookupArray(int(count), s.MemberAt, shapeArray)
+	return e.encodeLookupArray(int(count), s.MemberAt, shapeArray)
 }

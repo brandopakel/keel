@@ -42,7 +42,7 @@ func shapeHeaderSize(shape replyShape, values int) int {
 
 // encodeWalkReply counts exact framing before allocating a single output buffer.
 // Map iteration order may differ between passes; payload size remains identical.
-func encodeWalkReply(walk replyWalk, shape replyShape) []byte {
+func (e *Engine) encodeWalkReply(walk replyWalk, shape replyShape) []byte {
 	size, count, fits := 0, 0, true
 	walk(func(value string) bool {
 		size, fits = addBulkSize(size, len(value))
@@ -63,7 +63,7 @@ func encodeWalkReply(walk replyWalk, shape replyShape) []byte {
 		}
 		size += header
 	}
-	if refusal := admitReply(size); refusal != nil {
+	if refusal := e.admitReply(size); refusal != nil {
 		return refusal
 	}
 	out := make([]byte, 0, size)
@@ -76,12 +76,12 @@ func encodeWalkReply(walk replyWalk, shape replyShape) []byte {
 
 // hashReply answers a hash's fields, its values, or both - which is HGETALL,
 // and a map.
-func hashReply(h *data_structure.Hash, fields, values bool) []byte {
+func (e *Engine) hashReply(h *data_structure.Hash, fields, values bool) []byte {
 	shape := shapeArray
 	if fields && values {
 		shape = shapeMap
 	}
-	return encodeWalkReply(func(yield func(string) bool) {
+	return e.encodeWalkReply(func(yield func(string) bool) {
 		h.Visit(func(field, value string) bool {
 			if fields && !yield(field) {
 				return false
@@ -99,8 +99,8 @@ func hashReply(h *data_structure.Hash, fields, values bool) []byte {
 // this has to stay small enough to inline. Inlined, the closure it hands walk
 // stays on the stack; called, it escapes, twice per reply, and the
 // command-path benchmark holds the RESP2 path to the allocations it had.
-func scoredReply(walk func(func(string, float64) bool), withScores bool) []byte {
-	return encodeWalkReply(func(yield func(string) bool) {
+func (e *Engine) scoredReply(walk func(func(string, float64) bool), withScores bool) []byte {
+	return e.encodeWalkReply(func(yield func(string) bool) {
 		walk(func(member string, score float64) bool {
 			return yield(member) && (!withScores || yield(formatZScore(score)))
 		})
@@ -111,7 +111,7 @@ func scoredReply(walk func(func(string, float64) bool), withScores bool) []byte 
 // score a double and, when nested, each member and its score a pair of their
 // own - Redis's form for ZRANGE and ZRANGEBYSCORE WITHSCORES and for a ZPOPMIN
 // given a count. A ZPOPMIN without one stays flat: [member, score].
-func scoredReply3(walk func(func(string, float64) bool), nested bool) []byte {
+func (e *Engine) scoredReply3(walk func(func(string, float64) bool), nested bool) []byte {
 	size, pairs, fits := 0, 0, true
 	walk(func(member string, score float64) bool {
 		pairs++
@@ -137,7 +137,7 @@ func scoredReply3(walk func(func(string, float64) bool), nested bool) []byte {
 		return replyTooLarge
 	}
 	size += header
-	if refusal := admitReply(size); refusal != nil {
+	if refusal := e.admitReply(size); refusal != nil {
 		return refusal
 	}
 	out := appendArrayHeader(make([]byte, 0, size), values)
@@ -154,7 +154,7 @@ func scoredReply3(walk func(func(string, float64) bool), nested bool) []byte {
 
 // reserveRemoval bounds the canonical SREM/ZREM record and its member-index array
 // before destructive pops. The record has a separate 64 MiB ceiling.
-func reserveRemoval(command, key string, count int, walk replyWalk) []byte {
+func (e *Engine) reserveRemoval(command, key string, count int, walk replyWalk) []byte {
 	if count > MaxReplyBytes/16-2 {
 		return replyTooLarge
 	}
@@ -185,7 +185,7 @@ func reserveRemoval(command, key string, count int, walk replyWalk) []byte {
 		}
 		logCharge = 3 * (len(aof.buf) + size + 8192)
 	}
-	if !reserveCommandMemory((count+2)*16 + logCharge + 8192) {
+	if !e.reserveCommandMemory((count+2)*16 + logCharge + 8192) {
 		return allocationPressure
 	}
 	return nil

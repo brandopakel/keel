@@ -106,7 +106,7 @@ func (e *Engine) cmdSCAN(args []string) []byte {
 		return !expires || at > uint64(time.Now().UnixMilli())
 	}
 
-	if !reserveCommandMemory(4*min(count, data_structure.ScanMaxWork)*16 + 8192) {
+	if !e.reserveCommandMemory(4*min(count, data_structure.ScanMaxWork)*16 + 8192) {
 		return allocationPressure
 	}
 	keys, next := e.space.ScanKeyspaces(cursor, count, keep, nil)
@@ -126,7 +126,7 @@ func (e *Engine) cmdSCAN(args []string) []byte {
 	if !fits {
 		return replyTooLarge
 	}
-	if refusal := admitReply(size); refusal != nil {
+	if refusal := e.admitReply(size); refusal != nil {
 		return refusal
 	}
 	out := appendArrayHeader(make([]byte, 0, size), 2)

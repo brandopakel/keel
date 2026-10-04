@@ -70,7 +70,7 @@ func (e *Engine) cmdKEYS(args []string) []byte {
 	}
 	pattern := args[0]
 
-	if !reserveCommandMemory(8192) {
+	if !e.reserveCommandMemory(8192) {
 		return allocationPressure
 	}
 	now := uint64(time.Now().UnixMilli())
@@ -99,7 +99,7 @@ func (e *Engine) cmdKEYS(args []string) []byte {
 			}
 		})
 	})
-	return encodeWalkReply(walk, shapeArray)
+	return e.encodeWalkReply(walk, shapeArray)
 }
 
 // cmdMGET reads several string keys at once.
@@ -114,7 +114,7 @@ func (e *Engine) cmdMGET(args []string) []byte {
 		return Encode(wrongArguments("MGET"), false)
 	}
 
-	return encodeLookupArray(len(args), func(i int) (string, bool) {
+	return e.encodeLookupArray(len(args), func(i int) (string, bool) {
 		obj := e.dictStore.Get(args[i])
 		if obj == nil {
 			// nil encodes as a null bulk string, which is the element Redis

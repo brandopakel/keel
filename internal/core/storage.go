@@ -23,7 +23,7 @@ func ResetStores() {
 
 // newEngine returns an engine with empty stores, living in space.
 func newEngine(space *data_structure.Space) *Engine {
-	e := &Engine{space: space}
+	e := &Engine{space: space, replyCeiling: MaxReplyBytes}
 	e.resetStores()
 	return e
 }

@@ -73,7 +73,7 @@ func (e *Engine) cmdLCS(args []string) []byte {
 	}
 
 	if wantLen {
-		if !reserveCommandMemory(8*(min(len(a), len(b))+1) + 8192) {
+		if !e.reserveCommandMemory(8*(min(len(a), len(b))+1) + 8192) {
 			return allocationPressure
 		}
 		// Only the length is wanted, so nothing has to be recovered and the
@@ -93,7 +93,7 @@ func (e *Engine) cmdLCS(args []string) []byte {
 	if shorter == 0 {
 		base = 64
 	}
-	if shorter > (maxInt-base)/perByte || !reserveCommandMemory(base+perByte*shorter) {
+	if shorter > (maxInt-base)/perByte || !e.reserveCommandMemory(base+perByte*shorter) {
 		return allocationPressure
 	}
 	matches, seq := data_structure.LCSMatches(a, b)

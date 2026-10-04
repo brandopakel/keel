@@ -86,7 +86,7 @@ func (e *Engine) cmdHGET(args []string) []byte {
 	if !has {
 		return nullReply()
 	}
-	return encodeBoundedString(value)
+	return e.encodeBoundedString(value)
 }
 
 func (e *Engine) cmdHMGET(args []string) []byte {
@@ -95,7 +95,7 @@ func (e *Engine) cmdHMGET(args []string) []byte {
 	}
 	h, ok := e.hashFor(args[0])
 
-	return encodeLookupArray(len(args)-1, func(i int) (string, bool) {
+	return e.encodeLookupArray(len(args)-1, func(i int) (string, bool) {
 		if !ok {
 			return "", false
 		}
@@ -148,7 +148,7 @@ func (e *Engine) cmdHKEYS(args []string) []byte {
 	if !ok {
 		return constant.RespEmptyArray
 	}
-	return hashReply(h, true, false)
+	return e.hashReply(h, true, false)
 }
 
 func (e *Engine) cmdHVALS(args []string) []byte {
@@ -159,7 +159,7 @@ func (e *Engine) cmdHVALS(args []string) []byte {
 	if !ok {
 		return constant.RespEmptyArray
 	}
-	return hashReply(h, false, true)
+	return e.hashReply(h, false, true)
 }
 
 // cmdHGETALL answers a map of field to value: in RESP2 a flat array of field,
@@ -176,7 +176,7 @@ func (e *Engine) cmdHGETALL(args []string) []byte {
 		return emptyMapReply()
 	}
 
-	return hashReply(h, true, true)
+	return e.hashReply(h, true, true)
 }
 
 // cmdHINCRBY adds to a field, treating a missing key or field as zero.

@@ -369,7 +369,7 @@ func TestTransactionReplyCeiling(t *testing.T) {
 	require.True(t, strings.HasSuffix(reply, "\r\n-ERR reply exceeds the 64 MiB output limit\r\n+OK\r\n"),
 		"the second read is refused before it is built, and the write after it still runs and answers")
 	require.Equal(t, "v", run(t, "GET", "after"))
-	require.Equal(t, MaxReplyBytes, replyCeiling, "the ceiling is only lowered inside EXEC")
+	require.Equal(t, MaxReplyBytes, defaultEngine.replyCeiling, "the ceiling is only lowered inside EXEC")
 }
 
 func TestTransactionReplyBeyondTheLimitClosesAfterRunning(t *testing.T) {

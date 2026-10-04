@@ -34,7 +34,7 @@ func addBulkSize(size, length int) (int, bool) {
 // not grow values between passes; command execution is single-threaded. Expiry
 // may turn a value into nil, which only reduces the required space. The shape
 // is an array or, for SMEMBERS, a set.
-func encodeLookupArray(count int, lookup func(int) (string, bool), shape replyShape) []byte {
+func (e *Engine) encodeLookupArray(count int, lookup func(int) (string, bool), shape replyShape) []byte {
 	size := shapeHeaderSize(shape, count)
 	// A null is the smallest element either protocol has.
 	if count > (MaxReplyBytes-size)/nullSize() {
@@ -55,7 +55,7 @@ func encodeLookupArray(count int, lookup func(int) (string, bool), shape replySh
 			return replyTooLarge
 		}
 	}
-	if refusal := admitReply(size); refusal != nil {
+	if refusal := e.admitReply(size); refusal != nil {
 		return refusal
 	}
 	out := appendShapeHeader(make([]byte, 0, size), shape, count)
@@ -73,7 +73,7 @@ func encodeLookupArray(count int, lookup func(int) (string, bool), shape replySh
 // encodeRepeatedMembers fixes the random draw as bounded indexes, then sizes
 // its exact payload before allocating it. No member-string array or temporary
 // per-member encoded reply is built, and the set's order is unchanged.
-func encodeRepeatedMembers(s *data_structure.Set, count int) []byte {
+func (e *Engine) encodeRepeatedMembers(s *data_structure.Set, count int) []byte {
 	if count <= 0 || s.Len() == 0 {
 		return appendArrayHeader(nil, 0)
 	}
@@ -82,7 +82,7 @@ func encodeRepeatedMembers(s *data_structure.Set, count int) []byte {
 	if count > MaxReplyBytes/8 || count > (MaxReplyBytes-size)/6 {
 		return replyTooLarge
 	}
-	if !reserveCommandMemory(count*8 + 4096) {
+	if !e.reserveCommandMemory(count*8 + 4096) {
 		return allocationPressure
 	}
 	indices := make([]int, count)
@@ -95,7 +95,7 @@ func encodeRepeatedMembers(s *data_structure.Set, count int) []byte {
 			return replyTooLarge
 		}
 	}
-	if refusal := admitReply(size); refusal != nil {
+	if refusal := e.admitReply(size); refusal != nil {
 		return refusal
 	}
 	out := appendArrayHeader(make([]byte, 0, size), count)

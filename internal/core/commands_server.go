@@ -154,8 +154,8 @@ func (e *Engine) cmdINFO(args []string) []byte {
 		fmt.Fprintf(&b, "clients_closed_slow:%d\r\nclients_closed_unanswered:%d\r\nclients_closed_unread:%d\r\nclients_closed_unreplied:%d\r\n\r\n",
 			stats.ClosedSlow, stats.ClosedUnanswered, stats.ClosedUnread, stats.RunsUnreplied)
 	}
-	if want("clients") && CommandAllocations != nil {
-		stats := CommandAllocations
+	if want("clients") && e.commandAllocations != nil {
+		stats := e.commandAllocations
 		fmt.Fprintf(&b, "command_allocation_limit_bytes:%d\r\ncommand_allocation_reserved_bytes:%d\r\ncommand_allocation_peak_bytes:%d\r\ncommand_allocation_refusals:%d\r\n", stats.Limit, stats.Reserved, stats.Peak, stats.Refusals)
 	}
 

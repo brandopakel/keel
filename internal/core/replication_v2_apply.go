@@ -215,7 +215,7 @@ func (u replicationUnit) apply() error {
 		}
 	}
 	if u.transaction {
-		runTransaction(u.commands, EvalAndResponse, check)
+		defaultEngine.runTransaction(u.commands, EvalAndResponse, check)
 		return failed
 	}
 	var reply replicationReply

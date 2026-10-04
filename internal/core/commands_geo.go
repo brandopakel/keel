@@ -277,7 +277,7 @@ func (e *Engine) cmdGEOSEARCH(args []string) []byte {
 	key := args[0]
 	zs, exists := e.zsetFor(key)
 
-	s, err := parseGeoSearch(zs, exists, args[1:])
+	s, err := e.parseGeoSearch(zs, exists, args[1:])
 	if err != nil {
 		return Encode(err, false)
 	}
@@ -292,11 +292,11 @@ func (e *Engine) cmdGEOSEARCH(args []string) []byte {
 	}
 
 	radius := data_structure.GeohashCalculateAreasByShapeWGS84(&s.shape)
-	return geoSearchReply(zs, radius, s)
+	return e.geoSearchReply(zs, radius, s)
 }
 
 // parseGeoSearch reads everything after the key, which zs holds if exists.
-func parseGeoSearch(zs *data_structure.ZSet, exists bool, args []string) (*geoSearch, error) {
+func (e *Engine) parseGeoSearch(zs *data_structure.ZSet, exists bool, args []string) (*geoSearch, error) {
 	s := &geoSearch{}
 	for i := 0; i < len(args); i++ {
 		remaining := len(args) - i - 1
@@ -388,10 +388,10 @@ func parseGeoSearch(zs *data_structure.ZSet, exists bool, args []string) (*geoSe
 	}
 	// Redis names the command as it was sent in these two.
 	if s.centre == "" {
-		return nil, fmt.Errorf("ERR exactly one of FROMMEMBER or FROMLONLAT can be specified for %s", EchoArgument(runningName))
+		return nil, fmt.Errorf("ERR exactly one of FROMMEMBER or FROMLONLAT can be specified for %s", EchoArgument(e.runningName))
 	}
 	if s.area == "" {
-		return nil, fmt.Errorf("ERR exactly one of BYRADIUS and BYBOX can be specified for %s", EchoArgument(runningName))
+		return nil, fmt.Errorf("ERR exactly one of BYRADIUS and BYBOX can be specified for %s", EchoArgument(e.runningName))
 	}
 	if s.any && s.count == 0 {
 		return nil, errors.New("ERR the ANY argument requires COUNT argument")

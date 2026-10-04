@@ -10,9 +10,14 @@ type CommandAllocationBudget struct {
 	Refusals                                 uint64
 }
 
-// CommandAllocations is installed by the event-loop transport. Core-only calls
-// and alternate transports retain their per-command limits without this budget.
-var CommandAllocations *CommandAllocationBudget
+// SetCommandAllocations installs the event-loop transport's budget on the
+// default engine, or removes it when b is nil. Core-only calls and alternate
+// transports retain their per-command limits without this budget.
+func SetCommandAllocations(b *CommandAllocationBudget) { defaultEngine.commandAllocations = b }
+
+// CommandAllocations is the budget installed on the default engine, nil when
+// there is none.
+func CommandAllocations() *CommandAllocationBudget { return defaultEngine.commandAllocations }
 
 // Begin starts a serial execution run with buffers retained by earlier runs.
 func (b *CommandAllocationBudget) Begin(retained int) {
@@ -47,19 +52,19 @@ func (b *CommandAllocationBudget) Reserve(n int) bool {
 
 var allocationPressure = []byte("-ERR temporary command allocation budget exhausted\r\n")
 
-func reserveCommandMemory(n int) bool {
-	return CommandAllocations == nil || CommandAllocations.Reserve(n)
+func (e *Engine) reserveCommandMemory(n int) bool {
+	return e.commandAllocations == nil || e.commandAllocations.Reserve(n)
 }
 
 // Reserve three payloads for output, arena growth and detaching a partial reply.
 // Page rounding supplies slack for the backing allocation. Large outputs bypass
 // the arena, but keep the same conservative admission policy.
-func reserveReplyMemory(n int) bool {
+func (e *Engine) reserveReplyMemory(n int) bool {
 	if n < 0 || n > MaxReplyBytes {
 		return false
 	}
 	charge := 3 * ((n + 4095) &^ 4095)
-	budget := CommandAllocations
+	budget := e.commandAllocations
 	if budget == nil {
 		return true
 	}
@@ -74,30 +79,26 @@ func reserveReplyMemory(n int) bool {
 	return true
 }
 
-// replyCeiling is the most one reply may come to. It is the output limit,
-// except while EXEC runs: a transaction answers with one array holding every
-// reply, so each command it runs may use only what the replies before it left.
-var replyCeiling = MaxReplyBytes
-
 // admitReply is the last check before a reply of n encoded bytes is built: it
-// has to fit what the client can still be sent, and building it has to fit the
-// run's allocation budget. Each refusal names its own reason.
-func admitReply(n int) []byte {
-	if n > replyCeiling {
+// has to fit what the client can still be sent - the engine's reply ceiling -
+// and building it has to fit the run's allocation budget. Each refusal names
+// its own reason.
+func (e *Engine) admitReply(n int) []byte {
+	if n > e.replyCeiling {
 		return replyTooLarge
 	}
-	if !reserveReplyMemory(n) {
+	if !e.reserveReplyMemory(n) {
 		return allocationPressure
 	}
 	return nil
 }
 
-func encodeBoundedString(value string) []byte {
+func (e *Engine) encodeBoundedString(value string) []byte {
 	size, fits := addBulkSize(0, len(value))
 	if !fits {
 		return replyTooLarge
 	}
-	if refusal := admitReply(size); refusal != nil {
+	if refusal := e.admitReply(size); refusal != nil {
 		return refusal
 	}
 	return appendBulkString(make([]byte, 0, size), value)

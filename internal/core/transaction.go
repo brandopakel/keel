@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/brandopakel/keel/internal/constant"
-	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // Transactions: MULTI, EXEC and DISCARD.
@@ -176,9 +175,14 @@ func IsTransactionCommand(name string) bool {
 // cannot be delivered, so the connection has to be closed, which is what any
 // reply over the output limit already costs.
 func Transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn Connection) (*Transaction, error) {
+	return defaultEngine.transact(tx, cmd, w, conn)
+}
+
+// transact is Transact on e: what EXEC runs, it runs on e.
+func (e *Engine) transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn Connection) (*Transaction, error) {
 	if !IsTransactionCommand(cmd.Cmd) {
 		if tx == nil {
-			return nil, EvalAndResponse(cmd, w)
+			return nil, e.evalAndResponse(cmd, w)
 		}
 		if cmd.Cmd == "WATCH" {
 			// WATCH is not implemented, and outside a transaction it is an
@@ -221,7 +225,7 @@ func Transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn Connection) (
 	case cmd.Cmd == "DISCARD":
 		tx, reply = nil, constant.RespOk
 	default:
-		return nil, tx.exec(w, conn)
+		return nil, tx.exec(e, w, conn)
 	}
 	_, err := w.Write(reply)
 	return tx, err
@@ -303,7 +307,8 @@ func writeExecAbort(w io.Writer, cause error) error {
 // covers an integer, a status or a typical error.
 const transactionReplySlack = 128
 
-func (tx *Transaction) exec(w io.Writer, conn Connection) error {
+// exec runs tx on e, in e's command scope.
+func (tx *Transaction) exec(e *Engine, w io.Writer, conn Connection) error {
 	if tx.aborted {
 		_, err := w.Write(execAbortReply)
 		return err
@@ -323,7 +328,7 @@ func (tx *Transaction) exec(w io.Writer, conn Connection) error {
 
 	// The reply is one array of every command's reply, and it is bound by the
 	// same output limit as any other reply. Amplifying reads are told how much
-	// of it the replies before them left, through replyCeiling, so one that
+	// of it the replies before them left, through e.replyCeiling, so one that
 	// would not fit is refused before it is built. A reply that still does not
 	// fit - many small ones - cannot be delivered, and the transaction runs on
 	// regardless, because half of one must never run: the replies are dropped
@@ -337,13 +342,13 @@ func (tx *Transaction) exec(w io.Writer, conn Connection) error {
 	}
 	// Execution inside EXEC grows the log and holds replies just as a
 	// pipelined run grows the arena; later commands' reservations must see both.
-	budget := CommandAllocations
+	budget := e.commandAllocations
 	var retained, logged int
 	if budget != nil {
 		retained, logged = budget.Retained, AppendRetainedBytes()
 	}
-	replyCeiling = ceiling(0)
-	defer func() { replyCeiling = MaxReplyBytes }()
+	e.replyCeiling = ceiling(0)
+	defer func() { e.replyCeiling = MaxReplyBytes }()
 	run := func(cmd *Command, sink io.ReadWriter) error {
 		if answers(conn, cmd.Cmd) {
 			conn.AnswerConnection(cmd, sink)
@@ -353,9 +358,9 @@ func (tx *Transaction) exec(w io.Writer, conn Connection) error {
 		// command runs, not when it was queued: Redis runs a queued HELLO in
 		// its place, and frames every reply after it in the new protocol.
 		cmd.RESP3 = conn != nil && conn.RESP3()
-		return EvalAndResponse(cmd, sink)
+		return e.evalAndResponse(cmd, sink)
 	}
-	runTransaction(tx.commands, run, func(i int, reply []byte, err error) {
+	e.runTransaction(tx.commands, run, func(i int, reply []byte, err error) {
 		if err == nil && len(reply) == 0 {
 			// An empty element would shift every reply after it, and the
 			// client would read each as the answer to the command before.
@@ -373,7 +378,7 @@ func (tx *Transaction) exec(w io.Writer, conn Connection) error {
 		if budget != nil {
 			budget.ObserveRetained(retained + max(0, AppendRetainedBytes()-logged) + total)
 		}
-		replyCeiling = ceiling(i + 1)
+		e.replyCeiling = ceiling(i + 1)
 	})
 	if overflow {
 		return ErrTransactionReplyTooLarge
@@ -386,18 +391,19 @@ func (tx *Transaction) exec(w io.Writer, conn Connection) error {
 	return err
 }
 
-// runTransaction runs commands as one unit through run, for EXEC and for a
-// block a replica has received. The unit is framed in the log and in the protocol 2 stream, and
-// eviction waits until the block is closed, so a block holds what its
-// transaction did and not the removal of whatever unrelated key the budget
-// chose. Redis evicts before EXEC rather than between its commands, for the
-// same reason; the budget can be passed by up to one transaction meanwhile,
-// which the queue limit bounds. reply hears each command's answer in order.
-func runTransaction(commands []*Command, run func(*Command, io.ReadWriter) error, reply func(int, []byte, error)) {
+// runTransaction runs commands on e as one unit through run, for EXEC and for
+// a block a replica has received. The unit is framed in the log and in the
+// protocol 2 stream, and eviction in e's space waits until the block is
+// closed, so a block holds what its transaction did and not the removal of
+// whatever unrelated key the budget chose. Redis evicts before EXEC rather
+// than between its commands, for the same reason; the budget can be passed by
+// up to one transaction meanwhile, which the queue limit bounds. reply hears
+// each command's answer in order.
+func (e *Engine) runTransaction(commands []*Command, run func(*Command, io.ReadWriter) error, reply func(int, []byte, error)) {
 	aof.transaction, aof.transactionLogged = true, false
 	replicationTransaction = replicationBlock{active: true}
-	suspended := data_structure.DefaultSpace.SuspendEviction
-	data_structure.DefaultSpace.SuspendEviction = true
+	suspended := e.space.SuspendEviction
+	e.space.SuspendEviction = true
 	for i, cmd := range commands {
 		var sink transactionSink
 		err := run(cmd, &sink)
@@ -405,8 +411,8 @@ func runTransaction(commands []*Command, run func(*Command, io.ReadWriter) error
 	}
 	closeAOFTransaction()
 	closeReplicationTransaction()
-	data_structure.DefaultSpace.SuspendEviction = suspended
-	data_structure.EnforceLimits()
+	e.space.SuspendEviction = suspended
+	e.space.EnforceLimits()
 }
 
 // transactionSink keeps the reply it is handed rather than copying it, as the

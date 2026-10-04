@@ -90,7 +90,7 @@ func (e *Engine) cmdPING(args []string) []byte {
 	case 0:
 		return Encode("PONG", true)
 	case 1:
-		return encodeBoundedString(args[0])
+		return e.encodeBoundedString(args[0])
 	}
 	return Encode(wrongArguments("PING"), false)
 }
@@ -100,7 +100,7 @@ func (e *Engine) cmdECHO(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(wrongArguments("ECHO"), false)
 	}
-	return encodeBoundedString(args[0])
+	return e.encodeBoundedString(args[0])
 }
 
 // cmdSELECT accepts database 0, the only one there is. Clients send SELECT when
@@ -122,11 +122,6 @@ func (e *Engine) cmdSELECT(args []string) []byte {
 	return constant.RespOk
 }
 
-// runningName is the name GEOSEARCH, the one command whose errors repeat the
-// name it was sent as, was last sent as. It is set only for that command,
-// before it runs, and read only while it runs.
-var runningName string
-
 // EvalAndResponse runs one command and writes its reply to c.
 //
 // The error it returns is the connection's, not the command's: a command that
@@ -137,9 +132,9 @@ func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	return defaultEngine.evalAndResponse(cmd, c)
 }
 
-// evalAndResponse is EvalAndResponse on e: the command runs on e, and its
-// keys are type-checked, its eviction held off and its limits enforced on e's
-// space.
+// evalAndResponse is EvalAndResponse on e: the command runs on e, in e's
+// command scope, and its keys are type-checked, its eviction held off and its
+// limits enforced on e's space.
 func (e *Engine) evalAndResponse(cmd *Command, c io.ReadWriter) error {
 	// The reply is framed for the connection's protocol, held for exactly this
 	// command - see resp3.go. Log replay and replica apply answer nobody, and
@@ -167,7 +162,7 @@ func (e *Engine) evalAndResponse(cmd *Command, c io.ReadWriter) error {
 		refused = replicaCommandError(cmd.Cmd)
 	}
 	if entry.namesItself {
-		runningName = cmd.sentName()
+		e.runningName = cmd.sentName()
 	}
 	if refused != nil {
 		_, err := c.Write(Encode(refused, false))
