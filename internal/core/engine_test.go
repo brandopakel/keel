@@ -3,12 +3,14 @@ package core
 import (
 	"io"
 	"math"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/brandopakel/keel/internal/config"
+	"github.com/brandopakel/keel/internal/constant"
 	"github.com/brandopakel/keel/internal/data_structure"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -101,11 +103,12 @@ func TestEnginesShareNoKeys(t *testing.T) {
 // on it is its own - the allocation budget its commands reserve from, the
 // reply ceiling and eviction suspension of its EXEC, and the name GEOSEARCH
 // was sent as - and a command on another engine sees none of it, whether that
-// command runs after it, in the middle of its EXEC, or at the same time.
+// command runs after it, at the same time, or in the middle of its EXEC.
 func TestEnginesShareNoCommandScope(t *testing.T) {
 	ResetStores()
-	a := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
-	b := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
+	const bound = 8
+	a := newEngine(data_structure.NewSpace(engineLimits(bound)))
+	b := newEngine(data_structure.NewSpace(engineLimits(bound)))
 	value := strings.Repeat("v", 64<<10)
 	for _, e := range []*Engine{a, b} {
 		require.Equal(t, MaxReplyBytes, e.replyCeiling)
@@ -126,35 +129,19 @@ func TestEnginesShareNoCommandScope(t *testing.T) {
 	assert.Zero(t, a.commandAllocations.Reserved, "b's reservation is not a's")
 	assert.Equal(t, uint64(1), a.commandAllocations.Refusals)
 	assert.Nil(t, defaultEngine.commandAllocations, "neither budget is the default engine's")
-	a.commandAllocations, b.commandAllocations = nil, nil
 
-	// An EXEC on a suspends eviction in a's space and lowers a's reply
-	// ceiling for the commands after each reply. A command run on b in the
-	// middle of it has the whole limit, and b's space still evicts.
-	var during []byte
-	conn := &midTransaction{answer: func() {
-		assert.True(t, a.space.SuspendEviction, "a is inside its EXEC")
-		assert.Less(t, a.replyCeiling, MaxReplyBytes)
-		assert.False(t, b.space.SuspendEviction)
-		assert.Equal(t, MaxReplyBytes, b.replyCeiling)
-		during = rawOn(t, b, "GET", "large")
-	}}
-	var tx *Transaction
-	for _, cmd := range [][]string{{"MULTI"}, {"GET", "large"}, {"AUTH", "b"}, {"GET", "large"}} {
+	// Each engine's GEOSEARCH error names the command as it was sent there.
+	geosearch := []string{"g", "BYRADIUS", "1", "km", "COUNT", "1"}
+	for _, sent := range []struct {
+		e    *Engine
+		name string
+	}{{a, "geosearch"}, {b, "GeoSearch"}, {a, "GEOsearch"}} {
 		var w replyWriter
-		var err error
-		tx, err = a.transact(tx, &Command{Cmd: cmd[0], Args: cmd[1:]}, &w, conn)
-		require.NoError(t, err)
+		require.NoError(t, sent.e.evalAndResponse(&Command{Cmd: "GEOSEARCH", Name: sent.name, Args: geosearch}, &w))
+		assert.True(t, strings.HasSuffix(string(w.b), " for "+sent.name+"\r\n"), string(w.b))
+		assert.Equal(t, sent.name, sent.e.runningName)
 	}
-	var w replyWriter
-	_, err := a.transact(tx, &Command{Cmd: "EXEC"}, &w, conn)
-	require.NoError(t, err)
-	replies, _ := Decode(w.b)
-	assert.Equal(t, []interface{}{value, "OK", value}, replies)
-	got, _ := Decode(during)
-	assert.Equal(t, value, got)
-	assert.Equal(t, MaxReplyBytes, a.replyCeiling, "EXEC restores a's ceiling")
-	assert.False(t, a.space.SuspendEviction, "and lets a's space evict again")
+	assert.Equal(t, "GeoSearch", b.runningName, "a's commands leave b's name")
 
 	// Side by side, as two engines will run once each has a lock of its own
 	// (plan phase 3). Each goroutine sets its engine's scope the way
@@ -163,7 +150,6 @@ func TestEnginesShareNoCommandScope(t *testing.T) {
 	// command-scope state the engines shared would fail here.
 	a.commandAllocations = &CommandAllocationBudget{Limit: 16 << 10}
 	b.commandAllocations = &CommandAllocationBudget{Limit: 1 << 20}
-	geosearch := []string{"g", "BYRADIUS", "1", "km", "COUNT", "1"}
 	var wg sync.WaitGroup
 	for _, side := range []struct {
 		e          *Engine
@@ -190,14 +176,72 @@ func TestEnginesShareNoCommandScope(t *testing.T) {
 	wg.Wait()
 	assert.Equal(t, uint64(200), a.commandAllocations.Refusals)
 	assert.Zero(t, b.commandAllocations.Refusals)
+	a.commandAllocations, b.commandAllocations = nil, nil
+
+	// An EXEC on a lowers a's reply ceiling for the commands after each reply,
+	// and holds a's evictions until it is over, so a passes its bound
+	// meanwhile. A command run on b in the middle of it has the whole output
+	// limit, and b evicts at once when it passes its own bound. Last, because
+	// what eviction removes is the LRU's choice.
+	writes := func(prefix string) [][]string {
+		var out [][]string
+		for i := range bound - 1 {
+			out = append(out, []string{"SET", prefix + strconv.Itoa(i), "v"})
+		}
+		return out
+	}
+	var during []byte
+	conn := &midTransaction{t: t, answer: func() {
+		assert.True(t, a.space.SuspendEviction, "a is inside its EXEC")
+		assert.Less(t, a.replyCeiling, MaxReplyBytes)
+		assert.Greater(t, a.space.TotalKeys(), bound, "a holds its evictions")
+		assert.Zero(t, a.space.Evicted())
+		assert.False(t, b.space.SuspendEviction)
+		assert.Equal(t, MaxReplyBytes, b.replyCeiling)
+		during = rawOn(t, b, "GET", "large")
+		for _, cmd := range writes("b") {
+			require.Equal(t, "OK", on(t, b, cmd[0], cmd[1:]...))
+		}
+		assert.Equal(t, bound, b.space.TotalKeys(), "b evicts as it goes")
+		assert.Equal(t, uint64(1), b.space.Evicted())
+	}}
+	queued := append(append([][]string{{"MULTI"}, {"GET", "large"}}, writes("a")...), []string{"AUTH", "b"}, []string{"GET", "large"})
+	var tx *Transaction
+	for _, cmd := range queued {
+		var w replyWriter
+		var err error
+		tx, err = a.transact(tx, &Command{Cmd: cmd[0], Args: cmd[1:]}, &w, conn)
+		require.NoError(t, err)
+	}
+	var w replyWriter
+	_, err := a.transact(tx, &Command{Cmd: "EXEC"}, &w, conn)
+	require.NoError(t, err)
+	replies, _ := Decode(w.b)
+	want := []interface{}{value}
+	for range bound - 1 {
+		want = append(want, "OK")
+	}
+	assert.Equal(t, append(want, "OK", value), replies)
+	got, _ := Decode(during)
+	assert.Equal(t, value, got)
+	assert.Equal(t, MaxReplyBytes, a.replyCeiling, "EXEC restores a's ceiling")
+	assert.False(t, a.space.SuspendEviction)
+	assert.Equal(t, bound, a.space.TotalKeys(), "a evicts once its EXEC is over")
+	assert.Equal(t, uint64(1), a.space.Evicted())
+	assert.Equal(t, uint64(1), b.space.Evicted())
 }
 
 // midTransaction is a transport whose own command, run in its place inside an
 // EXEC, calls answer.
-type midTransaction struct{ answer func() }
+type midTransaction struct {
+	t      *testing.T
+	answer func()
+}
 
 func (m *midTransaction) RESP3() bool { return false }
 func (m *midTransaction) AnswerConnection(_ *Command, w io.ReadWriter) {
 	m.answer()
-	w.Write([]byte("+OK\r\n"))
+	n, err := w.Write(constant.RespOk)
+	assert.NoError(m.t, err)
+	assert.Equal(m.t, len(constant.RespOk), n, "a short write")
 }
