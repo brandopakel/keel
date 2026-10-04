@@ -109,10 +109,11 @@ var (
 	errRewriteCantStart  = errors.New("ERR Can't execute an AOF background rewriting. Please check the server logs for more information.")
 )
 
-// rewriteStartError is a rewrite that could not start for a reason Redis also
-// has - the file could not be created - or that Keel refuses in advance. Redis
-// reports both kinds as a failed rewrite without counting them as consecutive
-// failures, and BGREWRITEAOF answers them with its generic refusal.
+// rewriteStartError is a rewrite that could not start, because its file could
+// not be created, as a Redis fork can fail, or because of Keel's key ceiling,
+// which Redis does not have. Both are reported as Redis reports a failed start:
+// a failed rewrite that is not counted as a consecutive failure, and
+// BGREWRITEAOF's generic refusal.
 type rewriteStartError struct{ err error }
 
 func (e *rewriteStartError) Error() string { return e.err.Error() }
