@@ -54,7 +54,7 @@ func planDump(key string, limit int) (dumpPlan, bool) {
 			h.Visit(func(field, value string) bool { return yield(field) && yield(value) })
 		}, limit), true
 	}
-	if l, ok := listStore.Peek(key); ok {
+	if l, ok := defaultEngine.listStore.Peek(key); ok {
 		return partsDumpPlan(dumpTagList, func(yield func(string) bool) {
 			l.VisitRange(0, l.Len()-1, yield)
 		}, limit), true

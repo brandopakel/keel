@@ -313,7 +313,7 @@ func emitRewriteKey(dst []byte, key string, reset bool) []byte {
 		return appendRewriteRecords(dst, commands)
 	}
 	kind := ""
-	if l, ok := listStore.Peek(key); ok && (l.Len() > 256 || l.MemUsage() > 64<<10 || len(key) > rewriteRecordSlice) {
+	if l, ok := defaultEngine.listStore.Peek(key); ok && (l.Len() > 256 || l.MemUsage() > 64<<10 || len(key) > rewriteRecordSlice) {
 		kind = "list"
 	}
 	if s, ok := setStore.Peek(key); ok && (s.Len() > 256 || s.MemUsage() > 64<<10 || len(key) > rewriteRecordSlice) {
@@ -376,12 +376,12 @@ func emitCollectionSlice(dst []byte) []byte {
 		command, length, expiry = "HSET", h.Len(), defaultEngine.hashStore.GetExpiry
 		valueAt = func(int) (string, string) { field, value, _ := rewrite.hashCursor.Entry(); return value, field }
 	case "list":
-		l, ok := listStore.Peek(key)
+		l, ok := defaultEngine.listStore.Peek(key)
 		if !ok {
 			rewrite.collectionActive = false
 			return dst
 		}
-		command, length, expiry = "RPUSH", l.Len(), listStore.GetExpiry
+		command, length, expiry = "RPUSH", l.Len(), defaultEngine.listStore.GetExpiry
 		valueAt = func(i int) (string, string) { v, _ := l.Index(i); return v, "" }
 	case "set":
 		s, ok := setStore.Peek(key)
@@ -673,7 +673,7 @@ func emitValue(dst []byte, key string) []byte {
 		}
 		return appendCommand(dst, parts...)
 	}
-	if l, ok := listStore.Peek(key); ok {
+	if l, ok := defaultEngine.listStore.Peek(key); ok {
 		// RPUSH in order, so the list rebuilds left to right exactly as it is.
 		return appendCommand(dst, append([]string{"RPUSH", key}, l.All()...)...)
 	}

@@ -88,7 +88,7 @@ func AppendAdmission(commands []*Command) (logBytes, replyBytes int, ok bool) {
 			}
 			growth += uint64(len(a[0]) + collectionBaseOverhead)
 			if cmd.Cmd == "LPUSH" || cmd.Cmd == "RPUSH" {
-				if list, ok := listStore.Peek(a[0]); ok {
+				if list, ok := defaultEngine.listStore.Peek(a[0]); ok {
 					// A single push at capacity can double a large ring. Reserving its
 					// current slots plus per-added-element slack also covers a threshold
 					// crossed by several pushes later in this unexecuted run.
@@ -250,7 +250,7 @@ func collectionReplyBound(key string, writtenThisRun int) int {
 		held, elements = h.MemUsage(), 2*h.Len()
 	} else if s, ok := setStore.Peek(key); ok {
 		held, elements = s.MemUsage(), s.Len()
-	} else if l, ok := listStore.Peek(key); ok {
+	} else if l, ok := defaultEngine.listStore.Peek(key); ok {
 		held, elements = l.MemUsage(), l.Len()
 	} else if z, ok := zsetStore.Peek(key); ok {
 		held, elements = z.MemUsage(), z.Len()
