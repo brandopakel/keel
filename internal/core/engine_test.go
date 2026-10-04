@@ -99,9 +99,9 @@ func TestEnginesShareNoKeys(t *testing.T) {
 
 // TestEnginesShareNoCommandScope: what an engine holds for the command running
 // on it is its own - the allocation budget its commands reserve from, the
-// reply ceiling its EXEC lowers, and the name GEOSEARCH was sent as - and a
-// command on another engine sees none of it, whether that command runs after
-// it, in the middle of its EXEC, or at the same time.
+// reply ceiling and eviction suspension of its EXEC, and the name GEOSEARCH
+// was sent as - and a command on another engine sees none of it, whether that
+// command runs after it, in the middle of its EXEC, or at the same time.
 func TestEnginesShareNoCommandScope(t *testing.T) {
 	ResetStores()
 	a := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
@@ -128,11 +128,14 @@ func TestEnginesShareNoCommandScope(t *testing.T) {
 	assert.Nil(t, defaultEngine.commandAllocations, "neither budget is the default engine's")
 	a.commandAllocations, b.commandAllocations = nil, nil
 
-	// An EXEC on a lowers a's reply ceiling for the commands after each
-	// reply. A command run on b in the middle of it has the whole limit.
+	// An EXEC on a suspends eviction in a's space and lowers a's reply
+	// ceiling for the commands after each reply. A command run on b in the
+	// middle of it has the whole limit, and b's space still evicts.
 	var during []byte
 	conn := &midTransaction{answer: func() {
-		assert.Less(t, a.replyCeiling, MaxReplyBytes, "a is inside its EXEC")
+		assert.True(t, a.space.SuspendEviction, "a is inside its EXEC")
+		assert.Less(t, a.replyCeiling, MaxReplyBytes)
+		assert.False(t, b.space.SuspendEviction)
 		assert.Equal(t, MaxReplyBytes, b.replyCeiling)
 		during = rawOn(t, b, "GET", "large")
 	}}
@@ -151,6 +154,7 @@ func TestEnginesShareNoCommandScope(t *testing.T) {
 	got, _ := Decode(during)
 	assert.Equal(t, value, got)
 	assert.Equal(t, MaxReplyBytes, a.replyCeiling, "EXEC restores a's ceiling")
+	assert.False(t, a.space.SuspendEviction, "and lets a's space evict again")
 
 	// Side by side, as two engines will run once each has a lock of its own
 	// (plan phase 3). Each goroutine sets its engine's scope the way
