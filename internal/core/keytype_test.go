@@ -182,6 +182,28 @@ func TestTypeRuleIsIndexedWithTheCommand(t *testing.T) {
 	} {
 		assert.Equal(t, want, commands[name].keys, name)
 	}
+	// commandKeys finds keys through keysBy too, so the comparison above cannot
+	// catch a rule that picks the wrong arguments on both sides. These keys are
+	// written out by hand.
+	for _, c := range []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"GET", []string{"a"}, []string{"a"}},
+		{"HSET", []string{"a", "f", "v"}, []string{"a"}},
+		{"LCS", []string{"a", "b", "LEN"}, []string{"a", "b"}},
+		{"LCS", []string{"a"}, []string{"a"}},
+		{"MSET", []string{"a", "1", "b", "2", "c", "3"}, []string{"a", "b", "c"}},
+		{"MSET", []string{"a", "1"}, []string{"a"}},
+		{"PFCOUNT", []string{"a", "b", "c"}, []string{"a", "b", "c"}},
+		{"PFMERGE", []string{"dest", "a", "b"}, []string{"dest", "a", "b"}},
+		{"GET", nil, nil},
+	} {
+		cmd := &Command{Cmd: c.name, Args: c.args}
+		assert.Equal(t, c.want, keysBy(cmd, commands[c.name].keys), "%s %v", c.name, c.args)
+		assert.Equal(t, c.want, commandKeys(cmd), "%s %v", c.name, c.args)
+	}
 	for name, want := range map[string]string{
 		"GET": "string", "HSET": "hash", "ZADD": "zset", "PFADD": "hll",
 		"SET": "", "MSET": "", "BF.ADD": "", "CF.EXISTS": "", "DEL": "", "TYPE": "",
