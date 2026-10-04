@@ -23,7 +23,7 @@ func (e *Engine) cmdMEMORY(args []string) []byte {
 	}
 	switch strings.ToUpper(args[0]) {
 	case "STATS":
-		out := ReplyMap{"keyspace.bytes", int64(e.space.TotalMemUsed()), "keys.count", int64(e.space.TotalKeys()), "keys.expires", int64(KeysWithExpiry())}
+		out := ReplyMap{"keyspace.bytes", int64(e.space.TotalMemUsed()), "keys.count", int64(e.space.TotalKeys()), "keys.expires", int64(e.KeysWithExpiry())}
 		e.space.EachKeyspace(func(ks data_structure.Keyspace) { out = append(out, ks.KeyspaceName()+".bytes", int64(ks.MemUsed())) })
 		return Encode(out, false)
 	case "USAGE":
@@ -138,7 +138,7 @@ const RedisCompatibleVersion = "7.0.0"
 //
 // Any number of sections may be named, as Redis allows; a name that is not a
 // section adds nothing, and all, default and everything are every section.
-func cmdINFO(args []string) []byte {
+func (e *Engine) cmdINFO(args []string) []byte {
 	sections := make(map[string]bool, len(args))
 	for _, arg := range args {
 		sections[strings.ToLower(arg)] = true
@@ -192,7 +192,7 @@ func cmdINFO(args []string) []byte {
 			config.BuildVersion(), RedisCompatibleVersion, replyProtocol())
 	}
 	if want("memory") {
-		used := data_structure.TotalMemUsed()
+		used := e.space.TotalMemUsed()
 		fmt.Fprintf(&b, "# Memory\r\nused_memory:%d\r\nused_memory_human:%s\r\n",
 			used, humanBytes(used))
 		fmt.Fprintf(&b, "maxmemory:%d\r\nmaxmemory_human:%s\r\nmaxmemory_policy:%s\r\n\r\n",
@@ -200,7 +200,7 @@ func cmdINFO(args []string) []byte {
 	}
 	if want("stats") {
 		fmt.Fprintf(&b, "# Stats\r\nevicted_keys:%d\r\nexpired_keys:%d\r\n",
-			data_structure.Evicted(), ExpiredKeys())
+			e.space.Evicted(), e.ExpiredKeys())
 		if ClientBuffers != nil {
 			fmt.Fprintf(&b, "total_connections_received:%d\r\n", ClientBuffers().ConnectionsReceived)
 		}
@@ -247,7 +247,7 @@ func cmdINFO(args []string) []byte {
 	}
 	if want("keyspace") {
 		fmt.Fprintf(&b, "# Keyspace\r\ndb0:keys=%d,expires=%d\r\n\r\n",
-			data_structure.TotalKeys(), KeysWithExpiry())
+			e.space.TotalKeys(), e.KeysWithExpiry())
 	}
 
 	return Encode(ReplyVerbatim(b.String()), false)
@@ -266,7 +266,7 @@ func cmdINFO(args []string) []byte {
 // aof_last_bgrewrite_status, which says whether the last one did. A rewrite
 // that fails leaves the log as it was and the server serving; see
 // aof_rewrite_status.go, which also has the replies.
-func cmdBGREWRITEAOF(args []string) []byte {
+func (e *Engine) cmdBGREWRITEAOF(args []string) []byte {
 	if len(args) != 0 {
 		return Encode(wrongArguments("BGREWRITEAOF"), false)
 	}

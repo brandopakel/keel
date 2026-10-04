@@ -119,7 +119,7 @@ func TestProtocol2NonzeroTermRequiresExplicitCapability(t *testing.T) {
 	old := failover
 	failover = failoverState{term: 1, persisted: 1, held: 1}
 	t.Cleanup(func() { failover = old })
-	require.Equal(t, []byte(ReplicationTermRequiredReply), cmdReplicationPullV2([]string{"", "0", "", "0"}))
+	require.Equal(t, []byte(ReplicationTermRequiredReply), defaultEngine.cmdReplicationPullV2([]string{"", "0", "", "0"}))
 	require.Contains(t, run(t, "KEEL.REPL.PULL2", "", "0", "", "0", "0"), `"term":1`)
 	require.True(t, Writable())
 }

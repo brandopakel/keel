@@ -1,7 +1,7 @@
 # Embedding plan: Keel as a Go library
 
-Status: accepted plan, October 2, 2026. Phases 0 and 1 are done (#88, #90); step 2.1 is under way,
-one command family per PR (see "Step 2.1: the stores" below).
+Status: accepted plan, October 2, 2026. Phases 0 and 1 are done (#88, #90), and so is step 2.1,
+the stores (see "Step 2.1: the stores" below).
 
 The owner asked for Keel to be usable as a Go library, not only as a server:
 several independent instances per process, safe for concurrent use, a typed
@@ -213,30 +213,39 @@ How each step is verified:
 
 ### Step 2.1: the stores
 
-The stores move into `core.Engine` one command family per PR, in this order:
-hashes; lists; sets; sorted sets with geo; the RedisBloom filters (BF, CF);
-the counting sketches (CMS, Morris, HyperLogLog); then strings together with
-the commands that act on a key whatever its type (DEL, EXISTS, TYPE, KEYS,
-SCAN, the TTL commands, DUMP and RESTORE, DBSIZE, FLUSHDB, MEMORY). Where the
-plan above left a choice open, step 2.1 settles it this way:
+Step 2.1 moved the stores into `core.Engine` one command family per PR, in
+this order: hashes; lists; sets; sorted sets with geo; the RedisBloom filters
+(BF, CF); the counting sketches (CMS, Morris, HyperLogLog); strings, with the
+type check; the commands that act on a key whatever its type (DEL, EXISTS,
+TYPE, KEYS, SCAN, the TTL commands, DUMP and RESTORE, DBSIZE, FLUSHDB,
+MEMORY); and last the expiry and memory-maintenance state and the handlers
+that touch no store. Where the plan above left a choice open, step 2.1
+settles it this way:
 
 - **The default engine.** `defaultEngine` is a package-level `*Engine` that
   lives in `data_structure.DefaultSpace`, so its limits are still read from
   `config` until step 2.5. Its pointer never changes; `ResetStores` rebuilds
-  the stores inside it. `EvalAndResponse` keeps its signature and runs on it,
-  so the server, log replay, replica apply and EXEC are unchanged. Step 2.7
-  removes it, as the plan says.
-- **Handlers.** A family that has moved has Engine methods for handlers, which
-  read the store from the engine they run on. They sit in
-  `engineCommandTable`, the rest in `commandTable`, and a command is in exactly
-  one (`TestCommandTablePartsAreDisjoint`). Dispatch tests one field of the
-  entry it already looked up to pick the call. The last PR of the step makes
-  the remaining handlers methods too, including those that touch no store, so
-  the two tables are one again and every command runs on an engine.
-- **Code not yet on an engine.** The log, the rewrite, append admission and the
-  dump and replication encoders are not engine methods until steps 2.3 and
-  2.4. Until then they reach a moved store through `defaultEngine`; each such
-  reference is a place those steps pass the engine in instead.
+  the stores inside it. `EvalAndResponse`, `ExpireCycle`, `MaintainMemory`,
+  `ExpiredKeys` and `KeysWithExpiry` keep their signatures and run on it, as
+  data_structure's package functions run on `DefaultSpace`, so the server,
+  log replay, replica apply and EXEC are unchanged. Step 2.7 removes it, as
+  the plan says. `newEngine(space)` builds an engine of its own, for tests
+  until `core.Open` exists (`TestEnginesShareNoKeys`).
+- **Handlers.** Every handler is an Engine method in the one `commandTable`. It
+  reads the stores, and asks the space who holds a key, on the engine that
+  dispatches it. During the move a second table held the families that had
+  moved, and dispatch tested one field of the entry it had already looked up to
+  pick the call. The last PR made the remaining handlers methods too,
+  including those that touch no store yet (PING, ECHO, SELECT, UNWATCH, INFO,
+  BGREWRITEAOF and the KEEL.* replication and failover commands), and merged
+  the tables again.
+- **Code not yet on an engine.** Append admission, the rewrite, the log's size
+  estimate, the sketch rewrite stream and the dump and replication encoders
+  are not engine methods until steps 2.3 and 2.4. Until then they reach the
+  stores through `defaultEngine`, and the space through the package functions
+  over `DefaultSpace`. Each such reference is a place those steps pass the
+  engine in instead. EXEC's suspension of eviction in `runTransaction` is
+  command scope and moves in step 2.2.
 - **Registration order.** The order the stores register with the space is the
   order `OwnerOf` asks them, eviction samples them, and SCAN and the rewrite
   walk them, so it does not change: strings, sorted sets, sets, hashes, lists,
@@ -247,12 +256,14 @@ plan above left a choice open, step 2.1 settles it this way:
   concurrent use.
 - **Expiry and memory maintenance.** The expiry and memory-compaction cursors
   and the expired-key count are positions in, and counts over, the stores'
-  keys, and `ResetStores` already resets the count with them. They move with
-  the last family of step 2.1, not with the command-scope state of 2.2.
+  keys, and `ResetStores` already reset the count with them. They moved with
+  the last PR of step 2.1, not with the command-scope state of 2.2. The
+  cursors survive `ResetStores`, as they always have.
 - **Census.** `TestPackageStateIsCensused` in `internal/core` lists every
   package variable with the reason it may stay: computed once and never
   written, or the step that moves it. Each PR of a step removes the entries it
   makes obsolete, and an entry for a variable that no longer exists fails.
+  After step 2.1 it lists no store and no expiry state.
 - **Measured per PR.** The paired command-path job runs at least twice against
   develop and once against `65ebdbc`, develop just before phase 1, so that
   small costs cannot accumulate unseen; each PR reports all three.

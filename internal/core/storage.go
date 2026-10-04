@@ -9,24 +9,36 @@ import (
 // Each type has its own store, and every one of them is registered with the
 // evictor so that a memory budget spans the lot: before that, only strings were
 // accounted, and a keyspace full of 12KB HyperLogLogs could sail past
-// -maxmemory without anything noticing. The stores are fields of Engine; these
-// are the server's, in defaultEngine.
+// -maxmemory without anything noticing. The stores are fields of Engine; the
+// server's are defaultEngine's.
 
 func init() { ResetStores() }
 
-// ResetStores rebuilds every keyspace and re-registers them. Called at startup,
-// and by tests that need to begin from empty.
+// ResetStores rebuilds every keyspace of the default engine and re-registers
+// them. Called at startup, and by tests that need to begin from empty.
+func ResetStores() {
+	defaultEngine.resetStores()
+	aof.recovered = nil
+}
+
+// newEngine returns an engine with empty stores, living in space.
+func newEngine(space *data_structure.Space) *Engine {
+	e := &Engine{space: space}
+	e.resetStores()
+	return e
+}
+
+// resetStores empties e: its space's registry, and every store, rebuilt and
+// registered again.
 //
 // The order they register in is the order OwnerOf asks them, eviction samples
 // them and SCAN and the rewrite walk them, so it is the order they had as
 // package variables.
-func ResetStores() {
-	e := defaultEngine
+func (e *Engine) resetStores() {
 	space := e.space
 	space.ResetKeyspaces()
 	// The counter describes the keyspace being thrown away, so it goes with it.
-	expiredKeys = 0
-	aof.recovered = nil
+	e.expiredKeys = 0
 
 	e.dictStore = data_structure.CreateDict(space)
 	e.zsetStore = data_structure.NewKeyed[*data_structure.ZSet](space, "zset")

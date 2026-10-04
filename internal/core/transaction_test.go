@@ -287,12 +287,12 @@ func TestTransactionCommandsTakeTheAppendBarrier(t *testing.T) {
 // command runs, so a command the table did not hold could never run, and an
 // entry for a command nothing answers would be a name that is never unknown.
 func TestEveryCommandHasAnArity(t *testing.T) {
-	for _, name := range dispatchedNames() {
+	for name := range commandTable {
 		_, counted := commandArity[name]
 		require.True(t, counted, "%s has no arity", name)
 	}
 	for name := range commandArity {
-		_, table := dispatchedHandler(name)
+		_, table := commandTable[name]
 		require.True(t, table || connectionCommands[name] || IsTransactionCommand(name), "arity for unknown command %s", name)
 	}
 	for name, subcommands := range containerCommands {
@@ -314,7 +314,7 @@ func TestCommandArityIsNeverStricterThanTheHandler(t *testing.T) {
 	ownWords := map[string]bool{"MEMKV.DUMP": true, "MEMKV.RESTORE": true, "SRAND": true,
 		"KEEL.REPL.PULL": true, "KEEL.REPL.PULL2": true}
 	for name, arity := range commandArity {
-		handler, table := dispatchedHandler(name)
+		handler, table := commandTable[name]
 		if !table || containerCommands[name] != nil {
 			continue
 		}
@@ -331,7 +331,7 @@ func TestCommandArityIsNeverStricterThanTheHandler(t *testing.T) {
 			for i := range parts {
 				parts[i] = "1"
 			}
-			reply := handler(parts)
+			reply := handler(defaultEngine, parts)
 			require.True(t, bytes.HasPrefix(reply, []byte("-")), "%s with %d arguments: table refuses, handler answered %q", name, args, reply)
 			if !ownWords[name] {
 				require.Equal(t, string(Encode(wrongArguments(name), false)), string(reply), "%s with %d arguments", name, args)
@@ -375,7 +375,7 @@ func TestTransactionReplyCeiling(t *testing.T) {
 func TestTransactionReplyBeyondTheLimitClosesAfterRunning(t *testing.T) {
 	// Replies no admission sees - many small ones - can still add up past the
 	// output limit. The transaction runs whole and the connection is told so.
-	commandTable["TEST.MEGABYTE"] = func([]string) []byte { return bytes.Repeat([]byte("+"), 1<<20) }
+	commandTable["TEST.MEGABYTE"] = func(*Engine, []string) []byte { return bytes.Repeat([]byte("+"), 1<<20) }
 	commandArity["TEST.MEGABYTE"] = 1
 	indexCommands()
 	t.Cleanup(func() { delete(commandTable, "TEST.MEGABYTE"); delete(commandArity, "TEST.MEGABYTE"); indexCommands() })

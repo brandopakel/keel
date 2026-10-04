@@ -181,7 +181,7 @@ var errFenced = errors.New("FENCED this node is not the holder of the current te
 // leader chosen properly. Equal is refused as well as lower, because a
 // coordinator that issued the same term twice has already lost the property
 // that makes a term worth anything.
-func cmdPROMOTE(args []string) []byte {
+func (e *Engine) cmdPROMOTE(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(wrongArguments("KEEL.PROMOTE"), false)
 	}
@@ -213,7 +213,7 @@ func cmdPROMOTE(args []string) []byte {
 // established that the node stopped, and a node that is unreachable cannot be
 // told. Real exclusivity needs an authority that can isolate the node's data
 // paths whether or not the node cooperates.
-func cmdFENCE(args []string) []byte {
+func (e *Engine) cmdFENCE(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(wrongArguments("KEEL.FENCE"), false)
 	}

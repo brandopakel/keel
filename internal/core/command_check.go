@@ -120,23 +120,17 @@ func subcommandsOf(name string) []subcommand {
 }
 
 // commandEntry is one command as dispatch finds it: the handler from
-// commandTable or, for a family that has moved into Engine, from
-// engineCommandTable - neither, for a command the transport or Transact
-// answers - and the count from commandArity. container marks CLIENT and
-// MEMORY, whose count depends on the subcommand, and namesItself the one
-// handler that repeats the name it was sent as - see runningName. Both are
-// worked out once, here, so that a well-formed command is checked with one
-// comparison of its count.
+// commandTable, nil for a command the transport or Transact answers, and the
+// count from commandArity. container marks CLIENT and MEMORY, whose count
+// depends on the subcommand, and namesItself the one handler that repeats the
+// name it was sent as - see runningName. Both are worked out once, here, so
+// that a well-formed command is checked with one comparison of its count.
 type commandEntry struct {
-	run         func([]string) []byte
-	onEngine    func(*Engine, []string) []byte
+	run         func(*Engine, []string) []byte
 	arity       int
 	container   bool
 	namesItself bool
 }
-
-// runs reports whether dispatch has a handler to run for the command.
-func (e commandEntry) runs() bool { return e.run != nil || e.onEngine != nil }
 
 // counted reports whether a command of entry's, given args arguments, needs
 // no further look before it runs: neither a container nor the wrong count.
@@ -154,7 +148,7 @@ func init() { indexCommands() }
 func indexCommands() {
 	commands = make(map[string]commandEntry, len(commandArity))
 	for name, arity := range commandArity {
-		commands[name] = commandEntry{run: commandTable[name], onEngine: engineCommandTable[name], arity: arity,
+		commands[name] = commandEntry{run: commandTable[name], arity: arity,
 			container: subcommandsOf(name) != nil, namesItself: name == "GEOSEARCH"}
 	}
 }

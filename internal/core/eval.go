@@ -16,30 +16,39 @@ import (
 // those is a list that can be read against the others. Dispatch looks a
 // command up in commands, the index of this table and commandArity together.
 //
-// The table is in two parts while the stores move into Engine (plan step
-// 2.1): engineCommandTable holds the families that have moved, and this one
-// the rest. A command is in exactly one of them.
-var commandTable = map[string]func([]string) []byte{
-	"PING": cmdPING, "ECHO": cmdECHO, "SELECT": cmdSELECT,
-	"UNWATCH": cmdUNWATCH,
+// Every handler is an Engine method and runs on the engine dispatching it,
+// reading that engine's stores and asking its space who holds a key.
+var commandTable = map[string]func(*Engine, []string) []byte{
+	"PING": (*Engine).cmdPING, "ECHO": (*Engine).cmdECHO, "SELECT": (*Engine).cmdSELECT,
+	"UNWATCH": (*Engine).cmdUNWATCH,
+
+	// Strings
+	"SET": (*Engine).cmdSET, "SETNX": (*Engine).cmdSETNX, "GET": (*Engine).cmdGET, "INCR": (*Engine).cmdINCR,
+	"INCRBY": (*Engine).cmdINCRBY, "DECR": (*Engine).cmdDECR, "DECRBY": (*Engine).cmdDECRBY,
+	"MGET": (*Engine).cmdMGET, "MSET": (*Engine).cmdMSET, "SETEX": (*Engine).cmdSETEX,
+	"PSETEX": (*Engine).cmdPSETEX, "LCS": (*Engine).cmdLCS,
+
+	// Keys and expiry
+	"DEL": (*Engine).cmdDEL, "UNLINK": (*Engine).cmdUNLINK, "EXISTS": (*Engine).cmdEXISTS,
+	"TYPE": (*Engine).cmdTYPE, "KEYS": (*Engine).cmdKEYS, "SCAN": (*Engine).cmdSCAN, "TTL": (*Engine).cmdTTL,
+	"PTTL": (*Engine).cmdPTTL, "EXPIRE": (*Engine).cmdEXPIRE, "PEXPIREAT": (*Engine).cmdPEXPIREAT,
+	"PEXPIRE": (*Engine).cmdPEXPIRE, "EXPIREAT": (*Engine).cmdEXPIREAT, "PERSIST": (*Engine).cmdPERSIST,
 
 	// Server
-	"KEEL.PROMOTE": cmdPROMOTE, "KEEL.FENCE": cmdFENCE,
-	"KEEL.REPL.PULL":  cmdReplicationPull,
-	"KEEL.REPL.PULL2": cmdReplicationPullV2,
-	"INFO":            cmdINFO, "BGREWRITEAOF": cmdBGREWRITEAOF,
-}
+	"KEEL.PROMOTE": (*Engine).cmdPROMOTE, "KEEL.FENCE": (*Engine).cmdFENCE,
+	"KEEL.REPL.PULL": (*Engine).cmdReplicationPull, "KEEL.REPL.PULL2": (*Engine).cmdReplicationPullV2,
+	"DBSIZE": (*Engine).cmdDBSIZE, "FLUSHDB": (*Engine).cmdFLUSHDB, "MEMORY": (*Engine).cmdMEMORY,
+	"INFO": (*Engine).cmdINFO, "BGREWRITEAOF": (*Engine).cmdBGREWRITEAOF, "KEEL.DUMP": (*Engine).cmdDUMP,
+	"KEEL.RESTORE": (*Engine).cmdRESTORE,
+	// The names from before the server was renamed, so a log written then
+	// still replays; a command is written to the log under its current name.
+	"MEMKV.DUMP": (*Engine).cmdDUMP, "MEMKV.RESTORE": (*Engine).cmdRESTORE,
 
-// engineCommandTable is the part of the dispatch table whose handlers are
-// Engine methods: the families whose stores have moved into the engine. Each
-// runs on the engine that dispatches it and reads its store from there. A
-// family moves here from commandTable when its store moves; once every
-// handler has, the two are one table again.
-var engineCommandTable = map[string]func(*Engine, []string) []byte{
 	// Hashes
-	"HSET": (*Engine).cmdHSET, "HSETNX": (*Engine).cmdHSETNX, "HGET": (*Engine).cmdHGET, "HMGET": (*Engine).cmdHMGET,
-	"HDEL": (*Engine).cmdHDEL, "HEXISTS": (*Engine).cmdHEXISTS, "HLEN": (*Engine).cmdHLEN, "HKEYS": (*Engine).cmdHKEYS,
-	"HVALS": (*Engine).cmdHVALS, "HGETALL": (*Engine).cmdHGETALL, "HINCRBY": (*Engine).cmdHINCRBY,
+	"HSET": (*Engine).cmdHSET, "HSETNX": (*Engine).cmdHSETNX, "HGET": (*Engine).cmdHGET,
+	"HMGET": (*Engine).cmdHMGET, "HDEL": (*Engine).cmdHDEL, "HEXISTS": (*Engine).cmdHEXISTS,
+	"HLEN": (*Engine).cmdHLEN, "HKEYS": (*Engine).cmdHKEYS, "HVALS": (*Engine).cmdHVALS,
+	"HGETALL": (*Engine).cmdHGETALL, "HINCRBY": (*Engine).cmdHINCRBY,
 
 	// Lists
 	"LPUSH": (*Engine).cmdLPUSH, "RPUSH": (*Engine).cmdRPUSH, "LPOP": (*Engine).cmdLPOP,
@@ -48,8 +57,8 @@ var engineCommandTable = map[string]func(*Engine, []string) []byte{
 
 	// Sets
 	"SADD": (*Engine).cmdSADD, "SREM": (*Engine).cmdSREM, "SCARD": (*Engine).cmdSCARD,
-	"SMEMBERS": (*Engine).cmdSMEMBERS, "SISMEMBER": (*Engine).cmdSISMEMBER,
-	"SMISMEMBER": (*Engine).cmdSMISMEMBER, "SPOP": (*Engine).cmdSPOP, "SRANDMEMBER": (*Engine).cmdSRANDMEMBER,
+	"SMEMBERS": (*Engine).cmdSMEMBERS, "SISMEMBER": (*Engine).cmdSISMEMBER, "SMISMEMBER": (*Engine).cmdSMISMEMBER,
+	"SPOP": (*Engine).cmdSPOP, "SRANDMEMBER": (*Engine).cmdSRANDMEMBER,
 	// SRAND is what this server called SRANDMEMBER before it took the Redis name.
 	"SRAND": (*Engine).cmdSRANDMEMBER,
 
@@ -62,50 +71,21 @@ var engineCommandTable = map[string]func(*Engine, []string) []byte{
 	"GEODIST": (*Engine).cmdGEODIST, "GEOHASH": (*Engine).cmdGEOHASH, "GEOSEARCH": (*Engine).cmdGEOSEARCH,
 	"GEOPOS": (*Engine).cmdGEOPOS,
 
-	// Bloom filters
+	// Probabilistic structures
 	"BF.RESERVE": (*Engine).cmdBFRESERVE, "BF.INFO": (*Engine).cmdBFINFO, "BF.ADD": (*Engine).cmdBFADD,
 	"BF.MADD": (*Engine).cmdBFMADD, "BF.EXISTS": (*Engine).cmdBFEXISTS, "BF.MEXISTS": (*Engine).cmdBFMEXISTS,
-
-	// Cuckoo filters
-	"CF.RESERVE": (*Engine).cmdCFRESERVE, "CF.ADD": (*Engine).cmdCFADD, "CF.ADDNX": (*Engine).cmdCFADDNX,
-	"CF.EXISTS": (*Engine).cmdCFEXISTS, "CF.MEXISTS": (*Engine).cmdCFMEXISTS, "CF.DEL": (*Engine).cmdCFDEL,
-	"CF.COUNT": (*Engine).cmdCFCOUNT, "CF.INFO": (*Engine).cmdCFINFO,
-
-	// Count-min sketches
 	"CMS.INITBYDIM": (*Engine).cmdCMSINITBYDIM, "CMS.INITBYPROB": (*Engine).cmdCMSINITBYPROB,
 	"CMS.INCRBY": (*Engine).cmdCMSINCRBY, "CMS.QUERY": (*Engine).cmdCMSQUERY,
-
-	// Morris counters
 	"MORRIS.INITBYDIM": (*Engine).cmdMORRISINITBYDIM, "MORRIS.INITBYPROB": (*Engine).cmdMORRISINITBYPROB,
 	"MORRIS.INCRBY": (*Engine).cmdMORRISINCRBY, "MORRIS.QUERY": (*Engine).cmdMORRISQUERY,
-	"MORRIS.INFO": (*Engine).cmdMORRISINFO,
-
-	// HyperLogLogs
-	"PFADD": (*Engine).cmdPFADD, "PFCOUNT": (*Engine).cmdPFCOUNT, "PFMERGE": (*Engine).cmdPFMERGE,
-
-	// Strings
-	"SET": (*Engine).cmdSET, "SETNX": (*Engine).cmdSETNX, "GET": (*Engine).cmdGET, "INCR": (*Engine).cmdINCR,
-	"INCRBY": (*Engine).cmdINCRBY, "DECR": (*Engine).cmdDECR, "DECRBY": (*Engine).cmdDECRBY,
-	"MGET": (*Engine).cmdMGET, "MSET": (*Engine).cmdMSET, "SETEX": (*Engine).cmdSETEX,
-	"PSETEX": (*Engine).cmdPSETEX, "LCS": (*Engine).cmdLCS,
-
-	// Keys and expiry, whatever type holds the key
-	"DEL": (*Engine).cmdDEL, "UNLINK": (*Engine).cmdUNLINK, "EXISTS": (*Engine).cmdEXISTS,
-	"TYPE": (*Engine).cmdTYPE, "KEYS": (*Engine).cmdKEYS, "SCAN": (*Engine).cmdSCAN,
-	"TTL": (*Engine).cmdTTL, "PTTL": (*Engine).cmdPTTL, "EXPIRE": (*Engine).cmdEXPIRE,
-	"PEXPIREAT": (*Engine).cmdPEXPIREAT, "PEXPIRE": (*Engine).cmdPEXPIRE, "EXPIREAT": (*Engine).cmdEXPIREAT,
-	"PERSIST": (*Engine).cmdPERSIST,
-
-	// The keyspace as a whole, and keys dumped and restored whatever their type
-	"DBSIZE": (*Engine).cmdDBSIZE, "FLUSHDB": (*Engine).cmdFLUSHDB, "MEMORY": (*Engine).cmdMEMORY,
-	"KEEL.DUMP": (*Engine).cmdDUMP, "KEEL.RESTORE": (*Engine).cmdRESTORE,
-	// The names from before the server was renamed, so a log written then
-	// still replays; a command is written to the log under its current name.
-	"MEMKV.DUMP": (*Engine).cmdDUMP, "MEMKV.RESTORE": (*Engine).cmdRESTORE,
+	"MORRIS.INFO": (*Engine).cmdMORRISINFO, "PFADD": (*Engine).cmdPFADD, "PFCOUNT": (*Engine).cmdPFCOUNT,
+	"PFMERGE": (*Engine).cmdPFMERGE, "CF.RESERVE": (*Engine).cmdCFRESERVE, "CF.ADD": (*Engine).cmdCFADD,
+	"CF.ADDNX": (*Engine).cmdCFADDNX, "CF.EXISTS": (*Engine).cmdCFEXISTS, "CF.MEXISTS": (*Engine).cmdCFMEXISTS,
+	"CF.DEL": (*Engine).cmdCFDEL, "CF.COUNT": (*Engine).cmdCFCOUNT, "CF.INFO": (*Engine).cmdCFINFO,
 }
 
 // cmdPING answers PONG, or echoes the one argument it is given.
-func cmdPING(args []string) []byte {
+func (e *Engine) cmdPING(args []string) []byte {
 	switch len(args) {
 	case 0:
 		return Encode("PONG", true)
@@ -116,7 +96,7 @@ func cmdPING(args []string) []byte {
 }
 
 // cmdECHO answers its one argument, as PING does when given one.
-func cmdECHO(args []string) []byte {
+func (e *Engine) cmdECHO(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(wrongArguments("ECHO"), false)
 	}
@@ -128,7 +108,7 @@ func cmdECHO(args []string) []byte {
 // number gets Redis's error for a database that does not exist rather than
 // being mapped onto 0, which would mix the keys of applications that each
 // believed they had a database to themselves.
-func cmdSELECT(args []string) []byte {
+func (e *Engine) cmdSELECT(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(wrongArguments("SELECT"), false)
 	}
@@ -157,8 +137,9 @@ func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	return defaultEngine.evalAndResponse(cmd, c)
 }
 
-// evalAndResponse is EvalAndResponse on e: the handlers that have moved into
-// the engine run on e.
+// evalAndResponse is EvalAndResponse on e: the command runs on e, and its
+// keys are type-checked, its eviction held off and its limits enforced on e's
+// space.
 func (e *Engine) evalAndResponse(cmd *Command, c io.ReadWriter) error {
 	// The reply is framed for the connection's protocol, held for exactly this
 	// command - see resp3.go. Log replay and replica apply answer nobody, and
@@ -174,7 +155,7 @@ func (e *Engine) evalAndResponse(cmd *Command, c io.ReadWriter) error {
 	// well-formed command costs one comparison of its count here; anything
 	// else is looked at in full.
 	entry := commands[cmd.Cmd]
-	if !entry.runs() {
+	if entry.run == nil {
 		// Unknown, or one only the transport answers, with none here to.
 		return unknownCommand(cmd)
 	}
@@ -212,12 +193,7 @@ func (e *Engine) evalAndResponse(cmd *Command, c io.ReadWriter) error {
 
 	suspended := e.space.SuspendEviction
 	e.space.SuspendEviction = true
-	var res []byte
-	if entry.onEngine != nil {
-		res = entry.onEngine(e, cmd.Args)
-	} else {
-		res = entry.run(cmd.Args)
-	}
+	res := entry.run(e, cmd.Args)
 	// With eviction suspended, removals so far are lazy expiry. They precede
 	// this command: recording them after INCR/HSET would delete the recreated key.
 	// Recorded before the reply is written. FlushAOF runs between execution and
