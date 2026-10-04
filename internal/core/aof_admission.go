@@ -191,7 +191,7 @@ func AppendAdmission(commands []*Command) (logBytes, replyBytes int, ok bool) {
 			}
 			for _, key := range keys {
 				size := largestWrite
-				if obj := dictStore.Peek(key); obj != nil {
+				if obj := defaultEngine.dictStore.Peek(key); obj != nil {
 					size = max(size, len(obj.Value))
 				}
 				replyBytes += size + replyFraming

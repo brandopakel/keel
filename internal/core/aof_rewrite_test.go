@@ -573,16 +573,16 @@ func TestRewriteDoesNotCountAsUse(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		run(t, "GET", "k7")
 	}
-	hotBefore, ok := dictStore.ScoreOf("k7")
+	hotBefore, ok := defaultEngine.dictStore.ScoreOf("k7")
 	assert.True(t, ok)
-	coldBefore, ok := dictStore.ScoreOf("k42")
+	coldBefore, ok := defaultEngine.dictStore.ScoreOf("k42")
 	assert.True(t, ok)
 	assert.Greater(t, hotBefore, coldBefore)
 
 	assert.NoError(t, RewriteAOF())
 
-	hotAfter, _ := dictStore.ScoreOf("k7")
-	coldAfter, _ := dictStore.ScoreOf("k42")
+	hotAfter, _ := defaultEngine.dictStore.ScoreOf("k7")
+	coldAfter, _ := defaultEngine.dictStore.ScoreOf("k42")
 	assert.Equal(t, hotBefore, hotAfter, "a rewrite must not touch a key's access record")
 	assert.Equal(t, coldBefore, coldAfter)
 	assert.Greater(t, hotAfter, coldAfter, "and must leave the hot key still looking hot")
@@ -632,7 +632,7 @@ func TestRewriteSlicesObeyKeyBudgetAndReplay(t *testing.T) {
 	ResetStores()
 	_, err := LoadAOF(path)
 	assert.NoError(t, err)
-	assert.Equal(t, 200000, dictStore.Len())
+	assert.Equal(t, 200000, defaultEngine.dictStore.Len())
 	for i := 0; i < 200000; i++ {
 		assert.Equal(t, "some value of a realistic length", run(t, "GET", "k"+strconv.Itoa(i)))
 	}
@@ -713,7 +713,7 @@ func TestRewriteStartDoesNotCopyKeyNames(t *testing.T) {
 			require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "start.aof")))
 			t.Cleanup(func() { CancelRewrite(); assert.NoError(t, CloseAOF()) })
 			for i := 0; i < n; i++ {
-				dictStore.Put("key:"+strconv.Itoa(i), dictStore.NewObj("v"))
+				defaultEngine.dictStore.Put("key:"+strconv.Itoa(i), defaultEngine.dictStore.NewObj("v"))
 			}
 			var before, after runtime.MemStats
 			runtime.ReadMemStats(&before)

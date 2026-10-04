@@ -28,7 +28,6 @@ const (
 
 	// Until the step that moves it.
 	defaultInstance = "the server's engine until callers open their own (plan step 2.7)"
-	store           = "a store; becomes an Engine field with its command family (plan step 2.1)"
 	maintenance     = "a cursor or count over the stores' keys; moves with the stores (plan step 2.1)"
 	commandScope    = "held for the command running; becomes engine state (plan step 2.2)"
 	persistence     = "the log, the rewrite or their I/O and counters; becomes engine state (plan step 2.3)"
@@ -40,8 +39,6 @@ const (
 // the reason each one is allowed.
 var packageVars = map[string]string{
 	"defaultEngine": defaultInstance,
-
-	"dictStore": store,
 
 	"expiredKeys": maintenance, "expireCursor": maintenance,
 	"memoryCursor": maintenance, "memoryFirstPhase": maintenance,

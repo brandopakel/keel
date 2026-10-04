@@ -109,13 +109,13 @@ func cmdKEYS(args []string) []byte {
 // deliberately not drawn: MGET's whole purpose is to ask about many keys
 // without the answer to one of them destroying the rest. That is also why it is
 // absent from the type table in keytype.go.
-func cmdMGET(args []string) []byte {
+func (e *Engine) cmdMGET(args []string) []byte {
 	if len(args) == 0 {
 		return Encode(wrongArguments("MGET"), false)
 	}
 
 	return encodeLookupArray(len(args), func(i int) (string, bool) {
-		obj := dictStore.Get(args[i])
+		obj := e.dictStore.Get(args[i])
 		if obj == nil {
 			// nil encodes as a null bulk string, which is the element Redis
 			// puts here for both a missing key and a key of the wrong type.
@@ -138,7 +138,7 @@ func cmdMGET(args []string) []byte {
 // observe a moment inside it. The type check having already run for every key
 // is what makes that true of failures too - it cannot write half the pairs and
 // then refuse.
-func cmdMSET(args []string) []byte {
+func (e *Engine) cmdMSET(args []string) []byte {
 	if len(args) == 0 || len(args)%2 != 0 {
 		return Encode(wrongArguments("MSET"), false)
 	}
@@ -146,11 +146,11 @@ func cmdMSET(args []string) []byte {
 	replaced := false
 	for i := 0; i < len(args); i += 2 {
 		key, value := args[i], args[i+1]
-		if other, held := data_structure.OwnerOf(key); held && other.KeyspaceName() != dictStore.KeyspaceName() {
+		if other, held := e.space.OwnerOf(key); held && other.KeyspaceName() != e.dictStore.KeyspaceName() {
 			dropOtherType(other, key)
 			replaced = true
 		}
-		dictStore.Put(key, dictStore.NewObj(value))
+		e.dictStore.Put(key, e.dictStore.NewObj(value))
 	}
 	if replaced {
 		// Staged records replace the command in the log, so once a DEL is

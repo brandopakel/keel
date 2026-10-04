@@ -15,7 +15,7 @@ func TestAmplifiedReadsRejectBeforeResponseAllocation(t *testing.T) {
 			ResetStores()
 			t.Cleanup(ResetStores)
 			value := strings.Repeat("x", 1<<20)
-			dictStore.Put("string", dictStore.NewObj(value))
+			defaultEngine.dictStore.Put("string", defaultEngine.dictStore.NewObj(value))
 			h := data_structure.NewHash()
 			h.Set("field", value)
 			defaultEngine.hashStore.Put("hash", h)
@@ -44,7 +44,7 @@ func TestAmplifiedReadsRejectBeforeResponseAllocation(t *testing.T) {
 			require.Less(t, len(reply), 1024, "oversized reply must be refused")
 			require.Contains(t, string(reply), "reply exceeds")
 			require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(256<<10), "reject before allocating the amplified payload")
-			require.Equal(t, value, dictStore.Peek("string").Value)
+			require.Equal(t, value, defaultEngine.dictStore.Peek("string").Value)
 			require.Equal(t, 1, s.Len())
 		})
 	}

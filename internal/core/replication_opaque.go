@@ -83,7 +83,7 @@ func replicationKeyExpiry(key string, tag byte) uint64 {
 	var ks data_structure.Keyspace
 	switch tag {
 	case dumpTagString:
-		ks = dictStore
+		ks = defaultEngine.dictStore
 	case dumpTagHash:
 		ks = defaultEngine.hashStore
 	case dumpTagList:

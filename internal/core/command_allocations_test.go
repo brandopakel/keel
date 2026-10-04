@@ -110,7 +110,7 @@ func TestKeysAndScanRefuseOversizedNamesBeforeEncoding(t *testing.T) {
 	ResetStores()
 	t.Cleanup(ResetStores)
 	key := strings.Repeat("k", MaxReplyBytes)
-	dictStore.Put(key, dictStore.NewObj("v"))
+	defaultEngine.dictStore.Put(key, defaultEngine.dictStore.NewObj("v"))
 	for _, command := range [][]string{{"KEYS", "*"}, {"SCAN", "0", "COUNT", "100"}} {
 		runtime.GC()
 		var before, after runtime.MemStats

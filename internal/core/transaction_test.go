@@ -52,7 +52,7 @@ func TestTransactionQueuesThenRunsInOrder(t *testing.T) {
 	require.Equal(t, "+QUEUED\r\n", s.send("SET", "k", "1"))
 	require.Equal(t, "+QUEUED\r\n", s.send("INCR", "k"))
 	require.Equal(t, "+QUEUED\r\n", s.send("GET", "k"))
-	require.Nil(t, dictStore.Peek("k"), "nothing runs before EXEC")
+	require.Nil(t, defaultEngine.dictStore.Peek("k"), "nothing runs before EXEC")
 	require.Equal(t, "*3\r\n+OK\r\n:2\r\n$1\r\n2\r\n", s.send("EXEC"))
 	require.Nil(t, s.tx)
 	require.Equal(t, "2", run(t, "GET", "k"))
@@ -79,8 +79,8 @@ func TestTransactionRefusalWhileQueueingAbortsIt(t *testing.T) {
 			require.Zero(t, s.tx.RetainedBytes(), "a doomed transaction keeps nothing")
 			require.Equal(t, "-EXECABORT Transaction discarded because of previous errors.\r\n", s.send("EXEC"))
 			require.Nil(t, s.tx)
-			require.Nil(t, dictStore.Peek("before"))
-			require.Nil(t, dictStore.Peek("after"))
+			require.Nil(t, defaultEngine.dictStore.Peek("before"))
+			require.Nil(t, defaultEngine.dictStore.Peek("after"))
 		})
 	}
 	s := newSession(t)
@@ -461,8 +461,8 @@ func TestTransactionFencedBeforeExecRunsNothing(t *testing.T) {
 	s.send("SET", "b", "2")
 	require.NoError(t, observeTerm(7))
 	require.Equal(t, "-EXECABORT Transaction discarded because of: "+errFenced.Error()+"\r\n", s.send("EXEC"))
-	require.Nil(t, dictStore.Peek("a"))
-	require.Nil(t, dictStore.Peek("b"))
+	require.Nil(t, defaultEngine.dictStore.Peek("a"))
+	require.Nil(t, defaultEngine.dictStore.Peek("b"))
 }
 
 // aofBody is the log's bytes once flushed.
@@ -516,7 +516,7 @@ func TestTransactionIsFramedInTheLog(t *testing.T) {
 	require.Equal(t, "2", run(t, "GET", "a"))
 	require.Equal(t, "2", run(t, "GET", "b"))
 	require.Equal(t, "1", run(t, "GET", "outside"))
-	require.Nil(t, dictStore.Peek("short"))
+	require.Nil(t, defaultEngine.dictStore.Peek("short"))
 }
 
 // A SET or MSET over a key another type holds replaces it, as Redis's does,
@@ -674,7 +674,7 @@ func TestReplicationV2DeliversATransactionWhole(t *testing.T) {
 	require.NoError(t, ApplyReplication(signedV2(ReplicationFrame{Version: 2, Epoch: epoch, From: base, To: base, CaughtUp: true})))
 	for _, f := range deltas[:len(deltas)-1] {
 		require.NoError(t, ApplyReplication(f))
-		require.Nil(t, dictStore.Peek("first"), "no part of a transaction is visible before all of it")
+		require.Nil(t, defaultEngine.dictStore.Peek("first"), "no part of a transaction is visible before all of it")
 		require.Equal(t, int64(0), run(t, "EXISTS", "filter"))
 	}
 	require.NoError(t, ApplyReplication(deltas[len(deltas)-1]))
@@ -734,7 +734,7 @@ func TestReplicationV2RefusesMalformedTransactions(t *testing.T) {
 			f := signedV2(ReplicationFrame{Version: 2, Epoch: frames[0].Epoch, From: base, To: base + uint64(len(body)), Body: []byte(body), CaughtUp: true})
 			require.Error(t, ApplyReplication(f))
 			require.False(t, replicaReady)
-			require.Nil(t, dictStore.Peek("k"))
+			require.Nil(t, defaultEngine.dictStore.Peek("k"))
 		})
 	}
 }

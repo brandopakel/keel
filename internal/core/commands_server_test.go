@@ -14,8 +14,8 @@ func resetDictStore() { ResetStores() }
 
 func TestCmdMemoryUsage(t *testing.T) {
 	resetDictStore()
-	cmdSET([]string{"small", "v"})
-	cmdSET([]string{"large", strings.Repeat("v", 5000)})
+	defaultEngine.cmdSET([]string{"small", "v"})
+	defaultEngine.cmdSET([]string{"large", strings.Repeat("v", 5000)})
 
 	small, _ := Decode(cmdMEMORY([]string{"USAGE", "small"}))
 	large, _ := Decode(cmdMEMORY([]string{"USAGE", "large"}))
@@ -52,8 +52,8 @@ func TestCmdInfoReportsMemoryAndKeyspace(t *testing.T) {
 	config.MaxMemory = 1 << 20
 	t.Cleanup(func() { config.MaxMemory = old })
 
-	cmdSET([]string{"a", "1"})
-	cmdSET([]string{"b", "2"})
+	defaultEngine.cmdSET([]string{"a", "1"})
+	defaultEngine.cmdSET([]string{"b", "2"})
 
 	res, err := Decode(cmdINFO([]string{}))
 	assert.Nil(t, err)
@@ -117,8 +117,8 @@ func TestCmdDbsize(t *testing.T) {
 	res, _ := Decode(cmdDBSIZE([]string{}))
 	assert.EqualValues(t, 0, res)
 
-	cmdSET([]string{"a", "1"})
-	cmdSET([]string{"b", "2"})
+	defaultEngine.cmdSET([]string{"a", "1"})
+	defaultEngine.cmdSET([]string{"b", "2"})
 	res, _ = Decode(cmdDBSIZE([]string{}))
 	assert.EqualValues(t, 2, res)
 
