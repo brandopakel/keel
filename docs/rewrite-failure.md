@@ -121,7 +121,10 @@ would retry it at every tick.
 
 A rewrite that a protocol 2 replica needs for its snapshot is held back by the
 same limit, so a replica waiting for a snapshot cannot drive a failing disk round
-a loop.
+a loop. A replica pulls several times a second, so a snapshot rewrite that cannot
+start for a lasting reason, such as the key ceiling or a `.rewrite` that cannot
+be created, is refused once and logged once. The replica's pulls then wait a
+minute before trying again, and get `pending` frames meanwhile.
 
 ## Replication
 
@@ -211,7 +214,9 @@ tests cover:
 - the backoff sequence 1, 2, 4, 8, 16, 32 and 60 minutes, and the 100 ms tick;
 - a budget abort;
 - protocol 2 deltas, frames included, through a failed rewrite, and snapshot
-  pulls paced by the limit and then served.
+  pulls paced by the limit and then served;
+- a snapshot rewrite that cannot start, refused and logged once over several
+  pulls and started again after the minute.
 
 Process tests (`cmd/keel/rewrite_failure_test.go`) run the real server under a
 1 MiB `RLIMIT_FSIZE`. The trigger is a Bloom filter whose log record is one short
