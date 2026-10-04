@@ -59,7 +59,7 @@ func planDump(key string, limit int) (dumpPlan, bool) {
 			l.VisitRange(0, l.Len()-1, yield)
 		}, limit), true
 	}
-	if obj := dictStore.Peek(key); obj != nil {
+	if obj := defaultEngine.dictStore.Peek(key); obj != nil {
 		return dumpPlan{dumpTagString, len(obj.Value), func(dst []byte) []byte {
 			return append(dst, obj.Value...)
 		}}, true

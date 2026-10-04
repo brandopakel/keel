@@ -9,13 +9,8 @@ import (
 // Each type has its own store, and every one of them is registered with the
 // evictor so that a memory budget spans the lot: before that, only strings were
 // accounted, and a keyspace full of 12KB HyperLogLogs could sail past
-// -maxmemory without anything noticing.
-//
-// The stores are moving into Engine a command family at a time (plan step
-// 2.1). The ones below have yet to; Engine holds those that have.
-var (
-	dictStore *data_structure.Dict
-)
+// -maxmemory without anything noticing. The stores are fields of Engine; these
+// are the server's, in defaultEngine.
 
 func init() { ResetStores() }
 
@@ -23,8 +18,8 @@ func init() { ResetStores() }
 // and by tests that need to begin from empty.
 //
 // The order they register in is the order OwnerOf asks them, eviction samples
-// them and SCAN and the rewrite walk them, so a store that moves into the
-// engine keeps its place in it.
+// them and SCAN and the rewrite walk them, so it is the order they had as
+// package variables.
 func ResetStores() {
 	e := defaultEngine
 	space := e.space
@@ -33,7 +28,7 @@ func ResetStores() {
 	expiredKeys = 0
 	aof.recovered = nil
 
-	dictStore = data_structure.CreateDict(space)
+	e.dictStore = data_structure.CreateDict(space)
 	e.zsetStore = data_structure.NewKeyed[*data_structure.ZSet](space, "zset")
 	e.setStore = data_structure.NewKeyed[*data_structure.Set](space, "set")
 	e.hashStore = data_structure.NewKeyed[*data_structure.Hash](space, "hash")
@@ -44,7 +39,7 @@ func ResetStores() {
 	e.hllStore = data_structure.NewKeyed[*data_structure.HLL](space, "hll")
 	e.cfStore = data_structure.NewKeyed[*data_structure.CuckooFilter](space, "cuckoo")
 
-	space.RegisterKeyspace(dictStore)
+	space.RegisterKeyspace(e.dictStore)
 	space.RegisterKeyspace(e.zsetStore)
 	space.RegisterKeyspace(e.setStore)
 	space.RegisterKeyspace(e.hashStore)

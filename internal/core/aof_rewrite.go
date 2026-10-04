@@ -302,12 +302,12 @@ func AdvanceRewrite() error {
 // sets seek a bounded rank window in O(log(n)+chunk). Mutations invalidate the cursor; dirty-key
 // reconciliation then replaces every historical fragment with DEL first.
 func emitRewriteKey(dst []byte, key string, reset bool) []byte {
-	if obj := dictStore.Peek(key); obj != nil {
+	if obj := defaultEngine.dictStore.Peek(key); obj != nil {
 		commands := [][]string{{"SET", key, obj.Value}}
 		if reset {
 			commands = append([][]string{{"DEL", key}}, commands...)
 		}
-		if at, ok := dictStore.GetExpiry(key); ok {
+		if at, ok := defaultEngine.dictStore.GetExpiry(key); ok {
 			commands = append(commands, []string{"PEXPIREAT", key, strconv.FormatUint(at, 10)})
 		}
 		return appendRewriteRecords(dst, commands)
@@ -658,7 +658,7 @@ func emitKey(dst []byte, key string) []byte {
 }
 
 func emitValue(dst []byte, key string) []byte {
-	if obj := dictStore.Peek(key); obj != nil {
+	if obj := defaultEngine.dictStore.Peek(key); obj != nil {
 		return appendCommand(dst, "SET", key, obj.Value)
 	}
 	if set, ok := defaultEngine.setStore.Peek(key); ok {

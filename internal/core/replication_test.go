@@ -70,7 +70,7 @@ func TestReplicationCanonicalImagesAndOrdering(t *testing.T) {
 	got, _ = dumpKey("cf")
 	require.Equal(t, cuckoo, got)
 	require.Contains(t, string(rawReply(t, "SET", "forbidden", "v")), "READONLY")
-	require.Nil(t, dictStore.Peek("forbidden"))
+	require.Nil(t, defaultEngine.dictStore.Peek("forbidden"))
 	require.Error(t, ApplyReplication(firstDeltaWithGap(second)))
 	replicaUpdated = time.Now().Add(-6 * time.Second)
 	require.Contains(t, string(rawReply(t, "GET", "num")), "MASTERDOWN")
@@ -93,7 +93,7 @@ func TestReplicationRejectsMalformedSnapshotBeforeMutation(t *testing.T) {
 	f := ReplicationFrame{Version: 1, Epoch: "0123456789abcdef0123456789abcdef", Full: true, Body: []byte("*1\r\n$7\r\nFLUSHDB\r\n*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$999999999\r\n")}
 	f.Checksum = frameChecksum(f)
 	require.ErrorContains(t, ApplyReplication(f), "malformed replication command")
-	require.Equal(t, "present", dictStore.Peek("sentinel").Value)
+	require.Equal(t, "present", defaultEngine.dictStore.Peek("sentinel").Value)
 }
 
 func TestReplicationHistoryAndDirtyOverflowRequireFullSync(t *testing.T) {
@@ -142,7 +142,7 @@ func TestReplicationApplyFailureDisablesReadsUntilFullSync(t *testing.T) {
 	broken.Body = appendCommand(broken.Body, "SET", "k") // valid RESP, invalid command arity
 	broken.Checksum = frameChecksum(broken)
 	require.ErrorContains(t, ApplyReplication(broken), "replication apply")
-	require.Nil(t, dictStore.Peek("k"), "the first command applied before the second failed")
+	require.Nil(t, defaultEngine.dictStore.Peek("k"), "the first command applied before the second failed")
 	require.False(t, replicaReady)
 	require.False(t, replicaApplying)
 	require.Equal(t, uint64(1), replicaOffset)

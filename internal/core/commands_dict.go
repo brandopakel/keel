@@ -29,18 +29,18 @@ func invalidExpireTime(name string) error {
 
 // SETEX/PSETEX share SET's validation and canonical SET/PEXPIREAT persistence.
 // Like SET, they replace a key whatever type held it.
-func cmdSETEX(args []string) []byte  { return setWithTTL("SETEX", args, "EX") }
-func cmdPSETEX(args []string) []byte { return setWithTTL("PSETEX", args, "PX") }
+func (e *Engine) cmdSETEX(args []string) []byte  { return e.setWithTTL("SETEX", args, "EX") }
+func (e *Engine) cmdPSETEX(args []string) []byte { return e.setWithTTL("PSETEX", args, "PX") }
 
 // cmdSETNX is SET key value NX answering 1 or 0, the older spelling clients
 // still send: cachelib's and Flask-Caching's add() are built on it. It goes
 // through SET, so it is logged as the SET it performs and a log written here
 // replays on a build that predates the name.
-func cmdSETNX(args []string) []byte {
+func (e *Engine) cmdSETNX(args []string) []byte {
 	if len(args) != 2 {
 		return Encode(wrongArguments("SETNX"), false)
 	}
-	switch reply := cmdSET([]string{args[0], args[1], "NX"}); {
+	switch reply := e.cmdSET([]string{args[0], args[1], "NX"}); {
 	case bytes.Equal(reply, constant.RespOk):
 		return constant.RespOne
 	case bytes.Equal(reply, nullReply()):
@@ -50,11 +50,11 @@ func cmdSETNX(args []string) []byte {
 	}
 }
 
-func setWithTTL(name string, args []string, unit string) []byte {
+func (e *Engine) setWithTTL(name string, args []string, unit string) []byte {
 	if len(args) != 3 {
 		return Encode(wrongArguments(name), false)
 	}
-	return setCommand(name, []string{args[0], args[2], unit, args[1]})
+	return e.setCommand(name, []string{args[0], args[2], unit, args[1]})
 }
 
 // cmdSET implements SET key value [EX seconds | PX milliseconds].
@@ -66,7 +66,7 @@ func setWithTTL(name string, args []string, unit string) []byte {
 // all was accepted just as readily. Anything past EX and PX is refused rather
 // than guessed at, which is the difference between a command this server does
 // not implement and a command it appears to implement and does not.
-func cmdSET(args []string) []byte { return setCommand("SET", args) }
+func (e *Engine) cmdSET(args []string) []byte { return e.setCommand("SET", args) }
 
 // setCommand is SET, and SETEX and PSETEX through it; name is the command
 // running, which an invalid expiry names. The options are read as Redis reads
@@ -74,7 +74,7 @@ func cmdSET(args []string) []byte { return setCommand("SET", args) }
 // exclude one another, though one expiry option may be given again, and its
 // last value counts. The expiry is checked only once every option has been
 // read, so a malformed option is refused ahead of a malformed expiry.
-func setCommand(name string, args []string) []byte {
+func (e *Engine) setCommand(name string, args []string) []byte {
 	if len(args) < 2 {
 		return Encode(wrongArguments(name), false)
 	}
@@ -127,12 +127,12 @@ func setCommand(name string, args []string) []byte {
 	// A name another type holds is a key that exists, so NX leaves it and XX
 	// replaces it, and GET cannot read it as a string - Redis's rules, see
 	// replacingWrites.
-	other, otherHeld := data_structure.OwnerOf(key)
-	otherHeld = otherHeld && other.KeyspaceName() != dictStore.KeyspaceName()
+	other, otherHeld := e.space.OwnerOf(key)
+	otherHeld = otherHeld && other.KeyspaceName() != e.dictStore.KeyspaceName()
 	if otherHeld && get {
 		return Encode(errWrongType, false)
 	}
-	obj := dictStore.Get(key)
+	obj := e.dictStore.Get(key)
 	reply := constant.RespOk
 	if get {
 		reply = nullReply()
@@ -157,7 +157,7 @@ func setCommand(name string, args []string) []byte {
 		var old uint64
 		var has bool
 		if obj != nil {
-			old, has = dictStore.GetExpiry(key)
+			old, has = e.dictStore.GetExpiry(key)
 		} else {
 			old, has = other.GetExpiry(key)
 		}
@@ -168,10 +168,10 @@ func setCommand(name string, args []string) []byte {
 	if otherHeld {
 		dropOtherType(other, key)
 	}
-	dictStore.Put(key, dictStore.NewObj(value))
+	e.dictStore.Put(key, e.dictStore.NewObj(value))
 	aofRecord("SET", key, value)
 	if expiry {
-		dictStore.SetExpiryAt(key, uint64(at))
+		e.dictStore.SetExpiryAt(key, uint64(at))
 		aofRecord("PEXPIREAT", key, strconv.FormatInt(at, 10))
 	}
 	return reply
@@ -200,12 +200,12 @@ func expiryInstant(ttlMs int64) (int64, bool) {
 	return now + ttlMs, true
 }
 
-func cmdGET(args []string) []byte {
+func (e *Engine) cmdGET(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(wrongArguments("GET"), false)
 	}
 	// Get reaps a key whose TTL has passed, so what comes back is live.
-	obj := dictStore.Get(args[0])
+	obj := e.dictStore.Get(args[0])
 	if obj == nil {
 		return nullReply()
 	}
@@ -363,11 +363,11 @@ func cmdPERSIST(args []string) []byte {
 // The value is changed in place, so a TTL on the key survives, as it does in
 // Redis. A value that is not a canonical integer is refused, and so is one
 // that would overflow, rather than wrapping to a number nobody asked for.
-func cmdINCR(args []string) []byte   { return increment("INCR", args, 1, false) }
-func cmdDECR(args []string) []byte   { return increment("DECR", args, -1, false) }
-func cmdINCRBY(args []string) []byte { return increment("INCRBY", args, 1, true) }
-func cmdDECRBY(args []string) []byte { return increment("DECRBY", args, -1, true) }
-func increment(name string, args []string, sign int64, explicit bool) []byte {
+func (e *Engine) cmdINCR(args []string) []byte   { return e.increment("INCR", args, 1, false) }
+func (e *Engine) cmdDECR(args []string) []byte   { return e.increment("DECR", args, -1, false) }
+func (e *Engine) cmdINCRBY(args []string) []byte { return e.increment("INCRBY", args, 1, true) }
+func (e *Engine) cmdDECRBY(args []string) []byte { return e.increment("DECRBY", args, -1, true) }
+func (e *Engine) increment(name string, args []string, sign int64, explicit bool) []byte {
 	want := 1
 	if explicit {
 		want = 2
@@ -388,7 +388,7 @@ func increment(name string, args []string, sign int64, explicit bool) []byte {
 		delta = n * sign
 	}
 	key := args[0]
-	obj := dictStore.Get(key)
+	obj := e.dictStore.Get(key)
 	current := int64(0)
 	if obj != nil {
 		var valid bool
@@ -403,9 +403,9 @@ func increment(name string, args []string, sign int64, explicit bool) []byte {
 	current += delta
 	value := strconv.FormatInt(current, 10)
 	if obj == nil {
-		dictStore.Put(key, dictStore.NewObj(value))
+		e.dictStore.Put(key, e.dictStore.NewObj(value))
 	} else {
-		dictStore.UpdateValue(key, value)
+		e.dictStore.UpdateValue(key, value)
 	}
 	return Encode(current, false)
 }

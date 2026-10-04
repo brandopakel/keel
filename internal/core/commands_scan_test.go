@@ -161,7 +161,7 @@ func TestScanDoesNotShowExpiredKeys(t *testing.T) {
 	// An absolute expiry in the past, set on the store directly: going through
 	// EXPIREAT would delete the key outright rather than leave it present and
 	// due, which is the state this test is about.
-	dictStore.SetExpiryAt("gone", 1)
+	defaultEngine.dictStore.SetExpiryAt("gone", 1)
 
 	got, _ := scanAll(t)
 	assert.Contains(t, got, "live")

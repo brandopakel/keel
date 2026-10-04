@@ -9,11 +9,12 @@ import "github.com/brandopakel/keel/internal/data_structure"
 // two tests able to run side by side. The embedding plan
 // (docs/embedding-plan.md) gives all of it an owner, so that a process can hold
 // several independent instances and the server becomes one caller of the
-// engine among others. Step 2.1 moves the stores, one command family at a
-// time. A family that has moved keeps its store here, and its handlers are
-// Engine methods that read the store from the engine dispatching them - see
-// engineCommandTable. The families still to move read package variables, in
-// storage.go, until they do.
+// engine among others. Step 2.1 moves the stores here, one command family at
+// a time. A family that has moved has Engine methods for handlers, which read
+// its store from the engine dispatching them - see engineCommandTable. The
+// commands that act on a key whatever its type move last; until they do, they
+// find the stores through the default engine's space, as does the code that
+// later steps move (the log, the rewrite, replication).
 //
 // Until callers open engines of their own (plan phase 3) the server and the
 // tests run on defaultEngine, as the stores run on data_structure.DefaultSpace.
@@ -26,17 +27,18 @@ type Engine struct {
 	// draws from, its clock and its limits.
 	space *data_structure.Space
 
-	// The stores that have moved, under the names their package variables
-	// had, so that what a family reads is found by the same search as before.
+	// The stores, in the order ResetStores registers them, under the names
+	// they had as package variables.
+	dictStore   *data_structure.Dict
+	zsetStore   *data_structure.Keyed[*data_structure.ZSet]
+	setStore    *data_structure.Keyed[*data_structure.Set]
 	hashStore   *data_structure.Keyed[*data_structure.Hash]
 	listStore   *data_structure.Keyed[*data_structure.List]
-	setStore    *data_structure.Keyed[*data_structure.Set]
-	zsetStore   *data_structure.Keyed[*data_structure.ZSet]
 	sbStore     *data_structure.Keyed[*data_structure.SBChain]
-	cfStore     *data_structure.Keyed[*data_structure.CuckooFilter]
 	cmsStore    *data_structure.Keyed[*data_structure.CMS]
 	morrisStore *data_structure.Keyed[*data_structure.Morris]
 	hllStore    *data_structure.Keyed[*data_structure.HLL]
+	cfStore     *data_structure.Keyed[*data_structure.CuckooFilter]
 }
 
 // defaultEngine is the engine the server and the tests run on until each

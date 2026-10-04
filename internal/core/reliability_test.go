@@ -368,9 +368,9 @@ func TestLargeListRewriteRestartsAfterMutation(t *testing.T) {
 				_, has := defaultEngine.listStore.GetExpiry("large")
 				require.True(t, has)
 			case "replace":
-				require.Equal(t, "replacement", dictStore.Peek("large").Value)
+				require.Equal(t, "replacement", defaultEngine.dictStore.Peek("large").Value)
 			case "delete":
-				require.Nil(t, dictStore.Peek("large"))
+				require.Nil(t, defaultEngine.dictStore.Peek("large"))
 				_, ok := defaultEngine.listStore.Peek("large")
 				require.False(t, ok)
 			}
@@ -457,7 +457,7 @@ func TestAsyncAppendBarrierAndFailure(t *testing.T) {
 				ResetStores()
 				_, err = LoadAOF(path)
 				require.NoError(t, err)
-				require.Equal(t, "value", dictStore.Peek("k").Value)
+				require.Equal(t, "value", defaultEngine.dictStore.Peek("k").Value)
 			}
 		})
 	}

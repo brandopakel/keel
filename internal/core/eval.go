@@ -24,11 +24,6 @@ var commandTable = map[string]func([]string) []byte{
 	"PING": cmdPING, "ECHO": cmdECHO, "SELECT": cmdSELECT,
 	"UNWATCH": cmdUNWATCH,
 
-	// Strings
-	"SET": cmdSET, "SETNX": cmdSETNX, "GET": cmdGET, "INCR": cmdINCR, "INCRBY": cmdINCRBY, "DECR": cmdDECR, "DECRBY": cmdDECRBY, "MGET": cmdMGET, "MSET": cmdMSET,
-	"SETEX": cmdSETEX, "PSETEX": cmdPSETEX,
-	"LCS": cmdLCS,
-
 	// Keys and expiry
 	"DEL": cmdDEL, "UNLINK": cmdUNLINK, "EXISTS": cmdEXISTS, "TYPE": cmdTYPE, "KEYS": cmdKEYS, "SCAN": cmdSCAN,
 	"TTL": cmdTTL, "PTTL": cmdPTTL, "EXPIRE": cmdEXPIRE, "PEXPIREAT": cmdPEXPIREAT,
@@ -98,6 +93,12 @@ var engineCommandTable = map[string]func(*Engine, []string) []byte{
 
 	// HyperLogLogs
 	"PFADD": (*Engine).cmdPFADD, "PFCOUNT": (*Engine).cmdPFCOUNT, "PFMERGE": (*Engine).cmdPFMERGE,
+
+	// Strings
+	"SET": (*Engine).cmdSET, "SETNX": (*Engine).cmdSETNX, "GET": (*Engine).cmdGET, "INCR": (*Engine).cmdINCR,
+	"INCRBY": (*Engine).cmdINCRBY, "DECR": (*Engine).cmdDECR, "DECRBY": (*Engine).cmdDECRBY,
+	"MGET": (*Engine).cmdMGET, "MSET": (*Engine).cmdMSET, "SETEX": (*Engine).cmdSETEX,
+	"PSETEX": (*Engine).cmdPSETEX, "LCS": (*Engine).cmdLCS,
 }
 
 // cmdPING answers PONG, or echoes the one argument it is given.
@@ -199,7 +200,7 @@ func (e *Engine) evalAndResponse(cmd *Command, c io.ReadWriter) error {
 	// A name may only mean one thing at a time, and the stores cannot enforce
 	// that individually because none of them knows about the others. Checked
 	// before execution, so a refused command has not half-run.
-	if err := checkKeyTypes(cmd); err != nil {
+	if err := e.checkKeyTypes(cmd); err != nil {
 		res := Encode(err, false)
 		aofCommit(cmd, res)
 		_, werr := c.Write(res)

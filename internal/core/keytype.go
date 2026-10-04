@@ -125,12 +125,12 @@ var (
 )
 
 // typeError is the refusal of cmd for a key owner holds.
-func typeError(cmd string, owner data_structure.Keyspace) error {
+func (e *Engine) typeError(cmd string, owner data_structure.Keyspace) error {
 	switch cmd {
 	case "LCS":
 		return errLCSType
 	case "PFADD", "PFCOUNT", "PFMERGE":
-		if owner.KeyspaceName() == dictStore.KeyspaceName() {
+		if owner.KeyspaceName() == e.dictStore.KeyspaceName() {
 			return errNotHLL
 		}
 	}
@@ -309,20 +309,20 @@ var filterCommands = map[string]bool{
 // checkKeyTypes reports an error if any key the command names is already held
 // by a different kind of store: the command's own refusal of its arguments,
 // where Redis reads those first, and otherwise Redis's refusal of the type.
-func checkKeyTypes(cmd *Command) error {
+func (e *Engine) checkKeyTypes(cmd *Command) error {
 	space, checked := commandKeyspace[cmd.Cmd]
 	if !checked || len(cmd.Args) == 0 || replacingWrites[cmd.Cmd] || filterCommands[cmd.Cmd] {
 		return nil
 	}
 
 	for _, key := range commandKeys(cmd) {
-		if owner, held := data_structure.OwnerOf(key); held && owner.KeyspaceName() != space {
+		if owner, held := e.space.OwnerOf(key); held && owner.KeyspaceName() != space {
 			if arguments := argumentsBeforeType[cmd.Cmd]; arguments != nil {
 				if err := arguments(cmd.Args); err != nil {
 					return err
 				}
 			}
-			return typeError(cmd.Cmd, owner)
+			return e.typeError(cmd.Cmd, owner)
 		}
 	}
 	return nil

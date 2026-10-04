@@ -113,7 +113,7 @@ func decodeRestorePayload(key string, tag byte, body []byte) (store func(), err 
 		return func() { defaultEngine.listStore.Put(key, l) }, nil
 	case dumpTagString:
 		value := string(body)
-		return func() { dictStore.Put(key, dictStore.NewObj(value)) }, nil
+		return func() { defaultEngine.dictStore.Put(key, defaultEngine.dictStore.NewObj(value)) }, nil
 	case dumpTagSet:
 		members, err := decodeParts(body)
 		if err != nil {

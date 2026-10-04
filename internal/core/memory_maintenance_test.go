@@ -16,11 +16,11 @@ func TestMemoryMaintenancePreservesReplicaKeysAndExpiry(t *testing.T) {
 	config.ReplicaOf = "127.0.0.1:1"
 	for i := 0; i < 4096; i++ {
 		key := strconv.Itoa(i)
-		dictStore.Put(key, dictStore.NewObj("v"))
-		dictStore.SetExpiryAt(key, 1<<60)
+		defaultEngine.dictStore.Put(key, defaultEngine.dictStore.NewObj("v"))
+		defaultEngine.dictStore.SetExpiryAt(key, 1<<60)
 	}
 	for i := 0; i < 4000; i++ {
-		dictStore.ClearExpiry(strconv.Itoa(i))
+		defaultEngine.dictStore.ClearExpiry(strconv.Itoa(i))
 	}
 	before := data_structure.TotalMemUsed()
 	worked := 0
@@ -30,11 +30,11 @@ func TestMemoryMaintenancePreservesReplicaKeysAndExpiry(t *testing.T) {
 		worked += work
 	}
 	require.GreaterOrEqual(t, worked, 4096)
-	require.Equal(t, 4096, dictStore.Len())
-	require.Equal(t, 96, dictStore.KeysWithExpiry())
+	require.Equal(t, 4096, defaultEngine.dictStore.Len())
+	require.Equal(t, 96, defaultEngine.dictStore.KeysWithExpiry())
 	require.Equal(t, before, data_structure.TotalMemUsed(), "physical compaction must not change logical accounting")
 	for i := 4000; i < 4096; i++ {
-		at, ok := dictStore.GetExpiry(strconv.Itoa(i))
+		at, ok := defaultEngine.dictStore.GetExpiry(strconv.Itoa(i))
 		require.True(t, ok)
 		require.EqualValues(t, 1<<60, at)
 	}

@@ -16,7 +16,7 @@ import (
 // up every other client. Hence the guard, and hence the fact that the limit is
 // an operator setting rather than a constant - see config.LCSMaxCells.
 
-func cmdLCS(args []string) []byte {
+func (e *Engine) cmdLCS(args []string) []byte {
 	if len(args) < 2 {
 		return Encode(wrongArguments("LCS"), false)
 	}
@@ -55,16 +55,16 @@ func cmdLCS(args []string) []byte {
 		return Encode(errors.New("ERR If you want both the length and indexes, please just use IDX."), false)
 	}
 
-	a, err := lcsValue(args[0])
+	a, err := e.lcsValue(args[0])
 	if err != nil {
 		return Encode(err, false)
 	}
-	b, err := lcsValue(args[1])
+	b, err := e.lcsValue(args[1])
 	if err != nil {
 		return Encode(err, false)
 	}
 
-	if data_structure.LCSTooLarge(a, b) {
+	if e.space.LCSTooLarge(a, b) {
 		// Redis's message, so a client that already handles this from Redis
 		// handles it here. The reason underneath differs - Redis runs out of
 		// room for its table, this runs out of time budget - but the client's
@@ -134,12 +134,12 @@ func cmdLCS(args []string) []byte {
 //
 // A key holding some other type never reaches here: the type check refuses
 // it first, in the words Redis's LCS uses - see typeError.
-func lcsValue(key string) (string, error) {
-	obj := dictStore.Get(key)
+func (e *Engine) lcsValue(key string) (string, error) {
+	obj := e.dictStore.Get(key)
 	if obj == nil {
 		return "", nil
 	}
-	if dictStore.HasExpired(key) {
+	if e.dictStore.HasExpired(key) {
 		return "", nil
 	}
 	return obj.Value, nil

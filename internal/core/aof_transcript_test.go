@@ -191,7 +191,7 @@ func TestAOFTranscriptReplicationPreservesChunkedPrefixes(t *testing.T) {
 	run(t, "CMS.INCRBY", "cms", "hits", "7")
 	cms, ok := dumpKey("cms")
 	require.True(t, ok)
-	wantTTL, ok := dictStore.GetExpiry("large")
+	wantTTL, ok := defaultEngine.dictStore.GetExpiry("large")
 	require.True(t, ok)
 	var deltas []ReplicationFrame
 	for {
@@ -212,7 +212,7 @@ func TestAOFTranscriptReplicationPreservesChunkedPrefixes(t *testing.T) {
 	require.True(t, replicaReady)
 	require.Equal(t, "2", run(t, "GET", "counter"), "stream drains must not duplicate previous commands")
 	require.Equal(t, value, run(t, "GET", "large"))
-	gotTTL, ok := dictStore.GetExpiry("large")
+	gotTTL, ok := defaultEngine.dictStore.GetExpiry("large")
 	require.True(t, ok)
 	require.Equal(t, wantTTL, gotTTL)
 	require.EqualValues(t, 0, run(t, "SCARD", "set"))
@@ -231,7 +231,7 @@ func TestAOFTranscriptExpiryAndRecreationKeepCanonicalOrder(t *testing.T) {
 	for i := range keys {
 		keys[i] = fmt.Sprint(i) + strings.Repeat("e", 128<<10)
 		run(t, "SET", keys[i], "old")
-		dictStore.SetExpiryAt(keys[i], 1)
+		defaultEngine.dictStore.SetExpiryAt(keys[i], 1)
 	}
 	// These direct expiries model a clock advance after persistence without a
 	// sleep. Snapshot expiry semantics are covered by the full replication suite.
@@ -358,7 +358,7 @@ func TestAOFTranscriptMassEvictionKeepsBoundedBuffer(t *testing.T) {
 	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(8<<20))
 	var survivors []string
 	for _, key := range keys {
-		if dictStore.Has(key) {
+		if defaultEngine.dictStore.Has(key) {
 			survivors = append(survivors, key)
 		}
 	}
