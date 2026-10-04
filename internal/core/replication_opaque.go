@@ -87,7 +87,7 @@ func replicationKeyExpiry(key string, tag byte) uint64 {
 	case dumpTagHash:
 		ks = defaultEngine.hashStore
 	case dumpTagList:
-		ks = listStore
+		ks = defaultEngine.listStore
 	case dumpTagSet:
 		ks = setStore
 	case dumpTagZSet:

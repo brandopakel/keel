@@ -12,12 +12,11 @@ import (
 // -maxmemory without anything noticing.
 //
 // The stores are moving into Engine a command family at a time (plan step
-// 2.1). The ones below have yet to; the hashes have.
+// 2.1). The ones below have yet to; Engine holds those that have.
 var (
 	dictStore   *data_structure.Dict
 	zsetStore   *data_structure.Keyed[*data_structure.ZSet]
 	setStore    *data_structure.Keyed[*data_structure.Set]
-	listStore   *data_structure.Keyed[*data_structure.List]
 	sbStore     *data_structure.Keyed[*data_structure.SBChain]
 	cmsStore    *data_structure.Keyed[*data_structure.CMS]
 	morrisStore *data_structure.Keyed[*data_structure.Morris]
@@ -45,7 +44,7 @@ func ResetStores() {
 	zsetStore = data_structure.NewKeyed[*data_structure.ZSet](space, "zset")
 	setStore = data_structure.NewKeyed[*data_structure.Set](space, "set")
 	e.hashStore = data_structure.NewKeyed[*data_structure.Hash](space, "hash")
-	listStore = data_structure.NewKeyed[*data_structure.List](space, "list")
+	e.listStore = data_structure.NewKeyed[*data_structure.List](space, "list")
 	sbStore = data_structure.NewKeyed[*data_structure.SBChain](space, "bloom")
 	cmsStore = data_structure.NewKeyed[*data_structure.CMS](space, "cms")
 	morrisStore = data_structure.NewKeyed[*data_structure.Morris](space, "morris")
@@ -56,7 +55,7 @@ func ResetStores() {
 	space.RegisterKeyspace(zsetStore)
 	space.RegisterKeyspace(setStore)
 	space.RegisterKeyspace(e.hashStore)
-	space.RegisterKeyspace(listStore)
+	space.RegisterKeyspace(e.listStore)
 	space.RegisterKeyspace(sbStore)
 	space.RegisterKeyspace(cmsStore)
 	space.RegisterKeyspace(morrisStore)

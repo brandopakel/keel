@@ -45,10 +45,6 @@ var commandTable = map[string]func([]string) []byte{
 	// still replays; a command is written to the log under its current name.
 	"MEMKV.DUMP": cmdDUMP, "MEMKV.RESTORE": cmdRESTORE,
 
-	// Lists
-	"LPUSH": cmdLPUSH, "RPUSH": cmdRPUSH, "LPOP": cmdLPOP, "RPOP": cmdRPOP,
-	"LTRIM": cmdLTRIM, "LLEN": cmdLLEN, "LINDEX": cmdLINDEX, "LSET": cmdLSET, "LRANGE": cmdLRANGE,
-
 	// Sets
 	"SADD": cmdSADD, "SREM": cmdSREM, "SCARD": cmdSCARD, "SMEMBERS": cmdSMEMBERS,
 	"SISMEMBER": cmdSISMEMBER, "SMISMEMBER": cmdSMISMEMBER, "SPOP": cmdSPOP,
@@ -86,6 +82,11 @@ var engineCommandTable = map[string]func(*Engine, []string) []byte{
 	"HSET": (*Engine).cmdHSET, "HSETNX": (*Engine).cmdHSETNX, "HGET": (*Engine).cmdHGET, "HMGET": (*Engine).cmdHMGET,
 	"HDEL": (*Engine).cmdHDEL, "HEXISTS": (*Engine).cmdHEXISTS, "HLEN": (*Engine).cmdHLEN, "HKEYS": (*Engine).cmdHKEYS,
 	"HVALS": (*Engine).cmdHVALS, "HGETALL": (*Engine).cmdHGETALL, "HINCRBY": (*Engine).cmdHINCRBY,
+
+	// Lists
+	"LPUSH": (*Engine).cmdLPUSH, "RPUSH": (*Engine).cmdRPUSH, "LPOP": (*Engine).cmdLPOP,
+	"RPOP": (*Engine).cmdRPOP, "LTRIM": (*Engine).cmdLTRIM, "LLEN": (*Engine).cmdLLEN,
+	"LINDEX": (*Engine).cmdLINDEX, "LSET": (*Engine).cmdLSET, "LRANGE": (*Engine).cmdLRANGE,
 }
 
 // cmdPING answers PONG, or echoes the one argument it is given.

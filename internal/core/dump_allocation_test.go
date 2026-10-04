@@ -44,7 +44,7 @@ func TestDumpRejectsAmplifiedListBeforeAllocation(t *testing.T) {
 	for i := 0; i < 65; i++ {
 		list.PushBack(value)
 	}
-	listStore.Put("large", list)
+	defaultEngine.listStore.Put("large", list)
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
@@ -67,7 +67,7 @@ func TestDumpAcceptedPayloadUsesOneSizedBuffer(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		list.PushBack(value)
 	}
-	listStore.Put("large", list)
+	defaultEngine.listStore.Put("large", list)
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
@@ -84,7 +84,7 @@ func TestDumpAcceptedPayloadUsesOneSizedBuffer(t *testing.T) {
 	require.Equal(t, header+2+length+2, len(reply))
 	require.Equal(t, []byte("\r\n"), reply[len(reply)-2:])
 	require.NoError(t, restoreKey("restored", reply[header+2:len(reply)-2]))
-	restored, ok := listStore.Peek("restored")
+	restored, ok := defaultEngine.listStore.Peek("restored")
 	require.True(t, ok)
 	require.Equal(t, 4, restored.Len())
 	for i := 0; i < restored.Len(); i++ {

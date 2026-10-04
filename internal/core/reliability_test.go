@@ -358,20 +358,20 @@ func TestLargeListRewriteRestartsAfterMutation(t *testing.T) {
 			require.NoError(t, err)
 			switch mutation {
 			case "append":
-				l, ok := listStore.Peek("large")
+				l, ok := defaultEngine.listStore.Peek("large")
 				require.True(t, ok)
 				require.Equal(t, 2001, l.Len())
 				first, _ := l.Index(0)
 				last, _ := l.Index(-1)
 				require.Equal(t, "0", first)
 				require.Equal(t, "last", last)
-				_, has := listStore.GetExpiry("large")
+				_, has := defaultEngine.listStore.GetExpiry("large")
 				require.True(t, has)
 			case "replace":
 				require.Equal(t, "replacement", dictStore.Peek("large").Value)
 			case "delete":
 				require.Nil(t, dictStore.Peek("large"))
-				_, ok := listStore.Peek("large")
+				_, ok := defaultEngine.listStore.Peek("large")
 				require.False(t, ok)
 			}
 		})

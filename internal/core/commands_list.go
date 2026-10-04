@@ -15,46 +15,46 @@ import (
 // the rewrite would write it as an RPUSH with no values, which is a syntax
 // error on replay.
 
-func listFor(key string) (*data_structure.List, bool) {
-	return listStore.Get(key)
+func (e *Engine) listFor(key string) (*data_structure.List, bool) {
+	return e.listStore.Get(key)
 }
 
-func dropListIfEmpty(key string, l *data_structure.List) {
+func (e *Engine) dropListIfEmpty(key string, l *data_structure.List) {
 	if l.Len() == 0 {
-		listStore.Delete(key)
+		e.listStore.Delete(key)
 		return
 	}
-	listStore.Resize(key)
+	e.listStore.Resize(key)
 }
 
 // push is LPUSH and RPUSH, which differ only in the end they add to.
-func push(args []string, front bool, name string) []byte {
+func (e *Engine) push(args []string, front bool, name string) []byte {
 	if len(args) < 2 {
 		return Encode(wrongArguments(name), false)
 	}
 	key := args[0]
 
-	l, ok := listFor(key)
+	l, ok := e.listFor(key)
 	if !ok {
 		l = data_structure.NewList()
-		listStore.Put(key, l)
+		e.listStore.Put(key, l)
 	}
 	if front {
 		l.PushFront(args[1:]...)
 	} else {
 		l.PushBack(args[1:]...)
 	}
-	listStore.Resize(key)
+	e.listStore.Resize(key)
 	return Encode(l.Len(), false)
 }
 
-func cmdLPUSH(args []string) []byte { return push(args, true, "LPUSH") }
-func cmdRPUSH(args []string) []byte { return push(args, false, "RPUSH") }
+func (e *Engine) cmdLPUSH(args []string) []byte { return e.push(args, true, "LPUSH") }
+func (e *Engine) cmdRPUSH(args []string) []byte { return e.push(args, false, "RPUSH") }
 
 // pop is LPOP and RPOP. Without a count it answers one element; with one it
 // answers an array, which is Redis 6.2's behaviour and the one clients test
 // for - a count of zero is an empty array rather than a nil.
-func pop(args []string, front bool, name string) []byte {
+func (e *Engine) pop(args []string, front bool, name string) []byte {
 	if len(args) < 1 || len(args) > 2 {
 		return Encode(wrongArguments(name), false)
 	}
@@ -70,7 +70,7 @@ func pop(args []string, front bool, name string) []byte {
 		count = int(n)
 	}
 
-	l, ok := listFor(key)
+	l, ok := e.listFor(key)
 	if !ok {
 		// A null array and a null bulk string are different replies, and which
 		// one belongs here depends on what the command was going to answer.
@@ -112,18 +112,18 @@ func pop(args []string, front bool, name string) []byte {
 			l.PopBack()
 		}
 	}
-	dropListIfEmpty(key, l)
+	e.dropListIfEmpty(key, l)
 	return out
 }
 
-func cmdLPOP(args []string) []byte { return pop(args, true, "LPOP") }
-func cmdRPOP(args []string) []byte { return pop(args, false, "RPOP") }
+func (e *Engine) cmdLPOP(args []string) []byte { return e.pop(args, true, "LPOP") }
+func (e *Engine) cmdRPOP(args []string) []byte { return e.pop(args, false, "RPOP") }
 
-func cmdLLEN(args []string) []byte {
+func (e *Engine) cmdLLEN(args []string) []byte {
 	if len(args) != 1 {
 		return Encode(wrongArguments("LLEN"), false)
 	}
-	l, ok := listFor(args[0])
+	l, ok := e.listFor(args[0])
 	if !ok {
 		return constant.RespZero
 	}
@@ -132,11 +132,11 @@ func cmdLLEN(args []string) []byte {
 
 // cmdLINDEX looks the key up before it reads the index, as Redis does, so a
 // key that is not there answers nil whatever the index says.
-func cmdLINDEX(args []string) []byte {
+func (e *Engine) cmdLINDEX(args []string) []byte {
 	if len(args) != 2 {
 		return Encode(wrongArguments("LINDEX"), false)
 	}
-	l, ok := listFor(args[0])
+	l, ok := e.listFor(args[0])
 	if !ok {
 		return nullReply()
 	}
@@ -152,11 +152,11 @@ func cmdLINDEX(args []string) []byte {
 }
 
 // cmdLSET, like LINDEX, finds the key before it reads the index.
-func cmdLSET(args []string) []byte {
+func (e *Engine) cmdLSET(args []string) []byte {
 	if len(args) != 3 {
 		return Encode(wrongArguments("LSET"), false)
 	}
-	l, ok := listFor(args[0])
+	l, ok := e.listFor(args[0])
 	if !ok {
 		return Encode(errors.New("ERR no such key"), false)
 	}
@@ -167,7 +167,7 @@ func cmdLSET(args []string) []byte {
 	if !l.Set(int(index), args[2]) {
 		return Encode(errors.New("ERR index out of range"), false)
 	}
-	listStore.Resize(args[0])
+	e.listStore.Resize(args[0])
 	return constant.RespOk
 }
 
@@ -175,7 +175,7 @@ func cmdLSET(args []string) []byte {
 // allowed to be negative or out of range - a range outside the list is empty
 // rather than an error, which is what makes LRANGE key 0 -1 the idiom for
 // "everything" whatever the length.
-func cmdLRANGE(args []string) []byte {
+func (e *Engine) cmdLRANGE(args []string) []byte {
 	if len(args) != 3 {
 		return Encode(wrongArguments("LRANGE"), false)
 	}
@@ -184,14 +184,14 @@ func cmdLRANGE(args []string) []byte {
 		return Encode(err, false)
 	}
 
-	l, ok := listFor(args[0])
+	l, ok := e.listFor(args[0])
 	if !ok {
 		return constant.RespEmptyArray
 	}
 	return encodeWalkReply(func(yield func(string) bool) { l.VisitRange(start, stop, yield) }, shapeArray)
 }
 
-func cmdLTRIM(args []string) []byte {
+func (e *Engine) cmdLTRIM(args []string) []byte {
 	if len(args) != 3 {
 		return Encode(wrongArguments("LTRIM"), false)
 	}
@@ -199,21 +199,21 @@ func cmdLTRIM(args []string) []byte {
 	if err != nil {
 		return Encode(err, false)
 	}
-	l, ok := listFor(args[0])
+	l, ok := e.listFor(args[0])
 	if !ok {
 		return constant.RespOk
 	}
 	values := l.Range(start, stop)
 	if len(values) == 0 {
-		listStore.Delete(args[0])
+		e.listStore.Delete(args[0])
 		return constant.RespOk
 	}
-	ttl, expires := listStore.GetExpiry(args[0])
+	ttl, expires := e.listStore.GetExpiry(args[0])
 	replacement := data_structure.NewList()
 	replacement.PushBack(values...)
-	listStore.Put(args[0], replacement)
+	e.listStore.Put(args[0], replacement)
 	if expires {
-		listStore.SetExpiryAt(args[0], ttl)
+		e.listStore.SetExpiryAt(args[0], ttl)
 	}
 	return constant.RespOk
 }
