@@ -13,9 +13,9 @@ func BenchmarkSketchRewriteStart(b *testing.B) {
 			b.Run(fmt.Sprintf("%s/%dMiB", kind, mib), func(b *testing.B) {
 				ResetStores()
 				if kind == "cms" {
-					cmsStore.Put("image", data_structure.CreateCMS(uint32(mib<<18), 1))
+					defaultEngine.cmsStore.Put("image", data_structure.CreateCMS(uint32(mib<<18), 1))
 				} else {
-					morrisStore.Put("image", data_structure.CreateMorris(uint32(mib<<20), 1))
+					defaultEngine.morrisStore.Put("image", data_structure.CreateMorris(uint32(mib<<20), 1))
 				}
 				b.Cleanup(func() { rewrite.stream = nil; ResetStores() })
 				b.ReportAllocs()

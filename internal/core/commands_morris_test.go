@@ -12,11 +12,11 @@ import (
 func TestCmdMorrisInitByDim(t *testing.T) {
 	ResetStores()
 
-	res, err := Decode(cmdMORRISINITBYDIM([]string{"m", "1000", "5"}))
+	res, err := Decode(defaultEngine.cmdMORRISINITBYDIM([]string{"m", "1000", "5"}))
 	assert.Nil(t, err)
 	assert.EqualValues(t, "OK", res)
 
-	res, _ = Decode(cmdMORRISINITBYDIM([]string{"m", "1000", "5"}))
+	res, _ = Decode(defaultEngine.cmdMORRISINITBYDIM([]string{"m", "1000", "5"}))
 	assert.Contains(t, res, "already exists")
 
 	for _, bad := range [][]string{
@@ -25,19 +25,19 @@ func TestCmdMorrisInitByDim(t *testing.T) {
 		{"m2", "wide", "5"},
 		{"m2", "1000"},
 	} {
-		res, _ = Decode(cmdMORRISINITBYDIM(bad))
+		res, _ = Decode(defaultEngine.cmdMORRISINITBYDIM(bad))
 		assert.IsType(t, "", res, "MORRIS.INITBYDIM %v must be refused", bad)
-		assert.False(t, morrisStore.Exists("m2"))
+		assert.False(t, defaultEngine.morrisStore.Exists("m2"))
 	}
 }
 
 func TestCmdMorrisInitByProbMatchesCountMinDimensions(t *testing.T) {
 	ResetStores()
 
-	assert.EqualValues(t, "OK", mustDecode(t, cmdMORRISINITBYPROB([]string{"m", "0.001", "0.01"})))
-	assert.EqualValues(t, "OK", mustDecode(t, cmdCMSINITBYPROB([]string{"c", "0.001", "0.01"})))
+	assert.EqualValues(t, "OK", mustDecode(t, defaultEngine.cmdMORRISINITBYPROB([]string{"m", "0.001", "0.01"})))
+	assert.EqualValues(t, "OK", mustDecode(t, defaultEngine.cmdCMSINITBYPROB([]string{"c", "0.001", "0.01"})))
 
-	m, ok := morrisStore.Peek("m")
+	m, ok := defaultEngine.morrisStore.Peek("m")
 	assert.True(t, ok)
 	w, d := data_structure.CalcCMSDim(0.001, 0.01)
 	assert.Equal(t, w, m.Width())
@@ -49,18 +49,18 @@ func TestCmdMorrisInitByProbMatchesCountMinDimensions(t *testing.T) {
 // it lands within the error the structure advertises.
 func TestCmdMorrisCountsWithinItsStatedError(t *testing.T) {
 	ResetStores()
-	assert.EqualValues(t, "OK", mustDecode(t, cmdMORRISINITBYDIM([]string{"m", "20000", "7"})))
+	assert.EqualValues(t, "OK", mustDecode(t, defaultEngine.cmdMORRISINITBYDIM([]string{"m", "20000", "7"})))
 
 	const items = 300
 	const each = 100000
 	for i := 0; i < items; i++ {
-		res, _ := Decode(cmdMORRISINCRBY([]string{"m", "item:" + strconv.Itoa(i), strconv.Itoa(each)}))
+		res, _ := Decode(defaultEngine.cmdMORRISINCRBY([]string{"m", "item:" + strconv.Itoa(i), strconv.Itoa(each)}))
 		assert.Len(t, res, 1)
 	}
 
 	var mean float64
 	for i := 0; i < items; i++ {
-		res, _ := Decode(cmdMORRISQUERY([]string{"m", "item:" + strconv.Itoa(i)}))
+		res, _ := Decode(defaultEngine.cmdMORRISQUERY([]string{"m", "item:" + strconv.Itoa(i)}))
 		counts := res.([]interface{})
 		got, err := strconv.ParseFloat(counts[0].(string), 64)
 		assert.Nil(t, err)
@@ -76,11 +76,11 @@ func TestCmdMorrisCountsWithinItsStatedError(t *testing.T) {
 // replaced by a loop, this is the test that would notice.
 func TestCmdMorrisIncrByIsNotLinearInTheIncrement(t *testing.T) {
 	ResetStores()
-	assert.EqualValues(t, "OK", mustDecode(t, cmdMORRISINITBYDIM([]string{"m", "100", "5"})))
+	assert.EqualValues(t, "OK", mustDecode(t, defaultEngine.cmdMORRISINITBYDIM([]string{"m", "100", "5"})))
 
 	// Counting to a billion in one command, which a per-increment loop could
 	// not finish inside this test.
-	res, _ := Decode(cmdMORRISINCRBY([]string{"m", "heavy", "1000000000"}))
+	res, _ := Decode(defaultEngine.cmdMORRISINCRBY([]string{"m", "heavy", "1000000000"}))
 	counts := res.([]interface{})
 	got, err := strconv.ParseUint(counts[0].(string), 10, 64)
 	assert.Nil(t, err)
@@ -89,12 +89,12 @@ func TestCmdMorrisIncrByIsNotLinearInTheIncrement(t *testing.T) {
 
 func TestCmdMorrisMultipleItemsPerCall(t *testing.T) {
 	ResetStores()
-	assert.EqualValues(t, "OK", mustDecode(t, cmdMORRISINITBYDIM([]string{"m", "2000", "5"})))
+	assert.EqualValues(t, "OK", mustDecode(t, defaultEngine.cmdMORRISINITBYDIM([]string{"m", "2000", "5"})))
 
-	res, _ := Decode(cmdMORRISINCRBY([]string{"m", "a", "1", "b", "2", "c", "3"}))
+	res, _ := Decode(defaultEngine.cmdMORRISINCRBY([]string{"m", "a", "1", "b", "2", "c", "3"}))
 	assert.Len(t, res, 3)
 
-	res, _ = Decode(cmdMORRISQUERY([]string{"m", "a", "b", "c"}))
+	res, _ = Decode(defaultEngine.cmdMORRISQUERY([]string{"m", "a", "b", "c"}))
 	assert.Len(t, res, 3)
 
 	// Small counts land exactly: the first increments always take, so the
@@ -107,25 +107,25 @@ func TestCmdMorrisMultipleItemsPerCall(t *testing.T) {
 
 func TestCmdMorrisOnMissingKey(t *testing.T) {
 	ResetStores()
-	res, _ := Decode(cmdMORRISINCRBY([]string{"nope", "x", "1"}))
+	res, _ := Decode(defaultEngine.cmdMORRISINCRBY([]string{"nope", "x", "1"}))
 	assert.Contains(t, res, "does not exist")
-	res, _ = Decode(cmdMORRISQUERY([]string{"nope", "x"}))
+	res, _ = Decode(defaultEngine.cmdMORRISQUERY([]string{"nope", "x"}))
 	assert.Contains(t, res, "does not exist")
-	res, _ = Decode(cmdMORRISINFO([]string{"nope"}))
+	res, _ = Decode(defaultEngine.cmdMORRISINFO([]string{"nope"}))
 	assert.Contains(t, res, "does not exist")
 }
 
 func TestCmdMorrisWrongArity(t *testing.T) {
 	ResetStores()
-	assert.EqualValues(t, "OK", mustDecode(t, cmdMORRISINITBYDIM([]string{"m", "100", "5"})))
+	assert.EqualValues(t, "OK", mustDecode(t, defaultEngine.cmdMORRISINITBYDIM([]string{"m", "100", "5"})))
 
 	for _, bad := range [][]string{{"m"}, {"m", "item"}, {"m", "item", "1", "other"}} {
-		res, _ := Decode(cmdMORRISINCRBY(bad))
+		res, _ := Decode(defaultEngine.cmdMORRISINCRBY(bad))
 		assert.Contains(t, res, "wrong number of arguments", "MORRIS.INCRBY %v", bad)
 	}
-	res, _ := Decode(cmdMORRISQUERY([]string{"m"}))
+	res, _ := Decode(defaultEngine.cmdMORRISQUERY([]string{"m"}))
 	assert.Contains(t, res, "wrong number of arguments")
-	res, _ = Decode(cmdMORRISINFO([]string{"m", "extra"}))
+	res, _ = Decode(defaultEngine.cmdMORRISINFO([]string{"m", "extra"}))
 	assert.Contains(t, res, "wrong number of arguments")
 }
 
@@ -133,10 +133,10 @@ func TestCmdMorrisWrongArity(t *testing.T) {
 // without its error bar, and the memory comparison is the reason to accept one.
 func TestCmdMorrisInfoReportsTheTradeItIsMaking(t *testing.T) {
 	ResetStores()
-	assert.EqualValues(t, "OK", mustDecode(t, cmdMORRISINITBYDIM([]string{"m", "2000", "7"})))
-	_, _ = Decode(cmdMORRISINCRBY([]string{"m", "x", "42"}))
+	assert.EqualValues(t, "OK", mustDecode(t, defaultEngine.cmdMORRISINITBYDIM([]string{"m", "2000", "7"})))
+	_, _ = Decode(defaultEngine.cmdMORRISINCRBY([]string{"m", "x", "42"}))
 
-	res, _ := Decode(cmdMORRISINFO([]string{"m"}))
+	res, _ := Decode(defaultEngine.cmdMORRISINFO([]string{"m"}))
 	fields := map[string]string{}
 	pairs := res.([]interface{})
 	for i := 0; i+1 < len(pairs); i += 2 {
@@ -158,7 +158,7 @@ func TestCmdMorrisInfoReportsTheTradeItIsMaking(t *testing.T) {
 // was introduced to fix; a new one has to be wired in the same way.
 func TestMorrisKeyspaceIsAccountedAndEvictable(t *testing.T) {
 	ResetStores()
-	assert.EqualValues(t, "OK", mustDecode(t, cmdMORRISINITBYDIM([]string{"m", "5000", "5"})))
+	assert.EqualValues(t, "OK", mustDecode(t, defaultEngine.cmdMORRISINITBYDIM([]string{"m", "5000", "5"})))
 
 	res, _ := Decode(cmdMEMORY([]string{"USAGE", "m"}))
 	assert.EqualValues(t, 25000+64+len("m")+100, res,

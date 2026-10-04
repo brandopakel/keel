@@ -35,9 +35,9 @@ func TestEveryKeyspaceIsAccounted(t *testing.T) {
 		{"string", func(i int) { cmdSET([]string{"s" + strconv.Itoa(i), strings.Repeat("v", 500)}) }},
 		{"set", func(i int) { defaultEngine.cmdSADD([]string{"set" + strconv.Itoa(i), "a", "b", "c", "d", "e"}) }},
 		{"sorted set", func(i int) { defaultEngine.cmdZADD([]string{"z" + strconv.Itoa(i), "1", "a", "2", "b"}) }},
-		{"hyperloglog", func(i int) { cmdPFADD([]string{"h" + strconv.Itoa(i), "x"}) }},
+		{"hyperloglog", func(i int) { defaultEngine.cmdPFADD([]string{"h" + strconv.Itoa(i), "x"}) }},
 		{"cuckoo filter", func(i int) { defaultEngine.cmdCFADD([]string{"c" + strconv.Itoa(i), "x"}) }},
-		{"count-min sketch", func(i int) { cmdCMSINITBYDIM([]string{"m" + strconv.Itoa(i), "200", "5"}) }},
+		{"count-min sketch", func(i int) { defaultEngine.cmdCMSINITBYDIM([]string{"m" + strconv.Itoa(i), "200", "5"}) }},
 		{"bloom filter", func(i int) { defaultEngine.cmdBFMADD([]string{"b" + strconv.Itoa(i), "x"}) }},
 	}
 
@@ -69,7 +69,7 @@ func TestBudgetIsSharedAcrossKeyspaces(t *testing.T) {
 		n := strconv.Itoa(i)
 		cmdSET([]string{"s" + n, strings.Repeat("v", 500)})
 		defaultEngine.cmdSADD([]string{"set" + n, "a", "b", "c"})
-		cmdPFADD([]string{"h" + n, "x"})
+		defaultEngine.cmdPFADD([]string{"h" + n, "x"})
 		defaultEngine.cmdZADD([]string{"z" + n, "1", "a"})
 	}
 	used := data_structure.TotalMemUsed()
@@ -86,9 +86,9 @@ func TestEvictionCrossesKeyspaces(t *testing.T) {
 
 	// Fill with sketches only, so everything the budget holds is one type.
 	for i := 0; i < 4000; i++ {
-		cmdPFADD([]string{"h" + strconv.Itoa(i), "x"})
+		defaultEngine.cmdPFADD([]string{"h" + strconv.Itoa(i), "x"})
 	}
-	hllKeys := hllStore.Len()
+	hllKeys := defaultEngine.hllStore.Len()
 	assert.Greater(t, hllKeys, 0)
 
 	// Now write strings. The budget is already full of sketches, so room can
@@ -96,7 +96,7 @@ func TestEvictionCrossesKeyspaces(t *testing.T) {
 	for i := 0; i < 500; i++ {
 		cmdSET([]string{"s" + strconv.Itoa(i), strings.Repeat("v", 200)})
 	}
-	assert.Less(t, hllStore.Len(), hllKeys,
+	assert.Less(t, defaultEngine.hllStore.Len(), hllKeys,
 		"pressure from the string keyspace must be able to evict sketches")
 	assert.LessOrEqual(t, data_structure.TotalMemUsed(), uint64(512<<10)*11/10)
 }
@@ -132,9 +132,9 @@ func TestMemoryUsageFindsKeysInEveryKeyspace(t *testing.T) {
 	cmdSET([]string{"str", strings.Repeat("v", 100)})
 	defaultEngine.cmdSADD([]string{"set", "a", "b", "c"})
 	defaultEngine.cmdZADD([]string{"zset", "1", "a"})
-	cmdPFADD([]string{"hll", "x"})
+	defaultEngine.cmdPFADD([]string{"hll", "x"})
 	defaultEngine.cmdCFADD([]string{"cf", "x"})
-	cmdCMSINITBYDIM([]string{"cms", "200", "5"})
+	defaultEngine.cmdCMSINITBYDIM([]string{"cms", "200", "5"})
 	defaultEngine.cmdBFMADD([]string{"bf", "x"})
 
 	for _, key := range []string{"str", "set", "zset", "hll", "cf", "cms", "bf"} {
@@ -150,7 +150,7 @@ func TestMemoryUsageFindsKeysInEveryKeyspace(t *testing.T) {
 	res, _ := Decode(cmdMEMORY([]string{"USAGE", "hll"}))
 	assert.Less(t, res.(int64), int64(1000))
 	for i := 0; i < 1000; i++ {
-		cmdPFADD([]string{"hll", strconv.Itoa(i)})
+		defaultEngine.cmdPFADD([]string{"hll", strconv.Itoa(i)})
 	}
 	res, _ = Decode(cmdMEMORY([]string{"USAGE", "hll"}))
 	assert.Greater(t, res.(int64), int64(12000))

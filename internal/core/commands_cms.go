@@ -23,15 +23,15 @@ var (
 	errCMSOverflow = errors.New("CMS: INCRBY overflow")
 )
 
-func cmsFor(key string) (*data_structure.CMS, bool) {
-	return cmsStore.Get(key)
+func (e *Engine) cmsFor(key string) (*data_structure.CMS, bool) {
+	return e.cmsStore.Get(key)
 }
 
 // cmsCreate stores a fresh sketch at key, refusing dimensions that are zero or
 // that would not fit, and a key already taken. The dimensions arrive from a
 // client and multiply into an allocation, so their product is checked against
 // what the server will allocate before anything is made.
-func cmsCreate(key string, width, depth uint32) []byte {
+func (e *Engine) cmsCreate(key string, width, depth uint32) []byte {
 	if width == 0 {
 		return Encode(errCMSWidth, false)
 	}
@@ -47,15 +47,15 @@ func cmsCreate(key string, width, depth uint32) []byte {
 	if err := affordable(data_structure.CMSMemUsageFor(width, depth)); err != nil {
 		return Encode(err, false)
 	}
-	if cmsStore.Exists(key) {
+	if e.cmsStore.Exists(key) {
 		return Encode(errCMSExists, false)
 	}
-	cmsStore.Put(key, data_structure.CreateCMS(width, depth))
+	e.cmsStore.Put(key, data_structure.CreateCMS(width, depth))
 	return constant.RespOk
 }
 
 // cmdCMSINITBYDIM implements CMS.INITBYDIM key width depth.
-func cmdCMSINITBYDIM(args []string) []byte {
+func (e *Engine) cmdCMSINITBYDIM(args []string) []byte {
 	if len(args) != 3 {
 		return Encode(wrongArguments("CMS.INITBYDIM"), false)
 	}
@@ -67,13 +67,13 @@ func cmdCMSINITBYDIM(args []string) []byte {
 	if err != nil {
 		return Encode(errCMSDepth, false)
 	}
-	return cmsCreate(args[0], uint32(width), uint32(depth))
+	return e.cmsCreate(args[0], uint32(width), uint32(depth))
 }
 
 // cmdCMSINITBYPROB implements CMS.INITBYPROB key error probability: the
 // sketch is sized so estimates are within error of the total count with the
 // given probability of failing to be.
-func cmdCMSINITBYPROB(args []string) []byte {
+func (e *Engine) cmdCMSINITBYPROB(args []string) []byte {
 	if len(args) != 3 {
 		return Encode(wrongArguments("CMS.INITBYPROB"), false)
 	}
@@ -88,18 +88,18 @@ func cmdCMSINITBYPROB(args []string) []byte {
 		return Encode(errCMSProb, false)
 	}
 	width, depth := data_structure.CalcCMSDim(errRate, prob)
-	return cmsCreate(args[0], width, depth)
+	return e.cmsCreate(args[0], width, depth)
 }
 
 // cmdCMSINCRBY implements CMS.INCRBY key item increment [item increment ...]:
 // one estimate per item after its increment. Every increment is parsed before
 // any is applied, so a bad one changes nothing, and a counter that saturates
 // reports an error in its position rather than a number that is wrong.
-func cmdCMSINCRBY(args []string) []byte {
+func (e *Engine) cmdCMSINCRBY(args []string) []byte {
 	if len(args) < 3 || len(args)%2 == 0 {
 		return Encode(wrongArguments("CMS.INCRBY"), false)
 	}
-	cms, ok := cmsFor(args[0])
+	cms, ok := e.cmsFor(args[0])
 	if !ok {
 		return Encode(errCMSMissing, false)
 	}
@@ -127,11 +127,11 @@ func cmdCMSINCRBY(args []string) []byte {
 }
 
 // cmdCMSQUERY implements CMS.QUERY key item [item ...]: one estimate per item.
-func cmdCMSQUERY(args []string) []byte {
+func (e *Engine) cmdCMSQUERY(args []string) []byte {
 	if len(args) < 2 {
 		return Encode(wrongArguments("CMS.QUERY"), false)
 	}
-	cms, ok := cmsFor(args[0])
+	cms, ok := e.cmsFor(args[0])
 	if !ok {
 		return Encode(errCMSMissing, false)
 	}
