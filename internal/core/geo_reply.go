@@ -13,7 +13,7 @@ const maxGeoPoints = MaxReplyBytes / 48
 
 type geoWalk func(func(data_structure.GeoPoint) bool)
 
-func geoSearchReply(z *data_structure.ZSet, radius data_structure.GeoHashRadius, s *geoSearch) []byte {
+func (e *Engine) geoSearchReply(z *data_structure.ZSet, radius data_structure.GeoHashRadius, s *geoSearch) []byte {
 	var walk geoWalk = func(yield func(data_structure.GeoPoint) bool) {
 		count := 0
 		z.VisitGeoNeighbors(radius, &s.shape, func(p data_structure.GeoPoint) bool {
@@ -38,7 +38,7 @@ func geoSearchReply(z *data_structure.ZSet, radius data_structure.GeoHashRadius,
 			}
 		}
 		limit = min(limit, z.Len())
-		if !reserveCommandMemory(limit*48 + 4096) {
+		if !e.reserveCommandMemory(limit*48 + 4096) {
 			return allocationPressure
 		}
 		points := make([]data_structure.GeoPoint, 0, limit)
@@ -104,7 +104,7 @@ func geoSearchReply(z *data_structure.ZSet, radius data_structure.GeoHashRadius,
 	if !fits || size > MaxReplyBytes-header {
 		return replyTooLarge
 	}
-	if refusal := admitReply(size + header); refusal != nil {
+	if refusal := e.admitReply(size + header); refusal != nil {
 		return refusal
 	}
 	out := appendArrayHeader(make([]byte, 0, size+header), count)

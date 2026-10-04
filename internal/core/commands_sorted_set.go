@@ -398,7 +398,7 @@ func (e *Engine) cmdZRANGE(args []string) []byte {
 	}
 	walk := func(yield func(string, float64) bool) { zs.VisitRangeByRank(z.start, z.stop, z.reverse, yield) }
 	if z.withScores && replyRESP3 {
-		return scoredReply3(walk, true)
+		return e.scoredReply3(walk, true)
 	}
-	return scoredReply(walk, z.withScores)
+	return e.scoredReply(walk, z.withScores)
 }

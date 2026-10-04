@@ -382,8 +382,8 @@ func TestRESP3IsScopedToOneCommand(t *testing.T) {
 func TestRESP3RepliesAreSizedExactly(t *testing.T) {
 	ResetStores()
 	t.Cleanup(ResetStores)
-	old := CommandAllocations
-	t.Cleanup(func() { CommandAllocations = old })
+	old := defaultEngine.commandAllocations
+	t.Cleanup(func() { defaultEngine.commandAllocations = old })
 	for i := 0; i < 12; i++ {
 		v := strings.Repeat("v", i*13)
 		run(t, "HSET", "h", "field"+strconv.Itoa(i), v)
@@ -411,15 +411,15 @@ func TestRESP3RepliesAreSizedExactly(t *testing.T) {
 		{"SCAN", "0", "COUNT", "100"},
 	} {
 		for _, resp3 := range []bool{false, true} {
-			CommandAllocations = &CommandAllocationBudget{Limit: 64 << 20}
+			defaultEngine.commandAllocations = &CommandAllocationBudget{Limit: 64 << 20}
 			out := build(args, resp3)
 			require.NotEqual(t, byte('-'), out[0], "%v: %q", args, out)
 			assert.Equal(t, len(out), cap(out), "%v resp3=%v is sized to the byte", args, resp3)
-			assert.Equal(t, 3*((len(out)+4095)&^4095), CommandAllocations.ReplyReserved,
+			assert.Equal(t, 3*((len(out)+4095)&^4095), defaultEngine.commandAllocations.ReplyReserved,
 				"%v resp3=%v reserves what it sends", args, resp3)
 		}
 	}
-	CommandAllocations = old
+	defaultEngine.commandAllocations = old
 }
 
 // TestRESP3OutputLimitCountsRESP3Framing: the 64 MiB output limit is applied

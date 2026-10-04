@@ -190,7 +190,7 @@ func (e *Engine) cmdDUMP(args []string) []byte {
 	if !fits {
 		return replyTooLarge
 	}
-	if refusal := admitReply(size); refusal != nil {
+	if refusal := e.admitReply(size); refusal != nil {
 		return refusal
 	}
 	out := make([]byte, 0, size)

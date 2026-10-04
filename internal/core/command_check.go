@@ -123,8 +123,9 @@ func subcommandsOf(name string) []subcommand {
 // commandTable, nil for a command the transport or Transact answers, and the
 // count from commandArity. container marks CLIENT and MEMORY, whose count
 // depends on the subcommand, and namesItself the one handler that repeats the
-// name it was sent as - see runningName. Both are worked out once, here, so
-// that a well-formed command is checked with one comparison of its count.
+// name it was sent as - see Engine.runningName. Both are worked out once,
+// here, so that a well-formed command is checked with one comparison of its
+// count.
 // typed and keys are the type check's reading of the tables in keytype.go -
 // see checkKeyTypes - worked out here for the same reason.
 type commandEntry struct {

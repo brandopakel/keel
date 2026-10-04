@@ -12,10 +12,12 @@ import "github.com/brandopakel/keel/internal/data_structure"
 // engine among others. Step 2.1 moved the stores here, with the expiry and
 // memory-maintenance cursors over them. Every command handler is an Engine
 // method, which reads the stores, and asks the space who holds a key, on the
-// engine dispatching it - see commandTable. The command-scope, persistence and
-// replication state are still package variables until steps 2.2 to 2.4 move
-// them, and the code that owns them reaches the stores through defaultEngine
-// until then.
+// engine dispatching it - see commandTable. Step 2.2 moves the command scope
+// here: what the engine holds for the command it is running, and the budget
+// the transport running it reserves from. The reply's protocol, and the
+// persistence and replication state, are still package variables until the
+// rest of step 2.2 and steps 2.3 and 2.4 move them, and the code that owns
+// them reaches the stores through defaultEngine until then.
 //
 // Until callers open engines of their own (plan phase 3) the server and the
 // tests run on defaultEngine, as the stores run on data_structure.DefaultSpace.
@@ -54,6 +56,27 @@ type Engine struct {
 	expireCursor     int
 	memoryCursor     int
 	memoryFirstPhase int
+
+	// The command scope: what the engine holds for the command running on it,
+	// under the names it had as package variables. One command runs on an
+	// engine at a time, so one of each is enough, as one of each was for the
+	// process while there was one engine.
+	//
+	// runningName is the name GEOSEARCH, the one command whose errors repeat
+	// the name it was sent as, was last sent as. It is set only for that
+	// command, before it runs, and read only while it runs.
+	runningName string
+	// replyCeiling is the most one reply may come to. It is the output limit,
+	// except while EXEC runs: a transaction answers with one array holding
+	// every reply, so each command it runs may use only what the replies
+	// before it left.
+	replyCeiling int
+	// commandAllocations is the transport's budget, which a run of commands
+	// reserves its large replies and workspaces from before building them. The
+	// server installs it on the engine it drives (SetCommandAllocations). An
+	// engine with none - one no transport drives, and log replay before the
+	// server starts - keeps each command's own limits and reserves nothing.
+	commandAllocations *CommandAllocationBudget
 }
 
 // defaultEngine is the engine the server and the tests run on until each
@@ -62,4 +85,4 @@ type Engine struct {
 //
 // The pointer never changes. ResetStores rebuilds the stores inside it, so
 // whatever has kept the engine keeps the keyspace a test began from empty.
-var defaultEngine = &Engine{space: data_structure.DefaultSpace}
+var defaultEngine = &Engine{space: data_structure.DefaultSpace, replyCeiling: MaxReplyBytes}

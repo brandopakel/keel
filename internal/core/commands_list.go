@@ -101,7 +101,7 @@ func (e *Engine) pop(args []string, front bool, name string) []byte {
 	if !counted {
 		shape = shapeOne
 	}
-	out := encodeWalkReply(walk, shape)
+	out := e.encodeWalkReply(walk, shape)
 	if len(out) > 0 && out[0] == '-' {
 		return out
 	}
@@ -148,7 +148,7 @@ func (e *Engine) cmdLINDEX(args []string) []byte {
 	if !found {
 		return nullReply()
 	}
-	return encodeBoundedString(value)
+	return e.encodeBoundedString(value)
 }
 
 // cmdLSET, like LINDEX, finds the key before it reads the index.
@@ -188,7 +188,7 @@ func (e *Engine) cmdLRANGE(args []string) []byte {
 	if !ok {
 		return constant.RespEmptyArray
 	}
-	return encodeWalkReply(func(yield func(string) bool) { l.VisitRange(start, stop, yield) }, shapeArray)
+	return e.encodeWalkReply(func(yield func(string) bool) { l.VisitRange(start, stop, yield) }, shapeArray)
 }
 
 func (e *Engine) cmdLTRIM(args []string) []byte {

@@ -105,9 +105,9 @@ func (e *Engine) scoreRangeReply(key string, r scoreInterval, offset, count int,
 		z.VisitRangeByScore(r.min, r.max, r.minEx, r.maxEx, offset, count, reverse, yield)
 	}
 	if withScores && replyRESP3 {
-		return scoredReply3(walk, true)
+		return e.scoredReply3(walk, true)
 	}
-	return scoredReply(walk, withScores)
+	return e.scoredReply(walk, withScores)
 }
 
 func (e *Engine) cmdZINCRBY(args []string) []byte {
@@ -165,16 +165,16 @@ func (e *Engine) zpop(name string, args []string, reverse bool) []byte {
 	count = min(count, z.Len())
 	walk := func(yield func(string, float64) bool) { z.VisitRangeByRank(0, count-1, reverse, yield) }
 	names := replyWalk(func(yield func(string) bool) { walk(func(member string, _ float64) bool { return yield(member) }) })
-	if refusal := reserveRemoval("ZREM", args[0], count, names); refusal != nil {
+	if refusal := e.reserveRemoval("ZREM", args[0], count, names); refusal != nil {
 		return refusal
 	}
 	// Given a count, RESP3 nests each member with its score; without one the
 	// single pair stays flat, as it does in Redis.
 	var out []byte
 	if replyRESP3 {
-		out = scoredReply3(walk, len(args) == 2)
+		out = e.scoredReply3(walk, len(args) == 2)
 	} else {
-		out = scoredReply(walk, true)
+		out = e.scoredReply(walk, true)
 	}
 	if len(out) > 0 && out[0] == '-' {
 		return out

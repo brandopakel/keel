@@ -1,7 +1,8 @@
 # Embedding plan: Keel as a Go library
 
 Status: accepted plan, October 2, 2026. Phases 0 and 1 are done (#88, #90), and so is step 2.1,
-the stores (see "Step 2.1: the stores" below).
+the stores (see "Step 2.1: the stores" below). Step 2.2, the command scope, is
+under way (see "Step 2.2: the command scope").
 
 The owner asked for Keel to be usable as a Go library, not only as a server:
 several independent instances per process, safe for concurrent use, a typed
@@ -267,6 +268,62 @@ settles it this way:
 - **Measured per PR.** The paired command-path job runs at least twice against
   develop and once against `65ebdbc`, develop just before phase 1, so that
   small costs cannot accumulate unseen; each PR reports all three.
+
+### Step 2.2: the command scope
+
+Step 2.2 moves into `core.Engine` what is held for the command running, and
+for the transport running it: the name GEOSEARCH was sent as, the reply
+ceiling EXEC lowers, the transport's allocation budget, EXEC's suspension of
+eviction, and the protocol each reply is framed in. It takes two PRs. The
+first moves everything but the protocol; the second moves the protocol, which
+every reply helper reads. Where the plan above leaves a choice open, step 2.2
+settles it this way:
+
+- **On the engine, not passed down.** The state is held in fields of the
+  engine running the command, beside its stores, rather than in a value handed
+  to every handler. One command runs on an engine at a time, under the
+  lock-holder contract the concurrency design gives each instance, so one of
+  each is enough per engine, as one package variable was enough for the
+  process. Every handler is already an Engine method, so reading a field costs
+  what reading the variable did, and no handler signature changes before phase
+  4 replaces them with the `Reply` sink, which will carry the protocol and the
+  admission checks itself. The fields keep the names the variables had.
+- **The reply builders are Engine methods.** The helpers that admit and build
+  large replies (`admitReply`, `encodeBoundedString`, `encodeWalkReply`,
+  `hashReply`, `scoredReply`, `encodeLookupArray`, `geoSearchReply` and their
+  kind) read the ceiling and the budget of the engine whose command calls
+  them. `scoredReply` still inlines, which keeps the closure it hands its walk
+  on the stack.
+- **The transport's budget.** The server installs its
+  `CommandAllocationBudget` on the engine it drives with
+  `core.SetCommandAllocations`, and reads it back with
+  `core.CommandAllocations()`; both act on the default engine until step 2.7.
+  An engine with no budget installed (an embedded caller's, and the server's
+  own during startup replay) reserves nothing and keeps each command's own
+  limits, as core-only callers always have. The transport still begins and
+  ends each run on the budget, and INFO reports the budget of the engine it
+  runs on.
+- **EXEC.** `Transact` runs on the default engine, and a transaction runs on
+  the engine its EXEC runs on: its replies are bounded by that engine's
+  ceiling and reserve from that engine's budget, and eviction is suspended in
+  that engine's space until the block closes. A replica applies a received
+  block through the same `runTransaction`, on the default engine until step
+  2.4 passes the engine in.
+- **The protocol** stays the connection's. The server sets it on each
+  `Command`, and `evalAndResponse` holds it on the engine for exactly that
+  command and restores it afterwards, so nothing after the command inherits
+  it, and log replay and replica apply, which answer nobody, run as RESP2
+  whatever the command says. It moves in the second PR.
+- **Isolation.** `TestEnginesShareNoCommandScope` gives two engines different
+  budgets, ceilings and names, and runs them one after the other, one inside
+  the other's EXEC, and side by side on two goroutines, which the race job
+  runs under `-race`.
+- **Census.** Each PR removes the entries it moves. After step 2.2 the census
+  lists no command-scope state: what remains is the default engine, the
+  persistence state of step 2.3, the replication state of step 2.4, the
+  server's INFO hook, and values computed once.
+- **Measured per PR**, as in step 2.1: the paired command-path job runs at
+  least twice against develop and once against `65ebdbc`.
 
 ## Risks, in order
 

@@ -147,7 +147,7 @@ func (e *Engine) setCommand(name string, args []string) []byte {
 	if get {
 		reply = nullReply()
 		if obj != nil {
-			reply = encodeBoundedString(obj.Value)
+			reply = e.encodeBoundedString(obj.Value)
 			if len(reply) > 0 && reply[0] == '-' {
 				return reply
 			}
@@ -219,7 +219,7 @@ func (e *Engine) cmdGET(args []string) []byte {
 	if obj == nil {
 		return nullReply()
 	}
-	return encodeBoundedString(obj.Value)
+	return e.encodeBoundedString(obj.Value)
 }
 
 // remainingTTL is how long a key has left, in milliseconds. The two negative
