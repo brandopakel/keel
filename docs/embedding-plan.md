@@ -1,6 +1,7 @@
 # Embedding plan: Keel as a Go library
 
-Status: accepted plan, October 2, 2026. Phase 0 is in review; nothing later is implemented yet.
+Status: accepted plan, October 2, 2026. Phases 0 and 1 are done (#88, #90); step 2.1 is under way,
+one command family per PR (see "Step 2.1: the stores" below).
 
 The owner asked for Keel to be usable as a Go library, not only as a server:
 several independent instances per process, safe for concurrent use, a typed
@@ -209,6 +210,52 @@ How each step is verified:
 - **Persistence steps:** restart, upgrade and rollback checks.
 - **Phase 5:** two-instance isolation and contention stress tests under
   `-race`, and crash-and-reopen tests.
+
+### Step 2.1: the stores
+
+The stores move into `core.Engine` one command family per PR, in this order:
+hashes; lists; sets; sorted sets with geo; the RedisBloom filters (BF, CF);
+the counting sketches (CMS, Morris, HyperLogLog); then strings together with
+the commands that act on a key whatever its type (DEL, EXISTS, TYPE, KEYS,
+SCAN, the TTL commands, DUMP and RESTORE, DBSIZE, FLUSHDB, MEMORY). Where the
+plan above left a choice open, step 2.1 settles it this way:
+
+- **The default engine.** `defaultEngine` is a package-level `*Engine` that
+  lives in `data_structure.DefaultSpace`, so its limits are still read from
+  `config` until step 2.5. Its pointer never changes; `ResetStores` rebuilds
+  the stores inside it. `EvalAndResponse` keeps its signature and runs on it,
+  so the server, log replay, replica apply and EXEC are unchanged. Step 2.7
+  removes it, as the plan says.
+- **Handlers.** A family that has moved has Engine methods for handlers, which
+  read the store from the engine they run on. They sit in
+  `engineCommandTable`, the rest in `commandTable`, and a command is in exactly
+  one (`TestCommandTablePartsAreDisjoint`). Dispatch tests one field of the
+  entry it already looked up to pick the call. The last PR of the step makes
+  the remaining handlers methods too, including those that touch no store, so
+  the two tables are one again and every command runs on an engine.
+- **Code not yet on an engine.** The log, the rewrite, append admission and the
+  dump and replication encoders are not engine methods until steps 2.3 and
+  2.4. Until then they reach a moved store through `defaultEngine`; each such
+  reference is a place those steps pass the engine in instead.
+- **Registration order.** The order the stores register with the space is the
+  order `OwnerOf` asks them, eviction samples them, and SCAN and the rewrite
+  walk them, so it does not change: strings, sorted sets, sets, hashes, lists,
+  bloom, CMS, Morris, HyperLogLog, cuckoo.
+- **No lock yet.** The mutex per instance and the internal and external drivers
+  arrive with `core.Open` in phase 3. Until then the event loop is the only
+  caller, as it is today, and an Engine is documented as not safe for
+  concurrent use.
+- **Expiry and memory maintenance.** The expiry and memory-compaction cursors
+  and the expired-key count are positions in, and counts over, the stores'
+  keys, and `ResetStores` already resets the count with them. They move with
+  the last family of step 2.1, not with the command-scope state of 2.2.
+- **Census.** `TestPackageStateIsCensused` in `internal/core` lists every
+  package variable with the reason it may stay: computed once and never
+  written, or the step that moves it. Each PR of a step removes the entries it
+  makes obsolete, and an entry for a variable that no longer exists fails.
+- **Measured per PR.** The paired command-path job runs at least twice against
+  develop and once against `65ebdbc`, develop just before phase 1, so that
+  small costs cannot accumulate unseen; each PR reports all three.
 
 ## Risks, in order
 

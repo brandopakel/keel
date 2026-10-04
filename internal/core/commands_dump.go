@@ -106,7 +106,7 @@ func decodeRestorePayload(key string, tag byte, body []byte) (store func(), err 
 			for i := 0; i < len(parts); i += 2 {
 				h.Set(parts[i], parts[i+1])
 			}
-			return func() { hashStore.Put(key, h) }, nil
+			return func() { defaultEngine.hashStore.Put(key, h) }, nil
 		}
 		l := data_structure.NewList()
 		l.PushBack(parts...)

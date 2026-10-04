@@ -18,7 +18,7 @@ func TestAmplifiedReadsRejectBeforeResponseAllocation(t *testing.T) {
 			dictStore.Put("string", dictStore.NewObj(value))
 			h := data_structure.NewHash()
 			h.Set("field", value)
-			hashStore.Put("hash", h)
+			defaultEngine.hashStore.Put("hash", h)
 			s := data_structure.NewSet()
 			s.Add(value)
 			setStore.Put("set", s)

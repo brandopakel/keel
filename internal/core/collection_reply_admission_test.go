@@ -66,7 +66,7 @@ func largeCollectionReplyRejects(t *testing.T, kind string, args []string, resp3
 	}
 	switch kind {
 	case "hash":
-		hashStore.Put("large", h)
+		defaultEngine.hashStore.Put("large", h)
 	case "list":
 		listStore.Put("large", l)
 	case "set":

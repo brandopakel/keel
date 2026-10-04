@@ -271,7 +271,7 @@ func queueRefusal(cmd *Command, conn Connection) error {
 		// replica nor a fenced primary refuses them.
 		return nil
 	}
-	if commands[cmd.Cmd].run == nil {
+	if !commands[cmd.Cmd].runs() {
 		// A connection command with no transport to answer it.
 		return unknownCommand(cmd)
 	}

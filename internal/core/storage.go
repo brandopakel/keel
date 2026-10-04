@@ -10,11 +10,13 @@ import (
 // evictor so that a memory budget spans the lot: before that, only strings were
 // accounted, and a keyspace full of 12KB HyperLogLogs could sail past
 // -maxmemory without anything noticing.
+//
+// The stores are moving into Engine a command family at a time (plan step
+// 2.1). The ones below have yet to; the hashes have.
 var (
 	dictStore   *data_structure.Dict
 	zsetStore   *data_structure.Keyed[*data_structure.ZSet]
 	setStore    *data_structure.Keyed[*data_structure.Set]
-	hashStore   *data_structure.Keyed[*data_structure.Hash]
 	listStore   *data_structure.Keyed[*data_structure.List]
 	sbStore     *data_structure.Keyed[*data_structure.SBChain]
 	cmsStore    *data_structure.Keyed[*data_structure.CMS]
@@ -27,17 +29,22 @@ func init() { ResetStores() }
 
 // ResetStores rebuilds every keyspace and re-registers them. Called at startup,
 // and by tests that need to begin from empty.
+//
+// The order they register in is the order OwnerOf asks them, eviction samples
+// them and SCAN and the rewrite walk them, so a store that moves into the
+// engine keeps its place in it.
 func ResetStores() {
-	data_structure.ResetKeyspaces()
+	e := defaultEngine
+	space := e.space
+	space.ResetKeyspaces()
 	// The counter describes the keyspace being thrown away, so it goes with it.
 	expiredKeys = 0
 	aof.recovered = nil
 
-	space := data_structure.DefaultSpace
 	dictStore = data_structure.CreateDict(space)
 	zsetStore = data_structure.NewKeyed[*data_structure.ZSet](space, "zset")
 	setStore = data_structure.NewKeyed[*data_structure.Set](space, "set")
-	hashStore = data_structure.NewKeyed[*data_structure.Hash](space, "hash")
+	e.hashStore = data_structure.NewKeyed[*data_structure.Hash](space, "hash")
 	listStore = data_structure.NewKeyed[*data_structure.List](space, "list")
 	sbStore = data_structure.NewKeyed[*data_structure.SBChain](space, "bloom")
 	cmsStore = data_structure.NewKeyed[*data_structure.CMS](space, "cms")
@@ -45,14 +52,14 @@ func ResetStores() {
 	hllStore = data_structure.NewKeyed[*data_structure.HLL](space, "hll")
 	cfStore = data_structure.NewKeyed[*data_structure.CuckooFilter](space, "cuckoo")
 
-	data_structure.RegisterKeyspace(dictStore)
-	data_structure.RegisterKeyspace(zsetStore)
-	data_structure.RegisterKeyspace(setStore)
-	data_structure.RegisterKeyspace(hashStore)
-	data_structure.RegisterKeyspace(listStore)
-	data_structure.RegisterKeyspace(sbStore)
-	data_structure.RegisterKeyspace(cmsStore)
-	data_structure.RegisterKeyspace(morrisStore)
-	data_structure.RegisterKeyspace(hllStore)
-	data_structure.RegisterKeyspace(cfStore)
+	space.RegisterKeyspace(dictStore)
+	space.RegisterKeyspace(zsetStore)
+	space.RegisterKeyspace(setStore)
+	space.RegisterKeyspace(e.hashStore)
+	space.RegisterKeyspace(listStore)
+	space.RegisterKeyspace(sbStore)
+	space.RegisterKeyspace(cmsStore)
+	space.RegisterKeyspace(morrisStore)
+	space.RegisterKeyspace(hllStore)
+	space.RegisterKeyspace(cfStore)
 }

@@ -287,12 +287,12 @@ func TestTransactionCommandsTakeTheAppendBarrier(t *testing.T) {
 // command runs, so a command the table did not hold could never run, and an
 // entry for a command nothing answers would be a name that is never unknown.
 func TestEveryCommandHasAnArity(t *testing.T) {
-	for name := range commandTable {
+	for _, name := range dispatchedNames() {
 		_, counted := commandArity[name]
 		require.True(t, counted, "%s has no arity", name)
 	}
 	for name := range commandArity {
-		_, table := commandTable[name]
+		_, table := dispatchedHandler(name)
 		require.True(t, table || connectionCommands[name] || IsTransactionCommand(name), "arity for unknown command %s", name)
 	}
 	for name, subcommands := range containerCommands {
@@ -314,7 +314,7 @@ func TestCommandArityIsNeverStricterThanTheHandler(t *testing.T) {
 	ownWords := map[string]bool{"MEMKV.DUMP": true, "MEMKV.RESTORE": true, "SRAND": true,
 		"KEEL.REPL.PULL": true, "KEEL.REPL.PULL2": true}
 	for name, arity := range commandArity {
-		handler, table := commandTable[name]
+		handler, table := dispatchedHandler(name)
 		if !table || containerCommands[name] != nil {
 			continue
 		}

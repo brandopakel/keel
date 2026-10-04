@@ -166,7 +166,7 @@ func TestCollectionRewriteHonorsByteBudgetAndOversizedMemberMakesProgress(t *tes
 
 func hashRewriteState(t *testing.T, key string) map[string]string {
 	t.Helper()
-	h, ok := hashStore.Peek(key)
+	h, ok := defaultEngine.hashStore.Peek(key)
 	require.True(t, ok)
 	fields, values := h.Entries()
 	out := make(map[string]string, len(fields))

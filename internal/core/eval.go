@@ -16,6 +16,10 @@ import (
 // runs, and - if it changes anything - in the log's writeCommands; each of
 // those is a list that can be read against the others. Dispatch looks a
 // command up in commands, the index of this table and commandArity together.
+//
+// The table is in two parts while the stores move into Engine (plan step
+// 2.1): engineCommandTable holds the families that have moved, and this one
+// the rest. A command is in exactly one of them.
 var commandTable = map[string]func([]string) []byte{
 	"PING": cmdPING, "ECHO": cmdECHO, "SELECT": cmdSELECT,
 	"UNWATCH": cmdUNWATCH,
@@ -40,11 +44,6 @@ var commandTable = map[string]func([]string) []byte{
 	// The names from before the server was renamed, so a log written then
 	// still replays; a command is written to the log under its current name.
 	"MEMKV.DUMP": cmdDUMP, "MEMKV.RESTORE": cmdRESTORE,
-
-	// Hashes
-	"HSET": cmdHSET, "HSETNX": cmdHSETNX, "HGET": cmdHGET, "HMGET": cmdHMGET,
-	"HDEL": cmdHDEL, "HEXISTS": cmdHEXISTS, "HLEN": cmdHLEN, "HKEYS": cmdHKEYS,
-	"HVALS": cmdHVALS, "HGETALL": cmdHGETALL, "HINCRBY": cmdHINCRBY,
 
 	// Lists
 	"LPUSH": cmdLPUSH, "RPUSH": cmdRPUSH, "LPOP": cmdLPOP, "RPOP": cmdRPOP,
@@ -75,6 +74,18 @@ var commandTable = map[string]func([]string) []byte{
 	"CF.RESERVE": cmdCFRESERVE, "CF.ADD": cmdCFADD, "CF.ADDNX": cmdCFADDNX,
 	"CF.EXISTS": cmdCFEXISTS, "CF.MEXISTS": cmdCFMEXISTS, "CF.DEL": cmdCFDEL,
 	"CF.COUNT": cmdCFCOUNT, "CF.INFO": cmdCFINFO,
+}
+
+// engineCommandTable is the part of the dispatch table whose handlers are
+// Engine methods: the families whose stores have moved into the engine. Each
+// runs on the engine that dispatches it and reads its store from there. A
+// family moves here from commandTable when its store moves; once every
+// handler has, the two are one table again.
+var engineCommandTable = map[string]func(*Engine, []string) []byte{
+	// Hashes
+	"HSET": (*Engine).cmdHSET, "HSETNX": (*Engine).cmdHSETNX, "HGET": (*Engine).cmdHGET, "HMGET": (*Engine).cmdHMGET,
+	"HDEL": (*Engine).cmdHDEL, "HEXISTS": (*Engine).cmdHEXISTS, "HLEN": (*Engine).cmdHLEN, "HKEYS": (*Engine).cmdHKEYS,
+	"HVALS": (*Engine).cmdHVALS, "HGETALL": (*Engine).cmdHGETALL, "HINCRBY": (*Engine).cmdHINCRBY,
 }
 
 // cmdPING answers PONG, or echoes the one argument it is given.
@@ -127,6 +138,12 @@ var runningName string
 // command this server does not have, which is returned as an error so that a
 // log replay stops on it rather than skipping past a command it cannot run.
 func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
+	return defaultEngine.evalAndResponse(cmd, c)
+}
+
+// evalAndResponse is EvalAndResponse on e: the handlers that have moved into
+// the engine run on e.
+func (e *Engine) evalAndResponse(cmd *Command, c io.ReadWriter) error {
 	// The reply is framed for the connection's protocol, held for exactly this
 	// command - see resp3.go. Log replay and replica apply answer nobody, and
 	// run as RESP2 whatever the command says: what they produce has to be the
@@ -141,7 +158,7 @@ func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	// well-formed command costs one comparison of its count here; anything
 	// else is looked at in full.
 	entry := commands[cmd.Cmd]
-	if entry.run == nil {
+	if !entry.runs() {
 		// Unknown, or one only the transport answers, with none here to.
 		return unknownCommand(cmd)
 	}
@@ -179,7 +196,12 @@ func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 
 	suspended := data_structure.DefaultSpace.SuspendEviction
 	data_structure.DefaultSpace.SuspendEviction = true
-	res := entry.run(cmd.Args)
+	var res []byte
+	if entry.onEngine != nil {
+		res = entry.onEngine(e, cmd.Args)
+	} else {
+		res = entry.run(cmd.Args)
+	}
 	// With eviction suspended, removals so far are lazy expiry. They precede
 	// this command: recording them after INCR/HSET would delete the recreated key.
 	// Recorded before the reply is written. FlushAOF runs between execution and

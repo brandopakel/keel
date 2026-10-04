@@ -399,7 +399,8 @@ func TestRESP3RepliesAreSizedExactly(t *testing.T) {
 		saved := replyRESP3
 		replyRESP3 = resp3
 		defer func() { replyRESP3 = saved }()
-		return commandTable[args[0]](args[1:])
+		handler, _ := dispatchedHandler(args[0])
+		return handler(args[1:])
 	}
 	for _, args := range [][]string{
 		{"HGETALL", "h"}, {"HKEYS", "h"}, {"HMGET", "h", "field1", "missing", "field2"}, {"MGET", "missing", "missing"},
