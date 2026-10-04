@@ -91,21 +91,48 @@ var strideKeyCommands = map[string]int{
 // the rewrite's dirty tracking have to agree about which arguments are keys,
 // and the way they stop agreeing is one of them being taught about a new
 // command and the other not.
-func commandKeys(cmd *Command) []string {
+func commandKeys(cmd *Command) []string { return keysBy(cmd, keyRuleOf(cmd.Cmd)) }
+
+// keyRule is which of a command's arguments name keys.
+type keyRule uint8
+
+const (
+	keyFirst    keyRule = iota // the first argument, as nearly every command has it
+	keyFirstTwo                // LCS's two keys
+	keyStride                  // every n-th argument, from the first: strideKeyCommands
+	keyEvery                   // every argument: multiKeyCommands
+)
+
+// keyRuleOf is name's rule. Dispatch works it out once per command, in the
+// index, so the type check reads it rather than looking the name up again.
+func keyRuleOf(name string) keyRule {
+	switch {
+	case name == "LCS":
+		return keyFirstTwo
+	case strideKeyCommands[name] != 0:
+		return keyStride
+	case multiKeyCommands[name]:
+		return keyEvery
+	}
+	return keyFirst
+}
+
+// keysBy returns the arguments of cmd that name keys under rule.
+func keysBy(cmd *Command, rule keyRule) []string {
 	if len(cmd.Args) == 0 {
 		return nil
 	}
-	if cmd.Cmd == "LCS" {
+	switch rule {
+	case keyFirstTwo:
 		return cmd.Args[:min(2, len(cmd.Args))]
-	}
-	if stride, ok := strideKeyCommands[cmd.Cmd]; ok {
+	case keyStride:
+		stride := strideKeyCommands[cmd.Cmd]
 		keys := make([]string, 0, (len(cmd.Args)+stride-1)/stride)
 		for i := 0; i < len(cmd.Args); i += stride {
 			keys = append(keys, cmd.Args[i])
 		}
 		return keys
-	}
-	if multiKeyCommands[cmd.Cmd] {
+	case keyEvery:
 		return cmd.Args
 	}
 	return cmd.Args[:1]
@@ -306,16 +333,32 @@ var filterCommands = map[string]bool{
 	"CF.DEL": true, "CF.COUNT": true, "CF.INFO": true,
 }
 
+// typedKeyspace is the type checkKeyTypes holds name's keys to, or "" for a
+// command it passes over: one the type table does not constrain, a write that
+// replaces whatever the name held, or a filter command, which checks its key
+// itself.
+func typedKeyspace(name string) string {
+	space, checked := commandKeyspace[name]
+	if !checked || replacingWrites[name] || filterCommands[name] {
+		return ""
+	}
+	return space
+}
+
 // checkKeyTypes reports an error if any key the command names is already held
 // by a different kind of store: the command's own refusal of its arguments,
 // where Redis reads those first, and otherwise Redis's refusal of the type.
-func (e *Engine) checkKeyTypes(cmd *Command) error {
-	space, checked := commandKeyspace[cmd.Cmd]
-	if !checked || len(cmd.Args) == 0 || replacingWrites[cmd.Cmd] || filterCommands[cmd.Cmd] {
+//
+// It reads the type and the key rule from entry, the command's index entry,
+// which dispatch has already looked up: from the tables above they would be
+// five lookups by name, made for every command whose keys are checked.
+func (e *Engine) checkKeyTypes(cmd *Command, entry commandEntry) error {
+	space := entry.typed
+	if space == "" || len(cmd.Args) == 0 {
 		return nil
 	}
 
-	for _, key := range commandKeys(cmd) {
+	for _, key := range keysBy(cmd, entry.keys) {
 		if owner, held := e.space.OwnerOf(key); held && owner.KeyspaceName() != space {
 			if arguments := argumentsBeforeType[cmd.Cmd]; arguments != nil {
 				if err := arguments(cmd.Args); err != nil {

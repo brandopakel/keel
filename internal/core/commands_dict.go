@@ -127,12 +127,22 @@ func (e *Engine) setCommand(name string, args []string) []byte {
 	// A name another type holds is a key that exists, so NX leaves it and XX
 	// replaces it, and GET cannot read it as a string - Redis's rules, see
 	// replacingWrites.
-	other, otherHeld := e.space.OwnerOf(key)
-	otherHeld = otherHeld && other.KeyspaceName() != e.dictStore.KeyspaceName()
+	//
+	// The string store is asked first, and the others only if it does not
+	// hold the key. That is what asking every store in order did, since the
+	// strings come first in it, with one lookup fewer for the commonest SET,
+	// an overwrite: Get reaps an expired string as Has would have, and touches
+	// a live one as the Get after it did.
+	obj := e.dictStore.Get(key)
+	var other data_structure.Keyspace
+	otherHeld := false
+	if obj == nil {
+		other, otherHeld = e.space.OwnerOf(key)
+		otherHeld = otherHeld && other.KeyspaceName() != e.dictStore.KeyspaceName()
+	}
 	if otherHeld && get {
 		return Encode(errWrongType, false)
 	}
-	obj := e.dictStore.Get(key)
 	reply := constant.RespOk
 	if get {
 		reply = nullReply()

@@ -156,3 +156,36 @@ func timeAfter(ms int) func() bool {
 	deadline := time.Now().Add(time.Duration(ms) * time.Millisecond)
 	return func() bool { return time.Now().After(deadline) }
 }
+
+// TestTypeRuleIsIndexedWithTheCommand: dispatch reads the type check's rule
+// from the command's index entry, so the entry has to say what the tables say,
+// for every command, and find the same keys commandKeys does.
+func TestTypeRuleIsIndexedWithTheCommand(t *testing.T) {
+	for name, entry := range commands {
+		space, checked := commandKeyspace[name]
+		if !checked || replacingWrites[name] || filterCommands[name] {
+			space = ""
+		}
+		assert.Equal(t, space, entry.typed, name)
+		for n := 0; n <= 5; n++ {
+			args := make([]string, n)
+			for i := range args {
+				args[i] = string(rune('a' + i))
+			}
+			cmd := &Command{Cmd: name, Args: args}
+			assert.Equal(t, commandKeys(cmd), keysBy(cmd, entry.keys), "%s with %d arguments", name, n)
+		}
+	}
+	for name, want := range map[string]keyRule{
+		"GET": keyFirst, "HSET": keyFirst, "LCS": keyFirstTwo, "MSET": keyStride,
+		"PFCOUNT": keyEvery, "PFMERGE": keyEvery,
+	} {
+		assert.Equal(t, want, commands[name].keys, name)
+	}
+	for name, want := range map[string]string{
+		"GET": "string", "HSET": "hash", "ZADD": "zset", "PFADD": "hll",
+		"SET": "", "MSET": "", "BF.ADD": "", "CF.EXISTS": "", "DEL": "", "TYPE": "",
+	} {
+		assert.Equal(t, want, commands[name].typed, name)
+	}
+}

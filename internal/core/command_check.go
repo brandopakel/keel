@@ -125,9 +125,13 @@ func subcommandsOf(name string) []subcommand {
 // depends on the subcommand, and namesItself the one handler that repeats the
 // name it was sent as - see runningName. Both are worked out once, here, so
 // that a well-formed command is checked with one comparison of its count.
+// typed and keys are the type check's reading of the tables in keytype.go -
+// see checkKeyTypes - worked out here for the same reason.
 type commandEntry struct {
 	run         func(*Engine, []string) []byte
 	arity       int
+	typed       string
+	keys        keyRule
 	container   bool
 	namesItself bool
 }
@@ -149,6 +153,7 @@ func indexCommands() {
 	commands = make(map[string]commandEntry, len(commandArity))
 	for name, arity := range commandArity {
 		commands[name] = commandEntry{run: commandTable[name], arity: arity,
+			typed: typedKeyspace(name), keys: keyRuleOf(name),
 			container: subcommandsOf(name) != nil, namesItself: name == "GEOSEARCH"}
 	}
 }
