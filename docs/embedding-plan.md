@@ -864,6 +864,16 @@ plan above leaves a choice open, step 2.5 settles it this way:
   `ActiveNetVariant`, which `-mode` sets for the benchmark modes, were never
   config; they stay with the rest of the server's package state until the
   server struct (phase 6).
+- **Every flag as it was.** `TestFlagsKeepTheirNamesAndDefaults` requires
+  exactly the flags the server had before the step, each with the type and
+  the default `-h` lists at d56088a, so a flag cannot change or go without a
+  test changing too; the tests that map the default flags and each flag onto
+  the engine's and the server's options check what they do.
+  `TestServerStartsWithItsListenerAndTransportFlags` starts the server
+  through `main` with every listener and transport flag set: the password
+  and a two-connection limit are refused and enforced as the flags say, and
+  with two I/O threads, a 10 ms cron and concurrent appends on a worker the
+  server serves, and reaps a key nobody reads.
 - **What is left of `internal/config`** is the build's identity: `Version`,
   which the linker stamps (`-X .../internal/config.Version`), and
   `BuildVersion` and `BuildRevision`, which read it. The package keeps its

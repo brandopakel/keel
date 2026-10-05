@@ -1,16 +1,18 @@
 package main
 
 import (
+	"errors"
 	"flag"
+	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/brandopakel/keel/internal/server"
-
 	"github.com/brandopakel/keel/internal/core"
 	"github.com/brandopakel/keel/internal/data_structure"
+	"github.com/brandopakel/keel/internal/server"
 )
 
 // configureFrom parses args as the server's command line and holds the
@@ -176,4 +178,127 @@ func TestFlagsReachTheServer(t *testing.T) {
 	if got := serverOptions(); got != want {
 		t.Fatalf("flags give the server %+v, want %+v", got, want)
 	}
+}
+
+// developFlags is every flag the server had before step 2.5 of the embedding
+// plan replaced internal/config with options, with its type and its default,
+// as the build at d56088a lists them in -h. Step 2.5 promised that no flag
+// changes its name, its type or its default; the parts of the step that moved
+// the settings behind the flags have to keep that promise, and so does
+// anything after them that means to.
+var developFlags = []struct{ name, kind, value string }{
+	{"active-expire-samples", "int", "20"},
+	{"aof-async-append", "", "false"},
+	{"aof-concurrent-append", "", "false"},
+	{"appendfilename", "string", "./keel-master.aof"},
+	{"appendfsync", "string", "everysec"},
+	{"appendonly", "", "false"},
+	{"auto-aof-rewrite-min-size", "string", "64mb"},
+	{"auto-aof-rewrite-percentage", "int", "100"},
+	{"cron-interval-ms", "int", "100"},
+	{"evict", "string", "lru"},
+	{"host", "string", "127.0.0.1"},
+	{"io-threads", "int", "1"},
+	{"lcs-max-cells", "uint", "134217728"},
+	{"lfu-decay-period", "int", "10000"},
+	{"lfu-log-factor", "int", "10"},
+	{"lru-samples", "int", "5"},
+	{"maxclients", "int", "20000"},
+	{"maxkeys", "int", "5000000"},
+	{"maxmemory", "string", "0"},
+	{"mode", "string", "kqueue"},
+	{"port", "int", "8081"},
+	{"primary-password-env", "string", ""},
+	{"primary-tls", "", "false"},
+	{"profile-dir", "string", ""},
+	{"replicaof", "string", ""},
+	{"replication-feed", "", "false"},
+	{"replication-protocol", "int", "1"},
+	{"requirepass-env", "string", ""},
+	{"shutdown-timeout", "duration", "5s"},
+	{"version", "", "false"},
+}
+
+// TestFlagsKeepTheirNamesAndDefaults reads the flags parseFlags defines and
+// requires exactly develop's: the same names, each of the same type with the
+// same default, and no flag added or taken away. What each flag does is
+// checked by the tests above, which map the defaults and every flag onto the
+// engine's and the server's options, and by the subprocess tests, which start
+// the server through main.
+func TestFlagsKeepTheirNamesAndDefaults(t *testing.T) {
+	configureFrom(t)
+	got := map[string][2]string{}
+	flag.CommandLine.VisitAll(func(f *flag.Flag) {
+		kind, _ := flag.UnquoteUsage(f)
+		got[f.Name] = [2]string{kind, f.DefValue}
+	})
+	for _, want := range developFlags {
+		have, ok := got[want.name]
+		if !ok {
+			t.Errorf("-%s is gone", want.name)
+			continue
+		}
+		if have != [2]string{want.kind, want.value} {
+			t.Errorf("-%s is %q with default %q, want %q with default %q", want.name, have[0], have[1], want.kind, want.value)
+		}
+		delete(got, want.name)
+	}
+	for name := range got {
+		t.Errorf("-%s is new", name)
+	}
+}
+
+// TestServerStartsWithItsListenerAndTransportFlags starts the server through
+// main, as an operator does, with every listener and transport flag that
+// server.Options carries set to something other than its default. The
+// address (as in every subprocess test), the password and a two-connection
+// limit are checked by what the server does with them; with two I/O threads,
+// a 10 ms cron and concurrent appends on a worker it has to serve, and reap a
+// key nobody reads. TestFlagsReachTheServer checks the values those flags pass.
+func TestServerStartsWithItsListenerAndTransportFlags(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "flags.aof")
+	s := startTestServer(t, "-maxclients", "2", "-io-threads", "2", "-cron-interval-ms", "10",
+		"-requirepass-env", "KEEL_TEST_PASSWORD", "-appendonly", "-appendfilename", path,
+		"-aof-async-append", "-aof-concurrent-append")
+	c, r := connectTest(t, s)
+	if got := call(t, c, r, "SET", "k", "v"); !strings.HasPrefix(got, "-NOAUTH") {
+		t.Fatalf("SET before AUTH: %s", got)
+	}
+	if got := call(t, c, r, "AUTH", "integration-secret"); got != "+OK" {
+		t.Fatalf("AUTH: %s", got)
+	}
+	if got := call(t, c, r, "SET", "brief", "v", "PX", "20"); got != "+OK" {
+		t.Fatalf("SET: %s", got)
+	}
+	// With nothing else to do, only the cron wakes the loop to reap it.
+	deadline := time.Now().Add(3 * time.Second)
+	for !strings.Contains(call(t, c, r, "INFO", "stats"), "expired_keys:1\r\n") {
+		if time.Now().After(deadline) {
+			t.Fatal("the idle key was not reaped on the cron's clock")
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+
+	// A second connection is the last one -maxclients 2 admits; a third is
+	// accepted and closed at once.
+	second, secondReader := connectTest(t, s)
+	if got := call(t, second, secondReader, "AUTH", "integration-secret"); got != "+OK" {
+		t.Fatalf("second connection: %s", got)
+	}
+	third, err := net.DialTimeout("tcp", s.addr, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer third.Close()
+	third.SetDeadline(time.Now().Add(3 * time.Second))
+	third.Write([]byte(request("PING")))
+	n, err := third.Read(make([]byte, 64))
+	var timeout net.Error
+	if err == nil || (errors.As(err, &timeout) && timeout.Timeout()) {
+		t.Fatalf("a third connection past -maxclients 2 read %d bytes and %v, want it closed", n, err)
+	}
+	if got := call(t, c, r, "PING"); got != "+PONG" {
+		t.Fatalf("the first connection after the refusal: %s", got)
+	}
+	s.stop(t)
 }
