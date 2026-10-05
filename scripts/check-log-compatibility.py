@@ -299,11 +299,14 @@ class Case:
         s = self.server(side, data).start()
         try:
             before = int(info(s.client, 'persistence')['aof_rewrites'])
-            for attempt in range(100):
+            for _ in range(100):
                 # A worker append still in flight is a retry, as BGREWRITEAOF answers.
-                if not isinstance(call(s.client, 'BGREWRITEAOF'), Error):
+                reply = call(s.client, 'BGREWRITEAOF')
+                if not isinstance(reply, Error):
                     break
                 time.sleep(.01)
+            else:
+                raise AssertionError(f'{side}: BGREWRITEAOF refused: {reply!r}')
             more_writes(s.client, 1)
             deadline = time.monotonic() + 30
             while int(info(s.client, 'persistence')['aof_rewrites']) == before:
@@ -369,8 +372,9 @@ def legacy(root, binaries):
         logs[side] = (data / 'store.aof').read_bytes()
     if states['baseline'] != states['candidate']:
         raise AssertionError('the legacy filters replay differently')
-    if normalize(logs['baseline'], 0) != normalize(logs['candidate'], 0):
-        raise AssertionError(f"legacy rewrites differ: {first_difference(logs['baseline'], logs['candidate'])}")
+    a, b = normalize(logs['baseline'], 0), normalize(logs['candidate'], 0)
+    if a != b:
+        raise AssertionError(f'legacy rewrites differ: {first_difference(a, b)}')
     for side, other in [('baseline', 'candidate'), ('candidate', 'baseline')]:
         data = case / f'{side}-replays-{other}'
         data.mkdir()

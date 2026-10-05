@@ -96,9 +96,11 @@ func (e *Engine) FlushAOFAsync(wake func()) (ready bool, err error) {
 	if always {
 		// As in flushAOF: a rewrite's rename whose directory sync failed is
 		// finished before this batch can be acknowledged as synced.
-		if err := syncPendingLogDir(); err != nil {
-			e.aof.failed = err
-			return false, err
+		if e.ownsRewrite() {
+			if err := syncPendingLogDir(); err != nil {
+				e.aof.failed = err
+				return false, err
+			}
 		}
 	}
 	body := e.aof.buf

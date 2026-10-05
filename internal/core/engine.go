@@ -126,3 +126,11 @@ type Engine struct {
 // whatever has kept the engine keeps the keyspace a test began from empty.
 var defaultEngine = &Engine{space: data_structure.DefaultSpace, replyCeiling: MaxReplyBytes,
 	aofWrite: writeLog, aofSync: syncLog}
+
+// ownsRewrite reports whether e is the engine the rewrite belongs to. Until
+// the second part of plan step 2.3 moves it into the engine, the rewrite and
+// what it remembers are package state that walks and replaces the default
+// engine's log, so only the default engine's writes, removals, flushes and
+// closes may reach it; another engine's would mark keys it does not hold, or
+// advance and cancel a rewrite of a log it does not write.
+func (e *Engine) ownsRewrite() bool { return e == defaultEngine }

@@ -439,6 +439,29 @@ func TestEnginesShareNoLog(t *testing.T) {
 	encoded, written, synced, ready = defaultEngine.AOFPositions()
 	assert.Equal(t, defaultPositions, [4]uint64{encoded, written, synced, ready}, "neither moved the default engine's offsets")
 	assert.Zero(t, defaultEngine.space.TotalKeys())
+
+	// While the default engine rewrites its log, another engine's writes,
+	// removals, flushes and close leave that rewrite alone.
+	require.NoError(t, OpenAOF(filepath.Join(dir, "default.aof")))
+	t.Cleanup(func() { CancelRewrite(); CloseAOF() })
+	for i := range 10 {
+		require.Equal(t, "OK", run(t, "SET", "s:"+strconv.Itoa(i), "default"))
+	}
+	require.NoError(t, StartRewrite())
+	c := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
+	require.NoError(t, c.OpenAOF(filepath.Join(dir, "c.aof")))
+	require.Equal(t, "OK", on(t, c, "SET", "s:1", "c"))
+	require.Equal(t, int64(1), on(t, c, "SADD", "set", "only"))
+	on(t, c, "SPOP", "set")
+	require.Equal(t, "OK", on(t, c, "SET", "brief", "c", "PX", "1"))
+	time.Sleep(5 * time.Millisecond)
+	assert.Equal(t, "$-1\r\n", string(rawOn(t, c, "GET", "brief")))
+	require.Equal(t, "OK", on(t, c, "FLUSHDB"))
+	require.NoError(t, c.FlushAOF())
+	require.NoError(t, c.CloseAOF())
+	assert.True(t, RewriteActive(), "c's close leaves the default engine's rewrite running")
+	assert.Empty(t, rewrite.dirty, "c's keys are not the default engine's dirty keys")
+	assert.Zero(t, rewrite.pos, "c's flushes do not advance the default engine's rewrite")
 }
 
 // midTransaction is a transport whose own command, run in its place inside an

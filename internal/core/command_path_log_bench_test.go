@@ -12,6 +12,10 @@ import (
 // flushes: one event-loop cycle of pipelined commands.
 const logCycle = 64
 
+// minRecordBytes is less than any record a family's iteration logs, so the
+// log's growth shows each iteration's writes reached it.
+const minRecordBytes = 16
+
 // BenchmarkCommandPathWithLog is the command path with the log open. Every
 // write stages its record and appends it to the log's buffer, and step 2.3 of
 // the embedding plan (docs/embedding-plan.md) moves that state into the
@@ -80,13 +84,16 @@ func BenchmarkCommandPathWithLog(b *testing.B) {
 			if err := FlushAOF(); err != nil {
 				b.Fatal(err)
 			}
+			_, before, _, _ := AOFStats()
 			var w replyWriter
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				w.b = w.b[:0]
 				for _, cmd := range family.steps[i%len(family.steps)] {
-					EvalAndResponse(cmd, &w)
+					w.b = w.b[:0]
+					if err := EvalAndResponse(cmd, &w); err != nil || len(w.b) == 0 || w.b[0] == '-' {
+						b.Fatalf("%s %v: %v %q", cmd.Cmd, cmd.Args, err, w.b)
+					}
 				}
 				if i%logCycle == logCycle-1 {
 					if err := FlushAOF(); err != nil {
@@ -97,6 +104,11 @@ func BenchmarkCommandPathWithLog(b *testing.B) {
 			b.StopTimer()
 			if err := FlushAOF(); err != nil {
 				b.Fatal(err)
+			}
+			// Every write this measured is in the log: no record is shorter
+			// than minRecordBytes.
+			if _, after, _, _ := AOFStats(); after-before < int64(b.N)*minRecordBytes {
+				b.Fatalf("the log grew %d bytes over %d iterations", after-before, b.N)
 			}
 		})
 	}

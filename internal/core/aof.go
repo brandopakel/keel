@@ -231,7 +231,9 @@ func (e *Engine) OpenAOF(path string) error {
 		// Eviction and expiry remove keys no command named, so a rewrite has to
 		// hear about them here or it would carry a key forward that the server
 		// had already dropped.
-		noteRewriteDirty(key)
+		if e.ownsRewrite() {
+			noteRewriteDirty(key)
+		}
 		e.noteReplicationDirty(key)
 	}
 	return nil
@@ -245,8 +247,10 @@ func CloseAOF() error { return defaultEngine.CloseAOF() }
 // CloseAOF is the package's CloseAOF on e.
 func (e *Engine) CloseAOF() error {
 	closeReplicationSnapshot()
-	CancelRewrite()
-	_, _ = pollRewriteIO(true)
+	if e.ownsRewrite() {
+		CancelRewrite()
+		_, _ = pollRewriteIO(true)
+	}
 	if e.aof.file == nil {
 		return nil
 	}
@@ -300,7 +304,7 @@ func (e *Engine) aofCommit(cmd *Command, reply []byte) {
 	// which keys those are. Recorded whether or not the log itself takes the
 	// command, because a rewrite is a separate question from durability: a read
 	// that reaps an expired key changes the keyspace without being logged.
-	if rewrite.active {
+	if e.ownsRewrite() && rewrite.active {
 		for _, key := range writtenKeys(cmd) {
 			noteRewriteDirty(key)
 		}
@@ -369,6 +373,9 @@ func (e *Engine) FlushAOF() error {
 		return err
 	}
 
+	if !e.ownsRewrite() {
+		return nil
+	}
 	// A rewrite in progress gets one slice per cycle, which is what keeps it
 	// from being a stall. This is the right place for it because it is already
 	// the once-a-cycle hook: doing it per command would slice a pipelined batch
@@ -422,9 +429,11 @@ func (e *Engine) flushAOF(closing bool) error {
 	if e.aof.dirty && syncDue && e.aof.syncPending == nil {
 		// A rewrite's rename whose directory sync failed is finished first:
 		// what is about to be synced is in the file that rename named.
-		if err := syncPendingLogDir(); err != nil {
-			e.aof.failed = err
-			return err
+		if e.ownsRewrite() {
+			if err := syncPendingLogDir(); err != nil {
+				e.aof.failed = err
+				return err
+			}
 		}
 		if !closing && config.AOFFsync == config.FsyncEverySec {
 			result := make(chan error, 1)

@@ -430,7 +430,11 @@ step 2.3 settles it this way:
   (`InitReplication`, replica apply) reaches the log through `defaultEngine`.
 - **Until a part moves**, the code that owns it reaches what has moved through
   `defaultEngine`, as step 2.1's leftovers reached the stores: after the first
-  PR, the rewrite reads the server's log that way.
+  PR, the rewrite reads the server's log that way. The rewrite is the default
+  engine's until it moves, so until then only the default engine's writes,
+  removals, flushes and close reach it (`ownsRewrite`); another engine's
+  would mark keys it does not hold, or advance or cancel a rewrite of a log it
+  does not write. The second PR removes the guard with the package state.
 - **Isolation.** `TestEnginesShareNoLog` gives two engines a log each, with
   I/O of their own: one engine's records, transaction frames, reaped keys and
   failed disk stay its own, and then both run side by side through
