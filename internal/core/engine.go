@@ -41,6 +41,11 @@ type Engine struct {
 	// draws from, its clock and its limits.
 	space *data_structure.Space
 
+	// options are e's settings, as they were given to it; see options.go.
+	// What is read on a command's path is held where that path reads it: the
+	// keyspace's limits in the space.
+	options Options
+
 	// The stores, in the order resetStores registers them, under the names
 	// they had as package variables.
 	dictStore   *data_structure.Dict
@@ -220,13 +225,6 @@ type Engine struct {
 	appendWriteStats, appendSyncStats           persistenceIOStats
 	rewriteWriteStats, rewriteSyncStats         persistenceIOStats
 	rewriteFinalSyncStats, rewriteFinalizeStats persistenceIOStats
-
-	// options are e's settings, as they were given to it; see options.go.
-	// What is read on a command's path is held where that path reads it: the
-	// keyspace's limits in the space. The options themselves are read only
-	// when they are given or reported, so they come last, and every field a
-	// command reads keeps the offset it had.
-	options Options
 }
 
 // defaultEngine is the engine the server and the tests run on until each
