@@ -419,10 +419,11 @@ open, step 2.3 settles it this way:
 - **No indirect call per command.** `evalAndResponse` deferred `aofEnd()`,
   which the compiler calls directly at each return. Deferred as the method
   `e.aofEnd()`, it was wrapped in a closure and called through it on every
-  command, which measured as about 1 to 3% of the command path and was the
-  largest cost of the move. It is now called at each return instead, after
-  the reply is written, as the deferred call ran; no panic is recovered on
-  the way out of a command, so the two do not differ.
+  command: an indirect call and an extra frame. It is now called at each
+  return instead, after the reply is written, as the deferred call ran; no
+  panic is recovered on the way out of a command, so the two do not differ.
+  Over the whole step against 40eb2f6, the command path went from 1.011 and
+  1.015 to between 1.000 and 1.004 on EPYC 7763.
 - **Replay's leniency is the replaying engine's.** A log may hold integers
   written before canonical spelling was enforced, so `counterInteger` accepts
   them while its engine replays. It and the readers built on it
