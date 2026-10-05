@@ -212,7 +212,7 @@ func TestRewriteBudgetAbortWhileSyncOwnsFile(t *testing.T) {
 			advanceToRewriteSync(t)
 			job := defaultEngine.pendingRewriteIO
 			require.NotNil(t, job)
-			before := rewriteBudgetAborts
+			before := defaultEngine.rewriteBudgetAborts
 			if budget == "duration" {
 				defaultEngine.rewrite.started = time.Now().Add(-31 * time.Second)
 				require.NoError(t, AdvanceRewrite())
@@ -220,7 +220,7 @@ func TestRewriteBudgetAbortWhileSyncOwnsFile(t *testing.T) {
 				defaultEngine.noteRewriteDirty(strings.Repeat("k", rewriteDirtyBytes))
 			}
 			require.False(t, RewriteActive())
-			require.Equal(t, before+1, rewriteBudgetAborts)
+			require.Equal(t, before+1, defaultEngine.rewriteBudgetAborts)
 			require.Same(t, job, defaultEngine.pendingRewriteIO)
 			require.ErrorContains(t, StartRewrite(), "still releasing")
 			require.Equal(t, "OK", run(t, "SET", "after", "survives"))
@@ -268,7 +268,7 @@ func TestRewriteDirtyTailSyncFailureKeepsAllAcknowledgedWrites(t *testing.T) {
 		require.NoError(t, FlushAOF())
 	}
 	require.False(t, RewriteActive())
-	require.ErrorIs(t, rewriteOutcome.lastErr, diskErr)
+	require.ErrorIs(t, defaultEngine.rewriteOutcome.lastErr, diskErr)
 	require.Equal(t, int32(2), calls.Load())
 	require.Equal(t, "OK", run(t, "SET", "after", "survives"))
 	require.NoError(t, CloseAOF())

@@ -2,6 +2,7 @@ package core
 
 import (
 	"os"
+	"time"
 
 	"github.com/brandopakel/keel/internal/data_structure"
 )
@@ -21,11 +22,11 @@ import (
 // protocol included, and the budget the transport running it reserves from.
 // Step 2.3 moves the persistence state here, a part at a time: the log and its
 // append worker, whose methods record, flush and replay e's writes in e's own
-// file, and the rewrite, which walks e's keyspace and replaces e's log. The
-// rewrite's outcome and backoff and the I/O counters are package variables
-// until the last part of step 2.3, and replication's until step 2.4; the code
-// that owns them reaches the log and the stores through defaultEngine until
-// then.
+// file; the rewrite, which walks e's keyspace and replaces e's log; and what
+// e's rewrites came to and when the next may start. The I/O counters are
+// package variables until the last part of step 2.3, and replication's until
+// step 2.4; the code that owns them reaches the log and the stores through
+// defaultEngine until then.
 //
 // Until callers open engines of their own (plan phase 3) the server and the
 // tests run on defaultEngine, as the stores run on data_structure.DefaultSpace.
@@ -139,6 +140,23 @@ type Engine struct {
 	rewriteRename      func(oldPath, newPath string) error
 	rewriteSyncDir     func(string) error
 	keyCountForRewrite func() int
+
+	// What outlives one rewrite of e's log - see aof_rewrite_status.go - under
+	// the names it had as package variables, so one engine's failed rewrites,
+	// the waits they earn and a rewrite scheduled inside its EXEC are its own.
+	// rewriteOutcome is what INFO reports about the rewrites so far, the
+	// retry limit's state and a scheduled BGREWRITEAOF; nextAutoRewrite is
+	// when an automatic one may start, and rewriteBudgetAborts how many were
+	// abandoned on their budgets. snapshotRetryAt holds back the rewrite a
+	// protocol 2 pull would start after one whose snapshot could not be
+	// opened. unsyncedLogDir names the directory whose entry for e's log is
+	// not yet known to be durable, because the sync after a rewrite's rename
+	// failed.
+	rewriteOutcome      rewriteOutcomeState
+	nextAutoRewrite     time.Time
+	rewriteBudgetAborts uint64
+	snapshotRetryAt     time.Time
+	unsyncedLogDir      string
 }
 
 // defaultEngine is the engine the server and the tests run on until each
@@ -157,5 +175,7 @@ func engineIn(space *data_structure.Space) *Engine {
 		aofWrite: writeLog, aofSync: syncLog,
 		rewriteFileWrite: writeLog, rewriteFileSync: syncLog, rewriteOpenLog: openRewrittenLog,
 		rewriteRename: os.Rename, rewriteSyncDir: syncDir, keyCountForRewrite: space.TotalKeys,
+		// No rewrite has ended yet, which Redis reports as -1.
+		rewriteOutcome: rewriteOutcomeState{lastSeconds: -1},
 	}
 }

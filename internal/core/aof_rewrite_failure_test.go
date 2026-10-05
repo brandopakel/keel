@@ -395,7 +395,7 @@ func TestDirectorySyncAfterTheRenameIsRetriedBeforeTheNextSync(t *testing.T) {
 			require.Equal(t, "1", persistenceField(t, "aof_rewrites"))
 			require.True(t, sameFile(t, defaultEngine.aof.file, path), "appending continues into the file that has the log's name")
 			require.Contains(t, logs.String(), "the next sync of it retries the directory first")
-			require.Equal(t, filepath.Dir(path), unsyncedLogDir)
+			require.Equal(t, filepath.Dir(path), defaultEngine.unsyncedLogDir)
 
 			run(t, "SET", "after", "3")
 			var err error
@@ -409,7 +409,7 @@ func TestDirectorySyncAfterTheRenameIsRetriedBeforeTheNextSync(t *testing.T) {
 			if mode == "retry succeeds" {
 				require.NoError(t, err)
 				require.Equal(t, 2, calls)
-				require.Empty(t, unsyncedLogDir)
+				require.Empty(t, defaultEngine.unsyncedLogDir)
 				require.NoError(t, CloseAOF())
 				restart(t, path)
 				require.Equal(t, "3", run(t, "GET", "after"))
@@ -491,10 +491,10 @@ func TestAutomaticRewriteBacksOffAsRedisDoes(t *testing.T) {
 	require.False(t, RewriteActive(), "no attempt before the next 100 ms tick")
 	time.Sleep(rewriteRetryTick + 10*time.Millisecond)
 	failOne()
-	nextAutoRewrite = time.Time{} // the tick, without sleeping through it again
+	defaultEngine.nextAutoRewrite = time.Time{} // the tick, without sleeping through it again
 	failOne()
 	require.Equal(t, "3", persistenceField(t, "aof_rewrites_consecutive_failures"))
-	nextAutoRewrite = time.Time{}
+	defaultEngine.nextAutoRewrite = time.Time{}
 	for i := 0; i < 20; i++ {
 		write()
 		require.False(t, RewriteActive(), "the third failure in a row holds automatic rewrites back")
@@ -505,10 +505,10 @@ func TestAutomaticRewriteBacksOffAsRedisDoes(t *testing.T) {
 	// Each window that passes allows one attempt, and its failure doubles the
 	// next window, up to an hour.
 	for _, minutes := range []string{"2", "4", "8", "16", "32", "60", "60"} {
-		rewriteOutcome.limitedUntil = time.Now().Add(-time.Second)
-		nextAutoRewrite = time.Time{}
+		defaultEngine.rewriteOutcome.limitedUntil = time.Now().Add(-time.Second)
+		defaultEngine.nextAutoRewrite = time.Time{}
 		failOne()
-		nextAutoRewrite = time.Time{}
+		defaultEngine.nextAutoRewrite = time.Time{}
 		write()
 		require.False(t, RewriteActive())
 		require.Contains(t, logs.String(), "will retry in "+minutes+" minutes")
@@ -521,8 +521,8 @@ func TestAutomaticRewriteBacksOffAsRedisDoes(t *testing.T) {
 	driveRewrite(t)
 	require.Equal(t, "ok", persistenceField(t, "aof_last_bgrewrite_status"))
 	require.Equal(t, "0", persistenceField(t, "aof_rewrites_consecutive_failures"))
-	require.False(t, rewriteLimited(time.Now()))
-	require.Zero(t, rewriteOutcome.delay)
+	require.False(t, defaultEngine.rewriteLimited(time.Now()))
+	require.Zero(t, defaultEngine.rewriteOutcome.delay)
 	require.Equal(t, "OK", run(t, "SET", "last", "write"))
 	require.NoError(t, CloseAOF())
 	restart(t, path)
@@ -547,7 +547,7 @@ func TestBudgetAbortIsAFailedRewriteThatWaitsAMinute(t *testing.T) {
 	require.Equal(t, "1", persistenceField(t, "aof_rewrites_consecutive_failures"))
 	require.Equal(t, "1", persistenceField(t, "aof_rewrite_budget_aborts"))
 	require.Contains(t, logs.String(), "terminated with error: rewrite exceeded its 30-second duration budget")
-	require.WithinDuration(t, time.Now().Add(time.Minute), nextAutoRewrite, 5*time.Second)
+	require.WithinDuration(t, time.Now().Add(time.Minute), defaultEngine.nextAutoRewrite, 5*time.Second)
 }
 
 // A protocol 2 replica's stream goes on through a failed rewrite, and a
@@ -625,7 +625,7 @@ func TestReplicationV2SnapshotStartFailureIsNotRetriedEveryPull(t *testing.T) {
 	require.Equal(t, "err", persistenceField(t, "aof_last_bgrewrite_status"))
 
 	require.NoError(t, os.Remove(defaultEngine.aof.path+".rewrite"))
-	snapshotRetryAt = time.Now().Add(-time.Second) // the minute has passed
+	defaultEngine.snapshotRetryAt = time.Now().Add(-time.Second) // the minute has passed
 	require.True(t, pullV2(t, "", 0, "", 0).Pending)
 	require.True(t, RewriteActive())
 	driveRewrite(t)

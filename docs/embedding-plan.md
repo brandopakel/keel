@@ -349,12 +349,13 @@ PRs, in this order:
 
 1. **The log and its append worker** (`aof`, the `append*` offsets and the
    worker's result, and the `aofWrite` and `aofSync` hooks).
-2. **The rewrite**: its walk and record stream, its I/O job and wake, the
-   handoff hooks (`rewriteFileWrite`, `rewriteFileSync`, `rewriteOpenLog`,
-   `rewriteRename`, `rewriteSyncDir`) and `keyCountForRewrite`.
-3. **What outlives one rewrite**: its outcome, the retry backoff,
-   `rewriteBudgetAborts`, `nextAutoRewrite`, `snapshotRetryAt`,
-   `unsyncedLogDir`, and the six I/O counters.
+2. **The rewrite and what outlives one**: its walk and record stream, its
+   I/O job and wake, the handoff hooks (`rewriteFileWrite`, `rewriteFileSync`,
+   `rewriteOpenLog`, `rewriteRename`, `rewriteSyncDir`) and
+   `keyCountForRewrite`; and its outcome, the retry backoff,
+   `rewriteBudgetAborts`, `nextAutoRewrite`, `snapshotRetryAt` and
+   `unsyncedLogDir`.
+3. **The six I/O counters** INFO reports for the log and the rewrite.
 
 The order follows what reads what. Every write touches the log - a handler
 stages its record, `evalAndResponse` begins and commits it, and replay's
@@ -362,11 +363,15 @@ leniency is a question about the log - so the log moves first, and with it
 the guardrails below. The rewrite reads the log's file, path, buffer and sync
 state at every step, so it follows the log and reads it through
 `defaultEngine` for one PR; the other way round, every flush would reach the
-rewrite through `defaultEngine`. The outcome, the backoff and the counters are
-written by both - a flush retries the directory sync a rewrite's rename left,
-and the counters time the log's I/O and the rewrite's - so they go last, once
-both their writers are methods. Where the plan above leaves a choice open,
-step 2.3 settles it this way:
+rewrite through `defaultEngine`. What outlives one rewrite was planned for the
+last PR, and moves with the rewrite instead: once each engine rewrites its own
+log, a rewrite scheduled inside one engine's EXEC, the wait one engine's
+failures earn, and the directory sync one engine's rename leaves pending have
+to be that engine's, or another engine's flush starts, delays, retries or
+clears them. Review of the second PR found exactly that. The counters time
+the log's I/O and the rewrite's, and only INFO reads them, so they go last,
+once both their writers are methods. Where the plan above leaves a choice
+open, step 2.3 settles it this way:
 
 - **Guardrails first, captured on develop.** The first commit of the first PR
   adds them, on develop's code at 40eb2f6, before anything moves:
@@ -441,6 +446,16 @@ step 2.3 settles it this way:
   and space. KEEL.REPL.PULL takes its snapshot's images from the engine it
   runs on; protocol 1's `sealReplication` takes them from the default engine
   until step 2.4.
+- **What outlives one rewrite** is the engine's too: `rewriteOutcome`, now of
+  a named type, `rewriteOutcomeState`, which `engineIn` starts with no rewrite
+  ended (-1 seconds, as Redis reports it), and which holds the retry limit
+  and a BGREWRITEAOF scheduled inside EXEC; `nextAutoRewrite`;
+  `rewriteBudgetAborts`; `snapshotRetryAt`; and `unsyncedLogDir`, which only
+  a flush of that engine's log retries before it syncs, and only that
+  engine's close or reopening clears. So one engine's failures, and the waits
+  they earn, hold back no other engine's rewrites, a scheduled rewrite starts
+  on the engine whose EXEC scheduled it, and each engine's INFO reports its
+  own.
 - **Until a part moves**, the code that owns it reaches what has moved through
   `defaultEngine`, as step 2.1's leftovers reached the stores: after the first
   PR, the rewrite read the server's log that way. The rewrite was the
@@ -448,9 +463,7 @@ step 2.3 settles it this way:
   writes, removals, flushes and close reached it (`ownsRewrite`); another
   engine's would have marked keys it does not hold, or advanced or cancelled
   a rewrite of a log it does not write. The second PR removed the guard with
-  the package state. After the second, the rewrite's outcome and backoff are
-  still package state, so until the third a failed rewrite on one engine is in
-  every engine's INFO, and engines are rewritten one at a time in the tests.
+  the package state.
 - **Isolation.** `TestEnginesShareNoLog` gives two engines a log each, with
   I/O of their own: one engine's records, transaction frames, reaped keys and
   failed disk stay its own, and then both run side by side through
@@ -461,10 +474,17 @@ step 2.3 settles it this way:
   `TestEnginesShareNoRewrite` rewrites one engine while the other writes: the
   rewrite marks only its own engine's keys dirty, replaces only its own log,
   wakes only its own loop, and fails, or refuses at the key ceiling, through
-  its own engine's hooks alone. The race job runs them under `-race`.
+  its own engine's hooks alone. A BGREWRITEAOF scheduled inside one engine's
+  EXEC is started by that engine's flush and not the other's, and a directory
+  sync one engine's rename leaves pending is retried by that engine's sync and
+  left alone by the other's syncs, close and reopening. Then both rewrite side
+  by side, written to while they do, one failing three times running on its
+  own disk and the other succeeding: each engine's INFO reports its own
+  outcome, only the failing one is held back by the retry limit, and each log
+  replays to its own engine. The race job runs them under `-race`.
 - **Census.** Each PR removes the entries it moves. The first removes the ten
-  of the log and its worker, and `replicationTransaction`; the second the nine
-  of the rewrite.
+  of the log and its worker, and `replicationTransaction`; the second the
+  fourteen of the rewrite and what outlives it.
 - **Measured per PR**, as in steps 2.1 and 2.2, now including the log-on
   benchmark: the paired command-path job runs at least twice against develop
   and once against `65ebdbc`.

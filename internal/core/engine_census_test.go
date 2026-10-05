@@ -38,8 +38,6 @@ const (
 var packageVars = map[string]string{
 	"defaultEngine": defaultInstance,
 
-	"rewriteOutcome": persistence, "rewriteBudgetAborts": persistence, "nextAutoRewrite": persistence,
-	"snapshotRetryAt": persistence, "unsyncedLogDir": persistence,
 	"appendWriteStats": persistence, "appendSyncStats": persistence,
 	"rewriteWriteStats": persistence, "rewriteSyncStats": persistence,
 	"rewriteFinalSyncStats": persistence, "rewriteFinalizeStats": persistence,

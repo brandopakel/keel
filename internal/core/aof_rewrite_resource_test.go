@@ -127,14 +127,14 @@ func TestRewriteDirtyBudgetRefusesBeforeRetainingName(t *testing.T) {
 	t.Cleanup(func() { CancelRewrite(); require.NoError(t, CloseAOF()) })
 	run(t, "SET", "original", "value")
 	require.NoError(t, StartRewrite())
-	before := rewriteBudgetAborts
+	before := defaultEngine.rewriteBudgetAborts
 	for i := 0; RewriteActive(); i++ {
 		require.Less(t, i, 10)
 		key := strconv.Itoa(i) + strings.Repeat("k", 1<<20)
 		defaultEngine.noteRewriteDirty(key)
 		require.LessOrEqual(t, defaultEngine.rewrite.dirtyBytes, rewriteDirtyBytes)
 	}
-	require.Equal(t, before+1, rewriteBudgetAborts)
+	require.Equal(t, before+1, defaultEngine.rewriteBudgetAborts)
 	require.Nil(t, defaultEngine.rewrite.dirty)
 	require.Nil(t, defaultEngine.rewrite.stream)
 	_, err := os.Stat(path + ".rewrite")

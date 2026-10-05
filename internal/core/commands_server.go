@@ -231,7 +231,7 @@ func (e *Engine) cmdINFO(args []string) []byte {
 		encoded, written, synced, ready := e.AOFPositions()
 		fmt.Fprintf(&b, "aof_encoded_offset:%d\r\naof_appended_offset:%d\r\naof_synced_offset:%d\r\naof_reply_offset:%d\r\n", encoded, written, synced, ready)
 		fmt.Fprintf(&b, "aof_pending_fsync:%d\r\naof_pending_append_bytes:%d\r\n", pending, e.appendBytes)
-		fmt.Fprintf(&b, "aof_rewrite_dirty_keys:%d\r\naof_rewrite_dirty_bytes:%d\r\naof_rewrite_budget_aborts:%d\r\n", len(e.rewrite.dirty), e.rewrite.dirtyBytes, rewriteBudgetAborts)
+		fmt.Fprintf(&b, "aof_rewrite_dirty_keys:%d\r\naof_rewrite_dirty_bytes:%d\r\naof_rewrite_budget_aborts:%d\r\n", len(e.rewrite.dirty), e.rewrite.dirtyBytes, e.rewriteBudgetAborts)
 		rewritePending := 0
 		if e.pendingRewriteIO != nil && e.pendingRewriteIO.body == nil {
 			rewritePending = 1

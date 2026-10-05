@@ -88,10 +88,6 @@ const rewriteDirtyKeys = 100000
 const rewriteDirtyBytes = 8 << 20
 const rewriteRecordSlice = 64 << 10
 
-var rewriteBudgetAborts uint64
-
-var nextAutoRewrite time.Time
-
 // rewriteState is the state of the walk in progress, if there is one.
 type rewriteState struct {
 	active          bool
@@ -163,13 +159,13 @@ func (e *Engine) StartRewrite() error {
 	}
 
 	if e.keyCountForRewrite() > rewriteKeyCeiling {
-		return refuseRewriteStart(fmt.Errorf("rewrite limit: at most %d keys", rewriteKeyCeiling))
+		return e.refuseRewriteStart(fmt.Errorf("rewrite limit: at most %d keys", rewriteKeyCeiling))
 	}
 	path := e.aof.path
 	tmpPath := path + ".rewrite"
 	f, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
-		return refuseRewriteStart(err)
+		return e.refuseRewriteStart(err)
 	}
 	aofLog("Background append only file rewriting started")
 
@@ -540,10 +536,10 @@ func (e *Engine) finishRewrite() {
 	dir := filepath.Dir(e.rewrite.path)
 	if err := e.rewriteSyncDir(dir); err != nil {
 		finalErr = err
-		unsyncedLogDir = dir
+		e.unsyncedLogDir = dir
 		aofLog("syncing %s after the rewrite's rename: %v; the rewritten file is the log, and the next sync of it retries the directory first", dir, err)
 	} else {
-		unsyncedLogDir = "" // this sync covers an earlier rename's entry too
+		e.unsyncedLogDir = "" // this sync covers an earlier rename's entry too
 	}
 	replaced := e.aof.file
 	e.aof.file = next
@@ -558,7 +554,7 @@ func (e *Engine) finishRewrite() {
 	e.aof.written = 0
 	e.aof.rewrites++
 	e.aof.lastKeys = e.rewrite.initialKeys
-	noteRewriteFinished(e.rewrite.started)
+	e.noteRewriteFinished(e.rewrite.started)
 
 	e.rewrite.active = false
 	e.rewrite.keys = nil
@@ -572,7 +568,7 @@ func (e *Engine) finishRewrite() {
 		// The log is unaffected. A protocol 2 replica still waiting gets its
 		// snapshot from a later rewrite, which its pulls start no sooner than
 		// a minute from now rather than one after another.
-		snapshotRetryAt = time.Now().Add(time.Minute)
+		e.snapshotRetryAt = time.Now().Add(time.Minute)
 		aofLog("replication snapshot after the rewrite: %v", err)
 	}
 }
@@ -580,9 +576,9 @@ func (e *Engine) finishRewrite() {
 // abandonOverBudget abandons a rewrite the load outran. The next automatic
 // attempt waits a minute, since it would be outrun again straight away.
 func (e *Engine) abandonOverBudget(cause error) {
-	rewriteBudgetAborts++
+	e.rewriteBudgetAborts++
 	e.abortRewrite(cause)
-	nextAutoRewrite = time.Now().Add(time.Minute)
+	e.nextAutoRewrite = time.Now().Add(time.Minute)
 }
 
 // abortRewrite gives up on a rewrite without touching the log in use. The old
@@ -592,7 +588,7 @@ func (e *Engine) abandonOverBudget(cause error) {
 func (e *Engine) abortRewrite(cause error) {
 	active, started, path := e.rewrite.active, e.rewrite.started, e.rewrite.path
 	e.rewrite.hashCursor = nil
-	nextAutoRewrite = time.Now().Add(rewriteRetryTick)
+	e.nextAutoRewrite = time.Now().Add(rewriteRetryTick)
 	workerOwnsFile := e.pendingRewriteIO != nil && e.pendingRewriteIO.abandon()
 	if !workerOwnsFile && e.rewrite.file != nil {
 		e.rewrite.file.Close()
@@ -613,7 +609,7 @@ func (e *Engine) abortRewrite(cause error) {
 	e.rewrite.collectionActive = false
 	e.rewrite.file = nil
 	if cause != nil && active {
-		noteRewriteFailed(cause, started, path)
+		e.noteRewriteFailed(cause, started, path)
 	}
 }
 
@@ -727,7 +723,7 @@ func (e *Engine) RewriteAOF() error {
 	}
 	// A rewrite that failed has been abandoned and reported like any other;
 	// its caller is told why.
-	return rewriteOutcome.lastErr
+	return e.rewriteOutcome.lastErr
 }
 
 func syncDir(dir string) error {
@@ -756,11 +752,11 @@ func (e *Engine) maybeRewrite() {
 		return
 	}
 	now := time.Now()
-	if rewriteOutcome.scheduled {
+	if e.rewriteOutcome.scheduled {
 		e.startScheduledRewrite(now)
 		return
 	}
-	if now.Before(nextAutoRewrite) || config.AOFAutoRewritePercentage <= 0 {
+	if now.Before(e.nextAutoRewrite) || config.AOFAutoRewritePercentage <= 0 {
 		return
 	}
 	size := e.aof.baseSize + e.aof.written
@@ -773,13 +769,13 @@ func (e *Engine) maybeRewrite() {
 			return
 		}
 	}
-	if rewriteLimited(now) {
+	if e.rewriteLimited(now) {
 		return
 	}
 	// Redis's line, which measures growth against a base of at least one byte.
 	aofLog("Starting automatic rewriting of AOF on %d%% growth", size*100/max(e.aof.rewriteBase, 1)-100)
 	if err := e.StartRewrite(); err != nil {
-		nextAutoRewrite = time.Now().Add(time.Minute)
+		e.nextAutoRewrite = time.Now().Add(time.Minute)
 		logStartFailure("automatic rewrite", err)
 	}
 }

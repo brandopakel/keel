@@ -183,9 +183,9 @@ func (e *Engine) OpenAOF(path string) error {
 	// start again with it. Carrying them over would make a fresh log report
 	// rewrites it has never had.
 	e.aof.rewrites = 0
-	rewriteBudgetAborts = 0
-	nextAutoRewrite = time.Time{}
-	resetRewriteOutcome()
+	e.rewriteBudgetAborts = 0
+	e.nextAutoRewrite = time.Time{}
+	e.resetRewriteOutcome()
 	e.aof.lastKeys = 0
 	// Whatever is already on disk is the base the growth trigger measures
 	// against, so a server restarted onto an existing log does not immediately
@@ -259,7 +259,7 @@ func (e *Engine) CloseAOF() error {
 	}
 	e.aof.file = nil
 	e.aof.path = ""
-	unsyncedLogDir = ""
+	e.unsyncedLogDir = ""
 	e.aof.buf, e.aof.staged = nil, nil
 	e.space.OnRemove = nil
 	return err

@@ -75,7 +75,9 @@ const (
 	rewriteRetryTick = 100 * time.Millisecond
 )
 
-var rewriteOutcome struct {
+// rewriteOutcomeState is what the rewrites a log has had came to, and when
+// the next may start.
+type rewriteOutcomeState struct {
 	// lastErr is why the last rewrite failed or could not start, and nil once
 	// one has finished: aof_last_bgrewrite_status.
 	lastErr error
@@ -92,10 +94,6 @@ var rewriteOutcome struct {
 	delay        time.Duration
 	limitedUntil time.Time
 }
-
-// unsyncedLogDir names the directory whose entry for the log is not yet known
-// to be durable, because the sync after a rewrite's rename failed.
-var unsyncedLogDir string
 
 // openRewrittenLog opens the finished file for appending before it takes the
 // log's name, so that nothing after the rename can fail to reach it. It is
@@ -122,45 +120,43 @@ func (e *rewriteStartError) Error() string { return e.err.Error() }
 func (e *rewriteStartError) Unwrap() error { return e.err }
 
 // refuseRewriteStart records a start that failed and returns it.
-func refuseRewriteStart(err error) error {
-	rewriteOutcome.lastErr = err
+func (e *Engine) refuseRewriteStart(err error) error {
+	e.rewriteOutcome.lastErr = err
 	aofLog("Can't rewrite append only file in background: %v", err)
 	return &rewriteStartError{err}
 }
 
-func resetRewriteOutcome() {
-	rewriteOutcome.lastErr = nil
-	rewriteOutcome.failures = 0
-	rewriteOutcome.scheduled = false
-	rewriteOutcome.lastSeconds = -1
-	rewriteOutcome.delay = 0
-	rewriteOutcome.limitedUntil = time.Time{}
-	unsyncedLogDir = ""
-	snapshotRetryAt = time.Time{}
+func (e *Engine) resetRewriteOutcome() {
+	e.rewriteOutcome.lastErr = nil
+	e.rewriteOutcome.failures = 0
+	e.rewriteOutcome.scheduled = false
+	e.rewriteOutcome.lastSeconds = -1
+	e.rewriteOutcome.delay = 0
+	e.rewriteOutcome.limitedUntil = time.Time{}
+	e.unsyncedLogDir = ""
+	e.snapshotRetryAt = time.Time{}
 }
 
-func init() { rewriteOutcome.lastSeconds = -1 }
-
 // noteRewriteFailed records a rewrite that ended without replacing the log.
-func noteRewriteFailed(cause error, started time.Time, path string) {
-	rewriteOutcome.lastErr = cause
-	rewriteOutcome.failures++
-	rewriteOutcome.lastSeconds = time.Now().Unix() - started.Unix()
+func (e *Engine) noteRewriteFailed(cause error, started time.Time, path string) {
+	e.rewriteOutcome.lastErr = cause
+	e.rewriteOutcome.failures++
+	e.rewriteOutcome.lastSeconds = time.Now().Unix() - started.Unix()
 	aofLog("Background AOF rewrite terminated with error: %v; %s is still the log and keeps every write", cause, path)
 }
 
 // noteRewriteFinished records a rewrite whose file is now the log.
-func noteRewriteFinished(started time.Time) {
-	rewriteOutcome.lastErr = nil
-	rewriteOutcome.failures = 0
-	rewriteOutcome.lastSeconds = time.Now().Unix() - started.Unix()
+func (e *Engine) noteRewriteFinished(started time.Time) {
+	e.rewriteOutcome.lastErr = nil
+	e.rewriteOutcome.failures = 0
+	e.rewriteOutcome.lastSeconds = time.Now().Unix() - started.Unix()
 	aofLog("Background AOF rewrite finished successfully")
 }
 
 // rewriteLimited is Redis's aofRewriteLimited. It is asked only when a rewrite
 // would otherwise start now, and the caller starts one when it answers false.
-func rewriteLimited(now time.Time) bool {
-	o := &rewriteOutcome
+func (e *Engine) rewriteLimited(now time.Time) bool {
+	o := &e.rewriteOutcome
 	if o.failures < rewriteRetryThreshold {
 		o.delay, o.limitedUntil = 0, time.Time{}
 		return false
@@ -182,15 +178,11 @@ func rewriteLimited(now time.Time) bool {
 	return true
 }
 
-// snapshotRetryAt holds back the rewrite a protocol 2 pull would start after
-// one finished but its snapshot could not be opened.
-var snapshotRetryAt time.Time
-
 // snapshotRewriteAllowed says whether a protocol 2 pull may start the rewrite
 // its snapshot needs now.
-func snapshotRewriteAllowed() bool {
+func (e *Engine) snapshotRewriteAllowed() bool {
 	now := time.Now()
-	return !now.Before(snapshotRetryAt) && !rewriteLimited(now)
+	return !now.Before(e.snapshotRetryAt) && !e.rewriteLimited(now)
 }
 
 // startSnapshotRewrite starts the rewrite a protocol 2 pull needs. A replica
@@ -202,7 +194,7 @@ func (e *Engine) startSnapshotRewrite() error {
 	err := e.StartRewrite()
 	var refused *rewriteStartError
 	if errors.As(err, &refused) {
-		snapshotRetryAt = time.Now().Add(time.Minute)
+		e.snapshotRetryAt = time.Now().Add(time.Minute)
 	}
 	return err
 }
@@ -224,10 +216,10 @@ func (e *Engine) startScheduledRewrite(now time.Time) {
 	if ready, _ := e.pollRewriteIO(false); !ready || e.AppendPending() || len(e.aof.buf) > 0 {
 		return // the worker that finishes that wakes the loop again
 	}
-	if rewriteLimited(now) {
+	if e.rewriteLimited(now) {
 		return
 	}
-	rewriteOutcome.scheduled = false
+	e.rewriteOutcome.scheduled = false
 	if err := e.StartRewrite(); err != nil {
 		logStartFailure("scheduled rewrite", err)
 	}
@@ -247,8 +239,8 @@ func (e *Engine) bgRewriteAOF() []byte {
 		// Redis starts nothing in the middle of EXEC. The rewrite starts once
 		// the transaction is over, and a BGREWRITEAOF asked for this way
 		// clears the failures holding automatic ones back, as in Redis.
-		rewriteOutcome.scheduled = true
-		rewriteOutcome.failures = 0
+		e.rewriteOutcome.scheduled = true
+		e.rewriteOutcome.failures = 0
 		return Encode("Background append only file rewriting scheduled", true)
 	}
 	if err := e.StartRewrite(); err != nil {
@@ -265,14 +257,14 @@ func (e *Engine) bgRewriteAOF() []byte {
 // before the log's own sync, so nothing appended to the new file is reported
 // synced, or acknowledged under appendfsync always, before its name is durable.
 func (e *Engine) syncPendingLogDir() error {
-	if unsyncedLogDir == "" {
+	if e.unsyncedLogDir == "" {
 		return nil
 	}
-	if err := e.rewriteSyncDir(unsyncedLogDir); err != nil {
-		return fmt.Errorf("syncing %s after the rewrite's rename: %w", unsyncedLogDir, err)
+	if err := e.rewriteSyncDir(e.unsyncedLogDir); err != nil {
+		return fmt.Errorf("syncing %s after the rewrite's rename: %w", e.unsyncedLogDir, err)
 	}
-	aofLog("synced %s: the rewritten log's name is durable", unsyncedLogDir)
-	unsyncedLogDir = ""
+	aofLog("synced %s: the rewritten log's name is durable", e.unsyncedLogDir)
+	e.unsyncedLogDir = ""
 	return nil
 }
 
@@ -295,7 +287,7 @@ func renamedAnyway(next *os.File, path string) bool {
 // started.
 func (e *Engine) rewriteStatusInfo(b *strings.Builder) {
 	scheduled := 0
-	if rewriteOutcome.scheduled {
+	if e.rewriteOutcome.scheduled {
 		scheduled = 1
 	}
 	current := int64(-1)
@@ -303,9 +295,9 @@ func (e *Engine) rewriteStatusInfo(b *strings.Builder) {
 		current = time.Now().Unix() - e.rewrite.started.Unix()
 	}
 	status := "ok"
-	if rewriteOutcome.lastErr != nil {
+	if e.rewriteOutcome.lastErr != nil {
 		status = "err"
 	}
-	fmt.Fprintf(b, "aof_rewrite_scheduled:%d\r\naof_pending_rewrite:%d\r\naof_last_rewrite_time_sec:%d\r\n", scheduled, scheduled, rewriteOutcome.lastSeconds)
-	fmt.Fprintf(b, "aof_current_rewrite_time_sec:%d\r\naof_last_bgrewrite_status:%s\r\naof_rewrites_consecutive_failures:%d\r\n", current, status, rewriteOutcome.failures)
+	fmt.Fprintf(b, "aof_rewrite_scheduled:%d\r\naof_pending_rewrite:%d\r\naof_last_rewrite_time_sec:%d\r\n", scheduled, scheduled, e.rewriteOutcome.lastSeconds)
+	fmt.Fprintf(b, "aof_current_rewrite_time_sec:%d\r\naof_last_bgrewrite_status:%s\r\naof_rewrites_consecutive_failures:%d\r\n", current, status, e.rewriteOutcome.failures)
 }
