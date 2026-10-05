@@ -46,14 +46,14 @@ func TestAOFTranscriptLargeValueKeepsBoundedBuffer(t *testing.T) {
 
 func TestAOFTranscriptAdmitsFourLargeValuesBehindPendingAppend(t *testing.T) {
 	ResetStores()
-	oldWrite, oldMemory, oldKeys := defaultEngine.aofWrite, config.MaxMemory, config.KeyNumberLimit
-	config.MaxMemory, config.KeyNumberLimit = 0, 100000
+	oldWrite := defaultEngine.aofWrite
+	withOptions(t, func(o *Options) { o.MaxMemory, o.MaxKeys = 0, 100000 })
 	release, entered := make(chan struct{}), make(chan struct{})
 	var once sync.Once
 	t.Cleanup(func() {
 		once.Do(func() { close(release) })
 		CloseAOF()
-		defaultEngine.aofWrite, config.MaxMemory, config.KeyNumberLimit = oldWrite, oldMemory, oldKeys
+		defaultEngine.aofWrite = oldWrite
 		ResetStores()
 	})
 	path := filepath.Join(t.TempDir(), "batch.aof")
@@ -332,13 +332,12 @@ func TestAOFTranscriptJoinsOlderAppendBeforeDirectDrain(t *testing.T) {
 }
 
 func TestAOFTranscriptMassEvictionKeepsBoundedBuffer(t *testing.T) {
-	oldLimit, oldMemory := config.KeyNumberLimit, config.MaxMemory
 	oldPolicy := config.AOFFsync
 	config.AOFFsync = config.FsyncNever
-	config.KeyNumberLimit, config.MaxMemory = 1000, 0
+	withOptions(t, func(o *Options) { o.MaxKeys, o.MaxMemory = 1000, 0 })
 	t.Cleanup(func() {
 		CloseAOF()
-		config.KeyNumberLimit, config.MaxMemory, config.AOFFsync = oldLimit, oldMemory, oldPolicy
+		config.AOFFsync = oldPolicy
 		ResetStores()
 	})
 	ResetStores()
@@ -352,7 +351,7 @@ func TestAOFTranscriptMassEvictionKeepsBoundedBuffer(t *testing.T) {
 		require.NoError(t, FlushAOF())
 	}
 	keys = append(keys, "last")
-	config.KeyNumberLimit = 1
+	withOptions(t, func(o *Options) { o.MaxKeys = 1 })
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
@@ -369,7 +368,7 @@ func TestAOFTranscriptMassEvictionKeepsBoundedBuffer(t *testing.T) {
 	}
 	require.Len(t, survivors, 1)
 	require.NoError(t, CloseAOF())
-	config.KeyNumberLimit = 1000
+	withOptions(t, func(o *Options) { o.MaxKeys = 1000 })
 	for i := 0; i < 2; i++ {
 		restart(t, path)
 		require.EqualValues(t, 1, run(t, "DBSIZE"))

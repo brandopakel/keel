@@ -3,7 +3,6 @@ package core
 import (
 	"errors"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
@@ -32,7 +31,7 @@ func (e *Engine) affordable(bytes uint64) error {
 	if bytes > maxStructureBytes {
 		return errTooLargeForOneKey
 	}
-	if !e.aof.replaying && config.MaxMemory > 0 && bytes > config.MaxMemory {
+	if maxMemory := e.space.MaxMemory(); !e.aof.replaying && maxMemory > 0 && bytes > maxMemory {
 		return errTooLargeForBudget
 	}
 	return nil

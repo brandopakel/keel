@@ -60,7 +60,7 @@ import (
 // write that a client's own command may be waiting on anyway.
 const rewriteChunk = 2048
 
-// rewriteKeyCeiling refuses a rewrite that would not finish, rather than
+// RewriteKeyCeiling refuses a rewrite that would not finish, rather than
 // walking for the abort budget and then throwing the work away. It has to be
 // set against what a rewrite actually costs, because a ceiling below the
 // keyspace a server is allowed to hold is worse than no ceiling: auto-rewrite
@@ -74,15 +74,17 @@ const rewriteChunk = 2048
 // thirty-second budget below, four million leaves roughly half of it spare,
 // which is the margin a slower disk needs.
 //
-// KeyNumberLimit still allows five million, so a keyspace between four and five
-// million cannot be compacted. Closing that needs a faster rewrite or a longer
-// budget rather than a larger number here, and the number should not be raised
-// past what has been measured.
+// The server's -maxkeys default still allows five million, so a keyspace
+// between four and five million cannot be compacted; and an engine with no key
+// bound (Options.MaxKeys zero, the default for embedded use) may hold more, as
+// a documented limit of persistence rather than of the keyspace. Closing that
+// needs a faster rewrite or a longer budget rather than a larger number here,
+// and the number should not be raised past what has been measured.
 //
 // Under concurrent writes the binding constraint is rewriteDirtyKeys rather
 // than duration: a rewrite that runs four times longer collects four times the
 // dirty keys, so a large keyspace under load aborts on that budget first.
-const rewriteKeyCeiling = 4000000
+const RewriteKeyCeiling = 4000000
 
 const rewriteDirtyKeys = 100000
 const rewriteDirtyBytes = 8 << 20
@@ -158,8 +160,8 @@ func (e *Engine) StartRewrite() error {
 		return err
 	}
 
-	if e.keyCountForRewrite() > rewriteKeyCeiling {
-		return e.refuseRewriteStart(fmt.Errorf("rewrite limit: at most %d keys", rewriteKeyCeiling))
+	if e.keyCountForRewrite() > RewriteKeyCeiling {
+		return e.refuseRewriteStart(fmt.Errorf("rewrite limit: at most %d keys", RewriteKeyCeiling))
 	}
 	path := e.aof.path
 	tmpPath := path + ".rewrite"

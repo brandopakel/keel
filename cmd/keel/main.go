@@ -39,6 +39,8 @@ var (
 	lfuLogFactor       int
 	lfuDecayPeriod     int
 	maxMemory          string
+	maxMemoryBytes     uint64
+	eviction           core.EvictionPolicy
 	lcsMaxCells        uint64
 	ioThreads          int
 	appendOnly         bool
@@ -55,9 +57,10 @@ var (
 	shutdownTimeout    = 5 * time.Second
 )
 
-// parseFlags reads the command line into config. It runs before anything
-// starts, from main rather than from an init, so that nothing else in the
-// process can observe a setting before the flag that changes it has been read.
+// parseFlags reads the command line into config and into the values
+// engineOptions maps onto the engine. It runs before anything starts, from
+// main rather than from an init, so that nothing else in the process can
+// observe a setting before the flag that changes it has been read.
 func parseFlags() {
 	flag.DurationVar(&shutdownTimeout, "shutdown-timeout", 5*time.Second,
 		"grace period after SIGTERM/SIGINT for server cleanup and persistence sync; a second signal exits early")
@@ -74,17 +77,17 @@ func parseFlags() {
 	flag.StringVar(&mode, "mode", "kqueue", "io mode: kqueue (default) | kqueue-nobuf | net | net-small | net-direct | net-chan")
 	flag.StringVar(&maxMemory, "maxmemory", "0",
 		"bound the keyspace in bytes, e.g. 512mb or 2gb; 0 is unbounded")
-	flag.IntVar(&maxKeys, "maxkeys", config.KeyNumberLimit,
+	flag.IntVar(&maxKeys, "maxkeys", defaultMaxKeys,
 		"evict once the keyspace reaches this many keys")
 	flag.StringVar(&evictPolicy, "evict", "lru",
 		"eviction policy when -maxkeys is reached: lru | lfu | random")
-	flag.IntVar(&lruSamples, "lru-samples", config.LRUSamples,
+	flag.IntVar(&lruSamples, "lru-samples", 5,
 		"keys sampled per eviction; more is more accurate and slower")
-	flag.IntVar(&lfuLogFactor, "lfu-log-factor", config.LFULogFactor,
+	flag.IntVar(&lfuLogFactor, "lfu-log-factor", 10,
 		"how slowly the LFU access counter rises; higher spans more accesses in 8 bits")
-	flag.IntVar(&lfuDecayPeriod, "lfu-decay-period", config.LFUDecayPeriod,
+	flag.IntVar(&lfuDecayPeriod, "lfu-decay-period", 10000,
 		"accesses before an idle LFU counter drops by one; 0 disables forgetting")
-	flag.Uint64Var(&lcsMaxCells, "lcs-max-cells", config.LCSMaxCells,
+	flag.Uint64Var(&lcsMaxCells, "lcs-max-cells", 134217728,
 		"largest len(key1)*len(key2) LCS will attempt; 0 is unbounded")
 	flag.BoolVar(&config.AOFAsyncAppend, "aof-async-append", false, "experimental: append on a worker with one-batch command backpressure")
 	flag.BoolVar(&config.AOFConcurrentAppend, "aof-concurrent-append", false, "experimental: overlap bounded string commands with worker appends; requires -aof-async-append")
@@ -123,12 +126,7 @@ func parseFlags() {
 	if err != nil {
 		log.Fatalf("bad -maxmemory %q: %v", maxMemory, err)
 	}
-	config.MaxMemory = parsed
-	config.KeyNumberLimit = maxKeys
-	config.LRUSamples = lruSamples
-	config.LFULogFactor = lfuLogFactor
-	config.LFUDecayPeriod = lfuDecayPeriod
-	config.LCSMaxCells = lcsMaxCells
+	maxMemoryBytes = parsed
 	if ioThreads < 1 {
 		log.Fatalf("-io-threads must be at least 1, got %d", ioThreads)
 	}
@@ -169,14 +167,56 @@ func parseFlags() {
 	config.CronIntervalMs = cronIntervalMs
 	switch evictPolicy {
 	case "lru":
-		config.EvictStrategy = config.LRU
+		eviction = core.EvictLRU
 	case "lfu":
-		config.EvictStrategy = config.LFU
+		eviction = core.EvictLFU
 	case "random":
-		config.EvictStrategy = config.EvictFirst
+		eviction = core.EvictRandom
 	default:
 		log.Fatalf("unknown -evict %q (want lru, lfu or random)", evictPolicy)
 	}
+}
+
+// defaultMaxKeys is the server's bound on its key count, -maxkeys's default.
+// An engine has no key bound of its own unless it is given one, as in Redis,
+// so the server's cap is this explicit setting rather than a hidden default
+// (docs/embedding-plan.md, "Decisions"). It stays above the rewrite's key
+// ceiling (core.RewriteKeyCeiling), so that every keyspace the server holds
+// by default up to that ceiling can be compacted.
+const defaultMaxKeys = 5000000
+
+// engineOptions are the engine settings the flags describe. A flag's zero
+// that turns its setting off is passed as core.Off, because an option's zero
+// is its default.
+func engineOptions() core.Options {
+	return core.Options{
+		MaxMemory:       maxMemoryBytes,
+		MaxKeys:         maxKeys,
+		Eviction:        eviction,
+		EvictionSamples: lruSamples,
+		LFULogFactor:    offIfZero(lfuLogFactor),
+		LFUDecayPeriod:  offIfZero(lfuDecayPeriod),
+		LCSMaxCells:     lcsMaxCellsOption(lcsMaxCells),
+	}
+}
+
+// offIfZero maps a flag whose zero turns its setting off onto the option
+// that does.
+func offIfZero(n int) int {
+	if n == 0 {
+		return core.Off
+	}
+	return n
+}
+
+// lcsMaxCellsOption maps -lcs-max-cells, where zero is no bound, onto the
+// option. No product of two lengths reaches 2^63, so a bound past it is no
+// bound either.
+func lcsMaxCellsOption(n uint64) int64 {
+	if n == 0 || n > math.MaxInt64 {
+		return core.Off
+	}
+	return int64(n)
 }
 
 // parseSize reads a byte count, accepting the k/m/g suffixes people actually
@@ -237,7 +277,7 @@ func runServer() error {
 			if err != nil || parseErr != nil || host == "" || n < 1 || n > 65535 {
 				return fmt.Errorf("replicaof requires host:port with a valid port")
 			}
-			if config.ReplicationFeed || config.MaxMemory != 0 {
+			if config.ReplicationFeed || maxMemoryBytes != 0 {
 				return fmt.Errorf("replica requires no feed and no local eviction limits")
 			}
 			config.ReplicaPassword = os.Getenv(replicaPasswordEnv)
@@ -252,7 +292,7 @@ func runServer() error {
 	if config.RequirePass != "" && mode != "kqueue" && mode != "kqueue-nobuf" {
 		return fmt.Errorf("authentication requires an event-loop mode")
 	}
-	if config.KeyNumberLimit < 1 || config.LRUSamples < 1 || config.LFULogFactor < 0 || config.LFUDecayPeriod < 0 {
+	if maxKeys < 1 || lruSamples < 1 || lfuLogFactor < 0 || lfuDecayPeriod < 0 {
 		return fmt.Errorf("invalid eviction limits")
 	}
 	if config.AOFEnabled && mode != "kqueue" {
@@ -273,6 +313,13 @@ func runServer() error {
 		return fmt.Errorf("unknown or unsupported mode %q", mode)
 	}
 	fmt.Printf("starting keel %s ...\n", config.BuildVersion())
+	// The engine's settings are the flags', every one passed explicitly, so
+	// that none of the server's is an engine default. They are in place before
+	// the log is replayed, as the variables they replace were assigned before
+	// anything read them.
+	if err := core.Configure(engineOptions()); err != nil {
+		return err
+	}
 	if err := server.StartAOF(); err != nil {
 		return fmt.Errorf("appendonly: %w", err)
 	}

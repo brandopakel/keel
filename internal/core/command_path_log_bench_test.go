@@ -4,8 +4,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
-
-	"github.com/brandopakel/keel/internal/config"
 )
 
 // logCycle is how many commands BenchmarkCommandPathWithLog runs between
@@ -23,20 +21,17 @@ const minRecordBytes = 16
 // without a log in BenchmarkCommandPath.
 //
 // The log is under everysec, the server's default, in a temporary directory,
-// with automatic rewrites off. The flush runs once every logCycle commands, as
-// the event loop runs it once a cycle, so its write is in the time per command
-// at the share a pipelined cycle pays.
+// with automatic rewrites off (logBenchmarkSettings). The flush runs once
+// every logCycle commands, as the event loop runs it once a cycle, so its
+// write is in the time per command at the share a pipelined cycle pays.
 //
-// This file uses only what the package had before step 2.3, so command-path.yml
-// can build it into a baseline that does not have it yet. Sub-benchmark names
-// are part of that comparison, so a name, once added, is not renamed.
+// This file uses only what the package had before step 2.3, and the settings
+// in command_path_settings_test.go, so command-path.yml can build it into a
+// baseline that does not have it yet. Sub-benchmark names are part of that
+// comparison, so a name, once added, is not renamed.
 func BenchmarkCommandPathWithLog(b *testing.B) {
-	fsync, percentage := config.AOFFsync, config.AOFAutoRewritePercentage
-	b.Cleanup(func() {
-		config.AOFFsync, config.AOFAutoRewritePercentage = fsync, percentage
-		ResetStores()
-	})
-	config.AOFFsync, config.AOFAutoRewritePercentage = config.FsyncEverySec, 0
+	b.Cleanup(ResetStores)
+	logBenchmarkSettings(b)
 
 	members := make([]string, 100)
 	for i := range members {

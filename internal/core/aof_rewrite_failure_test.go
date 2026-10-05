@@ -273,7 +273,7 @@ func TestRewriteThatCannotStartIsReportedAsRedisReportsIt(t *testing.T) {
 	require.Contains(t, logs.String(), "Can't rewrite append only file in background: ")
 
 	oldCount := defaultEngine.keyCountForRewrite
-	defaultEngine.keyCountForRewrite = func() int { return rewriteKeyCeiling + 1 }
+	defaultEngine.keyCountForRewrite = func() int { return RewriteKeyCeiling + 1 }
 	require.Equal(t, refusal, run(t, "BGREWRITEAOF"))
 	require.Contains(t, logs.String(), "rewrite limit")
 	defaultEngine.keyCountForRewrite = oldCount

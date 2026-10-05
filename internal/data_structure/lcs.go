@@ -37,7 +37,7 @@ import (
 // Rows run along the shorter string, so for two 10,000-byte strings that is
 // about 330KB, against the 400MB the table would have been; for a 10MB value
 // against a short one it is a few kilobytes. That is what moves the limit in
-// config.LCSMaxCells from being about memory to being about time.
+// Limits.LCSMaxCells from being about memory to being about time.
 //
 // Hirschberg's divide-and-conquer, which this replaced, kept two rows rather
 // than a square root of them and returned Redis's subsequence, but chose its
@@ -52,7 +52,7 @@ import (
 // that the cost is the product of the two lengths and not the larger of them:
 // a 10MB value against a three-character one is cheap.
 func (s *Space) LCSTooLarge(a, b string) bool {
-	limit := *s.limits.lcsMaxCells
+	limit := s.limits.LCSMaxCells
 	return limit > 0 && uint64(len(a))*uint64(len(b)) > limit
 }
 

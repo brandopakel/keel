@@ -1,7 +1,5 @@
 package core
 
-import "github.com/brandopakel/keel/internal/config"
-
 // The rule that decides whether a command can be admitted alongside a pending
 // append is not "is it a write" but: can its canonical log record and its reply
 // be bounded from the arguments and the current keyspace, without running it?
@@ -176,8 +174,9 @@ func (e *Engine) AppendAdmission(commands []*Command) (logBytes, replyBytes int,
 			return 0, 0, false
 		}
 	}
-	if e.space.TotalKeys()+newKeys > config.KeyNumberLimit ||
-		(config.MaxMemory > 0 && e.space.TotalMemUsed()+growth > config.MaxMemory) {
+	maxKeys, maxMemory := e.space.MaxKeys(), e.space.MaxMemory()
+	if (maxKeys > 0 && e.space.TotalKeys()+newKeys > maxKeys) ||
+		(maxMemory > 0 && e.space.TotalMemUsed()+growth > maxMemory) {
 		// An eviction can name an arbitrary old key, and neither how many it
 		// removes nor which ones is knowable before the run executes, so its
 		// transcript cannot be reserved. Runs that may evict take the barrier.

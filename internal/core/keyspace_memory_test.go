@@ -7,19 +7,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // withBudget puts every keyspace under a byte budget for one test.
-func withBudget(t *testing.T, bytes uint64, policy int) {
+func withBudget(t *testing.T, bytes uint64, policy EvictionPolicy) {
 	t.Helper()
-	mm, ks, es := config.MaxMemory, config.KeyNumberLimit, config.EvictStrategy
-	t.Cleanup(func() {
-		config.MaxMemory, config.KeyNumberLimit, config.EvictStrategy = mm, ks, es
-		ResetStores()
-	})
-	config.MaxMemory, config.KeyNumberLimit, config.EvictStrategy = bytes, 100000000, policy
+	t.Cleanup(ResetStores)
+	withOptions(t, func(o *Options) { o.MaxMemory, o.MaxKeys, o.Eviction = bytes, 100000000, policy })
 	ResetStores()
 }
 
@@ -44,7 +39,7 @@ func TestEveryKeyspaceIsAccounted(t *testing.T) {
 	const budget = 1 << 20 // 1 MB
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			withBudget(t, budget, config.LRU)
+			withBudget(t, budget, EvictLRU)
 			// Enough of every type to exceed the budget: the smallest of
 			// them is a few hundred bytes, so 2000 keys would simply fit and
 			// eviction would never run.
@@ -64,7 +59,7 @@ func TestEveryKeyspaceIsAccounted(t *testing.T) {
 // TestBudgetIsSharedAcrossKeyspaces checks that the bound is one budget rather
 // than one per store: filling several types together must still total under it.
 func TestBudgetIsSharedAcrossKeyspaces(t *testing.T) {
-	withBudget(t, 1<<20, config.LRU)
+	withBudget(t, 1<<20, EvictLRU)
 	for i := 0; i < 1000; i++ {
 		n := strconv.Itoa(i)
 		defaultEngine.cmdSET([]string{"s" + n, strings.Repeat("v", 500)})
@@ -82,7 +77,7 @@ func TestBudgetIsSharedAcrossKeyspaces(t *testing.T) {
 // key from another. Without it, a store full of sketches would be untouchable
 // and the budget could only be met by destroying the strings.
 func TestEvictionCrossesKeyspaces(t *testing.T) {
-	withBudget(t, 512<<10, config.LRU)
+	withBudget(t, 512<<10, EvictLRU)
 
 	// Fill with sketches only, so everything the budget holds is one type.
 	for i := 0; i < 4000; i++ {
@@ -105,7 +100,7 @@ func TestEvictionCrossesKeyspaces(t *testing.T) {
 // members are added, without going through Put, so the keyspace has to be told
 // - and if it is not, the budget quietly believes an old, smaller figure.
 func TestSetGrowthIsRemeasured(t *testing.T) {
-	withBudget(t, 0, config.LRU) // unbounded, so nothing is evicted mid-test
+	withBudget(t, 0, EvictLRU) // unbounded, so nothing is evicted mid-test
 
 	defaultEngine.cmdSADD([]string{"s", "a"})
 	small := defaultEngine.setStore.MemUsed()
@@ -127,7 +122,7 @@ func TestSetGrowthIsRemeasured(t *testing.T) {
 // every set, sketch and filter - which is exactly the blind spot this change is
 // about, reproduced in the tool meant to reveal it.
 func TestMemoryUsageFindsKeysInEveryKeyspace(t *testing.T) {
-	withBudget(t, 0, config.LRU)
+	withBudget(t, 0, EvictLRU)
 
 	defaultEngine.cmdSET([]string{"str", strings.Repeat("v", 100)})
 	defaultEngine.cmdSADD([]string{"set", "a", "b", "c"})
@@ -161,7 +156,7 @@ func TestMemoryUsageFindsKeysInEveryKeyspace(t *testing.T) {
 // so a filter holding a hundred kilobytes of bits reported about forty bytes.
 // A memory budget built on that figure would have been meaningless.
 func TestBloomFilterSizeIsTheBitArray(t *testing.T) {
-	withBudget(t, 0, config.LRU)
+	withBudget(t, 0, EvictLRU)
 
 	defaultEngine.cmdBFRESERVE([]string{"bf", "0.01", "100000"})
 	defaultEngine.cmdBFMADD([]string{"bf", "x"})

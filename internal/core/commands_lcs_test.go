@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/constant"
 )
 
@@ -129,23 +128,20 @@ func TestCmdLCSSyntax(t *testing.T) {
 // be reachable from the command and not just from the library beneath it.
 func TestCmdLCSRefusesWhatWouldStallTheServer(t *testing.T) {
 	ResetStores()
-	original := config.LCSMaxCells
-	defer func() { config.LCSMaxCells = original }()
-
 	setString("big1", strings.Repeat("a", 1000))
 	setString("big2", strings.Repeat("b", 1000))
 
-	config.LCSMaxCells = 999999
+	withOptions(t, func(o *Options) { o.LCSMaxCells = 999999 })
 	res, _ := Decode(defaultEngine.cmdLCS([]string{"big1", "big2"}))
 	assert.Contains(t, res, "String too long for LCS")
 
-	config.LCSMaxCells = 1000000
+	withOptions(t, func(o *Options) { o.LCSMaxCells = 1000000 })
 	res, _ = Decode(defaultEngine.cmdLCS([]string{"big1", "big2", "LEN"}))
 	assert.EqualValues(t, 0, res, "exactly at the limit is allowed")
 
-	config.LCSMaxCells = 0
+	withOptions(t, func(o *Options) { o.LCSMaxCells = Off })
 	res, _ = Decode(defaultEngine.cmdLCS([]string{"big1", "big2", "LEN"}))
-	assert.EqualValues(t, 0, res, "zero removes the bound")
+	assert.EqualValues(t, 0, res, "Off removes the bound")
 }
 
 func TestCmdLCSGoesThroughEval(t *testing.T) {

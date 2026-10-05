@@ -14,7 +14,7 @@ import (
 // answers in time proportional to one key; LCS is the exception, and on a
 // single-threaded server that makes it the one command a client can use to hold
 // up every other client. Hence the guard, and hence the fact that the limit is
-// an operator setting rather than a constant - see config.LCSMaxCells.
+// an operator setting rather than a constant - see Options.LCSMaxCells.
 
 func (e *Engine) cmdLCS(args []string) []byte {
 	if len(args) < 2 {

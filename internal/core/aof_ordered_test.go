@@ -126,9 +126,8 @@ func TestOrderedAppendFailuresNeverAdvanceReplyPrefix(t *testing.T) {
 
 func TestAppendAdmissionBoundsGrowthRepliesAndCanonicalExpiry(t *testing.T) {
 	ResetStores()
-	oldMemory, oldKeys := config.MaxMemory, config.KeyNumberLimit
-	defer func() { CloseAOF(); config.MaxMemory, config.KeyNumberLimit = oldMemory, oldKeys }()
-	config.MaxMemory, config.KeyNumberLimit = 0, 100000
+	defer CloseAOF()
+	withOptions(t, func(o *Options) { o.MaxMemory, o.MaxKeys = 0, 100000 })
 	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "log")))
 	for _, parts := range [][]string{
 		{"SET", "k", strings.Repeat("v", 4096), "PX", "60000", "GET"},
@@ -147,11 +146,10 @@ func TestAppendAdmissionBoundsGrowthRepliesAndCanonicalExpiry(t *testing.T) {
 	}
 	_, _, ok := AppendAdmission([]*Command{{Cmd: "SPOP", Args: []string{"set", "1000"}}})
 	require.False(t, ok)
-	config.KeyNumberLimit = 1
+	withOptions(t, func(o *Options) { o.MaxKeys = 1 })
 	_, _, ok = AppendAdmission([]*Command{{Cmd: "SET", Args: []string{"new", "v"}}})
 	require.False(t, ok, "eviction requires the drained path")
-	config.KeyNumberLimit = 100000
-	config.MaxMemory = 1
+	withOptions(t, func(o *Options) { o.MaxKeys, o.MaxMemory = 100000, 1 })
 	_, _, ok = AppendAdmission([]*Command{{Cmd: "GET", Args: []string{"a"}}})
 	require.False(t, ok, "even a read enforces an already exceeded memory limit")
 	require.False(t, AppendHasRoom(maxAsyncAppendBytes))
@@ -182,9 +180,8 @@ func admissionRun(t *testing.T, parts ...[]string) (logBound, replyBound, logUse
 
 func TestAppendAdmissionBoundsCollectionCommands(t *testing.T) {
 	ResetStores()
-	oldMemory, oldKeys := config.MaxMemory, config.KeyNumberLimit
-	defer func() { CloseAOF(); config.MaxMemory, config.KeyNumberLimit = oldMemory, oldKeys }()
-	config.MaxMemory, config.KeyNumberLimit = 0, 100000
+	defer CloseAOF()
+	withOptions(t, func(o *Options) { o.MaxMemory, o.MaxKeys = 0, 100000 })
 	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "log")))
 
 	value := strings.Repeat("v", 512)
@@ -213,9 +210,8 @@ func TestAppendAdmissionBoundsCollectionCommands(t *testing.T) {
 // is computed. This is the case a per-command largest-write bound gets wrong.
 func TestAppendAdmissionBoundsReadsOfCollectionsGrownInTheSameRun(t *testing.T) {
 	ResetStores()
-	oldMemory, oldKeys := config.MaxMemory, config.KeyNumberLimit
-	defer func() { CloseAOF(); config.MaxMemory, config.KeyNumberLimit = oldMemory, oldKeys }()
-	config.MaxMemory, config.KeyNumberLimit = 0, 100000
+	defer CloseAOF()
+	withOptions(t, func(o *Options) { o.MaxMemory, o.MaxKeys = 0, 100000 })
 	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "log")))
 
 	big := strings.Repeat("x", 4096)
@@ -264,9 +260,8 @@ func TestAppendAdmissionRefusesRecordsItCannotPredict(t *testing.T) {
 // is too tight is a budget already spent when the overrun is discovered.
 func TestAppendAdmissionBoundHoldsForRandomRuns(t *testing.T) {
 	ResetStores()
-	oldMemory, oldKeys := config.MaxMemory, config.KeyNumberLimit
-	defer func() { CloseAOF(); config.MaxMemory, config.KeyNumberLimit = oldMemory, oldKeys }()
-	config.MaxMemory, config.KeyNumberLimit = 0, 1000000
+	defer CloseAOF()
+	withOptions(t, func(o *Options) { o.MaxMemory, o.MaxKeys = 0, 1000000 })
 	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "log")))
 
 	rng := rand.New(rand.NewSource(20260907))

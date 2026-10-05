@@ -7,7 +7,7 @@ import (
 
 func TestKeyspaceVisitStopsAndResumesWithoutWalkingRemainder(t *testing.T) {
 	t.Parallel()
-	s := NewSpace(configuredLimits())
+	s := NewSpace(DefaultLimits())
 	s.keyspaces = make([]Keyspace, 10000)
 	calls := 0
 	next := s.VisitKeyspacesFrom(37, func(Keyspace) bool { calls++; return false })

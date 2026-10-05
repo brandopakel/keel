@@ -5,8 +5,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/brandopakel/keel/internal/config"
 )
 
 // newTestDict builds a dictionary registered as the only keyspace of a space
@@ -22,29 +20,16 @@ func newTestDict(limits Limits) *Dict {
 	return d
 }
 
-// evictionLimits are the configured defaults with the eviction knobs a test
-// sets. Reading config is safe from a parallel test: the one test here that
-// assigns it is serial, and Go finishes serial tests before parallel ones.
-func evictionLimits(strategy, samples, limit int) Limits {
-	return Limits{
-		EvictStrategy:  strategy,
-		KeyNumberLimit: limit,
-		MaxMemory:      config.MaxMemory,
-		LRUSamples:     samples,
-		LFULogFactor:   config.LFULogFactor,
-		LFUDecayPeriod: config.LFUDecayPeriod,
-		LCSMaxCells:    config.LCSMaxCells,
-	}
-}
-
-// configuredLimits are the defaults, for a test that sets nothing.
-func configuredLimits() Limits {
-	return evictionLimits(config.EvictStrategy, config.LRUSamples, config.KeyNumberLimit)
+// evictionLimits are the defaults with the eviction knobs a test sets.
+func evictionLimits(policy EvictionPolicy, samples, limit int) Limits {
+	limits := DefaultLimits()
+	limits.Eviction, limits.EvictionSamples, limits.MaxKeys = policy, samples, limit
+	return limits
 }
 
 func TestAccessUpdatesRecency(t *testing.T) {
 	t.Parallel()
-	d := newTestDict(configuredLimits())
+	d := newTestDict(DefaultLimits())
 	d.Put("a", d.NewObj("v"))
 	d.Put("b", d.NewObj("v"))
 
@@ -58,7 +43,7 @@ func TestAccessUpdatesRecency(t *testing.T) {
 
 func TestNoEvictionBelowTheLimit(t *testing.T) {
 	t.Parallel()
-	d := newTestDict(evictionLimits(config.LRU, 5, 100))
+	d := newTestDict(evictionLimits(EvictLRU, 5, 100))
 	for i := 0; i < 100; i++ {
 		d.Put("k"+strconv.Itoa(i), d.NewObj("v"))
 	}
@@ -70,7 +55,7 @@ func TestNoEvictionBelowTheLimit(t *testing.T) {
 // throws a key away for nothing.
 func TestOverwritingAnExistingKeyDoesNotEvict(t *testing.T) {
 	t.Parallel()
-	d := newTestDict(evictionLimits(config.LRU, 5, 10))
+	d := newTestDict(evictionLimits(EvictLRU, 5, 10))
 	for i := 0; i < 10; i++ {
 		d.Put("k"+strconv.Itoa(i), d.NewObj("v"))
 	}
@@ -87,7 +72,7 @@ func TestOverwritingAnExistingKeyDoesNotEvict(t *testing.T) {
 
 func TestEvictionHoldsTheDictAtTheLimit(t *testing.T) {
 	t.Parallel()
-	d := newTestDict(evictionLimits(config.LRU, 5, 100))
+	d := newTestDict(evictionLimits(EvictLRU, 5, 100))
 	for i := 0; i < 1000; i++ {
 		d.Put("k"+strconv.Itoa(i), d.NewObj("v"))
 		assert.LessOrEqual(t, d.Len(), 100, "the dict must never exceed its limit")
@@ -98,9 +83,9 @@ func TestEvictionHoldsTheDictAtTheLimit(t *testing.T) {
 // hotRetention fills a dict to the limit, marks the first half recently used,
 // then forces exactly that many evictions and reports what fraction of the hot
 // keys survived. True LRU would score 100%: it would evict only cold keys.
-func hotRetention(t *testing.T, strategy, samples, limit int) float64 {
+func hotRetention(t *testing.T, policy EvictionPolicy, samples, limit int) float64 {
 	t.Helper()
-	d := newTestDict(evictionLimits(strategy, samples, limit))
+	d := newTestDict(evictionLimits(policy, samples, limit))
 	for i := 0; i < limit; i++ {
 		d.Put("k"+strconv.Itoa(i), d.NewObj("v"))
 	}
@@ -127,7 +112,7 @@ func hotRetention(t *testing.T, strategy, samples, limit int) float64 {
 // the recency tracking stops working.
 func TestApproxLRUKeepsHotKeys(t *testing.T) {
 	t.Parallel()
-	assert.Greater(t, hotRetention(t, config.LRU, 5, 10000), 75.0)
+	assert.Greater(t, hotRetention(t, EvictLRU, 5, 10000), 75.0)
 }
 
 // TestApproxLRUBeatsRandomEviction is the comparison that justifies the policy
@@ -135,8 +120,8 @@ func TestApproxLRUKeepsHotKeys(t *testing.T) {
 // proportion to how many there are.
 func TestApproxLRUBeatsRandomEviction(t *testing.T) {
 	t.Parallel()
-	random := hotRetention(t, config.EvictFirst, 5, 10000)
-	lru := hotRetention(t, config.LRU, 5, 10000)
+	random := hotRetention(t, EvictRandom, 5, 10000)
+	lru := hotRetention(t, EvictLRU, 5, 10000)
 
 	assert.Less(t, random, 65.0, "random eviction should be near chance, got %.1f%%", random)
 	assert.Greater(t, lru-random, 20.0,
@@ -147,8 +132,8 @@ func TestApproxLRUBeatsRandomEviction(t *testing.T) {
 // accuracy is bought with sampling work, and the knob is real.
 func TestMoreSamplesImproveRetention(t *testing.T) {
 	t.Parallel()
-	few := hotRetention(t, config.LRU, 2, 10000)
-	many := hotRetention(t, config.LRU, 20, 10000)
+	few := hotRetention(t, EvictLRU, 2, 10000)
+	many := hotRetention(t, EvictLRU, 20, 10000)
 	assert.Greater(t, many, few,
 		"20 samples should retain more than 2: %.1f%% vs %.1f%%", many, few)
 	assert.Greater(t, many, 90.0)
@@ -160,7 +145,7 @@ func TestMoreSamplesImproveRetention(t *testing.T) {
 // used key in the dictionary.
 func TestEvictionSkipsCandidatesReadSinceSampling(t *testing.T) {
 	t.Parallel()
-	d := newTestDict(evictionLimits(config.LRU, 5, 100))
+	d := newTestDict(evictionLimits(EvictLRU, 5, 100))
 	for i := 0; i < 20; i++ {
 		d.Put("k"+strconv.Itoa(i), d.NewObj("v"))
 	}
@@ -180,7 +165,7 @@ func TestEvictionSkipsCandidatesReadSinceSampling(t *testing.T) {
 
 func TestEvictionSkipsCandidatesAlreadyDeleted(t *testing.T) {
 	t.Parallel()
-	d := newTestDict(evictionLimits(config.LRU, 5, 100))
+	d := newTestDict(evictionLimits(EvictLRU, 5, 100))
 	for i := 0; i < 20; i++ {
 		d.Put("k"+strconv.Itoa(i), d.NewObj("v"))
 	}
@@ -193,7 +178,7 @@ func TestEvictionSkipsCandidatesAlreadyDeleted(t *testing.T) {
 
 func TestPoolStaysSortedAndBounded(t *testing.T) {
 	t.Parallel()
-	d := newTestDict(configuredLimits())
+	d := newTestDict(DefaultLimits())
 	s := d.space
 	for i := 0; i < 100; i++ {
 		// insert in an order that is neither ascending nor descending
@@ -212,7 +197,7 @@ func TestPoolStaysSortedAndBounded(t *testing.T) {
 // the second attempt to evict it a guaranteed miss, wasting a pool slot.
 func TestPoolDoesNotHoldOneKeyTwice(t *testing.T) {
 	t.Parallel()
-	d := newTestDict(configuredLimits())
+	d := newTestDict(DefaultLimits())
 	s := d.space
 	s.poolInsert(Candidate{Keyspace: d, Key: "dup", Score: 5})
 	s.poolInsert(Candidate{Keyspace: d, Key: "dup", Score: 3})

@@ -4,12 +4,11 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 func TestHLLGrowthIsChargedAndEnforcesBudget(t *testing.T) {
-	withBudget(t, 4096, config.LRU)
+	withBudget(t, 4096, EvictLRU)
 	run(t, "PFADD", "growing", "first")
 	initial := data_structure.TotalMemUsed()
 	args := []string{"growing"}

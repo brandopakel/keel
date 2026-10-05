@@ -116,7 +116,7 @@ func TestSetCompactionRestartsAfterFurtherLargeShrink(t *testing.T) {
 
 func TestSetCompactionUsesSharedKeyAndMemberBudget(t *testing.T) {
 	t.Parallel()
-	store := NewKeyed[*Set](NewSpace(configuredLimits()), "sets")
+	store := NewKeyed[*Set](NewSpace(DefaultLimits()), "sets")
 	sets := []*Set{sparseSet(t), sparseSet(t), sparseSet(t)}
 	for i, set := range sets {
 		store.Put(strconv.Itoa(i), set)

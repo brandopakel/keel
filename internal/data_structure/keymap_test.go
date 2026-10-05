@@ -280,7 +280,7 @@ func TestPagedHashCollisionsPreserveDistinctKeysAndBoundScan(t *testing.T) {
 
 func TestKeyspaceWalkFreezesLimitsWithoutSnapshottingNames(t *testing.T) {
 	t.Parallel()
-	d := newTestDict(configuredLimits())
+	d := newTestDict(DefaultLimits())
 	s := d.space
 	for i := 0; i < 200; i++ {
 		d.Put(strconv.Itoa(i), d.NewObj("v"))

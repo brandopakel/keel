@@ -52,11 +52,10 @@ func TestAccountingMutationAndExpiry(t *testing.T) {
 	run(t, "INCR", "n")
 	run(t, "DEL", "n")
 	require.Zero(t, data_structure.TotalMemUsed())
-	old := config.MaxMemory
-	defer func() { config.MaxMemory = old; ResetStores() }()
+	defer ResetStores()
 	for _, budget := range []uint64{100, 120, 150} {
 		ResetStores()
-		config.MaxMemory = budget
+		withOptions(t, func(o *Options) { o.MaxMemory = budget })
 		run(t, "SET", "k", "v", "EX", "60")
 		require.LessOrEqual(t, data_structure.TotalMemUsed(), budget)
 		if data_structure.TotalKeys() == 0 {
@@ -259,16 +258,15 @@ func TestStartupExpiryIsLoggedBeforeKeyReuse(t *testing.T) {
 }
 
 func TestStartupEvictionsRemainDeletedAfterBudgetIncrease(t *testing.T) {
-	old := config.KeyNumberLimit
-	defer func() { config.KeyNumberLimit = old; ResetStores() }()
-	config.KeyNumberLimit = 100
+	defer ResetStores()
+	withOptions(t, func(o *Options) { o.MaxKeys = 100 })
 	path := withAOF(t, func() { run(t, "SET", "a", "1"); run(t, "SET", "b", "2") })
-	config.KeyNumberLimit = 1
+	withOptions(t, func(o *Options) { o.MaxKeys = 1 })
 	restart(t, path)
 	require.Equal(t, 1, data_structure.TotalKeys())
 	require.NoError(t, OpenAOF(path))
 	require.NoError(t, CloseAOF())
-	config.KeyNumberLimit = 100
+	withOptions(t, func(o *Options) { o.MaxKeys = 100 })
 	restart(t, path)
 	require.Equal(t, 1, data_structure.TotalKeys())
 }

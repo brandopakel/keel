@@ -3,7 +3,6 @@ package core
 import (
 	"errors"
 	"io"
-	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -15,7 +14,6 @@ import (
 
 	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/constant"
-	"github.com/brandopakel/keel/internal/data_structure"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -36,15 +34,6 @@ func rawOn(t *testing.T, e *Engine, name string, args ...string) []byte {
 	return w.b
 }
 
-// engineLimits are the server's limits from config, with a key bound of its
-// own.
-func engineLimits(maxKeys int) data_structure.Limits {
-	return data_structure.Limits{
-		EvictStrategy: config.LRU, KeyNumberLimit: maxKeys, LRUSamples: config.LRUSamples,
-		LFULogFactor: config.LFULogFactor, LFUDecayPeriod: config.LFUDecayPeriod, LCSMaxCells: config.LCSMaxCells,
-	}
-}
-
 // TestEnginesShareNoKeys: each engine is a keyspace of its own. A key written
 // on one is not on the other, whatever its type; deleting, flushing, a bound
 // that evicts and the expiry cycle each act on one engine only; and neither
@@ -54,8 +43,8 @@ func engineLimits(maxKeys int) data_structure.Limits {
 // is untouched.
 func TestEnginesShareNoKeys(t *testing.T) {
 	ResetStores()
-	a := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
-	b := newEngine(data_structure.NewSpace(engineLimits(3)))
+	a := newEngine(Options{})
+	b := newEngine(Options{MaxKeys: 3})
 
 	// Every family, on a; the same names hold other types on b.
 	for _, cmd := range [][]string{
@@ -112,8 +101,8 @@ func TestEnginesShareNoKeys(t *testing.T) {
 func TestEnginesShareNoCommandScope(t *testing.T) {
 	ResetStores()
 	const bound = 8
-	a := newEngine(data_structure.NewSpace(engineLimits(bound)))
-	b := newEngine(data_structure.NewSpace(engineLimits(bound)))
+	a := newEngine(Options{MaxKeys: bound})
+	b := newEngine(Options{MaxKeys: bound})
 	value := strings.Repeat("v", 64<<10)
 	for _, e := range []*Engine{a, b} {
 		require.Equal(t, MaxReplyBytes, e.replyCeiling)
@@ -292,8 +281,8 @@ func TestEnginesShareNoLog(t *testing.T) {
 	defaultPositions := [4]uint64{encoded, written, synced, ready}
 	policy := config.AOFFsync
 	dir := t.TempDir()
-	a := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
-	b := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
+	a := newEngine(Options{})
+	b := newEngine(Options{})
 	t.Cleanup(func() { a.CloseAOF(); b.CloseAOF(); config.AOFFsync = policy })
 	var aWrites, bSyncs atomic.Int64
 	a.aofWrite = func(f *os.File, body []byte) (int, error) { aWrites.Add(1); return f.Write(body) }
@@ -432,7 +421,7 @@ func TestEnginesShareNoLog(t *testing.T) {
 		require.NoError(t, side.e.CloseAOF())
 		want := engineState(t, side.e, never)
 		require.Contains(t, string(want), side.own)
-		replayed := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
+		replayed := newEngine(Options{})
 		_, err := replayed.LoadAOF(path)
 		require.NoError(t, err)
 		assert.Equal(t, string(want), string(engineState(t, replayed, never)), "%s replays to its engine", path)
@@ -453,7 +442,7 @@ func TestEnginesShareNoLog(t *testing.T) {
 		require.Equal(t, "OK", run(t, "SET", "s:"+strconv.Itoa(i), "default"))
 	}
 	require.NoError(t, StartRewrite())
-	c := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
+	c := newEngine(Options{})
 	require.NoError(t, c.OpenAOF(filepath.Join(dir, "c.aof")))
 	require.Equal(t, "OK", on(t, c, "SET", "s:1", "c"))
 	require.Equal(t, int64(1), on(t, c, "SADD", "set", "only"))
@@ -480,8 +469,8 @@ func TestEnginesShareNoLog(t *testing.T) {
 func TestEnginesShareNoRewrite(t *testing.T) {
 	ResetStores()
 	dir := t.TempDir()
-	a := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
-	b := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
+	a := newEngine(Options{})
+	b := newEngine(Options{})
 	t.Cleanup(func() { a.CloseAOF(); b.CloseAOF() })
 	var aWoken, bWoken atomic.Int64
 	a.SetRewriteWaker(func() { aWoken.Add(1) })
@@ -515,7 +504,7 @@ func TestEnginesShareNoRewrite(t *testing.T) {
 	never := goldenWindow{start: -1, end: -1 - int64(24*time.Hour/time.Millisecond)}
 	replays := func(e *Engine) {
 		t.Helper()
-		replayed := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
+		replayed := newEngine(Options{})
 		_, err := replayed.LoadAOF(e.aof.path)
 		require.NoError(t, err)
 		assert.Equal(t, string(engineState(t, e, never)), string(engineState(t, replayed, never)))
@@ -551,7 +540,7 @@ func TestEnginesShareNoRewrite(t *testing.T) {
 	_, err := os.Stat(b.aof.path + ".rewrite")
 	assert.True(t, os.IsNotExist(err), "b's failed rewrite removed its file")
 	b.rewriteFileWrite = writeLog
-	a.keyCountForRewrite = func() int { return rewriteKeyCeiling + 1 }
+	a.keyCountForRewrite = func() int { return RewriteKeyCeiling + 1 }
 	require.Error(t, a.StartRewrite())
 	assert.False(t, a.RewriteActive())
 	require.NoError(t, b.StartRewrite(), "a's ceiling is not b's")

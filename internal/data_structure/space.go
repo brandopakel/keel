@@ -1,7 +1,5 @@
 package data_structure
 
-import "github.com/brandopakel/keel/internal/config"
-
 // Space is what a set of stores holds in common: the registry eviction draws
 // from, the clock and candidate pool it ranks keys with, the hook that hears
 // about removals no client asked for, and the limits the stores are held to.
@@ -25,8 +23,9 @@ type Space struct {
 	clock uint64
 
 	// limits is read on every access, for the policy, so it sits next to the
-	// clock.
-	limits limitRefs
+	// clock. They are held by value, so reading one is a load from the space
+	// rather than a load of a pointer and then of what it points at.
+	limits Limits
 
 	// pool carries the best candidates between evictions.
 	pool []Candidate
@@ -71,21 +70,105 @@ type Space struct {
 	// so that nothing reads as expired and historical log mutations do not
 	// depend on the wall clock at replay.
 	SuspendExpiry bool
-
-	own Limits
 }
 
-// Limits are the bounds a space's stores are held to and the policy that
-// enforces them. Each is the config setting of the same name, documented
-// there.
+// EvictionPolicy is how a space that is over one of its bounds chooses the
+// keys to evict. The zero value is EvictLRU.
+type EvictionPolicy int
+
+// The eviction policies. Redis names them allkeys-lru, allkeys-lfu and
+// allkeys-random, which is what INFO reports.
+const (
+	// EvictLRU evicts the least recently used key of a sample.
+	EvictLRU EvictionPolicy = iota
+	// EvictLFU evicts the least frequently used key of a sample.
+	EvictLFU
+	// EvictRandom takes whichever key comes to hand, without regard to use.
+	EvictRandom
+)
+
+// Limits are the bounds a space's stores are held to, and the parameters of
+// the policy that keeps them inside those bounds. Each is taken as it is
+// written: zero means none where a field says so. The engine fills them from
+// its options (see core.Options), which is where the defaults are chosen.
 type Limits struct {
-	EvictStrategy  int
-	KeyNumberLimit int
-	MaxMemory      uint64
-	LRUSamples     int
-	LFULogFactor   int
+	// Eviction is the policy a bound evicts by.
+	Eviction EvictionPolicy
+
+	// MaxKeys bounds the keyspace by count: once it is reached, a write evicts
+	// before it lands. Zero is no bound, as in Redis, where only the memory
+	// bound limits the keyspace.
+	MaxKeys int
+
+	// MaxMemory bounds the stores in bytes. Zero is no bound.
+	//
+	// The figure is an estimate rather than a measurement - Go offers no way
+	// to ask the allocator what a value cost - so it is a target, not a
+	// guarantee. See entryBytes in memory.go.
+	MaxMemory uint64
+
+	// EvictionSamples is how many random keys an approximate-LRU or -LFU
+	// eviction looks at before choosing one. Redis calls this
+	// maxmemory-samples and defaults to 5: scanning every key to find the true
+	// least-recently-used one would make eviction O(n) and is the whole reason
+	// the policy is approximate. Fewer than one samples one.
+	EvictionSamples int
+
+	// LFULogFactor controls how quickly the logarithmic access counter
+	// saturates. Higher means a slower rise, so the counter distinguishes
+	// larger access counts at the cost of resolution among small ones. Redis
+	// calls this lfu-log-factor and defaults to 10. Zero counts every access.
+	LFULogFactor int
+
+	// LFUDecayPeriod is how many accesses across the whole space pass before
+	// an idle key's counter drops by one. Zero never decays. Redis measures
+	// this in minutes of wall clock; measuring it in accesses instead ties
+	// forgetting to how busy the cache is rather than to how long the process
+	// has been running, and keeps eviction behaviour reproducible.
+	//
+	// The default is measured rather than guessed, against the two workloads
+	// that pull in opposite directions - a scan that should not displace a
+	// working set, and a working set that moves and should be followed:
+	//
+	//	period    scan resistance    stale kept    current kept
+	//	  none          99.2%           72.0%          75.4%
+	//	100000          99.2%           57.6%          91.8%
+	//	 10000          99.2%            1.0%         100.0%
+	//	  1000          70.4%            1.4%         100.0%
+	//	   100           1.2%              -              -
+	//
+	// Too short and frequency never accumulates, leaving LFU no better than
+	// LRU; too long and the cache fills with keys that were popular once.
 	LFUDecayPeriod int
-	LCSMaxCells    uint64
+
+	// LCSMaxCells bounds len(key1)*len(key2) for the LCS command, which is the
+	// number of cell comparisons it performs. Zero is no bound.
+	//
+	// The default is 134217728, which is where Redis stops: its LCS builds an
+	// (n+1)(m+1) table of uint32 and refuses once that allocation would exceed
+	// proto-max-bulk-len, 512MB by default. Keel does not build the table, so
+	// the same figure is reached for an entirely different reason - it is a
+	// time budget. Commands run one at a time, so an LCS does not merely take
+	// a while, it takes the engine away from every other caller for the
+	// duration. Measured at 410 million cells per second on darwin/arm64, the
+	// default is about 330ms of stall in the worst case, which is a lot; it is
+	// set to match what Redis will answer rather than to be comfortable.
+	// Lower it if tail latency matters more than accepting every input Redis
+	// accepts.
+	LCSMaxCells uint64
+}
+
+// DefaultLimits are the limits of a space nobody has set any for: no bound
+// on keys or memory, LRU, and Redis's sampling, LFU counter and LCS figures,
+// as documented on each field.
+func DefaultLimits() Limits {
+	return Limits{
+		Eviction:        EvictLRU,
+		EvictionSamples: 5,
+		LFULogFactor:    10,
+		LFUDecayPeriod:  10000,
+		LCSMaxCells:     134217728,
+	}
 }
 
 // evictionSeed is where every space's xorshift generator starts: the value the
@@ -93,53 +176,30 @@ type Limits struct {
 // the sequence it always has.
 const evictionSeed = 0x2545F4914F6CDD1D
 
-// limitRefs is where a space reads each limit: its own Limits, or, for
-// DefaultSpace, the config variable itself. Reading config live is what keeps
-// the flags, and the hundred-odd tests that assign config.MaxMemory and the
-// rest, working until engine options replace config (plan step 2.5).
-//
-// A pointer per limit rather than a flag tested on every read, because it was
-// measured to cost less. On a bare Dict.Get, against the package variables
-// these replace, the pointers cost 1% under LRU and 6% under LFU, which reads
-// two more limits per access; a flag cost 8% and 12%.
-type limitRefs struct {
-	evictStrategy  *int
-	keyNumberLimit *int
-	maxMemory      *uint64
-	lruSamples     *int
-	lfuLogFactor   *int
-	lfuDecayPeriod *int
-	lcsMaxCells    *uint64
+// NewSpace returns an empty space held to limits.
+func NewSpace(limits Limits) *Space {
+	return &Space{rng: evictionSeed, limits: limits}
 }
 
-// NewSpace returns an empty space held to limits. A space has to come from
-// here, or be DefaultSpace: the zero value has nowhere to read its limits.
-func NewSpace(limits Limits) *Space {
-	s := &Space{rng: evictionSeed, own: limits}
-	s.limits = limitRefs{
-		evictStrategy:  &s.own.EvictStrategy,
-		keyNumberLimit: &s.own.KeyNumberLimit,
-		maxMemory:      &s.own.MaxMemory,
-		lruSamples:     &s.own.LRUSamples,
-		lfuLogFactor:   &s.own.LFULogFactor,
-		lfuDecayPeriod: &s.own.LFUDecayPeriod,
-		lcsMaxCells:    &s.own.LCSMaxCells,
-	}
-	return s
-}
+// Limits reports the limits the space is held to.
+func (s *Space) Limits() Limits { return s.limits }
+
+// SetLimits holds the space to limits from now on. Keys already over a new
+// bound are evicted by the next write, as they would be by a lower bound
+// configured at startup. A space's policy is meant to be chosen before it
+// holds keys: changing it later reinterprets the access words of the keys it
+// holds, which LRU and LFU read differently.
+func (s *Space) SetLimits(limits Limits) { s.limits = limits }
+
+// MaxKeys is the space's bound on its key count; zero is none.
+func (s *Space) MaxKeys() int { return s.limits.MaxKeys }
+
+// MaxMemory is the space's bound on its estimated bytes; zero is none.
+func (s *Space) MaxMemory() uint64 { return s.limits.MaxMemory }
 
 // DefaultSpace is the space the server's stores live in until each engine owns
-// one. It reads its limits from config on every use, as this package always
-// has.
-var DefaultSpace = &Space{rng: evictionSeed, limits: limitRefs{
-	evictStrategy:  &config.EvictStrategy,
-	keyNumberLimit: &config.KeyNumberLimit,
-	maxMemory:      &config.MaxMemory,
-	lruSamples:     &config.LRUSamples,
-	lfuLogFactor:   &config.LFULogFactor,
-	lfuDecayPeriod: &config.LFUDecayPeriod,
-	lcsMaxCells:    &config.LCSMaxCells,
-}}
+// one. The default engine sets its limits from the engine's options.
+var DefaultSpace = NewSpace(DefaultLimits())
 
 // The package-level functions act on DefaultSpace, so callers read as they did
 // while the plan moves them onto spaces of their own.

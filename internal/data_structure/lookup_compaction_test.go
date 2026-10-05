@@ -12,7 +12,7 @@ import (
 func TestLookupCompactionRecoversPartlyOccupiedTable(t *testing.T) {
 	for _, kind := range []string{"string", "collection"} {
 		t.Run(kind, func(t *testing.T) {
-			space := NewSpace(configuredLimits())
+			space := NewSpace(DefaultLimits())
 			var ks Keyspace
 			var put func(string)
 			if kind == "string" {

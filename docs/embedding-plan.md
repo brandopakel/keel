@@ -4,7 +4,8 @@ Status: accepted plan, October 2, 2026. Phases 0 and 1 are done (#88, #90), and 
 the stores, step 2.2, the command scope, step 2.3, persistence (see "Step
 2.1: the stores", "Step 2.2: the command scope" and "Step 2.3: persistence"
 below), and step 2.4, replication and failover (see "Step 2.4:
-replication").
+replication"). Step 2.5, options in place of `internal/config`, is under way
+(see "Step 2.5: options").
 
 The owner asked for Keel to be usable as a Go library, not only as a server:
 several independent instances per process, safe for concurrent use, a typed
@@ -739,6 +740,100 @@ choice open, step 2.4 settles it this way:
   0.993 and 0.996 with no row over 1.04, so the excess was placement and not
   cost, and the control was not merged.
 
+### Step 2.5: options
+
+Step 2.5 replaces the package variables of `internal/config`, which every
+engine in a process read, with options: `core.Options` for what an engine is
+held to, and `server.Options` for the listener and the transport. `cmd/keel`
+maps its flags onto both. Nothing the server does may change: every flag
+keeps its name, its default and its meaning, and the server's effective
+settings, the 5,000,000-key cap and LRU eviction among them, are the ones it
+had. It takes three PRs, in this order:
+
+1. **The keyspace's limits**: `MaxMemory`, `KeyNumberLimit`, `EvictStrategy`,
+   `LRUSamples`, `LFULogFactor`, `LFUDecayPeriod` and `LCSMaxCells` become
+   `core.Options`, which an engine resolves into a `data_structure.Limits`
+   that its space holds by value.
+2. **Expiry, persistence and replication**: the active-expiry parameters,
+   the log's settings (`AOFEnabled`, `AOFFileName`, `AOFFsync`,
+   `AOFAsyncAppend` and the automatic rewrite's) and the role
+   (`ReplicaOf`, `ReplicationFeed`, `ReplicationProtocol`) become
+   `core.Options` too.
+3. **The listener and the transport**: `Host`, `Port`, `MaxConnection`,
+   `IOThreads`, `CronIntervalMs`, `RequirePass`, the replica's password and
+   TLS, and `AOFConcurrentAppend` become `server.Options`, and what is left of
+   `internal/config` is its build identity.
+
+The limits go first because every access reads one: they are the step's hot
+path, and the indirection that let the default space read config live goes
+with them. Each PR moves its settings end to end - the code that reads them,
+`cmd/keel`'s mapping and every test that sets them - and removes their
+variables from `config`, rather than moving the code first and the tests in a
+last PR. While a test assigns a variable, the engine has to read it live,
+which is what the pointers of phase 1 and step 2.4 were for; moving the tests last
+would have kept those pointers, and two places to set one setting, for two
+more PRs. So at every commit each setting is in exactly one place. Where the
+plan above leaves a choice open, step 2.5 settles it this way:
+
+- **Zero is the default.** Every field of `core.Options` takes its default
+  when it is zero, so `Options{}` is an engine for embedded use: no bound on
+  its keys or its memory and LRU eviction, as the Decisions below say, and
+  Redis's figures for the rest. A setting that can be turned off where off is
+  not its default takes a negative value for off, `core.Off`, as go-redis
+  does for its timeouts and retries: `LFUDecayPeriod` then never decays,
+  `LCSMaxCells` has no bound, and `LFULogFactor` is a factor of zero, which
+  counts every access. `Options` validate on the way in, and a refused one
+  leaves the engine as it was.
+- **As given, and resolved.** An engine keeps its options as they were given,
+  which `Configuration()` reads back, so a test can put back exactly what it
+  found; and it resolves them into what the code reads, every default filled
+  in and every setting that is off spelled as the space spells it, zero. The
+  space's `Limits` are taken as written, with no defaults of their own beyond
+  `DefaultLimits()`, which is what `Options{}` resolves to.
+- **No key bound unless one is set.** `MaxKeys` zero is no bound, as in Redis,
+  and the space tests the bound before it counts, so an engine without one no
+  longer counts its keys on every write. The server's cap is `-maxkeys`'s
+  default, `defaultMaxKeys` in `cmd/keel`, and nowhere else. The check that
+  the rewrite's key ceiling stays in a sane relation to it moved beside it,
+  and the ceiling is exported for that, as `core.RewriteKeyCeiling`.
+- **LRU is the zero policy.** `config.EvictStrategy` defaulted to random,
+  which only tests ever ran under, since the flag defaults to lru. The
+  policies are a typed `EvictionPolicy` in `data_structure` (`EvictLRU`,
+  `EvictLFU`, `EvictRandom`), which `core` re-exports.
+- **The server's settings are its flags'.** `engineOptions` in `cmd/keel` maps
+  every flag onto the engine explicitly, so none of the server's settings is
+  an engine default; a flag whose zero turns its setting off is passed as
+  `core.Off`. The flags are checked first, with the messages the server has
+  always given. `TestDefaultFlagsKeepTheServerSettings` pins what the default
+  flags hold the engine to, `TestFlagsReachTheEngine` that each flag, its
+  zeros included, reaches it, and `TestServerReportsItsDefaultEviction` reads
+  INFO from a server started without flags.
+- **The default engine** starts with `Options{}`. `core.Configure` holds it to
+  the options it is given, and `cmd/keel` calls it once, after checking its
+  flags and before the log is replayed, where it once assigned config before
+  anything read it. Another engine is given its options when it is made:
+  `newEngine(Options)` until `core.Open` (phase 3).
+- **Limits by value.** A space holds its `Limits` by value. It held a pointer
+  per limit so that the default space could read config live, and every
+  access read the policy through one; it now reads it from the space it
+  already has in hand. `SetLimits` replaces them; code outside the package
+  reads them through `Limits`, `MaxKeys` and `MaxMemory`, the last two being
+  what append admission and the reserve commands' budget check ask on their
+  paths.
+- **Tests set options on the engine they run on.** `withOptions(t, change)`
+  changes the default engine's and puts back what it found when the test
+  ends; a test on an engine of its own passes them to `newEngine`. This is
+  the groundwork for step 2.6, which gives every test an engine of its own.
+- **Identical benchmark workloads.** A baseline from before step 2.5 holds its
+  engine to config's 5,000,000-key cap, so every one of its writes counts the
+  keyspace. Every command-path benchmark gives the candidate's engine the
+  same cap; without it the candidate would skip that count and look faster
+  for that alone. The log-on and replica-on benchmarks, which
+  `command-path.yml` builds into a baseline that predates them, take their
+  settings from `command_path_settings_test.go`, and the job gives such a
+  baseline `testdata/command-path/command_path_settings_test.go` in its place,
+  which sets the same through config.
+
 ## Risks, in order
 
 1. Moving AOF, rewrite and replication state while MULTI/EXEC changes the same
@@ -758,11 +853,12 @@ The owner settled the open questions on October 2, 2026, with a standing rule
 for anything left uncertain: do what Redis does.
 
 - **Eviction default:** LRU, matching the `cmd/keel` flag. `config.EvictStrategy`
-  defaulting to random is the server-side inconsistency to remove in step 2.5.
+  defaulting to random is the server-side inconsistency to remove in step 2.5
+  (removed: LRU is the zero `core.Options.Eviction`).
 - **Key limit default:** none, as in Redis, where only `maxmemory` bounds the
   keyspace. `MaxKeys` defaults to zero, meaning unlimited. The server's current
   5,000,000 cap becomes an explicit `-maxkeys`-style setting rather than a
-  hidden default. The rewrite's four-million-key ceiling and the snapshot's
+  hidden default (done in step 2.5: it is `-maxkeys`'s default in `cmd/keel`). The rewrite's four-million-key ceiling and the snapshot's
   one-million-key refusal stay documented limits of persistence, not of the
   keyspace.
 - **`Atomic` semantics:** as Redis EXEC. Queued work is isolated and logged as

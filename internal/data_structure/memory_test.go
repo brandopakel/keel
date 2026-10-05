@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/brandopakel/keel/internal/config"
 )
 
 // heapBytes reads the live heap after collecting. A test that reads it does not
@@ -35,7 +33,7 @@ func heapBytes() uint64 {
 // allocator rounding each value up to a size class. The bound below allows for
 // that while still failing if the accounting stops describing the same thing.
 func TestEstimateTracksRealHeap(t *testing.T) {
-	limits := evictionLimits(config.EvictFirst, 5, 100000000)
+	limits := evictionLimits(EvictRandom, 5, 100000000)
 
 	for _, valLen := range []int{8, 64, 512, 4096} {
 		d := newTestDict(limits)
@@ -68,7 +66,7 @@ func TestEstimateTracksRealHeap(t *testing.T) {
 
 func TestMemUsedRisesAndFallsWithTheKeyspace(t *testing.T) {
 	t.Parallel()
-	d := newTestDict(evictionLimits(config.EvictFirst, 5, 1000000))
+	d := newTestDict(evictionLimits(EvictRandom, 5, 1000000))
 	assert.Equal(t, uint64(0), d.MemUsed(), "an empty dictionary holds nothing")
 
 	d.Put("k", d.NewObj(strings.Repeat("v", 1000)))
@@ -84,7 +82,7 @@ func TestMemUsedRisesAndFallsWithTheKeyspace(t *testing.T) {
 // the estimate climbs forever on a key that is merely being updated.
 func TestOverwritingReplacesCostRatherThanAddingIt(t *testing.T) {
 	t.Parallel()
-	d := newTestDict(evictionLimits(config.EvictFirst, 5, 1000000))
+	d := newTestDict(evictionLimits(EvictRandom, 5, 1000000))
 
 	d.Put("k", d.NewObj(strings.Repeat("v", 1000)))
 	first := d.MemUsed()
@@ -105,7 +103,7 @@ func TestOverwritingReplacesCostRatherThanAddingIt(t *testing.T) {
 func TestMemoryBoundHoldsRegardlessOfValueSize(t *testing.T) {
 	t.Parallel()
 	for _, valLen := range []int{8, 800, 8000} {
-		limits := evictionLimits(config.LRU, 5, 100000000)
+		limits := evictionLimits(EvictLRU, 5, 100000000)
 		limits.MaxMemory = 1 << 20 // 1 MB
 
 		d := newTestDict(limits)
@@ -126,7 +124,7 @@ func TestKeyCountAdaptsToValueSize(t *testing.T) {
 	t.Parallel()
 	held := map[int]int{}
 	for _, valLen := range []int{8, 800, 8000} {
-		limits := evictionLimits(config.LRU, 5, 100000000)
+		limits := evictionLimits(EvictLRU, 5, 100000000)
 		limits.MaxMemory = 1 << 20
 
 		d := newTestDict(limits)
@@ -147,7 +145,7 @@ func TestKeyCountAdaptsToValueSize(t *testing.T) {
 // spin, and must not be retried into an infinite eviction.
 func TestAValueLargerThanTheBudgetDoesNotEmptyTheKeyspaceForever(t *testing.T) {
 	t.Parallel()
-	limits := evictionLimits(config.LRU, 5, 100000000)
+	limits := evictionLimits(EvictLRU, 5, 100000000)
 	limits.MaxMemory = 1024
 
 	d := newTestDict(limits)
@@ -174,7 +172,7 @@ func TestAValueLargerThanTheBudgetDoesNotEmptyTheKeyspaceForever(t *testing.T) {
 // written, and invisible to both DBSIZE and the memory accounting.
 func TestOverwritingAKeyWithATTLLeaksNothing(t *testing.T) {
 	t.Parallel()
-	d := CreateDict(NewSpace(configuredLimits()))
+	d := CreateDict(NewSpace(DefaultLimits()))
 	for i := 0; i < 10000; i++ {
 		d.Put("hot", d.NewObj("value"))
 		d.SetExpiry("hot", 60000)
@@ -193,7 +191,7 @@ func TestOverwritingAKeyWithATTLLeaksNothing(t *testing.T) {
 // write.
 func TestExpiryAccountingBalances(t *testing.T) {
 	t.Parallel()
-	d := CreateDict(NewSpace(configuredLimits()))
+	d := CreateDict(NewSpace(DefaultLimits()))
 	empty := d.MemUsed()
 
 	for i := 0; i < 1000; i++ {

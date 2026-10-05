@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/constant"
 )
 
@@ -48,9 +47,7 @@ func TestCmdMemoryRejectsUnknownSubcommand(t *testing.T) {
 
 func TestCmdInfoReportsMemoryAndKeyspace(t *testing.T) {
 	resetDictStore()
-	old := config.MaxMemory
-	config.MaxMemory = 1 << 20
-	t.Cleanup(func() { config.MaxMemory = old })
+	withOptions(t, func(o *Options) { o.MaxMemory = 1 << 20 })
 
 	defaultEngine.cmdSET([]string{"a", "1"})
 	defaultEngine.cmdSET([]string{"b", "2"})
@@ -81,15 +78,12 @@ func TestCmdInfoSectionFiltering(t *testing.T) {
 
 func TestCmdInfoReportsTheActivePolicy(t *testing.T) {
 	resetDictStore()
-	old := config.EvictStrategy
-	t.Cleanup(func() { config.EvictStrategy = old })
-
-	for strategy, want := range map[int]string{
-		config.LRU:        "allkeys-lru",
-		config.LFU:        "allkeys-lfu",
-		config.EvictFirst: "allkeys-random",
+	for policy, want := range map[EvictionPolicy]string{
+		EvictLRU:    "allkeys-lru",
+		EvictLFU:    "allkeys-lfu",
+		EvictRandom: "allkeys-random",
 	} {
-		config.EvictStrategy = strategy
+		withOptions(t, func(o *Options) { o.Eviction = policy })
 		res, _ := Decode(defaultEngine.cmdINFO([]string{"memory"}))
 		assert.Contains(t, res.(string), "maxmemory_policy:"+want)
 	}
