@@ -19,7 +19,7 @@ import (
 // Sub-benchmark names are part of that comparison, so a name, once added, is
 // not renamed.
 func BenchmarkCommandPath(b *testing.B) {
-	withOptions(b, func(o *Options) { o.MaxKeys = serverKeyCap })
+	holdServerKeyCap(b)
 	ResetStores()
 	keys := make([]string, 1000)
 	for i := range keys {
@@ -170,6 +170,12 @@ func BenchmarkCommandPathUnderEviction(b *testing.B) {
 // keyspace, as the server's writes do, and as a baseline from before step
 // 2.5 counts it.
 const serverKeyCap = 5000000
+
+// holdServerKeyCap holds the default engine to serverKeyCap until b ends. It
+// is a function of its own rather than a closure in the benchmark, so that
+// the benchmark's own closures, which are its timed loops, keep the names and
+// the places they have in a baseline's build.
+func holdServerKeyCap(b *testing.B) { withOptions(b, func(o *Options) { o.MaxKeys = serverKeyCap }) }
 
 // mustSucceed runs cmd once and fails the benchmark if it errors, so a family
 // whose command was removed or broke cannot report the cost of an error reply.
