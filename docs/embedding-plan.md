@@ -832,7 +832,26 @@ plan above leaves a choice open, step 2.5 settles it this way:
   `command-path.yml` builds into a baseline that predates them, take their
   settings from `command_path_settings_test.go`, and the job gives such a
   baseline `testdata/command-path/command_path_settings_test.go` in its place,
-  which sets the same through config.
+  which sets the same through config. `holdServerKeyCap` is a function of its
+  own rather than a closure in `BenchmarkCommandPath`, so that the
+  benchmark's closures, its timed loops, keep the names and places they have
+  in a baseline's build.
+- **Measured per PR**, as in steps 2.1 to 2.4: the paired command-path job at
+  least twice against develop and once against `65ebdbc`. Part 1 ran at 1.003
+  to 1.005 against develop on EPYC 7763, and at 0.908 to 0.913 against
+  `65ebdbc`, with no more allocations anywhere; ZADD stayed over 1.04 on
+  repeat on EPYC 7763 (1.037 to 1.051), with ZSCORE and SADD at 1.02 to 1.04.
+  On those paths its instructions are develop's but for one load fewer in
+  `Keyed.Get` (the policy, now read from the space) and one test in
+  `overLimit`; the functions around them had moved. A layout control, the PR
+  plus never-taken branches in nine cold functions that restored develop's
+  64-byte phase for 32 of 35 hot functions, ran at 1.007 and 1.010 on EPYC
+  7763 and 1.010 on EPYC 9V74 with no row over 1.04 (ZADD 1.027 and 1.035),
+  and was not merged. A second experiment moved the options to the end of
+  `Engine`, giving every field a command reads develop's offset and the hot
+  instructions develop's: SISMEMBER then ran at 1.068 and 1.071 and SADD at
+  1.054 and 1.059, with nothing on their paths reading the options, so it was
+  reverted. Rows of 2 to 7% follow where the code lands, not what it does.
 
 ## Risks, in order
 
