@@ -45,8 +45,8 @@ import (
 //     from the logs being the same bytes; the log-compatibility job builds both
 //     and checks it with the binaries.
 //
-// Two things in a log are not the same from run to run, and are normalized on
-// both sides before the comparison, never anywhere else:
+// Three things in a log are not the same from run to run, and are normalized
+// on both sides before the comparison, never anywhere else:
 //
 //   - A relative expiry is logged as the instant it falls due, which depends on
 //     when the command ran. Every relative TTL here is a whole number of hours,
@@ -58,6 +58,12 @@ import (
 //     HSET record are put in field order, and the score-member pairs of each
 //     ZADD record without options in member order. The sort is stable, so a
 //     field or member named twice keeps its last value.
+//   - A rewrite writes a large collection in several records, each cut at 256
+//     elements, 64 KiB or a millisecond, whichever comes first, so where a cut
+//     falls depends on how fast the machine is. When the log is compared,
+//     records of the same collection command on the same key that follow one
+//     another are joined into one, then sorted as above. The fixture keeps the
+//     records as they were cut on 40eb2f6.
 //
 // A large hash is rewritten in several HSET records whose split is random too,
 // so the scenarios hold small hashes only; aof_rewrite_test.go and
@@ -306,6 +312,48 @@ func normalizeGoldenLog(t *testing.T, log []byte, window goldenWindow) []byte {
 			sortGoldenPairs(parts[2:], 0)
 		case strings.EqualFold(parts[0], "ZADD") && len(parts)%2 == 0 && goldenScores(parts[2:]):
 			sortGoldenPairs(parts[2:], 1)
+		}
+		out = appendCommand(out, parts...)
+	}
+	return out
+}
+
+// joinGoldenChunks joins the records of a collection the rewrite cut into
+// several - consecutive RPUSH, SADD, HSET, or ZADD without options, on the same
+// key - and sorts the joined pairs as normalizeGoldenLog sorts one record's.
+func joinGoldenChunks(t *testing.T, log []byte) []byte {
+	t.Helper()
+	joinable := func(parts []string) bool {
+		switch strings.ToUpper(parts[0]) {
+		case "RPUSH", "SADD":
+			return len(parts) > 2
+		case "HSET":
+			return len(parts) > 2 && len(parts)%2 == 0
+		case "ZADD":
+			return len(parts) > 2 && len(parts)%2 == 0 && goldenScores(parts[2:])
+		}
+		return false
+	}
+	var joined [][]string
+	for _, parts := range goldenRecords(t, log) {
+		if n := len(joined); n > 0 && joinable(parts) && joinable(joined[n-1]) &&
+			strings.EqualFold(joined[n-1][0], parts[0]) && joined[n-1][1] == parts[1] {
+			joined[n-1] = append(joined[n-1], parts[2:]...)
+			continue
+		}
+		joined = append(joined, parts)
+	}
+	var out []byte
+	for _, parts := range joined {
+		switch strings.ToUpper(parts[0]) {
+		case "HSET":
+			if len(parts)%2 == 0 {
+				sortGoldenPairs(parts[2:], 0)
+			}
+		case "ZADD":
+			if len(parts)%2 == 0 && goldenScores(parts[2:]) {
+				sortGoldenPairs(parts[2:], 1)
+			}
 		}
 		out = appendCommand(out, parts...)
 	}
@@ -873,7 +921,7 @@ func TestPersistenceGoldenCapture(t *testing.T) {
 				first = got
 				continue
 			}
-			requireSameLog(t, first.log, got.log, scenario.name+" under "+mode.name)
+			requireSameLog(t, joinGoldenChunks(t, first.log), joinGoldenChunks(t, got.log), scenario.name+" under "+mode.name)
 			require.Equal(t, string(first.replies), string(got.replies), "%s replies under %s", scenario.name, mode.name)
 			require.Equal(t, string(first.state), string(got.state), "%s state under %s", scenario.name, mode.name)
 		}
@@ -911,7 +959,7 @@ func TestPersistenceGoldenLogsAreUnchanged(t *testing.T) {
 		for _, mode := range goldenModes {
 			t.Run(scenario.name+"/"+mode.name, func(t *testing.T) {
 				got := runGoldenScenario(t, scenario, mode)
-				requireSameLog(t, wantLog, got.log, "the log")
+				requireSameLog(t, joinGoldenChunks(t, wantLog), joinGoldenChunks(t, got.log), "the log")
 				require.Equal(t, want.RepliesSHA256, goldenSHA(got.replies), "the replies")
 				require.Equal(t, string(wantState), string(got.state), "the keyspace")
 			})

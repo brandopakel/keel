@@ -22,7 +22,7 @@ func (e *Engine) writeAOFBuffer() error {
 		return nil
 	}
 	if len(e.aof.buf) > 0 {
-		n, err := timedPersistenceWrite(&appendWriteStats, e.aof.file, e.aof.buf, e.aofWrite)
+		n, err := timedPersistenceWrite(&e.appendWriteStats, e.aof.file, e.aof.buf, e.aofWrite)
 		e.recordAOFDigest(e.aof.buf[:n])
 		e.aof.written += int64(n)
 		e.appendStarted += uint64(n)

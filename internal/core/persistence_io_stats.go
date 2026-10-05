@@ -9,18 +9,16 @@ import (
 	"time"
 )
 
-// Process-lifetime counters use fixed storage and allow INFO to read while an
+// Engine-lifetime counters use fixed storage and allow INFO to read while an
 // I/O worker is blocked. Independent atomic fields are approximate snapshots;
 // they do not promise a transactionally consistent multi-field observation.
+// Each engine has six, for its log's I/O and its rewrite's; a worker is handed
+// the one it times before it starts.
 type persistenceIOStats struct {
 	active                                atomic.Int64
 	calls, errors, totalNS, maxNS, lastNS atomic.Uint64
 	slowCalls, slowLastNS, slowLastUnixUS atomic.Uint64
 }
-
-var appendWriteStats, appendSyncStats persistenceIOStats
-var rewriteWriteStats, rewriteSyncStats persistenceIOStats
-var rewriteFinalSyncStats, rewriteFinalizeStats persistenceIOStats
 
 func (s *persistenceIOStats) finish(start time.Time, err error) {
 	elapsed := uint64(time.Since(start))
@@ -62,14 +60,14 @@ func timedPersistenceSync(s *persistenceIOStats, f *os.File, syncFile func(*os.F
 	return err
 }
 
-func persistenceIOInfo(out *strings.Builder) {
+func (e *Engine) persistenceIOInfo(out *strings.Builder) {
 	for _, item := range []struct {
 		name  string
 		stats *persistenceIOStats
 	}{
-		{"aof_write", &appendWriteStats}, {"aof_sync", &appendSyncStats},
-		{"aof_rewrite_write", &rewriteWriteStats}, {"aof_rewrite_sync", &rewriteSyncStats},
-		{"aof_rewrite_final_sync", &rewriteFinalSyncStats}, {"aof_rewrite_finalize", &rewriteFinalizeStats},
+		{"aof_write", &e.appendWriteStats}, {"aof_sync", &e.appendSyncStats},
+		{"aof_rewrite_write", &e.rewriteWriteStats}, {"aof_rewrite_sync", &e.rewriteSyncStats},
+		{"aof_rewrite_final_sync", &e.rewriteFinalSyncStats}, {"aof_rewrite_finalize", &e.rewriteFinalizeStats},
 	} {
 		s := item.stats
 		fmt.Fprintf(out, "%s_inflight:%d\r\n%s_calls:%d\r\n%s_errors:%d\r\n%s_total_usec:%d\r\n%s_max_usec:%d\r\n%s_last_usec:%d\r\n",

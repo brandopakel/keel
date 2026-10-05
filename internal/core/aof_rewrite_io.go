@@ -69,6 +69,7 @@ func (e *Engine) startRewriteIO(body []byte) {
 	e.pendingRewriteIO = job
 	syncFile := e.rewriteFileSync
 	writeFile := e.rewriteFileWrite
+	syncStats, writeStats := &e.rewriteSyncStats, &e.rewriteWriteStats
 	wake := e.rewriteWake
 	go func() {
 		defer func() {
@@ -77,9 +78,9 @@ func (e *Engine) startRewriteIO(body []byte) {
 			}
 		}()
 		if job.body == nil {
-			job.err = timedPersistenceSync(&rewriteSyncStats, job.file, syncFile)
+			job.err = timedPersistenceSync(syncStats, job.file, syncFile)
 		} else {
-			job.n, job.err = timedPersistenceWrite(&rewriteWriteStats, job.file, job.body, writeFile)
+			job.n, job.err = timedPersistenceWrite(writeStats, job.file, job.body, writeFile)
 			if job.err == nil && job.n != len(job.body) {
 				job.err = io.ErrShortWrite
 			}

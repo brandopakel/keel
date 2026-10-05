@@ -483,10 +483,10 @@ func (e *Engine) finishRewrite() {
 		e.startRewriteSync()
 		return
 	}
-	rewriteFinalizeStats.active.Add(1)
+	e.rewriteFinalizeStats.active.Add(1)
 	finalStarted := time.Now()
 	var finalErr error
-	defer func() { rewriteFinalizeStats.finish(finalStarted, finalErr) }()
+	defer func() { e.rewriteFinalizeStats.finish(finalStarted, finalErr) }()
 	fail := func(err error) {
 		finalErr = err
 		e.abortRewrite(err)
@@ -495,8 +495,8 @@ func (e *Engine) finishRewrite() {
 		// Preflush the bulk snapshot once, then synchronize only the dirty
 		// suffix at the existing atomic handoff. Repeated asynchronous retries
 		// could otherwise starve forever under a continuous write stream.
-		if err := timedPersistenceSync(&rewriteFinalSyncStats, e.rewrite.file, func(f *os.File) error {
-			return timedPersistenceSync(&rewriteSyncStats, f, e.rewriteFileSync)
+		if err := timedPersistenceSync(&e.rewriteFinalSyncStats, e.rewrite.file, func(f *os.File) error {
+			return timedPersistenceSync(&e.rewriteSyncStats, f, e.rewriteFileSync)
 		}); err != nil {
 			fail(err)
 			return
@@ -630,7 +630,7 @@ func (e *Engine) rewriteWrite(body []byte) error {
 	if e.rewrite.preSyncComplete {
 		// The existing dirty-tail/handoff barrier remains synchronous. Moving
 		// this phase requires ordered dual writes and a separate commit cut.
-		n, err := timedPersistenceWrite(&rewriteWriteStats, e.rewrite.file, body, e.rewriteFileWrite)
+		n, err := timedPersistenceWrite(&e.rewriteWriteStats, e.rewrite.file, body, e.rewriteFileWrite)
 		if e.rewrite.digest != nil {
 			e.rewrite.digest.Write(body[:n])
 		}

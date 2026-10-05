@@ -242,7 +242,7 @@ func (e *Engine) cmdINFO(args []string) []byte {
 			pendingWriteBytes = cap(e.pendingRewriteIO.body)
 		}
 		fmt.Fprintf(&b, "aof_rewrite_pending_write_bytes:%d\r\n", pendingWriteBytes)
-		persistenceIOInfo(&b)
+		e.persistenceIOInfo(&b)
 		fmt.Fprintf(&b, "aof_rewrites:%d\r\naof_keys_at_last_rewrite:%d\r\n\r\n", rewrites, keys)
 	}
 	if want("keyspace") {

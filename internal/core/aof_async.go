@@ -104,6 +104,7 @@ func (e *Engine) FlushAOFAsync(wake func()) (ready bool, err error) {
 	body := e.aof.buf
 	e.aof.buf = nil
 	file, writeFile, syncFile := e.aof.file, e.aofWrite, e.aofSync
+	writeStats, syncStats := &e.appendWriteStats, &e.appendSyncStats
 	result := make(chan appendResult, 1)
 	e.appendPending = result
 	e.appendBytes = len(body)
@@ -111,13 +112,13 @@ func (e *Engine) FlushAOFAsync(wake func()) (ready bool, err error) {
 	e.appendStarted += uint64(len(body))
 	end := e.appendStarted
 	go func() {
-		n, err := timedPersistenceWrite(&appendWriteStats, file, body, writeFile)
+		n, err := timedPersistenceWrite(writeStats, file, body, writeFile)
 		if err == nil && n != len(body) {
 			err = io.ErrShortWrite
 		}
 		synced := false
 		if err == nil && always {
-			err = timedPersistenceSync(&appendSyncStats, file, syncFile)
+			err = timedPersistenceSync(syncStats, file, syncFile)
 			synced = err == nil
 		}
 		result <- appendResult{n: n, err: err, synced: synced, end: end, body: body}
