@@ -37,7 +37,6 @@ const (
 var packageVars = map[string]string{
 	"defaultEngine": defaultInstance,
 
-	"replication": replicated, "replicationV2": replicated, "replicaAck": replicated,
 	"failover": replicated, "termRename": replicated, "termSync": replicated, "termSyncDir": replicated,
 
 	"ClientBuffers": transport,

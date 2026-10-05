@@ -27,7 +27,7 @@ func setupReplicationV2(t *testing.T) {
 			defaultEngine.abortRewrite(errors.New("test cleanup"))
 		}
 		CloseAOF()
-		resetReplicationV2()
+		defaultEngine.resetReplicationV2()
 		defaultEngine.resetReplica()
 		config.ReplicationFeed, config.ReplicaOf, config.ReplicationProtocol, config.AOFFsync = oldFeed, oldReplica, oldProtocol, oldPolicy
 		data_structure.DefaultSpace.SuspendExpiry, data_structure.DefaultSpace.SuspendEviction = oldExpiry, oldEviction
@@ -326,13 +326,13 @@ func TestReplicationV2HistoryOverrunAndProtocolMismatch(t *testing.T) {
 	for n := 0; n < 4100; n++ {
 		run(t, "INCR", "counter")
 	}
-	require.True(t, historyV2Contains(base), "small operations must use the byte budget rather than a per-command entry limit")
+	require.True(t, defaultEngine.historyV2Contains(base), "small operations must use the byte budget rather than a per-command entry limit")
 	for n := 0; n < 70; n++ {
 		run(t, "SET", "history-fill", strings.Repeat("v", replicationChunkBytes))
 	}
-	require.LessOrEqual(t, len(replicationV2.history), 4096)
-	require.LessOrEqual(t, replicationV2.bytes, replicationHistoryLimit)
-	require.False(t, historyV2Contains(base))
+	require.LessOrEqual(t, len(defaultEngine.replicationV2.history), 4096)
+	require.LessOrEqual(t, defaultEngine.replicationV2.bytes, replicationHistoryLimit)
+	require.False(t, defaultEngine.historyV2Contains(base))
 	f := pullV2(t, epoch, base, id, 0)
 	require.True(t, f.Pending)
 	f = pullV2(t, epoch, base, "", 0)
@@ -343,5 +343,5 @@ func TestReplicationV2HistoryOverrunAndProtocolMismatch(t *testing.T) {
 	require.Contains(t, string(rawReply(t, "KEEL.REPL.PULL2", "", "0", "", "0")), "protocol 2 is disabled")
 	config.ReplicationProtocol = 2
 	defaultEngine.invalidateReplicationV2()
-	require.NotEqual(t, epoch, replication.epoch)
+	require.NotEqual(t, epoch, defaultEngine.replication.epoch)
 }

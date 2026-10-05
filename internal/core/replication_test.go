@@ -103,18 +103,18 @@ func TestReplicationHistoryAndDirtyOverflowRequireFullSync(t *testing.T) {
 	config.ReplicationFeed = true
 	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "primary")))
 	require.NoError(t, InitReplication())
-	epoch := replication.epoch
+	epoch := defaultEngine.replication.epoch
 	for i := 0; i < 1030; i++ {
 		run(t, "SET", "key", "value")
-		require.NoError(t, sealReplication())
+		require.NoError(t, defaultEngine.sealReplication())
 	}
-	require.LessOrEqual(t, len(replication.history), 1024)
+	require.LessOrEqual(t, len(defaultEngine.replication.history), 1024)
 	var frame ReplicationFrame
 	require.NoError(t, json.Unmarshal([]byte(run(t, "KEEL.REPL.PULL", epoch, "0").(string)), &frame))
 	require.True(t, frame.Full)
-	replication.dirtyBytes = replicationLimit
+	defaultEngine.replication.dirtyBytes = replicationLimit
 	defaultEngine.noteReplicationDirty("new-key")
-	require.True(t, replication.invalidated)
+	require.True(t, defaultEngine.replication.invalidated)
 	require.NoError(t, json.Unmarshal([]byte(run(t, "KEEL.REPL.PULL", epoch, "1030").(string)), &frame))
 	require.True(t, frame.Full)
 	require.NotEqual(t, epoch, frame.Epoch)

@@ -4,6 +4,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
@@ -25,9 +26,10 @@ import (
 // file; the rewrite, which walks e's keyspace and replaces e's log; what e's
 // rewrites came to and when the next may start; and the counters that time
 // e's I/O. Step 2.4 moves replication and failover here, a part at a time:
-// first the replica, which applies its primary's stream to e's keyspace and
-// e's log. The primary's stream and the failover term are still package
-// variables until the parts that move them.
+// the replica, which applies its primary's stream to e's keyspace and e's
+// log; and the primary's stream, which carries e's writes to e's replicas,
+// with the role that says which of them e is. The failover term is still a
+// package variable until the part that moves it.
 //
 // Until callers open engines of their own (plan phase 3) the server and the
 // tests run on defaultEngine, as the stores run on data_structure.DefaultSpace.
@@ -145,6 +147,27 @@ type Engine struct {
 	checkpointRename  func(oldPath, newPath string) error
 	checkpointSyncDir func(string) error
 
+	// The primary: the stream e feeds its replicas, under the names it had
+	// as package variables - see replication.go, replication_v2.go and
+	// replication_ack.go. It carries e's writes alone, in an epoch of e's
+	// own, and a snapshot is a rewrite of e's log.
+	//
+	// replication is protocol 1's stream and what protocol 2's shares with
+	// it, the epoch and the keys the running command changed;
+	// replicationV2 is protocol 2's history and snapshot; and replicaAck is
+	// the furthest cursor e's replicas have reported.
+	replication   replicationState
+	replicationV2 replicationV2State
+	replicaAck    replicaAckState
+
+	// role is what e is in replication - a replica of a primary, a primary
+	// feeding replicas, or neither, and in which protocol - read through
+	// replicaOf, feedsReplicas and replicationProtocol. The default engine's
+	// is the server's flags, read live from config as its space reads its
+	// limits; any other engine's is ownRole.
+	role    replicationRoleRefs
+	ownRole replicationRole
+
 	// The rewrite, under the names it had as package variables - see
 	// aof_rewrite.go and aof_rewrite_io.go. It walks e's keyspace and replaces
 	// e's log, and nothing else.
@@ -202,7 +225,7 @@ var defaultEngine = engineIn(data_structure.DefaultSpace)
 // engineIn returns an engine living in space, with no stores yet, and with
 // its persistence I/O the real thing.
 func engineIn(space *data_structure.Space) *Engine {
-	return &Engine{
+	e := &Engine{
 		space: space, replyCeiling: MaxReplyBytes,
 		aofWrite: writeLog, aofSync: syncLog,
 		rewriteFileWrite: writeLog, rewriteFileSync: syncLog, rewriteOpenLog: openRewrittenLog,
@@ -210,5 +233,14 @@ func engineIn(space *data_structure.Space) *Engine {
 		checkpointSync: syncFile, checkpointRename: os.Rename, checkpointSyncDir: syncDir,
 		// No rewrite has ended yet, which Redis reports as -1.
 		rewriteOutcome: rewriteOutcomeState{lastSeconds: -1},
+		// Neither a replica nor a feed, in the protocol the flag defaults to.
+		ownRole: replicationRole{Protocol: 1},
+		// Never nil, so noteReplicationDirty need not test it on every write.
+		replication: replicationState{dirty: map[string]struct{}{}},
 	}
+	e.role = replicationRoleRefs{&e.ownRole.ReplicaOf, &e.ownRole.Feed, &e.ownRole.Protocol}
+	if space == data_structure.DefaultSpace {
+		e.role = replicationRoleRefs{&config.ReplicaOf, &config.ReplicationFeed, &config.ReplicationProtocol}
+	}
+	return e
 }

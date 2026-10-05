@@ -9,9 +9,6 @@ import (
 	"fmt"
 	"strconv"
 	"time"
-
-	"github.com/brandopakel/keel/internal/config"
-	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // Experimental bounded replication uses canonical key images, not random
@@ -38,12 +35,47 @@ type ReplicationFrame struct {
 	// authentication and transport protection are separate requirements.
 	Term uint64 `json:"term,omitempty"`
 }
+
+// replicationRole is what an engine is in replication, as the flags
+// -replicaof, -replication-feed and -replication-protocol set it for the
+// server: the primary it follows, if it is a replica; whether it feeds a
+// stream to replicas of its own; and the protocol it speaks.
+type replicationRole struct {
+	ReplicaOf string
+	Feed      bool
+	Protocol  int
+}
+
+// replicationRoleRefs is where an engine reads its role: its own, or, for the
+// default engine, the config variables themselves. Reading config live keeps
+// the flags, and the tests that assign config.ReplicaOf and the rest, working
+// until engine options replace config (plan step 2.5), as the default space's
+// limits do.
+type replicationRoleRefs struct {
+	replicaOf *string
+	feed      *bool
+	protocol  *int
+}
+
+// replicaOf is the primary e follows, or "" when e is not a replica.
+func (e *Engine) replicaOf() string { return *e.role.replicaOf }
+
+// feedsReplicas says whether e feeds a stream to replicas.
+func (e *Engine) feedsReplicas() bool { return *e.role.feed }
+
+// replicationProtocol is the protocol e speaks to its primary or replicas.
+func (e *Engine) replicationProtocol() int { return *e.role.protocol }
+
 type replicationBatch struct {
 	offset uint64
 	body   []byte
 }
 
-var replication struct {
+// replicationState is a primary's protocol 1 stream, and what protocol 2's
+// shares with it: the epoch both protocols' positions belong to, the keys
+// changed since the last batch was sealed, and whether that set overflowed,
+// which starts a new epoch.
+type replicationState struct {
 	epoch       string
 	offset      uint64
 	dirty       map[string]struct{}
@@ -56,23 +88,25 @@ var replication struct {
 // InitReplication starts replication on the default engine once its log is
 // open, as the server does: a primary's stream in a new epoch, and a replica
 // that has applied nothing yet and, if it follows a primary, holds off expiry
-// and eviction and reads the checkpoint it restarts from. The primary's
-// stream is still package state until plan step 2.4 moves it too.
-func InitReplication() error {
-	resetReplicationV2()
-	replication.dirty = make(map[string]struct{})
-	replication.history = nil
-	replication.bytes = 0
-	replication.offset = 0
-	replication.dirtyBytes = 0
-	replication.invalidated = false
-	defaultEngine.resetReplica()
+// and eviction and reads the checkpoint it restarts from.
+func InitReplication() error { return defaultEngine.InitReplication() }
+
+// InitReplication is the package's InitReplication on e, as e's role says.
+func (e *Engine) InitReplication() error {
+	e.resetReplicationV2()
+	e.replication.dirty = make(map[string]struct{})
+	e.replication.history = nil
+	e.replication.bytes = 0
+	e.replication.offset = 0
+	e.replication.dirtyBytes = 0
+	e.replication.invalidated = false
+	e.resetReplica()
 	var id [16]byte
 	if _, err := rand.Read(id[:]); err != nil {
 		return err
 	}
-	replication.epoch = hex.EncodeToString(id[:])
-	return defaultEngine.followPrimary()
+	e.replication.epoch = hex.EncodeToString(id[:])
+	return e.followPrimary()
 }
 
 // resetReplica forgets everything e has applied from a primary: it is not
@@ -90,71 +124,73 @@ func (e *Engine) resetReplica() {
 // space leaves expiry and eviction to the primary, and under protocol 2 the
 // checkpoint beside its log says where it may resume.
 func (e *Engine) followPrimary() error {
-	if config.ReplicaOf != "" {
+	if e.replicaOf() != "" {
 		e.space.SuspendExpiry = true
 		e.space.SuspendEviction = true
 	}
-	if config.ReplicaOf != "" && config.ReplicationProtocol == 2 {
+	if e.replicaOf() != "" && e.replicationProtocol() == 2 {
 		return e.loadReplicaCheckpoint()
 	}
 	return nil
 }
 func (e *Engine) noteReplicationDirty(key string) {
-	if config.ReplicationFeed && !e.aof.replaying && !e.replicaApplying {
-		if replication.invalidated {
+	if *e.role.feed && !e.aof.replaying && !e.replicaApplying {
+		// The role is read directly and the stream through one pointer, and
+		// the dirty set is never nil (engineIn makes it), which keeps this
+		// within the inliner's budget, as it was while both were package
+		// variables: it runs for every key every write changes.
+		r := &e.replication
+		if r.invalidated {
 			return
 		}
-		if _, exists := replication.dirty[key]; exists {
+		if _, exists := r.dirty[key]; exists {
 			return
 		}
-		if len(replication.dirty) >= 100000 || replication.dirtyBytes+len(key) > replicationLimit {
-			clear(replication.dirty)
-			replication.dirtyBytes = 0
-			replication.invalidated = true
+		if len(r.dirty) >= 100000 || r.dirtyBytes+len(key) > replicationLimit {
+			clear(r.dirty)
+			r.dirtyBytes = 0
+			r.invalidated = true
 			return
 		}
-		if replication.dirty == nil {
-			replication.dirty = make(map[string]struct{})
-		}
-		replication.dirty[key] = struct{}{}
-		replication.dirtyBytes += len(key)
+		r.dirty[key] = struct{}{}
+		r.dirtyBytes += len(key)
 	}
 }
-func sealReplication() error {
-	if replication.invalidated {
+func (e *Engine) sealReplication() error {
+	if e.replication.invalidated {
 		var id [16]byte
 		if _, err := rand.Read(id[:]); err != nil {
 			return err
 		}
-		replication.epoch = hex.EncodeToString(id[:])
-		replication.offset = 0
-		replication.history = nil
-		replication.bytes = 0
-		replication.invalidated = false
+		e.replication.epoch = hex.EncodeToString(id[:])
+		e.replication.offset = 0
+		e.replication.history = nil
+		e.replication.bytes = 0
+		e.replication.invalidated = false
 	}
-	if len(replication.dirty) == 0 {
+	if len(e.replication.dirty) == 0 {
 		return nil
 	}
-	if data_structure.TotalMemUsed() > replicationLimit || len(replication.dirty) > 100000 {
+	if e.space.TotalMemUsed() > replicationLimit || len(e.replication.dirty) > 100000 {
 		return errors.New("replication alpha dataset limit: 8 MiB estimated keyspace / 100000 changed keys")
 	}
 	var body []byte
-	for key := range replication.dirty {
+	for key := range e.replication.dirty {
 		body = appendCommand(body, "DEL", key)
-		body = defaultEngine.emitKey(body, key)
+		body = e.emitKey(body, key)
 		if len(body) > replicationLimit {
 			return errors.New("replication frame exceeds 8 MiB")
 		}
 	}
-	replication.offset++
-	replication.history = append(replication.history, replicationBatch{replication.offset, body})
-	replication.bytes += len(body)
-	clear(replication.dirty)
-	replication.dirtyBytes = 0
-	for replication.bytes > replicationHistoryLimit || len(replication.history) > 1024 {
-		replication.bytes -= len(replication.history[0].body)
-		replication.history[0] = replicationBatch{}
-		replication.history = replication.history[1:]
+	e.replication.offset++
+	e.replication.history = append(e.replication.history, replicationBatch{e.replication.offset, body})
+	e.replication.bytes += len(body)
+	clear(e.replication.dirty)
+	e.replication.dirtyBytes = 0
+	for e.replication.bytes > replicationHistoryLimit || len(e.replication.history) > 1024 {
+		e.replication.bytes -= len(e.replication.history[0].body)
+		e.replication.history[0] = replicationBatch{}
+		e.replication.history = e.replication.history[1:]
 	}
 	return nil
 }
@@ -168,10 +204,10 @@ func frameChecksum(f ReplicationFrame) string {
 	return hex.EncodeToString(sum[:])
 }
 func (e *Engine) cmdReplicationPull(args []string) []byte {
-	if !config.ReplicationFeed || config.ReplicationProtocol != 1 {
+	if !e.feedsReplicas() || e.replicationProtocol() != 1 {
 		return e.encode(errors.New("ERR replication protocol 1 is disabled"), false)
 	}
-	if CurrentTerm() != 0 || !Writable() {
+	if CurrentTerm() != 0 || !e.writable() {
 		return e.encode(errors.New("ERR nonzero terms require replication protocol 2"), false)
 	}
 	if len(args) != 2 {
@@ -181,20 +217,20 @@ func (e *Engine) cmdReplicationPull(args []string) []byte {
 	if err != nil {
 		return e.encode(errNotAnInteger, false)
 	}
-	if err := sealReplication(); err != nil {
+	if err := e.sealReplication(); err != nil {
 		return e.encode(err, false)
 	}
-	full := args[0] != replication.epoch || offset > replication.offset
-	if len(replication.history) > 0 && offset < replication.history[0].offset-1 {
+	full := args[0] != e.replication.epoch || offset > e.replication.offset
+	if len(e.replication.history) > 0 && offset < e.replication.history[0].offset-1 {
 		full = true
 	}
-	frame := ReplicationFrame{Version: 1, Epoch: replication.epoch, From: offset, To: offset, Full: full}
+	frame := ReplicationFrame{Version: 1, Epoch: e.replication.epoch, From: offset, To: offset, Full: full}
 	if full {
-		if data_structure.TotalMemUsed() > replicationLimit || data_structure.TotalKeys() > 100000 {
+		if e.space.TotalMemUsed() > replicationLimit || e.space.TotalKeys() > 100000 {
 			return e.encode(errors.New("ERR replication snapshot limit"), false)
 		}
 		frame.Body = appendCommand(nil, "FLUSHDB")
-		walk := data_structure.NewKeyspaceWalk()
+		walk := e.space.NewKeyspaceWalk()
 		var keys []string
 		for !walk.Done() {
 			var err error
@@ -209,9 +245,9 @@ func (e *Engine) cmdReplicationPull(args []string) []byte {
 				}
 			}
 		}
-		frame.To = replication.offset
+		frame.To = e.replication.offset
 	} else {
-		for _, batch := range replication.history {
+		for _, batch := range e.replication.history {
 			if batch.offset <= offset {
 				continue
 			}
@@ -239,7 +275,7 @@ func ApplyReplication(frame ReplicationFrame) error { return defaultEngine.Apply
 // applied to e's keyspace, logged in e's log, and moves e's position in its
 // primary's stream.
 func (e *Engine) ApplyReplication(frame ReplicationFrame) error {
-	if config.ReplicationProtocol == 2 {
+	if e.replicationProtocol() == 2 {
 		return e.applyReplicationV2(frame)
 	}
 	if CurrentTerm() != 0 || frame.Term != 0 {
@@ -323,7 +359,7 @@ func (e *Engine) replicaCommandError(cmd string) error {
 	if e.replicaApplying || e.aof.replaying {
 		return nil
 	}
-	if config.ReplicaOf != "" {
+	if e.replicaOf() != "" {
 		if writeCommands[cmd] {
 			// READONLY rather than FENCED even when this replica has seen a
 			// term above its own: a replica refuses writes because of what it
@@ -339,7 +375,7 @@ func (e *Engine) replicaCommandError(cmd string) error {
 	// Checked on every write rather than at a transition, so there is no window
 	// between losing authority and noticing it. Writable first: it is a few
 	// fields, and a writable primary then never looks the command up at all.
-	if !Writable() && writeCommands[cmd] {
+	if !e.writable() && writeCommands[cmd] {
 		return errFenced
 	}
 	return nil

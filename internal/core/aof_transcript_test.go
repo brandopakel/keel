@@ -157,9 +157,9 @@ func TestAOFTranscriptFailedDrainDoesNotPublishReplication(t *testing.T) {
 			run(t, "SET", "acknowledged", "safe")
 			require.NoError(t, FlushAOF())
 			ready := AppendReadyOffset()
-			before := replicationV2.end
+			before := defaultEngine.replicationV2.end
 			run(t, "SET", "prior", strings.Repeat("p", 2<<20))
-			published := replicationV2.end
+			published := defaultEngine.replicationV2.end
 			require.Greater(t, published, before, "the successful control must publish its command")
 			require.Greater(t, len(defaultEngine.aof.buf), 1)
 			defaultEngine.aofWrite = func(f *os.File, body []byte) (int, error) {
@@ -169,7 +169,7 @@ func TestAOFTranscriptFailedDrainDoesNotPublishReplication(t *testing.T) {
 				run(t, "SET", "torn", strings.Repeat("v", 2*maxAOFTranscriptBytes))
 			})
 			require.ErrorIs(t, defaultEngine.aof.failed, io.ErrShortWrite)
-			require.Equal(t, published, replicationV2.end, "failed drain must not publish a resliced suffix")
+			require.Equal(t, published, defaultEngine.replicationV2.end, "failed drain must not publish a resliced suffix")
 			require.Equal(t, ready, AppendReadyOffset(), "failure cannot acknowledge either buffered command")
 			require.ErrorIs(t, FlushAOF(), io.ErrShortWrite)
 		})
@@ -250,7 +250,7 @@ func TestAOFTranscriptExpiryAndRecreationKeepCanonicalOrder(t *testing.T) {
 		require.Equal(t, "new", run(t, "GET", keys[0]))
 	}
 	var body []byte
-	for _, piece := range replicationV2.history {
+	for _, piece := range defaultEngine.replicationV2.history {
 		body = append(body, piece.body...)
 	}
 	file, err := os.ReadFile(path)

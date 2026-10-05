@@ -8,21 +8,23 @@ import "time"
 // to that greatest cursor; a lower cursor cannot make older progress look fresh.
 // No per-replica identity is tracked, so these fields cannot establish quorum,
 // current replica availability, promotion safety or acknowledged-write loss.
-var replicaAck struct {
+// replicaAckState is the furthest cursor a primary's replicas have reported,
+// and when.
+type replicaAckState struct {
 	offset uint64
 	at     time.Time
 }
 
-func resetReplicaAcknowledgement() {
-	replicaAck.offset = 0
-	replicaAck.at = time.Time{}
+func (e *Engine) resetReplicaAcknowledgement() {
+	e.replicaAck.offset = 0
+	e.replicaAck.at = time.Time{}
 }
 
 // noteReplicaAcknowledged records a validated received cursor from this epoch.
-func noteReplicaAcknowledged(offset uint64) {
-	if replicaAck.at.IsZero() || offset >= replicaAck.offset {
-		replicaAck.offset = offset
-		replicaAck.at = time.Now()
+func (e *Engine) noteReplicaAcknowledged(offset uint64) {
+	if e.replicaAck.at.IsZero() || offset >= e.replicaAck.offset {
+		e.replicaAck.offset = offset
+		e.replicaAck.at = time.Now()
 	}
 }
 
@@ -30,11 +32,16 @@ func noteReplicaAcknowledged(offset uint64) {
 // reports the greatest validated received cursor, its distance from the current
 // stream end and the age of its last confirmation. Age is negative when unknown.
 func ReplicationAcknowledged() (offset, behind uint64, ageMs int64) {
-	if replicaAck.at.IsZero() {
+	return defaultEngine.ReplicationAcknowledged()
+}
+
+// ReplicationAcknowledged is the package's ReplicationAcknowledged on e.
+func (e *Engine) ReplicationAcknowledged() (offset, behind uint64, ageMs int64) {
+	if e.replicaAck.at.IsZero() {
 		return 0, 0, -1
 	}
-	if replicationV2.end > replicaAck.offset {
-		behind = replicationV2.end - replicaAck.offset
+	if e.replicationV2.end > e.replicaAck.offset {
+		behind = e.replicationV2.end - e.replicaAck.offset
 	}
-	return replicaAck.offset, behind, time.Since(replicaAck.at).Milliseconds()
+	return e.replicaAck.offset, behind, time.Since(e.replicaAck.at).Milliseconds()
 }
