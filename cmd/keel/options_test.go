@@ -98,3 +98,21 @@ func TestServerReportsItsDefaultEviction(t *testing.T) {
 	}
 	s.stop(t)
 }
+
+// TestServerEnforcesMaxKeysAtStartup: the key cap reaches the engine through
+// runServer's own Configure, not only through this file's: a server started
+// with -maxkeys 1 holds one key.
+func TestServerEnforcesMaxKeysAtStartup(t *testing.T) {
+	s := startTestServer(t, "-maxkeys", "1")
+	c, r := connectTest(t, s)
+	defer c.Close()
+	for _, key := range []string{"first", "second"} {
+		if got := call(t, c, r, "SET", key, "v"); got != "+OK" {
+			t.Fatalf("SET %s: %s", key, got)
+		}
+	}
+	if got := call(t, c, r, "DBSIZE"); got != ":1" {
+		t.Fatalf("DBSIZE = %s, want :1", got)
+	}
+	s.stop(t)
+}
