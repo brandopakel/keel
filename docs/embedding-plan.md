@@ -840,7 +840,7 @@ plan above leaves a choice open, step 2.5 settles it this way:
   least twice against develop and once against `65ebdbc`. Part 1 ran at 1.003
   to 1.005 against develop on EPYC 7763, and at 0.908 to 0.913 against
   `65ebdbc`, with no more allocations anywhere; ZADD ran at 1.037 to 1.051
-  on EPYC 7763, over 1.04 in five of seven runs, with ZSCORE and SADD at 1.02
+  on EPYC 7763, over 1.04 in six of eight runs, with ZSCORE and SADD at 1.02
   to 1.04.
   On those paths its instructions are develop's but for one load fewer in
   `Keyed.Get` (the policy, now read from the space) and one test in
