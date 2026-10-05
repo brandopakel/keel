@@ -2,9 +2,10 @@
 #
 # The embedding plan (docs/embedding-plan.md) moves every store, the evictor
 # and the log into an engine, a step at a time, and each step adds an
-# indirection to the path a command takes. This job runs BenchmarkCommandPath
-# and BenchmarkCommandPathUnderEviction on the base and the change, on the same
-# runner, and scripts/compare-benchmarks.py compares them.
+# indirection to the path a command takes. This job runs BenchmarkCommandPath,
+# BenchmarkCommandPathUnderEviction and BenchmarkCommandPathWithLog on the base
+# and the change, on the same runner, and scripts/compare-benchmarks.py
+# compares them.
 #
 # How the runs are paired:
 # - Both sides are built with -trimpath, from worktrees whose paths have the
@@ -20,6 +21,12 @@
 #   rounds cancels out of each ratio, and a cost of running second falls on
 #   both sides equally. The comparison fails if the orders do not balance.
 # - Every run executes a fresh copy of its side's binary (see the rounds step).
+# - BenchmarkCommandPathWithLog, the command path with the log open, came with
+#   step 2.3 of the plan. Its file uses only what the package had before, so a
+#   baseline older than it (develop before step 2.3, or 65ebdbc for a
+#   cumulative run) builds the candidate's copy of that one file. Both sides
+#   then run the same benchmark code against their own build, and the
+#   provenance says so. Every other file is each side's own.
 #
 # What fails the job: more allocations per operation on any row, eviction
 # rows whose evictions/op is not sane on both sides, and any row that does not
@@ -113,10 +120,23 @@ jobs:
           for side in base cand; do
             rev=$base; [ "$side" = cand ] && rev=$cand
             git worktree add --detach "$RUNNER_TEMP/$side" "$rev"
+          done
+          # A baseline from before the log-on benchmark builds the candidate's
+          # copy of its file (see the header), or its rows would be missing
+          # from one side.
+          borrowed=''
+          for file in internal/core/command_path_log_bench_test.go; do
+            if [ -f "$RUNNER_TEMP/cand/$file" ] && [ ! -f "$RUNNER_TEMP/base/$file" ]; then
+              cp "$RUNNER_TEMP/cand/$file" "$RUNNER_TEMP/base/$file"
+              borrowed="$borrowed $file"
+            fi
+          done
+          for side in base cand; do
             go -C "$RUNNER_TEMP/$side" test -c -trimpath -o "$RUNNER_TEMP/$side.test" ./internal/core
           done
           { echo "baseline $base"
             echo "candidate $cand"
+            if [ -n "$borrowed" ]; then echo "baseline builds the candidate's$borrowed"; fi
             echo "runner $(uname -srm) cpus $(nproc) $(grep -m1 'model name' /proc/cpuinfo | sed 's/.*: //')"
             go version
             (cd "$RUNNER_TEMP" && sha256sum base.test cand.test)

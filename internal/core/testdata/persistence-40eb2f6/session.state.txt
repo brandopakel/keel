@@ -1,0 +1,46 @@
+bloom "bf" sha256:ead214790436c5f2/1285
+bloom "bf:auto" sha256:3a903d9fd718eb09/205
+bloom "bf:copy" sha256:ead214790436c5f2/1285
+string "c" expires:4102444800999 "39"
+string "c:text" "abc"
+cuckoo "cf" sha256:2ba4ce3e6565b017/4153
+cuckoo "cf:auto" sha256:b53fa1d916742f23/4153
+cms "cms" sha256:8b4f3b013838e76b/2025
+cms "cms:prob" sha256:bbcbde3108300c63/5625
+string "f:3" "v"
+string "f:4" "v"
+zset "geo" "catania" 3.479447370796909e+15 "palermo" 3.479099956230698e+15
+hash "h" "f1" "v1" "f3" "v3" "f4" "v4" "n" "5"
+hash "h:one" "f" "v"
+hll "hll" sha256:eaefe5c20efe8ebd/12306
+hll "hll2" sha256:c37d81964a43343c/12306
+hll "hll3" sha256:734ec204d80e62f4/12306
+list "l" "q" "b"
+list "l:copy" "q" "b"
+string "m:1" expires:4000021600000 "a"
+string "m:2" "b"
+string "m:3" "c"
+morris "mor" sha256:b568379ae0a20882/1033
+morris "mor:prob" sha256:d04f383510650e68/1433
+string "s:ex" expires:4000003600000 "kept"
+string "s:exat" expires:4102444800000 "v"
+string "s:huge" sha256:18a42ab71ef74ce8/5242880
+string "s:plain" expires:4000025200000 "v4"
+string "s:px" expires:4000007200000 "v"
+string "s:pxat" expires:4102444800123 "v"
+set "set" "a" "b" "c"
+string "t:1" expires:4000028800000 "a"
+string "t:2" "1"
+hash "t:3" "f" "v"
+string "t:4" "a"
+string "t:5" "1"
+string "t:6" "v"
+string "t:9" expires:4000032400000 "v"
+zset "t:z" "a" 1
+string "x:bf" expires:4102444800456 "v"
+string "x:hash" "string now"
+list "x:list" "a"
+set "x:set" "m"
+string "x:z" "v"
+zset "z" "b" 10 "d" 4
+zset "z2" "x" 1

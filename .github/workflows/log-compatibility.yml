@@ -1,0 +1,97 @@
+# Log compatibility: a change against its base, both directions.
+#
+# Step 2.3 of the embedding plan (docs/embedding-plan.md) moves the log, its
+# append worker, the rewrite and their counters into core.Engine, and none of
+# it may change a byte of what a server writes. internal/core's golden test
+# (persistence_golden_test.go) holds each build to the logs develop wrote at
+# 40eb2f6. This job checks the same thing with the binaries a user runs, and
+# checks the direction a fixture cannot: the base build replaying the change's
+# logs, which is what a rollback does.
+#
+# scripts/check-log-compatibility.py runs one sequential workload on each
+# build under every fsync policy (always, everysec, no) and append mode
+# (synchronous, worker, concurrent). It requires the log each writes, and the
+# log each rewrites that into, to be the same bytes after normalizing relative
+# expiries and map order; each build to replay the other's written, rewritten,
+# and crashed (kill -9 after writes during a rewrite) logs to the other's
+# keyspace; and a log of the BF and CF forms written before RedisBloom parity
+# to replay and rewrite the same on both.
+name: Log compatibility
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline:
+        description: Revision whose build writes and replays first (default develop)
+        default: develop
+      candidate:
+        description: Revision to check (default the revision this runs on)
+        default: ''
+  pull_request:
+    branches: [develop]
+    paths: ['internal/**', 'cmd/**', 'go.mod', 'go.sum', 'scripts/check-log-compatibility.py',
+            'scripts/test_check_log_compatibility.py', 'scripts/validation_lib.py',
+            '.github/workflows/log-compatibility.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  compatibility:
+    name: Log compatibility / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version-file: go.mod }
+      - name: Script tests
+        run: python3 -m unittest discover -s scripts -p 'test_check_log_compatibility.py' -v
+      - name: Build both sides
+        env:
+          BASELINE: ${{ github.event.pull_request.base.sha || inputs.baseline }}
+          CANDIDATE: ${{ inputs.candidate }}
+        run: |
+          mkdir -p dist/log-compatibility
+          # A branch name from the dispatch input exists only as origin/<name>.
+          resolve() { git rev-parse --verify --quiet "$1^{commit}" || git rev-parse --verify "origin/$1^{commit}"; }
+          base=$(resolve "$BASELINE")
+          cand=$(resolve "${CANDIDATE:-HEAD}")
+          for side in base cand; do
+            rev=$base; [ "$side" = cand ] && rev=$cand
+            git worktree add --detach "$RUNNER_TEMP/$side" "$rev"
+            go -C "$RUNNER_TEMP/$side" build -trimpath -o "$RUNNER_TEMP/keel-$side" ./cmd/keel
+          done
+          { echo "baseline $base"
+            echo "candidate $cand"
+            echo "runner $(uname -srm)"
+            go version
+            (cd "$RUNNER_TEMP" && shasum -a 256 keel-base keel-cand); } | tee dist/log-compatibility/provenance.txt
+      - name: Same logs, replayed both ways
+        run: |
+          python3 scripts/check-log-compatibility.py --baseline "$RUNNER_TEMP/keel-base" \
+            --candidate "$RUNNER_TEMP/keel-cand" --out "$RUNNER_TEMP/log-compatibility"
+      - name: Keep the report
+        if: ${{ !cancelled() }}
+        run: |
+          cp "$RUNNER_TEMP/log-compatibility/report.json" dist/log-compatibility/ || true
+          # Server logs always; the logs themselves (megabytes each) only to
+          # show a failure.
+          (cd "$RUNNER_TEMP/log-compatibility" && find . -name server.log | tar -czf "$GITHUB_WORKSPACE/dist/log-compatibility/server-logs.tar.gz" -T -) || true
+      - name: Keep the logs of a failure
+        if: ${{ failure() }}
+        run: tar -czf dist/log-compatibility/failure.tar.gz -C "$RUNNER_TEMP" log-compatibility
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: ${{ !cancelled() }}
+        with:
+          name: log-compatibility-${{ matrix.os }}
+          path: dist/log-compatibility
+          retention-days: 30

@@ -1,0 +1,14 @@
+bloom "NonScaling" sha256:1feca1827993b428/153
+bloom "bf:007" sha256:c73632e3fb2aab25/101
+bloom "bf:hex" sha256:e7daed6a71729dc4/213
+bloom "bf:huge" sha256:3d1491520b89b97c/520693
+bloom "bf:plus" sha256:299edc40b370fc63/205
+bloom "bf:wide" sha256:91ebc6623b49188f/1378625
+bloom "bf:zeros" sha256:ef1069301737e7b5/101
+cuckoo "bucketsize" sha256:4f6a8f7521b6ea42/313
+cuckoo "cf:1" sha256:e23d4be75b37c635/65
+cuckoo "cf:3" sha256:1fd5eacd32f96f0e/65
+cuckoo "cf:7" sha256:5dab44bb54c73f3b/73
+cuckoo "expansion" sha256:3053131093f1d5df/4153
+cuckoo "maxiterations" sha256:41e76b7e70c2be1a/4153
+bloom "nonscaling" sha256:5ea14c585af00dab/153
