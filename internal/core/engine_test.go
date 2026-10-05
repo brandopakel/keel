@@ -625,6 +625,8 @@ func TestEnginesShareNoRewrite(t *testing.T) {
 	a.rewriteFileWrite = func(*os.File, []byte) (int, error) { return 0, diskErr }
 	bRewrites := b.aof.rewrites
 	aWriteErrors, bWriteErrors := field(a, "aof_rewrite_write_errors"), field(b, "aof_rewrite_write_errors")
+	aErrors, err := strconv.Atoi(aWriteErrors)
+	require.NoError(t, err)
 	var wg sync.WaitGroup
 	for _, side := range []*Engine{a, b} {
 		wg.Add(1)
@@ -652,7 +654,8 @@ func TestEnginesShareNoRewrite(t *testing.T) {
 	assert.Equal(t, "ok", field(b, "aof_last_bgrewrite_status"))
 	assert.Equal(t, "0", field(b, "aof_rewrites_consecutive_failures"))
 	assert.Equal(t, bRewrites+3, b.aof.rewrites)
-	assert.NotEqual(t, aWriteErrors, field(a, "aof_rewrite_write_errors"), "a's failed writes are counted on a")
+	assert.Equal(t, strconv.Itoa(aErrors+3), field(a, "aof_rewrite_write_errors"),
+		"each of a's three rewrites failed on its first write, counted on a")
 	assert.Equal(t, bWriteErrors, field(b, "aof_rewrite_write_errors"), "and not on b")
 	now := time.Now()
 	assert.True(t, a.rewriteLimited(now), "three failures in a row hold a's automatic rewrites back")
