@@ -24,9 +24,10 @@ import (
 // append worker, whose methods record, flush and replay e's writes in e's own
 // file; the rewrite, which walks e's keyspace and replaces e's log; what e's
 // rewrites came to and when the next may start; and the counters that time
-// e's I/O. The replication state is still package variables until step 2.4,
-// and the code that owns it reaches the log and the stores through
-// defaultEngine until then.
+// e's I/O. Step 2.4 moves replication and failover here, a part at a time:
+// first the replica, which applies its primary's stream to e's keyspace and
+// e's log. The primary's stream and the failover term are still package
+// variables until the parts that move them.
 //
 // Until callers open engines of their own (plan phase 3) the server and the
 // tests run on defaultEngine, as the stores run on data_structure.DefaultSpace.
@@ -115,9 +116,34 @@ type Engine struct {
 	aofSync  func(*os.File) error
 	// replicationTransaction is the protocol 2 framing of the transaction
 	// running on the engine, which EXEC opens and closes with the log's frame
-	// of the same block; see transaction.go. The rest of replication is still
-	// the server's, until plan step 2.4.
+	// of the same block; see transaction.go.
 	replicationTransaction replicationBlock
+
+	// The replica: what e has applied of its primary's stream, under the
+	// names it had as package variables - see replication.go,
+	// replication_v2_apply.go and replica_checkpoint.go. A replica applies
+	// its primary's frames to e's keyspace and e's log, and resumes from the
+	// checkpoint beside e's log, so two replicas in one process follow two
+	// primaries.
+	//
+	// replicaApplying is set while e runs commands its primary decided, which
+	// are not client writes: a replica's refusal, the stream's publication
+	// and RESP3 framing all stand aside for them, as for log replay.
+	replicaApplying bool
+	// replicaReady says e's keyspace is a prefix of its primary's stream that
+	// may be read, as of replicaUpdated; replicaEpoch and replicaOffset are
+	// where in the stream that prefix ends.
+	replicaReady   bool
+	replicaEpoch   string
+	replicaOffset  uint64
+	replicaUpdated time.Time
+	// replicaV2 is what a protocol 2 replica holds between frames.
+	replicaV2 replicaV2State
+	// The checkpoint's I/O, which a test replaces on the engine it is
+	// failing: syncFile, os.Rename and syncDir, unless it has.
+	checkpointSync    func(*os.File) error
+	checkpointRename  func(oldPath, newPath string) error
+	checkpointSyncDir func(string) error
 
 	// The rewrite, under the names it had as package variables - see
 	// aof_rewrite.go and aof_rewrite_io.go. It walks e's keyspace and replaces
@@ -181,6 +207,7 @@ func engineIn(space *data_structure.Space) *Engine {
 		aofWrite: writeLog, aofSync: syncLog,
 		rewriteFileWrite: writeLog, rewriteFileSync: syncLog, rewriteOpenLog: openRewrittenLog,
 		rewriteRename: os.Rename, rewriteSyncDir: syncDir, keyCountForRewrite: space.TotalKeys,
+		checkpointSync: syncFile, checkpointRename: os.Rename, checkpointSyncDir: syncDir,
 		// No rewrite has ended yet, which Redis reports as -1.
 		rewriteOutcome: rewriteOutcomeState{lastSeconds: -1},
 	}

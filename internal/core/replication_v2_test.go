@@ -28,6 +28,7 @@ func setupReplicationV2(t *testing.T) {
 		}
 		CloseAOF()
 		resetReplicationV2()
+		defaultEngine.resetReplica()
 		config.ReplicationFeed, config.ReplicaOf, config.ReplicationProtocol, config.AOFFsync = oldFeed, oldReplica, oldProtocol, oldPolicy
 		data_structure.DefaultSpace.SuspendExpiry, data_structure.DefaultSpace.SuspendEviction = oldExpiry, oldEviction
 	})
@@ -131,11 +132,11 @@ func TestReplicationV2LargeSnapshotOperationsAndFrozenFile(t *testing.T) {
 	path := becomeReplicaV2(t)
 	for _, frame := range frames {
 		require.NoError(t, ApplyReplication(frame))
-		require.False(t, replicaReady, "even a complete snapshot must wait for catch-up")
+		require.False(t, defaultEngine.replicaReady, "even a complete snapshot must wait for catch-up")
 	}
 	require.NoError(t, ApplyReplication(delta))
 	require.NoError(t, ApplyReplication(opaque))
-	require.True(t, replicaReady)
+	require.True(t, defaultEngine.replicaReady)
 	require.Equal(t, want, snapshotEverything(t))
 	for key, want := range map[string][]byte{"mor": morris, "cf": cuckoo, "hll": hll} {
 		got, ok := defaultEngine.dumpKey(key)
@@ -182,8 +183,8 @@ func TestReplicationV2CheckpointRestartExpiryAndRewrite(t *testing.T) {
 		gotEpoch, gotOffset := ReplicaResumeCursor()
 		require.Equal(t, epoch, gotEpoch)
 		require.Equal(t, f.To, gotOffset)
-		require.True(t, replicaV2.resumed)
-		require.False(t, replicaReady)
+		require.True(t, defaultEngine.replicaV2.resumed)
+		require.False(t, defaultEngine.replicaReady)
 		require.NoError(t, ApplyReplication(signedV2(ReplicationFrame{Version: 2, Epoch: epoch, From: f.To, To: f.To, CaughtUp: true})))
 		require.Equal(t, "10", run(t, "GET", "counter"))
 		require.NoError(t, StartRewrite())
@@ -235,7 +236,7 @@ func TestReplicationV2CheckpointInvalidFilesFallBack(t *testing.T) {
 			epoch, offset := ReplicaResumeCursor()
 			require.Empty(t, epoch)
 			require.Zero(t, offset)
-			require.False(t, replicaReady)
+			require.False(t, defaultEngine.replicaReady)
 		})
 	}
 }
@@ -250,25 +251,25 @@ func TestReplicationV2CheckpointFaultsGateReads(t *testing.T) {
 			for _, f := range frames {
 				require.NoError(t, ApplyReplication(f))
 			}
-			oldSync, oldCPSync, oldRename, oldDir := defaultEngine.aofSync, checkpointSync, checkpointRename, checkpointSyncDir
+			oldSync, oldCPSync, oldRename, oldDir := defaultEngine.aofSync, defaultEngine.checkpointSync, defaultEngine.checkpointRename, defaultEngine.checkpointSyncDir
 			defer func() {
-				defaultEngine.aofSync, checkpointSync, checkpointRename, checkpointSyncDir = oldSync, oldCPSync, oldRename, oldDir
+				defaultEngine.aofSync, defaultEngine.checkpointSync, defaultEngine.checkpointRename, defaultEngine.checkpointSyncDir = oldSync, oldCPSync, oldRename, oldDir
 			}()
 			failure := errors.New("injected checkpoint failure")
 			switch fault {
 			case "aof-sync":
 				defaultEngine.aofSync = func(*os.File) error { return failure }
 			case "metadata-sync":
-				checkpointSync = func(*os.File) error { return failure }
+				defaultEngine.checkpointSync = func(*os.File) error { return failure }
 			case "rename":
-				checkpointRename = func(string, string) error { return failure }
+				defaultEngine.checkpointRename = func(string, string) error { return failure }
 			case "directory-sync":
-				checkpointSyncDir = func(string) error { return failure }
+				defaultEngine.checkpointSyncDir = func(string) error { return failure }
 			}
 			err := ApplyReplication(signedV2(ReplicationFrame{Version: 2, Epoch: frames[0].Epoch, From: frames[0].To, To: frames[0].To, CaughtUp: true}))
 			require.ErrorIs(t, err, failure)
-			require.False(t, replicaReady)
-			require.False(t, replicaV2.trusted)
+			require.False(t, defaultEngine.replicaReady)
+			require.False(t, defaultEngine.replicaV2.trusted)
 		})
 	}
 }
@@ -312,8 +313,8 @@ func TestReplicationV2RejectsChunkGapsCorruptionAndIncompleteCatchup(t *testing.
 				broken = signedV2(broken)
 			}
 			require.Error(t, ApplyReplication(broken))
-			require.False(t, replicaReady)
-			require.False(t, replicaV2.trusted)
+			require.False(t, defaultEngine.replicaReady)
+			require.False(t, defaultEngine.replicaV2.trusted)
 		})
 	}
 }

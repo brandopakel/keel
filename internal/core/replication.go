@@ -52,12 +52,12 @@ var replication struct {
 	dirtyBytes  int
 	invalidated bool
 }
-var replicaApplying bool
-var replicaReady bool
-var replicaEpoch string
-var replicaOffset uint64
-var replicaUpdated time.Time
 
+// InitReplication starts replication on the default engine once its log is
+// open, as the server does: a primary's stream in a new epoch, and a replica
+// that has applied nothing yet and, if it follows a primary, holds off expiry
+// and eviction and reads the checkpoint it restarts from. The primary's
+// stream is still package state until plan step 2.4 moves it too.
 func InitReplication() error {
 	resetReplicationV2()
 	replication.dirty = make(map[string]struct{})
@@ -66,26 +66,41 @@ func InitReplication() error {
 	replication.offset = 0
 	replication.dirtyBytes = 0
 	replication.invalidated = false
-	replicaReady = false
-	replicaEpoch = ""
-	replicaOffset = 0
-	replicaUpdated = time.Time{}
+	defaultEngine.resetReplica()
 	var id [16]byte
 	if _, err := rand.Read(id[:]); err != nil {
 		return err
 	}
 	replication.epoch = hex.EncodeToString(id[:])
+	return defaultEngine.followPrimary()
+}
+
+// resetReplica forgets everything e has applied from a primary: it is not
+// ready, at no epoch or offset, and holds no partial snapshot, operation or
+// transaction.
+func (e *Engine) resetReplica() {
+	e.resetReplicaV2()
+	e.replicaReady = false
+	e.replicaEpoch = ""
+	e.replicaOffset = 0
+	e.replicaUpdated = time.Time{}
+}
+
+// followPrimary readies e to apply a primary's stream, if it is a replica: its
+// space leaves expiry and eviction to the primary, and under protocol 2 the
+// checkpoint beside its log says where it may resume.
+func (e *Engine) followPrimary() error {
 	if config.ReplicaOf != "" {
-		data_structure.DefaultSpace.SuspendExpiry = true
-		data_structure.DefaultSpace.SuspendEviction = true
+		e.space.SuspendExpiry = true
+		e.space.SuspendEviction = true
 	}
 	if config.ReplicaOf != "" && config.ReplicationProtocol == 2 {
-		return defaultEngine.loadReplicaCheckpoint()
+		return e.loadReplicaCheckpoint()
 	}
 	return nil
 }
 func (e *Engine) noteReplicationDirty(key string) {
-	if config.ReplicationFeed && !e.aof.replaying && !replicaApplying {
+	if config.ReplicationFeed && !e.aof.replaying && !e.replicaApplying {
 		if replication.invalidated {
 			return
 		}
@@ -218,12 +233,17 @@ func (e *Engine) cmdReplicationPull(args []string) []byte {
 // ApplyReplication is called only on the event loop. Any failure is fatal to
 // the replica: it must not serve a partially applied frame. Restart requires a
 // fresh full sync before reads are enabled, regardless of local AOF contents.
-func ApplyReplication(frame ReplicationFrame) error {
+func ApplyReplication(frame ReplicationFrame) error { return defaultEngine.ApplyReplication(frame) }
+
+// ApplyReplication is the package's ApplyReplication on e: the frame is
+// applied to e's keyspace, logged in e's log, and moves e's position in its
+// primary's stream.
+func (e *Engine) ApplyReplication(frame ReplicationFrame) error {
 	if config.ReplicationProtocol == 2 {
-		return applyReplicationV2(frame)
+		return e.applyReplicationV2(frame)
 	}
 	if CurrentTerm() != 0 || frame.Term != 0 {
-		replicaReady = false
+		e.replicaReady = false
 		return errors.New("nonzero terms require replication protocol 2")
 	}
 	if frame.Version != 1 || len(frame.Epoch) != 32 || len(frame.Body) > replicationLimit || frame.Checksum != frameChecksum(frame) {
@@ -232,10 +252,10 @@ func ApplyReplication(frame ReplicationFrame) error {
 	if _, err := hex.DecodeString(frame.Epoch); err != nil {
 		return err
 	}
-	if !frame.Full && (!replicaReady || frame.Epoch != replicaEpoch || frame.From != replicaOffset || frame.To < frame.From) {
+	if !frame.Full && (!e.replicaReady || frame.Epoch != e.replicaEpoch || frame.From != e.replicaOffset || frame.To < frame.From) {
 		return errors.New("replication offset gap")
 	}
-	if frame.Full && replicaReady && frame.From != replicaOffset {
+	if frame.Full && e.replicaReady && frame.From != e.replicaOffset {
 		return errors.New("snapshot response does not match requested offset")
 	}
 	if !frame.Full && ((len(frame.Body) == 0 && frame.To != frame.From) || (len(frame.Body) > 0 && frame.To == frame.From)) {
@@ -264,22 +284,22 @@ func ApplyReplication(frame ReplicationFrame) error {
 	}
 	// The server stops on an apply error. Also gate reads here so partial
 	// state cannot be read or resumed with a delta by another caller.
-	replicaReady = false
-	replicaApplying = true
-	defer func() { replicaApplying = false }()
+	e.replicaReady = false
+	e.replicaApplying = true
+	defer func() { e.replicaApplying = false }()
 	for _, cmd := range commands {
 		var reply replicationReply
-		if err := EvalAndResponse(cmd, &reply); err != nil {
+		if err := e.evalAndResponse(cmd, &reply); err != nil {
 			return err
 		}
 		if len(reply) > 0 && reply[0] == '-' {
 			return fmt.Errorf("replication apply: %s", reply)
 		}
 	}
-	replicaReady = true
-	replicaEpoch = frame.Epoch
-	replicaOffset = frame.To
-	replicaUpdated = time.Now()
+	e.replicaReady = true
+	e.replicaEpoch = frame.Epoch
+	e.replicaOffset = frame.To
+	e.replicaUpdated = time.Now()
 	return nil
 }
 
@@ -300,7 +320,7 @@ var errReadOnlyReplica = errors.New("READONLY You can't write against a read onl
 func (e *Engine) replicaCommandError(cmd string) error {
 	// Applying replicated state and replaying the log are not client writes:
 	// one is a decision the primary already made, the other is recovery.
-	if replicaApplying || e.aof.replaying {
+	if e.replicaApplying || e.aof.replaying {
 		return nil
 	}
 	if config.ReplicaOf != "" {
@@ -311,7 +331,7 @@ func (e *Engine) replicaCommandError(cmd string) error {
 			// election it was never in. Worded as a Redis replica words it.
 			return errReadOnlyReplica
 		}
-		if !answersWithoutData[cmd] && (!replicaReady || time.Since(replicaUpdated) > 5*time.Second) {
+		if !answersWithoutData[cmd] && (!e.replicaReady || time.Since(e.replicaUpdated) > 5*time.Second) {
 			return errors.New("MASTERDOWN replica has no recent primary state")
 		}
 		return nil

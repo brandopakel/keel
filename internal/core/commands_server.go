@@ -165,18 +165,18 @@ func (e *Engine) cmdINFO(args []string) []byte {
 			role = "replica"
 		}
 		ready := 0
-		if replicaReady {
+		if e.replicaReady {
 			ready = 1
 		}
 		age := int64(-1)
-		if !replicaUpdated.IsZero() {
-			age = time.Since(replicaUpdated).Milliseconds()
+		if !e.replicaUpdated.IsZero() {
+			age = time.Since(e.replicaUpdated).Milliseconds()
 		}
-		fmt.Fprintf(&b, "# Replication\r\nprimary_epoch:%s\r\nreplica_epoch:%s\r\nreplication_pending_keys:%d\r\nreplication_epoch_invalidated:%t\r\n", replication.epoch, replicaEpoch, len(replication.dirty), replication.invalidated)
+		fmt.Fprintf(&b, "# Replication\r\nprimary_epoch:%s\r\nreplica_epoch:%s\r\nreplication_pending_keys:%d\r\nreplication_epoch_invalidated:%t\r\n", replication.epoch, e.replicaEpoch, len(replication.dirty), replication.invalidated)
 		offset, history := replication.offset, replication.bytes
 		if config.ReplicationProtocol == 2 {
 			offset, history = replicationV2.end, replicationV2.bytes
-			fmt.Fprintf(&b, "replication_snapshot_bytes:%d\r\nreplica_checkpoint_resumed:%t\r\nreplica_snapshot_received:%d\r\n", replicationV2.snapshotBytes, replicaV2.resumed, replicaV2.snapshotReceived)
+			fmt.Fprintf(&b, "replication_snapshot_bytes:%d\r\nreplica_checkpoint_resumed:%t\r\nreplica_snapshot_received:%d\r\n", replicationV2.snapshotBytes, e.replicaV2.resumed, e.replicaV2.snapshotReceived)
 			// What the primary knows about its replicas. Lag is the distance
 			// a promotion would lose right now; age says whether replication
 			// is alive at all. Neither is a quorum signal - see
@@ -185,7 +185,7 @@ func (e *Engine) cmdINFO(args []string) []byte {
 			fmt.Fprintf(&b, "replication_acked_offset:%d\r\nreplication_lag_bytes:%d\r\nreplication_acked_age_ms:%d\r\n", ackOffset, ackBehind, ackAge)
 		}
 		fmt.Fprintf(&b, "failover_term:%d\r\nfailover_held_term:%d\r\nfailover_fenced:%t\r\nwritable:%t\r\n", CurrentTerm(), HeldTerm(), Fenced(), Writable())
-		fmt.Fprintf(&b, "replication_protocol:%d\r\nrole:%s\r\nreplica_ready:%d\r\nreplica_offset:%d\r\nreplica_last_update_ms:%d\r\nprimary_offset:%d\r\nreplication_history_bytes:%d\r\n\r\n", config.ReplicationProtocol, role, ready, replicaOffset, age, offset, history)
+		fmt.Fprintf(&b, "replication_protocol:%d\r\nrole:%s\r\nreplica_ready:%d\r\nreplica_offset:%d\r\nreplica_last_update_ms:%d\r\nprimary_offset:%d\r\nreplication_history_bytes:%d\r\n\r\n", config.ReplicationProtocol, role, ready, e.replicaOffset, age, offset, history)
 	}
 	if want("server") {
 		fmt.Fprintf(&b, "# Server\r\nkeel_version:%s\r\nredis_version:%s\r\nredis_mode:standalone\r\nresp_version:%d\r\n\r\n",

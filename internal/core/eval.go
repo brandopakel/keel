@@ -141,7 +141,7 @@ func (e *Engine) evalAndResponse(cmd *Command, c io.ReadWriter) error {
 	// and run as RESP2 whatever the command says: what they produce has to be
 	// the same however the command first arrived.
 	saved := e.framing
-	e.framing = framing{replyRESP3: cmd.RESP3 && !e.aof.replaying && !replicaApplying}
+	e.framing = framing{replyRESP3: cmd.RESP3 && !e.aof.replaying && !e.replicaApplying}
 	defer func() { e.framing = saved }()
 
 	// Redis names and counts a command before anything else, a replica's

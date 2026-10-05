@@ -1,0 +1,9 @@
+{
+  "note": "Captured before step 2.4 of the embedding plan moved replication and failover into core.Engine; see replication_golden_test.go.",
+  "source_revision": "9736d8d",
+  "transcript_sha256": {
+    "protocol-1": "8e7eb05e8c95457b622897bc7450e42ffb3ed9d845b937d48fdb5b13ce3f1670",
+    "protocol-2": "8096b2d8d39ed143e466da784013435a39a8d46a009a7615278ccd2883a286ee",
+    "terms": "b5e7f52bdbcd8ce7a4534d853490d0a936cfb9515a7a77449ac77f442a15a4a8"
+  }
+}

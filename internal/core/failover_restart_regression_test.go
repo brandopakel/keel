@@ -69,9 +69,9 @@ func TestNonzeroTermsCannotUseProtocol1(t *testing.T) {
 	require.NoError(t, InitReplication())
 	require.Equal(t, "OK", run(t, "KEEL.PROMOTE", "1"))
 	require.Contains(t, run(t, "KEEL.REPL.PULL", "", "0"), "require replication protocol 2")
-	replicaReady = true
+	defaultEngine.replicaReady = true
 	require.ErrorContains(t, ApplyReplication(ReplicationFrame{Version: 1}), "require replication protocol 2")
-	require.False(t, replicaReady)
+	require.False(t, defaultEngine.replicaReady)
 }
 
 func TestCurrentTermCanBeReadByTransport(t *testing.T) {

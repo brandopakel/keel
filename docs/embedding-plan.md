@@ -3,7 +3,8 @@
 Status: accepted plan, October 2, 2026. Phases 0 and 1 are done (#88, #90), and so are step 2.1,
 the stores, step 2.2, the command scope, and step 2.3, persistence (see "Step
 2.1: the stores", "Step 2.2: the command scope" and "Step 2.3: persistence"
-below).
+below). Step 2.4, replication and failover, is under way (see "Step 2.4:
+replication").
 
 The owner asked for Keel to be usable as a Go library, not only as a server:
 several independent instances per process, safe for concurrent use, a typed
@@ -505,6 +506,142 @@ open, step 2.3 settles it this way:
   default engine, sixteen replication and failover entries for step 2.4, the
   server's INFO hook, and values computed once.
 - **Measured per PR**, as in steps 2.1 and 2.2, now including the log-on
+  benchmark: the paired command-path job runs at least twice against develop
+  and once against `65ebdbc`.
+
+### Step 2.4: replication
+
+Step 2.4 moves into `core.Engine` the state replication and failover keep
+between commands: what a replica has applied of its primary's stream, the
+stream a primary feeds its replicas, and the term that says whether a node may
+write. Nothing a peer can see may change: not a frame's bytes, a snapshot's, a
+checkpoint's or a term file's, not a reply, and not the log a replica writes.
+It takes three PRs, in this order:
+
+1. **The replica** (`replicaApplying`, `replicaReady`, `replicaEpoch`,
+   `replicaOffset`, `replicaUpdated` and `replicaV2`), with the checkpoint's
+   I/O (`checkpointRename`, `checkpointSync`, `checkpointSyncDir`).
+2. **The primary's stream**: protocol 1's dirty keys and history
+   (`replication`), protocol 2's history and snapshot (`replicationV2`) and
+   what its replicas have acknowledged (`replicaAck`).
+3. **Failover**: the term (`failover`) and its file's I/O (`termRename`,
+   `termSync`, `termSyncDir`).
+
+The order follows what reads what. Every command reads the replica's state:
+`evalAndResponse` asks whether its engine is applying a primary's decision
+before framing a reply, and the replica's refusal asks whether it has recent
+state before running a read. And applying a frame is where the step 2.2
+leftover was, a received transaction run through `defaultEngine`. So the
+replica moves first. The checkpoint's I/O moves with it, although the census
+listed it beside the term's: only the replica's apply writes a checkpoint, and
+what it writes is the replica's position. The primary's side reads the replica
+only for whether its engine is applying, which it already asks of the engine
+it publishes from. Failover goes last because both sides read it, a replica
+observing each frame's term and a primary stamping its frames with its own and
+observing its replicas', so once both are methods it moves in one PR, with
+neither side reaching it through `defaultEngine`. Where the plan above leaves a
+choice open, step 2.4 settles it this way:
+
+- **Guardrails first, captured on develop.** The first commit of the first PR
+  adds them, on develop's code at 9736d8d, before anything moves:
+  - `replication_golden_test.go` runs three scenarios under every fsync
+    policy, with synchronous and worker appends, and compares a transcript of
+    each with `testdata/replication-9736d8d`. A protocol 2 primary's stream
+    from its start, a snapshot and the deltas after it (every operation the
+    stream carries, the records written in a command's place, opaque images,
+    a key reaped lazily, transactions of writes, reads, a failed command and
+    expiries), and the refusals of its pulls; then the same engine as a
+    replica applying the snapshot and the deltas, writing its checkpoint,
+    restarting from it and catching up, and refusing a gap, a bad checksum
+    and a protocol 1 frame. A protocol 1 primary's full frame and deltas, and
+    a replica applying them. And promotion, fencing and observed terms, the
+    term file each writes, a restart onto it, the terms frames carry, and a
+    replica learning a term from a frame and refusing an older one. The
+    transcript holds every frame as sent, with its body record by record;
+    every reply to a replication, failover, refused or KEEL.DUMP command;
+    INFO replication field by field; what each applied frame added to the
+    replica's log; the checkpoint; the term file; and the keyspace, which
+    the replica must share with its primary. Random epochs and snapshot
+    identities are named by the order they first appear in, a checksum is
+    checked and written as "ok", ages are left out, a checkpoint's digest is
+    checked against the replica's log, and records are normalized as the
+    persistence golden test normalizes a log. Protocol 1 seals keys from a
+    map, so each key's records in one of its frames are kept together and the
+    keys put in order; so is the one protocol 2 frame that carries PFMERGE's
+    images of several keys, which also come from a map.
+  - `scripts/check-replication-compatibility.py`, run by the Replication
+    compatibility workflow on Linux and macOS, builds the base and the change
+    and, over protocols 1 and 2: pulls from each build by hand and requires
+    the same frames, snapshot, KEEL.DUMP images and INFO replication fields
+    for the same writes; runs every pairing of a base or changed primary with
+    a base or changed replica through a full sync, a delta stream with
+    MULTI/EXEC blocks, acknowledgements that reach the stream's end, a
+    dropped connection resumed from the replica's cursor, a replica crash
+    restarted on the other build (under protocol 2, from the checkpoint the
+    first build wrote) and a primary restart, which starts a new epoch, with
+    the replica's keyspace its primary's after each and the same in every
+    pairing; requires every protocol 2 replica to write the same log,
+    normalized as its frames are, and each build to replay every replica's
+    log; and moves the term file each
+    build writes to the other, requiring the same replies, INFO fields and
+    file bytes. It reuses `check-log-compatibility.py`'s workload and
+    normalization.
+  - `BenchmarkCommandPathWithReplica` is `BenchmarkCommandPathWithLog`'s
+    families and cycle with a protocol 2 feed on and a replica attached
+    in-process; its file uses only what 65ebdbc had, and `command-path.yml`
+    borrows it into an older baseline as it borrows the log-on benchmark. It
+    needs no network: a pull is a command like any other. The timed loop has
+    no pull in it, because a primary publishes every write the same way
+    whether a replica pulls or not, and a pull's cost, a checksummed JSON
+    frame of up to 256 KiB, is per pull and would drown the per-write cost
+    the step touches. After the timer, the stream must have grown by every
+    write measured, in the epoch the replica attached in.
+  - **Negative controls**: three builds broken on purpose. One publishes INCR
+    in lower case, which changes no keyspace and no replica log: the golden
+    test fails (`want "INCR" "c"`, `got "incr" "c"`), and so does the
+    script's wire check (`body 0 (protocol2) differs: record 12`), while its
+    pairings pass, which is why the wire check is there. One writes a
+    version 3 checkpoint: the golden test fails on the checkpoint, and the
+    script on `the candidate did not resume from the baseline's checkpoint`.
+    One ends the term file with a newline, which still parses: the golden
+    test fails on `term file promoted: "3"`, and the script on the replica's
+    term file.
+- **Fields keep their names**, as in steps 2.2 and 2.3: `e.replicaApplying`,
+  `e.replicaReady` and so on, and `replicaV2` is a field of a named type,
+  `replicaV2State`. The checkpoint's I/O hooks are fields too,
+  `e.checkpointSync`, `e.checkpointRename` and `e.checkpointSyncDir`, which
+  `engineIn` sets to `syncFile`, `os.Rename` and `syncDir`.
+- **Methods, and the package's functions on the default engine.**
+  `ApplyReplication` and `ReplicaResumeCursor` keep their signatures and run
+  on the default engine, and are Engine methods of the same name, so the
+  server is unchanged. The rest become methods. `InitReplication` stays a
+  package function until its other half, the primary's stream, moves in the
+  second PR: it starts the default engine's stream and calls the two halves
+  of the replica's start on the default engine, `resetReplica` and
+  `followPrimary`, in the order it always ran them.
+- **A replica applies on its own engine.** A frame's commands run through
+  the applying engine's `evalAndResponse`, and a received transaction
+  through its `runTransaction`, so they are logged in that engine's log and
+  the block is framed there; step 2.2 left this on the default engine.
+- **The role stays config until the second PR.** Whether a node is a
+  replica, feeds a stream, and with which protocol are flags, read from
+  `config` as before. So in the first PR every engine in a process is a
+  replica or none is, and its isolation test makes them all replicas. The
+  second PR, whose isolation test needs a primary and a replica in one
+  process, settles where the role lives.
+- **Isolation.** `TestEnginesShareNoReplica` gives two replicas a log each
+  and the streams of two primaries in epochs of their own, each with a
+  transaction larger than one frame. Applied interleaved, one engine stops
+  inside its transaction while the other catches up, and each holds its own
+  open block, readiness, position and checkpoint. A third replica of the
+  first primary whose disk will not sync its checkpoint stops, through its
+  own I/O alone. Then two fresh replicas apply side by side on goroutines of
+  their own, reading as they go; each ends with its own primary's keyspace,
+  writes its own checkpoint, and restarted on its own log resumes from it.
+  Protocol 1 does the same side by side. The default engine, a replica as
+  well, applies none of it. The race job runs it under `-race`.
+- **Census.** The first PR removes the nine entries it moves.
+- **Measured per PR**, as in steps 2.1 to 2.3, now including the replica-on
   benchmark: the paired command-path job runs at least twice against develop
   and once against `65ebdbc`.
 

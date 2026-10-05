@@ -215,4 +215,4 @@ func hasNonzeroMantissa(s string) bool {
 // filters it holds, so a replayed reservation the earlier build would have
 // accepted is read as that build read it. What a client sends is held to
 // RedisBloom's rules, and logged in a form that replays to the same filter.
-func (e *Engine) replayingFilterLog() bool { return e.aof.replaying || replicaApplying }
+func (e *Engine) replayingFilterLog() bool { return e.aof.replaying || e.replicaApplying }

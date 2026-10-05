@@ -357,7 +357,7 @@ func (e *Engine) expireCommand(name string, args []string, scale int64, absolute
 		e.aof.skip = true
 		return constant.RespZero
 	}
-	if at <= time.Now().UnixMilli() && !e.aof.replaying && !replicaApplying {
+	if at <= time.Now().UnixMilli() && !e.aof.replaying && !e.replicaApplying {
 		owner.Delete(args[0])
 		e.aofRecord("DEL", args[0])
 		return constant.RespOne

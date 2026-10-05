@@ -25,9 +25,9 @@ type replicaCheckpoint struct {
 	SHA256  string `json:"aof_sha256"`
 }
 
-var checkpointRename = os.Rename
-var checkpointSyncDir = syncDir
-var checkpointSync = func(f *os.File) error { return f.Sync() }
+// syncFile is a checkpoint's sync, unless a test has replaced the engine's
+// checkpointSync.
+func syncFile(f *os.File) error { return f.Sync() }
 
 func (e *Engine) openAOFDigest(path string) error {
 	e.aof.digest = nil
@@ -87,10 +87,10 @@ func (e *Engine) loadReplicaCheckpoint() error {
 	if _, err := hex.DecodeString(cp.Epoch); err != nil {
 		return nil
 	}
-	replicaEpoch, replicaOffset = cp.Epoch, cp.Offset
-	replicaV2.trusted = true
-	replicaV2.resumed = true
-	replicaV2.checkpoint = cp
+	e.replicaEpoch, e.replicaOffset = cp.Epoch, cp.Offset
+	e.replicaV2.trusted = true
+	e.replicaV2.resumed = true
+	e.replicaV2.checkpoint = cp
 	return nil
 }
 
@@ -103,8 +103,8 @@ func (e *Engine) saveReplicaCheckpoint() error {
 	if err := e.flushAOF(true); err != nil {
 		return err
 	}
-	cp := replicaCheckpoint{Version: 2, Primary: config.ReplicaOf, Epoch: replicaEpoch, Offset: replicaOffset, Bytes: e.aof.digestBytes, SHA256: e.currentAOFDigest()}
-	if cp == replicaV2.checkpoint {
+	cp := replicaCheckpoint{Version: 2, Primary: config.ReplicaOf, Epoch: e.replicaEpoch, Offset: e.replicaOffset, Bytes: e.aof.digestBytes, SHA256: e.currentAOFDigest()}
+	if cp == e.replicaV2.checkpoint {
 		return nil
 	}
 	body, err := json.Marshal(cp)
@@ -118,7 +118,7 @@ func (e *Engine) saveReplicaCheckpoint() error {
 	tmp := f.Name()
 	defer os.Remove(tmp)
 	if _, err = f.Write(body); err == nil {
-		err = checkpointSync(f)
+		err = e.checkpointSync(f)
 	}
 	if closeErr := f.Close(); err == nil {
 		err = closeErr
@@ -126,21 +126,24 @@ func (e *Engine) saveReplicaCheckpoint() error {
 	if err != nil {
 		return err
 	}
-	if err = checkpointRename(tmp, e.aof.path+".replica-checkpoint"); err != nil {
+	if err = e.checkpointRename(tmp, e.aof.path+".replica-checkpoint"); err != nil {
 		return err
 	}
-	if err = checkpointSyncDir(filepath.Dir(e.aof.path)); err != nil {
+	if err = e.checkpointSyncDir(filepath.Dir(e.aof.path)); err != nil {
 		return err
 	}
-	replicaV2.checkpoint = cp
+	e.replicaV2.checkpoint = cp
 	return nil
 }
 
 // Reads replica cursor state that applyReplicationV2 mutates on the command
 // thread. Callers must invoke this before the replica transport worker starts.
-func ReplicaResumeCursor() (string, uint64) {
-	if config.ReplicationProtocol == 2 && replicaV2.trusted {
-		return replicaEpoch, replicaOffset
+func ReplicaResumeCursor() (string, uint64) { return defaultEngine.ReplicaResumeCursor() }
+
+// ReplicaResumeCursor is the package's ReplicaResumeCursor on e.
+func (e *Engine) ReplicaResumeCursor() (string, uint64) {
+	if config.ReplicationProtocol == 2 && e.replicaV2.trusted {
+		return e.replicaEpoch, e.replicaOffset
 	}
 	return "", 0
 }

@@ -394,13 +394,15 @@ func TestTransactionReplyBeyondTheLimitClosesAfterRunning(t *testing.T) {
 }
 
 func TestTransactionOnAReplica(t *testing.T) {
-	oldReplica, oldReady, oldUpdated := config.ReplicaOf, replicaReady, replicaUpdated
-	t.Cleanup(func() { config.ReplicaOf, replicaReady, replicaUpdated = oldReplica, oldReady, oldUpdated })
+	oldReplica, oldReady, oldUpdated := config.ReplicaOf, defaultEngine.replicaReady, defaultEngine.replicaUpdated
+	t.Cleanup(func() {
+		config.ReplicaOf, defaultEngine.replicaReady, defaultEngine.replicaUpdated = oldReplica, oldReady, oldUpdated
+	})
 	s := newSession(t)
-	config.ReplicaOf, replicaReady, replicaUpdated = "primary.test:6379", true, time.Now()
-	replicaApplying = true
+	config.ReplicaOf, defaultEngine.replicaReady, defaultEngine.replicaUpdated = "primary.test:6379", true, time.Now()
+	defaultEngine.replicaApplying = true
 	run(t, "SET", "k", "from-primary")
-	replicaApplying = false
+	defaultEngine.replicaApplying = false
 
 	s.send("MULTI")
 	require.Equal(t, "-READONLY You can't write against a read only replica.\r\n", s.send("SET", "k", "local"))
@@ -415,7 +417,7 @@ func TestTransactionOnAReplica(t *testing.T) {
 	// Losing the primary between queueing and EXEC refuses the whole of it.
 	s.send("MULTI")
 	s.send("GET", "k")
-	replicaUpdated = time.Now().Add(-time.Minute)
+	defaultEngine.replicaUpdated = time.Now().Add(-time.Minute)
 	require.Equal(t, "-EXECABORT Transaction discarded because of: MASTERDOWN replica has no recent primary state\r\n", s.send("EXEC"))
 }
 
@@ -438,10 +440,10 @@ func TestReplicaAndFencedPrimaryNameAndCountFirst(t *testing.T) {
 		require.Equal(t, "-EXECABORT Transaction discarded because of previous errors.\r\n", s.send("EXEC"))
 	}
 	t.Run("replica without its primary", func(t *testing.T) {
-		oldReplica, oldReady := config.ReplicaOf, replicaReady
-		t.Cleanup(func() { config.ReplicaOf, replicaReady = oldReplica, oldReady })
+		oldReplica, oldReady := config.ReplicaOf, defaultEngine.replicaReady
+		t.Cleanup(func() { config.ReplicaOf, defaultEngine.replicaReady = oldReplica, oldReady })
 		ResetStores()
-		config.ReplicaOf, replicaReady = "primary.test:6379", false
+		config.ReplicaOf, defaultEngine.replicaReady = "primary.test:6379", false
 		check(t, "-READONLY You can't write against a read only replica.\r\n")
 		require.Equal(t, "-MASTERDOWN replica has no recent primary state\r\n", string(rawReply(t, "GET", "k")))
 	})
@@ -681,7 +683,7 @@ func TestReplicationV2DeliversATransactionWhole(t *testing.T) {
 	require.Equal(t, large, run(t, "GET", "first"))
 	require.Equal(t, large, run(t, "GET", "last"))
 	require.Equal(t, int64(1), run(t, "BF.EXISTS", "filter", "member"))
-	require.True(t, replicaReady)
+	require.True(t, defaultEngine.replicaReady)
 
 	// The replica frames the block in its own log, and replays it.
 	require.NoError(t, CloseAOF())
@@ -733,7 +735,7 @@ func TestReplicationV2RefusesMalformedTransactions(t *testing.T) {
 			base := frames[0].To
 			f := signedV2(ReplicationFrame{Version: 2, Epoch: frames[0].Epoch, From: base, To: base + uint64(len(body)), Body: []byte(body), CaughtUp: true})
 			require.Error(t, ApplyReplication(f))
-			require.False(t, replicaReady)
+			require.False(t, defaultEngine.replicaReady)
 			require.Nil(t, defaultEngine.dictStore.Peek("k"))
 		})
 	}

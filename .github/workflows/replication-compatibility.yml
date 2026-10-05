@@ -1,0 +1,102 @@
+# Replication compatibility: a change against its base, both directions.
+#
+# Step 2.4 of the embedding plan (docs/embedding-plan.md) moves replication and
+# failover into core.Engine, and none of it may change what a peer sees.
+# internal/core's golden test (replication_golden_test.go) holds each build to
+# the frames, replies, replica logs, checkpoints and term files develop wrote
+# at 9736d8d. This job checks the same thing with the binaries a user runs,
+# and checks what a fixture cannot: a build replicating to the other one, in
+# each direction, which is what an upgrade or a rollback of one node in a pair
+# does.
+#
+# scripts/check-replication-compatibility.py, over protocols 1 and 2:
+# - pulls from each build by hand and requires the same frames, snapshot,
+#   KEEL.DUMP images and INFO replication fields for the same writes;
+# - runs every pairing of a baseline or candidate primary with a baseline or
+#   candidate replica through a full sync, a delta stream with MULTI/EXEC
+#   blocks, acknowledgements, a dropped connection, a replica crash restarted
+#   on the other build (from the other build's checkpoint, under protocol 2)
+#   and a primary restart, with the replica's keyspace the primary's after each
+#   and the same in every pairing; under protocol 2 every replica writes the
+#   same log, and each build replays every replica's log;
+# - and moves a term file each build writes to the other, requiring the same
+#   replies, INFO fields and file bytes.
+name: Replication compatibility
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline:
+        description: Revision of the first build (default develop)
+        default: develop
+      candidate:
+        description: Revision to check (default the revision this runs on)
+        default: ''
+  pull_request:
+    branches: [develop]
+    paths: ['internal/**', 'cmd/**', 'go.mod', 'go.sum', 'scripts/check-replication-compatibility.py',
+            'scripts/test_check_replication_compatibility.py', 'scripts/check-log-compatibility.py',
+            'scripts/check-replication-v2.py', 'scripts/validation_lib.py',
+            '.github/workflows/replication-compatibility.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  compatibility:
+    name: Replication compatibility / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version-file: go.mod }
+      - name: Script tests
+        run: python3 -m unittest discover -s scripts -p 'test_check_replication_compatibility.py' -v
+      - name: Build both sides
+        env:
+          BASELINE: ${{ github.event.pull_request.base.sha || inputs.baseline }}
+          CANDIDATE: ${{ inputs.candidate }}
+        run: |
+          mkdir -p dist/replication-compatibility
+          # A branch name from the dispatch input exists only as origin/<name>.
+          resolve() { git rev-parse --verify --quiet "$1^{commit}" || git rev-parse --verify "origin/$1^{commit}"; }
+          base=$(resolve "$BASELINE")
+          cand=$(resolve "${CANDIDATE:-HEAD}")
+          for side in base cand; do
+            rev=$base; [ "$side" = cand ] && rev=$cand
+            git worktree add --detach "$RUNNER_TEMP/$side" "$rev"
+            go -C "$RUNNER_TEMP/$side" build -trimpath -o "$RUNNER_TEMP/keel-$side" ./cmd/keel
+          done
+          { echo "baseline $base"
+            echo "candidate $cand"
+            echo "runner $(uname -srm)"
+            go version
+            (cd "$RUNNER_TEMP" && shasum -a 256 keel-base keel-cand); } | tee dist/replication-compatibility/provenance.txt
+      - name: Same frames, replicated both ways
+        run: |
+          python3 scripts/check-replication-compatibility.py --baseline "$RUNNER_TEMP/keel-base" \
+            --candidate "$RUNNER_TEMP/keel-cand" --out "$RUNNER_TEMP/replication-compatibility"
+      - name: Keep the report
+        if: ${{ !cancelled() }}
+        run: |
+          cp "$RUNNER_TEMP/replication-compatibility/report.json" dist/replication-compatibility/ || true
+          # Server logs always; the logs themselves only to show a failure.
+          (cd "$RUNNER_TEMP/replication-compatibility" && find . -name server.log | tar -czf "$GITHUB_WORKSPACE/dist/replication-compatibility/server-logs.tar.gz" -T -) || true
+      - name: Keep the logs of a failure
+        if: ${{ failure() }}
+        run: tar -czf dist/replication-compatibility/failure.tar.gz -C "$RUNNER_TEMP" replication-compatibility
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: ${{ !cancelled() }}
+        with:
+          name: replication-compatibility-${{ matrix.os }}
+          path: dist/replication-compatibility
+          retention-days: 30
