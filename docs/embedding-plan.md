@@ -416,6 +416,13 @@ open, step 2.3 settles it this way:
   where replay holds off eviction and expiry; `AppendAdmission` and its reply
   bounds read the engine's stores. Admission still reads its limits from
   config, as the default engine's space does, until step 2.5.
+- **No indirect call per command.** `evalAndResponse` deferred `aofEnd()`,
+  which the compiler calls directly at each return. Deferred as the method
+  `e.aofEnd()`, it was wrapped in a closure and called through it on every
+  command, which measured as about 1 to 3% of the command path and was the
+  largest cost of the move. It is now called at each return instead, after
+  the reply is written, as the deferred call ran; no panic is recovered on
+  the way out of a command, so the two do not differ.
 - **Replay's leniency is the replaying engine's.** A log may hold integers
   written before canonical spelling was enforced, so `counterInteger` accepts
   them while its engine replays. It and the readers built on it
