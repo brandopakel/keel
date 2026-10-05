@@ -428,7 +428,7 @@ func (e *Engine) flushAOF(closing bool) error {
 		}
 		if !closing && config.AOFFsync == config.FsyncEverySec {
 			result := make(chan error, 1)
-			file, syncFile := e.aof.file, e.aofSync
+			file, syncFile, stats := e.aof.file, e.aofSync, &e.appendSyncStats
 			wake := e.rewriteWake
 			e.aof.syncPending = result
 			e.aof.syncOffset = e.appendWritten
@@ -436,7 +436,7 @@ func (e *Engine) flushAOF(closing bool) error {
 			// Writes during this Sync stay dirty and require another sync.
 			e.aof.dirty = false
 			go func() {
-				result <- timedPersistenceSync(&appendSyncStats, file, syncFile)
+				result <- timedPersistenceSync(stats, file, syncFile)
 				if wake != nil {
 					wake()
 				}
@@ -444,7 +444,7 @@ func (e *Engine) flushAOF(closing bool) error {
 			e.appendCompleted = e.appendWritten
 			return nil
 		}
-		if err := timedPersistenceSync(&appendSyncStats, e.aof.file, e.aofSync); err != nil {
+		if err := timedPersistenceSync(&e.appendSyncStats, e.aof.file, e.aofSync); err != nil {
 			e.aof.failed = err
 			return err
 		}

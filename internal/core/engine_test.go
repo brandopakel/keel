@@ -352,6 +352,8 @@ func TestEnginesShareNoLog(t *testing.T) {
 	require.NoError(t, b.FlushAOF())
 	assert.Contains(t, on(t, a, "INFO", "persistence"), "aof_last_write_status:err")
 	assert.Contains(t, on(t, b, "INFO", "persistence"), "aof_last_write_status:ok")
+	assert.Contains(t, on(t, a, "INFO", "persistence"), "aof_write_errors:1\r\n", "a counts its failed write")
+	assert.Contains(t, on(t, b, "INFO", "persistence"), "aof_write_errors:0\r\n", "and b does not")
 	require.ErrorIs(t, a.CloseAOF(), diskErr)
 	a.aofWrite = writeLog
 	a.resetStores() // a's next log starts from an empty keyspace
@@ -472,8 +474,9 @@ func TestEnginesShareNoLog(t *testing.T) {
 // wakes the loop that drives that engine. A failing disk under one engine's
 // rewrite, a key ceiling it hits, the keys written while it runs, a rewrite
 // its EXEC schedules, a directory sync its rename leaves pending, what its
-// rewrites come to and the wait they earn are that engine's alone, whether
-// the engines rewrite one after the other or side by side.
+// rewrites come to, the wait they earn and the I/O they are timed by are that
+// engine's alone, whether the engines rewrite one after the other or side by
+// side.
 func TestEnginesShareNoRewrite(t *testing.T) {
 	ResetStores()
 	dir := t.TempDir()
@@ -617,10 +620,11 @@ func TestEnginesShareNoRewrite(t *testing.T) {
 	// Side by side, each on a goroutine of its own and written to while it
 	// rewrites: a's rewrites fail on a's disk three times running, which earns
 	// a's automatic rewrites Redis's wait, while b's succeed. Each engine's
-	// INFO reports its own outcome, and each log still replays to its own
-	// engine.
+	// INFO reports its own outcome and I/O counters, and each log still
+	// replays to its own engine.
 	a.rewriteFileWrite = func(*os.File, []byte) (int, error) { return 0, diskErr }
 	bRewrites := b.aof.rewrites
+	aWriteErrors, bWriteErrors := field(a, "aof_rewrite_write_errors"), field(b, "aof_rewrite_write_errors")
 	var wg sync.WaitGroup
 	for _, side := range []*Engine{a, b} {
 		wg.Add(1)
@@ -648,6 +652,8 @@ func TestEnginesShareNoRewrite(t *testing.T) {
 	assert.Equal(t, "ok", field(b, "aof_last_bgrewrite_status"))
 	assert.Equal(t, "0", field(b, "aof_rewrites_consecutive_failures"))
 	assert.Equal(t, bRewrites+3, b.aof.rewrites)
+	assert.NotEqual(t, aWriteErrors, field(a, "aof_rewrite_write_errors"), "a's failed writes are counted on a")
+	assert.Equal(t, bWriteErrors, field(b, "aof_rewrite_write_errors"), "and not on b")
 	now := time.Now()
 	assert.True(t, a.rewriteLimited(now), "three failures in a row hold a's automatic rewrites back")
 	assert.False(t, b.rewriteLimited(now), "and not b's")

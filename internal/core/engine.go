@@ -22,10 +22,10 @@ import (
 // protocol included, and the budget the transport running it reserves from.
 // Step 2.3 moves the persistence state here, a part at a time: the log and its
 // append worker, whose methods record, flush and replay e's writes in e's own
-// file; the rewrite, which walks e's keyspace and replaces e's log; and what
-// e's rewrites came to and when the next may start. The I/O counters are
-// package variables until the last part of step 2.3, and replication's until
-// step 2.4; the code that owns them reaches the log and the stores through
+// file; the rewrite, which walks e's keyspace and replaces e's log; what e's
+// rewrites came to and when the next may start; and the counters that time
+// e's I/O. The replication state is still package variables until step 2.4,
+// and the code that owns it reaches the log and the stores through
 // defaultEngine until then.
 //
 // Until callers open engines of their own (plan phase 3) the server and the
@@ -157,6 +157,12 @@ type Engine struct {
 	rewriteBudgetAborts uint64
 	snapshotRetryAt     time.Time
 	unsyncedLogDir      string
+
+	// The I/O counters INFO persistence reports, for e's log and e's rewrite;
+	// see persistence_io_stats.go.
+	appendWriteStats, appendSyncStats           persistenceIOStats
+	rewriteWriteStats, rewriteSyncStats         persistenceIOStats
+	rewriteFinalSyncStats, rewriteFinalizeStats persistenceIOStats
 }
 
 // defaultEngine is the engine the server and the tests run on until each

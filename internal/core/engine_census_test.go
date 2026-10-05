@@ -28,7 +28,6 @@ const (
 
 	// Until the step that moves it.
 	defaultInstance = "the server's engine until callers open their own (plan step 2.7)"
-	persistence     = "the log, the rewrite or their I/O and counters; becomes engine state (plan step 2.3)"
 	replicated      = "replication or failover state, or its I/O; becomes engine state (plan step 2.4)"
 	transport       = "a hook the server installs for INFO; goes when the server renders INFO (plan phase 6)"
 )
@@ -37,10 +36,6 @@ const (
 // the reason each one is allowed.
 var packageVars = map[string]string{
 	"defaultEngine": defaultInstance,
-
-	"appendWriteStats": persistence, "appendSyncStats": persistence,
-	"rewriteWriteStats": persistence, "rewriteSyncStats": persistence,
-	"rewriteFinalSyncStats": persistence, "rewriteFinalizeStats": persistence,
 
 	"replication": replicated, "replicationV2": replicated, "replicaV2": replicated, "replicaAck": replicated,
 	"replicaApplying": replicated, "replicaReady": replicated, "replicaEpoch": replicated,

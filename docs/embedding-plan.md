@@ -1,9 +1,9 @@
 # Embedding plan: Keel as a Go library
 
 Status: accepted plan, October 2, 2026. Phases 0 and 1 are done (#88, #90), and so are step 2.1,
-the stores, and step 2.2, the command scope (see "Step 2.1: the stores" and
-"Step 2.2: the command scope" below). Step 2.3, persistence, is under way (see
-"Step 2.3: persistence").
+the stores, step 2.2, the command scope, and step 2.3, persistence (see "Step
+2.1: the stores", "Step 2.2: the command scope" and "Step 2.3: persistence"
+below).
 
 The owner asked for Keel to be usable as a Go library, not only as a server:
 several independent instances per process, safe for concurrent use, a typed
@@ -464,6 +464,10 @@ open, step 2.3 settles it this way:
   they earn, hold back no other engine's rewrites, a scheduled rewrite starts
   on the engine whose EXEC scheduled it, and each engine's INFO reports its
   own.
+- **The I/O counters** are six fields of each engine, and INFO persistence
+  reports the engine's own. A worker is handed the counter it times before it
+  starts, as it is handed its file and its hook, so it touches nothing of the
+  engine.
 - **Until a part moves**, the code that owns it reaches what has moved through
   `defaultEngine`, as step 2.1's leftovers reached the stores: after the first
   PR, the rewrite read the server's log that way. The rewrite was the
@@ -489,10 +493,15 @@ open, step 2.3 settles it this way:
   by side, written to while they do, one failing three times running on its
   own disk and the other succeeding: each engine's INFO reports its own
   outcome, only the failing one is held back by the retry limit, and each log
-  replays to its own engine. The race job runs them under `-race`.
+  replays to its own engine; each engine's write errors, on its log and on
+  its rewrite, are counted on that engine. The race job runs them under
+  `-race`.
 - **Census.** Each PR removes the entries it moves. The first removes the ten
   of the log and its worker, and `replicationTransaction`; the second the
-  fourteen of the rewrite and what outlives it.
+  fourteen of the rewrite and what outlives it; the third the six counters,
+  and with them the census's `persistence` reason. What remains is the
+  default engine, sixteen replication and failover entries for step 2.4, the
+  server's INFO hook, and values computed once.
 - **Measured per PR**, as in steps 2.1 and 2.2, now including the log-on
   benchmark: the paired command-path job runs at least twice against develop
   and once against `65ebdbc`.

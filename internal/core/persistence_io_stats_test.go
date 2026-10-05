@@ -70,7 +70,7 @@ func TestPersistenceIOStatsSupportConcurrentCompletionAndObservation(t *testing.
 	require.Zero(t, stats.active.Load())
 	require.Zero(t, stats.errors.Load())
 	var out strings.Builder
-	persistenceIOInfo(&out)
+	defaultEngine.persistenceIOInfo(&out)
 	for _, prefix := range []string{"aof_write", "aof_sync", "aof_rewrite_write", "aof_rewrite_sync", "aof_rewrite_final_sync", "aof_rewrite_finalize"} {
 		for _, field := range []string{"inflight", "calls", "errors", "total_usec", "max_usec", "last_usec", "slow_calls", "slow_last_usec", "slow_last_unix_usec"} {
 			require.Contains(t, out.String(), prefix+"_"+field+":")
