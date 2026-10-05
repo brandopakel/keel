@@ -65,13 +65,13 @@ func TestRedisIntegerReadsAsRedisDoes(t *testing.T) {
 // RedisBloom refuses - applies there too, with no error to stop the replica.
 func TestFilterCommandsFromAnEarlierPrimaryApply(t *testing.T) {
 	ResetStores()
-	t.Cleanup(func() { replicaApplying = false; ResetStores() })
-	replicaApplying = true
+	t.Cleanup(func() { defaultEngine.replicaApplying = false; ResetStores() })
+	defaultEngine.replicaApplying = true
 	for _, args := range legacyBloomLog {
 		reply := rawReply(t, args[0], args[1:]...)
 		require.NotEqual(t, byte('-'), reply[0], "%q answered %q", args, reply)
 	}
-	replicaApplying = false
+	defaultEngine.replicaApplying = false
 	_, each := dumpImages(t, legacyBloomKeys)
 	want := loadRedisBloomPersistence(t)
 	for key, image := range want.LegacyEach {

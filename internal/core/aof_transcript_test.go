@@ -209,7 +209,7 @@ func TestAOFTranscriptReplicationPreservesChunkedPrefixes(t *testing.T) {
 	for _, frame := range append(snapshot, deltas...) {
 		require.NoError(t, ApplyReplication(frame))
 	}
-	require.True(t, replicaReady)
+	require.True(t, defaultEngine.replicaReady)
 	require.Equal(t, "2", run(t, "GET", "counter"), "stream drains must not duplicate previous commands")
 	require.Equal(t, value, run(t, "GET", "large"))
 	gotTTL, ok := defaultEngine.dictStore.GetExpiry("large")

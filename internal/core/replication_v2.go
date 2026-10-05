@@ -54,10 +54,9 @@ func resetReplicationV2() {
 	replicationV2.bytes = 0
 	replicationV2.snapshotRequested = false
 	replicationV2.failed = nil
-	resetReplicaV2()
 }
 func (e *Engine) replicationV2Enabled() bool {
-	return config.ReplicationFeed && config.ReplicationProtocol == 2 && !e.aof.replaying && !replicaApplying
+	return config.ReplicationFeed && config.ReplicationProtocol == 2 && !e.aof.replaying && !e.replicaApplying
 }
 
 func (e *Engine) invalidateReplicationV2() {

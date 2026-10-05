@@ -72,7 +72,7 @@ func TestReplicationCanonicalImagesAndOrdering(t *testing.T) {
 	require.Contains(t, string(rawReply(t, "SET", "forbidden", "v")), "READONLY")
 	require.Nil(t, defaultEngine.dictStore.Peek("forbidden"))
 	require.Error(t, ApplyReplication(firstDeltaWithGap(second)))
-	replicaUpdated = time.Now().Add(-6 * time.Second)
+	defaultEngine.replicaUpdated = time.Now().Add(-6 * time.Second)
 	require.Contains(t, string(rawReply(t, "GET", "num")), "MASTERDOWN")
 }
 func firstDeltaWithGap(f ReplicationFrame) ReplicationFrame {
@@ -85,10 +85,10 @@ func firstDeltaWithGap(f ReplicationFrame) ReplicationFrame {
 func TestReplicationRejectsMalformedSnapshotBeforeMutation(t *testing.T) {
 	ResetStores()
 	run(t, "SET", "sentinel", "present")
-	oldReady := replicaReady
-	replicaReady = false
+	oldReady := defaultEngine.replicaReady
+	defaultEngine.replicaReady = false
 	oldReplica := config.ReplicaOf
-	defer func() { config.ReplicaOf = oldReplica; replicaReady = oldReady }()
+	defer func() { config.ReplicaOf = oldReplica; defaultEngine.replicaReady = oldReady }()
 	config.ReplicaOf = "test:1"
 	f := ReplicationFrame{Version: 1, Epoch: "0123456789abcdef0123456789abcdef", Full: true, Body: []byte("*1\r\n$7\r\nFLUSHDB\r\n*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$999999999\r\n")}
 	f.Checksum = frameChecksum(f)
@@ -136,17 +136,17 @@ func TestReplicationApplyFailureDisablesReadsUntilFullSync(t *testing.T) {
 	full.Checksum = frameChecksum(full)
 	require.NoError(t, ApplyReplication(full))
 	require.Equal(t, "original", run(t, "GET", "k"))
-	updated := replicaUpdated
+	updated := defaultEngine.replicaUpdated
 	broken := ReplicationFrame{Version: 1, Epoch: full.Epoch, From: 1, To: 2}
 	broken.Body = appendCommand(nil, "DEL", "k")
 	broken.Body = appendCommand(broken.Body, "SET", "k") // valid RESP, invalid command arity
 	broken.Checksum = frameChecksum(broken)
 	require.ErrorContains(t, ApplyReplication(broken), "replication apply")
 	require.Nil(t, defaultEngine.dictStore.Peek("k"), "the first command applied before the second failed")
-	require.False(t, replicaReady)
-	require.False(t, replicaApplying)
-	require.Equal(t, uint64(1), replicaOffset)
-	require.Equal(t, updated, replicaUpdated)
+	require.False(t, defaultEngine.replicaReady)
+	require.False(t, defaultEngine.replicaApplying)
+	require.Equal(t, uint64(1), defaultEngine.replicaOffset)
+	require.Equal(t, updated, defaultEngine.replicaUpdated)
 	require.Contains(t, string(rawReply(t, "GET", "k")), "MASTERDOWN")
 	broken.Body = appendCommand(nil, "SET", "k", "replacement")
 	broken.Checksum = frameChecksum(broken)

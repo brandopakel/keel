@@ -238,15 +238,15 @@ func TestAReplicaRefusesFramesFromAnOlderTerm(t *testing.T) {
 	err := ApplyReplication(stale)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "below the known term")
-	require.False(t, replicaReady, "a rejected frame must not leave the replica readable")
+	require.False(t, defaultEngine.replicaReady, "a rejected frame must not leave the replica readable")
 
 	// Rejecting it also untrusts the replica, so it cannot simply carry on from
 	// a frame that happens to carry an acceptable term afterwards. Recovering
 	// means a fresh synchronisation, which is the same answer the checkpoint and
 	// checksum guards give: a replica that has been lied to starts over.
-	require.False(t, replicaV2.trusted)
+	require.False(t, defaultEngine.replicaV2.trusted)
 	current := signedV2(ReplicationFrame{Version: 2, Epoch: epoch, From: base, To: base, CaughtUp: true, Term: 6})
 	err = ApplyReplication(current)
 	require.Error(t, err, "a delta must not resume after a rejected frame")
-	require.False(t, replicaReady)
+	require.False(t, defaultEngine.replicaReady)
 }
