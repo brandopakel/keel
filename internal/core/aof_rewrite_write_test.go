@@ -16,10 +16,10 @@ func TestBlockedRewriteWriteKeepsServingAndReconciles(t *testing.T) {
 	ResetStores()
 	path := filepath.Join(t.TempDir(), "write.aof")
 	require.NoError(t, OpenAOF(path))
-	oldWrite, oldWake := rewriteFileWrite, rewriteWake
+	oldWrite, oldWake := defaultEngine.rewriteFileWrite, defaultEngine.rewriteWake
 	release, started, wake := make(chan struct{}), make(chan struct{}), make(chan struct{}, 1)
 	released := false
-	rewriteFileWrite = func(f *os.File, body []byte) (int, error) {
+	defaultEngine.rewriteFileWrite = func(f *os.File, body []byte) (int, error) {
 		select {
 		case <-started:
 		default:
@@ -39,7 +39,7 @@ func TestBlockedRewriteWriteKeepsServingAndReconciles(t *testing.T) {
 			close(release)
 		}
 		require.NoError(t, CloseAOF())
-		rewriteFileWrite, rewriteWake = oldWrite, oldWake
+		defaultEngine.rewriteFileWrite, defaultEngine.rewriteWake = oldWrite, oldWake
 		ResetStores()
 	})
 	value := strings.Repeat("before", 1<<18)
@@ -53,16 +53,16 @@ func TestBlockedRewriteWriteKeepsServingAndReconciles(t *testing.T) {
 		t.Fatal("write did not start")
 	}
 	require.False(t, RewriteNeedsCycle())
-	job := pendingRewriteIO
+	job := defaultEngine.pendingRewriteIO
 	require.NotNil(t, job)
 	require.LessOrEqual(t, cap(job.body), 2*rewriteRecordSlice)
 	for i := 0; i < 100; i++ {
 		require.Equal(t, "OK", run(t, "SET", "large", "after"))
 		require.Equal(t, "after", run(t, "GET", "large"))
 		require.NoError(t, FlushAOF())
-		require.Same(t, job, pendingRewriteIO, "blocked writer cannot accumulate queued slices")
+		require.Same(t, job, defaultEngine.pendingRewriteIO, "blocked writer cannot accumulate queued slices")
 	}
-	require.Contains(t, rewrite.dirty, "large")
+	require.Contains(t, defaultEngine.rewrite.dirty, "large")
 	close(release)
 	released = true
 	select {
@@ -90,15 +90,15 @@ func TestRewriteWriteFailureKeepsOriginalLog(t *testing.T) {
 			ResetStores()
 			path := filepath.Join(t.TempDir(), "write.aof")
 			require.NoError(t, OpenAOF(path))
-			old := rewriteFileWrite
+			old := defaultEngine.rewriteFileWrite
 			diskErr := errors.New("injected replacement write failure")
-			rewriteFileWrite = func(f *os.File, body []byte) (int, error) {
+			defaultEngine.rewriteFileWrite = func(f *os.File, body []byte) (int, error) {
 				if kind == "error" {
 					return 0, diskErr
 				}
 				return f.Write(body[:3])
 			}
-			t.Cleanup(func() { require.NoError(t, CloseAOF()); rewriteFileWrite = old; ResetStores() })
+			t.Cleanup(func() { require.NoError(t, CloseAOF()); defaultEngine.rewriteFileWrite = old; ResetStores() })
 			require.Equal(t, "OK", run(t, "SET", "before", "survives"))
 			require.NoError(t, FlushAOF())
 			want := diskErr
@@ -107,7 +107,7 @@ func TestRewriteWriteFailureKeepsOriginalLog(t *testing.T) {
 			}
 			require.ErrorIs(t, RewriteAOF(), want)
 			require.False(t, RewriteActive())
-			require.Nil(t, pendingRewriteIO)
+			require.Nil(t, defaultEngine.pendingRewriteIO)
 			require.Equal(t, "OK", run(t, "SET", "after", "survives"))
 			require.NoError(t, CloseAOF())
 			ResetStores()
@@ -124,34 +124,34 @@ func TestCancelBlockedRewriteWriteOwnsCleanupUntilCompletion(t *testing.T) {
 	ResetStores()
 	path := filepath.Join(t.TempDir(), "write.aof")
 	require.NoError(t, OpenAOF(path))
-	old := rewriteFileWrite
+	old := defaultEngine.rewriteFileWrite
 	release := make(chan struct{})
 	released := false
-	rewriteFileWrite = func(f *os.File, body []byte) (int, error) { <-release; return f.Write(body) }
+	defaultEngine.rewriteFileWrite = func(f *os.File, body []byte) (int, error) { <-release; return f.Write(body) }
 	t.Cleanup(func() {
 		if !released {
 			close(release)
 		}
 		require.NoError(t, CloseAOF())
-		rewriteFileWrite = old
+		defaultEngine.rewriteFileWrite = old
 		ResetStores()
 	})
 	require.Equal(t, "OK", run(t, "SET", "k", "value"))
 	require.NoError(t, FlushAOF())
 	require.NoError(t, StartRewrite())
 	require.NoError(t, AdvanceRewrite())
-	job := pendingRewriteIO
+	job := defaultEngine.pendingRewriteIO
 	require.NotNil(t, job)
 	CancelRewrite()
 	require.False(t, RewriteActive())
-	require.Nil(t, rewrite.file)
+	require.Nil(t, defaultEngine.rewrite.file)
 	require.ErrorContains(t, StartRewrite(), "still releasing")
 	require.Equal(t, "OK", run(t, "SET", "after", "survives"))
 	require.NoError(t, FlushAOF())
 	close(release)
 	released = true
 	require.NoError(t, CloseAOF())
-	require.Nil(t, pendingRewriteIO)
+	require.Nil(t, defaultEngine.pendingRewriteIO)
 	_, err := os.Stat(path + ".rewrite")
 	require.True(t, os.IsNotExist(err))
 	ResetStores()

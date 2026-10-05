@@ -97,16 +97,14 @@ var rewriteOutcome struct {
 // to be durable, because the sync after a rewrite's rename failed.
 var unsyncedLogDir string
 
-// The steps of the handoff, injectable so tests can fail each one.
-var (
-	rewriteRename  = os.Rename
-	rewriteSyncDir = syncDir
-	// rewriteOpenLog opens the finished file for appending before it takes
-	// the log's name, so that nothing after the rename can fail to reach it.
-	rewriteOpenLog = func(path string) (*os.File, error) {
-		return os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o644)
-	}
-)
+// openRewrittenLog opens the finished file for appending before it takes the
+// log's name, so that nothing after the rename can fail to reach it. It is
+// each engine's rewriteOpenLog, one of the steps of the handoff a test can
+// fail on the engine it names, with rewriteRename (os.Rename) and
+// rewriteSyncDir (syncDir).
+func openRewrittenLog(path string) (*os.File, error) {
+	return os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o644)
+}
 
 var (
 	errRewriteInProgress = errors.New("ERR Background append only file rewriting already in progress")
@@ -200,8 +198,8 @@ func snapshotRewriteAllowed() bool {
 // will not pass by itself is not tried again for a minute, as an automatic one
 // is not; a pull meanwhile is told to wait. A transient refusal, such as a
 // pending append, is retried by the next pull.
-func startSnapshotRewrite() error {
-	err := StartRewrite()
+func (e *Engine) startSnapshotRewrite() error {
+	err := e.StartRewrite()
 	var refused *rewriteStartError
 	if errors.As(err, &refused) {
 		snapshotRetryAt = time.Now().Add(time.Minute)
@@ -222,15 +220,15 @@ func logStartFailure(what string, err error) {
 // was asked for. Redis keeps one scheduled through a failed start and tries
 // again ten times a second; here it is dropped after a failed start, which is
 // logged and reported, rather than retried in a loop.
-func startScheduledRewrite(now time.Time) {
-	if ready, _ := pollRewriteIO(false); !ready || AppendPending() || len(defaultEngine.aof.buf) > 0 {
+func (e *Engine) startScheduledRewrite(now time.Time) {
+	if ready, _ := e.pollRewriteIO(false); !ready || e.AppendPending() || len(e.aof.buf) > 0 {
 		return // the worker that finishes that wakes the loop again
 	}
 	if rewriteLimited(now) {
 		return
 	}
 	rewriteOutcome.scheduled = false
-	if err := StartRewrite(); err != nil {
+	if err := e.StartRewrite(); err != nil {
 		logStartFailure("scheduled rewrite", err)
 	}
 }
@@ -241,11 +239,11 @@ func startScheduledRewrite(now time.Time) {
 // though a scheduled one waits for that limit before it starts - and
 // Redis's generic refusal when it cannot start. Keel's own refusals, a log
 // that is off or a rewrite waiting for a pending append, keep their reasons.
-func bgRewriteAOF() []byte {
-	if defaultEngine.aof.file != nil && rewrite.active {
+func (e *Engine) bgRewriteAOF() []byte {
+	if e.aof.file != nil && e.rewrite.active {
 		return Encode(errRewriteInProgress, false)
 	}
-	if defaultEngine.aof.file != nil && defaultEngine.aof.transaction {
+	if e.aof.file != nil && e.aof.transaction {
 		// Redis starts nothing in the middle of EXEC. The rewrite starts once
 		// the transaction is over, and a BGREWRITEAOF asked for this way
 		// clears the failures holding automatic ones back, as in Redis.
@@ -253,7 +251,7 @@ func bgRewriteAOF() []byte {
 		rewriteOutcome.failures = 0
 		return Encode("Background append only file rewriting scheduled", true)
 	}
-	if err := StartRewrite(); err != nil {
+	if err := e.StartRewrite(); err != nil {
 		var refused *rewriteStartError
 		if errors.As(err, &refused) {
 			return Encode(errRewriteCantStart, false)
@@ -266,11 +264,11 @@ func bgRewriteAOF() []byte {
 // syncPendingLogDir finishes a rename whose directory sync failed. It runs
 // before the log's own sync, so nothing appended to the new file is reported
 // synced, or acknowledged under appendfsync always, before its name is durable.
-func syncPendingLogDir() error {
+func (e *Engine) syncPendingLogDir() error {
 	if unsyncedLogDir == "" {
 		return nil
 	}
-	if err := rewriteSyncDir(unsyncedLogDir); err != nil {
+	if err := e.rewriteSyncDir(unsyncedLogDir); err != nil {
 		return fmt.Errorf("syncing %s after the rewrite's rename: %w", unsyncedLogDir, err)
 	}
 	aofLog("synced %s: the rewritten log's name is durable", unsyncedLogDir)
@@ -295,14 +293,14 @@ func renamedAnyway(next *os.File, path string) bool {
 // rewrites beyond the ones Keel already had. aof_rewrites keeps Keel's meaning,
 // rewrites finished since the log was opened, where Redis counts the ones
 // started.
-func rewriteStatusInfo(b *strings.Builder) {
+func (e *Engine) rewriteStatusInfo(b *strings.Builder) {
 	scheduled := 0
 	if rewriteOutcome.scheduled {
 		scheduled = 1
 	}
 	current := int64(-1)
-	if rewrite.active {
-		current = time.Now().Unix() - rewrite.started.Unix()
+	if e.rewrite.active {
+		current = time.Now().Unix() - e.rewrite.started.Unix()
 	}
 	status := "ok"
 	if rewriteOutcome.lastErr != nil {

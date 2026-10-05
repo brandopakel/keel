@@ -183,9 +183,7 @@ func (e *Engine) cmdFLUSHDB(args []string) []byte {
 
 	e.space.EachKeyspace(func(ks data_structure.Keyspace) {
 		for _, key := range ks.Keys() {
-			if e.ownsRewrite() {
-				noteRewriteDirty(key)
-			}
+			e.noteRewriteDirty(key)
 			e.noteReplicationDirty(key)
 			ks.Delete(key)
 		}

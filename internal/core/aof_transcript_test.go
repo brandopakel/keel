@@ -107,11 +107,11 @@ func TestAOFTranscriptDrainsDoNotSyncOrAdvanceRewrite(t *testing.T) {
 	require.NoError(t, StartRewrite())
 	syncs := 0
 	defaultEngine.aofSync = func(f *os.File) error { syncs++; return oldSync(f) }
-	priorReady, priorRewrite := AppendReadyOffset(), rewrite.written
+	priorReady, priorRewrite := AppendReadyOffset(), defaultEngine.rewrite.written
 	run(t, "SET", "large", strings.Repeat("v", 3*maxAOFTranscriptBytes))
 	require.Zero(t, syncs, "fragments cannot fsync a partial command")
 	require.Equal(t, priorReady, AppendReadyOffset(), "partial command cannot be acknowledged")
-	require.Equal(t, priorRewrite, rewrite.written, "fragment drains cannot advance or replace the rewrite")
+	require.Equal(t, priorRewrite, defaultEngine.rewrite.written, "fragment drains cannot advance or replace the rewrite")
 	require.Greater(t, defaultEngine.appendWritten, priorReady)
 	require.True(t, RewriteActive())
 	require.NoError(t, FlushAOF())
@@ -189,7 +189,7 @@ func TestAOFTranscriptReplicationPreservesChunkedPrefixes(t *testing.T) {
 	run(t, "INCR", "counter")
 	run(t, "CMS.INITBYDIM", "cms", "65536", "8") // opaque image exceeds a chunk
 	run(t, "CMS.INCRBY", "cms", "hits", "7")
-	cms, ok := dumpKey("cms")
+	cms, ok := defaultEngine.dumpKey("cms")
 	require.True(t, ok)
 	wantTTL, ok := defaultEngine.dictStore.GetExpiry("large")
 	require.True(t, ok)
@@ -216,7 +216,7 @@ func TestAOFTranscriptReplicationPreservesChunkedPrefixes(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, wantTTL, gotTTL)
 	require.EqualValues(t, 0, run(t, "SCARD", "set"))
-	gotCMS, ok := dumpKey("cms")
+	gotCMS, ok := defaultEngine.dumpKey("cms")
 	require.True(t, ok)
 	require.Equal(t, cms, gotCMS, "opaque updates preserve the exact image")
 	assertCheckpointDigest(t, path)

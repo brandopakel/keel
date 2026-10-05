@@ -267,7 +267,7 @@ func testAutomaticRewriteTriggersOnGrowth(t *testing.T, delayedSync bool) {
 	}
 	if delayedSync {
 		require.True(t, RewriteActive(), "file replacement must wait for the sync worker")
-		require.Less(t, rewrite.written, int64(4096), "waiting for sync must not repeatedly serialize the hot key")
+		require.Less(t, defaultEngine.rewrite.written, int64(4096), "waiting for sync must not repeatedly serialize the hot key")
 		size, err := os.Stat(path)
 		require.NoError(t, err)
 		require.Greater(t, size.Size(), int64(64*1024), "the old log grows while sync holds its descriptor")
@@ -364,9 +364,9 @@ func TestRewriteStallProfile(t *testing.T) {
 	for {
 		waitStart := time.Now()
 		phase := "ready"
-		if pendingRewriteIO != nil {
+		if defaultEngine.pendingRewriteIO != nil {
 			phase = "replacement write"
-			if pendingRewriteIO.body == nil {
+			if defaultEngine.pendingRewriteIO.body == nil {
 				phase = "replacement sync"
 			}
 		} else if defaultEngine.aof.syncPending != nil {
@@ -376,13 +376,13 @@ func TestRewriteStallProfile(t *testing.T) {
 		for RewriteActive() && !RewriteNeedsCycle() {
 			waited := time.Since(waitStart)
 			if waited >= 3*time.Second && !slow {
-				t.Logf("rewrite worker exceeded three-second diagnostic threshold: phase=%s written=%d", phase, rewrite.written)
+				t.Logf("rewrite worker exceeded three-second diagnostic threshold: phase=%s written=%d", phase, defaultEngine.rewrite.written)
 				slow = true
 			}
 			// This is a deadlock watchdog, not a storage-latency assertion.
 			// Correctness below requires a committed rewrite and bounded work.
 			require.Less(t, waited, time.Minute,
-				"rewrite diagnostic watchdog expired: phase=%s written=%d", phase, rewrite.written)
+				"rewrite diagnostic watchdog expired: phase=%s written=%d", phase, defaultEngine.rewrite.written)
 			time.Sleep(time.Millisecond)
 		}
 		waited := time.Since(waitStart)
@@ -604,13 +604,13 @@ func TestRewriteSlicesObeyKeyBudgetAndReplay(t *testing.T) {
 	assert.NoError(t, StartRewrite())
 	slices, worstWalk, final := 0, time.Duration(0), time.Duration(0)
 	for {
-		before := rewrite.pos
+		before := defaultEngine.rewrite.pos
 		start := time.Now()
 		more := stepRewrite(t)
 		took := time.Since(start)
 		slices++
-		assert.GreaterOrEqual(t, rewrite.pos-before, 0)
-		assert.LessOrEqual(t, rewrite.pos-before, rewriteChunk,
+		assert.GreaterOrEqual(t, defaultEngine.rewrite.pos-before, 0)
+		assert.LessOrEqual(t, defaultEngine.rewrite.pos-before, rewriteChunk,
 			"every walk slice must obey its key budget, including the final slice")
 		if more {
 			if took > worstWalk {
@@ -719,12 +719,12 @@ func TestRewriteStartDoesNotCopyKeyNames(t *testing.T) {
 			runtime.ReadMemStats(&before)
 			require.NoError(t, StartRewrite())
 			runtime.ReadMemStats(&after)
-			require.Empty(t, rewrite.keys, "start retains slot limits, not every name")
+			require.Empty(t, defaultEngine.rewrite.keys, "start retains slot limits, not every name")
 			require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(256<<10), "startup must not allocate an O(N) name slice")
 			require.NoError(t, AdvanceRewrite())
 			waitForRewriteSync(t)
-			require.LessOrEqual(t, len(rewrite.keys), data_structure.ScanMaxWork)
-			require.LessOrEqual(t, rewrite.pos, data_structure.ScanMaxWork)
+			require.LessOrEqual(t, len(defaultEngine.rewrite.keys), data_structure.ScanMaxWork)
+			require.LessOrEqual(t, defaultEngine.rewrite.pos, data_structure.ScanMaxWork)
 		})
 	}
 }
@@ -746,11 +746,11 @@ func TestRewriteRetainsBoundedNameBatches(t *testing.T) {
 	assert.NoError(t, StartRewrite())
 
 	// Nothing is collected up front, so the walk starts holding nothing at all.
-	assert.Zero(t, len(rewrite.keys), "starting a rewrite must not enumerate the keyspace")
+	assert.Zero(t, len(defaultEngine.rewrite.keys), "starting a rewrite must not enumerate the keyspace")
 
 	worst := 0
 	for stepRewrite(t) {
-		worst = max(worst, cap(rewrite.keys))
+		worst = max(worst, cap(defaultEngine.rewrite.keys))
 	}
 	assert.Equal(t, 1, defaultEngine.aof.rewrites, "the rewrite must commit")
 
@@ -758,7 +758,7 @@ func TestRewriteRetainsBoundedNameBatches(t *testing.T) {
 	assert.LessOrEqual(t, worst, 2*data_structure.ScanMaxWork,
 		"retained batch capacity must follow the fixed traversal budget")
 
-	t.Logf("%d keys: walk retained at most %d names, %d walked", keys, worst, rewrite.pos)
+	t.Logf("%d keys: walk retained at most %d names, %d walked", keys, worst, defaultEngine.rewrite.pos)
 }
 
 // A ceiling below the keyspace a server is allowed to hold is worse than none:
@@ -779,16 +779,16 @@ func TestRewriteCeilingCoversTheKeyspaceAServerMayHold(t *testing.T) {
 
 	// Above the ceiling the refusal is immediate and leaves nothing running, so
 	// the caller can tell a refusal from an abort part way through.
-	old := keyCountForRewrite
-	defer func() { keyCountForRewrite = old }()
-	keyCountForRewrite = func() int { return rewriteKeyCeiling + 1 }
+	old := defaultEngine.keyCountForRewrite
+	defer func() { defaultEngine.keyCountForRewrite = old }()
+	defaultEngine.keyCountForRewrite = func() int { return rewriteKeyCeiling + 1 }
 	err := StartRewrite()
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "rewrite limit")
 	assert.False(t, RewriteActive(), "a refused rewrite must not leave one started")
 
 	// At the ceiling it proceeds.
-	keyCountForRewrite = func() int { return rewriteKeyCeiling }
+	defaultEngine.keyCountForRewrite = func() int { return rewriteKeyCeiling }
 	assert.NoError(t, StartRewrite())
 	assert.True(t, RewriteActive())
 	for stepRewrite(t) {

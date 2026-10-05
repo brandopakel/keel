@@ -428,23 +428,43 @@ step 2.3 settles it this way:
   closes it with the log's frame of the same block, and two engines' EXECs
   would otherwise write one variable. Replication code the log does not call
   (`InitReplication`, replica apply) reaches the log through `defaultEngine`.
+- **The rewrite** is an Engine method from `StartRewrite` to the handoff, and
+  its state a field of a named type, `rewriteState`. Its I/O and the steps of
+  its handoff are engine fields too, which `engineIn`, the constructor
+  `defaultEngine` and `newEngine` now share, sets to the real thing:
+  `rewriteFileWrite` and `rewriteFileSync` (`writeLog`, `syncLog`),
+  `rewriteOpenLog` (`openRewrittenLog`), `rewriteRename` (`os.Rename`),
+  `rewriteSyncDir` (`syncDir`), and `keyCountForRewrite`, the key count of the
+  engine's own space. The loop driving an engine installs its waker on that
+  engine with `SetRewriteWaker`. The walk, the key images and the dump
+  encoder (`emitKey`, `dumpKey`, the sketch stream) read the engine's stores
+  and space. KEEL.REPL.PULL takes its snapshot's images from the engine it
+  runs on; protocol 1's `sealReplication` takes them from the default engine
+  until step 2.4.
 - **Until a part moves**, the code that owns it reaches what has moved through
   `defaultEngine`, as step 2.1's leftovers reached the stores: after the first
-  PR, the rewrite reads the server's log that way. The rewrite is the default
-  engine's until it moves, so until then only the default engine's writes,
-  removals, flushes and close reach it (`ownsRewrite`); another engine's
-  would mark keys it does not hold, or advance or cancel a rewrite of a log it
-  does not write. The second PR removes the guard with the package state.
+  PR, the rewrite read the server's log that way. The rewrite was the
+  default engine's until it moved, so until then only the default engine's
+  writes, removals, flushes and close reached it (`ownsRewrite`); another
+  engine's would have marked keys it does not hold, or advanced or cancelled
+  a rewrite of a log it does not write. The second PR removed the guard with
+  the package state. After the second, the rewrite's outcome and backoff are
+  still package state, so until the third a failed rewrite on one engine is in
+  every engine's INFO, and engines are rewritten one at a time in the tests.
 - **Isolation.** `TestEnginesShareNoLog` gives two engines a log each, with
   I/O of their own: one engine's records, transaction frames, reaped keys and
   failed disk stay its own, and then both run side by side through
   `evalAndResponse`, one appending on the worker and one synchronously, with
   transactions and expiry cycles, and each log replays to its own engine's
   keyspace. `TestEnginesShareNoCommandScope` now runs its side-by-side part
-  through `evalAndResponse` too, with a log open on each engine. The race job
-  runs both under `-race`.
+  through `evalAndResponse` too, with a log open on each engine.
+  `TestEnginesShareNoRewrite` rewrites one engine while the other writes: the
+  rewrite marks only its own engine's keys dirty, replaces only its own log,
+  wakes only its own loop, and fails, or refuses at the key ceiling, through
+  its own engine's hooks alone. The race job runs them under `-race`.
 - **Census.** Each PR removes the entries it moves. The first removes the ten
-  of the log and its worker, and `replicationTransaction`.
+  of the log and its worker, and `replicationTransaction`; the second the nine
+  of the rewrite.
 - **Measured per PR**, as in steps 2.1 and 2.2, now including the log-on
   benchmark: the paired command-path job runs at least twice against develop
   and once against `65ebdbc`.

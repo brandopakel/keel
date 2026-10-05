@@ -38,8 +38,8 @@ func TestLargeCollectionRewriteYieldsAndReconcilesMutation(t *testing.T) {
 				require.NoError(t, StartRewrite())
 				require.NoError(t, AdvanceRewrite())
 				waitForRewriteSync(t)
-				require.True(t, rewrite.collectionActive)
-				require.LessOrEqual(t, rewrite.collectionPos, 256)
+				require.True(t, defaultEngine.rewrite.collectionActive)
+				require.LessOrEqual(t, defaultEngine.rewrite.collectionPos, 256)
 				switch mutation {
 				case "update":
 					if kind == "set" {
@@ -70,8 +70,8 @@ func TestLargeCollectionRewriteYieldsAndReconcilesMutation(t *testing.T) {
 					}
 					require.Equal(t, int64(2010), run(t, "HLEN", "large"))
 				}
-				require.False(t, rewrite.collectionActive)
-				require.Nil(t, rewrite.hashCursor)
+				require.False(t, defaultEngine.rewrite.collectionActive)
+				require.Nil(t, defaultEngine.rewrite.hashCursor)
 				var want interface{}
 				if mutation == "update" || mutation == "sample" || mutation == "shrink-regrow" {
 					if kind == "set" {
@@ -82,11 +82,11 @@ func TestLargeCollectionRewriteYieldsAndReconcilesMutation(t *testing.T) {
 						want = run(t, "ZRANGE", "large", "0", "-1", "WITHSCORES")
 					}
 				}
-				for i := 0; rewrite.active && i < 100; i++ {
+				for i := 0; defaultEngine.rewrite.active && i < 100; i++ {
 					require.NoError(t, FlushAOF())
 					waitForRewriteSync(t)
 				}
-				require.False(t, rewrite.active)
+				require.False(t, defaultEngine.rewrite.active)
 				require.Equal(t, 1, defaultEngine.aof.rewrites)
 				require.NoError(t, CloseAOF())
 				for i := 0; i < 2; i++ {
@@ -148,17 +148,17 @@ func TestCollectionRewriteHonorsByteBudgetAndOversizedMemberMakesProgress(t *tes
 			}
 			require.NoError(t, StartRewrite())
 			chunks := 0
-			for rewrite.active && chunks < 50 {
-				before := rewrite.written
+			for defaultEngine.rewrite.active && chunks < 50 {
+				before := defaultEngine.rewrite.written
 				require.NoError(t, AdvanceRewrite())
 				waitForRewriteSync(t)
-				if rewrite.active {
-					require.LessOrEqual(t, rewrite.written-before, int64(len(huge)+256))
+				if defaultEngine.rewrite.active {
+					require.LessOrEqual(t, defaultEngine.rewrite.written-before, int64(len(huge)+256))
 				}
 				chunks++
 			}
 			require.Greater(t, chunks, 5)
-			require.False(t, rewrite.active)
+			require.False(t, defaultEngine.rewrite.active)
 			require.Equal(t, 1, defaultEngine.aof.rewrites)
 		})
 	}

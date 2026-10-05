@@ -146,7 +146,7 @@ func dumpImages(t *testing.T, keys []string) ([]byte, map[string]string) {
 	var all []byte
 	each := map[string]string{}
 	for _, key := range keys {
-		image, ok := dumpKey(key)
+		image, ok := defaultEngine.dumpKey(key)
 		require.True(t, ok, "%s holds a filter", key)
 		all = append(all, key...)
 		all = append(all, 0)
@@ -320,13 +320,13 @@ func TestBFRESERVEOfAKeyNamedNONSCALINGIsLoggedSoItReplays(t *testing.T) {
 		}
 		run(t, "BF.MADD", items...)
 		require.Equal(t, "-ERR non scaling filter is full\r\n", string(rawReply(t, "BF.ADD", "nonscaling", "over")))
-		before, _ = dumpKey("nonscaling")
+		before, _ = defaultEngine.dumpKey("nonscaling")
 	})
 	log, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Contains(t, string(log), string(appendCommand(nil, "BF.RESERVE", "nonscaling", "0.000001", "50", "NONSCALING")))
 	restart(t, path)
-	after, ok := dumpKey("nonscaling")
+	after, ok := defaultEngine.dumpKey("nonscaling")
 	require.True(t, ok)
 	require.Equal(t, before, after, "the filter that does not grow, as it was")
 	require.Equal(t, "*1\r\n$-1\r\n", string(rawReply(t, "BF.INFO", "nonscaling", "EXPANSION")))

@@ -37,9 +37,9 @@ func TestUntrustedSizingAndRestore(t *testing.T) {
 func TestFailedMorrisBatchIsAtomicAcrossRestart(t *testing.T) {
 	path := withAOF(t, func() {
 		run(t, "MORRIS.INITBYDIM", "m", "100", "3")
-		before, _ := dumpKey("m")
+		before, _ := defaultEngine.dumpKey("m")
 		require.Equal(t, byte('-'), rawReply(t, "MORRIS.INCRBY", "m", "a", "1", "b", "invalid")[0])
-		after, _ := dumpKey("m")
+		after, _ := defaultEngine.dumpKey("m")
 		require.Equal(t, before, after)
 	})
 	restart(t, path)
@@ -161,7 +161,7 @@ func TestDumpCollectionsAndChecksum(t *testing.T) {
 	ResetStores()
 	for _, cmd := range [][]string{{"HSET", "h", "f", "v"}, {"RPUSH", "l", "a", "b"}} {
 		run(t, cmd[0], cmd[1:]...)
-		payload, _ := dumpKey(cmd[1])
+		payload, _ := defaultEngine.dumpKey(cmd[1])
 		require.NoError(t, defaultEngine.restoreKey("copy", payload))
 		require.Equal(t, run(t, "TYPE", cmd[1]), run(t, "TYPE", "copy"))
 		payload[len(payload)-1] ^= 1
@@ -200,7 +200,7 @@ func TestCollectionRangesAndTrimPersistence(t *testing.T) {
 func TestSmallBloomDumpRoundTrip(t *testing.T) {
 	ResetStores()
 	run(t, "BF.RESERVE", "b", "0.9", "1")
-	payload, ok := dumpKey("b")
+	payload, ok := defaultEngine.dumpKey("b")
 	require.True(t, ok)
 	require.NoError(t, defaultEngine.restoreKey("copy", payload))
 	run(t, "BF.ADD", "copy", "member")
@@ -336,7 +336,7 @@ func TestLargeListRewriteRestartsAfterMutation(t *testing.T) {
 			require.NoError(t, StartRewrite())
 			require.NoError(t, AdvanceRewrite())
 			waitForRewriteSync(t)
-			require.True(t, rewrite.collectionActive, "large list should yield between chunks")
+			require.True(t, defaultEngine.rewrite.collectionActive, "large list should yield between chunks")
 			switch mutation {
 			case "append":
 				run(t, "RPUSH", "large", "last")
@@ -346,12 +346,12 @@ func TestLargeListRewriteRestartsAfterMutation(t *testing.T) {
 			case "delete":
 				run(t, "DEL", "large")
 			}
-			require.False(t, rewrite.collectionActive)
-			for i := 0; rewrite.active && i < 100; i++ {
+			require.False(t, defaultEngine.rewrite.collectionActive)
+			for i := 0; defaultEngine.rewrite.active && i < 100; i++ {
 				require.NoError(t, FlushAOF())
 				waitForRewriteSync(t)
 			}
-			require.False(t, rewrite.active)
+			require.False(t, defaultEngine.rewrite.active)
 			require.NoError(t, CloseAOF())
 			ResetStores()
 			_, err := LoadAOF(path)
@@ -400,7 +400,7 @@ func TestRewriteAndCloseFenceBackgroundSync(t *testing.T) {
 	require.NoError(t, StartRewrite())
 	require.NoError(t, AdvanceRewrite())
 	waitForRewriteSync(t)
-	require.True(t, rewrite.active)
+	require.True(t, defaultEngine.rewrite.active)
 	require.Same(t, oldFile, defaultEngine.aof.file)
 	// Close must join the worker before closing its file descriptor.
 	CancelRewrite()

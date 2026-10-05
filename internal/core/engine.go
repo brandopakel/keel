@@ -19,12 +19,13 @@ import (
 // engine dispatching it - see commandTable. Step 2.2 moved the command scope
 // here: what the engine holds for the command it is running, the reply's
 // protocol included, and the budget the transport running it reserves from.
-// Step 2.3 moves the persistence state here, a part at a time: first the log
-// and its append worker, whose methods record, flush and replay e's writes in
-// e's own file. The rewrite, its outcome and the I/O counters are package
-// variables until the parts of step 2.3 that move them, and replication's
-// until step 2.4; the code that owns them reaches the log and the stores
-// through defaultEngine until then.
+// Step 2.3 moves the persistence state here, a part at a time: the log and its
+// append worker, whose methods record, flush and replay e's writes in e's own
+// file, and the rewrite, which walks e's keyspace and replaces e's log. The
+// rewrite's outcome and backoff and the I/O counters are package variables
+// until the last part of step 2.3, and replication's until step 2.4; the code
+// that owns them reaches the log and the stores through defaultEngine until
+// then.
 //
 // Until callers open engines of their own (plan phase 3) the server and the
 // tests run on defaultEngine, as the stores run on data_structure.DefaultSpace.
@@ -116,6 +117,28 @@ type Engine struct {
 	// of the same block; see transaction.go. The rest of replication is still
 	// the server's, until plan step 2.4.
 	replicationTransaction replicationBlock
+
+	// The rewrite, under the names it had as package variables - see
+	// aof_rewrite.go and aof_rewrite_io.go. It walks e's keyspace and replaces
+	// e's log, and nothing else.
+	//
+	// rewrite is the walk in progress, if there is one, and pendingRewriteIO
+	// the write or sync of its file a worker owns.
+	rewrite          rewriteState
+	pendingRewriteIO *rewriteIOJob
+	// rewriteWake is how a worker that finishes wakes the loop driving e,
+	// which installs it with SetRewriteWaker.
+	rewriteWake func()
+	// The rewrite's I/O and the steps of its handoff, which a test replaces on
+	// the engine it is failing: writeLog, syncLog, openRewrittenLog, os.Rename
+	// and syncDir, unless it has. keyCountForRewrite is the space's key count,
+	// unless a test needs the ceiling without building a keyspace that large.
+	rewriteFileWrite   func(*os.File, []byte) (int, error)
+	rewriteFileSync    func(*os.File) error
+	rewriteOpenLog     func(string) (*os.File, error)
+	rewriteRename      func(oldPath, newPath string) error
+	rewriteSyncDir     func(string) error
+	keyCountForRewrite func() int
 }
 
 // defaultEngine is the engine the server and the tests run on until each
@@ -124,13 +147,15 @@ type Engine struct {
 //
 // The pointer never changes. ResetStores rebuilds the stores inside it, so
 // whatever has kept the engine keeps the keyspace a test began from empty.
-var defaultEngine = &Engine{space: data_structure.DefaultSpace, replyCeiling: MaxReplyBytes,
-	aofWrite: writeLog, aofSync: syncLog}
+var defaultEngine = engineIn(data_structure.DefaultSpace)
 
-// ownsRewrite reports whether e is the engine the rewrite belongs to. Until
-// the second part of plan step 2.3 moves it into the engine, the rewrite and
-// what it remembers are package state that walks and replaces the default
-// engine's log, so only the default engine's writes, removals, flushes and
-// closes may reach it; another engine's would mark keys it does not hold, or
-// advance and cancel a rewrite of a log it does not write.
-func (e *Engine) ownsRewrite() bool { return e == defaultEngine }
+// engineIn returns an engine living in space, with no stores yet, and with
+// its persistence I/O the real thing.
+func engineIn(space *data_structure.Space) *Engine {
+	return &Engine{
+		space: space, replyCeiling: MaxReplyBytes,
+		aofWrite: writeLog, aofSync: syncLog,
+		rewriteFileWrite: writeLog, rewriteFileSync: syncLog, rewriteOpenLog: openRewrittenLog,
+		rewriteRename: os.Rename, rewriteSyncDir: syncDir, keyCountForRewrite: space.TotalKeys,
+	}
+}

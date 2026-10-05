@@ -104,7 +104,7 @@ func sameFile(t *testing.T, f *os.File, path string) bool {
 // restoreRewriteHooks puts back every injectable step a test may replace.
 func restoreRewriteHooks(t *testing.T) {
 	t.Helper()
-	write, sync, open, rename, dir := rewriteFileWrite, rewriteFileSync, rewriteOpenLog, rewriteRename, rewriteSyncDir
+	write, sync, open, rename, dir := defaultEngine.rewriteFileWrite, defaultEngine.rewriteFileSync, defaultEngine.rewriteOpenLog, defaultEngine.rewriteRename, defaultEngine.rewriteSyncDir
 	policy, async := config.AOFFsync, config.AOFAsyncAppend
 	pct, minSize := config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize
 	t.Cleanup(func() {
@@ -112,7 +112,7 @@ func restoreRewriteHooks(t *testing.T) {
 			CancelRewrite()
 		}
 		_ = CloseAOF()
-		rewriteFileWrite, rewriteFileSync, rewriteOpenLog, rewriteRename, rewriteSyncDir = write, sync, open, rename, dir
+		defaultEngine.rewriteFileWrite, defaultEngine.rewriteFileSync, defaultEngine.rewriteOpenLog, defaultEngine.rewriteRename, defaultEngine.rewriteSyncDir = write, sync, open, rename, dir
 		config.AOFFsync, config.AOFAsyncAppend = policy, async
 		config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize = pct, minSize
 		ResetStores()
@@ -130,25 +130,25 @@ func TestFailedRewriteKeepsServingFromTheOldLog(t *testing.T) {
 		cause   string
 	}{
 		{name: "snapshot write ENOSPC", cause: "no space left on device", install: func() {
-			rewriteFileWrite = func(*os.File, []byte) (int, error) { return 0, syscall.ENOSPC }
+			defaultEngine.rewriteFileWrite = func(*os.File, []byte) (int, error) { return 0, syscall.ENOSPC }
 		}},
 		{name: "snapshot short write", cause: io.ErrShortWrite.Error(), install: func() {
-			rewriteFileWrite = func(f *os.File, body []byte) (int, error) { return f.Write(body[:min(3, len(body))]) }
+			defaultEngine.rewriteFileWrite = func(f *os.File, body []byte) (int, error) { return f.Write(body[:min(3, len(body))]) }
 		}},
 		{name: "snapshot sync EIO", cause: "input/output error", install: func() {
-			rewriteFileSync = func(*os.File) error { return syscall.EIO }
+			defaultEngine.rewriteFileSync = func(*os.File) error { return syscall.EIO }
 		}},
 		{name: "dirty tail write EFBIG", tail: true, cause: "file too large", install: func() {
-			rewriteFileWrite = func(*os.File, []byte) (int, error) { return 0, syscall.EFBIG }
+			defaultEngine.rewriteFileWrite = func(*os.File, []byte) (int, error) { return 0, syscall.EFBIG }
 		}},
 		{name: "final sync EIO", tail: true, cause: "input/output error", install: func() {
-			rewriteFileSync = func(*os.File) error { return syscall.EIO }
+			defaultEngine.rewriteFileSync = func(*os.File) error { return syscall.EIO }
 		}},
 		{name: "open for appending", cause: "too many open files", install: func() {
-			rewriteOpenLog = func(string) (*os.File, error) { return nil, syscall.EMFILE }
+			defaultEngine.rewriteOpenLog = func(string) (*os.File, error) { return nil, syscall.EMFILE }
 		}},
 		{name: "rename", cause: "injected", install: func() {
-			rewriteRename = func(oldPath, newPath string) error {
+			defaultEngine.rewriteRename = func(oldPath, newPath string) error {
 				return &os.LinkError{Op: "rename", Old: oldPath, New: newPath, Err: injected}
 			}
 		}},
@@ -199,7 +199,7 @@ func TestFailedRewriteKeepsServingFromTheOldLog(t *testing.T) {
 				require.Equal(t, "ok", persistenceField(t, "aof_last_write_status"))
 				require.Contains(t, logs.String(), "Background AOF rewrite terminated with error: ")
 				require.Contains(t, logs.String(), tc.cause)
-				require.Nil(t, pendingRewriteIO)
+				require.Nil(t, defaultEngine.pendingRewriteIO)
 				_, err := os.Stat(path + ".rewrite")
 				require.True(t, os.IsNotExist(err), "the temporary file is removed")
 				require.True(t, sameFile(t, defaultEngine.aof.file, path), "the old log is still the one appended to")
@@ -245,13 +245,13 @@ func TestFailedRewriteKeepsServingFromTheOldLog(t *testing.T) {
 // restoreHooksNow puts the real steps back in the middle of a test, so the
 // rewrite after a failure runs against the disk as it is.
 func restoreHooksNow() {
-	rewriteFileWrite = func(f *os.File, body []byte) (int, error) { return f.Write(body) }
-	rewriteFileSync = func(f *os.File) error { return f.Sync() }
-	rewriteOpenLog = func(path string) (*os.File, error) {
+	defaultEngine.rewriteFileWrite = func(f *os.File, body []byte) (int, error) { return f.Write(body) }
+	defaultEngine.rewriteFileSync = func(f *os.File) error { return f.Sync() }
+	defaultEngine.rewriteOpenLog = func(path string) (*os.File, error) {
 		return os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o644)
 	}
-	rewriteRename = os.Rename
-	rewriteSyncDir = syncDir
+	defaultEngine.rewriteRename = os.Rename
+	defaultEngine.rewriteSyncDir = syncDir
 }
 
 // A start that fails is reported the way Redis reports a failed fork: the
@@ -272,11 +272,11 @@ func TestRewriteThatCannotStartIsReportedAsRedisReportsIt(t *testing.T) {
 	require.Equal(t, "0", persistenceField(t, "aof_rewrites_consecutive_failures"))
 	require.Contains(t, logs.String(), "Can't rewrite append only file in background: ")
 
-	oldCount := keyCountForRewrite
-	keyCountForRewrite = func() int { return rewriteKeyCeiling + 1 }
+	oldCount := defaultEngine.keyCountForRewrite
+	defaultEngine.keyCountForRewrite = func() int { return rewriteKeyCeiling + 1 }
 	require.Equal(t, refusal, run(t, "BGREWRITEAOF"))
 	require.Contains(t, logs.String(), "rewrite limit")
-	keyCountForRewrite = oldCount
+	defaultEngine.keyCountForRewrite = oldCount
 
 	require.NoError(t, os.Remove(path+".rewrite"))
 	require.Equal(t, "Background append only file rewriting started", run(t, "BGREWRITEAOF"))
@@ -299,7 +299,7 @@ func TestTransactionDuringAFailedRewriteReplaysWhole(t *testing.T) {
 	require.NoError(t, OpenAOF(path))
 	release, started := make(chan struct{}), make(chan struct{})
 	var once sync.Once
-	rewriteFileWrite = func(*os.File, []byte) (int, error) {
+	defaultEngine.rewriteFileWrite = func(*os.File, []byte) (int, error) {
 		once.Do(func() { close(started) })
 		<-release
 		return 0, syscall.ENOSPC
@@ -380,7 +380,7 @@ func TestDirectorySyncAfterTheRenameIsRetriedBeforeTheNextSync(t *testing.T) {
 			run(t, "SET", "before", "1")
 			require.NoError(t, FlushAOF())
 			calls := 0
-			rewriteSyncDir = func(dir string) error {
+			defaultEngine.rewriteSyncDir = func(dir string) error {
 				calls++
 				if calls == 1 || mode != "retry succeeds" {
 					return syscall.EIO
@@ -436,7 +436,7 @@ func TestRenameThatTookEffectDespiteItsErrorAdoptsTheNewLog(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "store.aof")
 	require.NoError(t, OpenAOF(path))
 	run(t, "SET", "before", "1")
-	rewriteRename = func(oldPath, newPath string) error {
+	defaultEngine.rewriteRename = func(oldPath, newPath string) error {
 		if err := os.Rename(oldPath, newPath); err != nil {
 			return err
 		}
@@ -468,7 +468,7 @@ func TestAutomaticRewriteBacksOffAsRedisDoes(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "store.aof")
 	require.NoError(t, OpenAOF(path))
 	writes := 0
-	rewriteFileWrite = func(*os.File, []byte) (int, error) { return 0, syscall.ENOSPC }
+	defaultEngine.rewriteFileWrite = func(*os.File, []byte) (int, error) { return 0, syscall.ENOSPC }
 	starts := func() int { return strings.Count(logs.String(), "Starting automatic rewriting of AOF on") }
 	write := func() {
 		t.Helper()
@@ -540,7 +540,7 @@ func TestBudgetAbortIsAFailedRewriteThatWaitsAMinute(t *testing.T) {
 	require.NoError(t, OpenAOF(path))
 	run(t, "SET", "k", "v")
 	require.NoError(t, StartRewrite())
-	rewrite.started = time.Now().Add(-31 * time.Second)
+	defaultEngine.rewrite.started = time.Now().Add(-31 * time.Second)
 	require.NoError(t, AdvanceRewrite())
 	require.False(t, RewriteActive())
 	require.Equal(t, "err", persistenceField(t, "aof_last_bgrewrite_status"))
@@ -561,7 +561,7 @@ func TestReplicationV2ThroughFailedRewrites(t *testing.T) {
 	frames := snapshotV2(t)
 	epoch, base := frames[0].Epoch, frames[len(frames)-1].To
 
-	rewriteFileWrite = func(*os.File, []byte) (int, error) { return 0, syscall.ENOSPC }
+	defaultEngine.rewriteFileWrite = func(*os.File, []byte) (int, error) { return 0, syscall.ENOSPC }
 	require.Equal(t, "Background append only file rewriting started", run(t, "BGREWRITEAOF"))
 	run(t, "SET", "k", "during")
 	driveRewrite(t)

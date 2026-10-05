@@ -215,7 +215,7 @@ func (e *Engine) cmdINFO(args []string) []byte {
 		fmt.Fprintf(&b, "# Persistence\r\naof_enabled:%d\r\naof_base_size:%d\r\naof_current_size:%d\r\n",
 			enabled, base, current)
 		active := 0
-		if RewriteActive() {
+		if e.RewriteActive() {
 			active = 1
 		}
 		status := "ok"
@@ -223,7 +223,7 @@ func (e *Engine) cmdINFO(args []string) []byte {
 			status = "err"
 		}
 		fmt.Fprintf(&b, "aof_rewrite_in_progress:%d\r\naof_last_write_status:%s\r\naof_buffer_length:%d\r\n", active, status, len(e.aof.buf))
-		rewriteStatusInfo(&b)
+		e.rewriteStatusInfo(&b)
 		pending := 0
 		if e.aof.syncPending != nil {
 			pending = 1
@@ -231,15 +231,15 @@ func (e *Engine) cmdINFO(args []string) []byte {
 		encoded, written, synced, ready := e.AOFPositions()
 		fmt.Fprintf(&b, "aof_encoded_offset:%d\r\naof_appended_offset:%d\r\naof_synced_offset:%d\r\naof_reply_offset:%d\r\n", encoded, written, synced, ready)
 		fmt.Fprintf(&b, "aof_pending_fsync:%d\r\naof_pending_append_bytes:%d\r\n", pending, e.appendBytes)
-		fmt.Fprintf(&b, "aof_rewrite_dirty_keys:%d\r\naof_rewrite_dirty_bytes:%d\r\naof_rewrite_budget_aborts:%d\r\n", len(rewrite.dirty), rewrite.dirtyBytes, rewriteBudgetAborts)
+		fmt.Fprintf(&b, "aof_rewrite_dirty_keys:%d\r\naof_rewrite_dirty_bytes:%d\r\naof_rewrite_budget_aborts:%d\r\n", len(e.rewrite.dirty), e.rewrite.dirtyBytes, rewriteBudgetAborts)
 		rewritePending := 0
-		if pendingRewriteIO != nil && pendingRewriteIO.body == nil {
+		if e.pendingRewriteIO != nil && e.pendingRewriteIO.body == nil {
 			rewritePending = 1
 		}
 		fmt.Fprintf(&b, "aof_rewrite_pending_sync:%d\r\n", rewritePending)
 		pendingWriteBytes := 0
-		if pendingRewriteIO != nil {
-			pendingWriteBytes = cap(pendingRewriteIO.body)
+		if e.pendingRewriteIO != nil {
+			pendingWriteBytes = cap(e.pendingRewriteIO.body)
 		}
 		fmt.Fprintf(&b, "aof_rewrite_pending_write_bytes:%d\r\n", pendingWriteBytes)
 		persistenceIOInfo(&b)
@@ -270,5 +270,5 @@ func (e *Engine) cmdBGREWRITEAOF(args []string) []byte {
 	if len(args) != 0 {
 		return e.encode(wrongArguments("BGREWRITEAOF"), false)
 	}
-	return bgRewriteAOF()
+	return e.bgRewriteAOF()
 }
