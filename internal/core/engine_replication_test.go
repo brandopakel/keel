@@ -613,13 +613,16 @@ func TestEnginesShareNoFailover(t *testing.T) {
 	assert.True(t, a.writable())
 
 	// Side by side: each engine takes terms and writes on a goroutine of its
-	// own, while another goroutine reads its term as the transport does.
-	var wg sync.WaitGroup
+	// own, while another goroutine reads its term as the transport does. The
+	// readers stop only once both writers have finished, so reads overlap
+	// every update, the last ones included.
+	var readers, writers sync.WaitGroup
 	stop := make(chan struct{})
 	for _, e := range []*Engine{a, b} {
-		wg.Add(2)
+		readers.Add(1)
+		writers.Add(1)
 		go func() {
-			defer wg.Done()
+			defer readers.Done()
 			for {
 				select {
 				case <-stop:
@@ -630,7 +633,7 @@ func TestEnginesShareNoFailover(t *testing.T) {
 			}
 		}()
 		go func() {
-			defer wg.Done()
+			defer writers.Done()
 			base := e.CurrentTerm()
 			for i := uint64(1); i <= 50; i++ {
 				var w replyWriter
@@ -647,8 +650,9 @@ func TestEnginesShareNoFailover(t *testing.T) {
 			}
 		}()
 	}
-	go func() { time.Sleep(50 * time.Millisecond); close(stop) }()
-	wg.Wait()
+	writers.Wait()
+	close(stop)
+	readers.Wait()
 	aTerm, bTerm := a.CurrentTerm(), b.CurrentTerm()
 	assert.Equal(t, uint64(5+101), aTerm)
 	assert.Equal(t, uint64(10+101), bTerm)
