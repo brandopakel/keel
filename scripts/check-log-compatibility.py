@@ -7,10 +7,12 @@ they write. This runs the same sequential workload on a baseline build and a
 candidate build, under every fsync policy and append mode, and checks:
 
 - the log each writes is the same bytes, and so is the log each rewrites it
-  into, once the two normalizations of internal/core/persistence_golden_test.go
+  into, once the three normalizations of internal/core/persistence_golden_test.go
   are applied: a relative expiry, written as the instant it falls due, becomes
-  the whole hours from the run's start, and the pairs of an HSET record, and of
-  a ZADD record without options, are put in field or member order;
+  the whole hours from the run's start; the records a rewrite cut one large
+  collection into, where the cuts depend on how fast the machine is, are
+  joined; and the pairs of an HSET record, and of a ZADD record without
+  options, are put in field or member order;
 - upgrade: the candidate replays every log the baseline wrote, rewrote, and
   wrote while a rewrite ran and then crashed, to the baseline's keyspace;
 - rollback: the baseline replays every log the candidate wrote the same way,
@@ -218,16 +220,39 @@ def is_score(value):
         return False
 
 
+def joinable(parts):
+    name = parts[0].upper()
+    if name in (b'RPUSH', b'SADD'):
+        return len(parts) > 2
+    if name == b'HSET':
+        return len(parts) > 2 and len(parts) % 2 == 0
+    if name == b'ZADD':
+        return len(parts) > 2 and len(parts) % 2 == 0 and all(is_score(s) for s in parts[2::2])
+    return False
+
+
 def normalize(body, start):
-    """The two normalizations persistence_golden_test.go applies, and only those."""
-    out = []
+    """The three normalizations persistence_golden_test.go applies, and only
+    those: a relative expiry becomes the whole hours from the run's start; the
+    records of one collection a rewrite cut into several, at a count, a size
+    or a millisecond, are joined; and the pairs of an HSET record, and of a
+    ZADD record without options, are put in field or member order."""
+    joined = []
     for parts in records(body):
         name = parts[0].upper()
         if name == b'PEXPIREAT' and len(parts) == 3:
             at = int(parts[2])
             if 0 <= at - start <= DAY_MS:
                 parts[2] = b'run+%dh' % ((at - start) // HOUR_MS)
-        elif name == b'HSET' and len(parts) % 2 == 0:
+        if joined and joinable(parts) and joinable(joined[-1]) and \
+                joined[-1][0].upper() == name and joined[-1][1] == parts[1]:
+            joined[-1] = joined[-1] + parts[2:]
+            continue
+        joined.append(parts)
+    out = []
+    for parts in joined:
+        name = parts[0].upper()
+        if name == b'HSET' and len(parts) % 2 == 0:
             pairs = sorted(zip(parts[2::2], parts[3::2]), key=lambda p: p[0])
             parts[2:] = [x for p in pairs for x in p]
         elif name == b'ZADD' and len(parts) % 2 == 0 and all(is_score(s) for s in parts[2::2]):

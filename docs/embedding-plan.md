@@ -385,10 +385,12 @@ open, step 2.3 settles it this way:
     BF and CF forms written before RedisBloom parity (#94). It compares the
     log, the replies and the keyspace with `testdata/persistence-40eb2f6`, and
     replays develop's logs, and their rewrite, on the build under test. A log
-    is compared record by record after two normalizations and no others: a
-    relative expiry becomes the whole hours from the run's start, and map
-    order inside an HSET record, and inside a ZADD record without options, is
-    sorted.
+    is compared record by record after three normalizations and no others: a
+    relative expiry becomes the whole hours from the run's start; the records
+    a rewrite cuts one large collection into, at 256 elements, 64 KiB or a
+    millisecond, are joined, because where the millisecond falls depends on
+    the machine; and map order inside an HSET record, and inside a ZADD record
+    without options, is sorted.
   - `scripts/check-log-compatibility.py`, run by the Log compatibility
     workflow on Linux and macOS, builds the base and the change and runs one
     workload on each under every policy and append mode (synchronous, worker

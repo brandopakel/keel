@@ -35,6 +35,15 @@ class NormalizeTest(unittest.TestCase):
                          record('HSET', 'h', 'a', '1', 'b', '2', 'b', '3') + record('ZADD', 'z', 1, 'x', 2, 'y')
                          + record('ZADD', 'z', 'XX', 'CH', 10, 'b'))
 
+    def test_a_collection_cut_into_records_is_joined(self):
+        body = (record('RPUSH', 'l', 'a', 'b') + record('RPUSH', 'l', 'c') + record('RPUSH', 'm', 'd')
+                + record('HSET', 'h', 'b', '2') + record('HSET', 'h', 'a', '1')
+                + record('ZADD', 'z', 2, 'y') + record('ZADD', 'z', 'XX', 1, 'x'))
+        self.assertEqual(compat.normalize(body, self.start),
+                         record('RPUSH', 'l', 'a', 'b', 'c') + record('RPUSH', 'm', 'd')
+                         + record('HSET', 'h', 'a', '1', 'b', '2')
+                         + record('ZADD', 'z', 2, 'y') + record('ZADD', 'z', 'XX', 1, 'x'))
+
     def test_first_difference_names_the_record(self):
         a, b = record('SET', 'k', 'v') + record('DEL', 'k'), record('SET', 'k', 'v') + record('UNLINK', 'k')
         self.assertIn('record 1', compat.first_difference(a, b))

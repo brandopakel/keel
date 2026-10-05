@@ -12,7 +12,8 @@
 # build under every fsync policy (always, everysec, no) and append mode
 # (synchronous, worker, concurrent). It requires the log each writes, and the
 # log each rewrites that into, to be the same bytes after normalizing relative
-# expiries and map order; each build to replay the other's written, rewritten,
+# expiries, map order and where a rewrite cut a large collection; each build to
+# replay the other's written, rewritten,
 # and crashed (kill -9 after writes during a rewrite) logs to the other's
 # keyspace; and a log of the BF and CF forms written before RedisBloom parity
 # to replay and rewrite the same on both.
