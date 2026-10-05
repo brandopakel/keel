@@ -27,7 +27,7 @@ func TestDumpPreservesLegacyPayloadsAcrossEveryType(t *testing.T) {
 			payload, err := hex.DecodeString(encoded)
 			require.NoError(t, err)
 			require.NoError(t, defaultEngine.restoreKey("legacy", payload))
-			actual, ok := dumpKey("legacy")
+			actual, ok := defaultEngine.dumpKey("legacy")
 			require.True(t, ok)
 			require.Equal(t, payload, actual, "the pre-change binary produced this payload")
 			reply := defaultEngine.cmdDUMP([]string{"legacy"})

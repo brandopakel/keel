@@ -27,8 +27,8 @@ func (r *rewriteRecord) appendCommand(command ...string) {
 // Dynamic opaque structures retain one immutable encoded image. CMS and Morris
 // have fixed shapes: the loop can read bounded pieces and checksum the emitted
 // bytes while dirty reconciliation covers every intervening write.
-func appendOpaqueRewriteRecord(dst []byte, key string, reset bool, plan dumpPlan, expiry uint64) []byte {
-	r := &rewriteRecord{sketch: newSketchDumpStream(key)}
+func (e *Engine) appendOpaqueRewriteRecord(dst []byte, key string, reset bool, plan dumpPlan, expiry uint64) []byte {
+	r := &rewriteRecord{sketch: e.newSketchDumpStream(key)}
 	payloadSize := plan.size + 9
 	if r.sketch == nil {
 		r.payload = appendDump(make([]byte, 0, payloadSize), plan)
@@ -42,11 +42,11 @@ func appendOpaqueRewriteRecord(dst []byte, key string, reset bool, plan dumpPlan
 	if expiry > 0 {
 		r.appendCommand("PEXPIREAT", key, strconv.FormatUint(expiry, 10))
 	}
-	rewrite.stream = r
-	return emitRewriteRecordSlice(dst)
+	e.rewrite.stream = r
+	return e.emitRewriteRecordSlice(dst)
 }
 
-func appendRewriteRecords(dst []byte, commands [][]string) []byte {
+func (e *Engine) appendRewriteRecords(dst []byte, commands [][]string) []byte {
 	size := 0
 	for _, command := range commands {
 		size += 32
@@ -64,12 +64,12 @@ func appendRewriteRecords(dst []byte, commands [][]string) []byte {
 	for _, command := range commands {
 		r.appendCommand(command...)
 	}
-	rewrite.stream = r
-	return emitRewriteRecordSlice(dst)
+	e.rewrite.stream = r
+	return e.emitRewriteRecordSlice(dst)
 }
 
-func emitRewriteRecordSlice(dst []byte) []byte {
-	r := rewrite.stream
+func (e *Engine) emitRewriteRecordSlice(dst []byte) []byte {
+	r := e.rewrite.stream
 	budget := rewriteRecordSlice
 	// The stream will emit at most this much. Reserve once so per-cell sketch
 	// encoding does not repeatedly grow and copy the current output slice.
@@ -107,7 +107,7 @@ func emitRewriteRecordSlice(dst []byte) []byte {
 		}
 	}
 	if r.part == len(r.parts) {
-		rewrite.stream = nil
+		e.rewrite.stream = nil
 	}
 	return dst
 }

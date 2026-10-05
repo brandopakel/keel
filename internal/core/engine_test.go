@@ -415,7 +415,10 @@ func TestEnginesShareNoLog(t *testing.T) {
 	wg.Wait()
 
 	// Each log replays to its own engine's keyspace, and holds nothing of the
-	// other's.
+	// other's. The last brief:* keys are let pass their millisecond first:
+	// the keyspace below reads one still within it as present, while the
+	// replay, a moment later, reaps it.
+	time.Sleep(5 * time.Millisecond)
 	never := goldenWindow{start: -1, end: -1 - int64(24*time.Hour/time.Millisecond)}
 	for _, side := range []struct {
 		e            *Engine
@@ -460,8 +463,200 @@ func TestEnginesShareNoLog(t *testing.T) {
 	require.NoError(t, c.FlushAOF())
 	require.NoError(t, c.CloseAOF())
 	assert.True(t, RewriteActive(), "c's close leaves the default engine's rewrite running")
-	assert.Empty(t, rewrite.dirty, "c's keys are not the default engine's dirty keys")
-	assert.Zero(t, rewrite.pos, "c's flushes do not advance the default engine's rewrite")
+	assert.Empty(t, defaultEngine.rewrite.dirty, "c's keys are not the default engine's dirty keys")
+	assert.Zero(t, defaultEngine.rewrite.pos, "c's flushes do not advance the default engine's rewrite")
+}
+
+// TestEnginesShareNoRewrite: a rewrite walks its own engine's keyspace and
+// replaces its own engine's log, through that engine's I/O and handoff, and
+// wakes the loop that drives that engine. A failing disk under one engine's
+// rewrite, a key ceiling it hits, the keys written while it runs, a rewrite
+// its EXEC schedules, a directory sync its rename leaves pending, what its
+// rewrites come to and the wait they earn are that engine's alone, whether
+// the engines rewrite one after the other or side by side.
+func TestEnginesShareNoRewrite(t *testing.T) {
+	ResetStores()
+	dir := t.TempDir()
+	a := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
+	b := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
+	t.Cleanup(func() { a.CloseAOF(); b.CloseAOF() })
+	var aWoken, bWoken atomic.Int64
+	a.SetRewriteWaker(func() { aWoken.Add(1) })
+	b.SetRewriteWaker(func() { bWoken.Add(1) })
+	require.NoError(t, a.OpenAOF(filepath.Join(dir, "a.aof")))
+	require.NoError(t, b.OpenAOF(filepath.Join(dir, "b.aof")))
+	for i := range 50 {
+		for _, side := range []struct {
+			e    *Engine
+			name string
+		}{{a, "a"}, {b, "b"}} {
+			v := side.name + ":" + strconv.Itoa(i)
+			require.Equal(t, "OK", on(t, side.e, "SET", "s:"+strconv.Itoa(i%10), v))
+			on(t, side.e, "RPUSH", "l", v)
+		}
+	}
+	require.NoError(t, a.FlushAOF())
+	require.NoError(t, b.FlushAOF())
+	read := func(e *Engine) string {
+		body, err := os.ReadFile(e.aof.path)
+		require.NoError(t, err)
+		return string(body)
+	}
+	drive := func(e *Engine) {
+		for i := 0; e.RewriteActive(); i++ {
+			require.NoError(t, e.FlushAOF())
+			require.Less(t, i, 100000, "the rewrite did not end")
+			time.Sleep(20 * time.Microsecond)
+		}
+	}
+	never := goldenWindow{start: -1, end: -1 - int64(24*time.Hour/time.Millisecond)}
+	replays := func(e *Engine) {
+		t.Helper()
+		replayed := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
+		_, err := replayed.LoadAOF(e.aof.path)
+		require.NoError(t, err)
+		assert.Equal(t, string(engineState(t, e, never)), string(engineState(t, replayed, never)))
+	}
+
+	// a's rewrite: a key written on a while it runs is a's dirty key, and one
+	// written on b is not; it replaces a's log and leaves b's as it was.
+	bBefore := read(b)
+	require.NoError(t, a.StartRewrite())
+	assert.False(t, b.RewriteActive())
+	require.Equal(t, "OK", on(t, a, "SET", "during", "a"))
+	require.Equal(t, "OK", on(t, b, "SET", "during", "b"))
+	assert.Contains(t, a.rewrite.dirty, "during")
+	require.NoError(t, b.FlushAOF())
+	drive(a)
+	assert.Equal(t, 1, a.aof.rewrites)
+	assert.Zero(t, b.aof.rewrites)
+	assert.Equal(t, bBefore+string(appendCommand(nil, "SET", "during", "b")), read(b), "b's log is only b's writes")
+	assert.NotContains(t, read(a), "b:")
+	assert.Positive(t, aWoken.Load(), "a's workers wake a's loop")
+	assert.Zero(t, bWoken.Load(), "and not b's")
+	replays(a)
+
+	// b's rewrite on a failing disk, and then a's key ceiling: each engine's
+	// own hooks, and neither touches the other's log.
+	diskErr := errors.New("b's disk is full")
+	b.rewriteFileWrite = func(*os.File, []byte) (int, error) { return 0, diskErr }
+	aBefore := read(a)
+	require.NoError(t, b.StartRewrite())
+	drive(b)
+	assert.Zero(t, b.aof.rewrites, "b's rewrite failed")
+	assert.True(t, sameFile(t, b.aof.file, b.aof.path), "b's old log is still b's log")
+	_, err := os.Stat(b.aof.path + ".rewrite")
+	assert.True(t, os.IsNotExist(err), "b's failed rewrite removed its file")
+	b.rewriteFileWrite = writeLog
+	a.keyCountForRewrite = func() int { return rewriteKeyCeiling + 1 }
+	require.Error(t, a.StartRewrite())
+	assert.False(t, a.RewriteActive())
+	require.NoError(t, b.StartRewrite(), "a's ceiling is not b's")
+	drive(b)
+	assert.Equal(t, 1, b.aof.rewrites)
+	assert.Equal(t, aBefore, read(a), "b's rewrites leave a's log as it was")
+	replays(a)
+	replays(b)
+	a.keyCountForRewrite = a.space.TotalKeys
+
+	field := func(e *Engine, name string) string {
+		for _, line := range strings.Split(string(rawOn(t, e, "INFO", "persistence")), "\r\n") {
+			if value, ok := strings.CutPrefix(line, name+":"); ok {
+				return value
+			}
+		}
+		t.Fatalf("INFO persistence has no %s", name)
+		return ""
+	}
+
+	// A BGREWRITEAOF inside a's EXEC is scheduled on a: b's flush starts
+	// nothing, and a's own starts it.
+	var tx *Transaction
+	for _, cmd := range []string{"MULTI", "BGREWRITEAOF", "EXEC"} {
+		var w replyWriter
+		var err error
+		tx, err = a.transact(tx, &Command{Cmd: cmd}, &w, nil)
+		require.NoError(t, err)
+	}
+	assert.Equal(t, "1", field(a, "aof_rewrite_scheduled"))
+	assert.Equal(t, "0", field(b, "aof_rewrite_scheduled"))
+	require.NoError(t, b.FlushAOF())
+	assert.False(t, b.RewriteActive(), "b's flush does not start a's scheduled rewrite")
+	assert.Equal(t, "1", field(a, "aof_rewrite_scheduled"))
+	require.NoError(t, a.FlushAOF())
+	assert.True(t, a.RewriteActive(), "a's own flush does")
+	drive(a)
+	assert.Equal(t, 2, a.aof.rewrites)
+
+	// b's rename leaves the directory sync after it pending on b alone: a's
+	// syncs and a's reopened log neither retry it nor clear it, and b's next
+	// sync does.
+	policy := config.AOFFsync
+	t.Cleanup(func() { config.AOFFsync = policy })
+	config.AOFFsync = config.FsyncAlways
+	var bDirSyncs atomic.Int64
+	dirErr := errors.New("b's directory will not sync")
+	b.rewriteSyncDir = func(string) error { bDirSyncs.Add(1); return dirErr }
+	require.NoError(t, b.StartRewrite())
+	drive(b)
+	require.Equal(t, filepath.Dir(b.aof.path), b.unsyncedLogDir)
+	require.Equal(t, int64(1), bDirSyncs.Load())
+	require.Equal(t, "OK", on(t, a, "SET", "synced", "a"))
+	require.NoError(t, a.FlushAOF())
+	aPath := a.aof.path
+	require.NoError(t, a.CloseAOF())
+	require.NoError(t, a.OpenAOF(aPath))
+	assert.Equal(t, filepath.Dir(b.aof.path), b.unsyncedLogDir, "a leaves b's pending directory sync")
+	assert.Equal(t, int64(1), bDirSyncs.Load())
+	b.rewriteSyncDir = syncDir
+	require.Equal(t, "OK", on(t, b, "SET", "synced", "b"))
+	require.NoError(t, b.FlushAOF())
+	assert.Empty(t, b.unsyncedLogDir, "b's own sync retries it")
+	config.AOFFsync = policy
+
+	// Side by side, each on a goroutine of its own and written to while it
+	// rewrites: a's rewrites fail on a's disk three times running, which earns
+	// a's automatic rewrites Redis's wait, while b's succeed. Each engine's
+	// INFO reports its own outcome, and each log still replays to its own
+	// engine.
+	a.rewriteFileWrite = func(*os.File, []byte) (int, error) { return 0, diskErr }
+	bRewrites := b.aof.rewrites
+	var wg sync.WaitGroup
+	for _, side := range []*Engine{a, b} {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for r := range 3 {
+				if !assert.NoError(t, side.StartRewrite()) {
+					return
+				}
+				for i := 0; side.RewriteActive(); i++ {
+					var w replyWriter
+					cmd := &Command{Cmd: "SET", Args: []string{"side:" + strconv.Itoa(i%20), strconv.Itoa(r)}}
+					if !assert.NoError(t, side.evalAndResponse(cmd, &w)) || !assert.NoError(t, side.FlushAOF()) ||
+						!assert.Less(t, i, 100000, "the rewrite did not end") {
+						return
+					}
+					time.Sleep(20 * time.Microsecond)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	assert.Equal(t, "err", field(a, "aof_last_bgrewrite_status"))
+	assert.Equal(t, "3", field(a, "aof_rewrites_consecutive_failures"))
+	assert.Equal(t, "ok", field(b, "aof_last_bgrewrite_status"))
+	assert.Equal(t, "0", field(b, "aof_rewrites_consecutive_failures"))
+	assert.Equal(t, bRewrites+3, b.aof.rewrites)
+	now := time.Now()
+	assert.True(t, a.rewriteLimited(now), "three failures in a row hold a's automatic rewrites back")
+	assert.False(t, b.rewriteLimited(now), "and not b's")
+	a.rewriteFileWrite = writeLog
+	replays(a)
+	replays(b)
+	assert.False(t, defaultEngine.RewriteActive())
+	assert.Nil(t, defaultEngine.aof.file)
+	assert.Equal(t, "ok", field(defaultEngine, "aof_last_bgrewrite_status"), "neither's failures are the default engine's")
 }
 
 // midTransaction is a transport whose own command, run in its place inside an

@@ -22,12 +22,12 @@ func TestSketchRewriteStartsWithoutConstructingAWholePayload(t *testing.T) {
 	runtime.ReadMemStats(&before)
 	require.NoError(t, AdvanceRewrite())
 	runtime.ReadMemStats(&after)
-	t.Logf("payload=%d allocated=%d first_slice=%d", cms.MarshalSize()+9, after.TotalAlloc-before.TotalAlloc, rewrite.written)
+	t.Logf("payload=%d allocated=%d first_slice=%d", cms.MarshalSize()+9, after.TotalAlloc-before.TotalAlloc, defaultEngine.rewrite.written)
 	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(256<<10))
-	require.LessOrEqual(t, rewrite.written, int64(rewriteRecordSlice))
-	require.NotNil(t, rewrite.stream)
-	require.Empty(t, rewrite.stream.payload)
-	require.NotNil(t, rewrite.stream.sketch)
+	require.LessOrEqual(t, defaultEngine.rewrite.written, int64(rewriteRecordSlice))
+	require.NotNil(t, defaultEngine.rewrite.stream)
+	require.Empty(t, defaultEngine.rewrite.stream.payload)
+	require.NotNil(t, defaultEngine.rewrite.stream.sketch)
 }
 
 func TestOpaqueRewriteReconcilesMutationWithValidHistoricalPayload(t *testing.T) {
@@ -61,8 +61,8 @@ func TestOpaqueRewriteReconcilesMutationWithValidHistoricalPayload(t *testing.T)
 				require.NoError(t, FlushAOF())
 				require.NoError(t, StartRewrite())
 				require.NoError(t, AdvanceRewrite())
-				require.NotNil(t, rewrite.stream)
-				require.LessOrEqual(t, rewrite.written, int64(rewriteRecordSlice))
+				require.NotNil(t, defaultEngine.rewrite.stream)
+				require.LessOrEqual(t, defaultEngine.rewrite.written, int64(rewriteRecordSlice))
 				switch mutation {
 				case "update":
 					run(t, update[0], update[1:]...)
@@ -72,20 +72,20 @@ func TestOpaqueRewriteReconcilesMutationWithValidHistoricalPayload(t *testing.T)
 				case "delete":
 					run(t, "DEL", key)
 				}
-				want, present := dumpKey(key)
+				want, present := defaultEngine.dumpKey(key)
 				for cycles := 0; RewriteActive(); cycles++ {
 					waitForRewriteSync(t)
 					require.Less(t, cycles, 100)
-					before := rewrite.written
+					before := defaultEngine.rewrite.written
 					require.NoError(t, FlushAOF())
-					require.LessOrEqual(t, rewrite.written-before, int64(rewriteRecordSlice))
+					require.LessOrEqual(t, defaultEngine.rewrite.written-before, int64(rewriteRecordSlice))
 				}
 				require.NoError(t, CloseAOF())
 				for restart := 0; restart < 2; restart++ {
 					ResetStores()
 					_, err := LoadAOF(path)
 					require.NoError(t, err, "every intermediate RESTORE must remain checksum-valid")
-					got, exists := dumpKey(key)
+					got, exists := defaultEngine.dumpKey(key)
 					require.Equal(t, present, exists)
 					require.Equal(t, want, got)
 					if mutation == "none" || mutation == "update" {

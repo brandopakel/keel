@@ -126,7 +126,7 @@ func sealReplication() error {
 	var body []byte
 	for key := range replication.dirty {
 		body = appendCommand(body, "DEL", key)
-		body = emitKey(body, key)
+		body = defaultEngine.emitKey(body, key)
 		if len(body) > replicationLimit {
 			return errors.New("replication frame exceeds 8 MiB")
 		}
@@ -188,7 +188,7 @@ func (e *Engine) cmdReplicationPull(args []string) []byte {
 				return e.encode(err, false)
 			}
 			for _, key := range keys {
-				frame.Body = emitKey(frame.Body, key)
+				frame.Body = e.emitKey(frame.Body, key)
 				if len(frame.Body) > replicationLimit {
 					return e.encode(errors.New("ERR replication snapshot exceeds 8 MiB"), false)
 				}

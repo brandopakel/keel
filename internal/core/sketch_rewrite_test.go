@@ -22,8 +22,8 @@ func TestSketchDumpSlicesPreserveEnvelopeAcrossAllBoundaries(t *testing.T) {
 				morris.IncrBy("item", 123456)
 				defaultEngine.morrisStore.Put("image", morris)
 			}
-			want, _ := dumpKey("image")
-			stream := newSketchDumpStream("image")
+			want, _ := defaultEngine.dumpKey("image")
+			stream := defaultEngine.newSketchDumpStream("image")
 			var got []byte
 			for offset := 0; offset < stream.size(); offset += slice {
 				got = stream.appendSlice(got, offset, min(slice, stream.size()-offset))
@@ -52,7 +52,7 @@ func TestSketchRewriteReconcilesWritesAcrossBodySlices(t *testing.T) {
 			run(t, "PEXPIRE", "image", "600000")
 			require.NoError(t, StartRewrite())
 			require.NoError(t, AdvanceRewrite())
-			require.NotNil(t, rewrite.stream.sketch)
+			require.NotNil(t, defaultEngine.rewrite.stream.sketch)
 			// Change cells after the header and first counter bytes were emitted.
 			// Every intermediate record must still decode, then reconciliation
 			// must replace it with the exact final table and RNG state.
@@ -60,7 +60,7 @@ func TestSketchRewriteReconcilesWritesAcrossBodySlices(t *testing.T) {
 				run(t, command, "image", fmt.Sprintf("item:%d", i), "12345")
 				require.NoError(t, AdvanceRewrite())
 			}
-			want, _ := dumpKey("image")
+			want, _ := defaultEngine.dumpKey("image")
 			for cycles := 0; RewriteActive(); cycles++ {
 				require.Less(t, cycles, 300)
 				require.NoError(t, FlushAOF())
@@ -71,7 +71,7 @@ func TestSketchRewriteReconcilesWritesAcrossBodySlices(t *testing.T) {
 				ResetStores()
 				_, err := LoadAOF(path)
 				require.NoError(t, err)
-				got, present := dumpKey("image")
+				got, present := defaultEngine.dumpKey("image")
 				require.True(t, present)
 				require.Equal(t, want, got)
 				require.Positive(t, run(t, "PTTL", "image").(int64))

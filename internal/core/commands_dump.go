@@ -48,8 +48,8 @@ const (
 )
 
 // dumpKey preserves the existing KEL1 envelope for internal persistence callers.
-func dumpKey(key string) ([]byte, bool) {
-	plan, ok := defaultEngine.planDump(key, math.MaxInt-9)
+func (e *Engine) dumpKey(key string) ([]byte, bool) {
+	plan, ok := e.planDump(key, math.MaxInt-9)
 	if !ok {
 		return nil, false
 	}

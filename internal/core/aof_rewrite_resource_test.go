@@ -44,12 +44,12 @@ func TestRewriteStreamsOversizedRecordsAcrossMutation(t *testing.T) {
 					run(t, "ZADD", key, "1", value)
 				}
 				run(t, "PEXPIRE", key, "600000")
-				expected := emitKey(nil, key)
+				expected := defaultEngine.emitKey(nil, key)
 				require.NoError(t, StartRewrite())
 				require.NoError(t, AdvanceRewrite())
 				waitForRewriteSync(t)
-				require.NotNil(t, rewrite.stream, "a large record must yield before completion")
-				require.LessOrEqual(t, rewrite.written, int64(rewriteRecordSlice))
+				require.NotNil(t, defaultEngine.rewrite.stream, "a large record must yield before completion")
+				require.LessOrEqual(t, defaultEngine.rewrite.written, int64(rewriteRecordSlice))
 				switch mutation {
 				case "replace":
 					run(t, "DEL", key)
@@ -72,10 +72,10 @@ func TestRewriteStreamsOversizedRecordsAcrossMutation(t *testing.T) {
 					// slow disk.
 					defaultEngine.pollAppend(true)
 					defaultEngine.pollAOFSync(true)
-					before := rewrite.written
+					before := defaultEngine.rewrite.written
 					require.NoError(t, AdvanceRewrite())
 					waitForRewriteSync(t)
-					require.LessOrEqual(t, rewrite.written-before, int64(rewriteRecordSlice), "one-key records must be emitted in bounded slices")
+					require.LessOrEqual(t, defaultEngine.rewrite.written-before, int64(rewriteRecordSlice), "one-key records must be emitted in bounded slices")
 				}
 				require.NoError(t, CloseAOF())
 				ResetStores()
@@ -83,7 +83,7 @@ func TestRewriteStreamsOversizedRecordsAcrossMutation(t *testing.T) {
 				require.NoError(t, err, "mutation must not leave a partial RESP record")
 				switch mutation {
 				case "none":
-					require.Equal(t, expected, emitKey(nil, key))
+					require.Equal(t, expected, defaultEngine.emitKey(nil, key))
 				case "replace":
 					require.Equal(t, "replacement", run(t, "GET", key))
 					require.EqualValues(t, -1, run(t, "PTTL", key))
@@ -109,10 +109,10 @@ func TestCancelPartialRewriteKeepsOriginalLog(t *testing.T) {
 	waitForRewriteSync(t)
 	runtime.ReadMemStats(&after)
 	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(256<<10), "starting a large record must not allocate a whole encoded copy")
-	require.NotNil(t, rewrite.stream)
+	require.NotNil(t, defaultEngine.rewrite.stream)
 	CancelRewrite()
-	require.Nil(t, rewrite.stream)
-	require.Empty(t, rewrite.collectionKey)
+	require.Nil(t, defaultEngine.rewrite.stream)
+	require.Empty(t, defaultEngine.rewrite.collectionKey)
 	require.NoError(t, CloseAOF())
 	ResetStores()
 	_, err := LoadAOF(path)
@@ -127,16 +127,16 @@ func TestRewriteDirtyBudgetRefusesBeforeRetainingName(t *testing.T) {
 	t.Cleanup(func() { CancelRewrite(); require.NoError(t, CloseAOF()) })
 	run(t, "SET", "original", "value")
 	require.NoError(t, StartRewrite())
-	before := rewriteBudgetAborts
+	before := defaultEngine.rewriteBudgetAborts
 	for i := 0; RewriteActive(); i++ {
 		require.Less(t, i, 10)
 		key := strconv.Itoa(i) + strings.Repeat("k", 1<<20)
-		noteRewriteDirty(key)
-		require.LessOrEqual(t, rewrite.dirtyBytes, rewriteDirtyBytes)
+		defaultEngine.noteRewriteDirty(key)
+		require.LessOrEqual(t, defaultEngine.rewrite.dirtyBytes, rewriteDirtyBytes)
 	}
-	require.Equal(t, before+1, rewriteBudgetAborts)
-	require.Nil(t, rewrite.dirty)
-	require.Nil(t, rewrite.stream)
+	require.Equal(t, before+1, defaultEngine.rewriteBudgetAborts)
+	require.Nil(t, defaultEngine.rewrite.dirty)
+	require.Nil(t, defaultEngine.rewrite.stream)
 	_, err := os.Stat(path + ".rewrite")
 	require.True(t, os.IsNotExist(err))
 	run(t, "SET", "after-abort", "durable")

@@ -179,9 +179,7 @@ func (e *Engine) cmdSPOP(args []string) []byte {
 	}
 	count = min(want, int64(s.Len()))
 	// Shuffling positions invalidates a rewrite cursor even if admission fails.
-	if e.ownsRewrite() {
-		noteRewriteDirty(key)
-	}
+	e.noteRewriteDirty(key)
 	count = int64(s.ShufflePrefix(int(count)))
 	walk := replyWalk(func(yield func(string) bool) {
 		for i := 0; i < int(count); i++ {
@@ -239,9 +237,7 @@ func (e *Engine) cmdSRANDMEMBER(args []string) []byte {
 	if !given || count > 0 {
 		// Distinct sampling shuffles the internal order even though the set's
 		// logical contents do not change. An incremental rewrite must restart.
-		if e.ownsRewrite() {
-			noteRewriteDirty(args[0])
-		}
+		e.noteRewriteDirty(args[0])
 	}
 	if !given {
 		// One member, for the same reason SPOP takes one.

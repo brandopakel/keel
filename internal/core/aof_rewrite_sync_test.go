@@ -18,9 +18,9 @@ import (
 // only for worker completion here; AdvanceRewrite still consumes the result.
 func waitForRewriteSync(t *testing.T) {
 	t.Helper()
-	if pendingRewriteIO != nil {
+	if defaultEngine.pendingRewriteIO != nil {
 		select {
-		case <-pendingRewriteIO.done:
+		case <-defaultEngine.pendingRewriteIO.done:
 		case <-time.After(3 * time.Second):
 			t.Fatal("rewrite I/O did not finish")
 		}
@@ -32,7 +32,7 @@ func waitForRewriteSync(t *testing.T) {
 func advanceToRewriteSync(t *testing.T) {
 	t.Helper()
 	for i := 0; i < 1000; i++ {
-		if pendingRewriteIO != nil && pendingRewriteIO.body == nil {
+		if defaultEngine.pendingRewriteIO != nil && defaultEngine.pendingRewriteIO.body == nil {
 			return
 		}
 		waitForRewriteSync(t)
@@ -48,8 +48,8 @@ func TestRewriteSyncAllowsWritesAndResynchronizesDirtyState(t *testing.T) {
 	release := make(chan struct{})
 	started := make(chan struct{})
 	woken := make(chan struct{}, 2)
-	oldSync := rewriteFileSync
-	oldWake := rewriteWake
+	oldSync := defaultEngine.rewriteFileSync
+	oldWake := defaultEngine.rewriteWake
 	SetRewriteWaker(func() {
 		select {
 		case woken <- struct{}{}:
@@ -57,7 +57,7 @@ func TestRewriteSyncAllowsWritesAndResynchronizesDirtyState(t *testing.T) {
 		}
 	})
 	var calls atomic.Int32
-	rewriteFileSync = func(f *os.File) error {
+	defaultEngine.rewriteFileSync = func(f *os.File) error {
 		if calls.Add(1) == 1 {
 			close(started)
 			<-release
@@ -71,7 +71,7 @@ func TestRewriteSyncAllowsWritesAndResynchronizesDirtyState(t *testing.T) {
 		}
 		CancelRewrite()
 		require.NoError(t, CloseAOF())
-		rewriteFileSync = oldSync
+		defaultEngine.rewriteFileSync = oldSync
 		SetRewriteWaker(oldWake)
 		ResetStores()
 	})
@@ -98,7 +98,7 @@ func TestRewriteSyncAllowsWritesAndResynchronizesDirtyState(t *testing.T) {
 	require.Equal(t, "during", run(t, "GET", "k"))
 	require.NoError(t, FlushAOF())
 	require.True(t, RewriteActive())
-	require.Contains(t, rewrite.dirty, "k")
+	require.Contains(t, defaultEngine.rewrite.dirty, "k")
 	oldFile, err := os.Stat(path)
 	require.NoError(t, err)
 	require.True(t, oldFile.Size() > 0)
@@ -131,25 +131,25 @@ func TestCancelRewriteSyncTransfersCleanupWithoutReusingPath(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "store.aof")
 	require.NoError(t, OpenAOF(path))
 	release := make(chan struct{})
-	oldSync := rewriteFileSync
-	rewriteFileSync = func(f *os.File) error { <-release; return f.Sync() }
+	oldSync := defaultEngine.rewriteFileSync
+	defaultEngine.rewriteFileSync = func(f *os.File) error { <-release; return f.Sync() }
 	released := false
 	t.Cleanup(func() {
 		if !released {
 			close(release)
 		}
 		require.NoError(t, CloseAOF())
-		rewriteFileSync = oldSync
+		defaultEngine.rewriteFileSync = oldSync
 		ResetStores()
 	})
 	run(t, "SET", "k", "value")
 	require.NoError(t, FlushAOF())
 	require.NoError(t, StartRewrite())
 	advanceToRewriteSync(t)
-	require.NotNil(t, pendingRewriteIO)
+	require.NotNil(t, defaultEngine.pendingRewriteIO)
 	CancelRewrite()
 	require.False(t, RewriteActive())
-	require.Nil(t, rewrite.file)
+	require.Nil(t, defaultEngine.rewrite.file)
 	require.ErrorContains(t, StartRewrite(), "still releasing")
 	require.Equal(t, "OK", run(t, "SET", "after", "survives"))
 	require.NoError(t, FlushAOF())
@@ -171,10 +171,10 @@ func TestRewriteSyncFailureKeepsOriginalLog(t *testing.T) {
 	ResetStores()
 	path := filepath.Join(t.TempDir(), "store.aof")
 	require.NoError(t, OpenAOF(path))
-	oldSync := rewriteFileSync
+	oldSync := defaultEngine.rewriteFileSync
 	diskErr := errors.New("injected replacement sync failure")
-	rewriteFileSync = func(*os.File) error { return diskErr }
-	t.Cleanup(func() { require.NoError(t, CloseAOF()); rewriteFileSync = oldSync; ResetStores() })
+	defaultEngine.rewriteFileSync = func(*os.File) error { return diskErr }
+	t.Cleanup(func() { require.NoError(t, CloseAOF()); defaultEngine.rewriteFileSync = oldSync; ResetStores() })
 	run(t, "SET", "k", "value")
 	require.NoError(t, FlushAOF())
 	require.ErrorIs(t, RewriteAOF(), diskErr)
@@ -195,40 +195,40 @@ func TestRewriteBudgetAbortWhileSyncOwnsFile(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "store.aof")
 			require.NoError(t, OpenAOF(path))
 			release := make(chan struct{})
-			oldSync := rewriteFileSync
-			rewriteFileSync = func(f *os.File) error { <-release; return f.Sync() }
+			oldSync := defaultEngine.rewriteFileSync
+			defaultEngine.rewriteFileSync = func(f *os.File) error { <-release; return f.Sync() }
 			released := false
 			t.Cleanup(func() {
 				if !released {
 					close(release)
 				}
 				require.NoError(t, CloseAOF())
-				rewriteFileSync = oldSync
+				defaultEngine.rewriteFileSync = oldSync
 				ResetStores()
 			})
 			run(t, "SET", "original", "value")
 			require.NoError(t, FlushAOF())
 			require.NoError(t, StartRewrite())
 			advanceToRewriteSync(t)
-			job := pendingRewriteIO
+			job := defaultEngine.pendingRewriteIO
 			require.NotNil(t, job)
-			before := rewriteBudgetAborts
+			before := defaultEngine.rewriteBudgetAborts
 			if budget == "duration" {
-				rewrite.started = time.Now().Add(-31 * time.Second)
+				defaultEngine.rewrite.started = time.Now().Add(-31 * time.Second)
 				require.NoError(t, AdvanceRewrite())
 			} else {
-				noteRewriteDirty(strings.Repeat("k", rewriteDirtyBytes))
+				defaultEngine.noteRewriteDirty(strings.Repeat("k", rewriteDirtyBytes))
 			}
 			require.False(t, RewriteActive())
-			require.Equal(t, before+1, rewriteBudgetAborts)
-			require.Same(t, job, pendingRewriteIO)
+			require.Equal(t, before+1, defaultEngine.rewriteBudgetAborts)
+			require.Same(t, job, defaultEngine.pendingRewriteIO)
 			require.ErrorContains(t, StartRewrite(), "still releasing")
 			require.Equal(t, "OK", run(t, "SET", "after", "survives"))
 			require.NoError(t, FlushAOF())
 			close(release)
 			released = true
 			require.NoError(t, CloseAOF()) // shutdown joins the abandoned worker
-			require.Nil(t, pendingRewriteIO)
+			require.Nil(t, defaultEngine.pendingRewriteIO)
 			_, err := os.Stat(path + ".rewrite")
 			require.True(t, os.IsNotExist(err))
 			ResetStores()
@@ -244,16 +244,16 @@ func TestRewriteDirtyTailSyncFailureKeepsAllAcknowledgedWrites(t *testing.T) {
 	ResetStores()
 	path := filepath.Join(t.TempDir(), "store.aof")
 	require.NoError(t, OpenAOF(path))
-	oldSync := rewriteFileSync
+	oldSync := defaultEngine.rewriteFileSync
 	diskErr := errors.New("injected dirty tail sync failure")
 	var calls atomic.Int32
-	rewriteFileSync = func(f *os.File) error {
+	defaultEngine.rewriteFileSync = func(f *os.File) error {
 		if calls.Add(1) == 2 {
 			return diskErr
 		}
 		return f.Sync()
 	}
-	t.Cleanup(func() { require.NoError(t, CloseAOF()); rewriteFileSync = oldSync; ResetStores() })
+	t.Cleanup(func() { require.NoError(t, CloseAOF()); defaultEngine.rewriteFileSync = oldSync; ResetStores() })
 	run(t, "SET", "original", "value")
 	require.NoError(t, FlushAOF())
 	require.NoError(t, StartRewrite())
@@ -268,7 +268,7 @@ func TestRewriteDirtyTailSyncFailureKeepsAllAcknowledgedWrites(t *testing.T) {
 		require.NoError(t, FlushAOF())
 	}
 	require.False(t, RewriteActive())
-	require.ErrorIs(t, rewriteOutcome.lastErr, diskErr)
+	require.ErrorIs(t, defaultEngine.rewriteOutcome.lastErr, diskErr)
 	require.Equal(t, int32(2), calls.Load())
 	require.Equal(t, "OK", run(t, "SET", "after", "survives"))
 	require.NoError(t, CloseAOF())
@@ -285,7 +285,7 @@ func TestRewriteDirtyTailSyncFailureKeepsAllAcknowledgedWrites(t *testing.T) {
 // self-wake indefinitely, and its completion must resume rewrite finalization.
 func TestRewriteWaitsForOriginalSyncWithoutSpinning(t *testing.T) {
 	ResetStores()
-	oldPolicy, oldSync, oldWake := config.AOFFsync, defaultEngine.aofSync, rewriteWake
+	oldPolicy, oldSync, oldWake := config.AOFFsync, defaultEngine.aofSync, defaultEngine.rewriteWake
 	config.AOFFsync = config.FsyncEverySec
 	release := make(chan struct{})
 	woken := make(chan struct{}, 4)
@@ -302,7 +302,7 @@ func TestRewriteWaitsForOriginalSyncWithoutSpinning(t *testing.T) {
 			close(release)
 		}
 		require.NoError(t, CloseAOF())
-		config.AOFFsync, defaultEngine.aofSync, rewriteWake = oldPolicy, oldSync, oldWake
+		config.AOFFsync, defaultEngine.aofSync, defaultEngine.rewriteWake = oldPolicy, oldSync, oldWake
 		ResetStores()
 	})
 	path := filepath.Join(t.TempDir(), "original-sync.aof")
@@ -312,10 +312,10 @@ func TestRewriteWaitsForOriginalSyncWithoutSpinning(t *testing.T) {
 	require.NoError(t, FlushAOF())
 	require.NotNil(t, defaultEngine.aof.syncPending)
 	require.NoError(t, StartRewrite())
-	for i := 0; !rewriteWalkDone() && i < 100; i++ {
+	for i := 0; !defaultEngine.rewriteWalkDone() && i < 100; i++ {
 		require.NoError(t, AdvanceRewrite())
 	}
-	require.True(t, rewriteWalkDone())
+	require.True(t, defaultEngine.rewriteWalkDone())
 	require.True(t, RewriteActive())
 	require.False(t, RewriteNeedsCycle(), "original-file sync must not cause idle polling")
 	waitForRewriteSync(t)

@@ -185,7 +185,7 @@ func TestTransactionSchedulesARewriteAsRedisDoes(t *testing.T) {
 	require.NoError(t, OpenAOF(path))
 	t.Cleanup(func() {
 		if RewriteActive() {
-			abortRewrite(errors.New("test cleanup"))
+			defaultEngine.abortRewrite(errors.New("test cleanup"))
 		}
 		CloseAOF()
 	})

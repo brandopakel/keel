@@ -24,7 +24,7 @@ func setupReplicationV2(t *testing.T) {
 	oldExpiry, oldEviction := data_structure.DefaultSpace.SuspendExpiry, data_structure.DefaultSpace.SuspendEviction
 	t.Cleanup(func() {
 		if RewriteActive() {
-			abortRewrite(errors.New("test cleanup"))
+			defaultEngine.abortRewrite(errors.New("test cleanup"))
 		}
 		CloseAOF()
 		resetReplicationV2()
@@ -116,9 +116,9 @@ func TestReplicationV2LargeSnapshotOperationsAndFrozenFile(t *testing.T) {
 	run(t, "CF.ADD", "cf", "second")
 	run(t, "PFADD", "hll", "another")
 	opaque := pullV2(t, epoch, delta.To, "", 0)
-	morris, _ := dumpKey("mor")
-	cuckoo, _ := dumpKey("cf")
-	hll, _ := dumpKey("hll")
+	morris, _ := defaultEngine.dumpKey("mor")
+	cuckoo, _ := defaultEngine.dumpKey("cf")
+	hll, _ := defaultEngine.dumpKey("hll")
 	want := snapshotEverything(t)
 	// Replacing the AOF inode must not change chunks from the frozen snapshot.
 	require.NoError(t, StartRewrite())
@@ -138,7 +138,7 @@ func TestReplicationV2LargeSnapshotOperationsAndFrozenFile(t *testing.T) {
 	require.True(t, replicaReady)
 	require.Equal(t, want, snapshotEverything(t))
 	for key, want := range map[string][]byte{"mor": morris, "cf": cuckoo, "hll": hll} {
-		got, ok := dumpKey(key)
+		got, ok := defaultEngine.dumpKey(key)
 		require.True(t, ok)
 		require.Equal(t, want, got)
 	}

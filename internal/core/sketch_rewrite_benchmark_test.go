@@ -17,15 +17,15 @@ func BenchmarkSketchRewriteStart(b *testing.B) {
 				} else {
 					defaultEngine.morrisStore.Put("image", data_structure.CreateMorris(uint32(mib<<20), 1))
 				}
-				b.Cleanup(func() { rewrite.stream = nil; ResetStores() })
+				b.Cleanup(func() { defaultEngine.rewrite.stream = nil; ResetStores() })
 				b.ReportAllocs()
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					out := emitRewriteKey(nil, "image", false)
+					out := defaultEngine.emitRewriteKey(nil, "image", false)
 					if len(out) != rewriteRecordSlice {
 						b.Fatal("first slice must fill its budget")
 					}
-					rewrite.stream = nil
+					defaultEngine.rewrite.stream = nil
 				}
 			})
 		}

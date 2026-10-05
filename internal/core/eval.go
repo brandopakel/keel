@@ -173,8 +173,14 @@ func (e *Engine) evalAndResponse(cmd *Command, c io.ReadWriter) error {
 	// first because the type check below reads keys, and reading a key whose
 	// expiry has passed reaps it - a removal that has to reach the log even
 	// though the command it happened under went on to be refused.
+	//
+	// aofEnd closes the scope after the reply is written, on each path from
+	// here. It is called there rather than deferred: a deferred method call is
+	// wrapped in a closure and called through it, an indirect call and a frame
+	// on every command, where the deferred function of no arguments it was
+	// while the log was package state was called directly. No panic is
+	// recovered on the way out of a command, so the two do not differ.
 	e.aofBegin(cmd.Cmd)
-	defer e.aofEnd()
 
 	// A name may only mean one thing at a time, and the stores cannot enforce
 	// that individually because none of them knows about the others. Checked
@@ -183,6 +189,7 @@ func (e *Engine) evalAndResponse(cmd *Command, c io.ReadWriter) error {
 		res := e.encode(err, false)
 		e.aofCommit(cmd, res)
 		_, werr := c.Write(res)
+		e.aofEnd()
 		return werr
 	}
 
@@ -200,5 +207,6 @@ func (e *Engine) evalAndResponse(cmd *Command, c io.ReadWriter) error {
 	e.space.EnforceLimits()
 
 	_, err := c.Write(res)
+	e.aofEnd()
 	return err
 }

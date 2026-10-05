@@ -274,8 +274,8 @@ func (e *Engine) cmdReplicationPullV2(args []string) []byte {
 		// After repeated failures the snapshot's rewrite waits as an
 		// automatic one does, so a waiting replica cannot drive a failing
 		// disk round a loop; any rewrite that finishes meanwhile serves it.
-		if !RewriteActive() && snapshotRewriteAllowed() {
-			if err := startSnapshotRewrite(); err != nil {
+		if !e.RewriteActive() && e.snapshotRewriteAllowed() {
+			if err := e.startSnapshotRewrite(); err != nil {
 				return e.encode(fmt.Errorf("ERR preparing replication snapshot: %w", err), false)
 			}
 		}
