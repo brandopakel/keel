@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"io/fs"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -61,9 +62,14 @@ func TestConfigHoldsNothingMutable(t *testing.T) {
 	}
 }
 
+// configPath is this package's import path.
+const configPath = "github.com/brandopakel/keel/internal/config"
+
 // TestNothingAssignsTheBuildIdentity: the variables this package keeps are
 // the linker's to set. A file anywhere in the module that assigns one, or
 // takes its address, as a flag binding would, turns it back into a setting.
+// Each file's own name for this package is read from its imports, so an
+// alias or a dot import does not hide a write.
 func TestNothingAssignsTheBuildIdentity(t *testing.T) {
 	t.Parallel()
 	root, err := filepath.Abs(filepath.Join("..", ".."))
@@ -71,15 +77,18 @@ func TestNothingAssignsTheBuildIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	fset := token.NewFileSet()
-	written := func(expr ast.Expr, inConfig bool) bool {
+	// names are what a file calls this package; bare is whether a listed
+	// variable can be written without a qualifier, inside the package or
+	// through a dot import.
+	written := func(expr ast.Expr, names map[string]bool, bare bool) bool {
 		switch e := ast.Unparen(expr).(type) {
 		case *ast.Ident:
 			_, listed := packageVars[e.Name]
-			return inConfig && listed
+			return bare && listed
 		case *ast.SelectorExpr:
 			pkg, ok := e.X.(*ast.Ident)
 			_, listed := packageVars[e.Sel.Name]
-			return ok && pkg.Name == "config" && listed
+			return ok && names[pkg.Name] && listed
 		}
 		return false
 	}
@@ -99,21 +108,35 @@ func TestNothingAssignsTheBuildIdentity(t *testing.T) {
 			return nil // not Go this module builds, such as a template
 		}
 		checked++
-		inConfig := file.Name.Name == "config" && filepath.Dir(path) == filepath.Join(root, "internal", "config")
+		bare := file.Name.Name == "config" && filepath.Dir(path) == filepath.Join(root, "internal", "config")
+		names := map[string]bool{}
+		for _, spec := range file.Imports {
+			if p, err := strconv.Unquote(spec.Path.Value); err != nil || p != configPath {
+				continue
+			}
+			switch {
+			case spec.Name == nil:
+				names["config"] = true
+			case spec.Name.Name == ".":
+				bare = true
+			case spec.Name.Name != "_":
+				names[spec.Name.Name] = true
+			}
+		}
 		ast.Inspect(file, func(n ast.Node) bool {
 			switch n := n.(type) {
 			case *ast.AssignStmt:
 				for _, lhs := range n.Lhs {
-					if written(lhs, inConfig) {
+					if written(lhs, names, bare) {
 						t.Errorf("%s assigns the build identity", fset.Position(lhs.Pos()))
 					}
 				}
 			case *ast.IncDecStmt:
-				if written(n.X, inConfig) {
+				if written(n.X, names, bare) {
 					t.Errorf("%s assigns the build identity", fset.Position(n.Pos()))
 				}
 			case *ast.UnaryExpr:
-				if n.Op == token.AND && written(n.X, inConfig) {
+				if n.Op == token.AND && written(n.X, names, bare) {
 					t.Errorf("%s takes the address of the build identity", fset.Position(n.Pos()))
 				}
 			}
