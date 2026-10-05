@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -187,13 +186,9 @@ func runBloomSessionV2(t *testing.T, resp3 bool) (log, delta, dumps []byte) {
 // delta after every command so each batch holds one key and the order is the
 // commands'.
 func runBloomSessionV1(t *testing.T, resp3 bool) []byte {
-	oldFeed, oldReplica, oldProtocol := config.ReplicationFeed, config.ReplicaOf, config.ReplicationProtocol
-	t.Cleanup(func() {
-		CloseAOF()
-		config.ReplicationFeed, config.ReplicaOf, config.ReplicationProtocol = oldFeed, oldReplica, oldProtocol
-	})
+	t.Cleanup(func() { CloseAOF() })
 	ResetStores()
-	config.ReplicationFeed, config.ReplicaOf, config.ReplicationProtocol = true, "", 1
+	withOptions(t, func(o *Options) { o.ReplicationFeed, o.ReplicaOf, o.ReplicationProtocol = true, "", 1 })
 	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "primary.aof")))
 	require.NoError(t, InitReplication())
 	pull := func(epoch string, offset uint64) ReplicationFrame {

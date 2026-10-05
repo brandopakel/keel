@@ -3,7 +3,9 @@
 //
 // Plan step 2.5 (docs/embedding-plan.md) is moving them into options, so that
 // each engine has settings of its own: the keyspace's limits are core.Options
-// now, and the rest follow.
+// now, and so are active expiry, the log's settings and the replication role.
+// What is left here is the listener's and the transport's, which become the
+// server's options.
 package config
 
 // Where the server listens, and how many connections it will hold.
@@ -28,43 +30,6 @@ var (
 // with no locking, and it is not worth trading for throughput.
 var IOThreads = 1
 
-// The append-only file. Off by default, as it is in Redis: it costs a write
-// syscall per event-loop cycle and, under FsyncAlways, a disk flush before
-// every reply.
-var (
-	AOFEnabled          = false
-	AOFAsyncAppend      = false
-	AOFConcurrentAppend = false
-	AOFFileName         = "./keel-master.aof"
-	AOFFsync            = FsyncEverySec
-)
-
-// LegacyAOFFileName is what the default log was called while the server was
-// called memkv.
-//
-// It is still looked for, because the alternative is the worst failure this
-// file has: a server started after the rename finds no log at the new default,
-// replays nothing, and comes up empty next to a perfectly good log it did not
-// look at. Nothing errors and nothing warns - the keyspace is just gone. The
-// old name is read if it is there and the new one is not; it is never written.
-var LegacyAOFFileName = "./memkv-master.aof"
-
-// Active expiry: how hard the server looks for keys whose TTL has passed
-// rather than waiting for something to read them.
-//
-// The sampling is Redis's. Twenty keys with a TTL are examined; if more than a
-// quarter had fallen due, the keyspace probably holds many more and another
-// round is drawn. Rounds are capped so one pass cannot become a long stall on a
-// keyspace that is mostly expired - what is left over is found on the next
-// pass, a tenth of a second later.
-//
-// Zero samples turns it off, leaving expiry lazy as it was.
-var (
-	ActiveExpireSamples = 20
-	ActiveExpirePercent = 25
-	ActiveExpireRounds  = 16
-)
-
 // CronIntervalMs is how often the event loop is woken to do work that is due
 // because of the clock rather than because a client asked.
 //
@@ -74,44 +39,17 @@ var (
 // and runs it at 10Hz by default; this is the same rate for the same reason.
 var CronIntervalMs = 100
 
-// When the log is rewritten automatically.
-//
-// The percentage is measured against the size the log was after the last
-// rewrite, which is roughly the size the data needs. Growth past that is
-// history: commands superseded by later ones, and keys since deleted. 100 means
-// rewrite once the log has doubled, which is Redis's default and the same
-// reasoning - half the file being dead weight is worth one pass to be rid of.
-//
-// The minimum stops a small server rewriting constantly. A 64MB log takes a
-// moment to replay and costs nothing to keep, so doubling from 1KB to 2KB is
-// not worth a rewrite even though it is 100% growth. Zero percentage turns
-// automatic rewriting off; BGREWRITEAOF still works.
-var (
-	AOFAutoRewritePercentage = 100
-	AOFAutoRewriteMinSize    = int64(64 * 1024 * 1024)
-)
-
-// How often the log is flushed to disk.
-//
-//	FsyncAlways   before replying, so an acknowledged write is a durable one
-//	FsyncEverySec at most once a second; a crash loses up to a second
-//	FsyncNever    when the operating system feels like it
-//
-// EverySec is the default for the reason Redis chose it: Always turns every
-// cycle into a disk round trip, and on a single-threaded server that is a stall
-// every other connection shares.
-const (
-	FsyncAlways   = "always"
-	FsyncEverySec = "everysec"
-	FsyncNever    = "no"
-)
+// AOFConcurrentAppend overlaps bounded string commands with the log's worker
+// appends, which the event loop orders (server/aof_ordered.go). It requires
+// the engine to append on a worker (core.Options.AsyncAppend).
+var AOFConcurrentAppend = false
 
 // RequirePass is configured from an environment variable, never a command-line secret.
 var RequirePass string
 
-// Experimental replication is opt-in and requires authenticated AOF servers.
-var ReplicationFeed bool
-var ReplicationProtocol = 1
-var ReplicaOf string
+// How a replica reaches its primary: the password it authenticates with,
+// read from the environment variable -primary-password-env names, and
+// whether it verifies TLS. Which primary it follows is the engine's
+// (core.Options.ReplicaOf).
 var ReplicaPassword string
 var ReplicaTLS bool

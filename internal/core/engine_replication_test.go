@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -71,8 +70,8 @@ func captureStreamV2(t *testing.T, name string) replicationStream {
 // with a log in dir, as a server started with -replicaof is.
 func replicaEngine(t *testing.T, dir, name string, protocol int) *Engine {
 	t.Helper()
-	e := newEngine(Options{})
-	e.ownRole = replicationRole{ReplicaOf: "primary.test:6379", Protocol: protocol}
+	// Under fsync no, as the default engine wrote the streams it applies.
+	e := newEngine(Options{ReplicaOf: "primary.test:6379", ReplicationProtocol: protocol, Fsync: FsyncNever})
 	require.NoError(t, e.OpenAOF(filepath.Join(dir, name+".aof")))
 	require.NoError(t, e.followPrimary())
 	t.Cleanup(func() { e.CloseAOF() })
@@ -117,7 +116,7 @@ func TestEnginesShareNoReplica(t *testing.T) {
 	// The default engine is a replica from here too.
 	require.NoError(t, CloseAOF())
 	ResetStores()
-	config.ReplicationFeed, config.ReplicaOf = false, "primary.test:6379"
+	withOptions(t, func(o *Options) { o.ReplicationFeed, o.ReplicaOf = false, "primary.test:6379" })
 	require.NoError(t, InitReplication())
 	dir := t.TempDir()
 	a, b := replicaEngine(t, dir, "a", 2), replicaEngine(t, dir, "b", 2)
@@ -236,8 +235,7 @@ func TestEnginesShareNoReplica(t *testing.T) {
 		// Restarted on its own log, each resumes from its own checkpoint.
 		path := side.e.aof.path
 		require.NoError(t, side.e.CloseAOF())
-		restarted := newEngine(Options{})
-		restarted.ownRole = side.e.ownRole
+		restarted := newEngine(side.e.options)
 		_, err := restarted.LoadAOF(path)
 		require.NoError(t, err)
 		require.NoError(t, restarted.OpenAOF(path))
@@ -260,7 +258,7 @@ func TestEnginesShareNoReplica(t *testing.T) {
 	assert.Zero(t, defaultEngine.space.TotalKeys())
 
 	// Protocol 1: two primaries' key images, applied side by side.
-	config.ReplicationFeed, config.ReplicaOf, config.ReplicationProtocol = true, "", 1
+	withOptions(t, func(o *Options) { o.ReplicationFeed, o.ReplicaOf, o.ReplicationProtocol = true, "", 1 })
 	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "primary1.aof")))
 	var v1 []replicationStream
 	for _, name := range []string{"a", "b"} {
@@ -288,7 +286,7 @@ func TestEnginesShareNoReplica(t *testing.T) {
 	}
 	require.NoError(t, CloseAOF())
 	ResetStores()
-	config.ReplicationFeed, config.ReplicaOf = false, "primary.test:6379"
+	withOptions(t, func(o *Options) { o.ReplicationFeed, o.ReplicaOf = false, "primary.test:6379" })
 	require.NoError(t, InitReplication())
 	a1, b1 := replicaEngine(t, dir, "a1", 1), replicaEngine(t, dir, "b1", 1)
 	for i, e := range []*Engine{a1, b1} {
@@ -404,8 +402,7 @@ func TestEnginesShareNoReplication(t *testing.T) {
 	defaultEpoch := defaultEngine.replication.epoch
 	dir := t.TempDir()
 	primary := func(name string, protocol int) *Engine {
-		e := newEngine(Options{})
-		e.ownRole = replicationRole{Feed: true, Protocol: protocol}
+		e := newEngine(Options{ReplicationFeed: true, ReplicationProtocol: protocol})
 		require.NoError(t, e.OpenAOF(filepath.Join(dir, name+".aof")))
 		require.NoError(t, e.InitReplication())
 		t.Cleanup(func() { e.CloseAOF() })
@@ -540,9 +537,8 @@ func TestEnginesShareNoReplication(t *testing.T) {
 func TestEnginesShareNoFailover(t *testing.T) {
 	ResetStores()
 	defaultTerm, defaultPath := defaultEngine.CurrentTerm(), defaultEngine.failover.path
-	engine := func(dir string, role replicationRole) (*Engine, string) {
-		e := newEngine(Options{})
-		e.ownRole = role
+	engine := func(dir string, role Options) (*Engine, string) {
+		e := newEngine(role)
 		path := filepath.Join(dir, "store.aof")
 		require.NoError(t, e.LoadTerm(path))
 		require.NoError(t, e.OpenAOF(path))
@@ -558,8 +554,8 @@ func TestEnginesShareNoFailover(t *testing.T) {
 		require.NoError(t, err)
 		return string(body)
 	}
-	feed := replicationRole{Feed: true, Protocol: 2}
-	follow2 := replicationRole{ReplicaOf: "primary.test:6379", Protocol: 2}
+	feed := Options{ReplicationFeed: true, ReplicationProtocol: 2}
+	follow2 := Options{ReplicaOf: "primary.test:6379", ReplicationProtocol: 2}
 	a, aPath := engine(t.TempDir(), feed)
 	b, bPath := engine(t.TempDir(), feed)
 
@@ -664,8 +660,7 @@ func TestEnginesShareNoFailover(t *testing.T) {
 		path string
 		term uint64
 	}{{aPath, aTerm}, {bPath, bTerm}} {
-		restarted := newEngine(Options{})
-		restarted.ownRole = feed
+		restarted := newEngine(feed)
 		require.NoError(t, restarted.LoadTerm(side.path))
 		assert.Equal(t, side.term, restarted.CurrentTerm())
 		assert.False(t, restarted.writable())
@@ -675,5 +670,5 @@ func TestEnginesShareNoFailover(t *testing.T) {
 	// The default engine saw none of it.
 	assert.Equal(t, defaultTerm, defaultEngine.CurrentTerm())
 	assert.Equal(t, defaultPath, defaultEngine.failover.path)
-	assert.Equal(t, defaultTerm == 0, Writable() || config.ReplicaOf != "")
+	assert.Equal(t, defaultTerm == 0, Writable() || Configuration().ReplicaOf != "")
 }

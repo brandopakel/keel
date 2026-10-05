@@ -8,7 +8,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/core"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
@@ -76,18 +75,12 @@ func TestMigratingFromTheLegacyLogSurvivesASecondRestart(t *testing.T) {
 	assert.NoError(t, os.WriteFile(legacy,
 		[]byte("*3\r\n$3\r\nSET\r\n$8\r\nlegacy-k\r\n$5\r\nvalue\r\n"), 0o644))
 
-	oldEnabled, oldName := config.AOFEnabled, config.AOFFileName
-	oldLegacy := config.LegacyAOFFileName
-	config.AOFEnabled, config.AOFFileName, config.LegacyAOFFileName = true, current, legacy
-	defer func() {
-		config.AOFEnabled, config.AOFFileName = oldEnabled, oldName
-		config.LegacyAOFFileName = oldLegacy
-	}()
+	withEngineOptions(t, func(o *core.Options) { o.AppendOnly, o.AppendFilename = true, current })
 
 	// First start: reads the legacy log, then writes what it read into the
 	// current one before anything else appends to it.
 	core.ResetStores()
-	assert.NoError(t, StartAOF())
+	assert.NoError(t, startAOF(legacy))
 	assert.Equal(t, 1, data_structure.TotalKeys(), "the legacy key is here after one restart")
 	assert.NoError(t, core.EvalAndResponse(
 		&core.Command{Cmd: "SET", Args: []string{"new-k", "added"}}, &bytes.Buffer{}))
@@ -96,7 +89,7 @@ func TestMigratingFromTheLegacyLogSurvivesASecondRestart(t *testing.T) {
 
 	// Second start: the current file now exists and takes precedence.
 	core.ResetStores()
-	assert.NoError(t, StartAOF())
+	assert.NoError(t, startAOF(legacy))
 	defer core.CloseAOF()
 	assert.Equal(t, 2, data_structure.TotalKeys(),
 		"the key that lived only in the legacy log has to survive the file swap")

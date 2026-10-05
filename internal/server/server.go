@@ -757,6 +757,9 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 		setWaker(nil)
 	}()
 	log.Println("starting an asynchronous TCP server on", config.Host, config.Port)
+	// Whether the engine appends its log on a worker is its own option, and
+	// does not change while the loop drives it.
+	asyncAppend := core.Configuration().AsyncAppend
 
 	nextMaintenance := time.Now()
 	var heldReplies []*client
@@ -879,7 +882,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 				return err
 			}
 		}
-		if config.AOFAsyncAppend && !config.AOFConcurrentAppend && core.AppendPending() {
+		if asyncAppend && !config.AOFConcurrentAppend && core.AppendPending() {
 			ready, err := core.FlushAOFAsync(wake)
 			if err != nil {
 				requestShutdown()
@@ -1093,7 +1096,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 		// would be faster and would be a lie.
 		ready := true
 		var flushErr error
-		if config.AOFAsyncAppend {
+		if asyncAppend {
 			ready, flushErr = core.FlushAOFAsync(wake)
 		} else {
 			flushErr = core.FlushAOF()
@@ -1186,20 +1189,39 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 // before it; anything else is a refusal to start, because beginning from a
 // partially understood log means quietly serving a keyspace that is missing
 // whatever came after the part that failed.
-func StartAOF() error {
-	if !config.AOFEnabled {
+//
+// Whether there is a log, and where, are the default engine's options
+// (core.Options.AppendOnly and AppendFilename), which cmd/keel sets from its
+// flags before it calls this.
+func StartAOF() error { return startAOF(legacyAOFFileName) }
+
+// legacyAOFFileName is what the default log was called while the server was
+// called memkv.
+//
+// It is still looked for, because the alternative is the worst failure the
+// log has: a server started after the rename finds no log at the new default,
+// replays nothing, and comes up empty next to a perfectly good log it did not
+// look at. Nothing errors and nothing warns - the keyspace is just gone. The
+// old name is read if it is there and the new one is not; it is never written.
+const legacyAOFFileName = "./memkv-master.aof"
+
+// startAOF is StartAOF with the legacy log looked for at legacy.
+func startAOF(legacy string) error {
+	options := core.Configuration().WithDefaults()
+	if !options.AppendOnly {
 		return nil
 	}
+	path := options.AppendFilename
 	// Before the log is read, because a node that cannot establish which term it
 	// is in must not reach the point of serving anything at that term.
-	if err := core.LoadTerm(config.AOFFileName); err != nil {
+	if err := core.LoadTerm(path); err != nil {
 		return err
 	}
 
-	readFrom := aofReadPath(config.AOFFileName, config.LegacyAOFFileName)
-	if readFrom != config.AOFFileName {
+	readFrom := aofReadPath(path, legacy)
+	if readFrom != path {
 		log.Printf("appendonly: reading %s, written before the rename; "+
-			"new records go to %s", readFrom, config.AOFFileName)
+			"new records go to %s", readFrom, path)
 	}
 
 	applied, err := core.LoadAOF(readFrom)
@@ -1214,7 +1236,7 @@ func StartAOF() error {
 	case applied > 0:
 		log.Printf("appendonly: replayed %d commands from %s", applied, readFrom)
 	}
-	if err := core.OpenAOF(config.AOFFileName); err != nil {
+	if err := core.OpenAOF(path); err != nil {
 		return err
 	}
 
@@ -1232,15 +1254,15 @@ func StartAOF() error {
 	// current state. It runs to completion before the server serves anyone,
 	// which at startup costs one pass over a keyspace that was just built by
 	// one pass over the same data.
-	if readFrom != config.AOFFileName {
+	if readFrom != path {
 		if err := core.RewriteAOF(); err != nil {
-			return fmt.Errorf("migrating %s to %s: %w", readFrom, config.AOFFileName, err)
+			return fmt.Errorf("migrating %s to %s: %w", readFrom, path, err)
 		}
 		log.Printf("appendonly: wrote the replayed keyspace to %s; %s is no longer read",
-			config.AOFFileName, readFrom)
+			path, readFrom)
 	}
 
-	log.Printf("appendonly: on, %s, appendfsync %s", config.AOFFileName, config.AOFFsync)
+	log.Printf("appendonly: on, %s, appendfsync %s", path, options.Fsync)
 	return nil
 }
 

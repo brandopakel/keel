@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/constant"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
@@ -232,16 +231,14 @@ func TestAutomaticRewriteTriggersOnGrowth(t *testing.T) {
 
 func testAutomaticRewriteTriggersOnGrowth(t *testing.T, delayedSync bool) {
 	t.Helper()
-	pct, minSize := config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize
-	policy, syncFile := config.AOFFsync, defaultEngine.aofSync
+	syncFile := defaultEngine.aofSync
 	defer func() {
 		CloseAOF()
-		config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize = pct, minSize
-		config.AOFFsync, defaultEngine.aofSync = policy, syncFile
+		defaultEngine.aofSync = syncFile
 	}()
-	config.AOFAutoRewritePercentage = 100
-	config.AOFAutoRewriteMinSize = 4096
-	config.AOFFsync = config.FsyncEverySec
+	withOptions(t, func(o *Options) {
+		o.AutoRewritePercentage, o.AutoRewriteMinSize, o.Fsync = 100, 4096, FsyncEverySec
+	})
 
 	path := filepath.Join(t.TempDir(), "auto.aof")
 	ResetStores()
@@ -303,12 +300,7 @@ func testAutomaticRewriteTriggersOnGrowth(t *testing.T, delayedSync bool) {
 
 // TestAutomaticRewriteCanBeTurnedOff.
 func TestAutomaticRewriteCanBeTurnedOff(t *testing.T) {
-	pct, minSize := config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize
-	defer func() {
-		config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize = pct, minSize
-	}()
-	config.AOFAutoRewritePercentage = 0
-	config.AOFAutoRewriteMinSize = 1
+	withOptions(t, func(o *Options) { o.AutoRewritePercentage, o.AutoRewriteMinSize = Off, 1 })
 
 	path := filepath.Join(t.TempDir(), "off.aof")
 	ResetStores()
@@ -674,9 +666,8 @@ func TestCancelledRewriteLeavesTheOldLogIntact(t *testing.T) {
 // Reopening a log must not reset its growth threshold to accumulated history.
 // Otherwise a restart every few minutes can defer automatic compaction forever.
 func TestRestartDoesNotRatchetAutomaticRewriteBaseline(t *testing.T) {
-	oldPct, oldMin := config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize
-	defer func() { CloseAOF(); config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize = oldPct, oldMin }()
-	config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize = 100, 1024
+	defer CloseAOF()
+	withOptions(t, func(o *Options) { o.AutoRewritePercentage, o.AutoRewriteMinSize = 100, 1024 })
 	path := filepath.Join(t.TempDir(), "ratchet.aof")
 	ResetStores()
 	assert.NoError(t, OpenAOF(path))

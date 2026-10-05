@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
@@ -149,7 +148,7 @@ func (e *Engine) StartRewrite() error {
 	if ready, _ := e.pollRewriteIO(false); !ready {
 		return fmt.Errorf("previous rewrite I/O is still releasing its file")
 	}
-	if e.AppendPending() || (config.AOFAsyncAppend && len(e.aof.buf) > 0) {
+	if e.AppendPending() || (e.settings.asyncAppend && len(e.aof.buf) > 0) {
 		return fmt.Errorf("rewrite waits for pending append; retry after the write reply")
 	}
 
@@ -758,16 +757,17 @@ func (e *Engine) maybeRewrite() {
 		e.startScheduledRewrite(now)
 		return
 	}
-	if now.Before(e.nextAutoRewrite) || config.AOFAutoRewritePercentage <= 0 {
+	percentage := e.settings.rewritePercentage
+	if now.Before(e.nextAutoRewrite) || percentage <= 0 {
 		return
 	}
 	size := e.aof.baseSize + e.aof.written
-	if size < config.AOFAutoRewriteMinSize {
+	if size < e.settings.rewriteMinSize {
 		return
 	}
 	if e.aof.rewriteBase > 0 {
 		grown := float64(size-e.aof.rewriteBase) * 100 / float64(e.aof.rewriteBase)
-		if grown < float64(config.AOFAutoRewritePercentage) {
+		if grown < float64(percentage) {
 			return
 		}
 	}

@@ -27,13 +27,15 @@ type replicaUpdate struct {
 // the event loop, and the cursor advances only after successful application.
 func startReplicaTransport() (<-chan replicaUpdate, func()) {
 	updates := make(chan replicaUpdate, 1)
-	if config.ReplicaOf == "" {
+	// The primary, and the protocol it is followed in, are the engine's role.
+	role := core.Configuration().WithDefaults()
+	if role.ReplicaOf == "" {
 		return updates, func() {}
 	}
-	address, password, useTLS := config.ReplicaOf, config.ReplicaPassword, config.ReplicaTLS
+	address, password, useTLS := role.ReplicaOf, config.ReplicaPassword, config.ReplicaTLS
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	protocol := config.ReplicationProtocol
+	protocol := role.ReplicationProtocol
 	initialEpoch, initialOffset := core.ReplicaResumeCursor()
 	go func() {
 		defer close(done)

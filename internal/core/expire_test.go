@@ -10,7 +10,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/constant"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
@@ -125,7 +124,8 @@ func TestExpireCycleIsBoundedPerTurn(t *testing.T) {
 
 	first := ExpireCycle()
 	assert.Greater(t, first, 0, "the cycle must find them")
-	assert.LessOrEqual(t, first, config.ActiveExpireSamples*config.ActiveExpireRounds,
+	held := Configuration().WithDefaults()
+	assert.LessOrEqual(t, first, held.ActiveExpireSamples*held.ActiveExpireRounds,
 		"but must not empty the keyspace in a single turn")
 	assert.Greater(t, data_structure.TotalKeys(), 0, "there must be some left for the next turn")
 }
@@ -140,15 +140,13 @@ func TestExpireCycleKeepsGoingWhileTheSampleSaysThereIsMore(t *testing.T) {
 	}
 	waitPast(30)
 
-	assert.Greater(t, ExpireCycle(), config.ActiveExpireSamples,
+	assert.Greater(t, ExpireCycle(), Configuration().WithDefaults().ActiveExpireSamples,
 		"a keyspace that is mostly expired must be reaped faster than one sample a turn")
 }
 
 // TestActiveExpiryCanBeTurnedOff leaves expiry lazy, as it was.
 func TestActiveExpiryCanBeTurnedOff(t *testing.T) {
-	original := config.ActiveExpireSamples
-	defer func() { config.ActiveExpireSamples = original }()
-	config.ActiveExpireSamples = 0
+	withOptions(t, func(o *Options) { o.ActiveExpireSamples = Off })
 
 	ResetStores()
 	for i := 0; i < 100; i++ {

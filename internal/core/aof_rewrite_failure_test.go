@@ -15,8 +15,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/brandopakel/keel/internal/config"
 )
 
 // A failed rewrite must leave the server serving from the log it would have
@@ -105,16 +103,12 @@ func sameFile(t *testing.T, f *os.File, path string) bool {
 func restoreRewriteHooks(t *testing.T) {
 	t.Helper()
 	write, sync, open, rename, dir := defaultEngine.rewriteFileWrite, defaultEngine.rewriteFileSync, defaultEngine.rewriteOpenLog, defaultEngine.rewriteRename, defaultEngine.rewriteSyncDir
-	policy, async := config.AOFFsync, config.AOFAsyncAppend
-	pct, minSize := config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize
 	t.Cleanup(func() {
 		if RewriteActive() {
 			CancelRewrite()
 		}
 		_ = CloseAOF()
 		defaultEngine.rewriteFileWrite, defaultEngine.rewriteFileSync, defaultEngine.rewriteOpenLog, defaultEngine.rewriteRename, defaultEngine.rewriteSyncDir = write, sync, open, rename, dir
-		config.AOFFsync, config.AOFAsyncAppend = policy, async
-		config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize = pct, minSize
 		ResetStores()
 	})
 }
@@ -153,13 +147,13 @@ func TestFailedRewriteKeepsServingFromTheOldLog(t *testing.T) {
 			}
 		}},
 	}
-	for _, policy := range []string{config.FsyncAlways, config.FsyncEverySec, config.FsyncNever} {
+	for _, policy := range []FsyncPolicy{FsyncAlways, FsyncEverySec, FsyncNever} {
 		for _, tc := range cases {
-			t.Run(policy+"/"+tc.name, func(t *testing.T) {
+			t.Run(string(policy)+"/"+tc.name, func(t *testing.T) {
 				restoreRewriteHooks(t)
 				logs := captureLog(t)
 				ResetStores()
-				config.AOFFsync = policy
+				withOptions(t, func(o *Options) { o.Fsync = policy })
 				path := filepath.Join(t.TempDir(), "store.aof")
 				require.NoError(t, OpenAOF(path))
 				require.Equal(t, "ok", persistenceField(t, "aof_last_bgrewrite_status"))
@@ -208,7 +202,7 @@ func TestFailedRewriteKeepsServingFromTheOldLog(t *testing.T) {
 				require.Equal(t, "OK", run(t, "SET", "after", "4"))
 				require.EqualValues(t, 5, run(t, "INCRBY", "counter", "5"))
 				require.NoError(t, FlushAOF())
-				if policy == config.FsyncAlways {
+				if policy == FsyncAlways {
 					body, err := os.ReadFile(path)
 					require.NoError(t, err)
 					require.Contains(t, string(body), string(appendCommand(nil, "SET", "after", "4")),
@@ -294,7 +288,7 @@ func TestTransactionDuringAFailedRewriteReplaysWhole(t *testing.T) {
 	restoreRewriteHooks(t)
 	captureLog(t)
 	ResetStores()
-	config.AOFFsync = config.FsyncAlways
+	withOptions(t, func(o *Options) { o.Fsync = FsyncAlways })
 	path := filepath.Join(t.TempDir(), "store.aof")
 	require.NoError(t, OpenAOF(path))
 	release, started := make(chan struct{}), make(chan struct{})
@@ -374,7 +368,7 @@ func TestDirectorySyncAfterTheRenameIsRetriedBeforeTheNextSync(t *testing.T) {
 			restoreRewriteHooks(t)
 			logs := captureLog(t)
 			ResetStores()
-			config.AOFFsync = config.FsyncAlways
+			withOptions(t, func(o *Options) { o.Fsync = FsyncAlways })
 			path := filepath.Join(t.TempDir(), "store.aof")
 			require.NoError(t, OpenAOF(path))
 			run(t, "SET", "before", "1")
@@ -400,7 +394,7 @@ func TestDirectorySyncAfterTheRenameIsRetriedBeforeTheNextSync(t *testing.T) {
 			run(t, "SET", "after", "3")
 			var err error
 			if mode == "retry fails, worker appends" {
-				config.AOFAsyncAppend = true
+				withOptions(t, func(o *Options) { o.AsyncAppend = true })
 				_, err = FlushAOFAsync(nil)
 				defaultEngine.pollAppend(true)
 			} else {
@@ -432,7 +426,7 @@ func TestRenameThatTookEffectDespiteItsErrorAdoptsTheNewLog(t *testing.T) {
 	restoreRewriteHooks(t)
 	logs := captureLog(t)
 	ResetStores()
-	config.AOFFsync = config.FsyncAlways
+	withOptions(t, func(o *Options) { o.Fsync = FsyncAlways })
 	path := filepath.Join(t.TempDir(), "store.aof")
 	require.NoError(t, OpenAOF(path))
 	run(t, "SET", "before", "1")
@@ -463,8 +457,7 @@ func TestAutomaticRewriteBacksOffAsRedisDoes(t *testing.T) {
 	restoreRewriteHooks(t)
 	logs := captureLog(t)
 	ResetStores()
-	config.AOFFsync = config.FsyncAlways
-	config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize = 1, 1
+	withOptions(t, func(o *Options) { o.Fsync, o.AutoRewritePercentage, o.AutoRewriteMinSize = FsyncAlways, 1, 1 })
 	path := filepath.Join(t.TempDir(), "store.aof")
 	require.NoError(t, OpenAOF(path))
 	writes := 0

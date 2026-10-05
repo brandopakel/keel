@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/constant"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -279,15 +278,13 @@ func TestEnginesShareNoLog(t *testing.T) {
 	ResetStores()
 	encoded, written, synced, ready := defaultEngine.AOFPositions()
 	defaultPositions := [4]uint64{encoded, written, synced, ready}
-	policy := config.AOFFsync
 	dir := t.TempDir()
-	a := newEngine(Options{})
-	b := newEngine(Options{})
-	t.Cleanup(func() { a.CloseAOF(); b.CloseAOF(); config.AOFFsync = policy })
+	a := newEngine(Options{Fsync: FsyncAlways})
+	b := newEngine(Options{Fsync: FsyncAlways})
+	t.Cleanup(func() { a.CloseAOF(); b.CloseAOF() })
 	var aWrites, bSyncs atomic.Int64
 	a.aofWrite = func(f *os.File, body []byte) (int, error) { aWrites.Add(1); return f.Write(body) }
 	b.aofSync = func(f *os.File) error { bSyncs.Add(1); return f.Sync() }
-	config.AOFFsync = config.FsyncAlways
 	require.NoError(t, a.OpenAOF(filepath.Join(dir, "a.aof")))
 	require.NoError(t, b.OpenAOF(filepath.Join(dir, "b.aof")))
 	logOf := func(e *Engine) string {
@@ -350,7 +347,9 @@ func TestEnginesShareNoLog(t *testing.T) {
 
 	// Side by side: a appends on its worker, b synchronously, each writing
 	// the same names with values of its own.
-	config.AOFFsync = config.FsyncEverySec
+	for _, e := range []*Engine{a, b} {
+		reconfigure(t, e, func(o *Options) { o.Fsync = FsyncEverySec })
+	}
 	var wg sync.WaitGroup
 	for _, side := range []struct {
 		e      *Engine
@@ -583,9 +582,9 @@ func TestEnginesShareNoRewrite(t *testing.T) {
 	// b's rename leaves the directory sync after it pending on b alone: a's
 	// syncs and a's reopened log neither retry it nor clear it, and b's next
 	// sync does.
-	policy := config.AOFFsync
-	t.Cleanup(func() { config.AOFFsync = policy })
-	config.AOFFsync = config.FsyncAlways
+	for _, e := range []*Engine{a, b} {
+		reconfigure(t, e, func(o *Options) { o.Fsync = FsyncAlways })
+	}
 	var bDirSyncs atomic.Int64
 	dirErr := errors.New("b's directory will not sync")
 	b.rewriteSyncDir = func(string) error { bDirSyncs.Add(1); return dirErr }
@@ -604,7 +603,9 @@ func TestEnginesShareNoRewrite(t *testing.T) {
 	require.Equal(t, "OK", on(t, b, "SET", "synced", "b"))
 	require.NoError(t, b.FlushAOF())
 	assert.Empty(t, b.unsyncedLogDir, "b's own sync retries it")
-	config.AOFFsync = policy
+	for _, e := range []*Engine{a, b} {
+		reconfigure(t, e, func(o *Options) { o.Fsync = "" })
+	}
 
 	// Side by side, each on a goroutine of its own and written to while it
 	// rewrites: a's rewrites fail on a's disk three times running, which earns

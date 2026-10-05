@@ -19,7 +19,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
@@ -82,7 +81,7 @@ const goldenAbsolute = "4102444800"
 
 type goldenMode struct {
 	name   string
-	fsync  string
+	fsync  FsyncPolicy
 	worker bool
 }
 
@@ -90,11 +89,11 @@ type goldenMode struct {
 // log's bytes must not depend on them, so each scenario is held to the same
 // fixture under all of them.
 var goldenModes = []goldenMode{
-	{"everysec", config.FsyncEverySec, false},
-	{"always", config.FsyncAlways, false},
-	{"no", config.FsyncNever, false},
-	{"worker-always", config.FsyncAlways, true},
-	{"worker-everysec", config.FsyncEverySec, true},
+	{"everysec", FsyncEverySec, false},
+	{"always", FsyncAlways, false},
+	{"no", FsyncNever, false},
+	{"worker-always", FsyncAlways, true},
+	{"worker-everysec", FsyncEverySec, true},
 }
 
 type goldenScenario struct {
@@ -129,7 +128,6 @@ type goldenRun struct {
 // the log closed, the keyspace emptied and the settings it changed restored.
 func startGoldenRun(t *testing.T, mode goldenMode, seed []byte) (*goldenRun, func()) {
 	t.Helper()
-	fsync, async, percentage := config.AOFFsync, config.AOFAsyncAppend, config.AOFAutoRewritePercentage
 	options := Configuration()
 	stopped := false
 	stop := func() {
@@ -139,14 +137,14 @@ func startGoldenRun(t *testing.T, mode goldenMode, seed []byte) (*goldenRun, fun
 		stopped = true
 		CancelRewrite()
 		CloseAOF()
-		config.AOFFsync, config.AOFAsyncAppend, config.AOFAutoRewritePercentage = fsync, async, percentage
 		require.NoError(t, Configure(options))
 		ResetStores()
 	}
 	t.Cleanup(stop)
-	config.AOFFsync, config.AOFAsyncAppend = mode.fsync, mode.worker
 	// Automatic rewrites start on growth, which a scenario starts itself.
-	config.AOFAutoRewritePercentage = 0
+	held := options
+	held.Fsync, held.AsyncAppend, held.AutoRewritePercentage = mode.fsync, mode.worker, Off
+	require.NoError(t, Configure(held))
 	ResetStores()
 	r := &goldenRun{t: t, mode: mode, path: filepath.Join(t.TempDir(), "golden.aof")}
 	if seed != nil {

@@ -824,6 +824,32 @@ plan above leaves a choice open, step 2.5 settles it this way:
   changes the default engine's and puts back what it found when the test
   ends; a test on an engine of its own passes them to `newEngine`. This is
   the groundwork for step 2.6, which gives every test an engine of its own.
+- **Resolved once, read where they were.** An engine resolves expiry's
+  parameters and the log's into a `settings` value when it is given its
+  options, and its role (`ReplicaOf`, `Feed`, `Protocol`) into the
+  `replicationRole` value it holds; `WithDefaults()` is that resolution as
+  `Options`, for a caller outside the package. The role used to be three
+  pointers, so that the default engine could read config live; it is a value
+  now, and `noteReplicationDirty`, which runs for every key every write
+  changes, reads the feed flag with one load where it read a pointer and then
+  the flag (inline cost 73, from 74). `replicaOf`, `feedsReplicas` and
+  `replicationProtocol` inline at cost 4, `writable` at 22 and
+  `replicationV2Enabled` at 25.
+- **The log's file is the engine's.** `AppendOnly` and `AppendFilename` are
+  options of the engine whose log they are, which the server's startup
+  sequence (`server.StartAOF`) reads until `core.Open` runs it (phase 3).
+  `AppendFilename` has no default, so `AppendOnly` needs one; the server's
+  `./keel-master.aof` is `-appendfilename`'s default, and the name the log
+  had before the rename is a constant of the server, which only its startup
+  reads. The fsync policies are a typed `core.FsyncPolicy`, by Redis's names.
+  The event loop reads whether its engine appends on a worker once, when it
+  starts.
+- **Each engine's settings are its own.** A test that assigned
+  `config.AOFFsync` while two engines of its own ran changed both, and the
+  default engine's; it now gives each engine its policy (`reconfigure`).
+  `TestEnginesShareNoOptions` holds two engines and the default engine to
+  different options: each expires, syncs its log and reports in INFO only as
+  its own options say.
 - **Identical benchmark workloads.** A baseline from before step 2.5 holds its
   engine to config's 5,000,000-key cap, so every one of its writes counts the
   keyspace. Every command-path benchmark gives the candidate's engine the
@@ -853,6 +879,8 @@ plan above leaves a choice open, step 2.5 settles it this way:
   instructions develop's: SISMEMBER then ran at 1.068 and 1.071 and SADD at
   1.054 and 1.059, with nothing on their paths reading the options, so it was
   reverted. Rows of 2 to 7% follow where the code lands, not what it does.
+  Part 2 ran at 0.990 and 0.992 against develop on EPYC 7763 and 0.990 on
+  Xeon 8573C, with no row over 1.04, and at 0.902 against `65ebdbc`.
 
 ## Risks, in order
 

@@ -14,7 +14,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
@@ -394,12 +393,13 @@ func TestTransactionReplyBeyondTheLimitClosesAfterRunning(t *testing.T) {
 }
 
 func TestTransactionOnAReplica(t *testing.T) {
-	oldReplica, oldReady, oldUpdated := config.ReplicaOf, defaultEngine.replicaReady, defaultEngine.replicaUpdated
+	oldReady, oldUpdated := defaultEngine.replicaReady, defaultEngine.replicaUpdated
 	t.Cleanup(func() {
-		config.ReplicaOf, defaultEngine.replicaReady, defaultEngine.replicaUpdated = oldReplica, oldReady, oldUpdated
+		defaultEngine.replicaReady, defaultEngine.replicaUpdated = oldReady, oldUpdated
 	})
 	s := newSession(t)
-	config.ReplicaOf, defaultEngine.replicaReady, defaultEngine.replicaUpdated = "primary.test:6379", true, time.Now()
+	withOptions(t, func(o *Options) { o.ReplicaOf = "primary.test:6379" })
+	defaultEngine.replicaReady, defaultEngine.replicaUpdated = true, time.Now()
 	defaultEngine.replicaApplying = true
 	run(t, "SET", "k", "from-primary")
 	defaultEngine.replicaApplying = false
@@ -440,10 +440,11 @@ func TestReplicaAndFencedPrimaryNameAndCountFirst(t *testing.T) {
 		require.Equal(t, "-EXECABORT Transaction discarded because of previous errors.\r\n", s.send("EXEC"))
 	}
 	t.Run("replica without its primary", func(t *testing.T) {
-		oldReplica, oldReady := config.ReplicaOf, defaultEngine.replicaReady
-		t.Cleanup(func() { config.ReplicaOf, defaultEngine.replicaReady = oldReplica, oldReady })
+		oldReady := defaultEngine.replicaReady
+		t.Cleanup(func() { defaultEngine.replicaReady = oldReady })
 		ResetStores()
-		config.ReplicaOf, defaultEngine.replicaReady = "primary.test:6379", false
+		withOptions(t, func(o *Options) { o.ReplicaOf = "primary.test:6379" })
+		defaultEngine.replicaReady = false
 		check(t, "-READONLY You can't write against a read only replica.\r\n")
 		require.Equal(t, "-MASTERDOWN replica has no recent primary state\r\n", string(rawReply(t, "GET", "k")))
 	})
@@ -741,10 +742,9 @@ func TestReplicationV2RefusesMalformedTransactions(t *testing.T) {
 }
 
 func TestReplicationV1SealsATransactionTogether(t *testing.T) {
-	oldFeed, oldProtocol := config.ReplicationFeed, config.ReplicationProtocol
-	t.Cleanup(func() { CloseAOF(); config.ReplicationFeed, config.ReplicationProtocol = oldFeed, oldProtocol })
+	t.Cleanup(func() { CloseAOF() })
 	ResetStores()
-	config.ReplicationFeed, config.ReplicationProtocol = true, 1
+	withOptions(t, func(o *Options) { o.ReplicationFeed, o.ReplicationProtocol = true, 1 })
 	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "primary")))
 	require.NoError(t, InitReplication())
 	pull := func(epoch string, offset uint64) ReplicationFrame {

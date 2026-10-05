@@ -13,14 +13,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/data_structure"
 	"github.com/stretchr/testify/require"
 )
 
 func setupReplicationV2(t *testing.T) {
 	t.Helper()
-	oldFeed, oldReplica, oldProtocol, oldPolicy := config.ReplicationFeed, config.ReplicaOf, config.ReplicationProtocol, config.AOFFsync
+	// The options are put back last, after the replica and the stream are.
+	withOptions(t, func(o *Options) {
+		o.ReplicationProtocol, o.Fsync, o.ReplicationFeed, o.ReplicaOf = 2, FsyncNever, true, ""
+	})
 	oldExpiry, oldEviction := data_structure.DefaultSpace.SuspendExpiry, data_structure.DefaultSpace.SuspendEviction
 	t.Cleanup(func() {
 		if RewriteActive() {
@@ -29,12 +31,9 @@ func setupReplicationV2(t *testing.T) {
 		CloseAOF()
 		defaultEngine.resetReplicationV2()
 		defaultEngine.resetReplica()
-		config.ReplicationFeed, config.ReplicaOf, config.ReplicationProtocol, config.AOFFsync = oldFeed, oldReplica, oldProtocol, oldPolicy
 		data_structure.DefaultSpace.SuspendExpiry, data_structure.DefaultSpace.SuspendEviction = oldExpiry, oldEviction
 	})
 	ResetStores()
-	config.ReplicationProtocol, config.AOFFsync = 2, config.FsyncNever
-	config.ReplicationFeed, config.ReplicaOf = true, ""
 	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "primary.aof")))
 	require.NoError(t, InitReplication())
 }
@@ -80,7 +79,7 @@ func becomeReplicaV2(t *testing.T) string {
 	t.Helper()
 	require.NoError(t, CloseAOF())
 	ResetStores()
-	config.ReplicationFeed, config.ReplicaOf = false, "primary.test:6379"
+	withOptions(t, func(o *Options) { o.ReplicationFeed, o.ReplicaOf = false, "primary.test:6379" })
 	path := filepath.Join(t.TempDir(), "replica.aof")
 	require.NoError(t, OpenAOF(path))
 	require.NoError(t, InitReplication())
@@ -223,7 +222,7 @@ func TestReplicationV2CheckpointInvalidFilesFallBack(t *testing.T) {
 			case "bad-json":
 				require.NoError(t, os.WriteFile(path+".replica-checkpoint", []byte("{"), 0600))
 			case "different-primary":
-				config.ReplicaOf = "different.test:6379"
+				withOptions(t, func(o *Options) { o.ReplicaOf = "different.test:6379" })
 			case "missing":
 				require.NoError(t, os.Remove(path+".replica-checkpoint"))
 			}
@@ -339,9 +338,9 @@ func TestReplicationV2HistoryOverrunAndProtocolMismatch(t *testing.T) {
 	require.True(t, f.Pending)
 	require.True(t, RewriteActive())
 	require.Contains(t, string(rawReply(t, "KEEL.REPL.PULL", "", "0")), "protocol 1 is disabled")
-	config.ReplicationProtocol = 1
+	withOptions(t, func(o *Options) { o.ReplicationProtocol = 1 })
 	require.Contains(t, string(rawReply(t, "KEEL.REPL.PULL2", "", "0", "", "0")), "protocol 2 is disabled")
-	config.ReplicationProtocol = 2
+	withOptions(t, func(o *Options) { o.ReplicationProtocol = 2 })
 	defaultEngine.invalidateReplicationV2()
 	require.NotEqual(t, epoch, defaultEngine.replication.epoch)
 }

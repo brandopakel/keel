@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/data_structure"
 	"github.com/stretchr/testify/require"
 )
@@ -131,9 +130,9 @@ func TestTornTailRepairSurvivesSecondRestart(t *testing.T) {
 
 func TestIdleFsyncAndStickyFailure(t *testing.T) {
 	ResetStores()
-	oldPolicy, oldSync := config.AOFFsync, defaultEngine.aofSync
-	defer func() { CloseAOF(); config.AOFFsync = oldPolicy; defaultEngine.aofSync = oldSync }()
-	config.AOFFsync = config.FsyncEverySec
+	oldSync := defaultEngine.aofSync
+	defer func() { CloseAOF(); defaultEngine.aofSync = oldSync }()
+	withOptions(t, func(o *Options) { o.Fsync = FsyncEverySec })
 	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "log")))
 	calls := 0
 	defaultEngine.aofSync = func(*os.File) error { calls++; return nil }
@@ -147,7 +146,7 @@ func TestIdleFsyncAndStickyFailure(t *testing.T) {
 	defaultEngine.pollAOFSync(true)
 	require.Equal(t, 1, calls)
 	require.False(t, defaultEngine.aof.dirty)
-	config.AOFFsync = config.FsyncAlways
+	withOptions(t, func(o *Options) { o.Fsync = FsyncAlways })
 	diskErr := errors.New("injected sync failure")
 	defaultEngine.aofSync = func(*os.File) error { return diskErr }
 	run(t, "SET", "k", "next")
@@ -288,10 +287,10 @@ func TestLazyExpiryIsLoggedBeforeRecreation(t *testing.T) {
 
 func TestBackgroundSyncDoesNotBlockAndPreservesLaterWrites(t *testing.T) {
 	ResetStores()
-	oldPolicy, oldSync := config.AOFFsync, defaultEngine.aofSync
+	oldSync := defaultEngine.aofSync
 	release := make(chan struct{})
-	defer func() { CloseAOF(); config.AOFFsync = oldPolicy; defaultEngine.aofSync = oldSync }()
-	config.AOFFsync = config.FsyncEverySec
+	defer func() { CloseAOF(); defaultEngine.aofSync = oldSync }()
+	withOptions(t, func(o *Options) { o.Fsync = FsyncEverySec })
 	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "log")))
 	diskErr := errors.New("background sync failed")
 	defaultEngine.aofSync = func(*os.File) error { <-release; return diskErr }
@@ -378,9 +377,9 @@ func TestLargeListRewriteRestartsAfterMutation(t *testing.T) {
 
 func TestRewriteAndCloseFenceBackgroundSync(t *testing.T) {
 	ResetStores()
-	oldPolicy, oldSync := config.AOFFsync, defaultEngine.aofSync
-	defer func() { CloseAOF(); config.AOFFsync = oldPolicy; defaultEngine.aofSync = oldSync }()
-	config.AOFFsync = config.FsyncEverySec
+	oldSync := defaultEngine.aofSync
+	defer func() { CloseAOF(); defaultEngine.aofSync = oldSync }()
+	withOptions(t, func(o *Options) { o.Fsync = FsyncEverySec })
 	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "log")))
 	release := make(chan struct{})
 	timer := time.AfterFunc(time.Second, func() { close(release) })
@@ -410,9 +409,9 @@ func TestAsyncAppendBarrierAndFailure(t *testing.T) {
 	for _, fail := range []bool{false, true} {
 		t.Run(strconv.FormatBool(fail), func(t *testing.T) {
 			ResetStores()
-			oldWrite, oldPolicy := defaultEngine.aofWrite, config.AOFFsync
-			defer func() { CloseAOF(); defaultEngine.aofWrite = oldWrite; config.AOFFsync = oldPolicy }()
-			config.AOFFsync = config.FsyncAlways
+			oldWrite := defaultEngine.aofWrite
+			defer func() { CloseAOF(); defaultEngine.aofWrite = oldWrite }()
+			withOptions(t, func(o *Options) { o.Fsync = FsyncAlways })
 			path := filepath.Join(t.TempDir(), "log")
 			require.NoError(t, OpenAOF(path))
 			release := make(chan struct{})
