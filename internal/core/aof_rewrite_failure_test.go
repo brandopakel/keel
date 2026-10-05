@@ -76,8 +76,8 @@ func driveRewrite(t *testing.T) {
 	for n := 0; RewriteActive() && n < 10000; n++ {
 		require.NoError(t, FlushAOF(), "a rewrite's failure must never become the log's")
 		waitForRewriteSync(t)
-		if aof.syncPending != nil {
-			pollAOFSync(true)
+		if defaultEngine.aof.syncPending != nil {
+			defaultEngine.pollAOFSync(true)
 		}
 	}
 	require.False(t, RewriteActive(), "the rewrite did not end")
@@ -202,7 +202,7 @@ func TestFailedRewriteKeepsServingFromTheOldLog(t *testing.T) {
 				require.Nil(t, pendingRewriteIO)
 				_, err := os.Stat(path + ".rewrite")
 				require.True(t, os.IsNotExist(err), "the temporary file is removed")
-				require.True(t, sameFile(t, aof.file, path), "the old log is still the one appended to")
+				require.True(t, sameFile(t, defaultEngine.aof.file, path), "the old log is still the one appended to")
 
 				// Writes go on into the old log.
 				require.Equal(t, "OK", run(t, "SET", "after", "4"))
@@ -393,7 +393,7 @@ func TestDirectorySyncAfterTheRenameIsRetriedBeforeTheNextSync(t *testing.T) {
 			require.Equal(t, 1, calls)
 			require.Equal(t, "ok", persistenceField(t, "aof_last_bgrewrite_status"), "the rewritten file is the log")
 			require.Equal(t, "1", persistenceField(t, "aof_rewrites"))
-			require.True(t, sameFile(t, aof.file, path), "appending continues into the file that has the log's name")
+			require.True(t, sameFile(t, defaultEngine.aof.file, path), "appending continues into the file that has the log's name")
 			require.Contains(t, logs.String(), "the next sync of it retries the directory first")
 			require.Equal(t, filepath.Dir(path), unsyncedLogDir)
 
@@ -402,7 +402,7 @@ func TestDirectorySyncAfterTheRenameIsRetriedBeforeTheNextSync(t *testing.T) {
 			if mode == "retry fails, worker appends" {
 				config.AOFAsyncAppend = true
 				_, err = FlushAOFAsync(nil)
-				pollAppend(true)
+				defaultEngine.pollAppend(true)
 			} else {
 				err = FlushAOF()
 			}
@@ -445,7 +445,7 @@ func TestRenameThatTookEffectDespiteItsErrorAdoptsTheNewLog(t *testing.T) {
 	require.Equal(t, "Background append only file rewriting started", run(t, "BGREWRITEAOF"))
 	driveRewrite(t)
 	require.Equal(t, "ok", persistenceField(t, "aof_last_bgrewrite_status"))
-	require.True(t, sameFile(t, aof.file, path))
+	require.True(t, sameFile(t, defaultEngine.aof.file, path))
 	require.Contains(t, logs.String(), "but the rewritten file has the log's name")
 	run(t, "SET", "after", "2")
 	require.NoError(t, FlushAOF())
@@ -614,7 +614,7 @@ func TestReplicationV2SnapshotStartFailureIsNotRetriedEveryPull(t *testing.T) {
 	restoreRewriteHooks(t)
 	logs := captureLog(t)
 	run(t, "SET", "k", "v")
-	require.NoError(t, os.Mkdir(aof.path+".rewrite", 0o755))
+	require.NoError(t, os.Mkdir(defaultEngine.aof.path+".rewrite", 0o755))
 	reply := run(t, "KEEL.REPL.PULL2", "", "0", "", "0", strconv.FormatUint(failover.term, 10))
 	require.Contains(t, reply, "ERR preparing replication snapshot: ")
 	for i := 0; i < 5; i++ {
@@ -624,7 +624,7 @@ func TestReplicationV2SnapshotStartFailureIsNotRetriedEveryPull(t *testing.T) {
 	require.Equal(t, 1, strings.Count(logs.String(), "Can't rewrite append only file in background: "))
 	require.Equal(t, "err", persistenceField(t, "aof_last_bgrewrite_status"))
 
-	require.NoError(t, os.Remove(aof.path+".rewrite"))
+	require.NoError(t, os.Remove(defaultEngine.aof.path+".rewrite"))
 	snapshotRetryAt = time.Now().Add(-time.Second) // the minute has passed
 	require.True(t, pullV2(t, "", 0, "", 0).Pending)
 	require.True(t, RewriteActive())

@@ -61,14 +61,14 @@ func (e *Engine) cmdZREVRANGEBYSCORE(args []string) []byte {
 
 // parseScoreRange reads ZRANGEBYSCORE's and ZREVRANGEBYSCORE's arguments in
 // Redis's order, the options before the range.
-func parseScoreRange(args []string, reverse bool) (r scoreInterval, withScores bool, offset, count int, err error) {
+func (e *Engine) parseScoreRange(args []string, reverse bool) (r scoreInterval, withScores bool, offset, count int, err error) {
 	count = -1
 	for i := 3; i < len(args); i++ {
 		switch opt := strings.ToUpper(args[i]); {
 		case opt == "WITHSCORES":
 			withScores = true
 		case opt == "LIMIT" && i+2 < len(args):
-			if offset, count, err = integerRange(args[i+1], args[i+2]); err != nil {
+			if offset, count, err = e.integerRange(args[i+1], args[i+2]); err != nil {
 				return r, false, 0, 0, err
 			}
 			i += 2
@@ -88,7 +88,7 @@ func (e *Engine) scoreRange(name string, args []string, reverse bool) []byte {
 	if len(args) < 3 {
 		return e.encode(wrongArguments(name), false)
 	}
-	r, withScores, offset, count, err := parseScoreRange(args, reverse)
+	r, withScores, offset, count, err := e.parseScoreRange(args, reverse)
 	if err != nil {
 		return e.encode(err, false)
 	}
@@ -130,7 +130,7 @@ func (e *Engine) cmdZINCRBY(args []string) []byte {
 	}
 	e.zaddApply(args[0], []float64{score}, []string{args[2]}, 0)
 	// Canonical commands keep the log readable by older Keel versions.
-	aofRecord("ZADD", args[0], formatZScore(score), args[2])
+	e.aofRecord("ZADD", args[0], formatZScore(score), args[2])
 	return e.encode(ReplyDouble(formatZScore(score)), false)
 }
 
@@ -138,7 +138,7 @@ func (e *Engine) cmdZPOPMIN(args []string) []byte { return e.zpop("ZPOPMIN", arg
 
 // zpopCount reads ZPOPMIN's and ZPOPMAX's optional count, refused as Redis
 // refuses it before the key is looked at.
-func zpopCount(name string, args []string) (int, error) {
+func (e *Engine) zpopCount(name string, args []string) (int, error) {
 	if len(args) < 1 {
 		return 0, wrongArguments(name)
 	}
@@ -148,18 +148,18 @@ func zpopCount(name string, args []string) (int, error) {
 	if len(args) == 1 {
 		return 1, nil
 	}
-	n, err := positiveCount(args[1])
+	n, err := e.positiveCount(args[1])
 	return int(n), err
 }
 func (e *Engine) cmdZPOPMAX(args []string) []byte { return e.zpop("ZPOPMAX", args, true) }
 func (e *Engine) zpop(name string, args []string, reverse bool) []byte {
-	count, err := zpopCount(name, args)
+	count, err := e.zpopCount(name, args)
 	if err != nil {
 		return e.encode(err, false)
 	}
 	z, ok := e.zsetFor(args[0])
 	if !ok || count == 0 {
-		aof.skip = true
+		e.aof.skip = true
 		return constant.RespEmptyArray
 	}
 	count = min(count, z.Len())
@@ -186,6 +186,6 @@ func (e *Engine) zpop(name string, args []string, reverse bool) []byte {
 		z.Remove(member)
 	}
 	e.zsetSettle(args[0], z)
-	aofRecord(record...)
+	e.aofRecord(record...)
 	return out
 }

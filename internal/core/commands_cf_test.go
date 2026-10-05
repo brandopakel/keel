@@ -215,11 +215,11 @@ func TestCFDELOfAMissingKeyIsNotLoggedOrReplicated(t *testing.T) {
 	setupReplicationV2(t)
 	frames := snapshotV2(t)
 	offset, epoch := frames[len(frames)-1].To, frames[0].Epoch
-	before, err := os.ReadFile(aof.path)
+	before, err := os.ReadFile(defaultEngine.aof.path)
 	assert.NoError(t, err)
 	assert.Equal(t, "-Not found\r\n", string(rawReply(t, "CF.DEL", "missing", "x")))
 	assert.NoError(t, FlushAOF())
-	after, err := os.ReadFile(aof.path)
+	after, err := os.ReadFile(defaultEngine.aof.path)
 	assert.NoError(t, err)
 	assert.Equal(t, before, after, "nothing logged")
 	assert.Empty(t, pullV2(t, epoch, offset, "", 0).Body, "nothing replicated")

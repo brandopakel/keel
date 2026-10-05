@@ -196,7 +196,7 @@ func (e *Engine) transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn C
 			_, err := w.Write(reply)
 			return tx, err
 		}
-		_, err := w.Write(tx.queue(cmd, conn))
+		_, err := w.Write(tx.queue(e, cmd, conn))
 		return tx, err
 	}
 	if err := CommandError(cmd); err != nil {
@@ -247,8 +247,8 @@ func (tx *Transaction) abort() {
 }
 
 // queue checks cmd as Redis does before queueing it, and holds it if it passes.
-func (tx *Transaction) queue(cmd *Command, conn Connection) []byte {
-	if err := queueRefusal(cmd, conn); err != nil {
+func (tx *Transaction) queue(e *Engine, cmd *Command, conn Connection) []byte {
+	if err := e.queueRefusal(cmd, conn); err != nil {
 		return tx.refuse(err)
 	}
 	if tx.aborted {
@@ -266,7 +266,7 @@ func (tx *Transaction) queue(cmd *Command, conn Connection) []byte {
 // queueRefusal checks cmd in Redis's order: the name and the count of
 // arguments, then whether a transaction may hold it, then whether this node
 // may run it.
-func queueRefusal(cmd *Command, conn Connection) error {
+func (e *Engine) queueRefusal(cmd *Command, conn Connection) error {
 	if err := CommandError(cmd); err != nil {
 		return err
 	}
@@ -284,7 +284,7 @@ func queueRefusal(cmd *Command, conn Connection) error {
 	}
 	// A replica refuses writes, and reads once it has lost its primary, as it
 	// would outside a transaction; and so does a primary that has been fenced.
-	return replicaCommandError(cmd.Cmd)
+	return e.replicaCommandError(cmd.Cmd)
 }
 
 // execAbort is EXEC's refusal, which discards the transaction and names the
@@ -321,7 +321,7 @@ func (tx *Transaction) exec(e *Engine, w io.Writer, conn Connection) error {
 		if answers(conn, cmd.Cmd) {
 			continue
 		}
-		if err := replicaCommandError(cmd.Cmd); err != nil {
+		if err := e.replicaCommandError(cmd.Cmd); err != nil {
 			return writeExecAbort(w, err)
 		}
 	}
@@ -345,7 +345,7 @@ func (tx *Transaction) exec(e *Engine, w io.Writer, conn Connection) error {
 	budget := e.commandAllocations
 	var retained, logged int
 	if budget != nil {
-		retained, logged = budget.Retained, AppendRetainedBytes()
+		retained, logged = budget.Retained, e.AppendRetainedBytes()
 	}
 	e.replyCeiling = ceiling(0)
 	defer func() { e.replyCeiling = MaxReplyBytes }()
@@ -376,7 +376,7 @@ func (tx *Transaction) exec(e *Engine, w io.Writer, conn Connection) error {
 			replies = append(replies, reply)
 		}
 		if budget != nil {
-			budget.ObserveRetained(retained + max(0, AppendRetainedBytes()-logged) + total)
+			budget.ObserveRetained(retained + max(0, e.AppendRetainedBytes()-logged) + total)
 		}
 		e.replyCeiling = ceiling(i + 1)
 	})
@@ -400,8 +400,8 @@ func (tx *Transaction) exec(e *Engine, w io.Writer, conn Connection) error {
 // up to one transaction meanwhile, which the queue limit bounds. reply hears
 // each command's answer in order.
 func (e *Engine) runTransaction(commands []*Command, run func(*Command, io.ReadWriter) error, reply func(int, []byte, error)) {
-	aof.transaction, aof.transactionLogged = true, false
-	replicationTransaction = replicationBlock{active: true}
+	e.aof.transaction, e.aof.transactionLogged = true, false
+	e.replicationTransaction = replicationBlock{active: true}
 	suspended := e.space.SuspendEviction
 	e.space.SuspendEviction = true
 	for i, cmd := range commands {
@@ -409,8 +409,8 @@ func (e *Engine) runTransaction(commands []*Command, run func(*Command, io.ReadW
 		err := run(cmd, &sink)
 		reply(i, sink.p, err)
 	}
-	closeAOFTransaction()
-	closeReplicationTransaction()
+	e.closeAOFTransaction()
+	e.closeReplicationTransaction()
 	e.space.SuspendEviction = suspended
 	e.space.EnforceLimits()
 }
@@ -443,21 +443,21 @@ var (
 // frame is written as if outside a command, where a bounded drain does not
 // publish it, and the command's published range starts after it. It is the
 // first record of the block, so nothing of this command precedes it.
-func openAOFTransaction() {
-	active := aof.commandActive
-	aof.commandActive = false
-	appendAOFCommand("MULTI")
-	aof.commandActive = active
-	aof.commandStart = len(aof.buf)
+func (e *Engine) openAOFTransaction() {
+	active := e.aof.commandActive
+	e.aof.commandActive = false
+	e.appendAOFCommand("MULTI")
+	e.aof.commandActive = active
+	e.aof.commandStart = len(e.aof.buf)
 }
 
 // closeAOFTransaction writes EXEC after the last record of a block that has
 // one, between commands.
-func closeAOFTransaction() {
-	logged := aof.transactionLogged
-	aof.transaction, aof.transactionLogged = false, false
-	if logged && aof.file != nil && !aof.replaying {
-		appendAOFCommand("EXEC")
+func (e *Engine) closeAOFTransaction() {
+	logged := e.aof.transactionLogged
+	e.aof.transaction, e.aof.transactionLogged = false, false
+	if logged && e.aof.file != nil && !e.aof.replaying {
+		e.appendAOFCommand("EXEC")
 	}
 }
 
@@ -474,15 +474,13 @@ type replicationBlock struct {
 	bytes                   int
 }
 
-var replicationTransaction replicationBlock
-
 // replicationTransactionBytes is the most of one block the stream will carry.
 // Anything larger is past the history's own limit before it has ended.
 const replicationTransactionBytes = replicationHistoryLimit
 
 // admitReplicationTransaction frames a body published inside a transaction.
-func admitReplicationTransaction(n int) bool {
-	block := &replicationTransaction
+func (e *Engine) admitReplicationTransaction(n int) bool {
+	block := &e.replicationTransaction
 	if block.dropped {
 		return false
 	}
@@ -491,23 +489,23 @@ func admitReplicationTransaction(n int) bool {
 		appendReplicationV2History(transactionOpenFrame)
 	}
 	if n > replicationTransactionBytes-block.bytes-len(transactionCloseFrame) {
-		invalidateReplicationV2()
+		e.invalidateReplicationV2()
 		return false
 	}
 	block.bytes += n
 	return true
 }
 
-func closeReplicationTransaction() {
-	block := replicationTransaction
-	replicationTransaction = replicationBlock{}
-	if !block.opened || block.dropped || !replicationV2Enabled() {
+func (e *Engine) closeReplicationTransaction() {
+	block := e.replicationTransaction
+	e.replicationTransaction = replicationBlock{}
+	if !block.opened || block.dropped || !e.replicationV2Enabled() {
 		return
 	}
-	if aof.failed != nil {
+	if e.aof.failed != nil {
 		// The bodies after the failure were never published. Ending the block
 		// would deliver part of a transaction as all of it.
-		invalidateReplicationV2()
+		e.invalidateReplicationV2()
 		return
 	}
 	appendReplicationV2History(transactionCloseFrame)

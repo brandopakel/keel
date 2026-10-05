@@ -63,7 +63,7 @@ func (e *Engine) pop(args []string, front bool, name string) []byte {
 	count := 1
 	counted := len(args) == 2
 	if counted {
-		n, err := positiveCount(args[1])
+		n, err := e.positiveCount(args[1])
 		if err != nil {
 			return e.encode(err, false)
 		}
@@ -140,7 +140,7 @@ func (e *Engine) cmdLINDEX(args []string) []byte {
 	if !ok {
 		return e.nullReply()
 	}
-	index, valid := counterInteger(args[1])
+	index, valid := e.counterInteger(args[1])
 	if !valid {
 		return e.encode(errNotAnInteger, false)
 	}
@@ -160,7 +160,7 @@ func (e *Engine) cmdLSET(args []string) []byte {
 	if !ok {
 		return e.encode(errors.New("ERR no such key"), false)
 	}
-	index, valid := counterInteger(args[1])
+	index, valid := e.counterInteger(args[1])
 	if !valid {
 		return e.encode(errNotAnInteger, false)
 	}
@@ -179,7 +179,7 @@ func (e *Engine) cmdLRANGE(args []string) []byte {
 	if len(args) != 3 {
 		return e.encode(wrongArguments("LRANGE"), false)
 	}
-	start, stop, err := integerRange(args[1], args[2])
+	start, stop, err := e.integerRange(args[1], args[2])
 	if err != nil {
 		return e.encode(err, false)
 	}
@@ -195,7 +195,7 @@ func (e *Engine) cmdLTRIM(args []string) []byte {
 	if len(args) != 3 {
 		return e.encode(wrongArguments("LTRIM"), false)
 	}
-	start, stop, err := integerRange(args[1], args[2])
+	start, stop, err := e.integerRange(args[1], args[2])
 	if err != nil {
 		return e.encode(err, false)
 	}

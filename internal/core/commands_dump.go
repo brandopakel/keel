@@ -62,7 +62,7 @@ func dumpKey(key string) ([]byte, bool) {
 // turns out to be malformed leaves the key exactly as it was. Deleting first
 // and decoding second lost the old value on every bad payload.
 func (e *Engine) restoreKey(key string, payload []byte) error {
-	if err := affordable(uint64(len(payload))); err != nil {
+	if err := e.affordable(uint64(len(payload))); err != nil {
 		return err
 	}
 	if bytes.HasPrefix(payload, []byte("KEL")) {

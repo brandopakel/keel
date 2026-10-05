@@ -101,7 +101,7 @@ func (e *Engine) setCommand(name string, args []string) []byte {
 	var at int64
 	expiry := unit != ""
 	if expiry {
-		n, valid := counterInteger(expire)
+		n, valid := e.counterInteger(expire)
 		if !valid {
 			return e.encode(errNotAnInteger, false)
 		}
@@ -155,7 +155,7 @@ func (e *Engine) setCommand(name string, args []string) []byte {
 	}
 	exists := obj != nil || otherHeld
 	if (nx && exists) || (xx && !exists) {
-		aof.skip = true
+		e.aof.skip = true
 		if get {
 			return reply
 		}
@@ -176,13 +176,13 @@ func (e *Engine) setCommand(name string, args []string) []byte {
 		}
 	}
 	if otherHeld {
-		dropOtherType(other, key)
+		e.dropOtherType(other, key)
 	}
 	e.dictStore.Put(key, e.dictStore.NewObj(value))
-	aofRecord("SET", key, value)
+	e.aofRecord("SET", key, value)
 	if expiry {
 		e.dictStore.SetExpiryAt(key, uint64(at))
-		aofRecord("PEXPIREAT", key, strconv.FormatInt(at, 10))
+		e.aofRecord("PEXPIREAT", key, strconv.FormatInt(at, 10))
 	}
 	return reply
 }
@@ -194,9 +194,9 @@ func (e *Engine) setCommand(name string, args []string) []byte {
 // SET. It is logged anyway for the build before this one: there SET over a
 // hash answers WRONGTYPE, a replay command that fails stops startup, and so a
 // rollback could not read a log that relied on SET replacing it.
-func dropOtherType(owner data_structure.Keyspace, key string) {
+func (e *Engine) dropOtherType(owner data_structure.Keyspace, key string) {
 	owner.Delete(key)
-	aofRecord("DEL", key)
+	e.aofRecord("DEL", key)
 }
 
 // expiryInstant turns a positive duration in milliseconds into the instant it
@@ -332,7 +332,7 @@ func (e *Engine) expireCommand(name string, args []string, scale int64, absolute
 	if gt && lt {
 		return e.encode(errors.New("ERR GT and LT options at the same time are not compatible"), false)
 	}
-	n, valid := counterInteger(args[1])
+	n, valid := e.counterInteger(args[1])
 	if !valid {
 		return e.encode(errNotAnInteger, false)
 	}
@@ -349,21 +349,21 @@ func (e *Engine) expireCommand(name string, args []string, scale int64, absolute
 	}
 	owner, ok := e.space.OwnerOf(args[0])
 	if !ok {
-		aof.skip = true
+		e.aof.skip = true
 		return constant.RespZero
 	}
 	old, has := owner.GetExpiry(args[0])
 	if (nx && has) || (xx && !has) || (gt && (!has || at <= int64(old))) || (lt && has && at >= int64(old)) {
-		aof.skip = true
+		e.aof.skip = true
 		return constant.RespZero
 	}
-	if at <= time.Now().UnixMilli() && !aof.replaying && !replicaApplying {
+	if at <= time.Now().UnixMilli() && !e.aof.replaying && !replicaApplying {
 		owner.Delete(args[0])
-		aofRecord("DEL", args[0])
+		e.aofRecord("DEL", args[0])
 		return constant.RespOne
 	}
 	owner.SetExpiryAt(args[0], uint64(at))
-	aofRecord("PEXPIREAT", args[0], strconv.FormatInt(at, 10))
+	e.aofRecord("PEXPIREAT", args[0], strconv.FormatInt(at, 10))
 	return constant.RespOne
 }
 
@@ -396,7 +396,7 @@ func (e *Engine) increment(name string, args []string, sign int64, explicit bool
 	}
 	delta := sign
 	if explicit {
-		n, valid := counterInteger(args[1])
+		n, valid := e.counterInteger(args[1])
 		if !valid {
 			return e.encode(errNotAnInteger, false)
 		}

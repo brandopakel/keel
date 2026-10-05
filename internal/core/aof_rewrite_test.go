@@ -233,11 +233,11 @@ func TestAutomaticRewriteTriggersOnGrowth(t *testing.T) {
 func testAutomaticRewriteTriggersOnGrowth(t *testing.T, delayedSync bool) {
 	t.Helper()
 	pct, minSize := config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize
-	policy, syncFile := config.AOFFsync, aofSync
+	policy, syncFile := config.AOFFsync, defaultEngine.aofSync
 	defer func() {
 		CloseAOF()
 		config.AOFAutoRewritePercentage, config.AOFAutoRewriteMinSize = pct, minSize
-		config.AOFFsync, aofSync = policy, syncFile
+		config.AOFFsync, defaultEngine.aofSync = policy, syncFile
 	}()
 	config.AOFAutoRewritePercentage = 100
 	config.AOFAutoRewriteMinSize = 4096
@@ -257,8 +257,8 @@ func testAutomaticRewriteTriggersOnGrowth(t *testing.T, delayedSync bool) {
 		}
 		defer releaseSync()
 		blocked := release
-		aofSync = func(f *os.File) error { <-blocked; return f.Sync() }
-		aof.lastSync = time.Now().Add(-2 * time.Second)
+		defaultEngine.aofSync = func(f *os.File) error { <-blocked; return f.Sync() }
+		defaultEngine.aof.lastSync = time.Now().Add(-2 * time.Second)
 	}
 	for i := 0; i < 4000; i++ {
 		run(t, "SET", "hot", strconv.Itoa(i))
@@ -276,11 +276,11 @@ func testAutomaticRewriteTriggersOnGrowth(t *testing.T, delayedSync bool) {
 	// A background everysec sync keeps the old descriptor alive and can delay
 	// replacement past the final write. Check size only after the automatic
 	// rewrite has completed, including its idle event-loop turns.
-	pollAOFSync(true)
+	defaultEngine.pollAOFSync(true)
 	require.NoError(t, FlushAOF())
 	waitForRewriteSync(t)
 	for i := 0; RewriteActive() && i < 100; i++ {
-		pollAOFSync(true)
+		defaultEngine.pollAOFSync(true)
 		require.NoError(t, FlushAOF())
 		waitForRewriteSync(t)
 	}
@@ -369,7 +369,7 @@ func TestRewriteStallProfile(t *testing.T) {
 			if pendingRewriteIO.body == nil {
 				phase = "replacement sync"
 			}
-		} else if aof.syncPending != nil {
+		} else if defaultEngine.aof.syncPending != nil {
 			phase = "original AOF sync"
 		}
 		slow := false
@@ -416,7 +416,7 @@ func TestRewriteStallProfile(t *testing.T) {
 	// Shared-host scheduling and storage affect even the median. Correctness
 	// uses work bounds; the scheduled-probe harness measures latency separately.
 	assert.Greater(t, len(walk), 100, "the walk must be spread over many cycles")
-	assert.Equal(t, 1, aof.rewrites, "the rewrite must actually commit")
+	assert.Equal(t, 1, defaultEngine.aof.rewrites, "the rewrite must actually commit")
 	assert.NoError(t, CloseAOF())
 }
 
@@ -627,7 +627,7 @@ func TestRewriteSlicesObeyKeyBudgetAndReplay(t *testing.T) {
 	t.Logf("200,000 keys: %d slices, worst walk slice %v, final slice %v",
 		slices, worstWalk, final)
 	assert.Greater(t, slices, 50, "the walk must be spread over many cycles")
-	assert.Equal(t, 1, aof.rewrites, "the rewrite must commit rather than fall back to the original log")
+	assert.Equal(t, 1, defaultEngine.aof.rewrites, "the rewrite must commit rather than fall back to the original log")
 	assert.NoError(t, CloseAOF())
 	ResetStores()
 	_, err := LoadAOF(path)
@@ -683,22 +683,22 @@ func TestRestartDoesNotRatchetAutomaticRewriteBaseline(t *testing.T) {
 	// Use flushAOF to create a replayable historical log without auto-compaction.
 	for i := 0; i < 200; i++ {
 		run(t, "SET", "hot", strconv.Itoa(i))
-		assert.NoError(t, flushAOF(false))
+		assert.NoError(t, defaultEngine.flushAOF(false))
 	}
 	assert.NoError(t, CloseAOF())
 	ResetStores()
 	_, err := LoadAOF(path)
 	assert.NoError(t, err)
 	assert.NoError(t, OpenAOF(path))
-	assert.Greater(t, aof.baseSize, aof.rewriteBase)
-	before := aof.baseSize
-	for i := 0; i < 100 && aof.rewrites == 0; i++ {
+	assert.Greater(t, defaultEngine.aof.baseSize, defaultEngine.aof.rewriteBase)
+	before := defaultEngine.aof.baseSize
+	for i := 0; i < 100 && defaultEngine.aof.rewrites == 0; i++ {
 		assert.NoError(t, FlushAOF())
 		waitForRewriteSync(t)
 	}
-	assert.Equal(t, 1, aof.rewrites)
-	assert.Less(t, aof.baseSize, before/4)
-	assert.Equal(t, aof.baseSize, aof.rewriteBase)
+	assert.Equal(t, 1, defaultEngine.aof.rewrites)
+	assert.Less(t, defaultEngine.aof.baseSize, before/4)
+	assert.Equal(t, defaultEngine.aof.baseSize, defaultEngine.aof.rewriteBase)
 	assert.NoError(t, CloseAOF())
 	ResetStores()
 	_, err = LoadAOF(path)
@@ -752,7 +752,7 @@ func TestRewriteRetainsBoundedNameBatches(t *testing.T) {
 	for stepRewrite(t) {
 		worst = max(worst, cap(rewrite.keys))
 	}
-	assert.Equal(t, 1, aof.rewrites, "the rewrite must commit")
+	assert.Equal(t, 1, defaultEngine.aof.rewrites, "the rewrite must commit")
 
 	// Slice capacity may round above the work limit, but never scales with N.
 	assert.LessOrEqual(t, worst, 2*data_structure.ScanMaxWork,
@@ -793,5 +793,5 @@ func TestRewriteCeilingCoversTheKeyspaceAServerMayHold(t *testing.T) {
 	assert.True(t, RewriteActive())
 	for stepRewrite(t) {
 	}
-	assert.Equal(t, 1, aof.rewrites)
+	assert.Equal(t, 1, defaultEngine.aof.rewrites)
 }

@@ -56,15 +56,15 @@ func resetReplicationV2() {
 	replicationV2.failed = nil
 	resetReplicaV2()
 }
-func replicationV2Enabled() bool {
-	return config.ReplicationFeed && config.ReplicationProtocol == 2 && !aof.replaying && !replicaApplying
+func (e *Engine) replicationV2Enabled() bool {
+	return config.ReplicationFeed && config.ReplicationProtocol == 2 && !e.aof.replaying && !replicaApplying
 }
 
-func invalidateReplicationV2() {
+func (e *Engine) invalidateReplicationV2() {
 	// A transaction running now loses its place in the stream with the rest
 	// of the history; the snapshot that replaces it will contain all of it.
-	if replicationTransaction.active {
-		replicationTransaction.dropped = true
+	if e.replicationTransaction.active {
+		e.replicationTransaction.dropped = true
 	}
 	var id [16]byte
 	if _, err := rand.Read(id[:]); err != nil {
@@ -80,11 +80,11 @@ func invalidateReplicationV2() {
 	replication.invalidated = false
 }
 
-func recordReplicationV2Body(body []byte) {
-	if !replicationV2Enabled() || len(body) == 0 {
+func (e *Engine) recordReplicationV2Body(body []byte) {
+	if !e.replicationV2Enabled() || len(body) == 0 {
 		return
 	}
-	if replicationTransaction.active && !admitReplicationTransaction(len(body)) {
+	if e.replicationTransaction.active && !e.admitReplicationTransaction(len(body)) {
 		return
 	}
 	appendReplicationV2History(body)
@@ -113,30 +113,30 @@ func appendReplicationV2History(body []byte) {
 	}
 }
 
-func recordReplicationV2Commit() {
-	if !replicationV2Enabled() {
+func (e *Engine) recordReplicationV2Commit() {
+	if !e.replicationV2Enabled() {
 		return
 	}
 	defer func() { clear(replication.dirty); replication.dirtyBytes = 0 }()
 	if replication.invalidated {
-		invalidateReplicationV2()
+		e.invalidateReplicationV2()
 		return
 	}
-	if !aof.commandChanged {
+	if !e.aof.commandChanged {
 		return
 	}
-	body := aof.buf[aof.commandStart:]
+	body := e.aof.buf[e.aof.commandStart:]
 	// Filters/sketches may choose random seeds internally. Preserve exact state
 	// for these commands; common strings/collections use their canonical deltas.
-	if aof.commandOpaque {
+	if e.aof.commandOpaque {
 		var fits bool
 		body, fits = opaqueReplicationBody()
 		if !fits {
-			invalidateReplicationV2()
+			e.invalidateReplicationV2()
 			return
 		}
 	}
-	recordReplicationV2Body(body)
+	e.recordReplicationV2Body(body)
 }
 
 func isOpaqueReplicationCommand(name string) bool {
@@ -148,11 +148,11 @@ func isOpaqueReplicationCommand(name string) bool {
 // captureReplicationSnapshot runs after a rewrite's rename and directory sync,
 // with all append batches fenced. Appends to the same inode cannot change its
 // captured prefix; a later rewrite leaves this read-only descriptor valid.
-func captureReplicationSnapshot() error {
-	if !replicationV2Enabled() || !replicationV2.snapshotRequested {
+func (e *Engine) captureReplicationSnapshot() error {
+	if !e.replicationV2Enabled() || !replicationV2.snapshotRequested {
 		return nil
 	}
-	f, err := os.Open(aof.path)
+	f, err := os.Open(e.aof.path)
 	if err != nil {
 		return err
 	}
@@ -164,7 +164,7 @@ func captureReplicationSnapshot() error {
 	closeReplicationSnapshot()
 	replicationV2.snapshot = f
 	replicationV2.snapshotID = hex.EncodeToString(id[:])
-	replicationV2.snapshotBytes = aof.baseSize
+	replicationV2.snapshotBytes = e.aof.baseSize
 	replicationV2.snapshotBase = replicationV2.end
 	replicationV2.snapshotRequested = false
 	return nil

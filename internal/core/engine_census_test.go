@@ -38,10 +38,6 @@ const (
 var packageVars = map[string]string{
 	"defaultEngine": defaultInstance,
 
-	"aof": persistence, "aofSync": persistence, "aofWrite": persistence,
-	"appendPending": persistence, "appendBytes": persistence, "appendRetained": persistence,
-	"appendStarted": persistence, "appendCompleted": persistence,
-	"appendWritten": persistence, "appendSynced": persistence,
 	"rewrite": persistence, "pendingRewriteIO": persistence, "rewriteWake": persistence,
 	"rewriteFileSync": persistence, "rewriteFileWrite": persistence,
 	"rewriteOpenLog": persistence, "rewriteRename": persistence, "rewriteSyncDir": persistence,
@@ -53,7 +49,7 @@ var packageVars = map[string]string{
 
 	"replication": replicated, "replicationV2": replicated, "replicaV2": replicated, "replicaAck": replicated,
 	"replicaApplying": replicated, "replicaReady": replicated, "replicaEpoch": replicated,
-	"replicaOffset": replicated, "replicaUpdated": replicated, "replicationTransaction": replicated,
+	"replicaOffset": replicated, "replicaUpdated": replicated,
 	"failover": replicated, "termRename": replicated, "termSync": replicated, "termSyncDir": replicated,
 	"checkpointRename": replicated, "checkpointSync": replicated, "checkpointSyncDir": replicated,
 

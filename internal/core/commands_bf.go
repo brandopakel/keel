@@ -148,7 +148,7 @@ func (e *Engine) cmdBFRESERVE(args []string) []byte {
 	// forms differently, it logs another, below.
 	legacy, legacyForm := parseLegacyBFReserve(args)
 	r := legacy
-	if !legacyForm || !replayingFilterLog() {
+	if !legacyForm || !e.replayingFilterLog() {
 		var err error
 		if r, err = parseBFReserve(args); err != nil {
 			return e.encode(err, false)
@@ -163,10 +163,10 @@ func (e *Engine) cmdBFRESERVE(args []string) []byte {
 	// RedisBloom sizes the first filter of a chain that grows for half the
 	// rate asked for, and cannot build one for a rate that halves to zero.
 	// The earlier build could, so a log may hold one.
-	if r.expansion != 0 && r.errorRate/2 == 0 && !replayingFilterLog() {
+	if r.expansion != 0 && r.errorRate/2 == 0 && !e.replayingFilterLog() {
 		return e.encode(errBFCouldNotCreate, false)
 	}
-	if err := affordable(data_structure.BloomBytesFor(r.capacity, r.errorRate)); err != nil {
+	if err := e.affordable(data_structure.BloomBytesFor(r.capacity, r.errorRate)); err != nil {
 		return e.encode(err, false)
 	}
 	e.sbStore.Put(key, data_structure.CreateSBChain(r.capacity, r.errorRate, r.expansion))
@@ -175,7 +175,7 @@ func (e *Engine) cmdBFRESERVE(args []string) []byte {
 		// which RedisBloom takes for the option and the earlier build took for
 		// a name. The log gets the option spelled out, a form the earlier
 		// build refused, so a replay builds what this command built.
-		aofRecord("BF.RESERVE", key, args[1], args[2], "NONSCALING")
+		e.aofRecord("BF.RESERVE", key, args[1], args[2], "NONSCALING")
 	}
 	return constant.RespOk
 }

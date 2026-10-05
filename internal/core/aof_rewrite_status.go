@@ -223,7 +223,7 @@ func logStartFailure(what string, err error) {
 // again ten times a second; here it is dropped after a failed start, which is
 // logged and reported, rather than retried in a loop.
 func startScheduledRewrite(now time.Time) {
-	if ready, _ := pollRewriteIO(false); !ready || AppendPending() || len(aof.buf) > 0 {
+	if ready, _ := pollRewriteIO(false); !ready || AppendPending() || len(defaultEngine.aof.buf) > 0 {
 		return // the worker that finishes that wakes the loop again
 	}
 	if rewriteLimited(now) {
@@ -242,10 +242,10 @@ func startScheduledRewrite(now time.Time) {
 // Redis's generic refusal when it cannot start. Keel's own refusals, a log
 // that is off or a rewrite waiting for a pending append, keep their reasons.
 func bgRewriteAOF() []byte {
-	if aof.file != nil && rewrite.active {
+	if defaultEngine.aof.file != nil && rewrite.active {
 		return Encode(errRewriteInProgress, false)
 	}
-	if aof.file != nil && aof.transaction {
+	if defaultEngine.aof.file != nil && defaultEngine.aof.transaction {
 		// Redis starts nothing in the middle of EXEC. The rewrite starts once
 		// the transaction is over, and a BGREWRITEAOF asked for this way
 		// clears the failures holding automatic ones back, as in Redis.

@@ -150,8 +150,8 @@ func assertCheckpointDigest(t *testing.T, path string) {
 	body, err := os.ReadFile(path)
 	require.NoError(t, err)
 	sum := sha256.Sum256(body)
-	require.Equal(t, hex.EncodeToString(sum[:]), currentAOFDigest())
-	require.Equal(t, int64(len(body)), aof.digestBytes)
+	require.Equal(t, hex.EncodeToString(sum[:]), defaultEngine.currentAOFDigest())
+	require.Equal(t, int64(len(body)), defaultEngine.aof.digestBytes)
 }
 
 func TestReplicationV2CheckpointRestartExpiryAndRewrite(t *testing.T) {
@@ -191,7 +191,7 @@ func TestReplicationV2CheckpointRestartExpiryAndRewrite(t *testing.T) {
 			require.NoError(t, FlushAOF())
 			waitForRewriteSync(t)
 		}
-		require.NoError(t, saveReplicaCheckpoint())
+		require.NoError(t, defaultEngine.saveReplicaCheckpoint())
 		assertCheckpointDigest(t, path)
 	}
 }
@@ -250,14 +250,14 @@ func TestReplicationV2CheckpointFaultsGateReads(t *testing.T) {
 			for _, f := range frames {
 				require.NoError(t, ApplyReplication(f))
 			}
-			oldSync, oldCPSync, oldRename, oldDir := aofSync, checkpointSync, checkpointRename, checkpointSyncDir
+			oldSync, oldCPSync, oldRename, oldDir := defaultEngine.aofSync, checkpointSync, checkpointRename, checkpointSyncDir
 			defer func() {
-				aofSync, checkpointSync, checkpointRename, checkpointSyncDir = oldSync, oldCPSync, oldRename, oldDir
+				defaultEngine.aofSync, checkpointSync, checkpointRename, checkpointSyncDir = oldSync, oldCPSync, oldRename, oldDir
 			}()
 			failure := errors.New("injected checkpoint failure")
 			switch fault {
 			case "aof-sync":
-				aofSync = func(*os.File) error { return failure }
+				defaultEngine.aofSync = func(*os.File) error { return failure }
 			case "metadata-sync":
 				checkpointSync = func(*os.File) error { return failure }
 			case "rename":
@@ -341,6 +341,6 @@ func TestReplicationV2HistoryOverrunAndProtocolMismatch(t *testing.T) {
 	config.ReplicationProtocol = 1
 	require.Contains(t, string(rawReply(t, "KEEL.REPL.PULL2", "", "0", "", "0")), "protocol 2 is disabled")
 	config.ReplicationProtocol = 2
-	invalidateReplicationV2()
+	defaultEngine.invalidateReplicationV2()
 	require.NotEqual(t, epoch, replication.epoch)
 }

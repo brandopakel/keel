@@ -126,11 +126,11 @@ func (e *Engine) cmdSMISMEMBER(args []string) []byte {
 // randomCount reads SRANDMEMBER's optional count, reporting whether one was
 // given at all: without one it answers a single member rather than an array
 // of one. Any count is allowed whose negation is one too.
-func randomCount(args []string) (count int64, given bool, err error) {
+func (e *Engine) randomCount(args []string) (count int64, given bool, err error) {
 	if len(args) < 2 {
 		return 0, false, nil
 	}
-	n, valid := counterInteger(args[1])
+	n, valid := e.counterInteger(args[1])
 	if !valid {
 		return 0, true, errIntegerOutOfRange
 	}
@@ -156,7 +156,7 @@ func (e *Engine) cmdSPOP(args []string) []byte {
 	given := len(args) == 2
 	if given {
 		var err error
-		if count, err = positiveCount(args[1]); err != nil {
+		if count, err = e.positiveCount(args[1]); err != nil {
 			return e.encode(err, false)
 		}
 	}
@@ -205,7 +205,7 @@ func (e *Engine) cmdSPOP(args []string) []byte {
 		record[0], record[1] = "SREM", key
 		walk(func(value string) bool { record = append(record, value); return true })
 		s.Remove(record[2:]...)
-		aofRecord(record...)
+		e.aofRecord(record...)
 	}
 	e.setSettle(key, s)
 	return out
@@ -222,7 +222,7 @@ func (e *Engine) cmdSRANDMEMBER(args []string) []byte {
 	if len(args) > 2 {
 		return e.encode(errSyntax, false)
 	}
-	count, given, err := randomCount(args)
+	count, given, err := e.randomCount(args)
 	if err != nil {
 		return e.encode(err, false)
 	}

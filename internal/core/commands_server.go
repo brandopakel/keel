@@ -33,7 +33,7 @@ func (e *Engine) cmdMEMORY(args []string) []byte {
 			if !strings.EqualFold(args[i], "SAMPLES") || i+1 == len(args) {
 				return e.encode(errSyntax, false)
 			}
-			samples, valid := counterInteger(args[i+1])
+			samples, valid := e.counterInteger(args[i+1])
 			if !valid {
 				return e.encode(errNotAnInteger, false)
 			}
@@ -207,9 +207,9 @@ func (e *Engine) cmdINFO(args []string) []byte {
 		b.WriteString("\r\n")
 	}
 	if want("persistence") {
-		base, current, rewrites, keys := AOFStats()
+		base, current, rewrites, keys := e.AOFStats()
 		enabled := 0
-		if AOFEnabled() {
+		if e.AOFEnabled() {
 			enabled = 1
 		}
 		fmt.Fprintf(&b, "# Persistence\r\naof_enabled:%d\r\naof_base_size:%d\r\naof_current_size:%d\r\n",
@@ -219,18 +219,18 @@ func (e *Engine) cmdINFO(args []string) []byte {
 			active = 1
 		}
 		status := "ok"
-		if aof.failed != nil {
+		if e.aof.failed != nil {
 			status = "err"
 		}
-		fmt.Fprintf(&b, "aof_rewrite_in_progress:%d\r\naof_last_write_status:%s\r\naof_buffer_length:%d\r\n", active, status, len(aof.buf))
+		fmt.Fprintf(&b, "aof_rewrite_in_progress:%d\r\naof_last_write_status:%s\r\naof_buffer_length:%d\r\n", active, status, len(e.aof.buf))
 		rewriteStatusInfo(&b)
 		pending := 0
-		if aof.syncPending != nil {
+		if e.aof.syncPending != nil {
 			pending = 1
 		}
-		encoded, written, synced, ready := AOFPositions()
+		encoded, written, synced, ready := e.AOFPositions()
 		fmt.Fprintf(&b, "aof_encoded_offset:%d\r\naof_appended_offset:%d\r\naof_synced_offset:%d\r\naof_reply_offset:%d\r\n", encoded, written, synced, ready)
-		fmt.Fprintf(&b, "aof_pending_fsync:%d\r\naof_pending_append_bytes:%d\r\n", pending, appendBytes)
+		fmt.Fprintf(&b, "aof_pending_fsync:%d\r\naof_pending_append_bytes:%d\r\n", pending, e.appendBytes)
 		fmt.Fprintf(&b, "aof_rewrite_dirty_keys:%d\r\naof_rewrite_dirty_bytes:%d\r\naof_rewrite_budget_aborts:%d\r\n", len(rewrite.dirty), rewrite.dirtyBytes, rewriteBudgetAborts)
 		rewritePending := 0
 		if pendingRewriteIO != nil && pendingRewriteIO.body == nil {

@@ -16,14 +16,11 @@ func init() { ResetStores() }
 
 // ResetStores rebuilds every keyspace of the default engine and re-registers
 // them. Called at startup, and by tests that need to begin from empty.
-func ResetStores() {
-	defaultEngine.resetStores()
-	aof.recovered = nil
-}
+func ResetStores() { defaultEngine.resetStores() }
 
 // newEngine returns an engine with empty stores, living in space.
 func newEngine(space *data_structure.Space) *Engine {
-	e := &Engine{space: space, replyCeiling: MaxReplyBytes}
+	e := &Engine{space: space, replyCeiling: MaxReplyBytes, aofWrite: writeLog, aofSync: syncLog}
 	e.resetStores()
 	return e
 }
@@ -37,8 +34,11 @@ func newEngine(space *data_structure.Space) *Engine {
 func (e *Engine) resetStores() {
 	space := e.space
 	space.ResetKeyspaces()
-	// The counter describes the keyspace being thrown away, so it goes with it.
+	// The counter describes the keyspace being thrown away, so it goes with it,
+	// and so do the keys a replay of the log removed, which the log's next
+	// open would record as deleted from it.
 	e.expiredKeys = 0
+	e.aof.recovered = nil
 
 	e.dictStore = data_structure.CreateDict(space)
 	e.zsetStore = data_structure.NewKeyed[*data_structure.ZSet](space, "zset")

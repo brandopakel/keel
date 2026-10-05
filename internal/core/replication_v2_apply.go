@@ -184,7 +184,7 @@ func applyReplicationV2(frame ReplicationFrame) (err error) {
 	replicaOffset = frame.To
 	if frame.CaughtUp {
 		if config.ReplicaOf != "" {
-			if err := saveReplicaCheckpoint(); err != nil {
+			if err := defaultEngine.saveReplicaCheckpoint(); err != nil {
 				return err
 			}
 		}

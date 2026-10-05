@@ -37,7 +37,7 @@ func (e *Engine) cmdMORRISINITBYDIM(args []string) []byte {
 	if e.morrisStore.Exists(key) {
 		return e.encode(errors.New("MORRIS: key already exists"), false)
 	}
-	if err := affordable(64 + width*depth); err != nil {
+	if err := e.affordable(64 + width*depth); err != nil {
 		return e.encode(err, false)
 	}
 	e.morrisStore.Put(key, data_structure.CreateMorris(uint32(width), uint32(depth)))
@@ -74,7 +74,7 @@ func (e *Engine) cmdMORRISINITBYPROB(args []string) []byte {
 	if w == 0 || d == 0 {
 		return e.encode(errTooLargeForOneKey, false)
 	}
-	if err := affordable(64 + uint64(w)*uint64(d)); err != nil {
+	if err := e.affordable(64 + uint64(w)*uint64(d)); err != nil {
 		return e.encode(err, false)
 	}
 	e.morrisStore.Put(key, data_structure.CreateMorris(w, d))

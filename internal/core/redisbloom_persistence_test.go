@@ -178,7 +178,7 @@ func runBloomSessionV2(t *testing.T, resp3 bool) (log, delta, dumps []byte) {
 		offset = f.To
 	}
 	dumps, _ = dumpImages(t, bloomPersistenceKeys)
-	log, err := os.ReadFile(aof.path)
+	log, err := os.ReadFile(defaultEngine.aof.path)
 	require.NoError(t, err)
 	return log, delta, dumps
 }

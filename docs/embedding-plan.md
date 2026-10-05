@@ -2,7 +2,8 @@
 
 Status: accepted plan, October 2, 2026. Phases 0 and 1 are done (#88, #90), and so are step 2.1,
 the stores, and step 2.2, the command scope (see "Step 2.1: the stores" and
-"Step 2.2: the command scope" below).
+"Step 2.2: the command scope" below). Step 2.3, persistence, is under way (see
+"Step 2.3: persistence").
 
 The owner asked for Keel to be usable as a Go library, not only as a server:
 several independent instances per process, safe for concurrent use, a typed
@@ -335,6 +336,114 @@ settles it this way:
   server's INFO hook, and values computed once.
 - **Measured per PR**, as in step 2.1: the paired command-path job runs at
   least twice against develop and once against `65ebdbc`.
+
+### Step 2.3: persistence
+
+Step 2.3 moves into `core.Engine` the state that makes an engine's writes
+durable: the log file and its buffer, the append worker and its pending
+result, the sync state, the rewrite and its record stream, the rewrite's
+outcome and retry backoff, the I/O hooks tests inject, and the I/O counters
+INFO reports. Nothing it writes may change: not a byte of a log or a rewrite,
+not a sync, and not the order or the back-pressure of appends. It takes three
+PRs, in this order:
+
+1. **The log and its append worker** (`aof`, the `append*` offsets and the
+   worker's result, and the `aofWrite` and `aofSync` hooks).
+2. **The rewrite**: its walk and record stream, its I/O job and wake, the
+   handoff hooks (`rewriteFileWrite`, `rewriteFileSync`, `rewriteOpenLog`,
+   `rewriteRename`, `rewriteSyncDir`) and `keyCountForRewrite`.
+3. **What outlives one rewrite**: its outcome, the retry backoff,
+   `rewriteBudgetAborts`, `nextAutoRewrite`, `snapshotRetryAt`,
+   `unsyncedLogDir`, and the six I/O counters.
+
+The order follows what reads what. Every write touches the log - a handler
+stages its record, `evalAndResponse` begins and commits it, and replay's
+leniency is a question about the log - so the log moves first, and with it
+the guardrails below. The rewrite reads the log's file, path, buffer and sync
+state at every step, so it follows the log and reads it through
+`defaultEngine` for one PR; the other way round, every flush would reach the
+rewrite through `defaultEngine`. The outcome, the backoff and the counters are
+written by both - a flush retries the directory sync a rewrite's rename left,
+and the counters time the log's I/O and the rewrite's - so they go last, once
+both their writers are methods. Where the plan above leaves a choice open,
+step 2.3 settles it this way:
+
+- **Guardrails first, captured on develop.** The first commit of the first PR
+  adds them, on develop's code at 40eb2f6, before anything moves:
+  - `persistence_golden_test.go` runs six scenarios under every fsync policy,
+    with synchronous and worker appends: every command family with its
+    writes, reads and refusals; the records logged in a command's place; each
+    kind of expiry, lazy, active and in the past; SET over another type
+    (#85); transactions, framed, empty, aborted and with a key reaped inside
+    (#89); evictions after EXEC; rewrites with a key written before the walk
+    and during the snapshot's preflush; a rewrite scheduled by EXEC; and the
+    BF and CF forms written before RedisBloom parity (#94). It compares the
+    log, the replies and the keyspace with `testdata/persistence-40eb2f6`, and
+    replays develop's logs, and their rewrite, on the build under test. A log
+    is compared record by record after two normalizations and no others: a
+    relative expiry becomes the whole hours from the run's start, and map
+    order inside an HSET record, and inside a ZADD record without options, is
+    sorted.
+  - `scripts/check-log-compatibility.py`, run by the Log compatibility
+    workflow on Linux and macOS, builds the base and the change and runs one
+    workload on each under every policy and append mode (synchronous, worker
+    and concurrent). The logs each writes and rewrites must be the same bytes,
+    after the same normalizations, and each build must replay the other's
+    written, rewritten and crashed logs (kill -9 after writes during a
+    rewrite) to the other's keyspace: upgrade and rollback. A build that logs
+    UNLINK as itself fails both guards, which is how they were checked.
+  - `BenchmarkCommandPathWithLog` is SET, INCR, HSET, LPUSH-RPOP and SADD with
+    the log open under everysec, flushed once every 64 commands as a
+    pipelined cycle is. Its file uses only what the package had before, and
+    `command-path.yml` builds the candidate's copy of it into a baseline that
+    predates it, so it pairs against develop and against `65ebdbc` alike.
+- **Fields keep their names**, as in step 2.2: `e.aof`, `e.appendPending`,
+  `e.appendStarted` and so on. The hooks are fields too, `e.aofWrite` and
+  `e.aofSync`, set to `writeLog` and `syncLog` when an engine is made. A test
+  fails the disk of the engine it names, the default engine's for the
+  server, and no other engine's.
+- **Methods, and the package's functions on the default engine.** Each
+  exported function keeps its signature and runs on the default engine, as
+  `ExpireCycle` does, and is also an Engine method of the same name (`OpenAOF`,
+  `LoadAOF`, `FlushAOF`, `FlushAOFAsync`, `CloseAOF`, the append offsets,
+  `AppendAdmission`, `AOFStats`). The rest become Engine methods. The engine's
+  own space carries the removal hook that logs expiry and eviction, and is
+  where replay holds off eviction and expiry; `AppendAdmission` and its reply
+  bounds read the engine's stores. Admission still reads its limits from
+  config, as the default engine's space does, until step 2.5.
+- **Replay's leniency is the replaying engine's.** A log may hold integers
+  written before canonical spelling was enforced, so `counterInteger` accepts
+  them while its engine replays. It and the readers built on it
+  (`positiveCount`, `integerRange`, `randomCount`, the ZRANGE, score-range and
+  pop-count parsers, and `argumentsBeforeType`, whose functions now take the
+  engine) are methods, as are `affordable` and `replayingFilterLog`.
+- **Replication where the log calls it.** The replication functions the log
+  calls, which read the log's state, become methods that read their engine's
+  log: `noteReplicationDirty`, `replicaCommandError`, `replicationV2Enabled`,
+  the protocol 2 publication (`recordReplicationV2Body`,
+  `recordReplicationV2Commit`), `captureReplicationSnapshot`, the log's digest
+  and the replica checkpoint. Their replication state stays where it is until
+  step 2.4, with one exception: `replicationTransaction`, the protocol 2 frame
+  of the transaction running now, moves with the log, because EXEC opens and
+  closes it with the log's frame of the same block, and two engines' EXECs
+  would otherwise write one variable. Replication code the log does not call
+  (`InitReplication`, replica apply) reaches the log through `defaultEngine`.
+- **Until a part moves**, the code that owns it reaches what has moved through
+  `defaultEngine`, as step 2.1's leftovers reached the stores: after the first
+  PR, the rewrite reads the server's log that way.
+- **Isolation.** `TestEnginesShareNoLog` gives two engines a log each, with
+  I/O of their own: one engine's records, transaction frames, reaped keys and
+  failed disk stay its own, and then both run side by side through
+  `evalAndResponse`, one appending on the worker and one synchronously, with
+  transactions and expiry cycles, and each log replays to its own engine's
+  keyspace. `TestEnginesShareNoCommandScope` now runs its side-by-side part
+  through `evalAndResponse` too, with a log open on each engine. The race job
+  runs both under `-race`.
+- **Census.** Each PR removes the entries it moves. The first removes the ten
+  of the log and its worker, and `replicationTransaction`.
+- **Measured per PR**, as in steps 2.1 and 2.2, now including the log-on
+  benchmark: the paired command-path job runs at least twice against develop
+  and once against `65ebdbc`.
 
 ## Risks, in order
 

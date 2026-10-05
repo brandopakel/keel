@@ -156,11 +156,11 @@ func TestCommandRemovalReservesExistingLogGrowth(t *testing.T) {
 		run(t, "SET", "padding", strings.Repeat("p", 1<<20))
 		// Fill the current backing allocation so even this tiny removal would
 		// force replacement of a large append buffer.
-		aof.buf = append(make([]byte, 0, len(aof.buf)), aof.buf...)
-		before := len(aof.buf)
-		defaultEngine.commandAllocations = &CommandAllocationBudget{Limit: 2 << 20, Retained: cap(aof.buf)}
+		defaultEngine.aof.buf = append(make([]byte, 0, len(defaultEngine.aof.buf)), defaultEngine.aof.buf...)
+		before := len(defaultEngine.aof.buf)
+		defaultEngine.commandAllocations = &CommandAllocationBudget{Limit: 2 << 20, Retained: cap(defaultEngine.aof.buf)}
 		require.Equal(t, allocationPressure, rawReply(t, "SPOP", "set"))
-		require.Equal(t, before, len(aof.buf), "refused command must not append a partial record")
+		require.Equal(t, before, len(defaultEngine.aof.buf), "refused command must not append a partial record")
 		defaultEngine.commandAllocations = nil
 		require.EqualValues(t, 1, run(t, "SCARD", "set"))
 	})

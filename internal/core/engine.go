@@ -1,6 +1,10 @@
 package core
 
-import "github.com/brandopakel/keel/internal/data_structure"
+import (
+	"os"
+
+	"github.com/brandopakel/keel/internal/data_structure"
+)
 
 // Engine is one keyspace and the state that serves it.
 //
@@ -15,8 +19,11 @@ import "github.com/brandopakel/keel/internal/data_structure"
 // engine dispatching it - see commandTable. Step 2.2 moved the command scope
 // here: what the engine holds for the command it is running, the reply's
 // protocol included, and the budget the transport running it reserves from.
-// The persistence and replication state are still package variables until
-// steps 2.3 and 2.4 move them, and the code that owns them reaches the stores
+// Step 2.3 moves the persistence state here, a part at a time: first the log
+// and its append worker, whose methods record, flush and replay e's writes in
+// e's own file. The rewrite, its outcome and the I/O counters are package
+// variables until the parts of step 2.3 that move them, and replication's
+// until step 2.4; the code that owns them reaches the log and the stores
 // through defaultEngine until then.
 //
 // Until callers open engines of their own (plan phase 3) the server and the
@@ -81,6 +88,34 @@ type Engine struct {
 	// engine with none - one no transport drives, and log replay before the
 	// server starts - keeps each command's own limits and reserves nothing.
 	commandAllocations *CommandAllocationBudget
+
+	// The log: the append-only file this engine records its writes in, and
+	// the worker that appends a batch of them, under the names they had as
+	// package variables - see aof.go and aof_async.go. Each engine's log is
+	// its own, so two engines in one process write two logs, and a test that
+	// fails one engine's disk fails no other's.
+	//
+	// aof is the file, its buffer and staging, and its sync and size state.
+	aof aofState
+	// appendPending is the worker's result while a batch is out, and
+	// appendBytes and appendRetained that batch's length and capacity.
+	appendPending  chan appendResult
+	appendBytes    int
+	appendRetained int
+	// The log's logical offsets since it was opened: appendStarted has been
+	// handed to a write, appendWritten written, appendSynced synced, and
+	// appendCompleted may have its replies released.
+	appendStarted, appendCompleted uint64
+	appendWritten, appendSynced    uint64
+	// aofWrite and aofSync are the log's I/O: writeLog and syncLog, unless a
+	// test has replaced them.
+	aofWrite func(*os.File, []byte) (int, error)
+	aofSync  func(*os.File) error
+	// replicationTransaction is the protocol 2 framing of the transaction
+	// running on the engine, which EXEC opens and closes with the log's frame
+	// of the same block; see transaction.go. The rest of replication is still
+	// the server's, until plan step 2.4.
+	replicationTransaction replicationBlock
 }
 
 // defaultEngine is the engine the server and the tests run on until each
@@ -89,4 +124,5 @@ type Engine struct {
 //
 // The pointer never changes. ResetStores rebuilds the stores inside it, so
 // whatever has kept the engine keeps the keyspace a test began from empty.
-var defaultEngine = &Engine{space: data_structure.DefaultSpace, replyCeiling: MaxReplyBytes}
+var defaultEngine = &Engine{space: data_structure.DefaultSpace, replyCeiling: MaxReplyBytes,
+	aofWrite: writeLog, aofSync: syncLog}
