@@ -457,7 +457,11 @@ func TestEnginesShareNoReplication(t *testing.T) {
 					}
 				}
 				time.Sleep(2 * time.Millisecond)
-				ok = ok && do("GET", "brief") // reaped
+				// Reaped: the read answers nil and logs the key's DEL, which
+				// the stream carries to the replica.
+				var w replyWriter
+				ok = ok && assert.NoError(t, p.evalAndResponse(&Command{Cmd: "GET", Args: []string{"brief"}}, &w)) &&
+					assert.Equal(t, "$-1\r\n", string(w.b), "brief was reaped")
 				if !ok || !assert.NoError(t, p.FlushAOF()) || !pair.catchUp(t) {
 					return
 				}
