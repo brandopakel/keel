@@ -415,7 +415,10 @@ func TestEnginesShareNoLog(t *testing.T) {
 	wg.Wait()
 
 	// Each log replays to its own engine's keyspace, and holds nothing of the
-	// other's.
+	// other's. The last brief:* keys are let pass their millisecond first:
+	// the keyspace below reads one still within it as present, while the
+	// replay, a moment later, reaps it.
+	time.Sleep(5 * time.Millisecond)
 	never := goldenWindow{start: -1, end: -1 - int64(24*time.Hour/time.Millisecond)}
 	for _, side := range []struct {
 		e            *Engine
