@@ -7,8 +7,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	"github.com/brandopakel/keel/internal/config"
 )
 
 // Threaded socket I/O, in the style of Redis's io-threads.
@@ -266,12 +264,4 @@ func (w *captureWriter) Write(p []byte) (int, error) {
 	joined := make([]byte, 0, len(w.p)+len(p))
 	w.p = append(append(joined, w.p...), p...)
 	return len(p), nil
-}
-
-// ioThreadCount reports how many threads the phases should use.
-func ioThreadCount() int {
-	if config.IOThreads < 1 {
-		return 1
-	}
-	return config.IOThreads
 }

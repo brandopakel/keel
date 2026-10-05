@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/core"
 	"github.com/brandopakel/keel/internal/core/io_multiplexing"
 	"github.com/stretchr/testify/require"
@@ -27,13 +26,10 @@ func TestOrderedRepliesAndDependentReadWaitForPersistence(t *testing.T) {
 	oldClients := clients
 	clients = make(map[int]*client)
 	t.Cleanup(func() { clients = oldClients })
-	oldConcurrent := config.AOFConcurrentAppend
 	oldRetained := retainedClientBytes
 	withEngineOptions(t, func(o *core.Options) { o.Fsync, o.AsyncAppend = core.FsyncAlways, true })
-	config.AOFConcurrentAppend = true
 	defer func() {
 		core.CloseAOF()
-		config.AOFConcurrentAppend = oldConcurrent
 		retainedClientBytes = oldRetained
 	}()
 	require.NoError(t, core.OpenAOF(filepath.Join(t.TempDir(), "log")))

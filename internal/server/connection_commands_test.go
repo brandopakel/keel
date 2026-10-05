@@ -3,7 +3,6 @@ package server
 import (
 	"testing"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/core"
 	"github.com/stretchr/testify/require"
 )
@@ -26,11 +25,12 @@ func upper(s string) string {
 	return string(b)
 }
 
-func withPassword(t *testing.T, password string) {
-	old := config.RequirePass
-	config.RequirePass = password
-	t.Cleanup(func() { config.RequirePass = old; core.ResetStores() })
+// clientWithPassword is a connection accepted by a server whose RequirePass
+// is password, on an empty keyspace.
+func clientWithPassword(t *testing.T, password string) *client {
+	t.Cleanup(core.ResetStores)
 	core.ResetStores()
+	return &client{fd: -1, password: password}
 }
 
 // TestCommandsAreNamedAndCountedBeforeAuthentication, as Redis 8.10.1 answers
@@ -39,8 +39,7 @@ func withPassword(t *testing.T, password string) {
 // refused as such, ahead of NOAUTH; anything else is NOAUTH, and EXEC is
 // refused with EXECABORT.
 func TestCommandsAreNamedAndCountedBeforeAuthentication(t *testing.T) {
-	withPassword(t, "secret")
-	c := &client{fd: -1}
+	c := clientWithPassword(t, "secret")
 	for _, tc := range []struct {
 		cmd  *core.Command
 		want string
@@ -77,8 +76,7 @@ func TestCommandsAreNamedAndCountedBeforeAuthentication(t *testing.T) {
 // TestAuthWithoutAPassword: Redis's default user takes any password when none
 // is configured, and its one-argument AUTH refuses to pretend otherwise.
 func TestAuthWithoutAPassword(t *testing.T) {
-	withPassword(t, "")
-	c := &client{fd: -1}
+	c := clientWithPassword(t, "")
 	require.Equal(t, "-ERR AUTH <password> called without any password configured for the default user. "+
 		"Are you sure your configuration is correct?\r\n", runOnce(t, c, sent("AUTH", "x")))
 	require.Equal(t, "+OK\r\n", runOnce(t, c, sent("AUTH", "default", "x")))
@@ -91,8 +89,7 @@ func TestAuthWithoutAPassword(t *testing.T) {
 // TestClientHelpAndSubcommandErrors: the subcommands are looked up as Redis
 // looks them up, and HELP lists the ones there are.
 func TestClientHelpAndSubcommandErrors(t *testing.T) {
-	withPassword(t, "")
-	c := &client{fd: -1}
+	c := clientWithPassword(t, "")
 	require.Equal(t, "-ERR unknown subcommand 'kill'. Try CLIENT HELP.\r\n", runOnce(t, c, sent("CLIENT", "kill", "x", "y")))
 	require.Equal(t, "-ERR wrong number of arguments for 'client|setinfo' command\r\n", runOnce(t, c, sent("client", "SetInfo", "lib-name")))
 	require.Equal(t, "-ERR Unrecognized option 'a'\r\n", runOnce(t, c, sent("CLIENT", "SETINFO", "a\x00b", "v")),

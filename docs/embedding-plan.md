@@ -4,8 +4,8 @@ Status: accepted plan, October 2, 2026. Phases 0 and 1 are done (#88, #90), and 
 the stores, step 2.2, the command scope, step 2.3, persistence (see "Step
 2.1: the stores", "Step 2.2: the command scope" and "Step 2.3: persistence"
 below), and step 2.4, replication and failover (see "Step 2.4:
-replication"). Step 2.5, options in place of `internal/config`, is under way
-(see "Step 2.5: options").
+replication"), and step 2.5, options in place of `internal/config` (see "Step
+2.5: options").
 
 The owner asked for Keel to be usable as a Go library, not only as a server:
 several independent instances per process, safe for concurrent use, a typed
@@ -850,6 +850,27 @@ plan above leaves a choice open, step 2.5 settles it this way:
   `TestEnginesShareNoOptions` holds two engines and the default engine to
   different options: each expires, syncs its log and reports in INFO only as
   its own options say.
+- **The server's options are the server's.** `server.Options` (`Host`,
+  `Port`, `MaxClients`, `IOThreads`, `CronInterval`, `RequirePass`,
+  `ConcurrentAppend`, `PrimaryPassword`, `PrimaryTLS`) are handed to
+  `RunAsyncTCPServer` and `RunNetTCPServer`, which resolve the defaults once
+  and pass on what each part needs: the listener its address and backlog,
+  the multiplexer how many descriptors one wait reports
+  (`CreateIOMultiplexer(maxDescriptors)`), the I/O pool its threads, the
+  replica transport its password and TLS. A connection holds the password it
+  authenticates with, set when it is accepted, so AUTH, HELLO and the check
+  before every command read the connection rather than a global, and a test
+  builds a client with the password it needs. `WriteUnbuffered` and
+  `ActiveNetVariant`, which `-mode` sets for the benchmark modes, were never
+  config; they stay with the rest of the server's package state until the
+  server struct (phase 6).
+- **What is left of `internal/config`** is the build's identity: `Version`,
+  which the linker stamps (`-X .../internal/config.Version`), and
+  `BuildVersion` and `BuildRevision`, which read it. The package keeps its
+  name because the release workflow, the Dockerfile and `build-alpha.sh`
+  stamp that path, and no PR check builds a release. `config_test.go` is its
+  census: it fails on any package variable but `Version`, and on any code in
+  the module that assigns `Version` or takes its address, as a flag would.
 - **Identical benchmark workloads.** A baseline from before step 2.5 holds its
   engine to config's 5,000,000-key cap, so every one of its writes counts the
   keyspace. Every command-path benchmark gives the candidate's engine the

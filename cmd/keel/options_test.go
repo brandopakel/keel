@@ -5,6 +5,9 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/brandopakel/keel/internal/server"
 
 	"github.com/brandopakel/keel/internal/core"
 	"github.com/brandopakel/keel/internal/data_structure"
@@ -147,4 +150,30 @@ func TestServerEnforcesMaxKeysAtStartup(t *testing.T) {
 		t.Fatalf("DBSIZE = %s, want :1", got)
 	}
 	s.stop(t)
+}
+
+// TestFlagsReachTheServer: the listener and transport flags reach the server's
+// options, each passed explicitly, so that none of the server's settings is a
+// server.Options default; with no flags they are the settings the server has
+// always had.
+func TestFlagsReachTheServer(t *testing.T) {
+	configureFrom(t)
+	want := server.Options{Host: "127.0.0.1", Port: 8081, MaxClients: 20000, IOThreads: 1,
+		CronInterval: 100 * time.Millisecond}
+	if got := serverOptions(); got != want {
+		t.Fatalf("default flags give the server %+v, want %+v", got, want)
+	}
+	if got := serverOptions().WithDefaults(); got != want {
+		t.Fatalf("the defaults change the server's settings to %+v, want %+v", got, want)
+	}
+
+	t.Setenv("KEEL_OPTIONS_TEST_PASSWORD", "secret")
+	configureFrom(t, "-host", "0.0.0.0", "-port", "7000", "-maxclients", "12", "-io-threads", "3",
+		"-cron-interval-ms", "25", "-requirepass-env", "KEEL_OPTIONS_TEST_PASSWORD",
+		"-aof-async-append", "-appendonly", "-aof-concurrent-append", "-primary-tls")
+	want = server.Options{Host: "0.0.0.0", Port: 7000, MaxClients: 12, IOThreads: 3,
+		CronInterval: 25 * time.Millisecond, RequirePass: "secret", ConcurrentAppend: true, PrimaryTLS: true}
+	if got := serverOptions(); got != want {
+		t.Fatalf("flags give the server %+v, want %+v", got, want)
+	}
 }

@@ -20,6 +20,16 @@ const (
 	OpNone
 )
 
+// MaxEventsPerWait is the most descriptors one wait reports. More ready than
+// that are reported by the next wait, which follows at once.
+const MaxEventsPerWait = 128
+
+// eventsPerWait is how many descriptors one wait reports, for a caller that
+// holds up to maxDescriptors: at least one, and at most MaxEventsPerWait.
+func eventsPerWait(maxDescriptors int) int {
+	return min(max(maxDescriptors, 1), MaxEventsPerWait)
+}
+
 // Event pairs a descriptor with what it is ready for.
 type Event struct {
 	Fd int

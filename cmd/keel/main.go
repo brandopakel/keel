@@ -43,6 +43,13 @@ var (
 	eviction           core.EvictionPolicy
 	lcsMaxCells        uint64
 	ioThreads          int
+	host               string
+	port               int
+	maxClients         int
+	requirePass        string
+	concurrentAppend   bool
+	primaryPassword    string
+	primaryTLS         bool
 	appendOnly         bool
 	appendFilename     string
 	appendFsync        string
@@ -62,10 +69,10 @@ var (
 	shutdownTimeout    = 5 * time.Second
 )
 
-// parseFlags reads the command line into config and into the values
-// engineOptions maps onto the engine. It runs before anything starts, from
-// main rather than from an init, so that nothing else in the process can
-// observe a setting before the flag that changes it has been read.
+// parseFlags reads the command line into the values engineOptions maps onto
+// the engine and serverOptions onto the server. It runs before anything
+// starts, from main rather than from an init, so that nothing else in the
+// process can observe a setting before the flag that changes it has been read.
 func parseFlags() {
 	flag.DurationVar(&shutdownTimeout, "shutdown-timeout", 5*time.Second,
 		"grace period after SIGTERM/SIGINT for server cleanup and persistence sync; a second signal exits early")
@@ -74,11 +81,11 @@ func parseFlags() {
 	flag.IntVar(&replicationProto, "replication-protocol", 1, "experimental replication protocol: 1 (alpha images) or 2 (streaming snapshots, operation deltas and recovery checkpoints)")
 	flag.StringVar(&replicaOf, "replicaof", "", "experimental: read-only replica of host:port")
 	flag.StringVar(&replicaPasswordEnv, "primary-password-env", "", "environment variable holding the primary AUTH password")
-	flag.BoolVar(&config.ReplicaTLS, "primary-tls", false, "verify TLS when connecting to the primary proxy")
+	flag.BoolVar(&primaryTLS, "primary-tls", false, "verify TLS when connecting to the primary proxy")
 	flag.BoolVar(&showVersion, "version", false, "print the version and exit")
-	flag.StringVar(&config.Host, "host", config.Host,
+	flag.StringVar(&host, "host", "127.0.0.1",
 		"IPv4 address to listen on; 0.0.0.0 is every interface")
-	flag.IntVar(&config.Port, "port", config.Port, "TCP port to listen on")
+	flag.IntVar(&port, "port", 8081, "TCP port to listen on")
 	flag.StringVar(&mode, "mode", "kqueue", "io mode: kqueue (default) | kqueue-nobuf | net | net-small | net-direct | net-chan")
 	flag.StringVar(&maxMemory, "maxmemory", "0",
 		"bound the keyspace in bytes, e.g. 512mb or 2gb; 0 is unbounded")
@@ -95,7 +102,7 @@ func parseFlags() {
 	flag.Uint64Var(&lcsMaxCells, "lcs-max-cells", 134217728,
 		"largest len(key1)*len(key2) LCS will attempt; 0 is unbounded")
 	flag.BoolVar(&asyncAppend, "aof-async-append", false, "experimental: append on a worker with one-batch command backpressure")
-	flag.BoolVar(&config.AOFConcurrentAppend, "aof-concurrent-append", false, "experimental: overlap bounded string commands with worker appends; requires -aof-async-append")
+	flag.BoolVar(&concurrentAppend, "aof-concurrent-append", false, "experimental: overlap bounded string commands with worker appends; requires -aof-async-append")
 	flag.BoolVar(&appendOnly, "appendonly", false,
 		"log every write to an append-only file and replay it at startup")
 	flag.StringVar(&appendFilename, "appendfilename", "./keel-master.aof",
@@ -109,20 +116,21 @@ func parseFlags() {
 		"never rewrite automatically below this size")
 	flag.IntVar(&expireSamples, "active-expire-samples", 20,
 		"keys with a TTL sampled per expiry cycle; 0 leaves expiry lazy")
-	flag.IntVar(&cronIntervalMs, "cron-interval-ms", config.CronIntervalMs,
+	flag.IntVar(&cronIntervalMs, "cron-interval-ms", 100,
 		"how often the loop is woken for work that is due by the clock")
-	flag.IntVar(&ioThreads, "io-threads", config.IOThreads,
+	flag.IntVar(&ioThreads, "io-threads", 1,
 		"threads that read, parse and write sockets, including the event loop's own; "+
 			"command execution stays on one thread whatever this is")
-	flag.IntVar(&config.MaxConnection, "maxclients", config.MaxConnection, "maximum connected clients")
+	flag.IntVar(&maxClients, "maxclients", 20000, "maximum connected clients")
 	flag.StringVar(&passwordEnv, "requirepass-env", "", "environment variable containing the required AUTH password")
 	flag.Parse()
 	if shutdownTimeout <= 0 {
 		log.Fatal("-shutdown-timeout must be positive")
 	}
+	requirePass = ""
 	if passwordEnv != "" {
-		config.RequirePass = os.Getenv(passwordEnv)
-		if config.RequirePass == "" {
+		requirePass = os.Getenv(passwordEnv)
+		if requirePass == "" {
 			log.Fatal("-requirepass-env names an empty or missing environment variable")
 		}
 	}
@@ -135,14 +143,13 @@ func parseFlags() {
 	if ioThreads < 1 {
 		log.Fatalf("-io-threads must be at least 1, got %d", ioThreads)
 	}
-	config.IOThreads = ioThreads
 
 	switch core.FsyncPolicy(appendFsync) {
 	case core.FsyncAlways, core.FsyncEverySec, core.FsyncNever:
 	default:
 		log.Fatalf("unknown -appendfsync %q (want always, everysec or no)", appendFsync)
 	}
-	if config.AOFConcurrentAppend && !asyncAppend {
+	if concurrentAppend && !asyncAppend {
 		log.Fatal("-aof-concurrent-append requires -aof-async-append")
 	}
 	if asyncAppend && !appendOnly {
@@ -164,7 +171,6 @@ func parseFlags() {
 	if cronIntervalMs < 1 {
 		log.Fatalf("-cron-interval-ms must be at least 1, got %d", cronIntervalMs)
 	}
-	config.CronIntervalMs = cronIntervalMs
 	switch evictPolicy {
 	case "lru":
 		eviction = core.EvictLRU
@@ -210,6 +216,22 @@ func engineOptions() core.Options {
 		ReplicaOf:           replicaOf,
 		ReplicationFeed:     replicationFeed,
 		ReplicationProtocol: replicationProto,
+	}
+}
+
+// serverOptions are the server settings the flags describe, every one passed
+// explicitly, as engineOptions passes the engine's.
+func serverOptions() server.Options {
+	return server.Options{
+		Host:             host,
+		Port:             port,
+		MaxClients:       maxClients,
+		IOThreads:        ioThreads,
+		CronInterval:     time.Duration(cronIntervalMs) * time.Millisecond,
+		RequirePass:      requirePass,
+		ConcurrentAppend: concurrentAppend,
+		PrimaryPassword:  primaryPassword,
+		PrimaryTLS:       primaryTLS,
 	}
 }
 
@@ -281,7 +303,7 @@ func runServer() error {
 		return fmt.Errorf("-replication-protocol must be 1 or 2")
 	}
 	if replicationFeed || replicaOf != "" {
-		if !appendOnly || config.RequirePass == "" || mode != "kqueue" {
+		if !appendOnly || requirePass == "" || mode != "kqueue" {
 			return fmt.Errorf("replication requires authenticated AOF in kqueue mode")
 		}
 		if replicaOf != "" {
@@ -293,16 +315,16 @@ func runServer() error {
 			if replicationFeed || maxMemoryBytes != 0 {
 				return fmt.Errorf("replica requires no feed and no local eviction limits")
 			}
-			config.ReplicaPassword = os.Getenv(replicaPasswordEnv)
-			if config.ReplicaPassword == "" {
+			primaryPassword = os.Getenv(replicaPasswordEnv)
+			if primaryPassword == "" {
 				return fmt.Errorf("replica requires -primary-password-env naming a nonempty variable")
 			}
 		}
 	}
-	if config.MaxConnection < 1 || config.MaxConnection > 100000 || config.Port < 1 || config.Port > 65535 {
+	if maxClients < 1 || maxClients > 100000 || port < 1 || port > 65535 {
 		return fmt.Errorf("invalid port or maxclients (1..100000)")
 	}
-	if config.RequirePass != "" && mode != "kqueue" && mode != "kqueue-nobuf" {
+	if requirePass != "" && mode != "kqueue" && mode != "kqueue-nobuf" {
 		return fmt.Errorf("authentication requires an event-loop mode")
 	}
 	if maxKeys < 1 || lruSamples < 1 || lfuLogFactor < 0 || lfuDecayPeriod < 0 {
@@ -311,7 +333,7 @@ func runServer() error {
 	if appendOnly && mode != "kqueue" {
 		return fmt.Errorf("-appendonly requires -mode kqueue; other modes are benchmarks")
 	}
-	var serve func(*sync.WaitGroup) error
+	var serve func(*sync.WaitGroup, server.Options) error
 	switch mode {
 	case "kqueue":
 		serve = server.RunAsyncTCPServer
@@ -348,7 +370,7 @@ func runServer() error {
 	wg.Add(1)
 	done := make(chan error, 1)
 	go func() {
-		err := serve(&wg)
+		err := serve(&wg, serverOptions())
 		closeErr := core.CloseAOF()
 		if err != nil {
 			done <- err

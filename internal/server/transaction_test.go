@@ -7,7 +7,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/core"
 )
 
@@ -64,11 +63,7 @@ func TestTransactionPipelinedInOneRun(t *testing.T) {
 }
 
 func TestAuthenticationStillGatesTransactions(t *testing.T) {
-	old := config.RequirePass
-	config.RequirePass = "secret"
-	t.Cleanup(func() { config.RequirePass = old; core.ResetStores() })
-	core.ResetStores()
-	c := &client{fd: -1}
+	c := clientWithPassword(t, "secret")
 	require.Equal(t, "-NOAUTH Authentication required.\r\n", runOnce(t, c, command("MULTI")))
 	require.Nil(t, c.tx)
 	// EXEC is refused as Redis refuses it, naming why the transaction it

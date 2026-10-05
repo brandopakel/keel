@@ -11,7 +11,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/core"
 )
 
@@ -251,13 +250,9 @@ func TestThreadedServerAnswersEveryClient(t *testing.T) {
 	port := probe.Addr().(*net.TCPAddr).Port
 	probe.Close()
 
-	oldHost, oldPort, oldThreads := config.Host, config.Port, config.IOThreads
-	config.Host, config.Port, config.IOThreads = "127.0.0.1", port, 4
-	defer func() { config.Host, config.Port, config.IOThreads = oldHost, oldPort, oldThreads }()
-
 	var wg sync.WaitGroup
 	wg.Add(1)
-	go RunAsyncTCPServer(&wg)
+	go RunAsyncTCPServer(&wg, Options{Host: "127.0.0.1", Port: port, IOThreads: 4})
 	defer func() {
 		requestShutdown()
 		wake()
