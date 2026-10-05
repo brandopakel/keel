@@ -190,7 +190,7 @@ func (e *Engine) cmdHINCRBY(args []string) []byte {
 	}
 	key, field := args[0], args[1]
 
-	delta, valid := counterInteger(args[2])
+	delta, valid := e.counterInteger(args[2])
 	if !valid {
 		return e.encode(errors.New("ERR value is not an integer or out of range"), false)
 	}
@@ -204,7 +204,7 @@ func (e *Engine) cmdHINCRBY(args []string) []byte {
 	current := int64(0)
 	if existed {
 		if existing, has := h.Get(field); has {
-			current, valid = counterInteger(existing)
+			current, valid = e.counterInteger(existing)
 			if !valid {
 				return e.encode(errors.New("ERR hash value is not an integer"), false)
 			}

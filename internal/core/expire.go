@@ -23,8 +23,8 @@ func (e *Engine) ExpireCycle() int {
 		return 0
 	}
 
-	aofBegin("")
-	defer aofEnd()
+	e.aofBegin("")
+	defer e.aofEnd()
 	total := 0
 	for round := 0; round < config.ActiveExpireRounds; round++ {
 		examined, expired := 0, 0

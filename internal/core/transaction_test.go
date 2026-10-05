@@ -469,7 +469,7 @@ func TestTransactionFencedBeforeExecRunsNothing(t *testing.T) {
 func aofBody(t *testing.T) string {
 	t.Helper()
 	require.NoError(t, FlushAOF())
-	body, err := os.ReadFile(aof.path)
+	body, err := os.ReadFile(defaultEngine.aof.path)
 	require.NoError(t, err)
 	return string(body)
 }
@@ -539,7 +539,7 @@ func TestTransactionReplacingWritesStayInsideTheirBlock(t *testing.T) {
 		string(appendCommand(nil, "MSET", "list", "x", "other", "y")) + "*1\r\n$4\r\nEXEC\r\n"
 	require.Equal(t, before+block, aofBody(t))
 	require.Equal(t, block, string(pullV2(t, epoch, base, "", 0).Body))
-	path := aof.path
+	path := defaultEngine.aof.path
 	require.NoError(t, CloseAOF())
 	restart(t, path)
 	require.Equal(t, "string", run(t, "GET", "hash"))

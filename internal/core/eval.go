@@ -112,7 +112,7 @@ func (e *Engine) cmdSELECT(args []string) []byte {
 	if len(args) != 1 {
 		return e.encode(wrongArguments("SELECT"), false)
 	}
-	n, valid := counterInteger(args[0])
+	n, valid := e.counterInteger(args[0])
 	if !valid {
 		return e.encode(errNotAnInteger, false)
 	}
@@ -141,7 +141,7 @@ func (e *Engine) evalAndResponse(cmd *Command, c io.ReadWriter) error {
 	// and run as RESP2 whatever the command says: what they produce has to be
 	// the same however the command first arrived.
 	saved := e.framing
-	e.framing = framing{replyRESP3: cmd.RESP3 && !aof.replaying && !replicaApplying}
+	e.framing = framing{replyRESP3: cmd.RESP3 && !e.aof.replaying && !replicaApplying}
 	defer func() { e.framing = saved }()
 
 	// Redis names and counts a command before anything else, a replica's
@@ -159,7 +159,7 @@ func (e *Engine) evalAndResponse(cmd *Command, c io.ReadWriter) error {
 		refused = commandRefusal(cmd, entry, true)
 	}
 	if refused == nil {
-		refused = replicaCommandError(cmd.Cmd)
+		refused = e.replicaCommandError(cmd.Cmd)
 	}
 	if entry.namesItself {
 		e.runningName = cmd.sentName()
@@ -173,15 +173,15 @@ func (e *Engine) evalAndResponse(cmd *Command, c io.ReadWriter) error {
 	// first because the type check below reads keys, and reading a key whose
 	// expiry has passed reaps it - a removal that has to reach the log even
 	// though the command it happened under went on to be refused.
-	aofBegin(cmd.Cmd)
-	defer aofEnd()
+	e.aofBegin(cmd.Cmd)
+	defer e.aofEnd()
 
 	// A name may only mean one thing at a time, and the stores cannot enforce
 	// that individually because none of them knows about the others. Checked
 	// before execution, so a refused command has not half-run.
 	if err := e.checkKeyTypes(cmd, entry); err != nil {
 		res := e.encode(err, false)
-		aofCommit(cmd, res)
+		e.aofCommit(cmd, res)
 		_, werr := c.Write(res)
 		return werr
 	}
@@ -194,7 +194,7 @@ func (e *Engine) evalAndResponse(cmd *Command, c io.ReadWriter) error {
 	// Recorded before the reply is written. FlushAOF runs between execution and
 	// the write phase, so under appendfsync always the client hears "OK" only
 	// once the log holding that OK is on disk.
-	aofCommit(cmd, res)
+	e.aofCommit(cmd, res)
 	e.space.SuspendEviction = suspended
 	// The removal hook writes eviction DELs directly after the canonical body.
 	e.space.EnforceLimits()

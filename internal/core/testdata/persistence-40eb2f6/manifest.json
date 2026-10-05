@@ -1,0 +1,42 @@
+{
+  "source_revision": "40eb2f6",
+  "note": "Captured before step 2.3 of the embedding plan moved persistence into core.Engine; see persistence_golden_test.go.",
+  "scenarios": {
+    "evictions": {
+      "log_bytes": 190,
+      "log_sha256": "ce68ab5e65cc6661042ba3a55a1002d30250aad32f92dffd753737d4b50a9b12",
+      "replies_sha256": "1d0ceee596a4c3c34f3d84dd8f456ee83d1e07773d401f1e74df7d79de631a43",
+      "state_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "legacy-filters": {
+      "log_bytes": 1909738,
+      "log_sha256": "d57b271a16af628e1d9617a6d1bd231b0ba01027d60b625a128f929178be3d2a",
+      "replies_sha256": "ad8c83e8a9790e0ff81d8f0136752e03a20af845e3ee241139ca9dad3e428574",
+      "state_sha256": "8f294c44e9446efb04416de80b15bca21ce87896d382c30118c5103b6df71344"
+    },
+    "rewrite-dirty-before-walk": {
+      "log_bytes": 533284,
+      "log_sha256": "9800252ef18926fa8e1a333b9831dfb4d3fff87fb73ccfdd43168521d10b8cad",
+      "replies_sha256": "12af95945ad88b62cbdb6a755ba547dc8772c03a45f6a198e98e2d2c540714c2",
+      "state_sha256": "2d76a488e310d490bc4a927b291f1a975e442d2f0045414cb7ec73fcbea0e020"
+    },
+    "rewrite-dirty-during-preflush": {
+      "log_bytes": 697675,
+      "log_sha256": "a78ea225c66edfb3b6034e6fdbfabf0a700f3c5302a82ff54060da79c729bbdc",
+      "replies_sha256": "424f7a76363688a89bc0ff0895940651a26a141e83b95c87210c8900fa6fb846",
+      "state_sha256": "b65ab730deca2626c3ef76d9a200db8debd22505b9c3a99ee1ce4c06ebc86850"
+    },
+    "rewrite-scheduled-by-exec": {
+      "log_bytes": 533307,
+      "log_sha256": "a22923315313e1f6610aefa9e591c1d2694e1fc302736101c5abfc47e395f4bb",
+      "replies_sha256": "a3d61f184c80efd986a448b7e91612b180114e0715f37acb7b983803dbf61511",
+      "state_sha256": "df0d6c89aca7af7a0dc0a6cfb23fd07aebd0efbf9d71094dca3dd55137560c93"
+    },
+    "session": {
+      "log_bytes": 5249238,
+      "log_sha256": "4eb976dc008bc9d7c313a961799d8199c8574d478dcf2629d4c4bebbfc0bd645",
+      "replies_sha256": "88f8c28e1073952e29e629ec3bfbd25c1fc0dbebfb55d4c155e899c51a66c9a5",
+      "state_sha256": "388686f13f49af29e146a3cf0ee912a2f41ec374235aa52a2a319a1f21b30dd0"
+    }
+  }
+}

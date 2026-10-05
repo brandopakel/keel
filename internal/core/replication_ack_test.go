@@ -135,7 +135,7 @@ func TestReplicaProgressResetsWhenPrimaryChangesEpoch(t *testing.T) {
 	pullV2(t, replication.epoch, replicationV2.end, "", 0)
 	require.Equal(t, replicationV2.end, replicaAck.offset)
 	previousEpoch := replication.epoch
-	invalidateReplicationV2()
+	defaultEngine.invalidateReplicationV2()
 	require.NotEqual(t, previousEpoch, replication.epoch)
 	offset, behind, age := ReplicationAcknowledged()
 	require.Zero(t, offset)

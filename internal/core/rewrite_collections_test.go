@@ -87,7 +87,7 @@ func TestLargeCollectionRewriteYieldsAndReconcilesMutation(t *testing.T) {
 					waitForRewriteSync(t)
 				}
 				require.False(t, rewrite.active)
-				require.Equal(t, 1, aof.rewrites)
+				require.Equal(t, 1, defaultEngine.aof.rewrites)
 				require.NoError(t, CloseAOF())
 				for i := 0; i < 2; i++ {
 					ResetStores()
@@ -159,7 +159,7 @@ func TestCollectionRewriteHonorsByteBudgetAndOversizedMemberMakesProgress(t *tes
 			}
 			require.Greater(t, chunks, 5)
 			require.False(t, rewrite.active)
-			require.Equal(t, 1, aof.rewrites)
+			require.Equal(t, 1, defaultEngine.aof.rewrites)
 		})
 	}
 }

@@ -22,48 +22,50 @@ type appendResult struct {
 	body   []byte
 }
 
-var appendPending chan appendResult
-var appendBytes int
-var appendRetained int
-var appendStarted, appendCompleted uint64
-var appendWritten, appendSynced uint64
-var aofWrite = func(f *os.File, body []byte) (int, error) { return f.Write(body) }
+// writeLog and syncLog are the log's I/O, each engine's aofWrite and aofSync
+// unless a test replaces them on the engine it is failing, to exercise disk
+// failures without relying on hardware.
+func writeLog(f *os.File, body []byte) (int, error) { return f.Write(body) }
+func syncLog(f *os.File) error                      { return f.Sync() }
 
-func AppendPending() bool { return appendPending != nil }
+func AppendPending() bool { return defaultEngine.AppendPending() }
 
-func pollAppend(wait bool) {
-	if appendPending == nil {
+// AppendPending is the package's AppendPending on e.
+func (e *Engine) AppendPending() bool { return e.appendPending != nil }
+
+func (e *Engine) pollAppend(wait bool) {
+	if e.appendPending == nil {
 		return
 	}
 	var result appendResult
 	if wait {
-		result = <-appendPending
+		result = <-e.appendPending
 	} else {
 		select {
-		case result = <-appendPending:
+		case result = <-e.appendPending:
 		default:
 			return
 		}
 	}
-	appendPending = nil
-	appendBytes = 0
-	appendRetained = 0
+	e.appendPending = nil
+	e.appendBytes = 0
+	e.appendRetained = 0
 	if result.err == nil {
-		appendCompleted = result.end
+		e.appendCompleted = result.end
 	}
-	recordAOFDigest(result.body[:result.n])
-	aof.written += int64(result.n)
-	appendWritten += uint64(result.n)
+	e.recordAOFDigest(result.body[:result.n])
+	e.aof.written += int64(result.n)
+	e.appendWritten += uint64(result.n)
 	if result.n > 0 {
-		aof.dirty = true
+		e.aof.dirty = true
 	}
 	if result.synced {
-		appendSynced = result.end
-		aof.dirty = false
-		aof.lastSync = time.Now()
+		e.appendSynced = result.end
+		e.aof.dirty = false
+		e.aof.lastSync = time.Now()
 	}
-	if result.err != nil && aof.failed == nil {
-		aof.failed = result.err
+	if result.err != nil && e.aof.failed == nil {
+		e.aof.failed = result.err
 	}
 }
 
@@ -71,40 +73,45 @@ func pollAppend(wait bool) {
 // With !ready, only runs covered by AppendAdmission may execute. Expiry,
 // replication publication and rewrite transitions must wait for the barrier.
 // wake must be safe to call from a worker, including during shutdown.
-func FlushAOFAsync(wake func()) (ready bool, err error) {
-	pollAppend(false)
-	pollAOFSync(false)
-	if aof.failed != nil {
-		return false, aof.failed
+func FlushAOFAsync(wake func()) (ready bool, err error) { return defaultEngine.FlushAOFAsync(wake) }
+
+// FlushAOFAsync is the package's FlushAOFAsync on e.
+func (e *Engine) FlushAOFAsync(wake func()) (ready bool, err error) {
+	e.pollAppend(false)
+	e.pollAOFSync(false)
+	if e.aof.failed != nil {
+		return false, e.aof.failed
 	}
-	if appendPending != nil {
+	if e.appendPending != nil {
 		return false, nil
 	}
-	if aof.file == nil || len(aof.buf) == 0 {
-		return true, FlushAOF()
+	if e.aof.file == nil || len(e.aof.buf) == 0 {
+		return true, e.FlushAOF()
 	}
-	if len(aof.buf) > maxAsyncAppendBytes {
-		aof.failed = fmt.Errorf("async AOF batch exceeds %d bytes", maxAsyncAppendBytes)
-		return false, aof.failed
+	if len(e.aof.buf) > maxAsyncAppendBytes {
+		e.aof.failed = fmt.Errorf("async AOF batch exceeds %d bytes", maxAsyncAppendBytes)
+		return false, e.aof.failed
 	}
 	always := config.AOFFsync == config.FsyncAlways
 	if always {
 		// As in flushAOF: a rewrite's rename whose directory sync failed is
 		// finished before this batch can be acknowledged as synced.
-		if err := syncPendingLogDir(); err != nil {
-			aof.failed = err
-			return false, err
+		if e.ownsRewrite() {
+			if err := syncPendingLogDir(); err != nil {
+				e.aof.failed = err
+				return false, err
+			}
 		}
 	}
-	body := aof.buf
-	aof.buf = nil
-	file, writeFile, syncFile := aof.file, aofWrite, aofSync
+	body := e.aof.buf
+	e.aof.buf = nil
+	file, writeFile, syncFile := e.aof.file, e.aofWrite, e.aofSync
 	result := make(chan appendResult, 1)
-	appendPending = result
-	appendBytes = len(body)
-	appendRetained = cap(body)
-	appendStarted += uint64(len(body))
-	end := appendStarted
+	e.appendPending = result
+	e.appendBytes = len(body)
+	e.appendRetained = cap(body)
+	e.appendStarted += uint64(len(body))
+	end := e.appendStarted
 	go func() {
 		n, err := timedPersistenceWrite(&appendWriteStats, file, body, writeFile)
 		if err == nil && n != len(body) {

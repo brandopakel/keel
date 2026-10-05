@@ -51,11 +51,13 @@ import (
 //     later grants ten fresh seconds, so every restart would renew every TTL in
 //     the keyspace.
 //   - Expiry and eviction are recorded as DEL, through the OnRemove hook of
-//     data_structure.DefaultSpace. Neither has a command behind it, and a log
+//     the engine's space. Neither has a command behind it, and a log
 //     that omits them replays into a keyspace holding keys the original had
 //     already dropped.
 //
 // Redis arrives at all five of these rules, by the same route.
+//
+// Each Engine holds one aofState, as e.aof, for the log it records in.
 type aofState struct {
 	file        *os.File
 	digest      hash.Hash
@@ -106,8 +108,6 @@ type aofState struct {
 	lastKeys    int
 }
 
-var aof aofState
-
 // writeCommands are the commands that change the dataset. A command absent from
 // here is a read, and a read is never recorded.
 //
@@ -153,11 +153,18 @@ func persistedName(cmd string) string {
 }
 
 // AOFEnabled reports whether the log is on.
-func AOFEnabled() bool { return aof.file != nil }
+func AOFEnabled() bool { return defaultEngine.AOFEnabled() }
+
+// AOFEnabled is the package's AOFEnabled on e.
+func (e *Engine) AOFEnabled() bool { return e.aof.file != nil }
 
 // OpenAOF opens the log for appending and installs the removal hook. Call after
 // LoadAOF, so replaying does not append what it is reading.
-func OpenAOF(path string) error {
+func OpenAOF(path string) error { return defaultEngine.OpenAOF(path) }
+
+// OpenAOF is the package's OpenAOF on e: the log is e's, and the removal hook
+// is installed on e's space, so only e's expiry and eviction are recorded in it.
+func (e *Engine) OpenAOF(path string) error {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
@@ -167,65 +174,67 @@ func OpenAOF(path string) error {
 		return err
 	}
 
-	aof.file = f
-	aof.path = path
-	aof.lastSync = time.Now()
-	aof.dirty = false
-	aof.failed = nil
+	e.aof.file = f
+	e.aof.path = path
+	e.aof.lastSync = time.Now()
+	e.aof.dirty = false
+	e.aof.failed = nil
 	// Counters describe this open file, not whatever the last one did, so they
 	// start again with it. Carrying them over would make a fresh log report
 	// rewrites it has never had.
-	aof.rewrites = 0
+	e.aof.rewrites = 0
 	rewriteBudgetAborts = 0
 	nextAutoRewrite = time.Time{}
 	resetRewriteOutcome()
-	aof.lastKeys = 0
+	e.aof.lastKeys = 0
 	// Whatever is already on disk is the base the growth trigger measures
 	// against, so a server restarted onto an existing log does not immediately
 	// decide the log has grown infinitely.
 	if info, err := f.Stat(); err == nil {
-		aof.baseSize = info.Size()
+		e.aof.baseSize = info.Size()
 	}
-	if err := openAOFDigest(path); err != nil {
+	if err := e.openAOFDigest(path); err != nil {
 		f.Close()
-		aof.file = nil
+		e.aof.file = nil
 		return err
 	}
-	aof.rewriteBase = aof.baseSize
+	e.aof.rewriteBase = e.aof.baseSize
 	// Frequent restarts must not reset compaction's growth target to the
 	// ever-growing log. Use a conservative live-state estimate until the next
 	// actual rewrite provides an exact baseline. HLL's wire registers remain
 	// dense even when its in-memory representation is compact.
-	live := data_structure.TotalMemUsed()
+	live := e.space.TotalMemUsed()
 	const maxInt64 = uint64(1<<63 - 1)
-	hllWire := uint64(defaultEngine.hllStore.Len()) * (16 << 10)
+	hllWire := uint64(e.hllStore.Len()) * (16 << 10)
 	if live <= (maxInt64-hllWire)/3 {
-		if estimate := int64(live*3 + hllWire); estimate < aof.rewriteBase {
-			aof.rewriteBase = estimate
+		if estimate := int64(live*3 + hllWire); estimate < e.aof.rewriteBase {
+			e.aof.rewriteBase = estimate
 		}
 	}
-	aof.written = 0
-	appendStarted, appendCompleted = 0, 0
-	appendWritten, appendSynced = 0, 0
-	for _, key := range aof.recovered {
-		appendAOFCommand("DEL", key)
+	e.aof.written = 0
+	e.appendStarted, e.appendCompleted = 0, 0
+	e.appendWritten, e.appendSynced = 0, 0
+	for _, key := range e.aof.recovered {
+		e.appendAOFCommand("DEL", key)
 	}
-	aof.recovered = nil
-	data_structure.DefaultSpace.OnRemove = func(keyspace, key string) {
-		if aof.file == nil || aof.replaying {
+	e.aof.recovered = nil
+	e.space.OnRemove = func(keyspace, key string) {
+		if e.aof.file == nil || e.aof.replaying {
 			return
 		}
-		outsideCommand := !aof.commandActive
+		outsideCommand := !e.aof.commandActive
 		if outsideCommand {
-			aofBegin("")
-			defer aofEnd()
+			e.aofBegin("")
+			defer e.aofEnd()
 		}
-		appendAOFCommand("DEL", key)
+		e.appendAOFCommand("DEL", key)
 		// Eviction and expiry remove keys no command named, so a rewrite has to
 		// hear about them here or it would carry a key forward that the server
 		// had already dropped.
-		noteRewriteDirty(key)
-		noteReplicationDirty(key)
+		if e.ownsRewrite() {
+			noteRewriteDirty(key)
+		}
+		e.noteReplicationDirty(key)
 	}
 	return nil
 }
@@ -233,25 +242,30 @@ func OpenAOF(path string) error {
 // CloseAOF flushes what is buffered and closes the file. A stop that skipped
 // this would lose up to a cycle's worth of acknowledged writes, which is the
 // one kind of loss a client has no way to detect.
-func CloseAOF() error {
+func CloseAOF() error { return defaultEngine.CloseAOF() }
+
+// CloseAOF is the package's CloseAOF on e.
+func (e *Engine) CloseAOF() error {
 	closeReplicationSnapshot()
-	CancelRewrite()
-	_, _ = pollRewriteIO(true)
-	if aof.file == nil {
+	if e.ownsRewrite() {
+		CancelRewrite()
+		_, _ = pollRewriteIO(true)
+	}
+	if e.aof.file == nil {
 		return nil
 	}
 	// Join both workers even after a failure before closing their descriptor.
-	pollAppend(true)
-	pollAOFSync(true)
-	err := flushAOF(true)
-	if cerr := aof.file.Close(); err == nil {
+	e.pollAppend(true)
+	e.pollAOFSync(true)
+	err := e.flushAOF(true)
+	if cerr := e.aof.file.Close(); err == nil {
 		err = cerr
 	}
-	aof.file = nil
-	aof.path = ""
+	e.aof.file = nil
+	e.aof.path = ""
 	unsyncedLogDir = ""
-	aof.buf, aof.staged = nil, nil
-	data_structure.DefaultSpace.OnRemove = nil
+	e.aof.buf, e.aof.staged = nil, nil
+	e.space.OnRemove = nil
 	return err
 }
 
@@ -261,26 +275,26 @@ func aofLog(format string, args ...interface{}) {
 }
 
 // aofRecord stages one command to be written for the command being executed.
-func aofRecord(parts ...string) {
-	if aof.file == nil || aof.replaying {
+func (e *Engine) aofRecord(parts ...string) {
+	if e.aof.file == nil || e.aof.replaying {
 		return
 	}
-	aof.staged = append(aof.staged, parts)
+	e.aof.staged = append(e.aof.staged, parts)
 }
 
 // aofBegin resets the staging areas before a command runs.
-func aofBegin(name string) {
-	aof.commandActive, aof.commandChanged = true, false
-	aof.commandOpaque = isOpaqueReplicationCommand(name)
-	aof.commandStart = len(aof.buf)
-	aof.skip = false
-	clear(aof.staged)
-	aof.staged = aof.staged[:0]
+func (e *Engine) aofBegin(name string) {
+	e.aof.commandActive, e.aof.commandChanged = true, false
+	e.aof.commandOpaque = isOpaqueReplicationCommand(name)
+	e.aof.commandStart = len(e.aof.buf)
+	e.aof.skip = false
+	clear(e.aof.staged)
+	e.aof.staged = e.aof.staged[:0]
 }
 
 // aofCommit records what the command that just ran actually did.
-func aofCommit(cmd *Command, reply []byte) {
-	if aof.file == nil || aof.replaying {
+func (e *Engine) aofCommit(cmd *Command, reply []byte) {
+	if e.aof.file == nil || e.aof.replaying {
 		return
 	}
 
@@ -290,7 +304,7 @@ func aofCommit(cmd *Command, reply []byte) {
 	// which keys those are. Recorded whether or not the log itself takes the
 	// command, because a rewrite is a separate question from durability: a read
 	// that reaps an expired key changes the keyspace without being logged.
-	if rewrite.active {
+	if e.ownsRewrite() && rewrite.active {
 		for _, key := range writtenKeys(cmd) {
 			noteRewriteDirty(key)
 		}
@@ -298,17 +312,17 @@ func aofCommit(cmd *Command, reply []byte) {
 
 	if writeCommands[cmd.Cmd] {
 		for _, key := range writtenKeys(cmd) {
-			noteReplicationDirty(key)
+			e.noteReplicationDirty(key)
 		}
 	}
 
 	switch {
-	case aof.skip:
-	case len(aof.staged) > 0:
+	case e.aof.skip:
+	case len(e.aof.staged) > 0:
 		// Staged because the command as it arrived would not replay to the
 		// same state, so the replacement is what goes in the log.
-		for _, parts := range aof.staged {
-			appendAOFCommand(parts[0], parts[1:]...)
+		for _, parts := range e.aof.staged {
+			e.appendAOFCommand(parts[0], parts[1:]...)
 		}
 	case !writeCommands[cmd.Cmd]:
 		// A read. Nothing of the command itself is recorded, but it may still
@@ -316,22 +330,22 @@ func aofCommit(cmd *Command, reply []byte) {
 	case len(reply) > 0 && reply[0] == '-':
 		// Failed, so by the heuristic in the file comment it changed nothing.
 	default:
-		appendAOFCommand(persistedName(cmd.Cmd), cmd.Args...)
+		e.appendAOFCommand(persistedName(cmd.Cmd), cmd.Args...)
 	}
 
-	clear(aof.staged)
-	aof.staged = aof.staged[:0]
+	clear(e.aof.staged)
+	e.aof.staged = e.aof.staged[:0]
 }
 
 // aofEnd publishes the complete command after its eviction decisions. The
 // event loop cannot serve a replica pull in the middle of this serial scope.
-func aofEnd() {
+func (e *Engine) aofEnd() {
 	// A failed drain reslices the retained buffer. Its old commandStart no
 	// longer names this slice, and none of that failed suffix may be published.
-	if aof.file != nil && !aof.replaying && aof.failed == nil {
-		recordReplicationV2Commit()
+	if e.aof.file != nil && !e.aof.replaying && e.aof.failed == nil {
+		e.recordReplicationV2Commit()
 	}
-	aof.commandActive = false
+	e.aof.commandActive = false
 }
 
 // appendCommand writes one command in the same RESP a client would have sent,
@@ -351,11 +365,17 @@ func appendCommand(dst []byte, parts ...string) []byte {
 // ordering that makes appendfsync always mean what it says: a client is told
 // its write succeeded only once the write is on disk. Doing it after the
 // replies would be faster and would be lying.
-func FlushAOF() error {
-	if err := flushAOF(false); err != nil {
+func FlushAOF() error { return defaultEngine.FlushAOF() }
+
+// FlushAOF is the package's FlushAOF on e.
+func (e *Engine) FlushAOF() error {
+	if err := e.flushAOF(false); err != nil {
 		return err
 	}
 
+	if !e.ownsRewrite() {
+		return nil
+	}
 	// A rewrite in progress gets one slice per cycle, which is what keeps it
 	// from being a stall. This is the right place for it because it is already
 	// the once-a-cycle hook: doing it per command would slice a pipelined batch
@@ -367,81 +387,81 @@ func FlushAOF() error {
 	return nil
 }
 
-// aofSync is injectable so tests can exercise disk failures without relying on hardware.
-var aofSync = func(f *os.File) error { return f.Sync() }
-
-// Only the event loop touches aof state. The worker owns one Sync call and
-// publishes its result through a buffered channel; there is never a work queue.
-func pollAOFSync(wait bool) {
-	if aof.syncPending == nil {
+// Only the engine's command thread - the event loop, for the server's engine -
+// touches its log state. The worker owns one Sync call and publishes its
+// result through a buffered channel; there is never a work queue.
+func (e *Engine) pollAOFSync(wait bool) {
+	if e.aof.syncPending == nil {
 		return
 	}
 	var err error
 	if wait {
-		err = <-aof.syncPending
+		err = <-e.aof.syncPending
 	} else {
 		select {
-		case err = <-aof.syncPending:
+		case err = <-e.aof.syncPending:
 		default:
 			return
 		}
 	}
-	aof.syncPending = nil
+	e.aof.syncPending = nil
 	if err == nil {
-		appendSynced = max(appendSynced, aof.syncOffset)
+		e.appendSynced = max(e.appendSynced, e.aof.syncOffset)
 	}
-	if err != nil && aof.failed == nil {
-		aof.failed = err
+	if err != nil && e.aof.failed == nil {
+		e.aof.failed = err
 	}
 }
 
-func flushAOF(closing bool) error {
-	pollAOFSync(closing || config.AOFFsync == config.FsyncAlways)
-	if aof.file == nil {
+func (e *Engine) flushAOF(closing bool) error {
+	e.pollAOFSync(closing || config.AOFFsync == config.FsyncAlways)
+	if e.aof.file == nil {
 		return nil
 	}
-	if aof.failed != nil {
-		return aof.failed
+	if e.aof.failed != nil {
+		return e.aof.failed
 	}
-	if err := writeAOFBuffer(); err != nil {
+	if err := e.writeAOFBuffer(); err != nil {
 		return err
 	}
 	syncDue := closing || config.AOFFsync == config.FsyncAlways ||
-		(config.AOFFsync == config.FsyncEverySec && time.Since(aof.lastSync) >= time.Second)
-	if aof.dirty && syncDue && aof.syncPending == nil {
+		(config.AOFFsync == config.FsyncEverySec && time.Since(e.aof.lastSync) >= time.Second)
+	if e.aof.dirty && syncDue && e.aof.syncPending == nil {
 		// A rewrite's rename whose directory sync failed is finished first:
 		// what is about to be synced is in the file that rename named.
-		if err := syncPendingLogDir(); err != nil {
-			aof.failed = err
-			return err
+		if e.ownsRewrite() {
+			if err := syncPendingLogDir(); err != nil {
+				e.aof.failed = err
+				return err
+			}
 		}
 		if !closing && config.AOFFsync == config.FsyncEverySec {
 			result := make(chan error, 1)
-			file, syncFile := aof.file, aofSync
+			file, syncFile := e.aof.file, e.aofSync
 			wake := rewriteWake
-			aof.syncPending = result
-			aof.syncOffset = appendWritten
-			aof.lastSync = time.Now()
+			e.aof.syncPending = result
+			e.aof.syncOffset = e.appendWritten
+			e.aof.lastSync = time.Now()
 			// Writes during this Sync stay dirty and require another sync.
-			aof.dirty = false
+			e.aof.dirty = false
 			go func() {
 				result <- timedPersistenceSync(&appendSyncStats, file, syncFile)
 				if wake != nil {
 					wake()
 				}
 			}()
-			appendCompleted = appendWritten
+			e.appendCompleted = e.appendWritten
 			return nil
 		}
-		if err := timedPersistenceSync(&appendSyncStats, aof.file, aofSync); err != nil {
-			aof.failed = err
+		if err := timedPersistenceSync(&appendSyncStats, e.aof.file, e.aofSync); err != nil {
+			e.aof.failed = err
 			return err
 		}
-		aof.lastSync = time.Now()
-		aof.dirty = false
-		appendSynced = appendWritten
+		e.aof.lastSync = time.Now()
+		e.aof.dirty = false
+		e.appendSynced = e.appendWritten
 	}
-	appendCompleted = appendWritten
+	e.appendCompleted = e.appendWritten
 	return nil
 }
 
@@ -459,8 +479,12 @@ func flushAOF(closing bool) error {
 // Its MULTI is where the torn tail starts: what was intact of the block goes to
 // the backup with the rest, which is Redis's rule for an AOF that ends inside
 // MULTI.
-func LoadAOF(path string) (int, error) {
-	aof.recovered = nil
+func LoadAOF(path string) (int, error) { return defaultEngine.LoadAOF(path) }
+
+// LoadAOF is the package's LoadAOF on e: the log replays into e's keyspace,
+// with eviction and expiry held off in e's space until it has.
+func (e *Engine) LoadAOF(path string) (int, error) {
+	e.aof.recovered = nil
 	f, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return 0, nil
@@ -469,22 +493,22 @@ func LoadAOF(path string) (int, error) {
 		return 0, err
 	}
 	defer f.Close()
-	aof.replaying = true
-	data_structure.DefaultSpace.SuspendEviction = true
-	data_structure.DefaultSpace.SuspendExpiry = true
+	e.aof.replaying = true
+	e.space.SuspendEviction = true
+	e.space.SuspendExpiry = true
 	defer func() {
-		priorRemovalHook := data_structure.DefaultSpace.OnRemove
-		data_structure.DefaultSpace.OnRemove = func(_, key string) { aof.recovered = append(aof.recovered, key) }
-		defer func() { data_structure.DefaultSpace.OnRemove = priorRemovalHook }()
+		priorRemovalHook := e.space.OnRemove
+		e.space.OnRemove = func(_, key string) { e.aof.recovered = append(e.aof.recovered, key) }
+		defer func() { e.space.OnRemove = priorRemovalHook }()
 		if config.ReplicaOf != "" && config.ReplicationProtocol == 2 {
-			aof.replaying = false
+			e.aof.replaying = false
 			return // preserve the exact primary-decided prefix for checkpoints
 		}
-		data_structure.DefaultSpace.SuspendExpiry = false
-		data_structure.EachKeyspace(func(ks data_structure.Keyspace) { ks.ActiveExpire(ks.KeysWithExpiry()) })
-		aof.replaying = false
-		data_structure.DefaultSpace.SuspendEviction = false
-		data_structure.EnforceLimits()
+		e.space.SuspendExpiry = false
+		e.space.EachKeyspace(func(ks data_structure.Keyspace) { ks.ActiveExpire(ks.KeysWithExpiry()) })
+		e.aof.replaying = false
+		e.space.SuspendEviction = false
+		e.space.EnforceLimits()
 	}()
 	reader := bufio.NewReaderSize(f, 64*1024)
 	applied, used := 0, int64(0)
@@ -521,7 +545,7 @@ func LoadAOF(path string) (int, error) {
 			return applied, fmt.Errorf("EXEC without MULTI at byte %d", used)
 		case cmd.Cmd == "EXEC":
 			for _, queued := range block {
-				if err := replayAOFCommand(queued.cmd, queued.at); err != nil {
+				if err := e.replayAOFCommand(queued.cmd, queued.at); err != nil {
 					return applied, err
 				}
 				applied++
@@ -531,7 +555,7 @@ func LoadAOF(path string) (int, error) {
 		case begun >= 0:
 			block = append(block, replayedCommand{cmd, used})
 		default:
-			if err := replayAOFCommand(cmd, used); err != nil {
+			if err := e.replayAOFCommand(cmd, used); err != nil {
 				return applied, err
 			}
 			applied++
@@ -545,9 +569,9 @@ type replayedCommand struct {
 	at  int64
 }
 
-func replayAOFCommand(cmd *Command, at int64) error {
+func (e *Engine) replayAOFCommand(cmd *Command, at int64) error {
 	sink := &replayWriter{}
-	if err := EvalAndResponse(cmd, sink); err != nil {
+	if err := e.evalAndResponse(cmd, sink); err != nil {
 		return fmt.Errorf("replaying %s at byte %d: %w", cmd.Cmd, at, err)
 	}
 	if sink.err != nil {
@@ -686,11 +710,11 @@ func (discardWriter) Write(p []byte) (int, error) { return len(p), nil }
 
 // aofExpireAt stages a PEXPIREAT for a key whose TTL was just set relative to
 // now, so the log names an instant rather than a duration.
-func aofExpireAt(key string) {
-	if aof.file == nil || aof.replaying {
+func (e *Engine) aofExpireAt(key string) {
+	if e.aof.file == nil || e.aof.replaying {
 		return
 	}
-	owner, ok := data_structure.OwnerOf(key)
+	owner, ok := e.space.OwnerOf(key)
 	if !ok {
 		return
 	}
@@ -698,5 +722,5 @@ func aofExpireAt(key string) {
 	if !has {
 		return
 	}
-	aofRecord("PEXPIREAT", key, strconv.FormatUint(at, 10))
+	e.aofRecord("PEXPIREAT", key, strconv.FormatUint(at, 10))
 }

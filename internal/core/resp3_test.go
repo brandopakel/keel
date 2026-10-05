@@ -348,8 +348,8 @@ func TestRESP3NeverReachesTheLogOrADump(t *testing.T) {
 // command first arrived.
 func TestReplayAndReplicaApplyAnswerInRESP2(t *testing.T) {
 	ResetStores()
-	t.Cleanup(func() { replicaApplying, aof.replaying = false, false })
-	for _, flag := range []*bool{&replicaApplying, &aof.replaying} {
+	t.Cleanup(func() { replicaApplying, defaultEngine.aof.replaying = false, false })
+	for _, flag := range []*bool{&replicaApplying, &defaultEngine.aof.replaying} {
 		*flag = true
 		assert.Equal(t, "$-1\r\n", string(rawReplyAs(t, true, "GET", "missing")))
 		*flag = false

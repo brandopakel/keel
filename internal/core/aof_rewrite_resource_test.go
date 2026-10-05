@@ -25,9 +25,9 @@ func TestRewriteStreamsOversizedRecordsAcrossMutation(t *testing.T) {
 				slowSync := mutation == "delete/slow-sync"
 				if slowSync {
 					mutation = "delete"
-					oldSync := aofSync
-					aofSync = func(f *os.File) error { time.Sleep(300 * time.Millisecond); return f.Sync() }
-					t.Cleanup(func() { aofSync = oldSync })
+					oldSync := defaultEngine.aofSync
+					defaultEngine.aofSync = func(f *os.File) error { time.Sleep(300 * time.Millisecond); return f.Sync() }
+					t.Cleanup(func() { defaultEngine.aofSync = oldSync })
 				}
 				// Stream both the name and value; neither may be copied as a whole.
 				key, value := strings.Repeat("k", 96<<10), strings.Repeat("v", 256<<10)
@@ -59,9 +59,9 @@ func TestRewriteStreamsOversizedRecordsAcrossMutation(t *testing.T) {
 				}
 				if slowSync {
 					// Write the DEL and start its everysec sync now.
-					aof.lastSync = time.Time{}
-					require.NoError(t, flushAOF(false))
-					require.NotNil(t, aof.syncPending, "the slow sync must be running while the rewrite advances")
+					defaultEngine.aof.lastSync = time.Time{}
+					require.NoError(t, defaultEngine.flushAOF(false))
+					require.NotNil(t, defaultEngine.aof.syncPending, "the slow sync must be running while the rewrite advances")
 				}
 				for cycles := 0; RewriteActive(); cycles++ {
 					require.Less(t, cycles, 100)
@@ -70,8 +70,8 @@ func TestRewriteStreamsOversizedRecordsAcrossMutation(t *testing.T) {
 					// for both, as the event loop would, so that the bound
 					// counts cycles that can advance rather than polls of a
 					// slow disk.
-					pollAppend(true)
-					pollAOFSync(true)
+					defaultEngine.pollAppend(true)
+					defaultEngine.pollAOFSync(true)
 					before := rewrite.written
 					require.NoError(t, AdvanceRewrite())
 					waitForRewriteSync(t)

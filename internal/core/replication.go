@@ -80,12 +80,12 @@ func InitReplication() error {
 		data_structure.DefaultSpace.SuspendEviction = true
 	}
 	if config.ReplicaOf != "" && config.ReplicationProtocol == 2 {
-		return loadReplicaCheckpoint()
+		return defaultEngine.loadReplicaCheckpoint()
 	}
 	return nil
 }
-func noteReplicationDirty(key string) {
-	if config.ReplicationFeed && !aof.replaying && !replicaApplying {
+func (e *Engine) noteReplicationDirty(key string) {
+	if config.ReplicationFeed && !e.aof.replaying && !replicaApplying {
 		if replication.invalidated {
 			return
 		}
@@ -297,10 +297,10 @@ var answersWithoutData = map[string]bool{"PING": true, "INFO": true, "ECHO": tru
 
 var errReadOnlyReplica = errors.New("READONLY You can't write against a read only replica.")
 
-func replicaCommandError(cmd string) error {
+func (e *Engine) replicaCommandError(cmd string) error {
 	// Applying replicated state and replaying the log are not client writes:
 	// one is a decision the primary already made, the other is recovery.
-	if replicaApplying || aof.replaying {
+	if replicaApplying || e.aof.replaying {
 		return nil
 	}
 	if config.ReplicaOf != "" {

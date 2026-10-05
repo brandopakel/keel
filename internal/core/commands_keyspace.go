@@ -147,7 +147,7 @@ func (e *Engine) cmdMSET(args []string) []byte {
 	for i := 0; i < len(args); i += 2 {
 		key, value := args[i], args[i+1]
 		if other, held := e.space.OwnerOf(key); held && other.KeyspaceName() != e.dictStore.KeyspaceName() {
-			dropOtherType(other, key)
+			e.dropOtherType(other, key)
 			replaced = true
 		}
 		e.dictStore.Put(key, e.dictStore.NewObj(value))
@@ -155,7 +155,7 @@ func (e *Engine) cmdMSET(args []string) []byte {
 	if replaced {
 		// Staged records replace the command in the log, so once a DEL is
 		// staged the MSET has to be staged after it too.
-		aofRecord(append([]string{"MSET"}, args...)...)
+		e.aofRecord(append([]string{"MSET"}, args...)...)
 	}
 	return constant.RespOk
 }
@@ -178,13 +178,15 @@ func (e *Engine) cmdFLUSHDB(args []string) []byte {
 		return e.encode(errSyntax, false)
 	}
 	if len(args) == 1 {
-		aofRecord("FLUSHDB")
+		e.aofRecord("FLUSHDB")
 	}
 
 	e.space.EachKeyspace(func(ks data_structure.Keyspace) {
 		for _, key := range ks.Keys() {
-			noteRewriteDirty(key)
-			noteReplicationDirty(key)
+			if e.ownsRewrite() {
+				noteRewriteDirty(key)
+			}
+			e.noteReplicationDirty(key)
 			ks.Delete(key)
 		}
 	})

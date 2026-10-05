@@ -115,7 +115,7 @@ func (e *Engine) cmdCFRESERVE(args []string) []byte {
 	// this build writes replays the same way.
 	capacity, legacyForm := parseLegacyCFReserve(args)
 	foreign := false
-	if !legacyForm || !replayingFilterLog() {
+	if !legacyForm || !e.replayingFilterLog() {
 		var err error
 		if capacity, foreign, err = parseCFReserve(args); err != nil {
 			return e.encode(err, false)
@@ -134,7 +134,7 @@ func (e *Engine) cmdCFRESERVE(args []string) []byte {
 		return e.encode(errTooLargeForOneKey, false)
 	}
 	cfBytes := data_structure.CuckooBytesFor(capacity)
-	if err := affordable(cfBytes); err != nil {
+	if err := e.affordable(cfBytes); err != nil {
 		return e.encode(err, false)
 	}
 	e.cfStore.Put(key, data_structure.CreateCuckooFilter(capacity))
@@ -225,7 +225,7 @@ func (e *Engine) cmdCFDEL(args []string) []byte {
 	}
 	switch e.filterKeyStatus(args[0], e.cfStore) {
 	case filterMissing:
-		if replayingFilterLog() {
+		if e.replayingFilterLog() {
 			// The build before answered 0 here, so its log records this.
 			return constant.RespZero
 		}

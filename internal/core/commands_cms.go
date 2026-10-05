@@ -44,7 +44,7 @@ func (e *Engine) cmsCreate(key string, width, depth uint32) []byte {
 	if uint64(width)*uint64(depth) > maxStructureBytes/4 {
 		return e.encode(errTooLargeForOneKey, false)
 	}
-	if err := affordable(data_structure.CMSMemUsageFor(width, depth)); err != nil {
+	if err := e.affordable(data_structure.CMSMemUsageFor(width, depth)); err != nil {
 		return e.encode(err, false)
 	}
 	if e.cmsStore.Exists(key) {

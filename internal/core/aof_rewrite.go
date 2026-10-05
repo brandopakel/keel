@@ -137,7 +137,7 @@ func rewriteWalkDone() bool { return rewrite.walk.Done() && rewrite.batchPos == 
 
 // StartRewrite begins one, capturing a slot limit per keyspace.
 func StartRewrite() error {
-	if aof.file == nil {
+	if defaultEngine.aof.file == nil {
 		return fmt.Errorf("appendonly is off")
 	}
 	if rewrite.active {
@@ -147,21 +147,21 @@ func StartRewrite() error {
 	if ready, _ := pollRewriteIO(false); !ready {
 		return fmt.Errorf("previous rewrite I/O is still releasing its file")
 	}
-	if AppendPending() || (config.AOFAsyncAppend && len(aof.buf) > 0) {
+	if AppendPending() || (config.AOFAsyncAppend && len(defaultEngine.aof.buf) > 0) {
 		return fmt.Errorf("rewrite waits for pending append; retry after the write reply")
 	}
 
 	// Anything still buffered belongs to the state about to be walked, so it
 	// goes to the old log now rather than after the swap, where it would be
 	// applied to a log that already contains its effect.
-	if err := flushAOF(false); err != nil {
+	if err := defaultEngine.flushAOF(false); err != nil {
 		return err
 	}
 
 	if keyCountForRewrite() > rewriteKeyCeiling {
 		return refuseRewriteStart(fmt.Errorf("rewrite limit: at most %d keys", rewriteKeyCeiling))
 	}
-	path := aof.path
+	path := defaultEngine.aof.path
 	tmpPath := path + ".rewrite"
 	f, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
@@ -175,7 +175,7 @@ func StartRewrite() error {
 	rewrite.tmpPath = tmpPath
 	rewrite.file = f
 	rewrite.digest = nil
-	if aof.digest != nil {
+	if defaultEngine.aof.digest != nil {
 		rewrite.digest = sha256.New()
 	}
 	rewrite.written = 0
@@ -205,9 +205,9 @@ func AdvanceRewrite() error {
 	if AppendPending() {
 		return nil
 	}
-	pollAOFSync(false)
-	if aof.failed != nil {
-		return aof.failed
+	defaultEngine.pollAOFSync(false)
+	if defaultEngine.aof.failed != nil {
+		return defaultEngine.aof.failed
 	}
 	if !rewrite.active {
 		return nil
@@ -226,7 +226,7 @@ func AdvanceRewrite() error {
 	// Once the snapshot walk is done, retain changed key names until the sync
 	// worker releases the old descriptor. Re-emitting hot keys every cycle
 	// while replacement is blocked can make the rewrite larger than the log.
-	if rewriteWalkDone() && !rewrite.collectionActive && aof.syncPending != nil {
+	if rewriteWalkDone() && !rewrite.collectionActive && defaultEngine.aof.syncPending != nil {
 		return nil
 	}
 	// Finish the bulk snapshot's write job before preflushing it. Dirty keys
@@ -472,7 +472,7 @@ func noteRewriteDirty(key string) {
 // the directory sync that follows it.
 func finishRewrite() {
 	// Never close or replace a descriptor owned by the worker.
-	if aof.syncPending != nil || pendingRewriteIO != nil {
+	if defaultEngine.aof.syncPending != nil || pendingRewriteIO != nil {
 		return
 	}
 
@@ -538,19 +538,19 @@ func finishRewrite() {
 	} else {
 		unsyncedLogDir = "" // this sync covers an earlier rename's entry too
 	}
-	replaced := aof.file
-	aof.file = next
+	replaced := defaultEngine.aof.file
+	defaultEngine.aof.file = next
 	if err := replaced.Close(); err != nil {
 		// Its contents are superseded by the file that now has its name.
 		aofLog("closing the replaced log: %v", err)
 	}
-	aof.digest, aof.digestBytes = rewrite.digest, rewrite.written
-	aof.baseSize = rewrite.written
-	aof.rewriteBase = rewrite.written
-	appendSynced = max(appendSynced, appendCompleted)
-	aof.written = 0
-	aof.rewrites++
-	aof.lastKeys = rewrite.initialKeys
+	defaultEngine.aof.digest, defaultEngine.aof.digestBytes = rewrite.digest, rewrite.written
+	defaultEngine.aof.baseSize = rewrite.written
+	defaultEngine.aof.rewriteBase = rewrite.written
+	defaultEngine.appendSynced = max(defaultEngine.appendSynced, defaultEngine.appendCompleted)
+	defaultEngine.aof.written = 0
+	defaultEngine.aof.rewrites++
+	defaultEngine.aof.lastKeys = rewrite.initialKeys
 	noteRewriteFinished(rewrite.started)
 
 	rewrite.active = false
@@ -561,7 +561,7 @@ func finishRewrite() {
 	rewrite.stream = nil
 	rewrite.collectionKey, rewrite.collectionKind = "", ""
 	rewrite.collectionActive = false
-	if err := captureReplicationSnapshot(); err != nil {
+	if err := defaultEngine.captureReplicationSnapshot(); err != nil {
 		// The log is unaffected. A protocol 2 replica still waiting gets its
 		// snapshot from a later rewrite, which its pulls start no sooner than
 		// a minute from now rather than one after another.
@@ -739,7 +739,7 @@ func syncDir(dir string) error {
 // BGREWRITEAOF scheduled inside a transaction starts here too, whatever the
 // automatic settings are.
 func maybeRewrite() {
-	if aof.file == nil || rewrite.active {
+	if defaultEngine.aof.file == nil || rewrite.active {
 		return
 	}
 	now := time.Now()
@@ -750,12 +750,12 @@ func maybeRewrite() {
 	if now.Before(nextAutoRewrite) || config.AOFAutoRewritePercentage <= 0 {
 		return
 	}
-	size := aof.baseSize + aof.written
+	size := defaultEngine.aof.baseSize + defaultEngine.aof.written
 	if size < config.AOFAutoRewriteMinSize {
 		return
 	}
-	if aof.rewriteBase > 0 {
-		grown := float64(size-aof.rewriteBase) * 100 / float64(aof.rewriteBase)
+	if defaultEngine.aof.rewriteBase > 0 {
+		grown := float64(size-defaultEngine.aof.rewriteBase) * 100 / float64(defaultEngine.aof.rewriteBase)
 		if grown < float64(config.AOFAutoRewritePercentage) {
 			return
 		}
@@ -764,7 +764,7 @@ func maybeRewrite() {
 		return
 	}
 	// Redis's line, which measures growth against a base of at least one byte.
-	aofLog("Starting automatic rewriting of AOF on %d%% growth", size*100/max(aof.rewriteBase, 1)-100)
+	aofLog("Starting automatic rewriting of AOF on %d%% growth", size*100/max(defaultEngine.aof.rewriteBase, 1)-100)
 	if err := StartRewrite(); err != nil {
 		nextAutoRewrite = time.Now().Add(time.Minute)
 		logStartFailure("automatic rewrite", err)
@@ -773,8 +773,13 @@ func maybeRewrite() {
 
 // AOFStats reports what INFO needs to say about the log.
 func AOFStats() (baseSize, currentSize int64, rewrites int, keys int) {
-	if aof.file == nil {
+	return defaultEngine.AOFStats()
+}
+
+// AOFStats is the package's AOFStats on e.
+func (e *Engine) AOFStats() (baseSize, currentSize int64, rewrites int, keys int) {
+	if e.aof.file == nil {
 		return 0, 0, 0, 0
 	}
-	return aof.baseSize, aof.baseSize + aof.written, aof.rewrites, aof.lastKeys
+	return e.aof.baseSize, e.aof.baseSize + e.aof.written, e.aof.rewrites, e.aof.lastKeys
 }

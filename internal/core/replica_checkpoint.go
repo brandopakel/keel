@@ -29,9 +29,9 @@ var checkpointRename = os.Rename
 var checkpointSyncDir = syncDir
 var checkpointSync = func(f *os.File) error { return f.Sync() }
 
-func openAOFDigest(path string) error {
-	aof.digest = nil
-	aof.digestBytes = 0
+func (e *Engine) openAOFDigest(path string) error {
+	e.aof.digest = nil
+	e.aof.digestBytes = 0
 	if config.ReplicaOf == "" || config.ReplicationProtocol != 2 {
 		return nil
 	}
@@ -45,30 +45,30 @@ func openAOFDigest(path string) error {
 	if err != nil {
 		return err
 	}
-	aof.digest = h
-	aof.digestBytes = n
+	e.aof.digest = h
+	e.aof.digestBytes = n
 	return nil
 }
-func recordAOFDigest(body []byte) {
-	if aof.digest != nil {
-		aof.digest.Write(body)
-		aof.digestBytes += int64(len(body))
+func (e *Engine) recordAOFDigest(body []byte) {
+	if e.aof.digest != nil {
+		e.aof.digest.Write(body)
+		e.aof.digestBytes += int64(len(body))
 	}
 }
-func currentAOFDigest() string {
-	if aof.digest == nil {
+func (e *Engine) currentAOFDigest() string {
+	if e.aof.digest == nil {
 		return ""
 	}
-	return hex.EncodeToString(aof.digest.Sum(nil))
+	return hex.EncodeToString(e.aof.digest.Sum(nil))
 }
 
-func loadReplicaCheckpoint() error {
+func (e *Engine) loadReplicaCheckpoint() error {
 	// Missing or invalid checkpoints are a full-sync fallback, not a writable
 	// or readable partially trusted state.
-	if aof.path == "" || aof.digest == nil || len(aof.buf) != 0 {
+	if e.aof.path == "" || e.aof.digest == nil || len(e.aof.buf) != 0 {
 		return nil
 	}
-	f, err := os.Open(aof.path + ".replica-checkpoint")
+	f, err := os.Open(e.aof.path + ".replica-checkpoint")
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
@@ -81,7 +81,7 @@ func loadReplicaCheckpoint() error {
 		return err
 	}
 	var cp replicaCheckpoint
-	if len(body) > 4096 || json.Unmarshal(body, &cp) != nil || cp.Version != 2 || cp.Primary != config.ReplicaOf || len(cp.Epoch) != 32 || cp.Bytes != aof.digestBytes || cp.SHA256 != currentAOFDigest() {
+	if len(body) > 4096 || json.Unmarshal(body, &cp) != nil || cp.Version != 2 || cp.Primary != config.ReplicaOf || len(cp.Epoch) != 32 || cp.Bytes != e.aof.digestBytes || cp.SHA256 != e.currentAOFDigest() {
 		return nil
 	}
 	if _, err := hex.DecodeString(cp.Epoch); err != nil {
@@ -94,16 +94,16 @@ func loadReplicaCheckpoint() error {
 	return nil
 }
 
-func saveReplicaCheckpoint() error {
-	if aof.digest == nil || aof.file == nil {
+func (e *Engine) saveReplicaCheckpoint() error {
+	if e.aof.digest == nil || e.aof.file == nil {
 		return errors.New("replication checkpoint requires a local AOF digest")
 	}
 	// Replica checkpoints strengthen local persistence even under everysec/no:
 	// the state must be synced before the checkpoint can name it as resumable.
-	if err := flushAOF(true); err != nil {
+	if err := e.flushAOF(true); err != nil {
 		return err
 	}
-	cp := replicaCheckpoint{Version: 2, Primary: config.ReplicaOf, Epoch: replicaEpoch, Offset: replicaOffset, Bytes: aof.digestBytes, SHA256: currentAOFDigest()}
+	cp := replicaCheckpoint{Version: 2, Primary: config.ReplicaOf, Epoch: replicaEpoch, Offset: replicaOffset, Bytes: e.aof.digestBytes, SHA256: e.currentAOFDigest()}
 	if cp == replicaV2.checkpoint {
 		return nil
 	}
@@ -111,7 +111,7 @@ func saveReplicaCheckpoint() error {
 	if err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(filepath.Dir(aof.path), ".keel-replica-checkpoint-*")
+	f, err := os.CreateTemp(filepath.Dir(e.aof.path), ".keel-replica-checkpoint-*")
 	if err != nil {
 		return err
 	}
@@ -126,10 +126,10 @@ func saveReplicaCheckpoint() error {
 	if err != nil {
 		return err
 	}
-	if err = checkpointRename(tmp, aof.path+".replica-checkpoint"); err != nil {
+	if err = checkpointRename(tmp, e.aof.path+".replica-checkpoint"); err != nil {
 		return err
 	}
-	if err = checkpointSyncDir(filepath.Dir(aof.path)); err != nil {
+	if err = checkpointSyncDir(filepath.Dir(e.aof.path)); err != nil {
 		return err
 	}
 	replicaV2.checkpoint = cp

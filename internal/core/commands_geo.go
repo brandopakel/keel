@@ -365,7 +365,7 @@ func (e *Engine) parseGeoSearch(zs *data_structure.ZSet, exists bool, args []str
 			if remaining < 1 {
 				return nil, errSyntax
 			}
-			n, valid := counterInteger(args[i+1])
+			n, valid := e.counterInteger(args[i+1])
 			if !valid {
 				return nil, errNotAnInteger
 			}

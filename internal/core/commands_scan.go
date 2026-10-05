@@ -62,7 +62,7 @@ func (e *Engine) cmdSCAN(args []string) []byte {
 			if i+1 >= len(args) {
 				return e.encode(errSyntax, false)
 			}
-			parsed, valid := counterInteger(args[i+1])
+			parsed, valid := e.counterInteger(args[i+1])
 			if !valid {
 				return e.encode(errNotAnInteger, false)
 			}

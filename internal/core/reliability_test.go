@@ -132,28 +132,28 @@ func TestTornTailRepairSurvivesSecondRestart(t *testing.T) {
 
 func TestIdleFsyncAndStickyFailure(t *testing.T) {
 	ResetStores()
-	oldPolicy, oldSync := config.AOFFsync, aofSync
-	defer func() { CloseAOF(); config.AOFFsync = oldPolicy; aofSync = oldSync }()
+	oldPolicy, oldSync := config.AOFFsync, defaultEngine.aofSync
+	defer func() { CloseAOF(); config.AOFFsync = oldPolicy; defaultEngine.aofSync = oldSync }()
 	config.AOFFsync = config.FsyncEverySec
 	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "log")))
 	calls := 0
-	aofSync = func(*os.File) error { calls++; return nil }
+	defaultEngine.aofSync = func(*os.File) error { calls++; return nil }
 	run(t, "SET", "k", "v")
 	require.NoError(t, FlushAOF())
 	waitForRewriteSync(t)
 	require.Zero(t, calls)
-	aof.lastSync = time.Now().Add(-2 * time.Second)
+	defaultEngine.aof.lastSync = time.Now().Add(-2 * time.Second)
 	require.NoError(t, FlushAOF())
 	waitForRewriteSync(t)
-	pollAOFSync(true)
+	defaultEngine.pollAOFSync(true)
 	require.Equal(t, 1, calls)
-	require.False(t, aof.dirty)
+	require.False(t, defaultEngine.aof.dirty)
 	config.AOFFsync = config.FsyncAlways
 	diskErr := errors.New("injected sync failure")
-	aofSync = func(*os.File) error { return diskErr }
+	defaultEngine.aofSync = func(*os.File) error { return diskErr }
 	run(t, "SET", "k", "next")
 	require.ErrorIs(t, FlushAOF(), diskErr)
-	aofSync = oldSync
+	defaultEngine.aofSync = oldSync
 	require.ErrorIs(t, FlushAOF(), diskErr)
 }
 
@@ -290,15 +290,15 @@ func TestLazyExpiryIsLoggedBeforeRecreation(t *testing.T) {
 
 func TestBackgroundSyncDoesNotBlockAndPreservesLaterWrites(t *testing.T) {
 	ResetStores()
-	oldPolicy, oldSync := config.AOFFsync, aofSync
+	oldPolicy, oldSync := config.AOFFsync, defaultEngine.aofSync
 	release := make(chan struct{})
-	defer func() { CloseAOF(); config.AOFFsync = oldPolicy; aofSync = oldSync }()
+	defer func() { CloseAOF(); config.AOFFsync = oldPolicy; defaultEngine.aofSync = oldSync }()
 	config.AOFFsync = config.FsyncEverySec
 	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "log")))
 	diskErr := errors.New("background sync failed")
-	aofSync = func(*os.File) error { <-release; return diskErr }
+	defaultEngine.aofSync = func(*os.File) error { <-release; return diskErr }
 	run(t, "SET", "first", "value")
-	aof.lastSync = time.Now().Add(-2 * time.Second)
+	defaultEngine.aof.lastSync = time.Now().Add(-2 * time.Second)
 	// A blocked Sync must not block this call. The timer also releases the fake
 	// disk if a regression blocks, so the test fails rather than hanging CI.
 	timer := time.AfterFunc(10*time.Second, func() { close(release) })
@@ -309,12 +309,12 @@ func TestBackgroundSyncDoesNotBlockAndPreservesLaterWrites(t *testing.T) {
 	run(t, "SET", "later", "value")
 	require.NoError(t, FlushAOF())
 	waitForRewriteSync(t)
-	require.True(t, aof.dirty)
-	require.NotNil(t, aof.syncPending)
+	require.True(t, defaultEngine.aof.dirty)
+	require.NotNil(t, defaultEngine.aof.syncPending)
 	if timer.Stop() {
 		close(release)
 	}
-	pollAOFSync(true)
+	defaultEngine.pollAOFSync(true)
 	require.Less(t, elapsed, 500*time.Millisecond)
 	require.ErrorIs(t, FlushAOF(), diskErr)
 	require.ErrorIs(t, CloseAOF(), diskErr)
@@ -380,8 +380,8 @@ func TestLargeListRewriteRestartsAfterMutation(t *testing.T) {
 
 func TestRewriteAndCloseFenceBackgroundSync(t *testing.T) {
 	ResetStores()
-	oldPolicy, oldSync := config.AOFFsync, aofSync
-	defer func() { CloseAOF(); config.AOFFsync = oldPolicy; aofSync = oldSync }()
+	oldPolicy, oldSync := config.AOFFsync, defaultEngine.aofSync
+	defer func() { CloseAOF(); config.AOFFsync = oldPolicy; defaultEngine.aofSync = oldSync }()
 	config.AOFFsync = config.FsyncEverySec
 	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "log")))
 	release := make(chan struct{})
@@ -391,29 +391,29 @@ func TestRewriteAndCloseFenceBackgroundSync(t *testing.T) {
 			close(release)
 		}
 	}()
-	aofSync = func(f *os.File) error { <-release; _, err := f.Stat(); return err }
+	defaultEngine.aofSync = func(f *os.File) error { <-release; _, err := f.Stat(); return err }
 	run(t, "SET", "k", "v")
-	aof.lastSync = time.Now().Add(-2 * time.Second)
+	defaultEngine.aof.lastSync = time.Now().Add(-2 * time.Second)
 	require.NoError(t, FlushAOF())
 	waitForRewriteSync(t)
-	oldFile := aof.file
+	oldFile := defaultEngine.aof.file
 	require.NoError(t, StartRewrite())
 	require.NoError(t, AdvanceRewrite())
 	waitForRewriteSync(t)
 	require.True(t, rewrite.active)
-	require.Same(t, oldFile, aof.file)
+	require.Same(t, oldFile, defaultEngine.aof.file)
 	// Close must join the worker before closing its file descriptor.
 	CancelRewrite()
 	require.NoError(t, CloseAOF())
-	require.Nil(t, aof.syncPending)
+	require.Nil(t, defaultEngine.aof.syncPending)
 }
 
 func TestAsyncAppendBarrierAndFailure(t *testing.T) {
 	for _, fail := range []bool{false, true} {
 		t.Run(strconv.FormatBool(fail), func(t *testing.T) {
 			ResetStores()
-			oldWrite, oldPolicy := aofWrite, config.AOFFsync
-			defer func() { CloseAOF(); aofWrite = oldWrite; config.AOFFsync = oldPolicy }()
+			oldWrite, oldPolicy := defaultEngine.aofWrite, config.AOFFsync
+			defer func() { CloseAOF(); defaultEngine.aofWrite = oldWrite; config.AOFFsync = oldPolicy }()
 			config.AOFFsync = config.FsyncAlways
 			path := filepath.Join(t.TempDir(), "log")
 			require.NoError(t, OpenAOF(path))
@@ -425,7 +425,7 @@ func TestAsyncAppendBarrierAndFailure(t *testing.T) {
 				}
 			}()
 			diskErr := errors.New("injected append failure")
-			aofWrite = func(f *os.File, b []byte) (int, error) {
+			defaultEngine.aofWrite = func(f *os.File, b []byte) (int, error) {
 				<-release
 				if fail {
 					return 0, diskErr
@@ -445,7 +445,7 @@ func TestAsyncAppendBarrierAndFailure(t *testing.T) {
 			if timer.Stop() {
 				close(release)
 			}
-			pollAppend(true)
+			defaultEngine.pollAppend(true)
 			ready, err = FlushAOFAsync(nil)
 			if fail {
 				require.ErrorIs(t, err, diskErr)

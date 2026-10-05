@@ -1,6 +1,5 @@
 package core
 
-import "github.com/brandopakel/keel/internal/data_structure"
 import "github.com/brandopakel/keel/internal/config"
 
 // The rule that decides whether a command can be admitted alongside a pending
@@ -33,6 +32,11 @@ const replyFraming = 32
 // canonical expiry records and reads of values written earlier in this run.
 // No store is touched: Peek and TotalMemUsed do not reap or update access state.
 func AppendAdmission(commands []*Command) (logBytes, replyBytes int, ok bool) {
+	return defaultEngine.AppendAdmission(commands)
+}
+
+// AppendAdmission is the package's AppendAdmission on e.
+func (e *Engine) AppendAdmission(commands []*Command) (logBytes, replyBytes int, ok bool) {
 	growth, newKeys, largestWrite := uint64(0), 0, 0
 	// Collections accumulate, and preflight runs before any of this executes,
 	// so a read of a collection later in the run can return everything written
@@ -88,7 +92,7 @@ func AppendAdmission(commands []*Command) (logBytes, replyBytes int, ok bool) {
 			}
 			growth += uint64(len(a[0]) + collectionBaseOverhead)
 			if cmd.Cmd == "LPUSH" || cmd.Cmd == "RPUSH" {
-				if list, ok := defaultEngine.listStore.Peek(a[0]); ok {
+				if list, ok := e.listStore.Peek(a[0]); ok {
 					// A single push at capacity can double a large ring. Reserving its
 					// current slots plus per-added-element slack also covers a threshold
 					// crossed by several pushes later in this unexecuted run.
@@ -172,8 +176,8 @@ func AppendAdmission(commands []*Command) (logBytes, replyBytes int, ok bool) {
 			return 0, 0, false
 		}
 	}
-	if data_structure.TotalKeys()+newKeys > config.KeyNumberLimit ||
-		(config.MaxMemory > 0 && data_structure.TotalMemUsed()+growth > config.MaxMemory) {
+	if e.space.TotalKeys()+newKeys > config.KeyNumberLimit ||
+		(config.MaxMemory > 0 && e.space.TotalMemUsed()+growth > config.MaxMemory) {
 		// An eviction can name an arbitrary old key, and neither how many it
 		// removes nor which ones is knowable before the run executes, so its
 		// transcript cannot be reserved. Runs that may evict take the barrier.
@@ -191,21 +195,21 @@ func AppendAdmission(commands []*Command) (logBytes, replyBytes int, ok bool) {
 			}
 			for _, key := range keys {
 				size := largestWrite
-				if obj := defaultEngine.dictStore.Peek(key); obj != nil {
+				if obj := e.dictStore.Peek(key); obj != nil {
 					size = max(size, len(obj.Value))
 				}
 				replyBytes += size + replyFraming
 			}
 		case "HGET", "HMGET":
-			replyBytes += hashReadReplyBound(cmd.Args[0], cmd.Args[1:], collectionWritten)
+			replyBytes += e.hashReadReplyBound(cmd.Args[0], cmd.Args[1:], collectionWritten)
 		case "SMISMEMBER":
 			replyBytes += max(0, len(cmd.Args)-1) * replyFraming
 		case "HGETALL", "HKEYS", "HVALS", "SMEMBERS", "LINDEX", "LRANGE":
-			replyBytes += collectionReplyBound(cmd.Args[0], collectionWritten)
+			replyBytes += e.collectionReplyBound(cmd.Args[0], collectionWritten)
 		case "ZRANGE":
 			// WITHSCORES doubles the elements, and a score is short beside the
 			// member it belongs to, so twice the bound covers both forms.
-			replyBytes += 2 * collectionReplyBound(cmd.Args[0], collectionWritten)
+			replyBytes += 2 * e.collectionReplyBound(cmd.Args[0], collectionWritten)
 		case "PING":
 			for _, s := range cmd.Args {
 				replyBytes += len(s) + replyFraming
@@ -220,8 +224,8 @@ func AppendAdmission(commands []*Command) (logBytes, replyBytes int, ok bool) {
 
 // HMGET may request the same field repeatedly. Bound every requested result,
 // including values created by earlier commands in this not-yet-executed run.
-func hashReadReplyBound(key string, fields []string, written int) int {
-	h, exists := defaultEngine.hashStore.Peek(key)
+func (e *Engine) hashReadReplyBound(key string, fields []string, written int) int {
+	h, exists := e.hashStore.Peek(key)
 	total := 0
 	for _, field := range fields {
 		size := written
@@ -244,15 +248,15 @@ func hashReadReplyBound(key string, fields []string, written int) int {
 // earlier in this run. Charging the run's whole collection growth to every such
 // read assumes it all went to this key, which is the safe direction: preflight
 // runs before any of it has executed and cannot know where it landed.
-func collectionReplyBound(key string, writtenThisRun int) int {
+func (e *Engine) collectionReplyBound(key string, writtenThisRun int) int {
 	held, elements := uint64(0), 0
-	if h, ok := defaultEngine.hashStore.Peek(key); ok {
+	if h, ok := e.hashStore.Peek(key); ok {
 		held, elements = h.MemUsage(), 2*h.Len()
-	} else if s, ok := defaultEngine.setStore.Peek(key); ok {
+	} else if s, ok := e.setStore.Peek(key); ok {
 		held, elements = s.MemUsage(), s.Len()
-	} else if l, ok := defaultEngine.listStore.Peek(key); ok {
+	} else if l, ok := e.listStore.Peek(key); ok {
 		held, elements = l.MemUsage(), l.Len()
-	} else if z, ok := defaultEngine.zsetStore.Peek(key); ok {
+	} else if z, ok := e.zsetStore.Peek(key); ok {
 		held, elements = z.MemUsage(), z.Len()
 	}
 	return int(held) + elements*replyFraming + writtenThisRun + replyFraming
@@ -260,22 +264,32 @@ func collectionReplyBound(key string, writtenThisRun int) int {
 
 // AppendOffset is a logical encoded prefix, independent of rewrite file sizes.
 // Reads inherit this position so they cannot expose an unacknowledged mutation.
-func AppendOffset() uint64      { return appendStarted + uint64(len(aof.buf)) }
-func AppendReadyOffset() uint64 { return appendCompleted }
-func AppendBufferedBytes() int  { return len(aof.buf) }
-func AppendRetainedBytes() int  { return appendRetained + cap(aof.buf) }
-func AppendHasRoom(reserve int) bool {
+func AppendOffset() uint64           { return defaultEngine.AppendOffset() }
+func AppendReadyOffset() uint64      { return defaultEngine.AppendReadyOffset() }
+func AppendBufferedBytes() int       { return defaultEngine.AppendBufferedBytes() }
+func AppendRetainedBytes() int       { return defaultEngine.AppendRetainedBytes() }
+func AppendHasRoom(reserve int) bool { return defaultEngine.AppendHasRoom(reserve) }
+
+// The same, on e's log.
+func (e *Engine) AppendOffset() uint64      { return e.appendStarted + uint64(len(e.aof.buf)) }
+func (e *Engine) AppendReadyOffset() uint64 { return e.appendCompleted }
+func (e *Engine) AppendBufferedBytes() int  { return len(e.aof.buf) }
+func (e *Engine) AppendRetainedBytes() int  { return e.appendRetained + cap(e.aof.buf) }
+func (e *Engine) AppendHasRoom(reserve int) bool {
 	// An admitted concurrent run must fit without a synchronous transcript
 	// drain; otherwise it waits at the server's existing append barrier.
-	if reserve < 0 || reserve > maxAOFTranscriptBytes-len(aof.buf) {
+	if reserve < 0 || reserve > maxAOFTranscriptBytes-len(e.aof.buf) {
 		return false
 	}
 	// Twice the encoded length also reserves slice growth/allocator slack.
-	return appendRetained+2*(len(aof.buf)+reserve) <= maxAsyncAppendBytes
+	return e.appendRetained+2*(len(e.aof.buf)+reserve) <= maxAsyncAppendBytes
 }
 
 // AOFPositions are logical positions since open; rewrites never reset them.
 // Synced is a conservative prefix: writes racing an everysec Sync remain dirty.
-func AOFPositions() (encoded, written, synced, ready uint64) {
-	return AppendOffset(), appendWritten, appendSynced, appendCompleted
+func AOFPositions() (encoded, written, synced, ready uint64) { return defaultEngine.AOFPositions() }
+
+// AOFPositions is the package's AOFPositions on e.
+func (e *Engine) AOFPositions() (encoded, written, synced, ready uint64) {
+	return e.AppendOffset(), e.appendWritten, e.appendSynced, e.appendCompleted
 }

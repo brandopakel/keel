@@ -28,11 +28,11 @@ var (
 // or larger than the whole memory budget when one is set. A size that fits the
 // budget but not what is left of it is allowed through, because making room
 // for it by evicting other keys is what the budget is for.
-func affordable(bytes uint64) error {
+func (e *Engine) affordable(bytes uint64) error {
 	if bytes > maxStructureBytes {
 		return errTooLargeForOneKey
 	}
-	if !aof.replaying && config.MaxMemory > 0 && bytes > config.MaxMemory {
+	if !e.aof.replaying && config.MaxMemory > 0 && bytes > config.MaxMemory {
 		return errTooLargeForBudget
 	}
 	return nil

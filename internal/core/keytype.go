@@ -171,77 +171,77 @@ func (e *Engine) typeError(cmd string, owner data_structure.Keyspace) error {
 // command reads them with, or nil. The type check asks only once it has found
 // a key of another type: a command is never run against a key it should have
 // refused, and a well-formed command pays nothing for it.
-var argumentsBeforeType = map[string]func(args []string) error{
-	"INCRBY":  incrementArgument,
-	"DECRBY":  decrementArgument,
-	"HINCRBY": func(args []string) error { return integerArgument(args[2]) },
-	"HSET": func(args []string) error {
+var argumentsBeforeType = map[string]func(e *Engine, args []string) error{
+	"INCRBY":  (*Engine).incrementArgument,
+	"DECRBY":  (*Engine).decrementArgument,
+	"HINCRBY": func(e *Engine, args []string) error { return e.integerArgument(args[2]) },
+	"HSET": func(e *Engine, args []string) error {
 		if len(args)%2 != 1 {
 			return wrongArguments("HSET")
 		}
 		return nil
 	},
-	"LPOP":   func(args []string) error { return listPopArguments("LPOP", args) },
-	"RPOP":   func(args []string) error { return listPopArguments("RPOP", args) },
-	"LRANGE": rangeArgument, "LTRIM": rangeArgument,
-	"SPOP": func(args []string) error {
+	"LPOP":   func(e *Engine, args []string) error { return e.listPopArguments("LPOP", args) },
+	"RPOP":   func(e *Engine, args []string) error { return e.listPopArguments("RPOP", args) },
+	"LRANGE": (*Engine).rangeArgument, "LTRIM": (*Engine).rangeArgument,
+	"SPOP": func(e *Engine, args []string) error {
 		if len(args) > 2 {
 			return errSyntax
 		}
-		return popCountArgument(args)
+		return e.popCountArgument(args)
 	},
-	"SRANDMEMBER": randomCountArgument, "SRAND": randomCountArgument,
-	"ZADD": zaddArguments,
-	"ZINCRBY": func(args []string) error {
+	"SRANDMEMBER": (*Engine).randomCountArgument, "SRAND": (*Engine).randomCountArgument,
+	"ZADD": func(_ *Engine, args []string) error { return zaddArguments(args) },
+	"ZINCRBY": func(e *Engine, args []string) error {
 		_, err := parseZScore(args[1])
 		return err
 	},
-	"ZRANGE": func(args []string) error {
-		_, err := parseZRange(args)
+	"ZRANGE": func(e *Engine, args []string) error {
+		_, err := e.parseZRange(args)
 		return err
 	},
-	"ZRANGEBYSCORE": func(args []string) error {
-		_, _, _, _, err := parseScoreRange(args, false)
+	"ZRANGEBYSCORE": func(e *Engine, args []string) error {
+		_, _, _, _, err := e.parseScoreRange(args, false)
 		return err
 	},
-	"ZREVRANGEBYSCORE": func(args []string) error {
-		_, _, _, _, err := parseScoreRange(args, true)
+	"ZREVRANGEBYSCORE": func(e *Engine, args []string) error {
+		_, _, _, _, err := e.parseScoreRange(args, true)
 		return err
 	},
-	"ZCOUNT": func(args []string) error {
+	"ZCOUNT": func(e *Engine, args []string) error {
 		_, err := parseScoreInterval(args[1], args[2])
 		return err
 	},
-	"ZPOPMIN": func(args []string) error {
-		_, err := zpopCount("ZPOPMIN", args)
+	"ZPOPMIN": func(e *Engine, args []string) error {
+		_, err := e.zpopCount("ZPOPMIN", args)
 		return err
 	},
-	"ZPOPMAX": func(args []string) error {
-		_, err := zpopCount("ZPOPMAX", args)
+	"ZPOPMAX": func(e *Engine, args []string) error {
+		_, err := e.zpopCount("ZPOPMAX", args)
 		return err
 	},
-	"ZRANK": func(args []string) error {
+	"ZRANK": func(e *Engine, args []string) error {
 		_, err := zrankArguments(args)
 		return err
 	},
-	"GEOADD": geoaddArguments,
-	"GEODIST": func(args []string) error {
+	"GEOADD": func(_ *Engine, args []string) error { return geoaddArguments(args) },
+	"GEODIST": func(e *Engine, args []string) error {
 		_, err := geodistUnit(args)
 		return err
 	},
 }
 
-func integerArgument(v string) error {
-	if _, valid := counterInteger(v); !valid {
+func (e *Engine) integerArgument(v string) error {
+	if _, valid := e.counterInteger(v); !valid {
 		return errNotAnInteger
 	}
 	return nil
 }
 
-func incrementArgument(args []string) error { return integerArgument(args[1]) }
+func (e *Engine) incrementArgument(args []string) error { return e.integerArgument(args[1]) }
 
-func decrementArgument(args []string) error {
-	n, valid := counterInteger(args[1])
+func (e *Engine) decrementArgument(args []string) error {
+	n, valid := e.counterInteger(args[1])
 	switch {
 	case !valid:
 		return errNotAnInteger
@@ -253,31 +253,31 @@ func decrementArgument(args []string) error {
 
 // listPopArguments is LPOP's and RPOP's reading: more than a count is the
 // wrong number of arguments, then the count.
-func listPopArguments(name string, args []string) error {
+func (e *Engine) listPopArguments(name string, args []string) error {
 	if len(args) > 2 {
 		return wrongArguments(name)
 	}
-	return popCountArgument(args)
+	return e.popCountArgument(args)
 }
 
-func popCountArgument(args []string) error {
+func (e *Engine) popCountArgument(args []string) error {
 	if len(args) == 2 {
-		_, err := positiveCount(args[1])
+		_, err := e.positiveCount(args[1])
 		return err
 	}
 	return nil
 }
 
-func rangeArgument(args []string) error {
-	_, _, err := integerRange(args[1], args[2])
+func (e *Engine) rangeArgument(args []string) error {
+	_, _, err := e.integerRange(args[1], args[2])
 	return err
 }
 
-func randomCountArgument(args []string) error {
+func (e *Engine) randomCountArgument(args []string) error {
 	if len(args) > 2 {
 		return errSyntax
 	}
-	_, _, err := randomCount(args)
+	_, _, err := e.randomCount(args)
 	return err
 }
 
@@ -361,7 +361,7 @@ func (e *Engine) checkKeyTypes(cmd *Command, entry commandEntry) error {
 	for _, key := range keysBy(cmd, entry.keys) {
 		if owner, held := e.space.OwnerOf(key); held && owner.KeyspaceName() != space {
 			if arguments := argumentsBeforeType[cmd.Cmd]; arguments != nil {
-				if err := arguments(cmd.Args); err != nil {
+				if err := arguments(e, cmd.Args); err != nil {
 					return err
 				}
 			}

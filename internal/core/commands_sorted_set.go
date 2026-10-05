@@ -345,14 +345,14 @@ type zrangeArguments struct {
 // agree, then the range itself, as ranks or, with BYSCORE, as scores given
 // from the first end walked. BYLEX is not offered, and is refused with the
 // syntax error of any other word this server does not know there.
-func parseZRange(args []string) (z zrangeArguments, err error) {
+func (e *Engine) parseZRange(args []string) (z zrangeArguments, err error) {
 	z.count = -1
 	for i := 3; i < len(args); i++ {
 		switch opt := strings.ToUpper(args[i]); {
 		case opt == "WITHSCORES":
 			z.withScores = true
 		case opt == "LIMIT" && i+2 < len(args):
-			if z.offset, z.count, err = integerRange(args[i+1], args[i+2]); err != nil {
+			if z.offset, z.count, err = e.integerRange(args[i+1], args[i+2]); err != nil {
 				return z, err
 			}
 			i += 2
@@ -375,7 +375,7 @@ func parseZRange(args []string) (z zrangeArguments, err error) {
 		z.scores, err = parseScoreInterval(lower, upper)
 		return z, err
 	}
-	z.start, z.stop, err = integerRange(args[1], args[2])
+	z.start, z.stop, err = e.integerRange(args[1], args[2])
 	return z, err
 }
 
@@ -385,7 +385,7 @@ func (e *Engine) cmdZRANGE(args []string) []byte {
 	if len(args) < 3 {
 		return e.encode(wrongArguments("ZRANGE"), false)
 	}
-	z, err := parseZRange(args)
+	z, err := e.parseZRange(args)
 	if err != nil {
 		return e.encode(err, false)
 	}

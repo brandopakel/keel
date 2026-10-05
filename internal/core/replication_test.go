@@ -113,7 +113,7 @@ func TestReplicationHistoryAndDirtyOverflowRequireFullSync(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(run(t, "KEEL.REPL.PULL", epoch, "0").(string)), &frame))
 	require.True(t, frame.Full)
 	replication.dirtyBytes = replicationLimit
-	noteReplicationDirty("new-key")
+	defaultEngine.noteReplicationDirty("new-key")
 	require.True(t, replication.invalidated)
 	require.NoError(t, json.Unmarshal([]byte(run(t, "KEEL.REPL.PULL", epoch, "1030").(string)), &frame))
 	require.True(t, frame.Full)

@@ -39,7 +39,7 @@ func (e *Engine) cmdLCS(args []string) []byte {
 			if i+1 >= len(args) {
 				return e.encode(errors.New("ERR syntax error"), false)
 			}
-			n, valid := counterInteger(args[i+1])
+			n, valid := e.counterInteger(args[i+1])
 			if !valid {
 				return e.encode(errNotAnInteger, false)
 			}
