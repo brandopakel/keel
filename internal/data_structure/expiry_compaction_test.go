@@ -1,7 +1,6 @@
 package data_structure
 
 import (
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/stretchr/testify/require"
 	"runtime"
 	"strconv"
@@ -11,7 +10,7 @@ import (
 func TestPartlyOccupiedExpiryTableReleasesRetainedHeap(t *testing.T) {
 	for _, kind := range []string{"string", "collection"} {
 		t.Run(kind, func(t *testing.T) {
-			space := NewSpace(evictionLimits(config.EvictFirst, 5, 1000000))
+			space := NewSpace(evictionLimits(EvictRandom, 5, 1000000))
 			var ks Keyspace
 			var put func(string)
 			if kind == "string" {
@@ -63,7 +62,7 @@ func TestExpiryCompactionMirrorsMutationsAcrossCursor(t *testing.T) {
 	t.Parallel()
 	for _, kind := range []string{"string", "collection"} {
 		t.Run(kind, func(t *testing.T) {
-			space := NewSpace(evictionLimits(config.EvictFirst, 5, 1000000))
+			space := NewSpace(evictionLimits(EvictRandom, 5, 1000000))
 			var ks Keyspace
 			var put func(string)
 			if kind == "string" {
@@ -127,7 +126,7 @@ func TestExpiryCompactionMirrorsMutationsAcrossCursor(t *testing.T) {
 
 func TestExpiryCompactionCancelsRegrowthAndEmptyTable(t *testing.T) {
 	t.Parallel()
-	space := NewSpace(evictionLimits(config.EvictFirst, 5, 1000000))
+	space := NewSpace(evictionLimits(EvictRandom, 5, 1000000))
 	d := CreateDict(space)
 	space.RegisterKeyspace(d)
 	for i := 0; i < 4096; i++ {
@@ -160,7 +159,7 @@ func TestExpiryCompactionCancelsRegrowthAndEmptyTable(t *testing.T) {
 }
 
 func TestExpiryCompactionStartDoesNotCopyTheTableOrAllKeyNames(t *testing.T) {
-	space := NewSpace(evictionLimits(config.EvictFirst, 5, 1000000))
+	space := NewSpace(evictionLimits(EvictRandom, 5, 1000000))
 	d := CreateDict(space)
 	space.RegisterKeyspace(d)
 	for i := 0; i < 420000; i++ {

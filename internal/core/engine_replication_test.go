@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -16,7 +15,6 @@ import (
 	"time"
 
 	"github.com/brandopakel/keel/internal/config"
-	"github.com/brandopakel/keel/internal/data_structure"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -73,7 +71,7 @@ func captureStreamV2(t *testing.T, name string) replicationStream {
 // with a log in dir, as a server started with -replicaof is.
 func replicaEngine(t *testing.T, dir, name string, protocol int) *Engine {
 	t.Helper()
-	e := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
+	e := newEngine(Options{})
 	e.ownRole = replicationRole{ReplicaOf: "primary.test:6379", Protocol: protocol}
 	require.NoError(t, e.OpenAOF(filepath.Join(dir, name+".aof")))
 	require.NoError(t, e.followPrimary())
@@ -238,7 +236,7 @@ func TestEnginesShareNoReplica(t *testing.T) {
 		// Restarted on its own log, each resumes from its own checkpoint.
 		path := side.e.aof.path
 		require.NoError(t, side.e.CloseAOF())
-		restarted := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
+		restarted := newEngine(Options{})
 		restarted.ownRole = side.e.ownRole
 		_, err := restarted.LoadAOF(path)
 		require.NoError(t, err)
@@ -406,7 +404,7 @@ func TestEnginesShareNoReplication(t *testing.T) {
 	defaultEpoch := defaultEngine.replication.epoch
 	dir := t.TempDir()
 	primary := func(name string, protocol int) *Engine {
-		e := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
+		e := newEngine(Options{})
 		e.ownRole = replicationRole{Feed: true, Protocol: protocol}
 		require.NoError(t, e.OpenAOF(filepath.Join(dir, name+".aof")))
 		require.NoError(t, e.InitReplication())
@@ -543,7 +541,7 @@ func TestEnginesShareNoFailover(t *testing.T) {
 	ResetStores()
 	defaultTerm, defaultPath := defaultEngine.CurrentTerm(), defaultEngine.failover.path
 	engine := func(dir string, role replicationRole) (*Engine, string) {
-		e := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
+		e := newEngine(Options{})
 		e.ownRole = role
 		path := filepath.Join(dir, "store.aof")
 		require.NoError(t, e.LoadTerm(path))
@@ -666,7 +664,7 @@ func TestEnginesShareNoFailover(t *testing.T) {
 		path string
 		term uint64
 	}{{aPath, aTerm}, {bPath, bTerm}} {
-		restarted := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
+		restarted := newEngine(Options{})
 		restarted.ownRole = feed
 		require.NoError(t, restarted.LoadTerm(side.path))
 		assert.Equal(t, side.term, restarted.CurrentTerm())

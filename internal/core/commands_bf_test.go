@@ -5,8 +5,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/brandopakel/keel/internal/config"
 )
 
 func TestBFRESERVE(t *testing.T) {
@@ -127,7 +125,7 @@ func TestBFRESERVESizeIsCheckedBeforeAllocating(t *testing.T) {
 		"a billion items at 1%% is 1.2GB of bits")
 	assert.EqualValues(t, 0, run(t, "EXISTS", "huge"))
 
-	withBudget(t, 1<<20, config.LRU)
+	withBudget(t, 1<<20, EvictLRU)
 	assert.Contains(t, run(t, "BF.RESERVE", "big", "0.01", "10000000"), "does not fit in maxmemory",
 		"12MB of bits against a 1MB budget")
 	assert.EqualValues(t, 0, run(t, "EXISTS", "big"))

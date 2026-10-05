@@ -6,8 +6,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/brandopakel/keel/internal/config"
 )
 
 func TestCMSINITBYDIM(t *testing.T) {
@@ -70,7 +68,7 @@ func TestCMSINCRBYAndQUERY(t *testing.T) {
 // enforced after a Put, and the counters are allocated before it, so a sketch
 // larger than the whole budget has to be refused on its dimensions alone.
 func TestCMSSizeIsCheckedAgainstTheBudgetBeforeAllocating(t *testing.T) {
-	withBudget(t, 1<<20, config.LRU)
+	withBudget(t, 1<<20, EvictLRU)
 	assert.Contains(t, run(t, "CMS.INITBYDIM", "c", "100000", "10"), "does not fit in maxmemory", "4MB of counters against a 1MB budget")
 	assert.EqualValues(t, 0, run(t, "EXISTS", "c"))
 	assert.Equal(t, "OK", run(t, "CMS.INITBYDIM", "small", "1000", "5"), "one that fits is fine")

@@ -6,8 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/brandopakel/keel/internal/config"
 )
 
 // BenchmarkCommandPathWithReplica is the command path of a protocol 2 primary
@@ -29,23 +27,14 @@ import (
 // No network is involved: the pull is a command like any other, run where the
 // event loop would run it.
 //
-// This file uses only what the package had before step 2.4, and what
-// command_path_log_bench_test.go uses, so command-path.yml can build it into
-// a baseline that does not have it yet. Sub-benchmark names are part of that
+// This file uses only what the package had before step 2.4, what
+// command_path_log_bench_test.go uses, and the settings in
+// command_path_settings_test.go, so command-path.yml can build it into a
+// baseline that does not have it yet. Sub-benchmark names are part of that
 // comparison, so a name, once added, is not renamed.
 func BenchmarkCommandPathWithReplica(b *testing.B) {
-	fsync, percentage := config.AOFFsync, config.AOFAutoRewritePercentage
-	feed, protocol, replicaOf := config.ReplicationFeed, config.ReplicationProtocol, config.ReplicaOf
-	b.Cleanup(func() {
-		config.AOFFsync, config.AOFAutoRewritePercentage = fsync, percentage
-		config.ReplicationFeed, config.ReplicationProtocol, config.ReplicaOf = feed, protocol, replicaOf
-		if err := InitReplication(); err != nil {
-			b.Error(err)
-		}
-		ResetStores()
-	})
-	config.AOFFsync, config.AOFAutoRewritePercentage = config.FsyncEverySec, 0
-	config.ReplicationFeed, config.ReplicationProtocol, config.ReplicaOf = true, 2, ""
+	b.Cleanup(ResetStores)
+	replicaBenchmarkSettings(b)
 
 	members := make([]string, 100)
 	for i := range members {

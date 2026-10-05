@@ -550,8 +550,7 @@ func TestTransactionReplacingWritesStayInsideTheirBlock(t *testing.T) {
 }
 
 func TestTransactionEvictsAfterItsBlock(t *testing.T) {
-	oldMemory := config.MaxMemory
-	t.Cleanup(func() { config.MaxMemory = oldMemory; CloseAOF() })
+	t.Cleanup(func() { CloseAOF() })
 	path := filepath.Join(t.TempDir(), "evict.aof")
 	ResetStores()
 	require.NoError(t, OpenAOF(path))
@@ -559,7 +558,7 @@ func TestTransactionEvictsAfterItsBlock(t *testing.T) {
 	for i := 0; i < 8; i++ {
 		run(t, "SET", "old"+strconv.Itoa(i), value)
 	}
-	config.MaxMemory = data_structure.TotalMemUsed() + 32<<10
+	withOptions(t, func(o *Options) { o.MaxMemory = data_structure.TotalMemUsed() + 32<<10 })
 	before := len(aofBody(t))
 	s := &session{t: t}
 	s.send("MULTI")
@@ -571,7 +570,7 @@ func TestTransactionEvictsAfterItsBlock(t *testing.T) {
 	require.Positive(t, exec)
 	require.NotContains(t, tail[:exec], "$3\r\nDEL\r\n", "no eviction inside the block")
 	require.Contains(t, tail[exec:], "$3\r\nDEL\r\n", "the budget is enforced once the block is closed")
-	require.LessOrEqual(t, data_structure.TotalMemUsed(), config.MaxMemory)
+	require.LessOrEqual(t, data_structure.TotalMemUsed(), Configuration().MaxMemory)
 }
 
 func TestTransactionTornTailDropsTheWholeBlock(t *testing.T) {

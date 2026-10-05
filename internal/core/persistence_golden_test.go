@@ -130,7 +130,7 @@ type goldenRun struct {
 func startGoldenRun(t *testing.T, mode goldenMode, seed []byte) (*goldenRun, func()) {
 	t.Helper()
 	fsync, async, percentage := config.AOFFsync, config.AOFAsyncAppend, config.AOFAutoRewritePercentage
-	maxMemory, strategy, samples := config.MaxMemory, config.EvictStrategy, config.LRUSamples
+	options := Configuration()
 	stopped := false
 	stop := func() {
 		if stopped {
@@ -140,7 +140,7 @@ func startGoldenRun(t *testing.T, mode goldenMode, seed []byte) (*goldenRun, fun
 		CancelRewrite()
 		CloseAOF()
 		config.AOFFsync, config.AOFAsyncAppend, config.AOFAutoRewritePercentage = fsync, async, percentage
-		config.MaxMemory, config.EvictStrategy, config.LRUSamples = maxMemory, strategy, samples
+		require.NoError(t, Configure(options))
 		ResetStores()
 	}
 	t.Cleanup(stop)
@@ -717,7 +717,9 @@ func goldenSession(r *goldenRun) {
 // at once and its DEL follows its record - after the EXEC of a transaction.
 // Each write is the only key, so the eviction has one choice.
 func goldenEvictions(r *goldenRun) {
-	config.MaxMemory, config.EvictStrategy, config.LRUSamples = 1, config.LRU, 16
+	options := Configuration()
+	options.MaxMemory, options.Eviction, options.EvictionSamples = 1, EvictLRU, 16
+	require.NoError(r.t, Configure(options))
 	r.ok("SET", "e:1", "v")
 	r.ok("MULTI")
 	r.ok("SET", "e:2", "v")

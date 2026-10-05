@@ -41,6 +41,11 @@ type Engine struct {
 	// draws from, its clock and its limits.
 	space *data_structure.Space
 
+	// options are e's settings, as they were given to it; see options.go.
+	// What is read on a command's path is held where that path reads it: the
+	// keyspace's limits in the space.
+	options Options
+
 	// The stores, in the order resetStores registers them, under the names
 	// they had as package variables.
 	dictStore   *data_structure.Dict
@@ -223,8 +228,8 @@ type Engine struct {
 }
 
 // defaultEngine is the engine the server and the tests run on until each
-// caller opens its own; plan step 2.7 removes it. It lives in DefaultSpace, so
-// its limits are read from config, as the server's always have been.
+// caller opens its own; plan step 2.7 removes it. It lives in DefaultSpace,
+// with the default options until Configure gives it the server's.
 //
 // The pointer never changes. ResetStores rebuilds the stores inside it, so
 // whatever has kept the engine keeps the keyspace a test began from empty.

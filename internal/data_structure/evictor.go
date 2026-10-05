@@ -1,9 +1,5 @@
 package data_structure
 
-import (
-	"github.com/brandopakel/keel/internal/config"
-)
-
 // The eviction machinery, shared by every keyspace in a Space.
 //
 // Keys live in several typed maps - strings, sets, sorted sets, filters,
@@ -152,7 +148,7 @@ func (s *Space) nextRand() uint64 {
 
 // NewAccess is the access word a newly created key starts with.
 func (s *Space) NewAccess() uint64 {
-	if *s.limits.evictStrategy == config.LFU {
+	if s.limits.Eviction == EvictLFU {
 		// A new key needs frequency credit or it is, by definition, the least
 		// frequently used thing present and is evicted before it can show
 		// otherwise.
@@ -165,7 +161,7 @@ func (s *Space) NewAccess() uint64 {
 // to know when, LFU how often.
 func (s *Space) Touch(access *uint64) {
 	s.clock++
-	if *s.limits.evictStrategy == config.LFU {
+	if s.limits.Eviction == EvictLFU {
 		s.touchLFU(access)
 		return
 	}
@@ -174,18 +170,19 @@ func (s *Space) Touch(access *uint64) {
 
 // Score ranks an access word. The lowest score is evicted first.
 func (s *Space) Score(access uint64) uint64 {
-	if *s.limits.evictStrategy == config.LFU {
+	if s.limits.Eviction == EvictLFU {
 		return uint64(s.decayedFreq(access))
 	}
 	return access
 }
 
-// overLimit reports whether either configured bound is exceeded.
+// overLimit reports whether either bound is exceeded. A space with neither
+// counts nothing.
 func (s *Space) overLimit() bool {
-	if s.TotalKeys() > *s.limits.keyNumberLimit {
+	if maxKeys := s.limits.MaxKeys; maxKeys > 0 && s.TotalKeys() > maxKeys {
 		return true
 	}
-	maxMemory := *s.limits.maxMemory
+	maxMemory := s.limits.MaxMemory
 	return maxMemory > 0 && s.TotalMemUsed() > maxMemory
 }
 
@@ -210,10 +207,10 @@ func (s *Space) EnforceLimits() {
 
 // evictOne removes a single key.
 func (s *Space) evictOne() bool {
-	// EvictFirst consults nothing: it takes whatever comes to hand. Falling
+	// EvictRandom consults nothing: it takes whatever comes to hand. Falling
 	// through to the sampling path would silently turn it into LRU, since the
 	// access word a non-LFU policy stores is a clock reading.
-	if strategy := *s.limits.evictStrategy; strategy != config.LRU && strategy != config.LFU {
+	if s.limits.Eviction == EvictRandom {
 		return s.evictArbitrary()
 	}
 
@@ -257,7 +254,7 @@ func (s *Space) samplePool() {
 	if total == 0 {
 		return
 	}
-	want := *s.limits.lruSamples
+	want := s.limits.EvictionSamples
 	if want < 1 {
 		want = 1
 	}

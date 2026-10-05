@@ -761,17 +761,10 @@ func TestRewriteRetainsBoundedNameBatches(t *testing.T) {
 	t.Logf("%d keys: walk retained at most %d names, %d walked", keys, worst, defaultEngine.rewrite.pos)
 }
 
-// A ceiling below the keyspace a server is allowed to hold is worse than none:
-// auto-rewrite retries every minute, fails every time, and the log grows without
-// bound. This checks the two numbers stay in a sane relation to each other and
-// that refusing above the ceiling is a clean error rather than a started rewrite.
-func TestRewriteCeilingCoversTheKeyspaceAServerMayHold(t *testing.T) {
-	assert.LessOrEqual(t, rewriteKeyCeiling, config.KeyNumberLimit,
-		"a ceiling above the key limit is dead configuration")
-	assert.Greater(t, rewriteKeyCeiling, config.KeyNumberLimit/2,
-		"a ceiling far below the key limit leaves legal keyspaces unable to compact, "+
-			"which is how a log grows without bound")
-
+// Refusing above the ceiling is a clean error rather than a started rewrite.
+// How the ceiling stands against the keyspace the server may hold, its
+// -maxkeys default, is checked beside that default, in cmd/keel.
+func TestRewriteCeilingRefusesCleanly(t *testing.T) {
 	ResetStores()
 	assert.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "ceiling.aof")))
 	defer func() { assert.NoError(t, CloseAOF()) }()
@@ -781,14 +774,14 @@ func TestRewriteCeilingCoversTheKeyspaceAServerMayHold(t *testing.T) {
 	// the caller can tell a refusal from an abort part way through.
 	old := defaultEngine.keyCountForRewrite
 	defer func() { defaultEngine.keyCountForRewrite = old }()
-	defaultEngine.keyCountForRewrite = func() int { return rewriteKeyCeiling + 1 }
+	defaultEngine.keyCountForRewrite = func() int { return RewriteKeyCeiling + 1 }
 	err := StartRewrite()
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "rewrite limit")
 	assert.False(t, RewriteActive(), "a refused rewrite must not leave one started")
 
 	// At the ceiling it proceeds.
-	defaultEngine.keyCountForRewrite = func() int { return rewriteKeyCeiling }
+	defaultEngine.keyCountForRewrite = func() int { return RewriteKeyCeiling }
 	assert.NoError(t, StartRewrite())
 	assert.True(t, RewriteActive())
 	for stepRewrite(t) {

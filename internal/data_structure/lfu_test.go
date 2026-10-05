@@ -6,8 +6,6 @@ import (
 	"unsafe"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/brandopakel/keel/internal/config"
 )
 
 func TestLFUStateRoundTripsThroughOneField(t *testing.T) {
@@ -33,7 +31,7 @@ func TestObjStaysOneWordPerPolicyField(t *testing.T) {
 
 func TestNewKeysStartWithCredit(t *testing.T) {
 	t.Parallel()
-	d := newTestDict(evictionLimits(config.LFU, 5, 100))
+	d := newTestDict(evictionLimits(EvictLFU, 5, 100))
 	obj := d.NewObj("v")
 	assert.Equal(t, uint8(lfuInitVal), lfuFreqOf(obj.Access),
 		"a new key needs credit, or it is by definition the least frequently used thing present")
@@ -43,7 +41,7 @@ func TestNewKeysStartWithCredit(t *testing.T) {
 // accesses: the counter is a rank, not a count.
 func TestCounterRiseSlowsDown(t *testing.T) {
 	t.Parallel()
-	limits := evictionLimits(config.LFU, 5, 1000000)
+	limits := evictionLimits(EvictLFU, 5, 1000000)
 	limits.LFUDecayPeriod = 0 // isolate the increment from decay
 	d := newTestDict(limits)
 
@@ -67,7 +65,7 @@ func TestCounterRiseSlowsDown(t *testing.T) {
 
 func TestCounterSaturatesRatherThanWrapping(t *testing.T) {
 	t.Parallel()
-	s := NewSpace(evictionLimits(config.LFU, 5, 100))
+	s := NewSpace(evictionLimits(EvictLFU, 5, 100))
 	var o Obj
 	o.Access = packLFU(0, 255)
 	assert.Equal(t, uint8(255), s.lfuLogIncr(lfuFreqOf(o.Access)),
@@ -76,7 +74,7 @@ func TestCounterSaturatesRatherThanWrapping(t *testing.T) {
 
 func TestDecayLowersAnIdleCounter(t *testing.T) {
 	t.Parallel()
-	limits := evictionLimits(config.LFU, 5, 1000000)
+	limits := evictionLimits(EvictLFU, 5, 1000000)
 	limits.LFUDecayPeriod = 100
 	d := newTestDict(limits)
 	s := d.space
@@ -95,7 +93,7 @@ func TestDecayLowersAnIdleCounter(t *testing.T) {
 
 func TestDecayIsLazyAndDoesNotMutate(t *testing.T) {
 	t.Parallel()
-	limits := evictionLimits(config.LFU, 5, 1000000)
+	limits := evictionLimits(EvictLFU, 5, 1000000)
 	limits.LFUDecayPeriod = 100
 	d := newTestDict(limits)
 	s := d.space
@@ -111,9 +109,9 @@ func TestDecayIsLazyAndDoesNotMutate(t *testing.T) {
 
 // scanResistance measures the workload LFU exists for: a hot working set,
 // followed by a long stream of keys nobody will ask for again.
-func scanResistance(t *testing.T, strategy, limit int) float64 {
+func scanResistance(t *testing.T, policy EvictionPolicy, limit int) float64 {
 	t.Helper()
-	d := newTestDict(evictionLimits(strategy, 5, limit))
+	d := newTestDict(evictionLimits(policy, 5, limit))
 	hot := limit / 2
 	for i := 0; i < limit; i++ {
 		d.Put("k"+strconv.Itoa(i), d.NewObj("v"))
@@ -142,8 +140,8 @@ func scanResistance(t *testing.T, strategy, limit int) float64 {
 // it.
 func TestLFUSurvivesAScanThatDestroysLRU(t *testing.T) {
 	t.Parallel()
-	lru := scanResistance(t, config.LRU, 1000)
-	lfu := scanResistance(t, config.LFU, 1000)
+	lru := scanResistance(t, EvictLRU, 1000)
+	lfu := scanResistance(t, EvictLFU, 1000)
 
 	assert.Less(t, lru, 20.0, "a scan should defeat LRU, got %.1f%%", lru)
 	assert.Greater(t, lfu, 90.0, "LFU should hold its working set through a scan, got %.1f%%", lfu)
@@ -155,7 +153,7 @@ func TestLFUSurvivesAScanThatDestroysLRU(t *testing.T) {
 // with history it will never serve again.
 func TestLFUFollowsAWorkingSetThatMoves(t *testing.T) {
 	t.Parallel()
-	d := newTestDict(evictionLimits(config.LFU, 5, 1000))
+	d := newTestDict(evictionLimits(EvictLFU, 5, 1000))
 
 	hammer := func(prefix string) {
 		for i := 0; i < 500; i++ {
@@ -188,7 +186,7 @@ func TestLFUFollowsAWorkingSetThatMoves(t *testing.T) {
 
 func TestLFUHoldsTheDictAtTheLimit(t *testing.T) {
 	t.Parallel()
-	d := newTestDict(evictionLimits(config.LFU, 5, 100))
+	d := newTestDict(evictionLimits(EvictLFU, 5, 100))
 	for i := 0; i < 1000; i++ {
 		d.Put("k"+strconv.Itoa(i), d.NewObj("v"))
 		assert.LessOrEqual(t, d.Len(), 100)

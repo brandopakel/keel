@@ -52,7 +52,7 @@ func (s *Space) touchLFU(access *uint64) {
 // stored timestamp costs nothing until someone asks.
 func (s *Space) decayedFreq(access uint64) uint8 {
 	freq := lfuFreqOf(access)
-	period := uint64(*s.limits.lfuDecayPeriod)
+	period := uint64(s.limits.LFUDecayPeriod)
 	if period == 0 || freq == 0 {
 		return freq
 	}
@@ -82,7 +82,7 @@ func (s *Space) lfuLogIncr(freq uint8) uint8 {
 	if base < 0 {
 		base = 0
 	}
-	p := 1.0 / (base*float64(*s.limits.lfuLogFactor) + 1)
+	p := 1.0 / (base*float64(s.limits.LFULogFactor) + 1)
 	if s.randFloat() < p {
 		return freq + 1
 	}

@@ -85,11 +85,13 @@ func humanBytes(n uint64) string {
 	return fmt.Sprintf("%.2f%c", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
-func evictionPolicyName() string {
-	switch config.EvictStrategy {
-	case config.LRU:
+// evictionPolicyName is Redis's name for an eviction policy, as INFO reports
+// it.
+func evictionPolicyName(policy EvictionPolicy) string {
+	switch policy {
+	case EvictLRU:
 		return "allkeys-lru"
-	case config.LFU:
+	case EvictLFU:
 		return "allkeys-lfu"
 	default:
 		return "allkeys-random"
@@ -195,8 +197,9 @@ func (e *Engine) cmdINFO(args []string) []byte {
 		used := e.space.TotalMemUsed()
 		fmt.Fprintf(&b, "# Memory\r\nused_memory:%d\r\nused_memory_human:%s\r\n",
 			used, humanBytes(used))
+		limits := e.space.Limits()
 		fmt.Fprintf(&b, "maxmemory:%d\r\nmaxmemory_human:%s\r\nmaxmemory_policy:%s\r\n\r\n",
-			config.MaxMemory, humanBytes(config.MaxMemory), evictionPolicyName())
+			limits.MaxMemory, humanBytes(limits.MaxMemory), evictionPolicyName(limits.Eviction))
 	}
 	if want("stats") {
 		fmt.Fprintf(&b, "# Stats\r\nevicted_keys:%d\r\nexpired_keys:%d\r\n",

@@ -4,7 +4,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
@@ -20,6 +19,7 @@ import (
 // Sub-benchmark names are part of that comparison, so a name, once added, is
 // not renamed.
 func BenchmarkCommandPath(b *testing.B) {
+	holdServerKeyCap(b)
 	ResetStores()
 	keys := make([]string, 1000)
 	for i := range keys {
@@ -128,13 +128,11 @@ func BenchmarkCommandPath(b *testing.B) {
 func BenchmarkCommandPathUnderEviction(b *testing.B) {
 	for _, policy := range []struct {
 		name     string
-		strategy int
-	}{{"random", config.EvictFirst}, {"lru", config.LRU}, {"lfu", config.LFU}} {
+		strategy EvictionPolicy
+	}{{"random", EvictRandom}, {"lru", EvictLRU}, {"lfu", EvictLFU}} {
 		b.Run(policy.name, func(b *testing.B) {
-			oldMax, oldStrategy := config.MaxMemory, config.EvictStrategy
-			b.Cleanup(func() { config.MaxMemory, config.EvictStrategy = oldMax, oldStrategy })
 			ResetStores()
-			config.MaxMemory, config.EvictStrategy = 4<<20, policy.strategy
+			withOptions(b, func(o *Options) { o.MaxMemory, o.MaxKeys, o.Eviction = 4<<20, serverKeyCap, policy.strategy })
 			value := string(make([]byte, 256))
 			cmds := make([]*Command, 1<<16)
 			for i := range cmds {
@@ -164,6 +162,20 @@ func BenchmarkCommandPathUnderEviction(b *testing.B) {
 		})
 	}
 }
+
+// serverKeyCap is the key bound the server's -maxkeys flag defaults to. Every
+// build before step 2.5 of the plan held the default engine to it, whatever
+// ran on it; since then an engine has no key bound unless it is given one. The
+// benchmarks give the engine this one, so that every write counts the
+// keyspace, as the server's writes do, and as a baseline from before step
+// 2.5 counts it.
+const serverKeyCap = 5000000
+
+// holdServerKeyCap holds the default engine to serverKeyCap until b ends. It
+// is a function of its own rather than a closure in the benchmark, so that
+// the benchmark's own closures, which are its timed loops, keep the names and
+// the places they have in a baseline's build.
+func holdServerKeyCap(b *testing.B) { withOptions(b, func(o *Options) { o.MaxKeys = serverKeyCap }) }
 
 // mustSucceed runs cmd once and fails the benchmark if it errors, so a family
 // whose command was removed or broke cannot report the cost of an error reply.

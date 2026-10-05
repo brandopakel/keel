@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/data_structure"
 	"github.com/stretchr/testify/require"
 )
@@ -13,10 +12,9 @@ import (
 func admissionResourceSetup(t *testing.T) {
 	t.Helper()
 	ResetStores()
-	oldMemory, oldKeys := config.MaxMemory, config.KeyNumberLimit
-	config.MaxMemory, config.KeyNumberLimit = 0, 1000000
+	withOptions(t, func(o *Options) { o.MaxMemory, o.MaxKeys = 0, 1000000 })
 	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "resource.aof")))
-	t.Cleanup(func() { require.NoError(t, CloseAOF()); config.MaxMemory, config.KeyNumberLimit = oldMemory, oldKeys })
+	t.Cleanup(func() { require.NoError(t, CloseAOF()) })
 }
 
 func TestAppendAdmissionBoundsRepeatedFieldsAndWideMembership(t *testing.T) {
@@ -58,7 +56,7 @@ func TestAppendAdmissionRejectsCollectionGrowthThatWouldEvict(t *testing.T) {
 				command = &Command{Cmd: "RPUSH", Args: []string{"list", "v"}}
 				room = 1024
 			}
-			config.MaxMemory = data_structure.TotalMemUsed() + room
+			withOptions(t, func(o *Options) { o.MaxMemory = data_structure.TotalMemUsed() + room })
 			_, _, ok := AppendAdmission([]*Command{command})
 			require.False(t, ok, "new structure metadata and ring-capacity growth must be reserved before concurrent execution")
 		})

@@ -9,8 +9,9 @@ complete reservation/recovery contract and demonstrates a measured benefit.
 `AppendAdmission` refuses a run that might evict:
 
 ```go
-if data_structure.TotalKeys()+newKeys > config.KeyNumberLimit ||
-    (config.MaxMemory > 0 && data_structure.TotalMemUsed()+growth > config.MaxMemory) {
+maxKeys, maxMemory := e.space.MaxKeys(), e.space.MaxMemory()
+if (maxKeys > 0 && e.space.TotalKeys()+newKeys > maxKeys) ||
+    (maxMemory > 0 && e.space.TotalMemUsed()+growth > maxMemory) {
     // An eviction can name an arbitrary old key. Until its transcript has
     // its own reservation, runs that may evict wait for the barrier.
     return 0, 0, false

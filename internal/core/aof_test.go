@@ -11,7 +11,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/constant"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
@@ -224,13 +223,10 @@ func TestAOFRecordsExpiryThatHasAlreadyPassedAsRemoval(t *testing.T) {
 // memory bound then evicts a different set, so the two diverge further with
 // every restart rather than converging.
 func TestAOFRecordsEviction(t *testing.T) {
-	originalKeys := config.KeyNumberLimit
-	defer func() { config.KeyNumberLimit = originalKeys }()
-
 	path := filepath.Join(t.TempDir(), "evict.aof")
 	ResetStores()
 	assert.NoError(t, OpenAOF(path))
-	config.KeyNumberLimit = 20
+	withOptions(t, func(o *Options) { o.MaxKeys = 20 })
 	for i := 0; i < 200; i++ {
 		run(t, "SET", "k"+strconv.Itoa(i), "v")
 	}
@@ -244,7 +240,7 @@ func TestAOFRecordsEviction(t *testing.T) {
 	restart(t, path)
 	assert.Equal(t, survived, data_structure.TotalKeys(),
 		"replay must not resurrect keys eviction had already dropped")
-	assert.LessOrEqual(t, data_structure.TotalKeys(), config.KeyNumberLimit)
+	assert.LessOrEqual(t, data_structure.TotalKeys(), Configuration().MaxKeys)
 }
 
 // TestAOFTruncatedTailIsRecoverable. A crash between two write syscalls leaves

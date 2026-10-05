@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,7 +16,7 @@ func TestEmptyExpiryTableReleasesRetainedHeap(t *testing.T) {
 	for _, kind := range []string{"string", "collection"} {
 		for _, action := range []string{"persist", "overwrite", "delete"} {
 			t.Run(kind+"/"+action, func(t *testing.T) {
-				space := NewSpace(evictionLimits(config.EvictFirst, 5, 1000000))
+				space := NewSpace(evictionLimits(EvictRandom, 5, 1000000))
 				var ks Keyspace
 				var put func(string)
 				if kind == "string" {
@@ -75,7 +74,7 @@ func TestEmptyExpiryTableReleasesRetainedHeap(t *testing.T) {
 func TestSingleKeyTTLChurnAvoidsMapReallocation(t *testing.T) {
 	for _, kind := range []string{"string", "collection"} {
 		t.Run(kind, func(t *testing.T) {
-			space := NewSpace(evictionLimits(config.EvictFirst, 5, 1000000))
+			space := NewSpace(evictionLimits(EvictRandom, 5, 1000000))
 			var ks Keyspace
 			if kind == "string" {
 				d := CreateDict(space)

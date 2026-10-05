@@ -18,9 +18,14 @@ func init() { ResetStores() }
 // them. Called at startup, and by tests that need to begin from empty.
 func ResetStores() { defaultEngine.resetStores() }
 
-// newEngine returns an engine with empty stores, living in space.
-func newEngine(space *data_structure.Space) *Engine {
-	e := engineIn(space)
+// newEngine returns an engine of its own, with empty stores in a space of its
+// own, held to o. It is for tests until callers open engines (plan phase 3),
+// so options it cannot be held to are a mistake in the test, and panic.
+func newEngine(o Options) *Engine {
+	e := engineIn(data_structure.NewSpace(o.limits()))
+	if err := e.configure(o); err != nil {
+		panic(err)
+	}
 	e.resetStores()
 	return e
 }
