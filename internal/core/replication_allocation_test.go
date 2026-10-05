@@ -14,7 +14,7 @@ import (
 func TestOversizedOpaqueReplicationUpdateIsSizedBeforeConstruction(t *testing.T) {
 	setupReplicationV2(t)
 	defaultEngine.cmsStore.Put("large", data_structure.CreateCMS((replicationCommandBytes/4)+1, 1))
-	epoch := replication.epoch
+	epoch := defaultEngine.replication.epoch
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
@@ -23,7 +23,7 @@ func TestOversizedOpaqueReplicationUpdateIsSizedBeforeConstruction(t *testing.T)
 	allocated := after.TotalAlloc - before.TotalAlloc
 	t.Logf("oversized opaque update allocated %d bytes", allocated)
 	require.Less(t, allocated, uint64(256<<10), "a refused delta must not construct an oversized snapshot first")
-	require.NotEqual(t, epoch, replication.epoch, "the replica must fall back to a fresh snapshot")
+	require.NotEqual(t, epoch, defaultEngine.replication.epoch, "the replica must fall back to a fresh snapshot")
 	require.Equal(t, []interface{}{int64(1)}, run(t, "CMS.QUERY", "large", "item"))
 }
 
@@ -32,11 +32,11 @@ func TestOpaqueReplicationBodyAllocatesOneAcceptedImage(t *testing.T) {
 	cms := data_structure.CreateCMS(1<<20, 1)
 	cms.IncrBy("item", 7)
 	defaultEngine.cmsStore.Put("large", cms)
-	replication.dirty["large"] = struct{}{}
+	defaultEngine.replication.dirty["large"] = struct{}{}
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	body, fits := opaqueReplicationBody()
+	body, fits := defaultEngine.opaqueReplicationBody()
 	runtime.ReadMemStats(&after)
 	t.Logf("accepted body=%d allocated=%d", len(body), after.TotalAlloc-before.TotalAlloc)
 	require.True(t, fits)
@@ -58,12 +58,12 @@ func TestOpaqueReplicationReplacementReplaysEveryTypeAndExpiry(t *testing.T) {
 	run(t, "HSET", "hash", "field", "value")
 	run(t, "RPUSH", "list", "first", "second")
 	want := snapshotEverything(t)
-	expiry := replicationKeyExpiry("living", dumpTagString)
+	expiry := defaultEngine.replicationKeyExpiry("living", dumpTagString)
 	keys := []string{"str", "num", "living", "set", "z", "geo", "hll", "bf", "cf", "cms", "mor", "hash", "list", "absent"}
 	for _, key := range keys {
-		replication.dirty[key] = struct{}{}
+		defaultEngine.replication.dirty[key] = struct{}{}
 	}
-	body, fits := opaqueReplicationBody()
+	body, fits := defaultEngine.opaqueReplicationBody()
 	require.True(t, fits)
 	require.NoError(t, CloseAOF())
 	path := filepath.Join(t.TempDir(), "replacement.aof")
@@ -74,7 +74,7 @@ func TestOpaqueReplicationReplacementReplaysEveryTypeAndExpiry(t *testing.T) {
 		_, err := LoadAOF(path)
 		require.NoError(t, err)
 		require.Equal(t, want, snapshotEverything(t))
-		require.Equal(t, expiry, replicationKeyExpiry("living", dumpTagString))
+		require.Equal(t, expiry, defaultEngine.replicationKeyExpiry("living", dumpTagString))
 		require.Equal(t, "value", run(t, "HGET", "hash", "field"))
 		require.Equal(t, []interface{}{"first", "second"}, run(t, "LRANGE", "list", "0", "-1"))
 		require.Equal(t, int64(0), run(t, "EXISTS", "absent"))
@@ -90,8 +90,8 @@ func TestOpaqueReplicationExpiryBelongsToSelectedValue(t *testing.T) {
 	wantExpiry := uint64(time.Now().UnixMilli() + 600000)
 	defaultEngine.hashStore.SetExpiryAt("overlap", wantExpiry)
 	defaultEngine.cmsStore.SetExpiryAt("overlap", 1)
-	replication.dirty["overlap"] = struct{}{}
-	body, fits := opaqueReplicationBody()
+	defaultEngine.replication.dirty["overlap"] = struct{}{}
+	body, fits := defaultEngine.opaqueReplicationBody()
 	require.True(t, fits)
 	require.NoError(t, CloseAOF())
 	ResetStores()
@@ -110,12 +110,12 @@ func TestOpaqueReplicationSizesAggregateBeforeAllocating(t *testing.T) {
 	// Each image fits alone; their combined delta does not.
 	for _, key := range []string{"first", "second"} {
 		defaultEngine.cmsStore.Put(key, data_structure.CreateCMS(9<<20, 1))
-		replication.dirty[key] = struct{}{}
+		defaultEngine.replication.dirty[key] = struct{}{}
 	}
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	body, fits := opaqueReplicationBody()
+	body, fits := defaultEngine.opaqueReplicationBody()
 	runtime.ReadMemStats(&after)
 	require.False(t, fits)
 	require.Nil(t, body)

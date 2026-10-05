@@ -645,7 +645,7 @@ func TestReplicationV2DeliversATransactionWhole(t *testing.T) {
 	s.send("MULTI")
 	s.send("GET", "seed")
 	s.send("EXEC")
-	require.Equal(t, base, replicationV2.end)
+	require.Equal(t, base, defaultEngine.replicationV2.end)
 
 	// A block larger than one frame, so a replica receives it in pieces.
 	large := strings.Repeat("x", 300<<10)
@@ -655,7 +655,7 @@ func TestReplicationV2DeliversATransactionWhole(t *testing.T) {
 	s.send("SET", "last", large)
 	s.send("EXEC")
 	var deltas []ReplicationFrame
-	for offset := base; offset < replicationV2.end; {
+	for offset := base; offset < defaultEngine.replicationV2.end; {
 		f := pullV2(t, epoch, offset, "", 0)
 		deltas = append(deltas, f)
 		offset = f.To
@@ -711,10 +711,10 @@ func TestReplicationV2OversizedTransactionTakesASnapshot(t *testing.T) {
 	s.send("BF.ADD", "filter", "b")
 	s.send("SET", "after", "v")
 	require.Equal(t, "*4\r\n+OK\r\n:1\r\n:1\r\n+OK\r\n", s.send("EXEC"))
-	require.NotEqual(t, epoch, replication.epoch, "a block the history cannot hold whole invalidates the stream")
-	require.Zero(t, replicationV2.end, "and none of it reaches the new epoch's history")
+	require.NotEqual(t, epoch, defaultEngine.replication.epoch, "a block the history cannot hold whole invalidates the stream")
+	require.Zero(t, defaultEngine.replicationV2.end, "and none of it reaches the new epoch's history")
 	run(t, "SET", "later", "v")
-	require.Equal(t, string(appendCommand(nil, "SET", "later", "v")), string(replicationV2.history[0].body))
+	require.Equal(t, string(appendCommand(nil, "SET", "later", "v")), string(defaultEngine.replicationV2.history[0].body))
 	require.True(t, pullV2(t, epoch, frames[0].To, "", 0).Pending)
 }
 

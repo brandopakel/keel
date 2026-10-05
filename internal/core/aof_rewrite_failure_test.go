@@ -581,7 +581,7 @@ func TestReplicationV2ThroughFailedRewrites(t *testing.T) {
 	}
 
 	// Now a replica needs a snapshot while every rewrite fails.
-	closeReplicationSnapshot()
+	defaultEngine.closeReplicationSnapshot()
 	attempts := 0
 	for i := 0; i < 10; i++ {
 		f := pullV2(t, "", 0, "", 0)
@@ -594,7 +594,7 @@ func TestReplicationV2ThroughFailedRewrites(t *testing.T) {
 	// One failure above already counted, so two more reach the limit.
 	require.Equal(t, 2, attempts, "a waiting replica cannot drive a failing disk round a loop")
 	require.Contains(t, logs.String(), "triggered the limit, will retry in 1 minutes")
-	require.True(t, replicationV2.snapshotRequested)
+	require.True(t, defaultEngine.replicationV2.snapshotRequested)
 
 	// The next rewrite that works serves it, whoever started it.
 	restoreHooksNow()

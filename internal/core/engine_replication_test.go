@@ -69,11 +69,12 @@ func captureStreamV2(t *testing.T, name string) replicationStream {
 	return s
 }
 
-// replicaEngine is an engine of its own that follows a primary, with a log in
-// dir, as a server started with -replicaof is.
-func replicaEngine(t *testing.T, dir, name string) *Engine {
+// replicaEngine is an engine of its own that follows a primary over protocol,
+// with a log in dir, as a server started with -replicaof is.
+func replicaEngine(t *testing.T, dir, name string, protocol int) *Engine {
 	t.Helper()
 	e := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
+	e.ownRole = replicationRole{ReplicaOf: "primary.test:6379", Protocol: protocol}
 	require.NoError(t, e.OpenAOF(filepath.Join(dir, name+".aof")))
 	require.NoError(t, e.followPrimary())
 	t.Cleanup(func() { e.CloseAOF() })
@@ -91,7 +92,7 @@ func requireCheckpoint(t *testing.T, e *Engine, epoch string, offset uint64) {
 	log, err := os.ReadFile(e.aof.path)
 	require.NoError(t, err)
 	sum := sha256.Sum256(log)
-	assert.Equal(t, replicaCheckpoint{Version: 2, Primary: config.ReplicaOf, Epoch: epoch, Offset: offset,
+	assert.Equal(t, replicaCheckpoint{Version: 2, Primary: e.replicaOf(), Epoch: epoch, Offset: offset,
 		Bytes: int64(len(log)), SHA256: hex.EncodeToString(sum[:])}, cp, "%s's checkpoint", e.aof.path)
 }
 
@@ -105,9 +106,9 @@ func requireCheckpoint(t *testing.T, e *Engine, epoch string, offset uint64) {
 // touches the default engine's replica. Under -race, replica state the
 // engines shared would fail here.
 //
-// The primaries' streams are written first, by the default engine, because
-// until plan step 2.4 moves the primary's side too a stream is the default
-// engine's.
+// The primaries' streams are written first, by the default engine, so that
+// the replicas can be applied in any order; TestEnginesShareNoReplication
+// runs primaries of their own.
 func TestEnginesShareNoReplica(t *testing.T) {
 	never := goldenWindow{start: -1, end: -1 - int64(24*time.Hour/time.Millisecond)}
 	setupReplicationV2(t)
@@ -115,13 +116,13 @@ func TestEnginesShareNoReplica(t *testing.T) {
 	sa, sb := streams[0], streams[1]
 	require.NotEqual(t, sa.epoch, sb.epoch)
 
-	// Every engine in the process is a replica from here, the default one too.
+	// The default engine is a replica from here too.
 	require.NoError(t, CloseAOF())
 	ResetStores()
 	config.ReplicationFeed, config.ReplicaOf = false, "primary.test:6379"
 	require.NoError(t, InitReplication())
 	dir := t.TempDir()
-	a, b := replicaEngine(t, dir, "a"), replicaEngine(t, dir, "b")
+	a, b := replicaEngine(t, dir, "a", 2), replicaEngine(t, dir, "b", 2)
 	ready := func(e *Engine) bool {
 		return strings.Contains(on(t, e, "INFO", "replication").(string), "replica_ready:1\r\n")
 	}
@@ -176,7 +177,7 @@ func TestEnginesShareNoReplica(t *testing.T) {
 
 	// c follows a's primary on a disk that will not sync its checkpoint: c
 	// stops, and neither a's checkpoint I/O nor b's is touched.
-	c := replicaEngine(t, dir, "c")
+	c := replicaEngine(t, dir, "c", 2)
 	diskErr := errors.New("c's disk will not sync")
 	c.checkpointSync = func(*os.File) error { return diskErr }
 	var others atomic.Int64
@@ -197,7 +198,7 @@ func TestEnginesShareNoReplica(t *testing.T) {
 
 	// Side by side, on goroutines of their own: two fresh replicas each apply
 	// their primary's stream, reading as they go.
-	a2, b2 := replicaEngine(t, dir, "a2"), replicaEngine(t, dir, "b2")
+	a2, b2 := replicaEngine(t, dir, "a2", 2), replicaEngine(t, dir, "b2", 2)
 	var wg sync.WaitGroup
 	for _, side := range []struct {
 		e *Engine
@@ -238,6 +239,7 @@ func TestEnginesShareNoReplica(t *testing.T) {
 		path := side.e.aof.path
 		require.NoError(t, side.e.CloseAOF())
 		restarted := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
+		restarted.ownRole = side.e.ownRole
 		_, err := restarted.LoadAOF(path)
 		require.NoError(t, err)
 		require.NoError(t, restarted.OpenAOF(path))
@@ -290,7 +292,7 @@ func TestEnginesShareNoReplica(t *testing.T) {
 	ResetStores()
 	config.ReplicationFeed, config.ReplicaOf = false, "primary.test:6379"
 	require.NoError(t, InitReplication())
-	a1, b1 := replicaEngine(t, dir, "a1"), replicaEngine(t, dir, "b1")
+	a1, b1 := replicaEngine(t, dir, "a1", 1), replicaEngine(t, dir, "b1", 1)
 	for i, e := range []*Engine{a1, b1} {
 		wg.Add(1)
 		go func() {
@@ -309,6 +311,220 @@ func TestEnginesShareNoReplica(t *testing.T) {
 		assert.Equal(t, v1[i].end, e.replicaOffset)
 		assert.True(t, e.replicaReady)
 	}
+	assert.False(t, defaultEngine.replicaReady)
+	assert.Zero(t, defaultEngine.space.TotalKeys())
+}
+
+// pullFrom runs a replica's pull on primary p, as the transport sends it, and
+// decodes the frame it answers.
+func pullFrom(t *testing.T, p *Engine, name string, args ...string) (ReplicationFrame, bool) {
+	t.Helper()
+	var w replyWriter
+	if !assert.NoError(t, p.evalAndResponse(&Command{Cmd: name, Args: args}, &w)) {
+		return ReplicationFrame{}, false
+	}
+	reply, _ := Decode(w.b)
+	encoded, ok := reply.(string)
+	if !assert.True(t, ok, "%s: %q", name, w.b) {
+		return ReplicationFrame{}, false
+	}
+	var f ReplicationFrame
+	return f, assert.NoError(t, json.Unmarshal([]byte(encoded), &f))
+}
+
+// follow is a replica's transport, in-process: r pulls from p and applies
+// what it is sent until it has caught up, driving a snapshot's rewrite on p
+// when one is asked for, as p's loop would. cursor is where r is in p's
+// stream, as the transport keeps it between pulls.
+type follow struct {
+	p, r                *Engine
+	protocol            int
+	epoch, snapshotID   string
+	offset, snapshotPos uint64
+}
+
+func (f *follow) catchUp(t *testing.T) bool {
+	t.Helper()
+	for i := 0; i < 10000; i++ {
+		if f.protocol == 1 {
+			frame, ok := pullFrom(t, f.p, "KEEL.REPL.PULL", f.epoch, strconv.FormatUint(f.offset, 10))
+			if !ok || !assert.NoError(t, f.r.ApplyReplication(frame)) {
+				return false
+			}
+			level := !frame.Full && frame.To == frame.From
+			f.epoch, f.offset = frame.Epoch, frame.To
+			if level {
+				return true
+			}
+			continue
+		}
+		frame, ok := pullFrom(t, f.p, "KEEL.REPL.PULL2", f.epoch, strconv.FormatUint(f.offset, 10),
+			f.snapshotID, strconv.FormatUint(f.snapshotPos, 10))
+		if !ok || !assert.NoError(t, f.r.ApplyReplication(frame)) {
+			return false
+		}
+		switch {
+		case frame.Full && frame.Pending:
+			f.epoch, f.offset, f.snapshotID, f.snapshotPos = "", 0, "", 0
+			for j := 0; f.p.RewriteActive(); j++ {
+				if !assert.NoError(t, f.p.FlushAOF()) || !assert.Less(t, j, 100000, "the snapshot did not end") {
+					return false
+				}
+				time.Sleep(20 * time.Microsecond)
+			}
+		case frame.Full && frame.SnapshotDone:
+			f.epoch, f.offset, f.snapshotID, f.snapshotPos = frame.Epoch, frame.To, "", 0
+		case frame.Full:
+			f.epoch, f.snapshotID, f.snapshotPos = frame.Epoch, frame.SnapshotID, frame.SnapshotOffset+uint64(len(frame.Body))
+		default:
+			f.epoch, f.offset = frame.Epoch, frame.To
+			if frame.CaughtUp {
+				return true
+			}
+		}
+	}
+	t.Errorf("%s did not catch up", f.r.aof.path)
+	return false
+}
+
+// TestEnginesShareNoReplication: each engine feeds its replicas a stream of
+// its own writes, in an epoch of its own, snapshots its own log for them, and
+// hears its own replicas' acknowledgements, as its own role says. Three
+// primaries in one process, two over protocol 2 and one over protocol 1, each
+// with a replica of its own that pulls from it in-process and applies what it
+// is sent, run side by side on goroutines of their own: each replica ends
+// with its own primary's keyspace, and no primary's stream, snapshot, epoch
+// or acknowledgement is another's. Then one primary's epoch starts again and
+// one primary's log is closed, and the others carry on. The default engine,
+// neither a primary nor a replica, feeds nothing and applies nothing. Under
+// -race, stream state the engines shared would fail here.
+func TestEnginesShareNoReplication(t *testing.T) {
+	never := goldenWindow{start: -1, end: -1 - int64(24*time.Hour/time.Millisecond)}
+	ResetStores()
+	defaultEpoch := defaultEngine.replication.epoch
+	dir := t.TempDir()
+	primary := func(name string, protocol int) *Engine {
+		e := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
+		e.ownRole = replicationRole{Feed: true, Protocol: protocol}
+		require.NoError(t, e.OpenAOF(filepath.Join(dir, name+".aof")))
+		require.NoError(t, e.InitReplication())
+		t.Cleanup(func() { e.CloseAOF() })
+		return e
+	}
+	pairs := []*follow{
+		{p: primary("pa", 2), r: replicaEngine(t, dir, "ra", 2), protocol: 2},
+		{p: primary("pb", 2), r: replicaEngine(t, dir, "rb", 2), protocol: 2},
+		{p: primary("pc", 1), r: replicaEngine(t, dir, "rc", 1), protocol: 1},
+	}
+	assert.Equal(t, "-READONLY You can't write against a read only replica.\r\n",
+		string(rawOn(t, pairs[0].r, "SET", "k", "v")), "a replica's role is its own")
+	assert.Equal(t, "OK", on(t, pairs[0].p, "SET", "k", "v"), "and so is a primary's")
+	on(t, pairs[0].p, "DEL", "k")
+
+	// Side by side: each primary writes the same names, as types of its own -
+	// k is a filter with an expiry on one, a string on another, a hash on the
+	// third - with transactions and a key reaped lazily, and its replica
+	// catches up after each round.
+	var wg sync.WaitGroup
+	for n, pair := range pairs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			p := pair.p
+			do := func(parts ...string) bool {
+				var w replyWriter
+				err := p.evalAndResponse(&Command{Cmd: parts[0], Args: parts[1:]}, &w)
+				return assert.NoError(t, err) && assert.NotEqual(t, byte('-'), w.b[0], "%q: %q", parts, w.b)
+			}
+			for round := range 4 {
+				v := strconv.Itoa(n) + ":" + strconv.Itoa(round)
+				ok := do("SET", "s:"+strconv.Itoa(round), v) && do("INCR", "count") && do("RPUSH", "l", v) &&
+					do("SADD", "set", v) && do("PFADD", "hll", v) && do("SET", "brief", v, "PX", "1")
+				switch n {
+				case 0:
+					ok = ok && do("BF.ADD", "k", v) && do("PEXPIRE", "k", "3600000")
+				case 1:
+					ok = ok && do("SET", "k", v)
+				default:
+					ok = ok && do("HSET", "k", "f", v)
+				}
+				var tx *Transaction
+				for _, cmd := range [][]string{{"MULTI"}, {"SET", "tx", v}, {"LPOP", "l"}, {"CMS.INITBYDIM", "cms:" + v, "10", "2"}, {"EXEC"}} {
+					var w replyWriter
+					var err error
+					if tx, err = p.transact(tx, &Command{Cmd: cmd[0], Args: cmd[1:]}, &w, nil); !assert.NoError(t, err) {
+						return
+					}
+				}
+				time.Sleep(2 * time.Millisecond)
+				// Reaped: the read answers nil and logs the key's DEL, which
+				// the stream carries to the replica.
+				var w replyWriter
+				ok = ok && assert.NoError(t, p.evalAndResponse(&Command{Cmd: "GET", Args: []string{"brief"}}, &w)) &&
+					assert.Equal(t, "$-1\r\n", string(w.b), "brief was reaped")
+				if !ok || !assert.NoError(t, p.FlushAOF()) || !pair.catchUp(t) {
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	if t.Failed() {
+		return
+	}
+	epochs := map[string]bool{defaultEpoch: true}
+	for _, pair := range pairs {
+		p, r := pair.p, pair.r
+		assert.Equal(t, string(engineState(t, p, never)), string(engineState(t, r, never)), "%s holds its primary's keyspace", r.aof.path)
+		assert.False(t, epochs[p.replication.epoch], "%s's epoch is its own", p.aof.path)
+		epochs[p.replication.epoch] = true
+		assert.Equal(t, p.replication.epoch, r.replicaEpoch)
+		if pair.protocol == 2 {
+			assert.Equal(t, p.replicationV2.end, r.replicaOffset)
+			// A pull acknowledges the cursor it asks from, so the replica's
+			// next one, level with the stream, acknowledges its end.
+			require.True(t, pair.catchUp(t))
+			assert.Equal(t, p.replicationV2.end, p.replicaAck.offset, "%s heard its own replica", p.aof.path)
+			assert.NotNil(t, p.replicationV2.snapshot, "%s served a snapshot of its own log", p.aof.path)
+		} else {
+			assert.Equal(t, p.replication.offset, r.replicaOffset)
+			assert.Empty(t, p.replication.dirty)
+		}
+	}
+	assert.NotEqual(t, pairs[0].p.replicationV2.end, pairs[1].p.replicationV2.end, "each stream holds its own writes")
+
+	// a's epoch starts again: a's replica takes a new snapshot of a, and b's
+	// stream, epoch and replica carry on.
+	pa, pb := pairs[0].p, pairs[1].p
+	bEpoch, bEnd := pb.replication.epoch, pb.replicationV2.end
+	aEpoch := pa.replication.epoch
+	pa.replication.invalidated = true
+	require.Equal(t, "OK", on(t, pa, "SET", "after", "a"))
+	assert.NotEqual(t, aEpoch, pa.replication.epoch)
+	assert.Equal(t, bEpoch, pb.replication.epoch)
+	assert.Equal(t, bEnd, pb.replicationV2.end)
+	require.True(t, pairs[0].catchUp(t))
+	assert.Equal(t, string(engineState(t, pa, never)), string(engineState(t, pairs[0].r, never)))
+	require.Equal(t, "OK", on(t, pb, "SET", "after", "b"))
+	require.NoError(t, pb.FlushAOF())
+	require.True(t, pairs[1].catchUp(t))
+	assert.Equal(t, string(engineState(t, pb, never)), string(engineState(t, pairs[1].r, never)))
+
+	// Closing a's log closes a's snapshot, and b's stays open for b's
+	// replicas.
+	require.NoError(t, pa.CloseAOF())
+	assert.Nil(t, pa.replicationV2.snapshot)
+	require.NotNil(t, pb.replicationV2.snapshot)
+	_, err := pb.replicationV2.snapshot.ReadAt(make([]byte, 1), 0)
+	assert.NoError(t, err, "b's snapshot is still open")
+
+	// The default engine fed none of it and applied none of it.
+	assert.Equal(t, defaultEpoch, defaultEngine.replication.epoch)
+	assert.Zero(t, defaultEngine.replicationV2.end)
+	assert.Zero(t, defaultEngine.replication.offset)
+	assert.Empty(t, defaultEngine.replication.dirty)
+	assert.Nil(t, defaultEngine.replicationV2.snapshot)
+	assert.Zero(t, defaultEngine.replicaAck)
 	assert.False(t, defaultEngine.replicaReady)
 	assert.Zero(t, defaultEngine.space.TotalKeys())
 }

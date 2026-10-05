@@ -244,7 +244,7 @@ func CloseAOF() error { return defaultEngine.CloseAOF() }
 
 // CloseAOF is the package's CloseAOF on e.
 func (e *Engine) CloseAOF() error {
-	closeReplicationSnapshot()
+	e.closeReplicationSnapshot()
 	e.CancelRewrite()
 	_, _ = e.pollRewriteIO(true)
 	if e.aof.file == nil {
@@ -491,7 +491,7 @@ func (e *Engine) LoadAOF(path string) (int, error) {
 		priorRemovalHook := e.space.OnRemove
 		e.space.OnRemove = func(_, key string) { e.aof.recovered = append(e.aof.recovered, key) }
 		defer func() { e.space.OnRemove = priorRemovalHook }()
-		if config.ReplicaOf != "" && config.ReplicationProtocol == 2 {
+		if e.replicaOf() != "" && e.replicationProtocol() == 2 {
 			e.aof.replaying = false
 			return // preserve the exact primary-decided prefix for checkpoints
 		}

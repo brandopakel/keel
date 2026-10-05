@@ -19,7 +19,7 @@ func ExpireCycle() int { return defaultEngine.ExpireCycle() }
 // ExpireCycle is the package's ExpireCycle on e: it samples e's stores, from
 // where its last cycle left off, and counts what it takes against e.
 func (e *Engine) ExpireCycle() int {
-	if config.ReplicaOf != "" || config.ActiveExpireSamples <= 0 || e.KeysWithExpiry() == 0 {
+	if e.replicaOf() != "" || config.ActiveExpireSamples <= 0 || e.KeysWithExpiry() == 0 {
 		return 0
 	}
 

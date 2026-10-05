@@ -8,8 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-
-	"github.com/brandopakel/keel/internal/config"
 )
 
 // A checkpoint is valid only for the exact synced AOF image it names. An extra
@@ -32,7 +30,7 @@ func syncFile(f *os.File) error { return f.Sync() }
 func (e *Engine) openAOFDigest(path string) error {
 	e.aof.digest = nil
 	e.aof.digestBytes = 0
-	if config.ReplicaOf == "" || config.ReplicationProtocol != 2 {
+	if e.replicaOf() == "" || e.replicationProtocol() != 2 {
 		return nil
 	}
 	f, err := os.Open(path)
@@ -81,7 +79,7 @@ func (e *Engine) loadReplicaCheckpoint() error {
 		return err
 	}
 	var cp replicaCheckpoint
-	if len(body) > 4096 || json.Unmarshal(body, &cp) != nil || cp.Version != 2 || cp.Primary != config.ReplicaOf || len(cp.Epoch) != 32 || cp.Bytes != e.aof.digestBytes || cp.SHA256 != e.currentAOFDigest() {
+	if len(body) > 4096 || json.Unmarshal(body, &cp) != nil || cp.Version != 2 || cp.Primary != e.replicaOf() || len(cp.Epoch) != 32 || cp.Bytes != e.aof.digestBytes || cp.SHA256 != e.currentAOFDigest() {
 		return nil
 	}
 	if _, err := hex.DecodeString(cp.Epoch); err != nil {
@@ -103,7 +101,7 @@ func (e *Engine) saveReplicaCheckpoint() error {
 	if err := e.flushAOF(true); err != nil {
 		return err
 	}
-	cp := replicaCheckpoint{Version: 2, Primary: config.ReplicaOf, Epoch: e.replicaEpoch, Offset: e.replicaOffset, Bytes: e.aof.digestBytes, SHA256: e.currentAOFDigest()}
+	cp := replicaCheckpoint{Version: 2, Primary: e.replicaOf(), Epoch: e.replicaEpoch, Offset: e.replicaOffset, Bytes: e.aof.digestBytes, SHA256: e.currentAOFDigest()}
 	if cp == e.replicaV2.checkpoint {
 		return nil
 	}
@@ -142,7 +140,7 @@ func ReplicaResumeCursor() (string, uint64) { return defaultEngine.ReplicaResume
 
 // ReplicaResumeCursor is the package's ReplicaResumeCursor on e.
 func (e *Engine) ReplicaResumeCursor() (string, uint64) {
-	if config.ReplicationProtocol == 2 && e.replicaV2.trusted {
+	if e.replicationProtocol() == 2 && e.replicaV2.trusted {
 		return e.replicaEpoch, e.replicaOffset
 	}
 	return "", 0

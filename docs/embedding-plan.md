@@ -623,12 +623,52 @@ choice open, step 2.4 settles it this way:
   the applying engine's `evalAndResponse`, and a received transaction
   through its `runTransaction`, so they are logged in that engine's log and
   the block is framed there; step 2.2 left this on the default engine.
-- **The role stays config until the second PR.** Whether a node is a
-  replica, feeds a stream, and with which protocol are flags, read from
-  `config` as before. So in the first PR every engine in a process is a
-  replica or none is, and its isolation test makes them all replicas. The
-  second PR, whose isolation test needs a primary and a replica in one
-  process, settles where the role lives.
+- **The role is the engine's, from the second PR.** Whether an engine is a
+  replica, feeds a stream, and in which protocol were flags read from
+  `config` wherever they were needed, so every engine in a process was a
+  replica or none was, and the first PR's isolation test made them all
+  replicas. The second PR's needs a primary and a replica in one process, so
+  each engine reads its role, a `replicationRole` (`ReplicaOf`, `Feed`,
+  `Protocol`), through three pointers, as a space reads its limits: the
+  default engine's point at the config variables, read live, so the flags and
+  the tests that assign them work unchanged until step 2.5 replaces both
+  with options; any other engine's point at its own `ownRole`, which starts
+  as neither a replica nor a feed, in protocol 1, as the flags do. Everything
+  that asked config is a replica, feeds, or speaks protocol 2 now asks the
+  engine: the replica's refusal, the stream's publication, the pulls, the
+  apply path, the checkpoint (whose `primary` field is the engine's
+  `ReplicaOf`), the log's replay and digest, the expiry cycle and INFO.
+- **The primary's stream** moves in the second PR as three fields of named
+  types: `replication` (`replicationState`: protocol 1's batches and what
+  both protocols share, the epoch and the keys the running command changed),
+  `replicationV2` (`replicationV2State`: the history and the snapshot) and
+  `replicaAck` (`replicaAckState`). `InitReplication` and
+  `ReplicationAcknowledged` keep their signatures on the default engine and
+  are methods of the same name; the rest become methods. So the step 2.3
+  leftovers go: `sealReplication` seals protocol 1's images from the sealing
+  engine's stores, and refuses on its space's size; a protocol 2 primary's
+  opaque images come from its own stores; `InitReplication` starts the
+  engine it is called on; and `CloseAOF` closes the snapshot of the engine
+  whose log it closes, not the default engine's.
+- **No deferred closure on a write.** With a protocol 2 feed on, every write
+  ended in `recordReplicationV2Commit`, which cleared the command's dirty
+  keys in a deferred closure. That is the pattern step 2.3 found costing an
+  indirect call per command (#112, #113), and moved onto the engine the
+  closure would capture it. The function now publishes and then clears, as
+  the deferred call did, since no panic is recovered on the way out of a
+  command.
+- **The inliner's budget.** `noteReplicationDirty` runs for every key every
+  write changes, and was inlined at each call, at a cost of 74 against the
+  budget of 80. Reading the role and the stream through the engine cost 91,
+  and it stopped being inlined, which with the feed off is a call per key
+  where there was none. It now reads the feed flag directly and the stream
+  through one pointer, and the dirty set is never nil (`engineIn` makes it),
+  which brings it back to 74. `replicationV2Enabled` and `writable` inline as
+  before.
+- **Failover reads the default engine's role until the third PR.** The term
+  is still the server's, so `LoadTerm` and `observeTerm` read `config`, the
+  default engine's role, and `writable`, which a primary's pulls and every
+  write ask, reads the engine's own role and the server's term.
 - **Isolation.** `TestEnginesShareNoReplica` gives two replicas a log each
   and the streams of two primaries in epochs of their own, each with a
   transaction larger than one frame. Applied interleaved, one engine stops
@@ -640,7 +680,23 @@ choice open, step 2.4 settles it this way:
   writes its own checkpoint, and restarted on its own log resumes from it.
   Protocol 1 does the same side by side. The default engine, a replica as
   well, applies none of it. The race job runs it under `-race`.
-- **Census.** The first PR removes the nine entries it moves.
+- **Isolation, the primary.** `TestEnginesShareNoReplication` runs three
+  primaries, two over protocol 2 and one over protocol 1, each with a
+  replica of its own that pulls from it in-process, as the transport does,
+  and applies what it is sent: a snapshot taken by its primary's rewrite,
+  then rounds of writes with transactions, a key reaped lazily, and the same
+  names held as different types on each primary, one a filter with an
+  expiry whose image is published. Side by side on goroutines of their own,
+  each replica ends with its own primary's keyspace, at its primary's
+  offset, in its primary's epoch, which no other engine has; each primary
+  hears its own replica's acknowledgement and served a snapshot of its own
+  log. Then one primary's epoch starts again and its replica takes a new
+  snapshot while another primary's stream, epoch and replica carry on, and
+  closing one primary's log closes its snapshot and leaves the other's open.
+  The default engine feeds none of it and applies none of it. Reverting the
+  opaque images to the default engine's stores fails it.
+- **Census.** The first PR removes the nine entries it moves, and the second
+  the three of the primary's stream.
 - **Measured per PR**, as in steps 2.1 to 2.3, now including the replica-on
   benchmark: the paired command-path job runs at least twice against develop
   and once against `65ebdbc`.

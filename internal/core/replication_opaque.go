@@ -10,10 +10,10 @@ import (
 // records before allocating: deciding to fall back after emitKey constructed a
 // huge image already paid the allocation and serialization cost. Commands and
 // these two passes share the event-loop owner; no key changes between them.
-func opaqueReplicationBody() ([]byte, bool) {
+func (e *Engine) opaqueReplicationBody() ([]byte, bool) {
 	size := 0
-	for key := range replication.dirty {
-		plan, present := defaultEngine.planDump(key, replicationCommandBytes)
+	for key := range e.replication.dirty {
+		plan, present := e.planDump(key, replicationCommandBytes)
 		var ok bool
 		size, ok = replicationRecordSize(size, len("DEL"), len(key))
 		if !ok {
@@ -29,7 +29,7 @@ func opaqueReplicationBody() ([]byte, bool) {
 		if !ok {
 			return nil, false
 		}
-		if replicationKeyExpiry(key, plan.tag) > 0 {
+		if e.replicationKeyExpiry(key, plan.tag) > 0 {
 			// Twenty digits safely cover any persisted uint64 deadline.
 			size, ok = replicationRecordSize(size, len("PEXPIREAT"), len(key), 20)
 			if !ok {
@@ -41,9 +41,9 @@ func opaqueReplicationBody() ([]byte, bool) {
 		return nil, true
 	}
 	body := make([]byte, 0, size)
-	for key := range replication.dirty {
+	for key := range e.replication.dirty {
 		body = appendCommand(body, "DEL", key)
-		plan, present := defaultEngine.planDump(key, replicationCommandBytes)
+		plan, present := e.planDump(key, replicationCommandBytes)
 		if !present {
 			continue
 		}
@@ -55,7 +55,7 @@ func opaqueReplicationBody() ([]byte, bool) {
 		body = append(body, '\r', '\n')
 		body = appendDump(body, plan)
 		body = append(body, '\r', '\n')
-		if expiry := replicationKeyExpiry(key, plan.tag); expiry > 0 {
+		if expiry := e.replicationKeyExpiry(key, plan.tag); expiry > 0 {
 			body = appendCommand(body, "PEXPIREAT", key, strconv.FormatUint(expiry, 10))
 		}
 	}
@@ -77,31 +77,31 @@ func replicationRecordSize(size int, lengths ...int) (int, bool) {
 	return size, true
 }
 
-func replicationKeyExpiry(key string, tag byte) uint64 {
+func (e *Engine) replicationKeyExpiry(key string, tag byte) uint64 {
 	// Bind expiry to the value selected by planDump, even if an internal caller
 	// bypassed command ownership checks and populated the same name twice.
 	var ks data_structure.Keyspace
 	switch tag {
 	case dumpTagString:
-		ks = defaultEngine.dictStore
+		ks = e.dictStore
 	case dumpTagHash:
-		ks = defaultEngine.hashStore
+		ks = e.hashStore
 	case dumpTagList:
-		ks = defaultEngine.listStore
+		ks = e.listStore
 	case dumpTagSet:
-		ks = defaultEngine.setStore
+		ks = e.setStore
 	case dumpTagZSet:
-		ks = defaultEngine.zsetStore
+		ks = e.zsetStore
 	case dumpTagBloom:
-		ks = defaultEngine.sbStore
+		ks = e.sbStore
 	case dumpTagCMS:
-		ks = defaultEngine.cmsStore
+		ks = e.cmsStore
 	case dumpTagMorris:
-		ks = defaultEngine.morrisStore
+		ks = e.morrisStore
 	case dumpTagHLL:
-		ks = defaultEngine.hllStore
+		ks = e.hllStore
 	case dumpTagCuckoo:
-		ks = defaultEngine.cfStore
+		ks = e.cfStore
 	default:
 		return 0
 	}

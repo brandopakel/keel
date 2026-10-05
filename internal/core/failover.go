@@ -159,8 +159,13 @@ func observeTerm(term uint64) error {
 }
 
 // Writable reports whether this node may accept a write.
-func Writable() bool {
-	return config.ReplicaOf == "" && !failover.fenced && failover.held == failover.term
+func Writable() bool { return defaultEngine.writable() }
+
+// writable is Writable for e: a replica never takes a write, and a primary
+// only while it holds the current term. The term is still the server's until
+// plan step 2.4's last part moves it.
+func (e *Engine) writable() bool {
+	return e.replicaOf() == "" && !failover.fenced && failover.held == failover.term
 }
 
 // CurrentTerm and HeldTerm are what INFO reports.

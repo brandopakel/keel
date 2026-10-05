@@ -486,7 +486,7 @@ func (e *Engine) admitReplicationTransaction(n int) bool {
 	}
 	if !block.opened {
 		block.opened, block.bytes = true, len(transactionOpenFrame)
-		appendReplicationV2History(transactionOpenFrame)
+		e.appendReplicationV2History(transactionOpenFrame)
 	}
 	if n > replicationTransactionBytes-block.bytes-len(transactionCloseFrame) {
 		e.invalidateReplicationV2()
@@ -508,5 +508,5 @@ func (e *Engine) closeReplicationTransaction() {
 		e.invalidateReplicationV2()
 		return
 	}
-	appendReplicationV2History(transactionCloseFrame)
+	e.appendReplicationV2History(transactionCloseFrame)
 }

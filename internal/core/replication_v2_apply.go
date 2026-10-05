@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"time"
-
-	"github.com/brandopakel/keel/internal/config"
 )
 
 const maxReplicationSnapshotBytes = 1 << 30
@@ -187,7 +185,7 @@ func (e *Engine) applyReplicationV2(frame ReplicationFrame) (err error) {
 	}
 	e.replicaOffset = frame.To
 	if frame.CaughtUp {
-		if config.ReplicaOf != "" {
+		if e.replicaOf() != "" {
 			if err := e.saveReplicaCheckpoint(); err != nil {
 				return err
 			}
