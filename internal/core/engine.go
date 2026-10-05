@@ -4,7 +4,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
@@ -42,8 +41,9 @@ type Engine struct {
 	space *data_structure.Space
 
 	// options are e's settings, as they were given to it; see options.go.
-	// What is read on a command's path is held where that path reads it: the
-	// keyspace's limits in the space.
+	// What the code reads is resolved from them when they are given, and held
+	// where it is read: the keyspace's limits in the space, the replication
+	// role in role, and expiry's and the log's in settings.
 	options Options
 
 	// The stores, in the order resetStores registers them, under the names
@@ -174,12 +174,9 @@ type Engine struct {
 	termSyncDir func(string) error
 
 	// role is what e is in replication - a replica of a primary, a primary
-	// feeding replicas, or neither, and in which protocol - read through
-	// replicaOf, feedsReplicas and replicationProtocol. The default engine's
-	// is the server's flags, read live from config as its space reads its
-	// limits; any other engine's is ownRole.
-	role    replicationRoleRefs
-	ownRole replicationRole
+	// feeding replicas, or neither, and in which protocol - as its options
+	// say, read through replicaOf, feedsReplicas and replicationProtocol.
+	role replicationRole
 
 	// The rewrite, under the names it had as package variables - see
 	// aof_rewrite.go and aof_rewrite_io.go. It walks e's keyspace and replaces
@@ -225,6 +222,12 @@ type Engine struct {
 	appendWriteStats, appendSyncStats           persistenceIOStats
 	rewriteWriteStats, rewriteSyncStats         persistenceIOStats
 	rewriteFinalSyncStats, rewriteFinalizeStats persistenceIOStats
+
+	// settings are e's options as the code that is not the space's or the
+	// role's reads them: expiry's and the log's, resolved when the options
+	// are given. They are read once a cycle, not once a command, so they
+	// come last.
+	settings settings
 }
 
 // defaultEngine is the engine the server and the tests run on until each
@@ -247,14 +250,11 @@ func engineIn(space *data_structure.Space) *Engine {
 		termSync: syncFile, termRename: os.Rename, termSyncDir: syncDir,
 		// No rewrite has ended yet, which Redis reports as -1.
 		rewriteOutcome: rewriteOutcomeState{lastSeconds: -1},
-		// Neither a replica nor a feed, in the protocol the flag defaults to.
-		ownRole: replicationRole{Protocol: 1},
+		// The default options' settings, and their role: neither a replica
+		// nor a feed, in protocol 1.
+		settings: Options{}.settings(), role: Options{}.role(),
 		// Never nil, so noteReplicationDirty need not test it on every write.
 		replication: replicationState{dirty: map[string]struct{}{}},
-	}
-	e.role = replicationRoleRefs{&e.ownRole.ReplicaOf, &e.ownRole.Feed, &e.ownRole.Protocol}
-	if space == data_structure.DefaultSpace {
-		e.role = replicationRoleRefs{&config.ReplicaOf, &config.ReplicationFeed, &config.ReplicationProtocol}
 	}
 	return e
 }

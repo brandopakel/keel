@@ -11,22 +11,21 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
 func TestOrderedAppendExecutesWhilePausedAndGatesEachPrefix(t *testing.T) {
-	for _, policy := range []string{config.FsyncNever, config.FsyncEverySec, config.FsyncAlways} {
-		t.Run(policy, func(t *testing.T) {
+	for _, policy := range []FsyncPolicy{FsyncNever, FsyncEverySec, FsyncAlways} {
+		t.Run(string(policy), func(t *testing.T) {
 			ResetStores()
-			oldWrite, oldPolicy, oldAsync := defaultEngine.aofWrite, config.AOFFsync, config.AOFAsyncAppend
-			config.AOFFsync, config.AOFAsyncAppend = policy, true
+			oldWrite := defaultEngine.aofWrite
+			withOptions(t, func(o *Options) { o.Fsync, o.AsyncAppend = policy, true })
 			release := make(chan struct{})
 			var once sync.Once
 			defer func() {
 				once.Do(func() { close(release) })
 				CloseAOF()
-				defaultEngine.aofWrite, config.AOFFsync, config.AOFAsyncAppend = oldWrite, oldPolicy, oldAsync
+				defaultEngine.aofWrite = oldWrite
 			}()
 			path := filepath.Join(t.TempDir(), "log")
 			require.NoError(t, OpenAOF(path))
@@ -58,7 +57,7 @@ func TestOrderedAppendExecutesWhilePausedAndGatesEachPrefix(t *testing.T) {
 			once.Do(func() { close(release) })
 			defaultEngine.pollAppend(true)
 			require.Equal(t, first, AppendReadyOffset(), "later replies remain gated")
-			if policy == config.FsyncAlways {
+			if policy == FsyncAlways {
 				require.Equal(t, first, defaultEngine.appendSynced)
 			} else {
 				require.Zero(t, defaultEngine.appendSynced)
@@ -84,12 +83,12 @@ func TestOrderedAppendFailuresNeverAdvanceReplyPrefix(t *testing.T) {
 	for _, fault := range []string{"short", "write", "sync"} {
 		t.Run(fault, func(t *testing.T) {
 			ResetStores()
-			oldWrite, oldSync, oldPolicy := defaultEngine.aofWrite, defaultEngine.aofSync, config.AOFFsync
+			oldWrite, oldSync := defaultEngine.aofWrite, defaultEngine.aofSync
 			defer func() {
 				CloseAOF()
-				defaultEngine.aofWrite, defaultEngine.aofSync, config.AOFFsync = oldWrite, oldSync, oldPolicy
+				defaultEngine.aofWrite, defaultEngine.aofSync = oldWrite, oldSync
 			}()
-			config.AOFFsync = config.FsyncAlways
+			withOptions(t, func(o *Options) { o.Fsync = FsyncAlways })
 			require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "log")))
 			diskErr := errors.New("controlled disk failure")
 			defaultEngine.aofWrite = func(f *os.File, b []byte) (int, error) {

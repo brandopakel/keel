@@ -17,7 +17,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
@@ -104,17 +103,19 @@ type replicationGolden struct {
 
 func startReplicationGolden(t *testing.T, mode goldenMode, protocol int) *replicationGolden {
 	t.Helper()
-	feed, replicaOf, previous := config.ReplicationFeed, config.ReplicaOf, config.ReplicationProtocol
+	found := Configuration()
 	expiry, eviction := data_structure.DefaultSpace.SuspendExpiry, data_structure.DefaultSpace.SuspendEviction
 	restoreTerm := saveGoldenTerm()
 	// Registered before startGoldenRun's, so it runs after the log is closed.
 	t.Cleanup(func() {
-		config.ReplicationFeed, config.ReplicaOf, config.ReplicationProtocol = feed, replicaOf, previous
+		require.NoError(t, Configure(found))
 		require.NoError(t, InitReplication())
 		data_structure.DefaultSpace.SuspendExpiry, data_structure.DefaultSpace.SuspendEviction = expiry, eviction
 		restoreTerm()
 	})
-	config.ReplicationFeed, config.ReplicaOf, config.ReplicationProtocol = true, "", protocol
+	reconfigure(t, defaultEngine, func(o *Options) {
+		o.ReplicationFeed, o.ReplicaOf, o.ReplicationProtocol = true, "", protocol
+	})
 	r, _ := startGoldenRun(t, mode, nil)
 	require.NoError(t, InitReplication())
 	return &replicationGolden{goldenRun: r, names: map[string]string{}}
@@ -431,7 +432,9 @@ func (g *replicationGolden) becomeReplica(protocol int) {
 	g.cycle()
 	require.NoError(g.t, CloseAOF())
 	ResetStores()
-	config.ReplicationFeed, config.ReplicaOf, config.ReplicationProtocol = false, goldenPrimary, protocol
+	reconfigure(g.t, defaultEngine, func(o *Options) {
+		o.ReplicationFeed, o.ReplicaOf, o.ReplicationProtocol = false, goldenPrimary, protocol
+	})
 	g.path = filepath.Join(filepath.Dir(g.path), "replica.aof")
 	require.NoError(g.t, OpenAOF(g.path))
 	require.NoError(g.t, InitReplication())
@@ -808,9 +811,9 @@ func goldenTerms(g *replicationGolden) {
 	g.termFile("fenced", primary)
 	g.info("fenced")
 	g.reply("SET", "c", "3")
-	config.ReplicationProtocol = 1
+	reconfigure(g.t, defaultEngine, func(o *Options) { o.ReplicationProtocol = 1 })
 	g.reply("KEEL.REPL.PULL", "", "0")
-	config.ReplicationProtocol = 2
+	reconfigure(g.t, defaultEngine, func(o *Options) { o.ReplicationProtocol = 2 })
 
 	g.becomeReplica(2)
 	require.NoError(g.t, LoadTerm(g.path))

@@ -1,9 +1,9 @@
 package core
 
 import (
-	"github.com/brandopakel/keel/internal/config"
-	"github.com/brandopakel/keel/internal/data_structure"
 	"time"
+
+	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // ExpireCycle removes keys whose TTL has passed, without waiting for anyone to
@@ -19,18 +19,19 @@ func ExpireCycle() int { return defaultEngine.ExpireCycle() }
 // ExpireCycle is the package's ExpireCycle on e: it samples e's stores, from
 // where its last cycle left off, and counts what it takes against e.
 func (e *Engine) ExpireCycle() int {
-	if e.replicaOf() != "" || config.ActiveExpireSamples <= 0 || e.KeysWithExpiry() == 0 {
+	samples := e.settings.expireSamples
+	if e.replicaOf() != "" || samples <= 0 || e.KeysWithExpiry() == 0 {
 		return 0
 	}
 
 	e.aofBegin("")
 	defer e.aofEnd()
 	total := 0
-	for round := 0; round < config.ActiveExpireRounds; round++ {
+	for round := 0; round < e.settings.expireRounds; round++ {
 		examined, expired := 0, 0
 		e.expireCursor = e.space.EachKeyspaceFrom(e.expireCursor, func(ks data_structure.Keyspace) {
-			if examined < config.ActiveExpireSamples {
-				n, d := ks.ActiveExpire(config.ActiveExpireSamples - examined)
+			if examined < samples {
+				n, d := ks.ActiveExpire(samples - examined)
 				examined += n
 				expired += d
 			}
@@ -43,7 +44,7 @@ func (e *Engine) ExpireCycle() int {
 		// threshold is what stops this being a full scan on a keyspace where
 		// nothing has fallen due, and what makes it one on a keyspace where
 		// everything has.
-		if expired*100 < examined*config.ActiveExpirePercent {
+		if expired*100 < examined*e.settings.expirePercent {
 			break
 		}
 	}

@@ -14,17 +14,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
 func TestAOFTranscriptLargeValueKeepsBoundedBuffer(t *testing.T) {
 	ResetStores()
-	oldPolicy := config.AOFFsync
-	config.AOFFsync = config.FsyncNever
+	withOptions(t, func(o *Options) { o.Fsync = FsyncNever })
 	path := filepath.Join(t.TempDir(), "store.aof")
 	require.NoError(t, OpenAOF(path))
-	t.Cleanup(func() { CloseAOF(); config.AOFFsync = oldPolicy; ResetStores() })
+	t.Cleanup(func() { CloseAOF(); ResetStores() })
 	value := strings.Repeat("v", 8<<20)
 	runtime.GC()
 	var before, after runtime.MemStats
@@ -98,9 +96,9 @@ func TestAOFTranscriptAdmitsFourLargeValuesBehindPendingAppend(t *testing.T) {
 
 func TestAOFTranscriptDrainsDoNotSyncOrAdvanceRewrite(t *testing.T) {
 	ResetStores()
-	oldSync, oldPolicy := defaultEngine.aofSync, config.AOFFsync
-	config.AOFFsync = config.FsyncAlways
-	t.Cleanup(func() { defaultEngine.aofSync = oldSync; CloseAOF(); config.AOFFsync = oldPolicy; ResetStores() })
+	oldSync := defaultEngine.aofSync
+	withOptions(t, func(o *Options) { o.Fsync = FsyncAlways })
+	t.Cleanup(func() { defaultEngine.aofSync = oldSync; CloseAOF(); ResetStores() })
 	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "store.aof")))
 	run(t, "SET", "before", "v")
 	require.NoError(t, FlushAOF())
@@ -224,9 +222,7 @@ func TestAOFTranscriptReplicationPreservesChunkedPrefixes(t *testing.T) {
 
 func TestAOFTranscriptExpiryAndRecreationKeepCanonicalOrder(t *testing.T) {
 	setupReplicationV2(t)
-	oldSamples, oldRounds := config.ActiveExpireSamples, config.ActiveExpireRounds
-	config.ActiveExpireSamples, config.ActiveExpireRounds = 64, 4
-	t.Cleanup(func() { config.ActiveExpireSamples, config.ActiveExpireRounds = oldSamples, oldRounds })
+	withOptions(t, func(o *Options) { o.ActiveExpireSamples, o.ActiveExpireRounds = 64, 4 })
 	keys := make([]string, 40)
 	for i := range keys {
 		keys[i] = fmt.Sprint(i) + strings.Repeat("e", 128<<10)
@@ -332,12 +328,9 @@ func TestAOFTranscriptJoinsOlderAppendBeforeDirectDrain(t *testing.T) {
 }
 
 func TestAOFTranscriptMassEvictionKeepsBoundedBuffer(t *testing.T) {
-	oldPolicy := config.AOFFsync
-	config.AOFFsync = config.FsyncNever
-	withOptions(t, func(o *Options) { o.MaxKeys, o.MaxMemory = 1000, 0 })
+	withOptions(t, func(o *Options) { o.Fsync, o.MaxKeys, o.MaxMemory = FsyncNever, 1000, 0 })
 	t.Cleanup(func() {
 		CloseAOF()
-		config.AOFFsync = oldPolicy
 		ResetStores()
 	})
 	ResetStores()

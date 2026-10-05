@@ -1,7 +1,6 @@
 package core
 
 import (
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/data_structure"
 	"github.com/stretchr/testify/require"
 	"strconv"
@@ -11,9 +10,7 @@ import (
 func TestMemoryMaintenancePreservesReplicaKeysAndExpiry(t *testing.T) {
 	ResetStores()
 	t.Cleanup(ResetStores)
-	old := config.ReplicaOf
-	t.Cleanup(func() { config.ReplicaOf = old })
-	config.ReplicaOf = "127.0.0.1:1"
+	withOptions(t, func(o *Options) { o.ReplicaOf = "127.0.0.1:1" })
 	for i := 0; i < 4096; i++ {
 		key := strconv.Itoa(i)
 		defaultEngine.dictStore.Put(key, defaultEngine.dictStore.NewObj("v"))

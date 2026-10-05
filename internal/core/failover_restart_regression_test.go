@@ -5,7 +5,6 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,7 +42,7 @@ func TestFailedTermObservationStaysFencedAndRetriesPersistence(t *testing.T) {
 
 func TestReplicaIsNeverReportedWritable(t *testing.T) {
 	setupFailover(t)
-	config.ReplicaOf = "primary.invalid:6379"
+	withOptions(t, func(o *Options) { o.ReplicaOf = "primary.invalid:6379" })
 	require.False(t, Writable())
 }
 
@@ -63,9 +62,7 @@ func TestPromotionWithoutTermStorageDoesNotFenceVolatileCache(t *testing.T) {
 
 func TestNonzeroTermsCannotUseProtocol1(t *testing.T) {
 	setupFailover(t)
-	oldProtocol, oldFeed := config.ReplicationProtocol, config.ReplicationFeed
-	t.Cleanup(func() { config.ReplicationProtocol, config.ReplicationFeed = oldProtocol, oldFeed })
-	config.ReplicationProtocol, config.ReplicationFeed = 1, true
+	withOptions(t, func(o *Options) { o.ReplicationProtocol, o.ReplicationFeed = 1, true })
 	require.NoError(t, InitReplication())
 	require.Equal(t, "OK", run(t, "KEEL.PROMOTE", "1"))
 	require.Contains(t, run(t, "KEEL.REPL.PULL", "", "0"), "require replication protocol 2")

@@ -46,8 +46,13 @@ var (
 	appendOnly         bool
 	appendFilename     string
 	appendFsync        string
+	asyncAppend        bool
 	aofRewritePct      int
 	aofRewriteMin      string
+	aofRewriteMinBytes int64
+	replicaOf          string
+	replicationFeed    bool
+	replicationProto   int
 	expireSamples      int
 	cronIntervalMs     int
 	showVersion        bool
@@ -65,9 +70,9 @@ func parseFlags() {
 	flag.DurationVar(&shutdownTimeout, "shutdown-timeout", 5*time.Second,
 		"grace period after SIGTERM/SIGINT for server cleanup and persistence sync; a second signal exits early")
 	flag.StringVar(&profileDir, "profile-dir", "", "diagnostic only: create a fresh private directory for CPU/heap/allocation profiles on shutdown")
-	flag.BoolVar(&config.ReplicationFeed, "replication-feed", false, "experimental: enable bounded canonical replication feed")
-	flag.IntVar(&config.ReplicationProtocol, "replication-protocol", 1, "experimental replication protocol: 1 (alpha images) or 2 (streaming snapshots, operation deltas and recovery checkpoints)")
-	flag.StringVar(&config.ReplicaOf, "replicaof", "", "experimental: read-only replica of host:port")
+	flag.BoolVar(&replicationFeed, "replication-feed", false, "experimental: enable bounded canonical replication feed")
+	flag.IntVar(&replicationProto, "replication-protocol", 1, "experimental replication protocol: 1 (alpha images) or 2 (streaming snapshots, operation deltas and recovery checkpoints)")
+	flag.StringVar(&replicaOf, "replicaof", "", "experimental: read-only replica of host:port")
 	flag.StringVar(&replicaPasswordEnv, "primary-password-env", "", "environment variable holding the primary AUTH password")
 	flag.BoolVar(&config.ReplicaTLS, "primary-tls", false, "verify TLS when connecting to the primary proxy")
 	flag.BoolVar(&showVersion, "version", false, "print the version and exit")
@@ -89,20 +94,20 @@ func parseFlags() {
 		"accesses before an idle LFU counter drops by one; 0 disables forgetting")
 	flag.Uint64Var(&lcsMaxCells, "lcs-max-cells", 134217728,
 		"largest len(key1)*len(key2) LCS will attempt; 0 is unbounded")
-	flag.BoolVar(&config.AOFAsyncAppend, "aof-async-append", false, "experimental: append on a worker with one-batch command backpressure")
+	flag.BoolVar(&asyncAppend, "aof-async-append", false, "experimental: append on a worker with one-batch command backpressure")
 	flag.BoolVar(&config.AOFConcurrentAppend, "aof-concurrent-append", false, "experimental: overlap bounded string commands with worker appends; requires -aof-async-append")
-	flag.BoolVar(&appendOnly, "appendonly", config.AOFEnabled,
+	flag.BoolVar(&appendOnly, "appendonly", false,
 		"log every write to an append-only file and replay it at startup")
-	flag.StringVar(&appendFilename, "appendfilename", config.AOFFileName,
+	flag.StringVar(&appendFilename, "appendfilename", "./keel-master.aof",
 		"where that log lives")
-	flag.StringVar(&appendFsync, "appendfsync", config.AOFFsync,
+	flag.StringVar(&appendFsync, "appendfsync", string(core.FsyncEverySec),
 		"how often the log reaches disk: always | everysec | no")
-	flag.IntVar(&aofRewritePct, "auto-aof-rewrite-percentage", config.AOFAutoRewritePercentage,
+	flag.IntVar(&aofRewritePct, "auto-aof-rewrite-percentage", 100,
 		"rewrite the log once it has grown this much past its size after the last "+
 			"rewrite; 0 disables automatic rewriting")
 	flag.StringVar(&aofRewriteMin, "auto-aof-rewrite-min-size", "64mb",
 		"never rewrite automatically below this size")
-	flag.IntVar(&expireSamples, "active-expire-samples", config.ActiveExpireSamples,
+	flag.IntVar(&expireSamples, "active-expire-samples", 20,
 		"keys with a TTL sampled per expiry cycle; 0 leaves expiry lazy")
 	flag.IntVar(&cronIntervalMs, "cron-interval-ms", config.CronIntervalMs,
 		"how often the loop is woken for work that is due by the clock")
@@ -132,20 +137,17 @@ func parseFlags() {
 	}
 	config.IOThreads = ioThreads
 
-	switch appendFsync {
-	case config.FsyncAlways, config.FsyncEverySec, config.FsyncNever:
+	switch core.FsyncPolicy(appendFsync) {
+	case core.FsyncAlways, core.FsyncEverySec, core.FsyncNever:
 	default:
 		log.Fatalf("unknown -appendfsync %q (want always, everysec or no)", appendFsync)
 	}
-	if config.AOFConcurrentAppend && !config.AOFAsyncAppend {
+	if config.AOFConcurrentAppend && !asyncAppend {
 		log.Fatal("-aof-concurrent-append requires -aof-async-append")
 	}
-	if config.AOFAsyncAppend && !appendOnly {
+	if asyncAppend && !appendOnly {
 		log.Fatal("-aof-async-append requires -appendonly")
 	}
-	config.AOFEnabled = appendOnly
-	config.AOFFileName = appendFilename
-	config.AOFFsync = appendFsync
 
 	rewriteMin, err := parseSize(aofRewriteMin)
 	if err != nil {
@@ -154,8 +156,7 @@ func parseFlags() {
 	if aofRewritePct < 0 {
 		log.Fatalf("-auto-aof-rewrite-percentage must not be negative, got %d", aofRewritePct)
 	}
-	config.AOFAutoRewritePercentage = aofRewritePct
-	config.AOFAutoRewriteMinSize = int64(rewriteMin)
+	aofRewriteMinBytes = int64(rewriteMin)
 
 	if expireSamples < 0 {
 		log.Fatalf("-active-expire-samples must not be negative, got %d", expireSamples)
@@ -163,7 +164,6 @@ func parseFlags() {
 	if cronIntervalMs < 1 {
 		log.Fatalf("-cron-interval-ms must be at least 1, got %d", cronIntervalMs)
 	}
-	config.ActiveExpireSamples = expireSamples
 	config.CronIntervalMs = cronIntervalMs
 	switch evictPolicy {
 	case "lru":
@@ -197,12 +197,25 @@ func engineOptions() core.Options {
 		LFULogFactor:    offIfZero(lfuLogFactor),
 		LFUDecayPeriod:  offIfZero(lfuDecayPeriod),
 		LCSMaxCells:     lcsMaxCellsOption(lcsMaxCells),
+
+		ActiveExpireSamples: offIfZero(expireSamples),
+
+		AppendOnly:            appendOnly,
+		AppendFilename:        appendFilename,
+		Fsync:                 core.FsyncPolicy(appendFsync),
+		AsyncAppend:           asyncAppend,
+		AutoRewritePercentage: offIfZero(aofRewritePct),
+		AutoRewriteMinSize:    offIfZero(aofRewriteMinBytes),
+
+		ReplicaOf:           replicaOf,
+		ReplicationFeed:     replicationFeed,
+		ReplicationProtocol: replicationProto,
 	}
 }
 
 // offIfZero maps a flag whose zero turns its setting off onto the option
 // that does.
-func offIfZero(n int) int {
+func offIfZero[T int | int64](n T) T {
 	if n == 0 {
 		return core.Off
 	}
@@ -264,20 +277,20 @@ func main() {
 }
 
 func runServer() error {
-	if config.ReplicationProtocol != 1 && config.ReplicationProtocol != 2 {
+	if replicationProto != 1 && replicationProto != 2 {
 		return fmt.Errorf("-replication-protocol must be 1 or 2")
 	}
-	if config.ReplicationFeed || config.ReplicaOf != "" {
-		if !config.AOFEnabled || config.RequirePass == "" || mode != "kqueue" {
+	if replicationFeed || replicaOf != "" {
+		if !appendOnly || config.RequirePass == "" || mode != "kqueue" {
 			return fmt.Errorf("replication requires authenticated AOF in kqueue mode")
 		}
-		if config.ReplicaOf != "" {
-			host, port, err := net.SplitHostPort(config.ReplicaOf)
+		if replicaOf != "" {
+			host, port, err := net.SplitHostPort(replicaOf)
 			n, parseErr := strconv.Atoi(port)
 			if err != nil || parseErr != nil || host == "" || n < 1 || n > 65535 {
 				return fmt.Errorf("replicaof requires host:port with a valid port")
 			}
-			if config.ReplicationFeed || maxMemoryBytes != 0 {
+			if replicationFeed || maxMemoryBytes != 0 {
 				return fmt.Errorf("replica requires no feed and no local eviction limits")
 			}
 			config.ReplicaPassword = os.Getenv(replicaPasswordEnv)
@@ -295,7 +308,7 @@ func runServer() error {
 	if maxKeys < 1 || lruSamples < 1 || lfuLogFactor < 0 || lfuDecayPeriod < 0 {
 		return fmt.Errorf("invalid eviction limits")
 	}
-	if config.AOFEnabled && mode != "kqueue" {
+	if appendOnly && mode != "kqueue" {
 		return fmt.Errorf("-appendonly requires -mode kqueue; other modes are benchmarks")
 	}
 	var serve func(*sync.WaitGroup) error

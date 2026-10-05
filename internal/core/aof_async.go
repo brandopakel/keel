@@ -5,8 +5,6 @@ import (
 	"io"
 	"os"
 	"time"
-
-	"github.com/brandopakel/keel/internal/config"
 )
 
 // One immutable batch crosses the worker boundary. The event loop owns all
@@ -92,7 +90,7 @@ func (e *Engine) FlushAOFAsync(wake func()) (ready bool, err error) {
 		e.aof.failed = fmt.Errorf("async AOF batch exceeds %d bytes", maxAsyncAppendBytes)
 		return false, e.aof.failed
 	}
-	always := config.AOFFsync == config.FsyncAlways
+	always := e.settings.fsync == FsyncAlways
 	if always {
 		// As in flushAOF: a rewrite's rename whose directory sync failed is
 		// finished before this batch can be acknowledged as synced.

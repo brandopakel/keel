@@ -36,35 +36,24 @@ type ReplicationFrame struct {
 	Term uint64 `json:"term,omitempty"`
 }
 
-// replicationRole is what an engine is in replication, as the flags
-// -replicaof, -replication-feed and -replication-protocol set it for the
-// server: the primary it follows, if it is a replica; whether it feeds a
-// stream to replicas of its own; and the protocol it speaks.
+// replicationRole is what an engine is in replication, as its options say
+// and the flags -replicaof, -replication-feed and -replication-protocol set
+// it for the server: the primary it follows, if it is a replica; whether it
+// feeds a stream to replicas of its own; and the protocol it speaks.
 type replicationRole struct {
 	ReplicaOf string
 	Feed      bool
 	Protocol  int
 }
 
-// replicationRoleRefs is where an engine reads its role: its own, or, for the
-// default engine, the config variables themselves. Reading config live keeps
-// the flags, and the tests that assign config.ReplicaOf and the rest, working
-// until engine options replace config (plan step 2.5), as the default space's
-// limits do.
-type replicationRoleRefs struct {
-	replicaOf *string
-	feed      *bool
-	protocol  *int
-}
-
 // replicaOf is the primary e follows, or "" when e is not a replica.
-func (e *Engine) replicaOf() string { return *e.role.replicaOf }
+func (e *Engine) replicaOf() string { return e.role.ReplicaOf }
 
 // feedsReplicas says whether e feeds a stream to replicas.
-func (e *Engine) feedsReplicas() bool { return *e.role.feed }
+func (e *Engine) feedsReplicas() bool { return e.role.Feed }
 
 // replicationProtocol is the protocol e speaks to its primary or replicas.
-func (e *Engine) replicationProtocol() int { return *e.role.protocol }
+func (e *Engine) replicationProtocol() int { return e.role.Protocol }
 
 type replicationBatch struct {
 	offset uint64
@@ -134,7 +123,7 @@ func (e *Engine) followPrimary() error {
 	return nil
 }
 func (e *Engine) noteReplicationDirty(key string) {
-	if *e.role.feed && !e.aof.replaying && !e.replicaApplying {
+	if e.role.Feed && !e.aof.replaying && !e.replicaApplying {
 		// The role is read directly and the stream through one pointer, and
 		// the dirty set is never nil (engineIn makes it), which keeps this
 		// within the inliner's budget, as it was while both were package

@@ -6,23 +6,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/data_structure"
 	"github.com/stretchr/testify/require"
 )
 
 func TestReplicationCanonicalImagesAndOrdering(t *testing.T) {
-	oldFeed, oldReplica := config.ReplicationFeed, config.ReplicaOf
 	oldExpiry, oldEviction := data_structure.DefaultSpace.SuspendExpiry, data_structure.DefaultSpace.SuspendEviction
 	defer func() {
 		CloseAOF()
-		config.ReplicationFeed = oldFeed
-		config.ReplicaOf = oldReplica
 		data_structure.DefaultSpace.SuspendExpiry = oldExpiry
 		data_structure.DefaultSpace.SuspendEviction = oldEviction
 	}()
 	ResetStores()
-	config.ReplicationFeed = true
+	withOptions(t, func(o *Options) { o.ReplicationFeed = true })
 	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "primary")))
 	require.NoError(t, InitReplication())
 	fillOneOfEverything(t)
@@ -50,8 +46,7 @@ func TestReplicationCanonicalImagesAndOrdering(t *testing.T) {
 	cuckoo, _ := defaultEngine.dumpKey("cf")
 	require.NoError(t, CloseAOF())
 	ResetStores()
-	config.ReplicationFeed = false
-	config.ReplicaOf = "test-primary:6379"
+	withOptions(t, func(o *Options) { o.ReplicationFeed, o.ReplicaOf = false, "test-primary:6379" })
 	require.NoError(t, InitReplication())
 	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "replica")))
 	require.Error(t, ApplyReplication(second), "delta requires initial snapshot")
@@ -87,9 +82,8 @@ func TestReplicationRejectsMalformedSnapshotBeforeMutation(t *testing.T) {
 	run(t, "SET", "sentinel", "present")
 	oldReady := defaultEngine.replicaReady
 	defaultEngine.replicaReady = false
-	oldReplica := config.ReplicaOf
-	defer func() { config.ReplicaOf = oldReplica; defaultEngine.replicaReady = oldReady }()
-	config.ReplicaOf = "test:1"
+	defer func() { defaultEngine.replicaReady = oldReady }()
+	withOptions(t, func(o *Options) { o.ReplicaOf = "test:1" })
 	f := ReplicationFrame{Version: 1, Epoch: "0123456789abcdef0123456789abcdef", Full: true, Body: []byte("*1\r\n$7\r\nFLUSHDB\r\n*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$999999999\r\n")}
 	f.Checksum = frameChecksum(f)
 	require.ErrorContains(t, ApplyReplication(f), "malformed replication command")
@@ -97,10 +91,9 @@ func TestReplicationRejectsMalformedSnapshotBeforeMutation(t *testing.T) {
 }
 
 func TestReplicationHistoryAndDirtyOverflowRequireFullSync(t *testing.T) {
-	oldFeed := config.ReplicationFeed
-	defer func() { CloseAOF(); config.ReplicationFeed = oldFeed }()
+	defer CloseAOF()
 	ResetStores()
-	config.ReplicationFeed = true
+	withOptions(t, func(o *Options) { o.ReplicationFeed = true })
 	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "primary")))
 	require.NoError(t, InitReplication())
 	epoch := defaultEngine.replication.epoch
@@ -122,13 +115,11 @@ func TestReplicationHistoryAndDirtyOverflowRequireFullSync(t *testing.T) {
 
 func TestReplicationApplyFailureDisablesReadsUntilFullSync(t *testing.T) {
 	ResetStores()
-	oldReplica := config.ReplicaOf
 	oldExpiry, oldEviction := data_structure.DefaultSpace.SuspendExpiry, data_structure.DefaultSpace.SuspendEviction
 	defer func() {
-		config.ReplicaOf = oldReplica
 		data_structure.DefaultSpace.SuspendExpiry, data_structure.DefaultSpace.SuspendEviction = oldExpiry, oldEviction
 	}()
-	config.ReplicaOf = "test:1"
+	withOptions(t, func(o *Options) { o.ReplicaOf = "test:1" })
 	require.NoError(t, InitReplication())
 	full := ReplicationFrame{Version: 1, Epoch: "0123456789abcdef0123456789abcdef", Full: true, To: 1}
 	full.Body = appendCommand(nil, "FLUSHDB")

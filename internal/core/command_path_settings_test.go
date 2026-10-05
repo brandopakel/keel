@@ -1,10 +1,6 @@
 package core
 
-import (
-	"testing"
-
-	"github.com/brandopakel/keel/internal/config"
-)
+import "testing"
 
 // The settings BenchmarkCommandPathWithLog and BenchmarkCommandPathWithReplica
 // run under, set in one place.
@@ -22,10 +18,9 @@ import (
 // rewrites off, and the server's key cap, which every baseline holds its
 // engine to. What it found is put back when b ends.
 func logBenchmarkSettings(b *testing.B) {
-	fsync, percentage := config.AOFFsync, config.AOFAutoRewritePercentage
-	b.Cleanup(func() { config.AOFFsync, config.AOFAutoRewritePercentage = fsync, percentage })
-	config.AOFFsync, config.AOFAutoRewritePercentage = config.FsyncEverySec, 0
-	withOptions(b, func(o *Options) { o.MaxKeys = serverKeyCap })
+	withOptions(b, func(o *Options) {
+		o.Fsync, o.AutoRewritePercentage, o.MaxKeys = FsyncEverySec, Off, serverKeyCap
+	})
 }
 
 // replicaBenchmarkSettings is logBenchmarkSettings with the engine a protocol
@@ -38,9 +33,5 @@ func replicaBenchmarkSettings(b *testing.B) {
 		}
 	})
 	logBenchmarkSettings(b)
-	feed, protocol, replicaOf := config.ReplicationFeed, config.ReplicationProtocol, config.ReplicaOf
-	b.Cleanup(func() {
-		config.ReplicationFeed, config.ReplicationProtocol, config.ReplicaOf = feed, protocol, replicaOf
-	})
-	config.ReplicationFeed, config.ReplicationProtocol, config.ReplicaOf = true, 2, ""
+	withOptions(b, func(o *Options) { o.ReplicationFeed, o.ReplicationProtocol, o.ReplicaOf = true, 2, "" })
 }

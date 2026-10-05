@@ -33,15 +33,26 @@ func configureFrom(t *testing.T, args ...string) data_structure.Limits {
 }
 
 // TestDefaultFlagsKeepTheServerSettings pins what the server's engine is held
-// to with no flags: the 5,000,000-key cap and LRU, no memory bound, and the
-// sampling, LFU and LCS figures, exactly as before the flags were mapped onto
-// engine options rather than into config.
+// to with no flags, exactly as before the flags were mapped onto engine
+// options rather than into config: the 5,000,000-key cap and LRU, no memory
+// bound, and the sampling, LFU and LCS figures; active expiry at 20 keys a
+// round, 25% and 16 rounds; no log, at ./keel-master.aof under everysec
+// when there is one, appended on the caller's thread and rewritten at 100%
+// growth past 64 MiB; and neither a replica nor a feed, in protocol 1.
 func TestDefaultFlagsKeepTheServerSettings(t *testing.T) {
 	got := configureFrom(t)
 	want := data_structure.Limits{Eviction: data_structure.EvictLRU, MaxKeys: 5000000, MaxMemory: 0,
 		EvictionSamples: 5, LFULogFactor: 10, LFUDecayPeriod: 10000, LCSMaxCells: 134217728}
 	if got != want {
 		t.Fatalf("default flags hold the engine to %+v, want %+v", got, want)
+	}
+	wantOptions := core.Options{MaxKeys: 5000000, Eviction: core.EvictLRU, EvictionSamples: 5,
+		LFULogFactor: 10, LFUDecayPeriod: 10000, LCSMaxCells: 134217728,
+		ActiveExpireSamples: 20, ActiveExpirePercent: 25, ActiveExpireRounds: 16,
+		AppendFilename: "./keel-master.aof", Fsync: core.FsyncEverySec,
+		AutoRewritePercentage: 100, AutoRewriteMinSize: 64 << 20, ReplicationProtocol: 1}
+	if options := core.Configuration().WithDefaults(); options != wantOptions {
+		t.Fatalf("default flags give the engine %+v, want %+v", options, wantOptions)
 	}
 }
 
@@ -67,6 +78,27 @@ func TestFlagsReachTheEngine(t *testing.T) {
 	got = configureFrom(t, "-lcs-max-cells", "18446744073709551615")
 	if got.LCSMaxCells != 0 {
 		t.Fatalf("an LCS bound past 2^63 holds the engine to %d cells, want no bound", got.LCSMaxCells)
+	}
+
+	configureFrom(t, "-active-expire-samples", "7", "-appendonly", "-appendfilename", "/tmp/x.aof",
+		"-appendfsync", "always", "-aof-async-append", "-auto-aof-rewrite-percentage", "50",
+		"-auto-aof-rewrite-min-size", "1mb", "-replication-feed", "-replication-protocol", "2")
+	options := core.Configuration()
+	if options.ActiveExpireSamples != 7 || !options.AppendOnly || options.AppendFilename != "/tmp/x.aof" ||
+		options.Fsync != core.FsyncAlways || !options.AsyncAppend || options.AutoRewritePercentage != 50 ||
+		options.AutoRewriteMinSize != 1<<20 || !options.ReplicationFeed || options.ReplicationProtocol != 2 {
+		t.Fatalf("flags give the engine %+v", options)
+	}
+	configureFrom(t, "-replicaof", "primary.test:6379")
+	if options := core.Configuration(); options.ReplicaOf != "primary.test:6379" {
+		t.Fatalf("-replicaof gives the engine %+v", options)
+	}
+
+	configureFrom(t, "-active-expire-samples", "0", "-auto-aof-rewrite-percentage", "0",
+		"-auto-aof-rewrite-min-size", "0")
+	options = core.Configuration()
+	if options.ActiveExpireSamples >= 0 || options.AutoRewritePercentage >= 0 || options.AutoRewriteMinSize >= 0 {
+		t.Fatalf("zero flags give the engine %+v, want each of them off", options)
 	}
 }
 

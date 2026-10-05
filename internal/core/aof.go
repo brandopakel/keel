@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
@@ -407,7 +406,8 @@ func (e *Engine) pollAOFSync(wait bool) {
 }
 
 func (e *Engine) flushAOF(closing bool) error {
-	e.pollAOFSync(closing || config.AOFFsync == config.FsyncAlways)
+	fsync := e.settings.fsync
+	e.pollAOFSync(closing || fsync == FsyncAlways)
 	if e.aof.file == nil {
 		return nil
 	}
@@ -417,8 +417,8 @@ func (e *Engine) flushAOF(closing bool) error {
 	if err := e.writeAOFBuffer(); err != nil {
 		return err
 	}
-	syncDue := closing || config.AOFFsync == config.FsyncAlways ||
-		(config.AOFFsync == config.FsyncEverySec && time.Since(e.aof.lastSync) >= time.Second)
+	syncDue := closing || fsync == FsyncAlways ||
+		(fsync == FsyncEverySec && time.Since(e.aof.lastSync) >= time.Second)
 	if e.aof.dirty && syncDue && e.aof.syncPending == nil {
 		// A rewrite's rename whose directory sync failed is finished first:
 		// what is about to be synced is in the file that rename named.
@@ -426,7 +426,7 @@ func (e *Engine) flushAOF(closing bool) error {
 			e.aof.failed = err
 			return err
 		}
-		if !closing && config.AOFFsync == config.FsyncEverySec {
+		if !closing && fsync == FsyncEverySec {
 			result := make(chan error, 1)
 			file, syncFile, stats := e.aof.file, e.aofSync, &e.appendSyncStats
 			wake := e.rewriteWake

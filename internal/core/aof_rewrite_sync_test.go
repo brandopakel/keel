@@ -10,8 +10,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/brandopakel/keel/internal/config"
 )
 
 // Existing slice-count tests count emitted slices, not idle I/O polls. Wait
@@ -285,8 +283,8 @@ func TestRewriteDirtyTailSyncFailureKeepsAllAcknowledgedWrites(t *testing.T) {
 // self-wake indefinitely, and its completion must resume rewrite finalization.
 func TestRewriteWaitsForOriginalSyncWithoutSpinning(t *testing.T) {
 	ResetStores()
-	oldPolicy, oldSync, oldWake := config.AOFFsync, defaultEngine.aofSync, defaultEngine.rewriteWake
-	config.AOFFsync = config.FsyncEverySec
+	oldSync, oldWake := defaultEngine.aofSync, defaultEngine.rewriteWake
+	withOptions(t, func(o *Options) { o.Fsync = FsyncEverySec })
 	release := make(chan struct{})
 	woken := make(chan struct{}, 4)
 	defaultEngine.aofSync = func(f *os.File) error { <-release; return f.Sync() }
@@ -302,7 +300,7 @@ func TestRewriteWaitsForOriginalSyncWithoutSpinning(t *testing.T) {
 			close(release)
 		}
 		require.NoError(t, CloseAOF())
-		config.AOFFsync, defaultEngine.aofSync, defaultEngine.rewriteWake = oldPolicy, oldSync, oldWake
+		defaultEngine.aofSync, defaultEngine.rewriteWake = oldSync, oldWake
 		ResetStores()
 	})
 	path := filepath.Join(t.TempDir(), "original-sync.aof")

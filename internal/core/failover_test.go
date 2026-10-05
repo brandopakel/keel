@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -14,15 +13,13 @@ import (
 // the default engine's failover state back afterwards.
 func setupFailover(t *testing.T) string {
 	t.Helper()
-	oldReplica := config.ReplicaOf
 	oldState := defaultEngine.failover
 	t.Cleanup(func() {
 		CloseAOF()
-		config.ReplicaOf = oldReplica
 		defaultEngine.failover = oldState
 	})
 	ResetStores()
-	config.ReplicaOf = ""
+	withOptions(t, func(o *Options) { o.ReplicaOf = "" })
 	path := filepath.Join(t.TempDir(), "term.aof")
 	require.NoError(t, LoadTerm(path))
 	require.NoError(t, OpenAOF(path))
@@ -115,29 +112,21 @@ func TestADamagedTermFileStopsEveryRole(t *testing.T) {
 	path := filepath.Join(dir, "term.aof")
 	require.NoError(t, os.WriteFile(path+termFileName, []byte("not-a-term"), 0o600))
 
-	old := config.ReplicaOf
-	t.Cleanup(func() {
-		config.ReplicaOf = old
-		defaultEngine.failover = failoverState{}
-	})
+	t.Cleanup(func() { defaultEngine.failover = failoverState{} })
 
-	config.ReplicaOf = ""
+	withOptions(t, func(o *Options) { o.ReplicaOf = "" })
 	require.Error(t, LoadTerm(path),
 		"a primary must not guess a term the cluster may already have moved past")
 
 	// A replica must not forget the floor for rejecting stale histories.
-	config.ReplicaOf = "primary.test:6379"
+	withOptions(t, func(o *Options) { o.ReplicaOf = "primary.test:6379" })
 	require.Error(t, LoadTerm(path))
 }
 
 func TestAMissingTermFileIsTermZero(t *testing.T) {
 	dir := t.TempDir()
-	old := config.ReplicaOf
-	t.Cleanup(func() {
-		config.ReplicaOf = old
-		defaultEngine.failover = failoverState{}
-	})
-	config.ReplicaOf = ""
+	t.Cleanup(func() { defaultEngine.failover = failoverState{} })
+	withOptions(t, func(o *Options) { o.ReplicaOf = "" })
 	// Every node before its first failover, and every fresh install. Refusing
 	// to start on this would refuse to start on an upgrade.
 	require.NoError(t, LoadTerm(filepath.Join(dir, "absent.aof")))
@@ -176,8 +165,7 @@ func TestPromotionFailsClosedWhenTheTermCannotBeMadeDurable(t *testing.T) {
 
 func TestInfoReportsTheTerm(t *testing.T) {
 	setupFailover(t)
-	config.ReplicationFeed = true
-	defer func() { config.ReplicationFeed = false }()
+	withOptions(t, func(o *Options) { o.ReplicationFeed = true })
 	require.Equal(t, "OK", run(t, "KEEL.PROMOTE", "11"))
 	info, ok := run(t, "INFO", "replication").(string)
 	require.True(t, ok)

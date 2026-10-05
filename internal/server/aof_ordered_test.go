@@ -27,12 +27,13 @@ func TestOrderedRepliesAndDependentReadWaitForPersistence(t *testing.T) {
 	oldClients := clients
 	clients = make(map[int]*client)
 	t.Cleanup(func() { clients = oldClients })
-	oldPolicy, oldAsync, oldConcurrent := config.AOFFsync, config.AOFAsyncAppend, config.AOFConcurrentAppend
+	oldConcurrent := config.AOFConcurrentAppend
 	oldRetained := retainedClientBytes
-	config.AOFFsync, config.AOFAsyncAppend, config.AOFConcurrentAppend = config.FsyncAlways, true, true
+	withEngineOptions(t, func(o *core.Options) { o.Fsync, o.AsyncAppend = core.FsyncAlways, true })
+	config.AOFConcurrentAppend = true
 	defer func() {
 		core.CloseAOF()
-		config.AOFFsync, config.AOFAsyncAppend, config.AOFConcurrentAppend = oldPolicy, oldAsync, oldConcurrent
+		config.AOFConcurrentAppend = oldConcurrent
 		retainedClientBytes = oldRetained
 	}()
 	require.NoError(t, core.OpenAOF(filepath.Join(t.TempDir(), "log")))
