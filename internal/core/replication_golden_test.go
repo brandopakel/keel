@@ -123,8 +123,8 @@ func startReplicationGolden(t *testing.T, mode goldenMode, protocol int) *replic
 // saveGoldenTerm keeps the failover state a scenario's LoadTerm replaces, and
 // returns what puts it back.
 func saveGoldenTerm() func() {
-	saved := failover
-	return func() { failover = saved }
+	saved := defaultEngine.failover
+	return func() { defaultEngine.failover = saved }
 }
 
 func runReplicationGolden(t *testing.T, scenario replicationGoldenScenario, mode goldenMode) []byte {

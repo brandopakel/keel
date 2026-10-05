@@ -461,7 +461,7 @@ func TestTransactionFencedBeforeExecRunsNothing(t *testing.T) {
 	s.send("MULTI")
 	s.send("SET", "a", "1")
 	s.send("SET", "b", "2")
-	require.NoError(t, observeTerm(7))
+	require.NoError(t, defaultEngine.observeTerm(7))
 	require.Equal(t, "-EXECABORT Transaction discarded because of: "+errFenced.Error()+"\r\n", s.send("EXEC"))
 	require.Nil(t, defaultEngine.dictStore.Peek("a"))
 	require.Nil(t, defaultEngine.dictStore.Peek("b"))

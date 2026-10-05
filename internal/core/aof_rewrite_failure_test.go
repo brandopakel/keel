@@ -615,7 +615,7 @@ func TestReplicationV2SnapshotStartFailureIsNotRetriedEveryPull(t *testing.T) {
 	logs := captureLog(t)
 	run(t, "SET", "k", "v")
 	require.NoError(t, os.Mkdir(defaultEngine.aof.path+".rewrite", 0o755))
-	reply := run(t, "KEEL.REPL.PULL2", "", "0", "", "0", strconv.FormatUint(failover.term, 10))
+	reply := run(t, "KEEL.REPL.PULL2", "", "0", "", "0", strconv.FormatUint(defaultEngine.failover.term, 10))
 	require.Contains(t, reply, "ERR preparing replication snapshot: ")
 	for i := 0; i < 5; i++ {
 		require.True(t, pullV2(t, "", 0, "", 0).Pending)

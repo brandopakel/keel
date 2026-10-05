@@ -358,8 +358,10 @@ func (f *follow) catchUp(t *testing.T) bool {
 			}
 			continue
 		}
+		// The term-aware form, with the term the replica knows, which a
+		// primary that holds one requires.
 		frame, ok := pullFrom(t, f.p, "KEEL.REPL.PULL2", f.epoch, strconv.FormatUint(f.offset, 10),
-			f.snapshotID, strconv.FormatUint(f.snapshotPos, 10))
+			f.snapshotID, strconv.FormatUint(f.snapshotPos, 10), strconv.FormatUint(f.r.CurrentTerm(), 10))
 		if !ok || !assert.NoError(t, f.r.ApplyReplication(frame)) {
 			return false
 		}
@@ -527,4 +529,149 @@ func TestEnginesShareNoReplication(t *testing.T) {
 	assert.Zero(t, defaultEngine.replicaAck)
 	assert.False(t, defaultEngine.replicaReady)
 	assert.Zero(t, defaultEngine.space.TotalKeys())
+}
+
+// TestEnginesShareNoFailover: each engine holds its own term, kept in a file
+// beside its own log through I/O of its own. Promoting, fencing or a term
+// learned from a peer on one engine leaves every other engine's writes, term
+// file and frames alone; one engine's failing disk fences that engine alone;
+// a restart reads each engine's own term back; and a replica learns only its
+// own primary's term. Side by side on goroutines, with another goroutine
+// reading each engine's term as the replica transport does, under -race,
+// term state the engines shared would fail here.
+func TestEnginesShareNoFailover(t *testing.T) {
+	ResetStores()
+	defaultTerm, defaultPath := defaultEngine.CurrentTerm(), defaultEngine.failover.path
+	engine := func(dir string, role replicationRole) (*Engine, string) {
+		e := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
+		e.ownRole = role
+		path := filepath.Join(dir, "store.aof")
+		require.NoError(t, e.LoadTerm(path))
+		require.NoError(t, e.OpenAOF(path))
+		require.NoError(t, e.InitReplication())
+		t.Cleanup(func() { e.CloseAOF() })
+		return e, path
+	}
+	termFile := func(path string) string {
+		body, err := os.ReadFile(path + termFileName)
+		if os.IsNotExist(err) {
+			return "none"
+		}
+		require.NoError(t, err)
+		return string(body)
+	}
+	feed := replicationRole{Feed: true, Protocol: 2}
+	follow2 := replicationRole{ReplicaOf: "primary.test:6379", Protocol: 2}
+	a, aPath := engine(t.TempDir(), feed)
+	b, bPath := engine(t.TempDir(), feed)
+
+	// a is promoted, b fenced at a higher term: each holds its own.
+	require.Equal(t, "OK", on(t, a, "KEEL.PROMOTE", "3"))
+	require.Equal(t, "OK", on(t, b, "KEEL.FENCE", "7"))
+	assert.Equal(t, [3]uint64{3, 3, 7}, [3]uint64{a.CurrentTerm(), a.failover.held, b.CurrentTerm()})
+	assert.True(t, a.writable())
+	assert.False(t, b.writable())
+	assert.Equal(t, "OK", on(t, a, "SET", "k", "a"))
+	assert.Equal(t, "-FENCED this node is not the holder of the current term\r\n", string(rawOn(t, b, "SET", "k", "b")))
+	assert.Equal(t, "3", termFile(aPath))
+	assert.Equal(t, "7", termFile(bPath))
+	assert.Contains(t, on(t, a, "INFO", "replication"), "failover_term:3\r\nfailover_held_term:3\r\nfailover_fenced:false\r\nwritable:true\r\n")
+	assert.Contains(t, on(t, b, "INFO", "replication"), "failover_term:7\r\nfailover_held_term:0\r\nfailover_fenced:true\r\nwritable:false\r\n")
+
+	// a's frames carry a's term; a replica of a learns it, beside its own
+	// log; a fenced b serves no frames.
+	ra, raPath := engine(t.TempDir(), follow2)
+	f := &follow{p: a, r: ra, protocol: 2}
+	require.True(t, f.catchUp(t))
+	assert.Equal(t, uint64(3), ra.CurrentTerm())
+	assert.Equal(t, "3", termFile(raPath))
+	assert.Equal(t, "-FENCED this node is not the holder of the current term\r\n",
+		string(rawOn(t, b, "KEEL.REPL.PULL2", "", "0", "", "0", "7")))
+	// A replica of b's that has moved on to term 9 deposes b, and only b.
+	assert.Equal(t, "-FENCED this node is not the holder of the current term\r\n",
+		string(rawOn(t, b, "KEEL.REPL.PULL2", "", "0", "", "0", "9")))
+	assert.Equal(t, "9", termFile(bPath))
+	assert.Equal(t, uint64(3), a.CurrentTerm())
+	assert.Equal(t, "3", termFile(aPath))
+
+	// a's disk will not sync its term file: promoting a fails and fences a,
+	// through a's I/O alone, and b's promotion goes through b's.
+	var aSyncs, bSyncs atomic.Int64
+	diskErr := errors.New("a's disk will not sync")
+	a.termSync = func(*os.File) error { aSyncs.Add(1); return diskErr }
+	b.termSync = func(f *os.File) error { bSyncs.Add(1); return f.Sync() }
+	assert.Equal(t, "-ERR persisting term: a's disk will not sync\r\n", string(rawOn(t, a, "KEEL.PROMOTE", "4")))
+	assert.False(t, a.writable(), "a term a cannot keep is still one a has seen")
+	assert.Equal(t, "3", termFile(aPath))
+	assert.Equal(t, "OK", on(t, b, "KEEL.PROMOTE", "10"))
+	assert.Equal(t, "10", termFile(bPath))
+	assert.True(t, b.writable())
+	assert.Equal(t, int64(1), aSyncs.Load())
+	assert.Equal(t, int64(1), bSyncs.Load())
+	a.termSync = syncFile
+	assert.Equal(t, "OK", on(t, a, "KEEL.PROMOTE", "5"))
+	assert.True(t, a.writable())
+
+	// Side by side: each engine takes terms and writes on a goroutine of its
+	// own, while another goroutine reads its term as the transport does.
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+	for _, e := range []*Engine{a, b} {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					_ = e.CurrentTerm()
+				}
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			base := e.CurrentTerm()
+			for i := uint64(1); i <= 50; i++ {
+				var w replyWriter
+				for _, cmd := range []*Command{
+					{Cmd: "KEEL.PROMOTE", Args: []string{strconv.FormatUint(base+2*i, 10)}},
+					{Cmd: "SET", Args: []string{"k", strconv.FormatUint(i, 10)}},
+					{Cmd: "KEEL.FENCE", Args: []string{strconv.FormatUint(base+2*i+1, 10)}},
+				} {
+					w.b = w.b[:0]
+					if !assert.NoError(t, e.evalAndResponse(cmd, &w)) || !assert.Equal(t, "+OK\r\n", string(w.b), "%s", cmd.Cmd) {
+						return
+					}
+				}
+			}
+		}()
+	}
+	go func() { time.Sleep(50 * time.Millisecond); close(stop) }()
+	wg.Wait()
+	aTerm, bTerm := a.CurrentTerm(), b.CurrentTerm()
+	assert.Equal(t, uint64(5+101), aTerm)
+	assert.Equal(t, uint64(10+101), bTerm)
+	assert.True(t, a.failover.fenced)
+	assert.True(t, b.failover.fenced)
+	assert.Equal(t, strconv.FormatUint(aTerm, 10), termFile(aPath))
+	assert.Equal(t, strconv.FormatUint(bTerm, 10), termFile(bPath))
+
+	// Restarted, each reads its own term back, and starts fenced.
+	for _, side := range []struct {
+		path string
+		term uint64
+	}{{aPath, aTerm}, {bPath, bTerm}} {
+		restarted := newEngine(data_structure.NewSpace(engineLimits(math.MaxInt)))
+		restarted.ownRole = feed
+		require.NoError(t, restarted.LoadTerm(side.path))
+		assert.Equal(t, side.term, restarted.CurrentTerm())
+		assert.False(t, restarted.writable())
+	}
+	assert.Equal(t, uint64(3), ra.CurrentTerm(), "a's replica learned only what a sent it")
+
+	// The default engine saw none of it.
+	assert.Equal(t, defaultTerm, defaultEngine.CurrentTerm())
+	assert.Equal(t, defaultPath, defaultEngine.failover.path)
+	assert.Equal(t, defaultTerm == 0, Writable() || config.ReplicaOf != "")
 }

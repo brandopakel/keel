@@ -207,7 +207,7 @@ func (e *Engine) cmdReplicationPull(args []string) []byte {
 	if !e.feedsReplicas() || e.replicationProtocol() != 1 {
 		return e.encode(errors.New("ERR replication protocol 1 is disabled"), false)
 	}
-	if CurrentTerm() != 0 || !e.writable() {
+	if e.CurrentTerm() != 0 || !e.writable() {
 		return e.encode(errors.New("ERR nonzero terms require replication protocol 2"), false)
 	}
 	if len(args) != 2 {
@@ -278,7 +278,7 @@ func (e *Engine) ApplyReplication(frame ReplicationFrame) error {
 	if e.replicationProtocol() == 2 {
 		return e.applyReplicationV2(frame)
 	}
-	if CurrentTerm() != 0 || frame.Term != 0 {
+	if e.CurrentTerm() != 0 || frame.Term != 0 {
 		e.replicaReady = false
 		return errors.New("nonzero terms require replication protocol 2")
 	}
