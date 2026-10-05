@@ -879,6 +879,8 @@ plan above leaves a choice open, step 2.5 settles it this way:
   instructions develop's: SISMEMBER then ran at 1.068 and 1.071 and SADD at
   1.054 and 1.059, with nothing on their paths reading the options, so it was
   reverted. Rows of 2 to 7% follow where the code lands, not what it does.
+  Part 2 ran at 0.990 and 0.992 against develop on EPYC 7763 and 0.990 on
+  Xeon 8573C, with no row over 1.04, and at 0.902 against `65ebdbc`.
 
 ## Risks, in order
 
