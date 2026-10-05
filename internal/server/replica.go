@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/core"
 )
 
@@ -25,14 +24,14 @@ type replicaUpdate struct {
 
 // The transport never accesses the keyspace. One frame at a time crosses to
 // the event loop, and the cursor advances only after successful application.
-func startReplicaTransport() (<-chan replicaUpdate, func()) {
+func startReplicaTransport(password string, useTLS bool) (<-chan replicaUpdate, func()) {
 	updates := make(chan replicaUpdate, 1)
 	// The primary, and the protocol it is followed in, are the engine's role.
 	role := core.Configuration().WithDefaults()
 	if role.ReplicaOf == "" {
 		return updates, func() {}
 	}
-	address, password, useTLS := role.ReplicaOf, config.ReplicaPassword, config.ReplicaTLS
+	address := role.ReplicaOf
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	protocol := role.ReplicationProtocol

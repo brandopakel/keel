@@ -8,7 +8,6 @@ import (
 	"net"
 	"sync"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/core"
 )
 
@@ -160,14 +159,17 @@ func handleConn(conn net.Conn, variant NetVariant) {
 	}
 }
 
-// RunNetTCPServer serves on net.Listener with one goroutine per connection.
-func RunNetTCPServer(wg *sync.WaitGroup) error {
+// RunNetTCPServer serves on net.Listener with one goroutine per connection, at
+// the address o gives. It is a benchmark mode: the rest of o is the event
+// loop's.
+func RunNetTCPServer(wg *sync.WaitGroup, o Options) error {
 	defer wg.Done()
+	o = o.WithDefaults()
 	if ActiveNetVariant == NetVariantChannel {
 		startExecutor()
 	}
-	addr := net.JoinHostPort(config.Host, itoa(config.Port))
-	log.Println("starting a net.Listener TCP server on", config.Host, config.Port, "variant", ActiveNetVariant)
+	addr := net.JoinHostPort(o.Host, itoa(o.Port))
+	log.Println("starting a net.Listener TCP server on", o.Host, o.Port, "variant", ActiveNetVariant)
 
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {

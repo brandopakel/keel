@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/core"
 )
 
@@ -50,10 +49,10 @@ func (c *client) authenticate(user, password string) error {
 	if user != "default" {
 		return errWrongPass
 	}
-	if config.RequirePass == "" {
+	if c.password == "" {
 		return nil
 	}
-	got, want := sha256.Sum256([]byte(password)), sha256.Sum256([]byte(config.RequirePass))
+	got, want := sha256.Sum256([]byte(password)), sha256.Sum256([]byte(c.password))
 	if subtle.ConstantTimeCompare(got[:], want[:]) != 1 {
 		return errWrongPass
 	}
@@ -70,7 +69,7 @@ func (c *client) auth(args []string, w io.Writer) {
 		return
 	case len(args) == 2:
 		user = args[0]
-	case config.RequirePass == "":
+	case c.password == "":
 		// The one-argument form names no user, and Redis refuses it when
 		// the default user has no password rather than accept anything.
 		responseError(errNoPassword, w)
@@ -135,7 +134,7 @@ func (c *client) hello(args []string, w io.Writer) {
 			return
 		}
 	}
-	if config.RequirePass != "" && !c.authenticated {
+	if c.password != "" && !c.authenticated {
 		responseError(errHelloNotAuthenticated, w)
 		return
 	}

@@ -38,7 +38,7 @@ func checkEvents(t *testing.T, mux IOMultiplexer) []Event {
 }
 
 func TestCheckReportsTheDescriptorThatBecameReadable(t *testing.T) {
-	mux, err := CreateIOMultiplexer()
+	mux, err := CreateIOMultiplexer(MaxEventsPerWait)
 	assert.NoError(t, err)
 	defer mux.Close()
 
@@ -55,7 +55,7 @@ func TestCheckReportsTheDescriptorThatBecameReadable(t *testing.T) {
 }
 
 func TestCheckReportsEveryReadyDescriptor(t *testing.T) {
-	mux, err := CreateIOMultiplexer()
+	mux, err := CreateIOMultiplexer(MaxEventsPerWait)
 	assert.NoError(t, err)
 	defer mux.Close()
 
@@ -76,7 +76,7 @@ func TestCheckReportsEveryReadyDescriptor(t *testing.T) {
 }
 
 func TestCheckIsLevelTriggered(t *testing.T) {
-	mux, err := CreateIOMultiplexer()
+	mux, err := CreateIOMultiplexer(MaxEventsPerWait)
 	assert.NoError(t, err)
 	defer mux.Close()
 
@@ -117,7 +117,7 @@ func TestCheckIsLevelTriggered(t *testing.T) {
 // A bounded wait provides another loop turn without a readiness notification.
 // It does not restore missing descriptor registrations or establish client recovery.
 func TestCheckReturnsWithoutAnyDescriptorBecomingReady(t *testing.T) {
-	mux, err := CreateIOMultiplexer()
+	mux, err := CreateIOMultiplexer(MaxEventsPerWait)
 	assert.NoError(t, err)
 	defer mux.Close()
 
@@ -144,7 +144,7 @@ func TestCheckReturnsWithoutAnyDescriptorBecomingReady(t *testing.T) {
 }
 
 func TestClosedWriteEndReadsAsReadable(t *testing.T) {
-	mux, err := CreateIOMultiplexer()
+	mux, err := CreateIOMultiplexer(MaxEventsPerWait)
 	assert.NoError(t, err)
 	defer mux.Close()
 
@@ -160,14 +160,14 @@ func TestClosedWriteEndReadsAsReadable(t *testing.T) {
 }
 
 func TestMonitorRefusesABadDescriptor(t *testing.T) {
-	mux, err := CreateIOMultiplexer()
+	mux, err := CreateIOMultiplexer(MaxEventsPerWait)
 	assert.NoError(t, err)
 	defer mux.Close()
 	assert.Error(t, mux.Monitor(Event{Fd: -1, Op: OpRead}))
 }
 
 func TestForgetReportsWhetherTheKernelStillKnewTheDescriptor(t *testing.T) {
-	mux, err := CreateIOMultiplexer()
+	mux, err := CreateIOMultiplexer(MaxEventsPerWait)
 	if err != nil {
 		t.Fatal(err)
 	}

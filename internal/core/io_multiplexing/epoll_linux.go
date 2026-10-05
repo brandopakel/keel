@@ -5,8 +5,6 @@ package io_multiplexing
 import (
 	"syscall"
 	"time"
-
-	"github.com/brandopakel/keel/internal/config"
 )
 
 // Epoll is the Linux facility: one epoll instance, and the buffers one wait
@@ -18,16 +16,17 @@ type Epoll struct {
 }
 
 // CreateIOMultiplexer opens an epoll instance sized to report up to
-// config.MaxConnection descriptors from one wait.
-func CreateIOMultiplexer() (*Epoll, error) {
+// maxDescriptors descriptors from one wait, and never more than
+// MaxEventsPerWait: the server passes the most connections it holds.
+func CreateIOMultiplexer(maxDescriptors int) (*Epoll, error) {
 	fd, err := syscall.EpollCreate1(0)
 	if err != nil {
 		return nil, err
 	}
 	return &Epoll{
 		fd:     fd,
-		native: make([]syscall.EpollEvent, min(config.MaxConnection, 128)),
-		ready:  make([]Event, 0, min(config.MaxConnection, 128)),
+		native: make([]syscall.EpollEvent, eventsPerWait(maxDescriptors)),
+		ready:  make([]Event, 0, eventsPerWait(maxDescriptors)),
 	}, nil
 }
 

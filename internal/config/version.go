@@ -1,3 +1,14 @@
+// Package config is the build's identity: the version and the commit the
+// binary reports.
+//
+// It held the server's settings, as package variables every engine in a
+// process shared, until plan step 2.5 (docs/embedding-plan.md) replaced them
+// with options: core.Options for what an engine is held to, and
+// server.Options for the listener and the transport, which cmd/keel maps its
+// flags onto. What is left is set when the binary is built and never after,
+// and config_test.go fails on any package variable that is not, or on any
+// code that assigns one. The package keeps its name because the release
+// builds stamp the version as internal/config.Version.
 package config
 
 import "runtime/debug"

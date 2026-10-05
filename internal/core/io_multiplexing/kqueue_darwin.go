@@ -4,8 +4,6 @@ package io_multiplexing
 
 import (
 	"syscall"
-
-	"github.com/brandopakel/keel/internal/config"
 )
 
 // KQueue is the darwin facility: one kernel queue, and the buffers one wait
@@ -17,16 +15,17 @@ type KQueue struct {
 }
 
 // CreateIOMultiplexer opens a kernel queue sized to report up to
-// config.MaxConnection descriptors from one wait.
-func CreateIOMultiplexer() (*KQueue, error) {
+// maxDescriptors descriptors from one wait, and never more than
+// MaxEventsPerWait: the server passes the most connections it holds.
+func CreateIOMultiplexer(maxDescriptors int) (*KQueue, error) {
 	fd, err := syscall.Kqueue()
 	if err != nil {
 		return nil, err
 	}
 	return &KQueue{
 		fd:     fd,
-		native: make([]syscall.Kevent_t, min(config.MaxConnection, 128)),
-		ready:  make([]Event, 0, min(config.MaxConnection, 128)),
+		native: make([]syscall.Kevent_t, eventsPerWait(maxDescriptors)),
+		ready:  make([]Event, 0, eventsPerWait(maxDescriptors)),
 	}, nil
 }
 

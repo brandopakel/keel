@@ -13,7 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/core"
 	"github.com/brandopakel/keel/internal/core/io_multiplexing"
 )
@@ -138,6 +137,9 @@ type client struct {
 	unreadSeen      time.Time
 	closeAfterWrite bool
 	authenticated   bool
+	// password is what the connection authenticates with: the server's
+	// RequirePass when it was accepted. Empty, it needs none.
+	password string
 	// id numbers the connection for HELLO and CLIENT ID; name, libName and
 	// libVersion are what CLIENT SETNAME and CLIENT SETINFO recorded.
 	id                        uint64
@@ -567,7 +569,7 @@ func ipv4Address(host string, port int) (*syscall.SockaddrInet4, error) {
 // problem, not the server's, so it costs the client its connection and nothing
 // else. These used to return from the loop, which unwound RunAsyncTCPServer
 // and took every other connected client down over one bad descriptor.
-func acceptClient(serverFD int, mux io_multiplexing.IOMultiplexer) (*client, bool) {
+func acceptClient(serverFD int, mux io_multiplexing.IOMultiplexer, password string) (*client, bool) {
 	connFD, _, err := syscall.Accept(serverFD)
 	if err != nil {
 		log.Println("accept:", err)
@@ -599,7 +601,8 @@ func acceptClient(serverFD int, mux io_multiplexing.IOMultiplexer) (*client, boo
 		return nil, false
 	}
 	connectionsReceived++
-	return &client{fd: connFD, id: connectionsReceived, lastProgress: time.Now(), interestKnown: true, interest: io_multiplexing.OpRead}, true
+	return &client{fd: connFD, id: connectionsReceived, lastProgress: time.Now(), interestKnown: true, interest: io_multiplexing.OpRead,
+		password: password}, true
 }
 
 // replyBuffer collects the replies produced from one read so they can be sent
@@ -733,8 +736,12 @@ func executeRun(c *client, arena *replyArena) bool {
 	return c.inArena
 }
 
-func RunAsyncTCPServer(wg *sync.WaitGroup) error {
+// RunAsyncTCPServer serves on the event loop, as o says, until Stop. It drives
+// the default engine, which has to have been given its options (core.Configure)
+// and its log (StartAOF) first.
+func RunAsyncTCPServer(wg *sync.WaitGroup, o Options) error {
 	defer wg.Done()
+	o = o.WithDefaults()
 	if interestCacheOff != "" {
 		log.Println("client interest cache off: every registration goes to the kernel")
 	}
@@ -756,7 +763,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 		queuedClientReads = nil
 		setWaker(nil)
 	}()
-	log.Println("starting an asynchronous TCP server on", config.Host, config.Port)
+	log.Println("starting an asynchronous TCP server on", o.Host, o.Port)
 	// Whether the engine appends its log on a worker is its own option, and
 	// does not change while the loop drives it.
 	asyncAppend := core.Configuration().AsyncAppend
@@ -775,11 +782,11 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 		arena    replyArena
 	)
 
-	pool := newIOPool(ioThreadCount())
+	pool := newIOPool(o.IOThreads)
 	pool.requestBudget = &requestBudget
 	defer pool.stop()
 
-	serverFD, err := listenTCP(config.Host, config.Port, config.MaxConnection)
+	serverFD, err := listenTCP(o.Host, o.Port, o.MaxClients)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -789,7 +796,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 	// The multiplexer is what the loop parks in: it watches the listening
 	// socket, every client socket and the wakeup pipe below, and returns
 	// whichever of them are ready.
-	ioMultiplexer, err := io_multiplexing.CreateIOMultiplexer()
+	ioMultiplexer, err := io_multiplexing.CreateIOMultiplexer(o.MaxClients)
 	if err != nil {
 		return err
 	}
@@ -827,7 +834,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 	defer setWaker(nil) // detach callbacks before closing/reusing the pipe descriptors
 	core.SetRewriteWaker(wake)
 	defer core.SetRewriteWaker(nil)
-	replicaUpdates, stopReplica := startReplicaTransport()
+	replicaUpdates, stopReplica := startReplicaTransport(o.PrimaryPassword, o.PrimaryTLS)
 	defer stopReplica()
 
 	// A heartbeat, so work that is due because of the clock happens on a server
@@ -846,7 +853,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 	cronStop := make(chan struct{})
 	defer close(cronStop)
 	go func() {
-		tick := time.NewTicker(time.Duration(config.CronIntervalMs) * time.Millisecond)
+		tick := time.NewTicker(o.CronInterval)
 		defer tick.Stop()
 		for {
 			select {
@@ -874,7 +881,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 		}
 
 		var deferred []*client
-		if config.AOFConcurrentAppend {
+		if o.ConcurrentAppend {
 			var err error
 			deferred, err = ordered.begin(pool, ioMultiplexer)
 			if err != nil {
@@ -882,7 +889,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 				return err
 			}
 		}
-		if asyncAppend && !config.AOFConcurrentAppend && core.AppendPending() {
+		if asyncAppend && !o.ConcurrentAppend && core.AppendPending() {
 			ready, err := core.FlushAOFAsync(wake)
 			if err != nil {
 				requestShutdown()
@@ -921,8 +928,8 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 					var drain [64]byte
 					syscall.Read(wakeupFDs[0], drain[:])
 				case serverFD:
-					if len(clients) < config.MaxConnection {
-						if c, ok := acceptClient(serverFD, ioMultiplexer); ok {
+					if len(clients) < o.MaxClients {
+						if c, ok := acceptClient(serverFD, ioMultiplexer, o.RequirePass); ok {
 							clients[c.fd] = c
 						}
 					} else {
@@ -994,14 +1001,14 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 			case serverFD:
 				// The listening socket is readable: a client is waiting to be
 				// accepted.
-				if len(clients) >= config.MaxConnection {
+				if len(clients) >= o.MaxClients {
 					fd, _, err := syscall.Accept(serverFD)
 					if err == nil {
 						syscall.Close(fd)
 					}
 					continue
 				}
-				if c, ok := acceptClient(serverFD, ioMultiplexer); ok {
+				if c, ok := acceptClient(serverFD, ioMultiplexer, o.RequirePass); ok {
 					clients[c.fd] = c
 				}
 			default:
@@ -1066,7 +1073,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 				continue
 			}
 
-			if config.AOFConcurrentAppend && !ordered.admit(c, ioMultiplexer) {
+			if o.ConcurrentAppend && !ordered.admit(c, ioMultiplexer) {
 				continue
 			}
 			if executeRun(c, &arena) {
@@ -1085,7 +1092,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 		}
 
 		// Reap idle keys before flushing their removal records.
-		if !config.AOFConcurrentAppend || (!core.AppendPending() && core.AppendBufferedBytes() == 0) {
+		if !o.ConcurrentAppend || (!core.AppendPending() && core.AppendBufferedBytes() == 0) {
 			core.ExpireCycle()
 		}
 
@@ -1106,7 +1113,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 			requestShutdown()
 			return flushErr
 		}
-		if !ready && !config.AOFConcurrentAppend {
+		if !ready && !o.ConcurrentAppend {
 			for _, c := range writable {
 				if c.inArena {
 					c.out = append([]byte(nil), arena.buf[c.outStart:c.outEnd]...)
@@ -1137,7 +1144,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup) error {
 			wake()
 		}
 
-		if config.AOFConcurrentAppend {
+		if o.ConcurrentAppend {
 			writable = ordered.gate(writable, &arena, ioMultiplexer)
 			if len(ordered.deferred) > 0 && !core.AppendPending() {
 				wake()
@@ -1310,7 +1317,7 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 		c.transact(cmd, w)
 		return
 	}
-	locked := config.RequirePass != "" && !c.authenticated
+	locked := c.password != "" && !c.authenticated
 	if locked || core.IsConnectionCommand(cmd.Cmd) {
 		if err := core.CommandError(cmd); err != nil {
 			w.Write(core.Refusal(cmd, err))
