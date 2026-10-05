@@ -28,7 +28,6 @@ const (
 
 	// Until the step that moves it.
 	defaultInstance = "the server's engine until callers open their own (plan step 2.7)"
-	commandScope    = "held for the command running; becomes engine state (plan step 2.2)"
 	persistence     = "the log, the rewrite or their I/O and counters; becomes engine state (plan step 2.3)"
 	replicated      = "replication or failover state, or its I/O; becomes engine state (plan step 2.4)"
 	transport       = "a hook the server installs for INFO; goes when the server renders INFO (plan phase 6)"
@@ -38,8 +37,6 @@ const (
 // the reason each one is allowed.
 var packageVars = map[string]string{
 	"defaultEngine": defaultInstance,
-
-	"replyRESP3": commandScope,
 
 	"aof": persistence, "aofSync": persistence, "aofWrite": persistence,
 	"appendPending": persistence, "appendBytes": persistence, "appendRetained": persistence,

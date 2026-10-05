@@ -22,7 +22,7 @@ import (
 
 func (e *Engine) cmdEXISTS(args []string) []byte {
 	if len(args) == 0 {
-		return Encode(wrongArguments("EXISTS"), false)
+		return e.encode(wrongArguments("EXISTS"), false)
 	}
 
 	// Repeats count repeatedly, which is Redis's behaviour from 3.0 on:
@@ -33,7 +33,7 @@ func (e *Engine) cmdEXISTS(args []string) []byte {
 			found++
 		}
 	}
-	return Encode(found, false)
+	return e.encode(found, false)
 }
 
 // cmdTYPE reports which keyspace holds a name.
@@ -45,16 +45,16 @@ func (e *Engine) cmdEXISTS(args []string) []byte {
 // rather than borrowing a word that would be a lie.
 func (e *Engine) cmdTYPE(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(wrongArguments("TYPE"), false)
+		return e.encode(wrongArguments("TYPE"), false)
 	}
 
 	owner, held := e.space.OwnerOf(args[0])
 	if !held {
 		// Redis answers +none rather than an error or a nil, and clients test
 		// for exactly that string.
-		return Encode("none", true)
+		return e.encode("none", true)
 	}
-	return Encode(owner.KeyspaceName(), true)
+	return e.encode(owner.KeyspaceName(), true)
 }
 
 // cmdKEYS lists every key matching a glob pattern.
@@ -66,7 +66,7 @@ func (e *Engine) cmdTYPE(args []string) []byte {
 // it is the honest answer when a caller really does want the whole keyspace.
 func (e *Engine) cmdKEYS(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(wrongArguments("KEYS"), false)
+		return e.encode(wrongArguments("KEYS"), false)
 	}
 	pattern := args[0]
 
@@ -111,7 +111,7 @@ func (e *Engine) cmdKEYS(args []string) []byte {
 // absent from the type table in keytype.go.
 func (e *Engine) cmdMGET(args []string) []byte {
 	if len(args) == 0 {
-		return Encode(wrongArguments("MGET"), false)
+		return e.encode(wrongArguments("MGET"), false)
 	}
 
 	return e.encodeLookupArray(len(args), func(i int) (string, bool) {
@@ -140,7 +140,7 @@ func (e *Engine) cmdMGET(args []string) []byte {
 // then refuse.
 func (e *Engine) cmdMSET(args []string) []byte {
 	if len(args) == 0 || len(args)%2 != 0 {
-		return Encode(wrongArguments("MSET"), false)
+		return e.encode(wrongArguments("MSET"), false)
 	}
 
 	replaced := false
@@ -175,7 +175,7 @@ func (e *Engine) cmdMSET(args []string) []byte {
 // logged is the plain FLUSHDB, which every release replays.
 func (e *Engine) cmdFLUSHDB(args []string) []byte {
 	if len(args) > 1 || len(args) == 1 && !strings.EqualFold(args[0], "SYNC") && !strings.EqualFold(args[0], "ASYNC") {
-		return Encode(errSyntax, false)
+		return e.encode(errSyntax, false)
 	}
 	if len(args) == 1 {
 		aofRecord("FLUSHDB")

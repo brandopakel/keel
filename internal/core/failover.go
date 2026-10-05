@@ -183,26 +183,26 @@ var errFenced = errors.New("FENCED this node is not the holder of the current te
 // that makes a term worth anything.
 func (e *Engine) cmdPROMOTE(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(wrongArguments("KEEL.PROMOTE"), false)
+		return e.encode(wrongArguments("KEEL.PROMOTE"), false)
 	}
 	term, err := strconv.ParseUint(args[0], 10, 64)
 	if err != nil {
-		return Encode(errNotAnInteger, false)
+		return e.encode(errNotAnInteger, false)
 	}
 	if term <= failover.term {
-		return Encode(fmt.Errorf("ERR term %d is not above the current term %d", term, failover.term), false)
+		return e.encode(fmt.Errorf("ERR term %d is not above the current term %d", term, failover.term), false)
 	}
 	// A volatile cache cannot enable this feature. Reject the unavailable
 	// operation before treating its proposed term as an authority observation.
 	if failover.path == "" {
-		return Encode(errors.New("ERR no term file: promotion requires an append-only log"), false)
+		return e.encode(errors.New("ERR no term file: promotion requires an append-only log"), false)
 	}
 	// On disk before a single write is taken at it.
 	if err := observeTerm(term); err != nil {
-		return Encode(fmt.Errorf("ERR persisting term: %w", err), false)
+		return e.encode(fmt.Errorf("ERR persisting term: %w", err), false)
 	}
 	failover.held, failover.fenced = term, false
-	return Encode("OK", true)
+	return e.encode("OK", true)
 }
 
 // cmdFENCE tells this node a term it does not hold now exists, which stands it
@@ -215,14 +215,14 @@ func (e *Engine) cmdPROMOTE(args []string) []byte {
 // paths whether or not the node cooperates.
 func (e *Engine) cmdFENCE(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(wrongArguments("KEEL.FENCE"), false)
+		return e.encode(wrongArguments("KEEL.FENCE"), false)
 	}
 	term, err := strconv.ParseUint(args[0], 10, 64)
 	if err != nil {
-		return Encode(errNotAnInteger, false)
+		return e.encode(errNotAnInteger, false)
 	}
 	if err := observeTerm(term); err != nil {
-		return Encode(fmt.Errorf("ERR recording term: %w", err), false)
+		return e.encode(fmt.Errorf("ERR recording term: %w", err), false)
 	}
-	return Encode("OK", true)
+	return e.encode("OK", true)
 }

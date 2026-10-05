@@ -345,24 +345,32 @@ func encodeStringArray(sa []string) []byte {
 // a bug in the command that produced it, and is answered as an error naming
 // the type rather than as a silent nil.
 //
-// The reply is framed for the protocol of the command running - see resp3.go.
-// Only nil and the Reply types defined there come out differently in RESP3.
+// Encode frames the reply in RESP2, for a reply built outside any command:
+// the transport's own errors, and anything else that is the same in both
+// protocols. A handler encodes through the engine running it, e.encode, which
+// frames the reply in the protocol of the command - see resp3.go. Only nil and
+// the Reply types defined there come out differently in RESP3.
 func Encode(value interface{}, isSimpleString bool) []byte {
+	return framing{}.encode(value, isSimpleString)
+}
+
+// encode is Encode in f's protocol.
+func (f framing) encode(value interface{}, isSimpleString bool) []byte {
 	switch v := value.(type) {
 	case nil:
-		return nullReply()
+		return f.nullReply()
 	case ReplyMap:
-		b := appendMapHeader(nil, len(v)/2)
+		b := f.appendMapHeader(nil, len(v)/2)
 		for _, x := range v {
-			b = append(b, Encode(x, false)...)
+			b = append(b, f.encode(x, false)...)
 		}
 		return b
 	case ReplyDouble:
-		return appendDouble(make([]byte, 0, len(v)+16), string(v))
+		return appendDouble(f, make([]byte, 0, len(v)+16), string(v))
 	case ReplyBool:
-		return boolReply(bool(v))
+		return f.boolReply(bool(v))
 	case ReplyVerbatim:
-		return appendVerbatim(make([]byte, 0, len(v)+24), string(v))
+		return f.appendVerbatim(make([]byte, 0, len(v)+24), string(v))
 	case infoField:
 		return appendSimpleString(make([]byte, 0, len(v)+3), string(v))
 	case string:
@@ -404,7 +412,7 @@ func Encode(value interface{}, isSimpleString bool) []byte {
 	case []interface{}:
 		b := appendArrayHeader(nil, len(v))
 		for _, x := range v {
-			b = append(b, Encode(x, false)...)
+			b = append(b, f.encode(x, false)...)
 		}
 		return b
 	case []int:

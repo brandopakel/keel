@@ -28,11 +28,13 @@ import (
 // its member/score pairs only when it was given a count.
 //
 // Which protocol a reply is framed in belongs to the connection. It reaches
-// here on the Command, and EvalAndResponse holds it in replyRESP3 for as long
-// as the command runs, the way the log's staging state is held for exactly one
-// command. A handler says what it is answering - a map, a set, a score, a
-// yes-or-no - through the helpers below, and every byte that differs between
-// the protocols is written in this file.
+// here on the Command, and evalAndResponse holds it in the framing of the
+// engine running the command for as long as the command runs, the way the
+// log's staging state is held for exactly one command. A handler says what it
+// is answering - a map, a set, a score, a yes-or-no - through the framing's
+// methods below, which the Engine promotes, so that a handler writes
+// e.nullReply() or e.encode(...); every byte that differs between the
+// protocols is written in this file.
 //
 // What is logged, replicated and dumped is not a reply, and never depends on
 // this. The log and the replication feed record commands in the RESP2 arrays a
@@ -40,34 +42,37 @@ import (
 // in resp.go; a KEEL.DUMP image is a bulk string either way. Log replay and
 // replica apply answer nobody and always run as RESP2.
 
-// replyRESP3 is whether the reply being built is RESP3.
+// framing is the protocol a reply is built in: RESP3, or RESP2 when
+// replyRESP3 is false, as it is for the zero value.
 //
-// EvalAndResponse sets it from the command and restores it when the command
-// returns, and EncodeAs sets it for the replies the connection layer builds
-// itself. Commands execute one at a time on the event loop, so one variable is
-// enough. Encode reads it only for nil and the Reply types below, which is why
-// the replica's requests to its primary, encoded as []string on a goroutine of
-// their own, never touch it.
-var replyRESP3 bool
+// An Engine embeds the framing of the command running on it. evalAndResponse
+// sets it from the command and restores it when the command returns, so
+// nothing after the command inherits it. One command runs on an engine at a
+// time, so one framing per engine is enough. A reply built outside any command
+// names its protocol instead, with a framing of its own: Encode's is RESP2,
+// and EncodeAs takes the connection's. So the replica's requests to its
+// primary, encoded on a goroutine of their own, and the connection layer's
+// replies read no engine at all.
+type framing struct {
+	// replyRESP3 is whether the reply being built is RESP3.
+	replyRESP3 bool
+}
 
 // replyProtocol is the protocol version of the reply being built, 2 or 3, for
 // the replies that report it.
-func replyProtocol() int {
-	if replyRESP3 {
+func (f framing) replyProtocol() int {
+	if f.replyRESP3 {
 		return 3
 	}
 	return 2
 }
 
-// EncodeAs is Encode for a reply built outside EvalAndResponse, in the
-// protocol given rather than that of a command in progress. HELLO and CLIENT
-// are answered by the connection layer, which knows the connection's protocol
-// and runs no command through here.
+// EncodeAs is Encode for a reply built outside a command, in the protocol
+// given rather than RESP2. HELLO and CLIENT are answered by the connection
+// layer, which knows the connection's protocol and runs no command through
+// here.
 func EncodeAs(value interface{}, isSimpleString, resp3 bool) []byte {
-	saved := replyRESP3
-	replyRESP3 = resp3
-	defer func() { replyRESP3 = saved }()
-	return Encode(value, isSimpleString)
+	return framing{replyRESP3: resp3}.encode(value, isSimpleString)
 }
 
 // The reply values Encode frames differently for the two protocols. Anything
@@ -101,27 +106,27 @@ type infoEntry struct {
 // infoReply answers BF.INFO and CF.INFO as RedisBloom does: a map from
 // simple-string names to integers, which RESP2 lays out as the flat array of
 // its names and values.
-func infoReply(entries []infoEntry) []byte {
+func (f framing) infoReply(entries []infoEntry) []byte {
 	out := make(ReplyMap, 0, 2*len(entries))
 	for _, e := range entries {
 		out = append(out, infoField(e.name), e.value)
 	}
-	return Encode(out, false)
+	return f.encode(out, false)
 }
 
 // infoFieldReply answers BF.INFO for the one field asked for, as RedisBloom
 // does: a map of that one name in RESP3, and in RESP2 an array holding only
 // the value, with no name.
-func infoFieldReply(e infoEntry) []byte {
-	if replyRESP3 {
-		return infoReply([]infoEntry{e})
+func (f framing) infoFieldReply(e infoEntry) []byte {
+	if f.replyRESP3 {
+		return f.infoReply([]infoEntry{e})
 	}
-	return Encode([]interface{}{e.value}, false)
+	return f.encode([]interface{}{e.value}, false)
 }
 
 // nullReply is the null bulk string: a key, field or member that is not there.
-func nullReply() []byte {
-	if replyRESP3 {
+func (f framing) nullReply() []byte {
+	if f.replyRESP3 {
 		return constant.Resp3Null
 	}
 	return constant.RespNil
@@ -130,34 +135,34 @@ func nullReply() []byte {
 // nullArrayReply is the null array, which RESP2 sends where the reply would
 // otherwise have been an array: a counted pop of a missing key, or a GEOPOS
 // member that is not there. RESP3 has one null for both.
-func nullArrayReply() []byte {
-	if replyRESP3 {
+func (f framing) nullArrayReply() []byte {
+	if f.replyRESP3 {
 		return constant.Resp3Null
 	}
 	return constant.RespNilArray
 }
 
 // emptyMapReply and emptySetReply answer a missing hash and a missing set.
-func emptyMapReply() []byte {
-	if replyRESP3 {
+func (f framing) emptyMapReply() []byte {
+	if f.replyRESP3 {
 		return constant.Resp3EmptyMap
 	}
 	return constant.RespEmptyArray
 }
 
-func emptySetReply() []byte {
-	if replyRESP3 {
+func (f framing) emptySetReply() []byte {
+	if f.replyRESP3 {
 		return constant.Resp3EmptySet
 	}
 	return constant.RespEmptyArray
 }
 
 // boolReply is ReplyBool for a reply that is nothing else.
-func boolReply(b bool) []byte {
+func (f framing) boolReply(b bool) []byte {
 	switch {
-	case replyRESP3 && b:
+	case f.replyRESP3 && b:
 		return constant.Resp3True
-	case replyRESP3:
+	case f.replyRESP3:
 		return constant.Resp3False
 	case b:
 		return constant.RespOne
@@ -169,13 +174,13 @@ func boolReply(b bool) []byte {
 // counterpart below that the admission checks use to size a reply exactly
 // before allocating it, and the two are kept beside each other so they agree.
 
-func appendNull(dst []byte) []byte { return append(dst, nullReply()...) }
+func (f framing) appendNull(dst []byte) []byte { return append(dst, f.nullReply()...) }
 
-func appendNullArray(dst []byte) []byte { return append(dst, nullArrayReply()...) }
+func (f framing) appendNullArray(dst []byte) []byte { return append(dst, f.nullArrayReply()...) }
 
 // appendMapHeader starts a map of pairs keys and values.
-func appendMapHeader(dst []byte, pairs int) []byte {
-	if !replyRESP3 {
+func (f framing) appendMapHeader(dst []byte, pairs int) []byte {
+	if !f.replyRESP3 {
 		return appendArrayHeader(dst, 2*pairs)
 	}
 	dst = append(dst, '%')
@@ -184,8 +189,8 @@ func appendMapHeader(dst []byte, pairs int) []byte {
 }
 
 // appendSetHeader starts a set of n members.
-func appendSetHeader(dst []byte, n int) []byte {
-	if !replyRESP3 {
+func (f framing) appendSetHeader(dst []byte, n int) []byte {
+	if !f.replyRESP3 {
 		return appendArrayHeader(dst, n)
 	}
 	dst = append(dst, '~')
@@ -196,8 +201,8 @@ func appendSetHeader(dst []byte, n int) []byte {
 // appendPairHeader starts a [member, score] pair. RESP3 nests each pair as an
 // array of two; RESP2 lays the two out flat in the enclosing array, so there is
 // nothing to start.
-func appendPairHeader(dst []byte) []byte {
-	if !replyRESP3 {
+func (f framing) appendPairHeader(dst []byte) []byte {
+	if !f.replyRESP3 {
 		return dst
 	}
 	return appendArrayHeader(dst, 2)
@@ -205,9 +210,11 @@ func appendPairHeader(dst []byte) []byte {
 
 // appendDouble writes a float already written as text, as a RESP3 double or a
 // RESP2 bulk string. The text is the same in both - the score or coordinate the
-// command has always answered with - so only the framing differs.
-func appendDouble[T string | []byte](dst []byte, text T) []byte {
-	if !replyRESP3 {
+// command has always answered with - so only the framing differs. It takes the
+// framing as an argument where the helpers around it are its methods, because
+// a method cannot have a type parameter.
+func appendDouble[T string | []byte](f framing, dst []byte, text T) []byte {
+	if !f.replyRESP3 {
 		dst = append(dst, '$')
 		dst = strconv.AppendInt(dst, int64(len(text)), 10)
 		dst = append(dst, '\r', '\n')
@@ -222,8 +229,8 @@ func appendDouble[T string | []byte](dst []byte, text T) []byte {
 // appendVerbatim writes text as a RESP3 verbatim string of format txt - the
 // format redis-cli prints as it is - or a RESP2 bulk string. The length counts
 // the format and its colon.
-func appendVerbatim(dst []byte, text string) []byte {
-	if !replyRESP3 {
+func (f framing) appendVerbatim(dst []byte, text string) []byte {
+	if !f.replyRESP3 {
 		return appendBulkString(dst, text)
 	}
 	dst = append(dst, '=')
@@ -234,19 +241,19 @@ func appendVerbatim(dst []byte, text string) []byte {
 }
 
 // nullSize is the encoded size of a null.
-func nullSize() int { return len(nullReply()) }
+func (f framing) nullSize() int { return len(f.nullReply()) }
 
 // pairHeaderSize is what appendPairHeader adds per pair.
-func pairHeaderSize() int {
-	if replyRESP3 {
+func (f framing) pairHeaderSize() int {
+	if f.replyRESP3 {
 		return 4
 	}
 	return 0
 }
 
 // mapHeaderSize is the encoded size of a map header for pairs keys and values.
-func mapHeaderSize(pairs int) int {
-	if replyRESP3 {
+func (f framing) mapHeaderSize(pairs int) int {
+	if f.replyRESP3 {
 		return decimalDigits(pairs) + 3
 	}
 	return decimalDigits(2*pairs) + 3
@@ -254,8 +261,8 @@ func mapHeaderSize(pairs int) int {
 
 // addDoubleSize is addBulkSize for a double of the given text length, checked
 // against the output limit the same way.
-func addDoubleSize(size, length int) (int, bool) {
-	if !replyRESP3 {
+func (f framing) addDoubleSize(size, length int) (int, bool) {
+	if !f.replyRESP3 {
 		return addBulkSize(size, length)
 	}
 	if length > MaxReplyBytes-size-3 {

@@ -88,11 +88,14 @@ func (e *Engine) geoSearchReply(z *data_structure.ZSet, radius data_structure.Ge
 			}
 		}
 	}
+	// The closures handed to walk escape, so they capture the framing, not
+	// the engine, and leave the engine's escape analysis as it was.
+	f := e.framing
 	size, count, fits := 0, 0, true
 	walk(func(p data_structure.GeoPoint) bool {
 		count++
 		var pointSize int
-		pointSize, fits = geoPointReplySize(p, s)
+		pointSize, fits = f.geoPointReplySize(p, s)
 		if !fits || pointSize > MaxReplyBytes-size {
 			fits = false
 			return false
@@ -108,11 +111,11 @@ func (e *Engine) geoSearchReply(z *data_structure.ZSet, radius data_structure.Ge
 		return refusal
 	}
 	out := appendArrayHeader(make([]byte, 0, size+header), count)
-	walk(func(p data_structure.GeoPoint) bool { out = appendGeoPoint(out, p, s); return true })
+	walk(func(p data_structure.GeoPoint) bool { out = f.appendGeoPoint(out, p, s); return true })
 	return out
 }
 
-func geoPointReplySize(p data_structure.GeoPoint, s *geoSearch) (int, bool) {
+func (f framing) geoPointReplySize(p data_structure.GeoPoint, s *geoSearch) (int, bool) {
 	size := 0
 	if s.withDist || s.withHash || s.withCoord {
 		size = 4
@@ -144,7 +147,7 @@ func geoPointReplySize(p data_structure.GeoPoint, s *geoSearch) (int, bool) {
 		// Coordinates are doubles in RESP3; the distance above stays a bulk
 		// string in both protocols, as Redis sends it.
 		for _, v := range [2]float64{p.Longitude, p.Latitude} {
-			size, fits = addDoubleSize(size, len(strconv.AppendFloat(scratch[:0], v, 'f', -1, 64)))
+			size, fits = f.addDoubleSize(size, len(strconv.AppendFloat(scratch[:0], v, 'f', -1, 64)))
 			if !fits {
 				return 0, false
 			}
@@ -161,7 +164,7 @@ func appendGeoBulk(dst, body []byte) []byte {
 	return append(dst, '\r', '\n')
 }
 
-func appendGeoPoint(dst []byte, p data_structure.GeoPoint, s *geoSearch) []byte {
+func (f framing) appendGeoPoint(dst []byte, p data_structure.GeoPoint, s *geoSearch) []byte {
 	fields := 1
 	if s.withDist {
 		fields++
@@ -187,8 +190,8 @@ func appendGeoPoint(dst []byte, p data_structure.GeoPoint, s *geoSearch) []byte 
 	}
 	if s.withCoord {
 		dst = appendArrayHeader(dst, 2)
-		dst = appendDouble(dst, strconv.AppendFloat(scratch[:0], p.Longitude, 'f', -1, 64))
-		dst = appendDouble(dst, strconv.AppendFloat(scratch[:0], p.Latitude, 'f', -1, 64))
+		dst = appendDouble(f, dst, strconv.AppendFloat(scratch[:0], p.Longitude, 'f', -1, 64))
+		dst = appendDouble(f, dst, strconv.AppendFloat(scratch[:0], p.Latitude, 'f', -1, 64))
 	}
 	return dst
 }

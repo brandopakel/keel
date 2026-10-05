@@ -101,7 +101,7 @@ var notInTransaction = map[string]bool{
 // redis-py's pipeline reset both do.
 func (e *Engine) cmdUNWATCH(args []string) []byte {
 	if len(args) != 0 {
-		return Encode(wrongArguments("UNWATCH"), false)
+		return e.encode(wrongArguments("UNWATCH"), false)
 	}
 	return constant.RespOk
 }
@@ -189,7 +189,7 @@ func (e *Engine) transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn C
 			// unknown command. Inside one Redis refuses it without aborting
 			// the transaction, after counting its arguments as it counts any
 			// command's, and clients get the same answers here.
-			reply := Encode(errWatchInMulti, false)
+			reply := e.encode(errWatchInMulti, false)
 			if len(cmd.Args) == 0 {
 				reply = tx.refuse(wrongArguments("WATCH"))
 			}
@@ -214,13 +214,13 @@ func (e *Engine) transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn C
 	var reply []byte
 	switch {
 	case cmd.Cmd == "MULTI" && tx != nil:
-		reply = Encode(errNestedMulti, false)
+		reply = e.encode(errNestedMulti, false)
 	case cmd.Cmd == "MULTI":
 		tx, reply = &Transaction{}, constant.RespOk
 	case tx == nil:
-		reply = Encode(errExecNoMulti, false)
+		reply = e.encode(errExecNoMulti, false)
 		if cmd.Cmd == "DISCARD" {
-			reply = Encode(errDiscardNoMulti, false)
+			reply = e.encode(errDiscardNoMulti, false)
 		}
 	case cmd.Cmd == "DISCARD":
 		tx, reply = nil, constant.RespOk

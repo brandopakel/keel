@@ -23,22 +23,22 @@ import (
 
 func (e *Engine) cmdMORRISINITBYDIM(args []string) []byte {
 	if len(args) != 3 {
-		return Encode(wrongArguments("MORRIS.INITBYDIM"), false)
+		return e.encode(wrongArguments("MORRIS.INITBYDIM"), false)
 	}
 	key := args[0]
 	width, err := strconv.ParseUint(args[1], 10, 32)
 	if err != nil || width == 0 {
-		return Encode(errors.New(fmt.Sprintf("width must be a positive integer number %s", args[1])), false)
+		return e.encode(errors.New(fmt.Sprintf("width must be a positive integer number %s", args[1])), false)
 	}
 	depth, err := strconv.ParseUint(args[2], 10, 32)
 	if err != nil || depth == 0 {
-		return Encode(errors.New(fmt.Sprintf("depth must be a positive integer number %s", args[2])), false)
+		return e.encode(errors.New(fmt.Sprintf("depth must be a positive integer number %s", args[2])), false)
 	}
 	if e.morrisStore.Exists(key) {
-		return Encode(errors.New("MORRIS: key already exists"), false)
+		return e.encode(errors.New("MORRIS: key already exists"), false)
 	}
 	if err := affordable(64 + width*depth); err != nil {
-		return Encode(err, false)
+		return e.encode(err, false)
 	}
 	e.morrisStore.Put(key, data_structure.CreateMorris(uint32(width), uint32(depth)))
 	return constant.RespOk
@@ -46,25 +46,25 @@ func (e *Engine) cmdMORRISINITBYDIM(args []string) []byte {
 
 func (e *Engine) cmdMORRISINITBYPROB(args []string) []byte {
 	if len(args) != 3 {
-		return Encode(wrongArguments("MORRIS.INITBYPROB"), false)
+		return e.encode(wrongArguments("MORRIS.INITBYPROB"), false)
 	}
 	key := args[0]
 	errRate, err := strconv.ParseFloat(args[1], 64)
 	if err != nil {
-		return Encode(errors.New(fmt.Sprintf("errRate must be a floating point number %s", args[1])), false)
+		return e.encode(errors.New(fmt.Sprintf("errRate must be a floating point number %s", args[1])), false)
 	}
 	if math.IsNaN(errRate) || errRate >= 1 || errRate <= 0 {
-		return Encode(errors.New("MORRIS: invalid overestimation value"), false)
+		return e.encode(errors.New("MORRIS: invalid overestimation value"), false)
 	}
 	probability, err := strconv.ParseFloat(args[2], 64)
 	if err != nil {
-		return Encode(errors.New(fmt.Sprintf("probability must be a floating point number %s", args[2])), false)
+		return e.encode(errors.New(fmt.Sprintf("probability must be a floating point number %s", args[2])), false)
 	}
 	if math.IsNaN(probability) || probability >= 1 || probability <= 0 {
-		return Encode(errors.New("MORRIS: invalid prob value"), false)
+		return e.encode(errors.New("MORRIS: invalid prob value"), false)
 	}
 	if e.morrisStore.Exists(key) {
-		return Encode(errors.New("MORRIS: key already exists"), false)
+		return e.encode(errors.New("MORRIS: key already exists"), false)
 	}
 
 	// These bound the error the hashing contributes. The counters contribute
@@ -72,10 +72,10 @@ func (e *Engine) cmdMORRISINITBYPROB(args []string) []byte {
 	// reports it so the two are not confused for each other.
 	w, d := data_structure.CalcMorrisDim(errRate, probability)
 	if w == 0 || d == 0 {
-		return Encode(errTooLargeForOneKey, false)
+		return e.encode(errTooLargeForOneKey, false)
 	}
 	if err := affordable(64 + uint64(w)*uint64(d)); err != nil {
-		return Encode(err, false)
+		return e.encode(err, false)
 	}
 	e.morrisStore.Put(key, data_structure.CreateMorris(w, d))
 	return constant.RespOk
@@ -83,19 +83,19 @@ func (e *Engine) cmdMORRISINITBYPROB(args []string) []byte {
 
 func (e *Engine) cmdMORRISINCRBY(args []string) []byte {
 	if len(args) < 3 || len(args)%2 == 0 {
-		return Encode(wrongArguments("MORRIS.INCRBY"), false)
+		return e.encode(wrongArguments("MORRIS.INCRBY"), false)
 	}
 	key := args[0]
 	m, exist := e.morrisStore.Get(key)
 	if !exist {
-		return Encode(errors.New("MORRIS: key does not exist"), false)
+		return e.encode(errors.New("MORRIS: key does not exist"), false)
 	}
 
 	increments := make([]uint64, 0, len(args)/2)
 	for i := 2; i < len(args); i += 2 {
 		value, err := strconv.ParseUint(args[i], 10, 64)
 		if err != nil {
-			return Encode(errors.New("ERR increment must be a non negative integer"), false)
+			return e.encode(errors.New("ERR increment must be a non negative integer"), false)
 		}
 		increments = append(increments, value)
 	}
@@ -106,24 +106,24 @@ func (e *Engine) cmdMORRISINCRBY(args []string) []byte {
 	// The table is a fixed size, so unlike a set or a sorted set this cannot
 	// change what the key costs - and Resize is deliberately not called, since
 	// it would only re-measure a number that has not moved.
-	return Encode(res, false)
+	return e.encode(res, false)
 }
 
 func (e *Engine) cmdMORRISQUERY(args []string) []byte {
 	if len(args) < 2 {
-		return Encode(wrongArguments("MORRIS.QUERY"), false)
+		return e.encode(wrongArguments("MORRIS.QUERY"), false)
 	}
 	key := args[0]
 	m, exist := e.morrisStore.Get(key)
 	if !exist {
-		return Encode(errors.New("MORRIS: key does not exist"), false)
+		return e.encode(errors.New("MORRIS: key does not exist"), false)
 	}
 
 	var res []string
 	for i := 1; i < len(args); i++ {
 		res = append(res, fmt.Sprintf("%d", m.Count(args[i])))
 	}
-	return Encode(res, false)
+	return e.encode(res, false)
 }
 
 // cmdMORRISINFO reports the shape of the table and, more importantly, the
@@ -138,12 +138,12 @@ func (e *Engine) cmdMORRISQUERY(args []string) []byte {
 // and values RESP2 sends - as MORRIS.QUERY keeps its bulk-string counts.
 func (e *Engine) cmdMORRISINFO(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(wrongArguments("MORRIS.INFO"), false)
+		return e.encode(wrongArguments("MORRIS.INFO"), false)
 	}
 	key := args[0]
 	m, exist := e.morrisStore.Peek(key)
 	if !exist {
-		return Encode(errors.New(fmt.Sprintf("Morris counter with key '%s' does not exist", key)), false)
+		return e.encode(errors.New(fmt.Sprintf("Morris counter with key '%s' does not exist", key)), false)
 	}
 	res := ReplyMap{
 		"Width", fmt.Sprintf("%d", m.Width()),
@@ -154,5 +154,5 @@ func (e *Engine) cmdMORRISINFO(args []string) []byte {
 		"Max count", fmt.Sprintf("%d", data_structure.MorrisMaxCount),
 		"Total count", fmt.Sprintf("%d", m.TotalCount()),
 	}
-	return Encode(res, false)
+	return e.encode(res, false)
 }

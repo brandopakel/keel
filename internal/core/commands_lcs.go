@@ -18,7 +18,7 @@ import (
 
 func (e *Engine) cmdLCS(args []string) []byte {
 	if len(args) < 2 {
-		return Encode(wrongArguments("LCS"), false)
+		return e.encode(wrongArguments("LCS"), false)
 	}
 
 	var (
@@ -37,31 +37,31 @@ func (e *Engine) cmdLCS(args []string) []byte {
 			withMatchLen = true
 		case "MINMATCHLEN":
 			if i+1 >= len(args) {
-				return Encode(errors.New("ERR syntax error"), false)
+				return e.encode(errors.New("ERR syntax error"), false)
 			}
 			n, valid := counterInteger(args[i+1])
 			if !valid {
-				return Encode(errNotAnInteger, false)
+				return e.encode(errNotAnInteger, false)
 			}
 			minMatchLen = n
 			i++
 		default:
-			return Encode(errors.New("ERR syntax error"), false)
+			return e.encode(errors.New("ERR syntax error"), false)
 		}
 	}
 	if wantLen && wantIdx {
 		// Redis's wording. The two are not contradictory - IDX already carries
 		// the length - so it points that out rather than just refusing.
-		return Encode(errors.New("ERR If you want both the length and indexes, please just use IDX."), false)
+		return e.encode(errors.New("ERR If you want both the length and indexes, please just use IDX."), false)
 	}
 
 	a, err := e.lcsValue(args[0])
 	if err != nil {
-		return Encode(err, false)
+		return e.encode(err, false)
 	}
 	b, err := e.lcsValue(args[1])
 	if err != nil {
-		return Encode(err, false)
+		return e.encode(err, false)
 	}
 
 	if e.space.LCSTooLarge(a, b) {
@@ -69,7 +69,7 @@ func (e *Engine) cmdLCS(args []string) []byte {
 		// handles it here. The reason underneath differs - Redis runs out of
 		// room for its table, this runs out of time budget - but the client's
 		// options are the same either way.
-		return Encode(errors.New("ERR String too long for LCS"), false)
+		return e.encode(errors.New("ERR String too long for LCS"), false)
 	}
 
 	if wantLen {
@@ -78,7 +78,7 @@ func (e *Engine) cmdLCS(args []string) []byte {
 		}
 		// Only the length is wanted, so nothing has to be recovered and the
 		// two-row form does half the work.
-		return Encode(int64(data_structure.LCSLen(a, b)), false)
+		return e.encode(int64(data_structure.LCSLen(a, b)), false)
 	}
 
 	// The checkpointed rows, pair/run slice growth, the subsequence and the
@@ -98,7 +98,7 @@ func (e *Engine) cmdLCS(args []string) []byte {
 	}
 	matches, seq := data_structure.LCSMatches(a, b)
 	if !wantIdx {
-		return Encode(seq, false)
+		return e.encode(seq, false)
 	}
 
 	// Reported last match first, the order Redis produces by walking back from
@@ -123,7 +123,7 @@ func (e *Engine) cmdLCS(args []string) []byte {
 	// which stays the length of the whole subsequence. Redis does the same: the
 	// filter is about what is worth looking at, not about what was found. The
 	// two are a map, flattened in RESP2.
-	return Encode(ReplyMap{"matches", out, "len", len(seq)}, false)
+	return e.encode(ReplyMap{"matches", out, "len", len(seq)}, false)
 }
 
 // lcsValue reads a key as a string, treating a missing key as empty.

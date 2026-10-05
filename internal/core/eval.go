@@ -88,17 +88,17 @@ var commandTable = map[string]func(*Engine, []string) []byte{
 func (e *Engine) cmdPING(args []string) []byte {
 	switch len(args) {
 	case 0:
-		return Encode("PONG", true)
+		return e.encode("PONG", true)
 	case 1:
 		return e.encodeBoundedString(args[0])
 	}
-	return Encode(wrongArguments("PING"), false)
+	return e.encode(wrongArguments("PING"), false)
 }
 
 // cmdECHO answers its one argument, as PING does when given one.
 func (e *Engine) cmdECHO(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(wrongArguments("ECHO"), false)
+		return e.encode(wrongArguments("ECHO"), false)
 	}
 	return e.encodeBoundedString(args[0])
 }
@@ -110,14 +110,14 @@ func (e *Engine) cmdECHO(args []string) []byte {
 // believed they had a database to themselves.
 func (e *Engine) cmdSELECT(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(wrongArguments("SELECT"), false)
+		return e.encode(wrongArguments("SELECT"), false)
 	}
 	n, valid := counterInteger(args[0])
 	if !valid {
-		return Encode(errNotAnInteger, false)
+		return e.encode(errNotAnInteger, false)
 	}
 	if n != 0 {
-		return Encode(errors.New("ERR DB index is out of range"), false)
+		return e.encode(errors.New("ERR DB index is out of range"), false)
 	}
 	return constant.RespOk
 }
@@ -136,13 +136,13 @@ func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 // command scope, and its keys are type-checked, its eviction held off and its
 // limits enforced on e's space.
 func (e *Engine) evalAndResponse(cmd *Command, c io.ReadWriter) error {
-	// The reply is framed for the connection's protocol, held for exactly this
-	// command - see resp3.go. Log replay and replica apply answer nobody, and
-	// run as RESP2 whatever the command says: what they produce has to be the
-	// same however the command first arrived.
-	saved := replyRESP3
-	replyRESP3 = cmd.RESP3 && !aof.replaying && !replicaApplying
-	defer func() { replyRESP3 = saved }()
+	// The reply is framed for the connection's protocol, held on e for exactly
+	// this command - see resp3.go. Log replay and replica apply answer nobody,
+	// and run as RESP2 whatever the command says: what they produce has to be
+	// the same however the command first arrived.
+	saved := e.framing
+	e.framing = framing{replyRESP3: cmd.RESP3 && !aof.replaying && !replicaApplying}
+	defer func() { e.framing = saved }()
 
 	// Redis names and counts a command before anything else, a replica's
 	// refusal of a write included. A command this server does not have is
@@ -165,7 +165,7 @@ func (e *Engine) evalAndResponse(cmd *Command, c io.ReadWriter) error {
 		e.runningName = cmd.sentName()
 	}
 	if refused != nil {
-		_, err := c.Write(Encode(refused, false))
+		_, err := c.Write(e.encode(refused, false))
 		return err
 	}
 	// Anything a command wants written to the log instead of itself is staged
@@ -180,7 +180,7 @@ func (e *Engine) evalAndResponse(cmd *Command, c io.ReadWriter) error {
 	// that individually because none of them knows about the others. Checked
 	// before execution, so a refused command has not half-run.
 	if err := e.checkKeyTypes(cmd, entry); err != nil {
-		res := Encode(err, false)
+		res := e.encode(err, false)
 		aofCommit(cmd, res)
 		_, werr := c.Write(res)
 		return werr

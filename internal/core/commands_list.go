@@ -30,7 +30,7 @@ func (e *Engine) dropListIfEmpty(key string, l *data_structure.List) {
 // push is LPUSH and RPUSH, which differ only in the end they add to.
 func (e *Engine) push(args []string, front bool, name string) []byte {
 	if len(args) < 2 {
-		return Encode(wrongArguments(name), false)
+		return e.encode(wrongArguments(name), false)
 	}
 	key := args[0]
 
@@ -45,7 +45,7 @@ func (e *Engine) push(args []string, front bool, name string) []byte {
 		l.PushBack(args[1:]...)
 	}
 	e.listStore.Resize(key)
-	return Encode(l.Len(), false)
+	return e.encode(l.Len(), false)
 }
 
 func (e *Engine) cmdLPUSH(args []string) []byte { return e.push(args, true, "LPUSH") }
@@ -56,7 +56,7 @@ func (e *Engine) cmdRPUSH(args []string) []byte { return e.push(args, false, "RP
 // for - a count of zero is an empty array rather than a nil.
 func (e *Engine) pop(args []string, front bool, name string) []byte {
 	if len(args) < 1 || len(args) > 2 {
-		return Encode(wrongArguments(name), false)
+		return e.encode(wrongArguments(name), false)
 	}
 	key := args[0]
 
@@ -65,7 +65,7 @@ func (e *Engine) pop(args []string, front bool, name string) []byte {
 	if counted {
 		n, err := positiveCount(args[1])
 		if err != nil {
-			return Encode(err, false)
+			return e.encode(err, false)
 		}
 		count = int(n)
 	}
@@ -79,9 +79,9 @@ func (e *Engine) pop(args []string, front bool, name string) []byte {
 		// client that decodes the counted reply into a list. RESP3 has one
 		// null for both.
 		if counted {
-			return nullArrayReply()
+			return e.nullArrayReply()
 		}
-		return nullReply()
+		return e.nullReply()
 	}
 
 	count = min(count, l.Len())
@@ -121,32 +121,32 @@ func (e *Engine) cmdRPOP(args []string) []byte { return e.pop(args, false, "RPOP
 
 func (e *Engine) cmdLLEN(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(wrongArguments("LLEN"), false)
+		return e.encode(wrongArguments("LLEN"), false)
 	}
 	l, ok := e.listFor(args[0])
 	if !ok {
 		return constant.RespZero
 	}
-	return Encode(l.Len(), false)
+	return e.encode(l.Len(), false)
 }
 
 // cmdLINDEX looks the key up before it reads the index, as Redis does, so a
 // key that is not there answers nil whatever the index says.
 func (e *Engine) cmdLINDEX(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(wrongArguments("LINDEX"), false)
+		return e.encode(wrongArguments("LINDEX"), false)
 	}
 	l, ok := e.listFor(args[0])
 	if !ok {
-		return nullReply()
+		return e.nullReply()
 	}
 	index, valid := counterInteger(args[1])
 	if !valid {
-		return Encode(errNotAnInteger, false)
+		return e.encode(errNotAnInteger, false)
 	}
 	value, found := l.Index(int(index))
 	if !found {
-		return nullReply()
+		return e.nullReply()
 	}
 	return e.encodeBoundedString(value)
 }
@@ -154,18 +154,18 @@ func (e *Engine) cmdLINDEX(args []string) []byte {
 // cmdLSET, like LINDEX, finds the key before it reads the index.
 func (e *Engine) cmdLSET(args []string) []byte {
 	if len(args) != 3 {
-		return Encode(wrongArguments("LSET"), false)
+		return e.encode(wrongArguments("LSET"), false)
 	}
 	l, ok := e.listFor(args[0])
 	if !ok {
-		return Encode(errors.New("ERR no such key"), false)
+		return e.encode(errors.New("ERR no such key"), false)
 	}
 	index, valid := counterInteger(args[1])
 	if !valid {
-		return Encode(errNotAnInteger, false)
+		return e.encode(errNotAnInteger, false)
 	}
 	if !l.Set(int(index), args[2]) {
-		return Encode(errors.New("ERR index out of range"), false)
+		return e.encode(errors.New("ERR index out of range"), false)
 	}
 	e.listStore.Resize(args[0])
 	return constant.RespOk
@@ -177,11 +177,11 @@ func (e *Engine) cmdLSET(args []string) []byte {
 // "everything" whatever the length.
 func (e *Engine) cmdLRANGE(args []string) []byte {
 	if len(args) != 3 {
-		return Encode(wrongArguments("LRANGE"), false)
+		return e.encode(wrongArguments("LRANGE"), false)
 	}
 	start, stop, err := integerRange(args[1], args[2])
 	if err != nil {
-		return Encode(err, false)
+		return e.encode(err, false)
 	}
 
 	l, ok := e.listFor(args[0])
@@ -193,11 +193,11 @@ func (e *Engine) cmdLRANGE(args []string) []byte {
 
 func (e *Engine) cmdLTRIM(args []string) []byte {
 	if len(args) != 3 {
-		return Encode(wrongArguments("LTRIM"), false)
+		return e.encode(wrongArguments("LTRIM"), false)
 	}
 	start, stop, err := integerRange(args[1], args[2])
 	if err != nil {
-		return Encode(err, false)
+		return e.encode(err, false)
 	}
 	l, ok := e.listFor(args[0])
 	if !ok {

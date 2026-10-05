@@ -215,27 +215,27 @@ func zaddArguments(args []string) error {
 // the set exactly as it was.
 func (e *Engine) cmdZADD(args []string) []byte {
 	if len(args) < 3 {
-		return Encode(wrongArguments("ZADD"), false)
+		return e.encode(wrongArguments("ZADD"), false)
 	}
 	flags, ch, pairs, err := zaddShape(args)
 	if err != nil {
-		return Encode(err, false)
+		return e.encode(err, false)
 	}
 	scores := make([]float64, 0, len(pairs)/2)
 	members := make([]string, 0, len(pairs)/2)
 	for i := 0; i < len(pairs); i += 2 {
 		score, err := parseZScore(pairs[i])
 		if err != nil {
-			return Encode(err, false)
+			return e.encode(err, false)
 		}
 		scores = append(scores, score)
 		members = append(members, pairs[i+1])
 	}
 	added, changed := e.zaddApply(args[0], scores, members, flags)
 	if ch {
-		return Encode(changed, false)
+		return e.encode(changed, false)
 	}
-	return Encode(added, false)
+	return e.encode(added, false)
 }
 
 // zrankArguments reads ZRANK's optional WITHSCORE as Redis does: more
@@ -259,34 +259,34 @@ func zrankArguments(args []string) (withScore bool, err error) {
 // score, or a null array.
 func (e *Engine) cmdZRANK(args []string) []byte {
 	if len(args) < 2 {
-		return Encode(wrongArguments("ZRANK"), false)
+		return e.encode(wrongArguments("ZRANK"), false)
 	}
 	withScore, err := zrankArguments(args)
 	if err != nil {
-		return Encode(err, false)
+		return e.encode(err, false)
 	}
-	missing := nullReply
+	missing := e.nullReply()
 	if withScore {
-		missing = nullArrayReply
+		missing = e.nullArrayReply()
 	}
 	zs, ok := e.zsetFor(args[0])
 	if !ok {
-		return missing()
+		return missing
 	}
 	rank, ok := zs.Rank(args[1], false)
 	if !ok {
-		return missing()
+		return missing
 	}
 	if withScore {
 		score, _ := zs.Score(args[1])
-		return Encode([]interface{}{int64(rank), ReplyDouble(formatZScore(score))}, false)
+		return e.encode([]interface{}{int64(rank), ReplyDouble(formatZScore(score))}, false)
 	}
-	return Encode(rank, false)
+	return e.encode(rank, false)
 }
 
 func (e *Engine) cmdZREM(args []string) []byte {
 	if len(args) < 2 {
-		return Encode(wrongArguments("ZREM"), false)
+		return e.encode(wrongArguments("ZREM"), false)
 	}
 	key := args[0]
 	zs, ok := e.zsetFor(key)
@@ -300,35 +300,35 @@ func (e *Engine) cmdZREM(args []string) []byte {
 		}
 	}
 	e.zsetSettle(key, zs)
-	return Encode(removed, false)
+	return e.encode(removed, false)
 }
 
 // cmdZSCORE answers a member's score - a double in RESP3, a bulk string in
 // RESP2 - or nil when the member or the key is absent.
 func (e *Engine) cmdZSCORE(args []string) []byte {
 	if len(args) != 2 {
-		return Encode(wrongArguments("ZSCORE"), false)
+		return e.encode(wrongArguments("ZSCORE"), false)
 	}
 	zs, ok := e.zsetFor(args[0])
 	if !ok {
-		return nullReply()
+		return e.nullReply()
 	}
 	score, ok := zs.Score(args[1])
 	if !ok {
-		return nullReply()
+		return e.nullReply()
 	}
-	return Encode(ReplyDouble(formatZScore(score)), false)
+	return e.encode(ReplyDouble(formatZScore(score)), false)
 }
 
 func (e *Engine) cmdZCARD(args []string) []byte {
 	if len(args) != 1 {
-		return Encode(wrongArguments("ZCARD"), false)
+		return e.encode(wrongArguments("ZCARD"), false)
 	}
 	zs, ok := e.zsetFor(args[0])
 	if !ok {
 		return constant.RespZero
 	}
-	return Encode(zs.Len(), false)
+	return e.encode(zs.Len(), false)
 }
 
 // zrangeArguments is how ZRANGE was asked for its range.
@@ -383,11 +383,11 @@ func parseZRange(args []string) (z zrangeArguments, err error) {
 // direction, with or without scores.
 func (e *Engine) cmdZRANGE(args []string) []byte {
 	if len(args) < 3 {
-		return Encode(wrongArguments("ZRANGE"), false)
+		return e.encode(wrongArguments("ZRANGE"), false)
 	}
 	z, err := parseZRange(args)
 	if err != nil {
-		return Encode(err, false)
+		return e.encode(err, false)
 	}
 	if z.byScore {
 		return e.scoreRangeReply(args[0], z.scores, z.offset, z.count, z.reverse, z.withScores)
@@ -397,7 +397,7 @@ func (e *Engine) cmdZRANGE(args []string) []byte {
 		return constant.RespEmptyArray
 	}
 	walk := func(yield func(string, float64) bool) { zs.VisitRangeByRank(z.start, z.stop, z.reverse, yield) }
-	if z.withScores && replyRESP3 {
+	if z.withScores && e.replyRESP3 {
 		return e.scoredReply3(walk, true)
 	}
 	return e.scoredReply(walk, z.withScores)

@@ -12,12 +12,12 @@ import "github.com/brandopakel/keel/internal/data_structure"
 // engine among others. Step 2.1 moved the stores here, with the expiry and
 // memory-maintenance cursors over them. Every command handler is an Engine
 // method, which reads the stores, and asks the space who holds a key, on the
-// engine dispatching it - see commandTable. Step 2.2 moves the command scope
-// here: what the engine holds for the command it is running, and the budget
-// the transport running it reserves from. The reply's protocol, and the
-// persistence and replication state, are still package variables until the
-// rest of step 2.2 and steps 2.3 and 2.4 move them, and the code that owns
-// them reaches the stores through defaultEngine until then.
+// engine dispatching it - see commandTable. Step 2.2 moved the command scope
+// here: what the engine holds for the command it is running, the reply's
+// protocol included, and the budget the transport running it reserves from.
+// The persistence and replication state are still package variables until
+// steps 2.3 and 2.4 move them, and the code that owns them reaches the stores
+// through defaultEngine until then.
 //
 // Until callers open engines of their own (plan phase 3) the server and the
 // tests run on defaultEngine, as the stores run on data_structure.DefaultSpace.
@@ -62,6 +62,10 @@ type Engine struct {
 	// engine at a time, so one of each is enough, as one of each was for the
 	// process while there was one engine.
 	//
+	// framing is the protocol the running command's reply is built in, held
+	// for exactly that command. Its methods are promoted, so a handler writes
+	// e.nullReply() or e.encode(...), and reads e.replyRESP3 - see resp3.go.
+	framing
 	// runningName is the name GEOSEARCH, the one command whose errors repeat
 	// the name it was sent as, was last sent as. It is set only for that
 	// command, before it runs, and read only while it runs.

@@ -39,17 +39,17 @@ func parseScoreInterval(lower, upper string) (r scoreInterval, err error) {
 
 func (e *Engine) cmdZCOUNT(args []string) []byte {
 	if len(args) != 3 {
-		return Encode(wrongArguments("ZCOUNT"), false)
+		return e.encode(wrongArguments("ZCOUNT"), false)
 	}
 	r, err := parseScoreInterval(args[1], args[2])
 	if err != nil {
-		return Encode(err, false)
+		return e.encode(err, false)
 	}
 	z, ok := e.zsetFor(args[0])
 	if !ok {
 		return constant.RespZero
 	}
-	return Encode(z.CountByScore(r.min, r.max, r.minEx, r.maxEx), false)
+	return e.encode(z.CountByScore(r.min, r.max, r.minEx, r.maxEx), false)
 }
 
 func (e *Engine) cmdZRANGEBYSCORE(args []string) []byte {
@@ -86,11 +86,11 @@ func parseScoreRange(args []string, reverse bool) (r scoreInterval, withScores b
 
 func (e *Engine) scoreRange(name string, args []string, reverse bool) []byte {
 	if len(args) < 3 {
-		return Encode(wrongArguments(name), false)
+		return e.encode(wrongArguments(name), false)
 	}
 	r, withScores, offset, count, err := parseScoreRange(args, reverse)
 	if err != nil {
-		return Encode(err, false)
+		return e.encode(err, false)
 	}
 	return e.scoreRangeReply(args[0], r, offset, count, reverse, withScores)
 }
@@ -104,7 +104,7 @@ func (e *Engine) scoreRangeReply(key string, r scoreInterval, offset, count int,
 	walk := func(yield func(string, float64) bool) {
 		z.VisitRangeByScore(r.min, r.max, r.minEx, r.maxEx, offset, count, reverse, yield)
 	}
-	if withScores && replyRESP3 {
+	if withScores && e.replyRESP3 {
 		return e.scoredReply3(walk, true)
 	}
 	return e.scoredReply(walk, withScores)
@@ -112,11 +112,11 @@ func (e *Engine) scoreRangeReply(key string, r scoreInterval, offset, count int,
 
 func (e *Engine) cmdZINCRBY(args []string) []byte {
 	if len(args) != 3 {
-		return Encode(wrongArguments("ZINCRBY"), false)
+		return e.encode(wrongArguments("ZINCRBY"), false)
 	}
 	increment, err := parseZScore(args[1])
 	if err != nil {
-		return Encode(err, false)
+		return e.encode(err, false)
 	}
 	z, ok := e.zsetFor(args[0])
 	score := increment
@@ -126,12 +126,12 @@ func (e *Engine) cmdZINCRBY(args []string) []byte {
 		}
 	}
 	if math.IsNaN(score) {
-		return Encode(errors.New("ERR resulting score is not a number (NaN)"), false)
+		return e.encode(errors.New("ERR resulting score is not a number (NaN)"), false)
 	}
 	e.zaddApply(args[0], []float64{score}, []string{args[2]}, 0)
 	// Canonical commands keep the log readable by older Keel versions.
 	aofRecord("ZADD", args[0], formatZScore(score), args[2])
-	return Encode(ReplyDouble(formatZScore(score)), false)
+	return e.encode(ReplyDouble(formatZScore(score)), false)
 }
 
 func (e *Engine) cmdZPOPMIN(args []string) []byte { return e.zpop("ZPOPMIN", args, false) }
@@ -155,7 +155,7 @@ func (e *Engine) cmdZPOPMAX(args []string) []byte { return e.zpop("ZPOPMAX", arg
 func (e *Engine) zpop(name string, args []string, reverse bool) []byte {
 	count, err := zpopCount(name, args)
 	if err != nil {
-		return Encode(err, false)
+		return e.encode(err, false)
 	}
 	z, ok := e.zsetFor(args[0])
 	if !ok || count == 0 {
@@ -171,7 +171,7 @@ func (e *Engine) zpop(name string, args []string, reverse bool) []byte {
 	// Given a count, RESP3 nests each member with its score; without one the
 	// single pair stays flat, as it does in Redis.
 	var out []byte
-	if replyRESP3 {
+	if e.replyRESP3 {
 		out = e.scoredReply3(walk, len(args) == 2)
 	} else {
 		out = e.scoredReply(walk, true)
