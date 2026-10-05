@@ -206,7 +206,7 @@ func TestEnginesShareNoReplica(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for i, f := range side.s.frames {
+			for _, f := range side.s.frames {
 				if !assert.NoError(t, side.e.ApplyReplication(f)) {
 					return
 				}
@@ -214,7 +214,8 @@ func TestEnginesShareNoReplica(t *testing.T) {
 				if !assert.NoError(t, side.e.evalAndResponse(&Command{Cmd: "GET", Args: []string{side.s.name + ":after"}}, &w)) {
 					return
 				}
-				if i < len(side.s.frames)-1 {
+				// A replica serves reads once a frame says it has caught up.
+				if !f.CaughtUp {
 					assert.Equal(t, "-MASTERDOWN replica has no recent primary state\r\n", string(w.b))
 				} else {
 					assert.Equal(t, "$1\r\n"+side.s.name+"\r\n", string(w.b))

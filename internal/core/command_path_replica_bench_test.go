@@ -150,11 +150,14 @@ func replicaPull(b *testing.B, epoch string, offset uint64) (string, uint64) {
 	if err := EvalAndResponse(cmd, &w); err != nil {
 		b.Fatal(err)
 	}
-	reply, _ := Decode(w.b)
+	reply, err := Decode(w.b)
 	encoded, ok := reply.(string)
 	var frame ReplicationFrame
-	if !ok || json.Unmarshal([]byte(encoded), &frame) != nil || frame.Full || frame.Epoch != epoch {
-		b.Fatalf("KEEL.REPL.PULL2 %s %d: %q", epoch, offset, w.b)
+	if err == nil && ok {
+		err = json.Unmarshal([]byte(encoded), &frame)
+	}
+	if err != nil || !ok || frame.Full || frame.Epoch != epoch {
+		b.Fatalf("KEEL.REPL.PULL2 %s %d: %v %q", epoch, offset, err, w.b)
 	}
 	return replicationPosition(b)
 }
