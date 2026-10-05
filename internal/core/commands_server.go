@@ -184,7 +184,7 @@ func (e *Engine) cmdINFO(args []string) []byte {
 			ackOffset, ackBehind, ackAge := e.ReplicationAcknowledged()
 			fmt.Fprintf(&b, "replication_acked_offset:%d\r\nreplication_lag_bytes:%d\r\nreplication_acked_age_ms:%d\r\n", ackOffset, ackBehind, ackAge)
 		}
-		fmt.Fprintf(&b, "failover_term:%d\r\nfailover_held_term:%d\r\nfailover_fenced:%t\r\nwritable:%t\r\n", CurrentTerm(), HeldTerm(), Fenced(), e.writable())
+		fmt.Fprintf(&b, "failover_term:%d\r\nfailover_held_term:%d\r\nfailover_fenced:%t\r\nwritable:%t\r\n", e.CurrentTerm(), e.failover.held, e.failover.fenced, e.writable())
 		fmt.Fprintf(&b, "replication_protocol:%d\r\nrole:%s\r\nreplica_ready:%d\r\nreplica_offset:%d\r\nreplica_last_update_ms:%d\r\nprimary_offset:%d\r\nreplication_history_bytes:%d\r\n\r\n", e.replicationProtocol(), role, ready, e.replicaOffset, age, offset, history)
 	}
 	if want("server") {

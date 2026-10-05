@@ -25,11 +25,10 @@ import (
 // append worker, whose methods record, flush and replay e's writes in e's own
 // file; the rewrite, which walks e's keyspace and replaces e's log; what e's
 // rewrites came to and when the next may start; and the counters that time
-// e's I/O. Step 2.4 moves replication and failover here, a part at a time:
-// the replica, which applies its primary's stream to e's keyspace and e's
-// log; and the primary's stream, which carries e's writes to e's replicas,
-// with the role that says which of them e is. The failover term is still a
-// package variable until the part that moves it.
+// e's I/O. Step 2.4 moved replication and failover here: the replica, which
+// applies its primary's stream to e's keyspace and e's log; the primary's
+// stream, which carries e's writes to e's replicas, with the role that says
+// which of them e is; and the term that says whether e may write.
 //
 // Until callers open engines of their own (plan phase 3) the server and the
 // tests run on defaultEngine, as the stores run on data_structure.DefaultSpace.
@@ -160,6 +159,15 @@ type Engine struct {
 	replicationV2 replicationV2State
 	replicaAck    replicaAckState
 
+	// failover is e's term, which says whether e may write, and the file
+	// beside e's log that keeps it - see failover.go. termSync, termRename
+	// and termSyncDir are that file's I/O, which a test replaces on the
+	// engine it is failing: syncFile, os.Rename and syncDir, unless it has.
+	failover    failoverState
+	termSync    func(*os.File) error
+	termRename  func(oldPath, newPath string) error
+	termSyncDir func(string) error
+
 	// role is what e is in replication - a replica of a primary, a primary
 	// feeding replicas, or neither, and in which protocol - read through
 	// replicaOf, feedsReplicas and replicationProtocol. The default engine's
@@ -231,6 +239,7 @@ func engineIn(space *data_structure.Space) *Engine {
 		rewriteFileWrite: writeLog, rewriteFileSync: syncLog, rewriteOpenLog: openRewrittenLog,
 		rewriteRename: os.Rename, rewriteSyncDir: syncDir, keyCountForRewrite: space.TotalKeys,
 		checkpointSync: syncFile, checkpointRename: os.Rename, checkpointSyncDir: syncDir,
+		termSync: syncFile, termRename: os.Rename, termSyncDir: syncDir,
 		// No rewrite has ended yet, which Redis reports as -1.
 		rewriteOutcome: rewriteOutcomeState{lastSeconds: -1},
 		// Neither a replica nor a feed, in the protocol the flag defaults to.

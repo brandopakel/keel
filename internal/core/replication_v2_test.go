@@ -44,7 +44,7 @@ func pullV2(t *testing.T, epoch string, offset uint64, snapshot string, part uin
 	// A pull carries the caller's term. These tests are a single node acting as
 	// both ends, so it sends the term it already holds.
 	reply := run(t, "KEEL.REPL.PULL2", epoch, strconv.FormatUint(offset, 10), snapshot,
-		strconv.FormatUint(part, 10), strconv.FormatUint(failover.term, 10))
+		strconv.FormatUint(part, 10), strconv.FormatUint(defaultEngine.failover.term, 10))
 	encoded, ok := reply.(string)
 	require.True(t, ok, "reply: %v", reply)
 	var frame ReplicationFrame

@@ -8,8 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
-
-	"github.com/brandopakel/keel/internal/config"
 )
 
 // A term names a period of leadership. It is a stale-generation guard, and it is
@@ -54,15 +52,9 @@ type failoverState struct {
 	path string
 }
 
-var failover failoverState
-
 // termFileName is beside the log, because a term is only meaningful for the
 // data it authorises writes to.
 const termFileName = ".term"
-
-var termRename = os.Rename
-var termSyncDir = syncDir
-var termSync = func(f *os.File) error { return f.Sync() }
 
 // LoadTerm reads the durable term. Call once, before serving.
 //
@@ -77,7 +69,12 @@ var termSync = func(f *os.File) error { return f.Sync() }
 // entirely, which is indistinguishable from a node that was never promoted.
 // Nothing local can tell those apart; it is why the coordinator, not the node,
 // has to be the one that never issues a term twice.
-func LoadTerm(path string) error {
+func LoadTerm(path string) error { return defaultEngine.LoadTerm(path) }
+
+// LoadTerm is the package's LoadTerm on e: e's term is read from beside its
+// own log, and fences e alone.
+func (e *Engine) LoadTerm(path string) error {
+	failover := &e.failover
 	failover.path = path + termFileName
 	atomic.StoreUint64(&failover.term, 0)
 	failover.persisted = 0
@@ -99,14 +96,15 @@ func LoadTerm(path string) error {
 	// The numeric file records observation, not a durable grant to this
 	// incarnation. Every nonzero-term primary starts fenced and needs a fresh
 	// externally assigned higher term. Restart must not claim a successor's term.
-	failover.fenced = config.ReplicaOf == "" && term > 0
+	failover.fenced = e.replicaOf() == "" && term > 0
 	return nil
 }
 
 // persistTerm makes a term durable before granting local write authority.
 // Observing a successor revokes authority even if storage is failing; only a
 // successful persistence operation can promise recovery of that observation.
-func persistTerm(term uint64) error {
+func (e *Engine) persistTerm(term uint64) error {
+	failover := &e.failover
 	if failover.path == "" {
 		return errors.New("no term file: failover requires an append-only log")
 	}
@@ -118,7 +116,7 @@ func persistTerm(term uint64) error {
 	tmp := f.Name()
 	defer os.Remove(tmp)
 	if _, err = f.WriteString(strconv.FormatUint(term, 10)); err == nil {
-		err = termSync(f)
+		err = e.termSync(f)
 	}
 	if closeErr := f.Close(); err == nil {
 		err = closeErr
@@ -126,10 +124,10 @@ func persistTerm(term uint64) error {
 	if err != nil {
 		return err
 	}
-	if err = termRename(tmp, failover.path); err != nil {
+	if err = e.termRename(tmp, failover.path); err != nil {
 		return err
 	}
-	if err = termSyncDir(dir); err != nil {
+	if err = e.termSyncDir(dir); err != nil {
 		return err
 	}
 	failover.persisted = term
@@ -144,16 +142,17 @@ func persistTerm(term uint64) error {
 // that cannot hear anyone, which is the case a fence exists for. The term is
 // persisted before success is reported. A persistence failure still stops live
 // writes and requires external isolation/recovery rather than continuing to write.
-func observeTerm(term uint64) error {
+func (e *Engine) observeTerm(term uint64) error {
+	failover := &e.failover
 	if term > failover.term {
 		atomic.StoreUint64(&failover.term, term)
 		// Only a primary needs fencing. Replicas already refuse writes.
-		if config.ReplicaOf == "" && failover.held < term {
+		if e.replicaOf() == "" && failover.held < term {
 			failover.fenced = true
 		}
 	}
 	if failover.persisted < failover.term {
-		return persistTerm(failover.term)
+		return e.persistTerm(failover.term)
 	}
 	return nil
 }
@@ -162,16 +161,21 @@ func observeTerm(term uint64) error {
 func Writable() bool { return defaultEngine.writable() }
 
 // writable is Writable for e: a replica never takes a write, and a primary
-// only while it holds the current term. The term is still the server's until
-// plan step 2.4's last part moves it.
+// only while it holds the current term.
 func (e *Engine) writable() bool {
-	return e.replicaOf() == "" && !failover.fenced && failover.held == failover.term
+	return e.replicaOf() == "" && !e.failover.fenced && e.failover.held == e.failover.term
 }
 
-// CurrentTerm and HeldTerm are what INFO reports.
-func CurrentTerm() uint64 { return atomic.LoadUint64(&failover.term) }
-func HeldTerm() uint64    { return failover.held }
-func Fenced() bool        { return failover.fenced }
+// CurrentTerm and HeldTerm are what INFO reports, on the default engine.
+// CurrentTerm is also read by the replica transport's goroutine, which is why
+// the term is stored atomically.
+func CurrentTerm() uint64 { return defaultEngine.CurrentTerm() }
+func HeldTerm() uint64    { return defaultEngine.failover.held }
+func Fenced() bool        { return defaultEngine.failover.fenced }
+
+// CurrentTerm is the package's CurrentTerm on e, safe to call from any
+// goroutine.
+func (e *Engine) CurrentTerm() uint64 { return atomic.LoadUint64(&e.failover.term) }
 
 var errFenced = errors.New("FENCED this node is not the holder of the current term")
 
@@ -194,19 +198,19 @@ func (e *Engine) cmdPROMOTE(args []string) []byte {
 	if err != nil {
 		return e.encode(errNotAnInteger, false)
 	}
-	if term <= failover.term {
-		return e.encode(fmt.Errorf("ERR term %d is not above the current term %d", term, failover.term), false)
+	if term <= e.failover.term {
+		return e.encode(fmt.Errorf("ERR term %d is not above the current term %d", term, e.failover.term), false)
 	}
 	// A volatile cache cannot enable this feature. Reject the unavailable
 	// operation before treating its proposed term as an authority observation.
-	if failover.path == "" {
+	if e.failover.path == "" {
 		return e.encode(errors.New("ERR no term file: promotion requires an append-only log"), false)
 	}
 	// On disk before a single write is taken at it.
-	if err := observeTerm(term); err != nil {
+	if err := e.observeTerm(term); err != nil {
 		return e.encode(fmt.Errorf("ERR persisting term: %w", err), false)
 	}
-	failover.held, failover.fenced = term, false
+	e.failover.held, e.failover.fenced = term, false
 	return e.encode("OK", true)
 }
 
@@ -226,7 +230,7 @@ func (e *Engine) cmdFENCE(args []string) []byte {
 	if err != nil {
 		return e.encode(errNotAnInteger, false)
 	}
-	if err := observeTerm(term); err != nil {
+	if err := e.observeTerm(term); err != nil {
 		return e.encode(fmt.Errorf("ERR recording term: %w", err), false)
 	}
 	return e.encode("OK", true)

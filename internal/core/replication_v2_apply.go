@@ -56,10 +56,10 @@ func (e *Engine) applyReplicationV2(frame ReplicationFrame) (err error) {
 	// A frame from below the term this replica already knows is a deposed
 	// primary still talking. Following it would rewind the replica onto a
 	// history the cluster has abandoned.
-	if frame.Term < failover.term {
-		return fmt.Errorf("replication frame from term %d, below the known term %d", frame.Term, failover.term)
+	if frame.Term < e.failover.term {
+		return fmt.Errorf("replication frame from term %d, below the known term %d", frame.Term, e.failover.term)
 	}
-	if err := observeTerm(frame.Term); err != nil {
+	if err := e.observeTerm(frame.Term); err != nil {
 		return err
 	}
 	if _, err := hex.DecodeString(frame.Epoch); err != nil {

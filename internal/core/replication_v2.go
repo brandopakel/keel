@@ -215,7 +215,7 @@ func (e *Engine) cmdReplicationPullV2(args []string) []byte {
 	if len(args) != 4 && len(args) != 5 {
 		return e.encode(wrongArguments("KEEL.REPL.PULL2"), false)
 	}
-	if len(args) == 4 && CurrentTerm() != 0 {
+	if len(args) == 4 && e.CurrentTerm() != 0 {
 		return []byte(ReplicationTermRequiredReply)
 	}
 	// The caller's term arrives on every pull, so a primary that has been
@@ -229,7 +229,7 @@ func (e *Engine) cmdReplicationPullV2(args []string) []byte {
 			return e.encode(errNotAnInteger, false)
 		}
 	}
-	if err := observeTerm(callerTerm); err != nil {
+	if err := e.observeTerm(callerTerm); err != nil {
 		return e.encode(fmt.Errorf("ERR recording term: %w", err), false)
 	}
 	if !e.writable() {
@@ -246,7 +246,7 @@ func (e *Engine) cmdReplicationPullV2(args []string) []byte {
 	if e.replicationV2.failed != nil {
 		return e.encode(e.replicationV2.failed, false)
 	}
-	frame := ReplicationFrame{Version: 2, Epoch: e.replication.epoch, From: offset, To: offset, Term: failover.term}
+	frame := ReplicationFrame{Version: 2, Epoch: e.replication.epoch, From: offset, To: offset, Term: e.failover.term}
 	full := args[2] != "" || args[0] != e.replication.epoch || !e.historyV2Contains(offset)
 	if !full {
 		if part != 0 {

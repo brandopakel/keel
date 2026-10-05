@@ -1,9 +1,9 @@
 # Embedding plan: Keel as a Go library
 
 Status: accepted plan, October 2, 2026. Phases 0 and 1 are done (#88, #90), and so are step 2.1,
-the stores, step 2.2, the command scope, and step 2.3, persistence (see "Step
+the stores, step 2.2, the command scope, step 2.3, persistence (see "Step
 2.1: the stores", "Step 2.2: the command scope" and "Step 2.3: persistence"
-below). Step 2.4, replication and failover, is under way (see "Step 2.4:
+below), and step 2.4, replication and failover (see "Step 2.4:
 replication").
 
 The owner asked for Keel to be usable as a Go library, not only as a server:
@@ -665,10 +665,24 @@ choice open, step 2.4 settles it this way:
   through one pointer, and the dirty set is never nil (`engineIn` makes it),
   which brings it back to 74. `replicationV2Enabled` and `writable` inline as
   before.
-- **Failover reads the default engine's role until the third PR.** The term
-  is still the server's, so `LoadTerm` and `observeTerm` read `config`, the
-  default engine's role, and `writable`, which a primary's pulls and every
-  write ask, reads the engine's own role and the server's term.
+- **Failover read the default engine's role until the third PR.** While the
+  term was still the server's, `LoadTerm` and `observeTerm` read `config`,
+  the default engine's role, and `writable`, which a primary's pulls and
+  every write ask, read the engine's own role and the server's term.
+- **The term** moves in the third PR: `failover` (`failoverState`, the term,
+  the term held, whether the engine is fenced, and its file) and the file's
+  I/O hooks, `e.termSync`, `e.termRename` and `e.termSyncDir`, which
+  `engineIn` sets to `syncFile`, `os.Rename` and `syncDir`. `LoadTerm`,
+  `CurrentTerm`, `HeldTerm`, `Fenced` and `Writable` keep their signatures on
+  the default engine; `LoadTerm` and `CurrentTerm` are methods of the same
+  name, `writable` is `Writable`'s, and `observeTerm` and `persistTerm`
+  become methods. An engine's term file is beside its own log; a term it
+  learns from a peer, its replicas' pulls or its primary's frames fences it
+  alone, as its own role says; and its frames carry its own term.
+- **The term stays atomic.** The replica transport reads the term from a
+  goroutine of its own, to send it with each pull, so `e.CurrentTerm` loads
+  it atomically and every store to it is atomic, as the package's were; the
+  server's transport reads the default engine's.
 - **Isolation.** `TestEnginesShareNoReplica` gives two replicas a log each
   and the streams of two primaries in epochs of their own, each with a
   transaction larger than one frame. Applied interleaved, one engine stops
@@ -695,11 +709,35 @@ choice open, step 2.4 settles it this way:
   closing one primary's log closes its snapshot and leaves the other's open.
   The default engine feeds none of it and applies none of it. Reverting the
   opaque images to the default engine's stores fails it.
-- **Census.** The first PR removes the nine entries it moves, and the second
-  the three of the primary's stream.
+- **Isolation, failover.** `TestEnginesShareNoFailover` gives two primaries a
+  log and a term file each. One is promoted and the other fenced at a higher
+  term, and each writes, refuses, reports and keeps only its own term; the
+  first's frames carry its term to a replica of its own, which keeps it
+  beside its own log, while a replica that has moved on deposes the second
+  alone. The first's disk then fails its term file's sync: its promotion
+  fails and fences it, through its own I/O, while the second's promotion goes
+  through the second's. Side by side, each takes fifty promotions, writes and
+  fences on a goroutine of its own while another goroutine reads its term as
+  the transport does; each ends with its own term in its own file, and a
+  restart on each log reads it back, fenced. The default engine's term and
+  file are untouched.
+- **Census.** The first PR removes the nine entries it moves, the second the
+  three of the primary's stream, and the third the four of failover, and
+  with them the census's `replicated` reason. What remains is the default
+  engine (step 2.7), the server's INFO hook (phase 6), and the tables and
+  sentinels, computed once.
 - **Measured per PR**, as in steps 2.1 to 2.3, now including the replica-on
   benchmark: the paired command-path job runs at least twice against develop
-  and once against `65ebdbc`.
+  and once against `65ebdbc`. The second PR's runs against develop came out at
+  1.009 to 1.013, inside the budget, with two rows over 1.04 on repeat on EPYC
+  7763: the log-on LPUSH-RPOP and SISMEMBER, a read whose path the PR changed
+  by one load. Its hot functions were the same instructions as develop's but
+  for that load and one per key written, while the functions whose sizes it
+  changed had flipped the 64-byte alignment of the hot functions after them.
+  A layout control, the PR plus a never-taken branch in the cold `OpenAOF`
+  that restored develop's alignment for nine of twelve hot functions, ran at
+  0.993 and 0.996 with no row over 1.04, so the excess was placement and not
+  cost, and the control was not merged.
 
 ## Risks, in order
 
