@@ -24,8 +24,8 @@ protocols 1 and 2, and checks:
   starts a new epoch. After each the replica's keyspace must be the
   primary's, and the same in every pair;
 - the replica's log: under protocol 2 every pair's replica writes the same log
-  once normalized, and under both protocols each build replays every
-  replica's log to that replica's keyspace;
+  once normalized as a protocol 2 frame is, and under both protocols each
+  build replays every replica's log to that replica's keyspace;
 - terms: term files each build writes load on the other, with the same
   replies to KEEL.PROMOTE, KEEL.FENCE and writes, the same INFO failover
   fields and the same file bytes; and a protocol 2 replica of either build
@@ -449,7 +449,8 @@ def pairs(root, binaries, protocol):
             pair = Pair(case, protocol, binaries, primary, replica)
             log = pair.run()
             pair.replay(log)
-            logs[name] = compat.normalize(log, pair.start)
+            # Normalized as a protocol 2 frame is: a log's, and opaque images in key order.
+            logs[name] = normalize_body(log, pair.start, 'protocol2')
             states[name] = pair.states
             results.append({'name': name, 'passed': True, 'checks': pair.checks,
                             'replica_log_sha256': sha256(case / 'replica' / 'store.aof')})
