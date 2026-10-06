@@ -228,6 +228,11 @@ type Engine struct {
 	// are given. They are read once a cycle, not once a command, so they
 	// come last.
 	settings settings
+
+	// clientBuffers is how INFO reads the connections of the transport
+	// driving e, which installs it with SetClientBuffers; nil, INFO reports
+	// none. Only INFO reads it, so it goes after everything a command reads.
+	clientBuffers func() ClientBufferStats
 }
 
 // defaultEngine is the engine the server and the tests run on until each

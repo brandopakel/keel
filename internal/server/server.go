@@ -756,13 +756,13 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 	var requestBudget requestAllocationBudget
 	e.SetCommandAllocations(&core.CommandAllocationBudget{Limit: maxRetainedClientBytes, ReplyLimit: maxRetainedClassBytes})
 	defer e.SetCommandAllocations(nil)
-	core.ClientBuffers = func() core.ClientBufferStats {
+	e.SetClientBuffers(func() core.ClientBufferStats {
 		return core.ClientBufferStats{Connected: len(clients), InputBytes: retainedInputBytes, ReplyBytes: retainedReplyBytes, TotalBytes: retainedClientBytes,
 			RequestAllocationPeak: requestBudget.peak, RequestAllocationRefusals: requestBudget.refusals.Load(),
 			ClosedSlow: clientsClosedSlow, ClosedUnanswered: clientsClosedUnanswered, ClosedUnread: clientsClosedUnread,
 			RunsUnreplied: runsUnreplied, ConnectionsReceived: connectionsReceived}
-	}
-	defer func() { core.ClientBuffers = nil }()
+	})
+	defer e.SetClientBuffers(nil)
 	defer func() {
 		e.CancelRewrite()
 		for _, c := range clients {
