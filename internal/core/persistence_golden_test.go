@@ -117,6 +117,7 @@ var goldenScenarios = []goldenScenario{
 // every command is followed by the flush the event loop runs after a cycle.
 type goldenRun struct {
 	t       *testing.T
+	e       *Engine
 	mode    goldenMode
 	path    string
 	start   int64
@@ -124,35 +125,36 @@ type goldenRun struct {
 	replies bytes.Buffer
 }
 
-// startGoldenRun opens a run, and returns it with the function that ends it:
-// the log closed, the keyspace emptied and the settings it changed restored.
-func startGoldenRun(t *testing.T, mode goldenMode, seed []byte) (*goldenRun, func()) {
+// startGoldenRun opens a run on e, and returns it with the function that ends
+// it: the log closed, the keyspace emptied and the settings it changed
+// restored.
+func startGoldenRun(t *testing.T, e *Engine, mode goldenMode, seed []byte) (*goldenRun, func()) {
 	t.Helper()
-	options := Configuration()
+	options := e.options
 	stopped := false
 	stop := func() {
 		if stopped {
 			return
 		}
 		stopped = true
-		CancelRewrite()
-		CloseAOF()
-		require.NoError(t, Configure(options))
-		ResetStores()
+		e.CancelRewrite()
+		e.CloseAOF()
+		require.NoError(t, e.configure(options))
+		e.resetStores()
 	}
 	t.Cleanup(stop)
 	// Automatic rewrites start on growth, which a scenario starts itself.
 	held := options
 	held.Fsync, held.AsyncAppend, held.AutoRewritePercentage = mode.fsync, mode.worker, Off
-	require.NoError(t, Configure(held))
-	ResetStores()
-	r := &goldenRun{t: t, mode: mode, path: filepath.Join(t.TempDir(), "golden.aof")}
+	require.NoError(t, e.configure(held))
+	e.resetStores()
+	r := &goldenRun{t: t, e: e, mode: mode, path: filepath.Join(t.TempDir(), "golden.aof")}
 	if seed != nil {
 		require.NoError(t, os.WriteFile(r.path, seed, 0o644))
-		_, err := LoadAOF(r.path)
+		_, err := e.LoadAOF(r.path)
 		require.NoError(t, err)
 	}
-	require.NoError(t, OpenAOF(r.path))
+	require.NoError(t, e.OpenAOF(r.path))
 	r.start = time.Now().UnixMilli()
 	return r, stop
 }
@@ -163,11 +165,11 @@ func startGoldenRun(t *testing.T, mode goldenMode, seed []byte) (*goldenRun, fun
 func (r *goldenRun) cycle() {
 	r.t.Helper()
 	if !r.mode.worker {
-		require.NoError(r.t, FlushAOF())
+		require.NoError(r.t, r.e.FlushAOF())
 		return
 	}
 	for i := 0; ; i++ {
-		ready, err := FlushAOFAsync(nil)
+		ready, err := r.e.FlushAOFAsync(nil)
 		require.NoError(r.t, err)
 		if ready {
 			return
@@ -185,9 +187,9 @@ func (r *goldenRun) do(parts ...string) string {
 	var w replyWriter
 	var err error
 	if r.tx != nil || IsTransactionCommand(cmd.Cmd) {
-		r.tx, err = Transact(r.tx, cmd, &w, nil)
+		r.tx, err = r.e.transact(r.tx, cmd, &w, nil)
 	} else {
-		err = EvalAndResponse(cmd, &w)
+		err = r.e.evalAndResponse(cmd, &w)
 	}
 	require.NoError(r.t, err, "%.80q", parts)
 	r.cycle()
@@ -215,7 +217,7 @@ func (r *goldenRun) unrecorded(parts ...string) {
 // until it ends or until stop says to.
 func (r *goldenRun) driveRewrite(stop func() bool) {
 	r.t.Helper()
-	for i := 0; RewriteActive(); i++ {
+	for i := 0; r.e.RewriteActive(); i++ {
 		if stop != nil && stop() {
 			return
 		}
@@ -234,12 +236,12 @@ type goldenLog struct {
 func (r *goldenRun) finish() goldenLog {
 	r.t.Helper()
 	require.Nil(r.t, r.tx, "a transaction was left open")
-	require.False(r.t, RewriteActive())
+	require.False(r.t, r.e.RewriteActive())
 	r.cycle()
 	raw, err := os.ReadFile(r.path)
 	require.NoError(r.t, err)
 	window := goldenWindow{r.start, time.Now().UnixMilli()}
-	return goldenLog{log: normalizeGoldenLog(r.t, raw, window), replies: r.replies.Bytes(), state: goldenState(r.t, window)}
+	return goldenLog{log: normalizeGoldenLog(r.t, raw, window), replies: r.replies.Bytes(), state: goldenStateOn(r.t, r.e, window)}
 }
 
 func runGoldenScenario(t *testing.T, scenario goldenScenario, mode goldenMode) goldenLog {
@@ -248,7 +250,7 @@ func runGoldenScenario(t *testing.T, scenario goldenScenario, mode goldenMode) g
 	if scenario.seed != nil {
 		seed = scenario.seed()
 	}
-	r, stop := startGoldenRun(t, mode, seed)
+	r, stop := startGoldenRun(t, newTestEngine(t, Options{}), mode, seed)
 	defer stop()
 	scenario.run(r)
 	return r.finish()
@@ -395,7 +397,13 @@ func goldenValue(b *bytes.Buffer, value string) {
 // goldenState describes the default engine's keyspace; see engineState.
 func goldenState(t *testing.T, window goldenWindow) []byte {
 	t.Helper()
-	return engineState(t, defaultEngine, window)
+	return goldenStateOn(t, defaultEngine, window)
+}
+
+// goldenStateOn is goldenState on e.
+func goldenStateOn(t *testing.T, e *Engine, window goldenWindow) []byte {
+	t.Helper()
+	return engineState(t, e, window)
 }
 
 // engineState describes e's keyspace, one key a line in key order: the store
@@ -548,7 +556,7 @@ func goldenSession(r *goldenRun) {
 	// Active expiry: the cycle reaps the key and logs its DEL.
 	r.ok("SET", "s:brief2", "v", "PX", "1")
 	time.Sleep(5 * time.Millisecond)
-	for i := 0; ExpireCycle() == 0; i++ {
+	for i := 0; r.e.ExpireCycle() == 0; i++ {
 		require.Less(r.t, i, 1000, "the expiry cycle did not reap s:brief2")
 	}
 	r.cycle()
@@ -715,9 +723,9 @@ func goldenSession(r *goldenRun) {
 // at once and its DEL follows its record - after the EXEC of a transaction.
 // Each write is the only key, so the eviction has one choice.
 func goldenEvictions(r *goldenRun) {
-	options := Configuration()
+	options := r.e.options
 	options.MaxMemory, options.Eviction, options.EvictionSamples = 1, EvictLRU, 16
-	require.NoError(r.t, Configure(options))
+	require.NoError(r.t, r.e.configure(options))
 	r.ok("SET", "e:1", "v")
 	r.ok("MULTI")
 	r.ok("SET", "e:2", "v")
@@ -771,8 +779,8 @@ func goldenPopulate(r *goldenRun) {
 
 func requireRewriteSucceeded(r *goldenRun) {
 	r.t.Helper()
-	require.Equal(r.t, "ok", persistenceField(r.t, "aof_last_bgrewrite_status"))
-	require.Equal(r.t, "1", persistenceField(r.t, "aof_rewrites"))
+	require.Equal(r.t, "ok", persistenceField(r.t, r.e, "aof_last_bgrewrite_status"))
+	require.Equal(r.t, "1", persistenceField(r.t, r.e, "aof_rewrites"))
 }
 
 // goldenRewriteDirtyBeforeWalk: a key is replaced by another type after the
@@ -781,7 +789,7 @@ func requireRewriteSucceeded(r *goldenRun) {
 // the new log.
 func goldenRewriteDirtyBeforeWalk(r *goldenRun) {
 	goldenPopulate(r)
-	require.NoError(r.t, StartRewrite())
+	require.NoError(r.t, r.e.StartRewrite())
 	r.ok("SET", "h", "replaced")
 	r.driveRewrite(nil)
 	requireRewriteSucceeded(r)
@@ -794,9 +802,9 @@ func goldenRewriteDirtyBeforeWalk(r *goldenRun) {
 // dirty tail writes the whole key again after it, with a DEL first.
 func goldenRewriteDirtyDuringPreflush(r *goldenRun) {
 	goldenPopulate(r)
-	require.NoError(r.t, StartRewrite())
-	r.driveRewrite(func() bool { return persistenceField(r.t, "aof_rewrite_pending_sync") == "1" })
-	require.True(r.t, RewriteActive(), "the preflush sync started")
+	require.NoError(r.t, r.e.StartRewrite())
+	r.driveRewrite(func() bool { return persistenceField(r.t, r.e, "aof_rewrite_pending_sync") == "1" })
+	require.True(r.t, r.e.RewriteActive(), "the preflush sync started")
 	r.ok("RPUSH", "big:list", "during")
 	r.driveRewrite(nil)
 	requireRewriteSucceeded(r)
@@ -811,7 +819,7 @@ func goldenRewriteScheduledByExec(r *goldenRun) {
 	r.ok("SET", "sched", "v")
 	r.ok("BGREWRITEAOF")
 	r.ok("EXEC")
-	require.True(r.t, RewriteActive(), "the scheduled rewrite started after EXEC")
+	require.True(r.t, r.e.RewriteActive(), "the scheduled rewrite started after EXEC")
 	r.driveRewrite(nil)
 	requireRewriteSucceeded(r)
 	r.ok("SET", "after", "v")
@@ -834,7 +842,7 @@ func goldenLegacyFilters(r *goldenRun) {
 	r.ok("CF.ADD", "cf:3", "late")
 	r.ok("BF.INFO", "bf:wide")
 	r.ok("CF.INFO", "cf:7")
-	require.NoError(r.t, StartRewrite())
+	require.NoError(r.t, r.e.StartRewrite())
 	r.driveRewrite(nil)
 	requireRewriteSucceeded(r)
 	r.ok("BF.ADD", "bf:hex", "after")
@@ -903,6 +911,7 @@ func requireSameLog(t *testing.T, want, got []byte, what string) {
 // skipped otherwise. It was run once, on develop at 40eb2f6. Every mode must
 // agree before anything is written.
 func TestPersistenceGoldenCapture(t *testing.T) {
+	t.Parallel()
 	dir := os.Getenv("KEEL_CAPTURE_PERSISTENCE_GOLDEN")
 	if dir == "" {
 		t.Skip("set KEEL_CAPTURE_PERSISTENCE_GOLDEN to rewrite the fixture")
@@ -946,6 +955,7 @@ func TestPersistenceGoldenCapture(t *testing.T) {
 // TestPersistenceGoldenLogsAreUnchanged: every scenario, under every mode,
 // writes develop's log and replies and ends with develop's keyspace.
 func TestPersistenceGoldenLogsAreUnchanged(t *testing.T) {
+	t.Parallel()
 	if os.Getenv("KEEL_CAPTURE_PERSISTENCE_GOLDEN") != "" {
 		t.Skip("capturing")
 	}
@@ -958,6 +968,7 @@ func TestPersistenceGoldenLogsAreUnchanged(t *testing.T) {
 		wantState := readGoldenFile(t, scenario.name+".state.txt")
 		for _, mode := range goldenModes {
 			t.Run(scenario.name+"/"+mode.name, func(t *testing.T) {
+				t.Parallel()
 				got := runGoldenScenario(t, scenario, mode)
 				requireSameLog(t, joinGoldenChunks(t, wantLog), joinGoldenChunks(t, got.log), "the log")
 				require.Equal(t, want.RepliesSHA256, goldenSHA(got.replies), "the replies")
@@ -970,31 +981,31 @@ func TestPersistenceGoldenLogsAreUnchanged(t *testing.T) {
 // TestPersistenceGoldenLogsReplay: develop's logs replay to develop's
 // keyspaces on this build, and so does the log this build rewrites them into.
 func TestPersistenceGoldenLogsReplay(t *testing.T) {
+	t.Parallel()
 	if os.Getenv("KEEL_CAPTURE_PERSISTENCE_GOLDEN") != "" {
 		t.Skip("capturing")
 	}
 	manifest := loadGoldenManifest(t)
-	t.Cleanup(ResetStores)
 	for _, scenario := range goldenScenarios {
 		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			e := newTestEngine(t, Options{})
 			wantState := readGoldenFile(t, scenario.name+".state.txt")
 			require.Equal(t, manifest.Scenarios[scenario.name].StateSHA256, goldenSHA(wantState))
 			path := filepath.Join(t.TempDir(), "develop.aof")
 			require.NoError(t, os.WriteFile(path, readGoldenFile(t, scenario.name+".aof.gz"), 0o644))
-			ResetStores()
-			_, err := LoadAOF(path)
+			_, err := e.LoadAOF(path)
 			require.NoError(t, err)
 			never := goldenWindow{start: -1, end: -1 - int64(24*time.Hour/time.Millisecond)}
-			require.Equal(t, string(wantState), string(goldenState(t, never)), "develop's log, replayed")
+			require.Equal(t, string(wantState), string(goldenStateOn(t, e, never)), "develop's log, replayed")
 
-			require.NoError(t, OpenAOF(path))
-			t.Cleanup(func() { CloseAOF() })
-			require.NoError(t, RewriteAOF())
-			require.NoError(t, CloseAOF())
-			ResetStores()
-			_, err = LoadAOF(path)
+			require.NoError(t, e.OpenAOF(path))
+			require.NoError(t, e.RewriteAOF())
+			require.NoError(t, e.CloseAOF())
+			e.resetStores()
+			_, err = e.LoadAOF(path)
 			require.NoError(t, err)
-			require.Equal(t, string(wantState), string(goldenState(t, never)), "develop's log, rewritten and replayed")
+			require.Equal(t, string(wantState), string(goldenStateOn(t, e, never)), "develop's log, rewritten and replayed")
 		})
 	}
 }

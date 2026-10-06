@@ -127,6 +127,12 @@ func (c *parallelCensus) reaches(n ast.Node, methods bool) string {
 					return false
 				}
 			}
+		case *ast.KeyValueExpr:
+			// A field's name in a composite literal, such as run: in
+			// goldenScenario{run: goldenSession}, is not the function run.
+			if key, ok := x.Key.(*ast.Ident); ok {
+				selected[key] = true
+			}
 		case *ast.SelectorExpr:
 			selected[x.Sel] = true
 			if pkg, ok := x.X.(*ast.Ident); ok && c.src.imports[pkg.Name] {

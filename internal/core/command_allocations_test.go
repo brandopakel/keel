@@ -10,6 +10,7 @@ import (
 )
 
 func TestCommandAllocationBudgetChecksAggregateAndOverflow(t *testing.T) {
+	t.Parallel()
 	b := CommandAllocationBudget{Limit: 100}
 	b.Begin(40)
 	require.True(t, b.Reserve(30))
@@ -26,6 +27,7 @@ func TestCommandAllocationBudgetChecksAggregateAndOverflow(t *testing.T) {
 }
 
 func TestCommandAllocationPeakIncludesExistingBuffers(t *testing.T) {
+	t.Parallel()
 	b := CommandAllocationBudget{Limit: 100}
 	b.Begin(64)
 	require.Equal(t, 64, b.Peak, "a command need not make a reservation")
@@ -41,50 +43,54 @@ func TestCommandAllocationPeakIncludesExistingBuffers(t *testing.T) {
 }
 
 func TestCommandAllocationRefusalPreservesWritesAndReplay(t *testing.T) {
-	old := defaultEngine.commandAllocations
-	t.Cleanup(func() { defaultEngine.commandAllocations = old; ResetStores() })
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	old := e.commandAllocations
+	t.Cleanup(func() { e.commandAllocations = old; e.resetStores() })
 	value := strings.Repeat("v", 16<<10)
-	path := withAOF(t, func() {
-		run(t, "SET", "string", value)
-		run(t, "RPUSH", "list", value, value)
-		run(t, "SADD", "set", value, "second")
-		run(t, "ZADD", "zset", "1", value, "2", "second")
+	path := withAOFOn(t, e, func() {
+		runOn(t, e, "SET", "string", value)
+		runOn(t, e, "RPUSH", "list", value, value)
+		runOn(t, e, "SADD", "set", value, "second")
+		runOn(t, e, "ZADD", "zset", "1", value, "2", "second")
 		for _, command := range [][]string{
 			{"SET", "string", "replacement", "GET"},
 			{"LPOP", "list", "2"}, {"RPOP", "list", "2"},
 			{"SPOP", "set", "2"}, {"ZPOPMIN", "zset", "2"}, {"ZPOPMAX", "zset", "2"},
 		} {
-			defaultEngine.commandAllocations = &CommandAllocationBudget{Limit: 32 << 10}
-			got := rawReply(t, command[0], command[1:]...)
+			e.commandAllocations = &CommandAllocationBudget{Limit: 32 << 10}
+			got := rawReplyOn(t, e, command[0], command[1:]...)
 			require.Equal(t, allocationPressure, got, "%s", command[0])
-			require.Positive(t, defaultEngine.commandAllocations.Refusals)
-			defaultEngine.commandAllocations = nil
-			require.Equal(t, value, run(t, "GET", "string"))
-			require.EqualValues(t, 2, run(t, "LLEN", "list"))
-			require.EqualValues(t, 2, run(t, "SCARD", "set"))
-			require.EqualValues(t, 2, run(t, "ZCARD", "zset"))
+			require.Positive(t, e.commandAllocations.Refusals)
+			e.commandAllocations = nil
+			require.Equal(t, value, runOn(t, e, "GET", "string"))
+			require.EqualValues(t, 2, runOn(t, e, "LLEN", "list"))
+			require.EqualValues(t, 2, runOn(t, e, "SCARD", "set"))
+			require.EqualValues(t, 2, runOn(t, e, "ZCARD", "zset"))
 		}
-		run(t, "SET", "after", "accepted")
+		runOn(t, e, "SET", "after", "accepted")
 	})
 	for replay := 0; replay < 2; replay++ {
-		restart(t, path)
-		require.Equal(t, value, run(t, "GET", "string"))
-		require.Equal(t, "accepted", run(t, "GET", "after"))
-		require.Equal(t, []interface{}{value, value}, run(t, "LRANGE", "list", "0", "-1"))
-		require.ElementsMatch(t, []interface{}{value, "second"}, run(t, "SMEMBERS", "set"))
-		require.Equal(t, []interface{}{value, "1", "second", "2"}, run(t, "ZRANGE", "zset", "0", "-1", "WITHSCORES"))
+		restartOn(t, e, path)
+		require.Equal(t, value, runOn(t, e, "GET", "string"))
+		require.Equal(t, "accepted", runOn(t, e, "GET", "after"))
+		require.Equal(t, []interface{}{value, value}, runOn(t, e, "LRANGE", "list", "0", "-1"))
+		require.ElementsMatch(t, []interface{}{value, "second"}, runOn(t, e, "SMEMBERS", "set"))
+		require.Equal(t, []interface{}{value, "1", "second", "2"}, runOn(t, e, "ZRANGE", "zset", "0", "-1", "WITHSCORES"))
 	}
 }
 
 func TestCommandAllocationAdmissionRejectsBeforeLargeReadBuffers(t *testing.T) {
-	ResetStores()
-	old := defaultEngine.commandAllocations
-	t.Cleanup(func() { defaultEngine.commandAllocations = old; ResetStores() })
+	// Not parallel: it reads the process's heap statistics, which a test
+	// running beside it would move.
+	e := newTestEngine(t, Options{})
+	old := e.commandAllocations
+	t.Cleanup(func() { e.commandAllocations = old; e.resetStores() })
 	value := strings.Repeat("x", 4<<20)
-	run(t, "SET", "large", value)
-	run(t, "HSET", "hash", "field", value)
-	run(t, "SADD", "set", value)
-	run(t, "RPUSH", "list", value)
+	runOn(t, e, "SET", "large", value)
+	runOn(t, e, "HSET", "hash", "field", value)
+	runOn(t, e, "SADD", "set", value)
+	runOn(t, e, "RPUSH", "list", value)
 	for _, command := range [][]string{
 		{"GET", "large"}, {"MGET", "large", "large"},
 		{"HGET", "hash", "field"}, {"HMGET", "hash", "field", "field"},
@@ -92,30 +98,31 @@ func TestCommandAllocationAdmissionRejectsBeforeLargeReadBuffers(t *testing.T) {
 		{"SRANDMEMBER", "set", "-1000000"}, {"LINDEX", "list", "0"},
 		{"KEEL.DUMP", "large"}, {"LCS", "large", "large", "LEN"},
 	} {
-		defaultEngine.commandAllocations = &CommandAllocationBudget{Limit: 1 << 20, Retained: 900 << 10}
+		e.commandAllocations = &CommandAllocationBudget{Limit: 1 << 20, Retained: 900 << 10}
 		runtime.GC()
 		var before, after runtime.MemStats
 		runtime.ReadMemStats(&before)
-		got := rawReply(t, command[0], command[1:]...)
+		got := rawReplyOn(t, e, command[0], command[1:]...)
 		runtime.ReadMemStats(&after)
 		// LCS's configured CPU gate may refuse before reaching allocation.
 		require.Equal(t, byte('-'), got[0], "%s", command[0])
 		require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(128<<10), "%s", command[0])
 	}
-	defaultEngine.commandAllocations = nil
-	require.Equal(t, value, run(t, "GET", "large"))
+	e.commandAllocations = nil
+	require.Equal(t, value, runOn(t, e, "GET", "large"))
 }
 
 func TestKeysAndScanRefuseOversizedNamesBeforeEncoding(t *testing.T) {
-	ResetStores()
-	t.Cleanup(ResetStores)
+	// Not parallel: it reads the process's heap statistics, which a test
+	// running beside it would move.
+	e := newTestEngine(t, Options{})
 	key := strings.Repeat("k", MaxReplyBytes)
-	defaultEngine.dictStore.Put(key, defaultEngine.dictStore.NewObj("v"))
+	e.dictStore.Put(key, e.dictStore.NewObj("v"))
 	for _, command := range [][]string{{"KEYS", "*"}, {"SCAN", "0", "COUNT", "100"}} {
 		runtime.GC()
 		var before, after runtime.MemStats
 		runtime.ReadMemStats(&before)
-		got := rawReply(t, command[0], command[1:]...)
+		got := rawReplyOn(t, e, command[0], command[1:]...)
 		runtime.ReadMemStats(&after)
 		require.Equal(t, replyTooLarge, got)
 		require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(128<<10))
@@ -123,61 +130,65 @@ func TestKeysAndScanRefuseOversizedNamesBeforeEncoding(t *testing.T) {
 }
 
 func TestCommandWorkspaceAndReplyShareReservation(t *testing.T) {
-	ResetStores()
-	old := defaultEngine.commandAllocations
-	t.Cleanup(func() { defaultEngine.commandAllocations = old; ResetStores() })
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	old := e.commandAllocations
+	t.Cleanup(func() { e.commandAllocations = old; e.resetStores() })
 	for i := 0; i < 1000; i++ {
-		run(t, "GEOADD", "geo", "0", "0", strings.Repeat("m", 100)+strconv.Itoa(i))
+		runOn(t, e, "GEOADD", "geo", "0", "0", strings.Repeat("m", 100)+strconv.Itoa(i))
 	}
-	defaultEngine.commandAllocations = &CommandAllocationBudget{Limit: 128 << 10}
-	got := rawReply(t, "GEOSEARCH", "geo", "FROMLONLAT", "0", "0", "BYRADIUS", "1", "km", "COUNT", "1000")
+	e.commandAllocations = &CommandAllocationBudget{Limit: 128 << 10}
+	got := rawReplyOn(t, e, "GEOSEARCH", "geo", "FROMLONLAT", "0", "0", "BYRADIUS", "1", "km", "COUNT", "1000")
 	require.Equal(t, allocationPressure, got)
-	require.Greater(t, defaultEngine.commandAllocations.Reserved, 48000, "point storage fits but combined encoded reply does not")
-	require.Less(t, defaultEngine.commandAllocations.Reserved, defaultEngine.commandAllocations.Limit)
-	defaultEngine.commandAllocations = nil
-	run(t, "SET", "a", strings.Repeat("ab", 500))
-	run(t, "SET", "b", strings.Repeat("ba", 500))
+	require.Greater(t, e.commandAllocations.Reserved, 48000, "point storage fits but combined encoded reply does not")
+	require.Less(t, e.commandAllocations.Reserved, e.commandAllocations.Limit)
+	e.commandAllocations = nil
+	runOn(t, e, "SET", "a", strings.Repeat("ab", 500))
+	runOn(t, e, "SET", "b", strings.Repeat("ba", 500))
 	for _, options := range [][]string{{"LEN"}, {}, {"IDX", "WITHMATCHLEN"}} {
-		defaultEngine.commandAllocations = &CommandAllocationBudget{Limit: 8192}
-		got := rawReply(t, "LCS", append([]string{"a", "b"}, options...)...)
+		e.commandAllocations = &CommandAllocationBudget{Limit: 8192}
+		got := rawReplyOn(t, e, "LCS", append([]string{"a", "b"}, options...)...)
 		require.Equal(t, allocationPressure, got)
 	}
-	defaultEngine.commandAllocations = &CommandAllocationBudget{Limit: 2 << 20}
-	require.EqualValues(t, 999, run(t, "LCS", "a", "b", "LEN"))
-	defaultEngine.commandAllocations.End()
-	require.Equal(t, strings.Repeat("ba", 499)+"b", run(t, "LCS", "a", "b"))
+	e.commandAllocations = &CommandAllocationBudget{Limit: 2 << 20}
+	require.EqualValues(t, 999, runOn(t, e, "LCS", "a", "b", "LEN"))
+	e.commandAllocations.End()
+	require.Equal(t, strings.Repeat("ba", 499)+"b", runOn(t, e, "LCS", "a", "b"))
 }
 
 func TestCommandRemovalReservesExistingLogGrowth(t *testing.T) {
-	old := defaultEngine.commandAllocations
-	t.Cleanup(func() { defaultEngine.commandAllocations = old; ResetStores() })
-	path := withAOF(t, func() {
-		run(t, "SADD", "set", "member")
-		run(t, "SET", "padding", strings.Repeat("p", 1<<20))
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	old := e.commandAllocations
+	t.Cleanup(func() { e.commandAllocations = old; e.resetStores() })
+	path := withAOFOn(t, e, func() {
+		runOn(t, e, "SADD", "set", "member")
+		runOn(t, e, "SET", "padding", strings.Repeat("p", 1<<20))
 		// Fill the current backing allocation so even this tiny removal would
 		// force replacement of a large append buffer.
-		defaultEngine.aof.buf = append(make([]byte, 0, len(defaultEngine.aof.buf)), defaultEngine.aof.buf...)
-		before := len(defaultEngine.aof.buf)
-		defaultEngine.commandAllocations = &CommandAllocationBudget{Limit: 2 << 20, Retained: cap(defaultEngine.aof.buf)}
-		require.Equal(t, allocationPressure, rawReply(t, "SPOP", "set"))
-		require.Equal(t, before, len(defaultEngine.aof.buf), "refused command must not append a partial record")
-		defaultEngine.commandAllocations = nil
-		require.EqualValues(t, 1, run(t, "SCARD", "set"))
+		e.aof.buf = append(make([]byte, 0, len(e.aof.buf)), e.aof.buf...)
+		before := len(e.aof.buf)
+		e.commandAllocations = &CommandAllocationBudget{Limit: 2 << 20, Retained: cap(e.aof.buf)}
+		require.Equal(t, allocationPressure, rawReplyOn(t, e, "SPOP", "set"))
+		require.Equal(t, before, len(e.aof.buf), "refused command must not append a partial record")
+		e.commandAllocations = nil
+		require.EqualValues(t, 1, runOn(t, e, "SCARD", "set"))
 	})
-	restart(t, path)
-	require.Equal(t, []interface{}{"member"}, run(t, "SMEMBERS", "set"))
+	restartOn(t, e, path)
+	require.Equal(t, []interface{}{"member"}, runOn(t, e, "SMEMBERS", "set"))
 }
 
 func TestCommandReplyClassCanRefuseBeforeAggregateLimit(t *testing.T) {
-	ResetStores()
-	old := defaultEngine.commandAllocations
-	t.Cleanup(func() { defaultEngine.commandAllocations = old; ResetStores() })
-	run(t, "SET", "value", strings.Repeat("v", 1<<20))
-	defaultEngine.commandAllocations = &CommandAllocationBudget{Limit: 16 << 20, ReplyLimit: 4 << 20, ReplyRetained: 2 << 20}
-	require.Equal(t, allocationPressure, rawReply(t, "GET", "value"))
-	require.Zero(t, defaultEngine.commandAllocations.Reserved)
-	require.Zero(t, defaultEngine.commandAllocations.ReplyReserved)
-	defaultEngine.commandAllocations.ReplyRetained = 0
-	require.Equal(t, byte('$'), rawReply(t, "GET", "value")[0])
-	require.Positive(t, defaultEngine.commandAllocations.ReplyReserved)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	old := e.commandAllocations
+	t.Cleanup(func() { e.commandAllocations = old; e.resetStores() })
+	runOn(t, e, "SET", "value", strings.Repeat("v", 1<<20))
+	e.commandAllocations = &CommandAllocationBudget{Limit: 16 << 20, ReplyLimit: 4 << 20, ReplyRetained: 2 << 20}
+	require.Equal(t, allocationPressure, rawReplyOn(t, e, "GET", "value"))
+	require.Zero(t, e.commandAllocations.Reserved)
+	require.Zero(t, e.commandAllocations.ReplyReserved)
+	e.commandAllocations.ReplyRetained = 0
+	require.Equal(t, byte('$'), rawReplyOn(t, e, "GET", "value")[0])
+	require.Positive(t, e.commandAllocations.ReplyReserved)
 }

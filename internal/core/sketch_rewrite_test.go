@@ -10,71 +10,74 @@ import (
 )
 
 func TestSketchDumpSlicesPreserveEnvelopeAcrossAllBoundaries(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	for _, kind := range []string{"cms", "morris"} {
 		for _, slice := range []int{1, 2, 3, 4, 5, 7, 16, 24, 64, 65536} {
-			ResetStores()
+			e.resetStores()
 			if kind == "cms" {
 				cms := data_structure.CreateCMS(129, 3)
 				cms.IncrBy("item", 123456)
-				defaultEngine.cmsStore.Put("image", cms)
+				e.cmsStore.Put("image", cms)
 			} else {
 				morris := data_structure.CreateMorris(129, 3)
 				morris.IncrBy("item", 123456)
-				defaultEngine.morrisStore.Put("image", morris)
+				e.morrisStore.Put("image", morris)
 			}
-			want, _ := defaultEngine.dumpKey("image")
-			stream := defaultEngine.newSketchDumpStream("image")
+			want, _ := e.dumpKey("image")
+			stream := e.newSketchDumpStream("image")
 			var got []byte
 			for offset := 0; offset < stream.size(); offset += slice {
 				got = stream.appendSlice(got, offset, min(slice, stream.size()-offset))
 			}
 			require.Equal(t, want, got, "%s slice=%d", kind, slice)
-			require.NoError(t, defaultEngine.restoreKey("restored", got))
+			require.NoError(t, e.restoreKey("restored", got))
 		}
 	}
-	ResetStores()
 }
 
 func TestSketchRewriteReconcilesWritesAcrossBodySlices(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	for _, kind := range []string{"cms", "morris"} {
 		t.Run(kind, func(t *testing.T) {
-			ResetStores()
+			e.resetStores()
 			path := filepath.Join(t.TempDir(), "store.aof")
-			require.NoError(t, OpenAOF(path))
-			t.Cleanup(func() { CancelRewrite(); require.NoError(t, CloseAOF()); ResetStores() })
+			require.NoError(t, e.OpenAOF(path))
+			t.Cleanup(func() { e.CancelRewrite(); require.NoError(t, e.CloseAOF()); e.resetStores() })
 			command := "CMS.INCRBY"
 			if kind == "cms" {
-				defaultEngine.cmsStore.Put("image", data_structure.CreateCMS(1<<20, 1))
+				e.cmsStore.Put("image", data_structure.CreateCMS(1<<20, 1))
 			} else {
-				defaultEngine.morrisStore.Put("image", data_structure.CreateMorris(4<<20, 1))
+				e.morrisStore.Put("image", data_structure.CreateMorris(4<<20, 1))
 				command = "MORRIS.INCRBY"
 			}
-			run(t, "PEXPIRE", "image", "600000")
-			require.NoError(t, StartRewrite())
-			require.NoError(t, AdvanceRewrite())
-			require.NotNil(t, defaultEngine.rewrite.stream.sketch)
+			runOn(t, e, "PEXPIRE", "image", "600000")
+			require.NoError(t, e.StartRewrite())
+			require.NoError(t, e.AdvanceRewrite())
+			require.NotNil(t, e.rewrite.stream.sketch)
 			// Change cells after the header and first counter bytes were emitted.
 			// Every intermediate record must still decode, then reconciliation
 			// must replace it with the exact final table and RNG state.
 			for i := 0; i < 32; i++ {
-				run(t, command, "image", fmt.Sprintf("item:%d", i), "12345")
-				require.NoError(t, AdvanceRewrite())
+				runOn(t, e, command, "image", fmt.Sprintf("item:%d", i), "12345")
+				require.NoError(t, e.AdvanceRewrite())
 			}
-			want, _ := defaultEngine.dumpKey("image")
-			for cycles := 0; RewriteActive(); cycles++ {
+			want, _ := e.dumpKey("image")
+			for cycles := 0; e.RewriteActive(); cycles++ {
 				require.Less(t, cycles, 300)
-				require.NoError(t, FlushAOF())
-				waitForRewriteSync(t)
+				require.NoError(t, e.FlushAOF())
+				waitForRewriteSyncOn(t, e)
 			}
-			require.NoError(t, CloseAOF())
+			require.NoError(t, e.CloseAOF())
 			for restart := 0; restart < 2; restart++ {
-				ResetStores()
-				_, err := LoadAOF(path)
+				e.resetStores()
+				_, err := e.LoadAOF(path)
 				require.NoError(t, err)
-				got, present := defaultEngine.dumpKey("image")
+				got, present := e.dumpKey("image")
 				require.True(t, present)
 				require.Equal(t, want, got)
-				require.Positive(t, run(t, "PTTL", "image").(int64))
+				require.Positive(t, runOn(t, e, "PTTL", "image").(int64))
 			}
 		})
 	}

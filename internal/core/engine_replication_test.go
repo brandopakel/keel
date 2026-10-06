@@ -46,7 +46,7 @@ func captureStreamV2(t *testing.T, name string) replicationStream {
 	s := replicationStream{name: name, epoch: frames[0].Epoch}
 	run(t, "HSET", name+":h", "f", name)
 	run(t, "BF.ADD", name+":bf", name)
-	session := &session{t: t}
+	session := &session{t: t, e: defaultEngine}
 	session.send("MULTI")
 	session.send("SET", name+":first", strings.Repeat(name, 300<<10))
 	session.send("INCR", name+":n")

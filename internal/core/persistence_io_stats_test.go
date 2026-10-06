@@ -13,6 +13,7 @@ import (
 )
 
 func TestPersistenceIOStatsExposeBlockedWorkAndCountFailures(t *testing.T) {
+	t.Parallel()
 	var stats persistenceIOStats
 	started, release, done := make(chan struct{}), make(chan struct{}), make(chan error, 1)
 	go func() {
@@ -51,6 +52,8 @@ func TestPersistenceIOStatsExposeBlockedWorkAndCountFailures(t *testing.T) {
 }
 
 func TestPersistenceIOStatsSupportConcurrentCompletionAndObservation(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	var stats persistenceIOStats
 	var workers sync.WaitGroup
 	for i := 0; i < 32; i++ {
@@ -70,7 +73,7 @@ func TestPersistenceIOStatsSupportConcurrentCompletionAndObservation(t *testing.
 	require.Zero(t, stats.active.Load())
 	require.Zero(t, stats.errors.Load())
 	var out strings.Builder
-	defaultEngine.persistenceIOInfo(&out)
+	e.persistenceIOInfo(&out)
 	for _, prefix := range []string{"aof_write", "aof_sync", "aof_rewrite_write", "aof_rewrite_sync", "aof_rewrite_final_sync", "aof_rewrite_finalize"} {
 		for _, field := range []string{"inflight", "calls", "errors", "total_usec", "max_usec", "last_usec", "slow_calls", "slow_last_usec", "slow_last_unix_usec"} {
 			require.Contains(t, out.String(), prefix+"_"+field+":")

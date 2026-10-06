@@ -116,7 +116,7 @@ func startReplicationGolden(t *testing.T, mode goldenMode, protocol int) *replic
 	reconfigure(t, defaultEngine, func(o *Options) {
 		o.ReplicationFeed, o.ReplicaOf, o.ReplicationProtocol = true, "", protocol
 	})
-	r, _ := startGoldenRun(t, mode, nil)
+	r, _ := startGoldenRun(t, defaultEngine, mode, nil)
 	require.NoError(t, InitReplication())
 	return &replicationGolden{goldenRun: r, names: map[string]string{}}
 }
