@@ -14,19 +14,20 @@ import (
 )
 
 func TestGeoSearchRefusesOversizedReplyBeforeEncoding(t *testing.T) {
-	ResetStores()
-	t.Cleanup(ResetStores)
+	// Not parallel: it reads the process's heap statistics, which a test
+	// running beside it would move.
+	e := newTestEngine(t, Options{})
 	z := data_structure.CreateZSet()
 	score, ok := data_structure.GeoScore(0, 0)
 	require.True(t, ok)
 	for i := 0; i < 6; i++ {
 		z.Add(float64(score), fmt.Sprintf("%d", i)+strings.Repeat("x", 11<<20), 0)
 	}
-	defaultEngine.zsetStore.Put("geo", z)
+	e.zsetStore.Put("geo", z)
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	reply := defaultEngine.cmdGEOSEARCH([]string{"geo", "FROMLONLAT", "0", "0", "BYRADIUS", "1000", "km"})
+	reply := e.cmdGEOSEARCH([]string{"geo", "FROMLONLAT", "0", "0", "BYRADIUS", "1000", "km"})
 	runtime.ReadMemStats(&after)
 	t.Logf("oversized GEOSEARCH allocated %d bytes", after.TotalAlloc-before.TotalAlloc)
 	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(256<<10))
@@ -35,8 +36,8 @@ func TestGeoSearchRefusesOversizedReplyBeforeEncoding(t *testing.T) {
 }
 
 func TestGeoSearchSelectionAndEncodingAgainstFullSort(t *testing.T) {
-	ResetStores()
-	t.Cleanup(ResetStores)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	z := data_structure.CreateZSet()
 	rng := rand.New(rand.NewSource(741))
 	points := make([]data_structure.GeoPoint, 0, 1000)
@@ -50,7 +51,7 @@ func TestGeoSearchSelectionAndEncodingAgainstFullSort(t *testing.T) {
 		points = append(points, data_structure.GeoPoint{Longitude: lon, Latitude: lat,
 			Dist: data_structure.GeohashGetDistance(0, 0, lon, lat), Score: float64(score), Member: member})
 	}
-	defaultEngine.zsetStore.Put("geo", z)
+	e.zsetStore.Put("geo", z)
 	for _, order := range []string{"ASC", "DESC"} {
 		sort.Slice(points, func(i, j int) bool {
 			if order == "ASC" {
@@ -84,20 +85,20 @@ func TestGeoSearchSelectionAndEncodingAgainstFullSort(t *testing.T) {
 					}
 					want = append(want, entry)
 				}
-				require.Equal(t, Encode(want, false), defaultEngine.cmdGEOSEARCH(args), "order=%s count=%d flags=%d", order, count, flags)
+				require.Equal(t, Encode(want, false), e.cmdGEOSEARCH(args), "order=%s count=%d flags=%d", order, count, flags)
 			}
 		}
 	}
 	// ANY chooses the first matching points before applying an explicit order.
 	base := []string{"geo", "FROMLONLAT", "0", "0", "BYRADIUS", "1000", "km", "COUNT", "7", "ANY"}
-	first := run(t, "GEOSEARCH", base...).([]interface{})
+	first := runOn(t, e, "GEOSEARCH", base...).([]interface{})
 	selected := map[string]bool{}
 	for _, name := range first {
 		selected[name.(string)] = true
 	}
 	for _, order := range []string{"ASC", "DESC"} {
 		args := append(append([]string{}, base...), order)
-		got := run(t, "GEOSEARCH", args...).([]interface{})
+		got := runOn(t, e, "GEOSEARCH", args...).([]interface{})
 		require.ElementsMatch(t, first, got)
 		var last float64
 		for i, name := range got {
@@ -120,19 +121,20 @@ func TestGeoSearchSelectionAndEncodingAgainstFullSort(t *testing.T) {
 }
 
 func TestGeoSearchCountDoesNotCollectEveryMatch(t *testing.T) {
-	ResetStores()
-	t.Cleanup(ResetStores)
+	// Not parallel: it reads the process's heap statistics, which a test
+	// running beside it would move.
+	e := newTestEngine(t, Options{})
 	z := data_structure.CreateZSet()
 	for i := 0; i < 50000; i++ {
 		score, ok := data_structure.GeoScore(float64(i)/10000, 0)
 		require.True(t, ok)
 		z.Add(float64(score), fmt.Sprintf("%05d", i), 0)
 	}
-	defaultEngine.zsetStore.Put("geo", z)
+	e.zsetStore.Put("geo", z)
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	reply := defaultEngine.cmdGEOSEARCH([]string{"geo", "FROMLONLAT", "0", "0", "BYRADIUS", "1000", "km", "COUNT", "1"})
+	reply := e.cmdGEOSEARCH([]string{"geo", "FROMLONLAT", "0", "0", "BYRADIUS", "1000", "km", "COUNT", "1"})
 	runtime.ReadMemStats(&after)
 	t.Logf("COUNT 1 across 50000 matches allocated %d bytes", after.TotalAlloc-before.TotalAlloc)
 	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(64<<10))
@@ -140,8 +142,9 @@ func TestGeoSearchCountDoesNotCollectEveryMatch(t *testing.T) {
 }
 
 func TestGeoSearchLargeCountWithSparseMatches(t *testing.T) {
-	ResetStores()
-	t.Cleanup(ResetStores)
+	// Not parallel: it reads the process's heap statistics, which a test
+	// running beside it would move.
+	e := newTestEngine(t, Options{})
 	z := data_structure.CreateZSet()
 	far, ok := data_structure.GeoScore(10, 10)
 	require.True(t, ok)
@@ -151,12 +154,12 @@ func TestGeoSearchLargeCountWithSparseMatches(t *testing.T) {
 	near, ok := data_structure.GeoScore(0, 0)
 	require.True(t, ok)
 	z.Add(float64(near), "near", 0)
-	defaultEngine.zsetStore.Put("geo", z)
+	e.zsetStore.Put("geo", z)
 	for _, count := range []string{"50000", "1000000", "10000000"} {
 		runtime.GC()
 		var before, after runtime.MemStats
 		runtime.ReadMemStats(&before)
-		reply := defaultEngine.cmdGEOSEARCH([]string{"geo", "FROMLONLAT", "0", "0", "BYRADIUS", "1", "m", "COUNT", count})
+		reply := e.cmdGEOSEARCH([]string{"geo", "FROMLONLAT", "0", "0", "BYRADIUS", "1", "m", "COUNT", count})
 		runtime.ReadMemStats(&after)
 		t.Logf("sparse COUNT %s allocated %d bytes", count, after.TotalAlloc-before.TotalAlloc)
 		require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(128<<10))

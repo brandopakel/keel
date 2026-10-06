@@ -13,42 +13,53 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brandopakel/keel/internal/data_structure"
 	"github.com/stretchr/testify/require"
 )
 
 func setupReplicationV2(t *testing.T) {
 	t.Helper()
+	setupReplicationV2On(t, defaultEngine)
+}
+
+// setupReplicationV2On is setupReplicationV2 on e.
+func setupReplicationV2On(t *testing.T, e *Engine) {
+	t.Helper()
 	// Registered first, so it runs last, once the options are back: the
 	// stream and the replica start afresh in the role those give, so that
-	// nothing this test fed or applied stays on the default engine.
-	t.Cleanup(func() { require.NoError(t, InitReplication()) })
+	// nothing this test fed or applied stays on e.
+	t.Cleanup(func() { require.NoError(t, e.InitReplication()) })
 	// The options are put back next, after the replica and the stream are.
-	withOptions(t, func(o *Options) {
+	withOptionsOn(t, e, func(o *Options) {
 		o.ReplicationProtocol, o.Fsync, o.ReplicationFeed, o.ReplicaOf = 2, FsyncNever, true, ""
 	})
-	oldExpiry, oldEviction := data_structure.DefaultSpace.SuspendExpiry, data_structure.DefaultSpace.SuspendEviction
+	oldExpiry, oldEviction := e.space.SuspendExpiry, e.space.SuspendEviction
 	t.Cleanup(func() {
 		// Closing cancels a rewrite still running, as a server's shutdown
 		// does, without counting it as a failed one. A failure would outlive
 		// the keyspace and the test, and the default engine would report it
 		// to every test after this one.
-		CloseAOF()
-		defaultEngine.resetReplicationV2()
-		defaultEngine.resetReplica()
-		data_structure.DefaultSpace.SuspendExpiry, data_structure.DefaultSpace.SuspendEviction = oldExpiry, oldEviction
+		e.CloseAOF()
+		e.resetReplicationV2()
+		e.resetReplica()
+		e.space.SuspendExpiry, e.space.SuspendEviction = oldExpiry, oldEviction
 	})
-	ResetStores()
-	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "primary.aof")))
-	require.NoError(t, InitReplication())
+	e.resetStores()
+	require.NoError(t, e.OpenAOF(filepath.Join(t.TempDir(), "primary.aof")))
+	require.NoError(t, e.InitReplication())
 }
 
 func pullV2(t *testing.T, epoch string, offset uint64, snapshot string, part uint64) ReplicationFrame {
 	t.Helper()
+	return pullV2On(t, defaultEngine, epoch, offset, snapshot, part)
+}
+
+// pullV2On is pullV2 on e.
+func pullV2On(t *testing.T, e *Engine, epoch string, offset uint64, snapshot string, part uint64) ReplicationFrame {
+	t.Helper()
 	// A pull carries the caller's term. These tests are a single node acting as
 	// both ends, so it sends the term it already holds.
-	reply := run(t, "KEEL.REPL.PULL2", epoch, strconv.FormatUint(offset, 10), snapshot,
-		strconv.FormatUint(part, 10), strconv.FormatUint(defaultEngine.failover.term, 10))
+	reply := runOn(t, e, "KEEL.REPL.PULL2", epoch, strconv.FormatUint(offset, 10), snapshot,
+		strconv.FormatUint(part, 10), strconv.FormatUint(e.failover.term, 10))
 	encoded, ok := reply.(string)
 	require.True(t, ok, "reply: %v", reply)
 	var frame ReplicationFrame
@@ -60,16 +71,22 @@ func pullV2(t *testing.T, epoch string, offset uint64, snapshot string, part uin
 
 func snapshotV2(t *testing.T) []ReplicationFrame {
 	t.Helper()
-	first := pullV2(t, "", 0, "", 0)
+	return snapshotV2On(t, defaultEngine)
+}
+
+// snapshotV2On is snapshotV2 on e.
+func snapshotV2On(t *testing.T, e *Engine) []ReplicationFrame {
+	t.Helper()
+	first := pullV2On(t, e, "", 0, "", 0)
 	require.True(t, first.Pending)
-	for n := 0; RewriteActive() && n < 100000; n++ {
-		require.NoError(t, FlushAOF())
-		waitForRewriteSync(t)
+	for n := 0; e.RewriteActive() && n < 100000; n++ {
+		require.NoError(t, e.FlushAOF())
+		waitForRewriteSyncOn(t, e)
 	}
-	require.False(t, RewriteActive())
+	require.False(t, e.RewriteActive())
 	var frames []ReplicationFrame
 	for id, part := "", uint64(0); ; {
-		f := pullV2(t, "", 0, id, part)
+		f := pullV2On(t, e, "", 0, id, part)
 		require.True(t, f.Full)
 		require.False(t, f.Pending)
 		frames = append(frames, f)
@@ -82,12 +99,18 @@ func snapshotV2(t *testing.T) []ReplicationFrame {
 
 func becomeReplicaV2(t *testing.T) string {
 	t.Helper()
-	require.NoError(t, CloseAOF())
-	ResetStores()
-	withOptions(t, func(o *Options) { o.ReplicationFeed, o.ReplicaOf = false, "primary.test:6379" })
+	return becomeReplicaV2On(t, defaultEngine)
+}
+
+// becomeReplicaV2On is becomeReplicaV2 on e.
+func becomeReplicaV2On(t *testing.T, e *Engine) string {
+	t.Helper()
+	require.NoError(t, e.CloseAOF())
+	e.resetStores()
+	withOptionsOn(t, e, func(o *Options) { o.ReplicationFeed, o.ReplicaOf = false, "primary.test:6379" })
 	path := filepath.Join(t.TempDir(), "replica.aof")
-	require.NoError(t, OpenAOF(path))
-	require.NoError(t, InitReplication())
+	require.NoError(t, e.OpenAOF(path))
+	require.NoError(t, e.InitReplication())
 	return path
 }
 
@@ -152,11 +175,17 @@ func TestReplicationV2LargeSnapshotOperationsAndFrozenFile(t *testing.T) {
 
 func assertCheckpointDigest(t *testing.T, path string) {
 	t.Helper()
+	assertCheckpointDigestOn(t, defaultEngine, path)
+}
+
+// assertCheckpointDigestOn is assertCheckpointDigest on e.
+func assertCheckpointDigestOn(t *testing.T, e *Engine, path string) {
+	t.Helper()
 	body, err := os.ReadFile(path)
 	require.NoError(t, err)
 	sum := sha256.Sum256(body)
-	require.Equal(t, hex.EncodeToString(sum[:]), defaultEngine.currentAOFDigest())
-	require.Equal(t, int64(len(body)), defaultEngine.aof.digestBytes)
+	require.Equal(t, hex.EncodeToString(sum[:]), e.currentAOFDigest())
+	require.Equal(t, int64(len(body)), e.aof.digestBytes)
 }
 
 func TestReplicationV2CheckpointRestartExpiryAndRewrite(t *testing.T) {

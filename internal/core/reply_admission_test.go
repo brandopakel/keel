@@ -10,18 +10,20 @@ import (
 )
 
 func TestAmplifiedReadsRejectBeforeResponseAllocation(t *testing.T) {
+	// Not parallel: it reads the process's heap statistics, which a test
+	// running beside it would move.
+	e := newTestEngine(t, Options{})
 	for _, name := range []string{"MGET", "HMGET", "SRANDMEMBER"} {
 		t.Run(name, func(t *testing.T) {
-			ResetStores()
-			t.Cleanup(ResetStores)
+			e.resetStores()
 			value := strings.Repeat("x", 1<<20)
-			defaultEngine.dictStore.Put("string", defaultEngine.dictStore.NewObj(value))
+			e.dictStore.Put("string", e.dictStore.NewObj(value))
 			h := data_structure.NewHash()
 			h.Set("field", value)
-			defaultEngine.hashStore.Put("hash", h)
+			e.hashStore.Put("hash", h)
 			s := data_structure.NewSet()
 			s.Add(value)
-			defaultEngine.setStore.Put("set", s)
+			e.setStore.Put("set", s)
 			args := []string{name}
 			switch name {
 			case "MGET":
@@ -39,18 +41,19 @@ func TestAmplifiedReadsRejectBeforeResponseAllocation(t *testing.T) {
 			runtime.GC()
 			var before, after runtime.MemStats
 			runtime.ReadMemStats(&before)
-			reply := rawReply(t, args[0], args[1:]...)
+			reply := rawReplyOn(t, e, args[0], args[1:]...)
 			runtime.ReadMemStats(&after)
 			require.Less(t, len(reply), 1024, "oversized reply must be refused")
 			require.Contains(t, string(reply), "reply exceeds")
 			require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(256<<10), "reject before allocating the amplified payload")
-			require.Equal(t, value, defaultEngine.dictStore.Peek("string").Value)
+			require.Equal(t, value, e.dictStore.Peek("string").Value)
 			require.Equal(t, 1, s.Len())
 		})
 	}
 }
 
 func TestReplySizeChecksIncludeFramingAndAvoidOverflow(t *testing.T) {
+	t.Parallel()
 	for _, length := range []int{0, 9, 10, 99, 100, 1 << 20} {
 		framed := length + decimalDigits(length) + 5
 		size, fits := addBulkSize(MaxReplyBytes-framed, length)
@@ -64,26 +67,27 @@ func TestReplySizeChecksIncludeFramingAndAvoidOverflow(t *testing.T) {
 }
 
 func TestAdmittedLookupRepliesPreserveBinaryEmptyAndNilValues(t *testing.T) {
-	ResetStores()
-	t.Cleanup(ResetStores)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	value := "a\x00\r\nb"
-	run(t, "SET", "binary", value)
-	run(t, "SET", "empty", "")
-	run(t, "HSET", "hash", "binary", value, "empty", "")
+	runOn(t, e, "SET", "binary", value)
+	runOn(t, e, "SET", "empty", "")
+	runOn(t, e, "HSET", "hash", "binary", value, "empty", "")
 	want := Encode([]interface{}{value, "", nil, value}, false)
-	require.Equal(t, want, rawReply(t, "MGET", "binary", "empty", "hash", "binary"))
-	require.Equal(t, want, rawReply(t, "HMGET", "hash", "binary", "empty", "missing", "binary"))
-	run(t, "SADD", "set", value)
-	require.Equal(t, Encode([]string{value, value, value}, false), rawReply(t, "SRANDMEMBER", "set", "-3"))
+	require.Equal(t, want, rawReplyOn(t, e, "MGET", "binary", "empty", "hash", "binary"))
+	require.Equal(t, want, rawReplyOn(t, e, "HMGET", "hash", "binary", "empty", "missing", "binary"))
+	runOn(t, e, "SADD", "set", value)
+	require.Equal(t, Encode([]string{value, value, value}, false), rawReplyOn(t, e, "SRANDMEMBER", "set", "-3"))
 }
 
 func TestRepeatedMemberIndexLimitRejectsBeforeAllocating(t *testing.T) {
-	ResetStores()
-	t.Cleanup(ResetStores)
-	run(t, "SADD", "set", "")
+	// Not parallel: it reads the process's heap statistics, which a test
+	// running beside it would move.
+	e := newTestEngine(t, Options{})
+	runOn(t, e, "SADD", "set", "")
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	got := rawReply(t, "SRANDMEMBER", "set", "-16777216")
+	got := rawReplyOn(t, e, "SRANDMEMBER", "set", "-16777216")
 	runtime.ReadMemStats(&after)
 	require.Equal(t, replyTooLarge, got)
 	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(256<<10))

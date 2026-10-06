@@ -18,45 +18,48 @@ import (
 )
 
 func TestAOFTranscriptLargeValueKeepsBoundedBuffer(t *testing.T) {
-	ResetStores()
-	withOptions(t, func(o *Options) { o.Fsync = FsyncNever })
+	// Not parallel: it reads the process's heap statistics, which a test
+	// running beside it would move.
+	e := newTestEngine(t, Options{})
+	reconfigure(t, e, func(o *Options) { o.Fsync = FsyncNever })
 	path := filepath.Join(t.TempDir(), "store.aof")
-	require.NoError(t, OpenAOF(path))
-	t.Cleanup(func() { CloseAOF(); ResetStores() })
+	require.NoError(t, e.OpenAOF(path))
+	t.Cleanup(func() { e.CloseAOF(); e.resetStores() })
 	value := strings.Repeat("v", 8<<20)
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	require.Equal(t, "OK", run(t, "SET", "large", value))
+	require.Equal(t, "OK", runOn(t, e, "SET", "large", value))
 	runtime.ReadMemStats(&after)
-	t.Logf("large SET allocated %d bytes, retained log capacity %d", after.TotalAlloc-before.TotalAlloc, cap(defaultEngine.aof.buf))
-	require.LessOrEqual(t, cap(defaultEngine.aof.buf), maxAOFTranscriptBytes)
+	t.Logf("large SET allocated %d bytes, retained log capacity %d", after.TotalAlloc-before.TotalAlloc, cap(e.aof.buf))
+	require.LessOrEqual(t, cap(e.aof.buf), maxAOFTranscriptBytes)
 	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(6<<20))
-	require.NoError(t, CloseAOF())
+	require.NoError(t, e.CloseAOF())
 	encoded, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, appendCommand(nil, "SET", "large", value), encoded)
 	for i := 0; i < 2; i++ {
-		restart(t, path)
-		require.Equal(t, value, run(t, "GET", "large"))
+		restartOn(t, e, path)
+		require.Equal(t, value, runOn(t, e, "GET", "large"))
 	}
 }
 
 func TestAOFTranscriptAdmitsFourLargeValuesBehindPendingAppend(t *testing.T) {
-	ResetStores()
-	oldWrite := defaultEngine.aofWrite
-	withOptions(t, func(o *Options) { o.MaxMemory, o.MaxKeys = 0, 100000 })
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	oldWrite := e.aofWrite
+	reconfigure(t, e, func(o *Options) { o.MaxMemory, o.MaxKeys = 0, 100000 })
 	release, entered := make(chan struct{}), make(chan struct{})
 	var once sync.Once
 	t.Cleanup(func() {
 		once.Do(func() { close(release) })
-		CloseAOF()
-		defaultEngine.aofWrite = oldWrite
-		ResetStores()
+		e.CloseAOF()
+		e.aofWrite = oldWrite
+		e.resetStores()
 	})
 	path := filepath.Join(t.TempDir(), "batch.aof")
-	require.NoError(t, OpenAOF(path))
-	defaultEngine.aofWrite = func(f *os.File, body []byte) (int, error) {
+	require.NoError(t, e.OpenAOF(path))
+	e.aofWrite = func(f *os.File, body []byte) (int, error) {
 		select {
 		case <-entered:
 		default:
@@ -65,8 +68,8 @@ func TestAOFTranscriptAdmitsFourLargeValuesBehindPendingAppend(t *testing.T) {
 		<-release
 		return oldWrite(f, body)
 	}
-	run(t, "SET", "first", "safe")
-	ready, err := FlushAOFAsync(nil)
+	runOn(t, e, "SET", "first", "safe")
+	ready, err := e.FlushAOFAsync(nil)
 	require.NoError(t, err)
 	require.False(t, ready)
 	<-entered
@@ -74,126 +77,132 @@ func TestAOFTranscriptAdmitsFourLargeValuesBehindPendingAppend(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		key := fmt.Sprint("large:", i)
 		commands := []*Command{{Cmd: "SET", Args: []string{key, value, "PX", "60000"}}}
-		reserve, _, bounded := AppendAdmission(commands)
+		reserve, _, bounded := e.AppendAdmission(commands)
 		require.True(t, bounded)
-		require.True(t, AppendHasRoom(reserve), "four one-MiB values plus framing should fit")
-		before := len(defaultEngine.aof.buf)
-		require.Equal(t, "OK", run(t, "SET", commands[0].Args...))
-		require.LessOrEqual(t, len(defaultEngine.aof.buf)-before, reserve)
-		require.True(t, AppendPending(), "commands must not synchronously join the paused worker")
-		require.Zero(t, AppendReadyOffset(), "pending writes remain unacknowledged")
+		require.True(t, e.AppendHasRoom(reserve), "four one-MiB values plus framing should fit")
+		before := len(e.aof.buf)
+		require.Equal(t, "OK", runOn(t, e, "SET", commands[0].Args...))
+		require.LessOrEqual(t, len(e.aof.buf)-before, reserve)
+		require.True(t, e.AppendPending(), "commands must not synchronously join the paused worker")
+		require.Zero(t, e.AppendReadyOffset(), "pending writes remain unacknowledged")
 	}
-	require.LessOrEqual(t, cap(defaultEngine.aof.buf), maxAOFTranscriptBytes)
+	require.LessOrEqual(t, cap(e.aof.buf), maxAOFTranscriptBytes)
 	once.Do(func() { close(release) })
-	require.NoError(t, CloseAOF())
+	require.NoError(t, e.CloseAOF())
 	for i := 0; i < 2; i++ {
-		restart(t, path)
+		restartOn(t, e, path)
 		for key := 0; key < 4; key++ {
-			require.Equal(t, value, run(t, "GET", fmt.Sprint("large:", key)))
+			require.Equal(t, value, runOn(t, e, "GET", fmt.Sprint("large:", key)))
 		}
 	}
 }
 
 func TestAOFTranscriptDrainsDoNotSyncOrAdvanceRewrite(t *testing.T) {
-	ResetStores()
-	oldSync := defaultEngine.aofSync
-	withOptions(t, func(o *Options) { o.Fsync = FsyncAlways })
-	t.Cleanup(func() { defaultEngine.aofSync = oldSync; CloseAOF(); ResetStores() })
-	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "store.aof")))
-	run(t, "SET", "before", "v")
-	require.NoError(t, FlushAOF())
-	require.NoError(t, StartRewrite())
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	oldSync := e.aofSync
+	reconfigure(t, e, func(o *Options) { o.Fsync = FsyncAlways })
+	t.Cleanup(func() { e.aofSync = oldSync; e.CloseAOF(); e.resetStores() })
+	require.NoError(t, e.OpenAOF(filepath.Join(t.TempDir(), "store.aof")))
+	runOn(t, e, "SET", "before", "v")
+	require.NoError(t, e.FlushAOF())
+	require.NoError(t, e.StartRewrite())
 	syncs := 0
-	defaultEngine.aofSync = func(f *os.File) error { syncs++; return oldSync(f) }
-	priorReady, priorRewrite := AppendReadyOffset(), defaultEngine.rewrite.written
-	run(t, "SET", "large", strings.Repeat("v", 3*maxAOFTranscriptBytes))
+	e.aofSync = func(f *os.File) error { syncs++; return oldSync(f) }
+	priorReady, priorRewrite := e.AppendReadyOffset(), e.rewrite.written
+	runOn(t, e, "SET", "large", strings.Repeat("v", 3*maxAOFTranscriptBytes))
 	require.Zero(t, syncs, "fragments cannot fsync a partial command")
-	require.Equal(t, priorReady, AppendReadyOffset(), "partial command cannot be acknowledged")
-	require.Equal(t, priorRewrite, defaultEngine.rewrite.written, "fragment drains cannot advance or replace the rewrite")
-	require.Greater(t, defaultEngine.appendWritten, priorReady)
-	require.True(t, RewriteActive())
-	require.NoError(t, FlushAOF())
+	require.Equal(t, priorReady, e.AppendReadyOffset(), "partial command cannot be acknowledged")
+	require.Equal(t, priorRewrite, e.rewrite.written, "fragment drains cannot advance or replace the rewrite")
+	require.Greater(t, e.appendWritten, priorReady)
+	require.True(t, e.RewriteActive())
+	require.NoError(t, e.FlushAOF())
 	require.Equal(t, 1, syncs)
-	require.Equal(t, AppendOffset(), AppendReadyOffset())
-	require.Equal(t, AppendOffset(), defaultEngine.appendSynced)
+	require.Equal(t, e.AppendOffset(), e.AppendReadyOffset())
+	require.Equal(t, e.AppendOffset(), e.appendSynced)
 }
 
 func TestAOFTranscriptPartialWriteNeverAdvancesReplyPrefix(t *testing.T) {
-	ResetStores()
-	oldWrite := defaultEngine.aofWrite
-	t.Cleanup(func() { defaultEngine.aofWrite = oldWrite; CloseAOF(); ResetStores() })
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	oldWrite := e.aofWrite
+	t.Cleanup(func() { e.aofWrite = oldWrite; e.CloseAOF(); e.resetStores() })
 	path := filepath.Join(t.TempDir(), "store.aof")
-	require.NoError(t, OpenAOF(path))
-	run(t, "SET", "before", "safe")
-	require.NoError(t, FlushAOF())
-	ready := AppendReadyOffset()
-	defaultEngine.aofWrite = func(f *os.File, body []byte) (int, error) { return f.Write(body[:len(body)/2]) }
-	run(t, "SET", "torn", strings.Repeat("v", 3*maxAOFTranscriptBytes))
-	require.ErrorIs(t, defaultEngine.aof.failed, io.ErrShortWrite)
-	require.Equal(t, ready, AppendReadyOffset())
-	require.ErrorIs(t, FlushAOF(), io.ErrShortWrite)
-	require.ErrorIs(t, CloseAOF(), io.ErrShortWrite)
-	defaultEngine.aofWrite = oldWrite
-	ResetStores()
-	_, err := LoadAOF(path)
+	require.NoError(t, e.OpenAOF(path))
+	runOn(t, e, "SET", "before", "safe")
+	require.NoError(t, e.FlushAOF())
+	ready := e.AppendReadyOffset()
+	e.aofWrite = func(f *os.File, body []byte) (int, error) { return f.Write(body[:len(body)/2]) }
+	runOn(t, e, "SET", "torn", strings.Repeat("v", 3*maxAOFTranscriptBytes))
+	require.ErrorIs(t, e.aof.failed, io.ErrShortWrite)
+	require.Equal(t, ready, e.AppendReadyOffset())
+	require.ErrorIs(t, e.FlushAOF(), io.ErrShortWrite)
+	require.ErrorIs(t, e.CloseAOF(), io.ErrShortWrite)
+	e.aofWrite = oldWrite
+	e.resetStores()
+	_, err := e.LoadAOF(path)
 	var torn *truncatedAOF
 	require.ErrorAs(t, err, &torn)
 	require.NoError(t, RepairAOFTail(err))
 	for i := 0; i < 2; i++ {
-		restart(t, path)
-		require.Equal(t, "safe", run(t, "GET", "before"))
-		require.EqualValues(t, 0, run(t, "EXISTS", "torn"))
+		restartOn(t, e, path)
+		require.Equal(t, "safe", runOn(t, e, "GET", "before"))
+		require.EqualValues(t, 0, runOn(t, e, "EXISTS", "torn"))
 	}
 }
 
 func TestAOFTranscriptFailedDrainDoesNotPublishReplication(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	for _, tail := range []int{1, 3 << 20} {
 		t.Run(fmt.Sprint(tail), func(t *testing.T) {
-			setupReplicationV2(t)
-			oldWrite := defaultEngine.aofWrite
-			t.Cleanup(func() { defaultEngine.aofWrite = oldWrite })
-			run(t, "SET", "acknowledged", "safe")
-			require.NoError(t, FlushAOF())
-			ready := AppendReadyOffset()
-			before := defaultEngine.replicationV2.end
-			run(t, "SET", "prior", strings.Repeat("p", 2<<20))
-			published := defaultEngine.replicationV2.end
+			setupReplicationV2On(t, e)
+			oldWrite := e.aofWrite
+			t.Cleanup(func() { e.aofWrite = oldWrite })
+			runOn(t, e, "SET", "acknowledged", "safe")
+			require.NoError(t, e.FlushAOF())
+			ready := e.AppendReadyOffset()
+			before := e.replicationV2.end
+			runOn(t, e, "SET", "prior", strings.Repeat("p", 2<<20))
+			published := e.replicationV2.end
 			require.Greater(t, published, before, "the successful control must publish its command")
-			require.Greater(t, len(defaultEngine.aof.buf), 1)
-			defaultEngine.aofWrite = func(f *os.File, body []byte) (int, error) {
+			require.Greater(t, len(e.aof.buf), 1)
+			e.aofWrite = func(f *os.File, body []byte) (int, error) {
 				return f.Write(body[:len(body)-tail])
 			}
 			require.NotPanics(t, func() {
-				run(t, "SET", "torn", strings.Repeat("v", 2*maxAOFTranscriptBytes))
+				runOn(t, e, "SET", "torn", strings.Repeat("v", 2*maxAOFTranscriptBytes))
 			})
-			require.ErrorIs(t, defaultEngine.aof.failed, io.ErrShortWrite)
-			require.Equal(t, published, defaultEngine.replicationV2.end, "failed drain must not publish a resliced suffix")
-			require.Equal(t, ready, AppendReadyOffset(), "failure cannot acknowledge either buffered command")
-			require.ErrorIs(t, FlushAOF(), io.ErrShortWrite)
+			require.ErrorIs(t, e.aof.failed, io.ErrShortWrite)
+			require.Equal(t, published, e.replicationV2.end, "failed drain must not publish a resliced suffix")
+			require.Equal(t, ready, e.AppendReadyOffset(), "failure cannot acknowledge either buffered command")
+			require.ErrorIs(t, e.FlushAOF(), io.ErrShortWrite)
 		})
 	}
 }
 
 func TestAOFTranscriptReplicationPreservesChunkedPrefixes(t *testing.T) {
-	setupReplicationV2(t)
-	snapshot := snapshotV2(t)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setupReplicationV2On(t, e)
+	snapshot := snapshotV2On(t, e)
 	epoch, offset := snapshot[0].Epoch, snapshot[0].To
 	value := strings.Repeat("v", 2<<20)
-	run(t, "SET", "prefix", "one")                // must not be published again on the first drain
-	run(t, "SET", "large", value, "PX", "600000") // two staged records
-	run(t, "INCR", "counter")
-	run(t, "SADD", "set", value, "small")
-	run(t, "SPOP", "set", "2") // canonical removal crosses the drain
-	run(t, "INCR", "counter")
-	run(t, "CMS.INITBYDIM", "cms", "65536", "8") // opaque image exceeds a chunk
-	run(t, "CMS.INCRBY", "cms", "hits", "7")
-	cms, ok := defaultEngine.dumpKey("cms")
+	runOn(t, e, "SET", "prefix", "one")                // must not be published again on the first drain
+	runOn(t, e, "SET", "large", value, "PX", "600000") // two staged records
+	runOn(t, e, "INCR", "counter")
+	runOn(t, e, "SADD", "set", value, "small")
+	runOn(t, e, "SPOP", "set", "2") // canonical removal crosses the drain
+	runOn(t, e, "INCR", "counter")
+	runOn(t, e, "CMS.INITBYDIM", "cms", "65536", "8") // opaque image exceeds a chunk
+	runOn(t, e, "CMS.INCRBY", "cms", "hits", "7")
+	cms, ok := e.dumpKey("cms")
 	require.True(t, ok)
-	wantTTL, ok := defaultEngine.dictStore.GetExpiry("large")
+	wantTTL, ok := e.dictStore.GetExpiry("large")
 	require.True(t, ok)
 	var deltas []ReplicationFrame
 	for {
-		frame := pullV2(t, epoch, offset, "", 0)
+		frame := pullV2On(t, e, epoch, offset, "", 0)
 		require.False(t, frame.Full)
 		require.False(t, frame.Pending)
 		deltas = append(deltas, frame)
@@ -203,50 +212,52 @@ func TestAOFTranscriptReplicationPreservesChunkedPrefixes(t *testing.T) {
 		}
 	}
 	require.Greater(t, len(deltas), 20)
-	path := becomeReplicaV2(t)
+	path := becomeReplicaV2On(t, e)
 	for _, frame := range append(snapshot, deltas...) {
-		require.NoError(t, ApplyReplication(frame))
+		require.NoError(t, e.ApplyReplication(frame))
 	}
-	require.True(t, defaultEngine.replicaReady)
-	require.Equal(t, "2", run(t, "GET", "counter"), "stream drains must not duplicate previous commands")
-	require.Equal(t, value, run(t, "GET", "large"))
-	gotTTL, ok := defaultEngine.dictStore.GetExpiry("large")
+	require.True(t, e.replicaReady)
+	require.Equal(t, "2", runOn(t, e, "GET", "counter"), "stream drains must not duplicate previous commands")
+	require.Equal(t, value, runOn(t, e, "GET", "large"))
+	gotTTL, ok := e.dictStore.GetExpiry("large")
 	require.True(t, ok)
 	require.Equal(t, wantTTL, gotTTL)
-	require.EqualValues(t, 0, run(t, "SCARD", "set"))
-	gotCMS, ok := defaultEngine.dumpKey("cms")
+	require.EqualValues(t, 0, runOn(t, e, "SCARD", "set"))
+	gotCMS, ok := e.dumpKey("cms")
 	require.True(t, ok)
 	require.Equal(t, cms, gotCMS, "opaque updates preserve the exact image")
-	assertCheckpointDigest(t, path)
+	assertCheckpointDigestOn(t, e, path)
 }
 
 func TestAOFTranscriptExpiryAndRecreationKeepCanonicalOrder(t *testing.T) {
-	setupReplicationV2(t)
-	withOptions(t, func(o *Options) { o.ActiveExpireSamples, o.ActiveExpireRounds = 64, 4 })
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setupReplicationV2On(t, e)
+	reconfigure(t, e, func(o *Options) { o.ActiveExpireSamples, o.ActiveExpireRounds = 64, 4 })
 	keys := make([]string, 40)
 	for i := range keys {
 		keys[i] = fmt.Sprint(i) + strings.Repeat("e", 128<<10)
-		run(t, "SET", keys[i], "old")
-		defaultEngine.dictStore.SetExpiryAt(keys[i], 1)
+		runOn(t, e, "SET", keys[i], "old")
+		e.dictStore.SetExpiryAt(keys[i], 1)
 	}
 	// These direct expiries model a clock advance after persistence without a
 	// sleep. Snapshot expiry semantics are covered by the full replication suite.
-	run(t, "SET", keys[0], "new")
-	for KeysWithExpiry() > 0 {
-		require.Positive(t, ExpireCycle())
+	runOn(t, e, "SET", keys[0], "new")
+	for e.KeysWithExpiry() > 0 {
+		require.Positive(t, e.ExpireCycle())
 	}
-	require.Equal(t, "new", run(t, "GET", keys[0]))
-	require.EqualValues(t, 1, run(t, "DBSIZE"))
-	require.NoError(t, FlushAOF())
-	path := defaultEngine.aof.path
-	require.NoError(t, CloseAOF())
+	require.Equal(t, "new", runOn(t, e, "GET", keys[0]))
+	require.EqualValues(t, 1, runOn(t, e, "DBSIZE"))
+	require.NoError(t, e.FlushAOF())
+	path := e.aof.path
+	require.NoError(t, e.CloseAOF())
 	for i := 0; i < 2; i++ {
-		restart(t, path)
-		require.EqualValues(t, 1, run(t, "DBSIZE"))
-		require.Equal(t, "new", run(t, "GET", keys[0]))
+		restartOn(t, e, path)
+		require.EqualValues(t, 1, runOn(t, e, "DBSIZE"))
+		require.Equal(t, "new", runOn(t, e, "GET", keys[0]))
 	}
 	var body []byte
-	for _, piece := range defaultEngine.replicationV2.history {
+	for _, piece := range e.replicationV2.history {
 		body = append(body, piece.body...)
 	}
 	file, err := os.ReadFile(path)
@@ -255,21 +266,24 @@ func TestAOFTranscriptExpiryAndRecreationKeepCanonicalOrder(t *testing.T) {
 }
 
 func TestAOFTranscriptJoinsOlderAppendBeforeDirectDrain(t *testing.T) {
-	ResetStores()
-	oldWrite := defaultEngine.aofWrite
+	// Not parallel: it finds its own drain waiting in a dump of every
+	// goroutine's stack, where a test beside it could be waiting in the same
+	// functions.
+	e := newTestEngine(t, Options{})
+	oldWrite := e.aofWrite
 	release, entered := make(chan struct{}), make(chan struct{})
 	var once sync.Once
 	t.Cleanup(func() {
 		once.Do(func() { close(release) })
-		CloseAOF()
-		defaultEngine.aofWrite = oldWrite
-		ResetStores()
+		e.CloseAOF()
+		e.aofWrite = oldWrite
+		e.resetStores()
 	})
 	path := filepath.Join(t.TempDir(), "store.aof")
-	require.NoError(t, OpenAOF(path))
+	require.NoError(t, e.OpenAOF(path))
 	var calls atomic.Int32
 	var firstDone atomic.Bool
-	defaultEngine.aofWrite = func(f *os.File, body []byte) (int, error) {
+	e.aofWrite = func(f *os.File, body []byte) (int, error) {
 		if calls.Add(1) == 1 {
 			close(entered)
 			<-release
@@ -282,12 +296,12 @@ func TestAOFTranscriptJoinsOlderAppendBeforeDirectDrain(t *testing.T) {
 		}
 		return oldWrite(f, body)
 	}
-	run(t, "SET", "first", "safe")
-	ready, err := FlushAOFAsync(nil)
+	runOn(t, e, "SET", "first", "safe")
+	ready, err := e.FlushAOFAsync(nil)
 	require.NoError(t, err)
 	require.False(t, ready)
 	<-entered
-	require.False(t, AppendHasRoom(2*maxAOFTranscriptBytes), "normal server admission must use its barrier")
+	require.False(t, e.AppendHasRoom(2*maxAOFTranscriptBytes), "normal server admission must use its barrier")
 	value := strings.Repeat("x", 2*maxAOFTranscriptBytes)
 	// Release only after observing the direct drain waiting in pollAppend.
 	// A timer alone could release before execution and silently skip the join.
@@ -323,10 +337,10 @@ func TestAOFTranscriptJoinsOlderAppendBeforeDirectDrain(t *testing.T) {
 			}
 		}
 	}()
-	run(t, "SET", "second", value) // even a direct core caller must preserve order
+	runOn(t, e, "SET", "second", value) // even a direct core caller must preserve order
 	require.True(t, <-joined, "direct drain did not exercise the blocked append join")
-	require.NoError(t, defaultEngine.aof.failed)
-	require.NoError(t, CloseAOF())
+	require.NoError(t, e.aof.failed)
+	require.NoError(t, e.CloseAOF())
 	got, err := os.ReadFile(path)
 	require.NoError(t, err)
 	want := appendCommand(nil, "SET", "first", "safe")
@@ -335,43 +349,46 @@ func TestAOFTranscriptJoinsOlderAppendBeforeDirectDrain(t *testing.T) {
 }
 
 func TestAOFTranscriptMassEvictionKeepsBoundedBuffer(t *testing.T) {
-	withOptions(t, func(o *Options) { o.Fsync, o.MaxKeys, o.MaxMemory = FsyncNever, 1000, 0 })
+	// Not parallel: it reads the process's heap statistics, which a test
+	// running beside it would move.
+	e := newTestEngine(t, Options{})
+	reconfigure(t, e, func(o *Options) { o.Fsync, o.MaxKeys, o.MaxMemory = FsyncNever, 1000, 0 })
 	t.Cleanup(func() {
-		CloseAOF()
-		ResetStores()
+		e.CloseAOF()
+		e.resetStores()
 	})
-	ResetStores()
+	e.resetStores()
 	path := filepath.Join(t.TempDir(), "eviction.aof")
-	require.NoError(t, OpenAOF(path))
+	require.NoError(t, e.OpenAOF(path))
 	keys := make([]string, 0, 65)
 	for i := 0; i < 64; i++ {
 		key := fmt.Sprint(i) + strings.Repeat("k", 128<<10)
 		keys = append(keys, key)
-		require.Equal(t, "OK", run(t, "SET", key, "v"))
-		require.NoError(t, FlushAOF())
+		require.Equal(t, "OK", runOn(t, e, "SET", key, "v"))
+		require.NoError(t, e.FlushAOF())
 	}
 	keys = append(keys, "last")
-	withOptions(t, func(o *Options) { o.MaxKeys = 1 })
+	reconfigure(t, e, func(o *Options) { o.MaxKeys = 1 })
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	require.Equal(t, "OK", run(t, "SET", "last", "v"))
+	require.Equal(t, "OK", runOn(t, e, "SET", "last", "v"))
 	runtime.ReadMemStats(&after)
-	t.Logf("mass eviction allocated %d bytes, retained log capacity %d", after.TotalAlloc-before.TotalAlloc, cap(defaultEngine.aof.buf))
-	require.LessOrEqual(t, cap(defaultEngine.aof.buf), maxAOFTranscriptBytes)
+	t.Logf("mass eviction allocated %d bytes, retained log capacity %d", after.TotalAlloc-before.TotalAlloc, cap(e.aof.buf))
+	require.LessOrEqual(t, cap(e.aof.buf), maxAOFTranscriptBytes)
 	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(8<<20))
 	var survivors []string
 	for _, key := range keys {
-		if defaultEngine.dictStore.Has(key) {
+		if e.dictStore.Has(key) {
 			survivors = append(survivors, key)
 		}
 	}
 	require.Len(t, survivors, 1)
-	require.NoError(t, CloseAOF())
-	withOptions(t, func(o *Options) { o.MaxKeys = 1000 })
+	require.NoError(t, e.CloseAOF())
+	reconfigure(t, e, func(o *Options) { o.MaxKeys = 1000 })
 	for i := 0; i < 2; i++ {
-		restart(t, path)
-		require.EqualValues(t, 1, run(t, "DBSIZE"))
-		require.Equal(t, "v", run(t, "GET", survivors[0]))
+		restartOn(t, e, path)
+		require.EqualValues(t, 1, runOn(t, e, "DBSIZE"))
+		require.Equal(t, "v", runOn(t, e, "GET", survivors[0]))
 	}
 }
