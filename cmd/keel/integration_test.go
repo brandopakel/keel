@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -116,28 +117,66 @@ func launchTestServer(t *testing.T, startupTimeout time.Duration, env []string, 
 	return nil
 }
 
-// portsHandedOut are the ports freePort has given a test server in this
-// process.
-var portsHandedOut sync.Map
+// Test servers listen on ports from [testPortFloor, testPortCeiling), which is
+// below the range the kernel hands out by itself (Linux's
+// ip_local_port_range starts at 32768 by default, macOS's at 49152).
+const (
+	testPortFloor   = 20000
+	testPortCeiling = 32000
+)
 
-// freePort returns a port no other test server in this process has been given.
+// nextTestPort counts the ports freePort has handed out in this process.
+// freePort starts from an offset taken from the process id, so that two test
+// processes at once rarely meet.
+var nextTestPort atomic.Int64
+
+// freePort returns a free port that no other test server in the process has
+// had, and that nothing else can be given before the server binds it.
 //
-// The kernel picks a free port for a listener on :0, which is closed so that
-// the server can bind the port a moment later. Tests run side by side, so in
-// that moment the kernel may give another test the same port; the second
-// server would fail to bind it, or a test would find the first server
-// answering on its port. A port is therefore handed out once per process.
+// A port the kernel picks for a listener on :0, closed so that the server can
+// bind it, was free only for that moment. The kernel hands just-closed ports
+// out again, to the next listener on :0 and to outgoing connections, in this
+// process or another. Tests run side by side, and a race-instrumented server
+// takes a while to start, so another test's probe would take the port first,
+// several times a run (a CI diagnostic counted 7 to 14 in each three-pass race
+// run). Then a test's readiness check reached that probe instead of its server.
+// The next dial was refused, or a connection the probe had queued was reset.
+//
+// Ports below the kernel's own range cannot be handed out that way. Within the
+// process each is tried once, in turn, and kept only if a listener can bind it,
+// which skips any that something else holds.
 func freePort(t *testing.T) int {
 	t.Helper()
-	for {
-		listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	requireTestPortsBelowEphemeral(t)
+	span := int64(testPortCeiling - testPortFloor)
+	offset := int64(os.Getpid()) * 7919 % span
+	for tries := int64(0); tries < span; tries++ {
+		port := testPortFloor + int((offset+nextTestPort.Add(1)-1)%span)
+		listener, err := net.Listen("tcp4", fmt.Sprintf("127.0.0.1:%d", port))
 		if err != nil {
-			t.Fatal(err)
+			continue
 		}
-		port := listener.Addr().(*net.TCPAddr).Port
 		listener.Close()
-		if _, taken := portsHandedOut.LoadOrStore(port, true); !taken {
-			return port
+		return port
+	}
+	t.Fatalf("no free port in [%d, %d) for a test server", testPortFloor, testPortCeiling)
+	return 0
+}
+
+// requireTestPortsBelowEphemeral fails t when Linux is set to hand out ports
+// at or below testPortCeiling, which would let the kernel take a test server's
+// port again; the check freePort exists for would then not hold.
+func requireTestPortsBelowEphemeral(t *testing.T) {
+	t.Helper()
+	body, err := os.ReadFile("/proc/sys/net/ipv4/ip_local_port_range")
+	if err != nil {
+		return // not Linux: macOS hands out ports from 49152
+	}
+	fields := strings.Fields(string(body))
+	if len(fields) == 2 {
+		if low, err := strconv.Atoi(fields[0]); err == nil && low < testPortCeiling {
+			t.Fatalf("the kernel hands out ports from %d (ip_local_port_range %q), inside the test servers' range [%d, %d)",
+				low, strings.TrimSpace(string(body)), testPortFloor, testPortCeiling)
 		}
 	}
 }
