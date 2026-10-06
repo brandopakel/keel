@@ -15,49 +15,53 @@ import (
 // word at all was accepted in the position - both silently, since the reply was
 // OK either way.
 func TestCmdSetReadsTheExpiryKeyword(t *testing.T) {
-	ResetStores()
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 
-	assert.EqualValues(t, "OK", mustDecode(t, defaultEngine.cmdSET([]string{"s", "v", "EX", "100"})))
+	assert.EqualValues(t, "OK", mustDecode(t, e.cmdSET([]string{"s", "v", "EX", "100"})))
 	// Within one second, not exactly 100: TTL reports whole seconds and rounds
 	// down, so a millisecond spent between the two commands shows as 99.
-	assert.InDelta(t, 100, mustDecode(t, defaultEngine.cmdTTL([]string{"s"})), 1)
+	assert.InDelta(t, 100, mustDecode(t, e.cmdTTL([]string{"s"})), 1)
 
 	// 100 milliseconds is under a second, so TTL in whole seconds is 0 - not
 	// the 100 it reported when PX was read as EX.
-	assert.EqualValues(t, "OK", mustDecode(t, defaultEngine.cmdSET([]string{"ms", "v", "PX", "100"})))
-	assert.EqualValues(t, 0, mustDecode(t, defaultEngine.cmdTTL([]string{"ms"})))
+	assert.EqualValues(t, "OK", mustDecode(t, e.cmdSET([]string{"ms", "v", "PX", "100"})))
+	assert.EqualValues(t, 0, mustDecode(t, e.cmdTTL([]string{"ms"})))
 
 	// Lower case is the same keyword.
-	assert.EqualValues(t, "OK", mustDecode(t, defaultEngine.cmdSET([]string{"lower", "v", "px", "100"})))
-	assert.EqualValues(t, 0, mustDecode(t, defaultEngine.cmdTTL([]string{"lower"})))
+	assert.EqualValues(t, "OK", mustDecode(t, e.cmdSET([]string{"lower", "v", "px", "100"})))
+	assert.EqualValues(t, 0, mustDecode(t, e.cmdTTL([]string{"lower"})))
 }
 
 func TestCmdSetRejectsWhatItDoesNotImplement(t *testing.T) {
-	ResetStores()
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 
 	for _, bad := range [][]string{
 		{"k", "v", "ZZ", "100"},
 		{"k", "v", "KEEPTTL", "100"},
 		{"k", "v", "NX", "XX"},
 	} {
-		res, _ := Decode(defaultEngine.cmdSET(bad))
+		res, _ := Decode(e.cmdSET(bad))
 		assert.Contains(t, res, "syntax error", "SET %v must be refused, not guessed at", bad)
-		assert.Equal(t, constant.RespNil, defaultEngine.cmdGET([]string{"k"}), "and must not have written anything")
+		assert.Equal(t, constant.RespNil, e.cmdGET([]string{"k"}), "and must not have written anything")
 	}
 }
 
 func TestCmdSetRejectsAnExpiryThatHasAlreadyPassed(t *testing.T) {
-	ResetStores()
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	for _, bad := range [][]string{{"k", "v", "EX", "0"}, {"k", "v", "PX", "-1"}} {
-		res, _ := Decode(defaultEngine.cmdSET(bad))
+		res, _ := Decode(e.cmdSET(bad))
 		assert.Contains(t, res, "invalid expire time", "SET %v", bad)
 	}
 }
 
 // TestCmdSetWithoutExpiryIsUnchanged guards the common path.
 func TestCmdSetWithoutExpiryIsUnchanged(t *testing.T) {
-	ResetStores()
-	assert.EqualValues(t, "OK", mustDecode(t, defaultEngine.cmdSET([]string{"plain", "value"})))
-	assert.EqualValues(t, "value", mustDecode(t, defaultEngine.cmdGET([]string{"plain"})))
-	assert.EqualValues(t, -1, mustDecode(t, defaultEngine.cmdTTL([]string{"plain"})), "no TTL means no expiry")
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	assert.EqualValues(t, "OK", mustDecode(t, e.cmdSET([]string{"plain", "value"})))
+	assert.EqualValues(t, "value", mustDecode(t, e.cmdGET([]string{"plain"})))
+	assert.EqualValues(t, -1, mustDecode(t, e.cmdTTL([]string{"plain"})), "no TTL means no expiry")
 }

@@ -27,6 +27,7 @@ func FuzzCommandParserMatchesValueDecoder(f *testing.F) {
 }
 
 func TestParsedCommandOwnsInputBytes(t *testing.T) {
+	t.Parallel()
 	wire := appendCommand(nil, "SET", "small-key", strings.Repeat("x", 1<<20))
 	command, _, err := ParseCmd(wire)
 	if err != nil {

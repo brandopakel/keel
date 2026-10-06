@@ -9,15 +9,14 @@ import (
 	"github.com/brandopakel/keel/internal/constant"
 )
 
-func resetDictStore() { ResetStores() }
-
 func TestCmdMemoryUsage(t *testing.T) {
-	resetDictStore()
-	defaultEngine.cmdSET([]string{"small", "v"})
-	defaultEngine.cmdSET([]string{"large", strings.Repeat("v", 5000)})
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	e.cmdSET([]string{"small", "v"})
+	e.cmdSET([]string{"large", strings.Repeat("v", 5000)})
 
-	small, _ := Decode(defaultEngine.cmdMEMORY([]string{"USAGE", "small"}))
-	large, _ := Decode(defaultEngine.cmdMEMORY([]string{"USAGE", "large"}))
+	small, _ := Decode(e.cmdMEMORY([]string{"USAGE", "small"}))
+	large, _ := Decode(e.cmdMEMORY([]string{"USAGE", "large"}))
 
 	assert.Greater(t, small.(int64), int64(0))
 	assert.Greater(t, large.(int64), small.(int64)+4000,
@@ -25,34 +24,36 @@ func TestCmdMemoryUsage(t *testing.T) {
 }
 
 func TestCmdMemoryUsageOnMissingKey(t *testing.T) {
-	resetDictStore()
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	// Asserted on the wire bytes rather than the decoded value: DecodeOne maps
 	// the RESP null bulk string to an empty string, so a decoded comparison
 	// could not tell nil from a zero-length reply.
-	assert.Equal(t, constant.RespNil, defaultEngine.cmdMEMORY([]string{"USAGE", "nosuchkey"}),
+	assert.Equal(t, constant.RespNil, e.cmdMEMORY([]string{"USAGE", "nosuchkey"}),
 		"a missing key reports nil, not zero")
 }
 
 func TestCmdMemoryRejectsUnknownSubcommand(t *testing.T) {
-	resetDictStore()
-	res, _ := Decode(defaultEngine.cmdMEMORY([]string{"DOCTOR"}))
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	res, _ := Decode(e.cmdMEMORY([]string{"DOCTOR"}))
 	assert.Equal(t, "ERR unknown subcommand 'DOCTOR'. Try MEMORY HELP.", res)
 
-	res, _ = Decode(defaultEngine.cmdMEMORY([]string{}))
+	res, _ = Decode(e.cmdMEMORY([]string{}))
 	assert.Contains(t, res, "wrong number of arguments")
 
-	res, _ = Decode(defaultEngine.cmdMEMORY([]string{"USAGE"}))
+	res, _ = Decode(e.cmdMEMORY([]string{"USAGE"}))
 	assert.Contains(t, res, "wrong number of arguments")
 }
 
 func TestCmdInfoReportsMemoryAndKeyspace(t *testing.T) {
-	resetDictStore()
-	withOptions(t, func(o *Options) { o.MaxMemory = 1 << 20 })
+	t.Parallel()
+	e := newTestEngine(t, Options{MaxMemory: 1 << 20})
 
-	defaultEngine.cmdSET([]string{"a", "1"})
-	defaultEngine.cmdSET([]string{"b", "2"})
+	e.cmdSET([]string{"a", "1"})
+	e.cmdSET([]string{"b", "2"})
 
-	res, err := Decode(defaultEngine.cmdINFO([]string{}))
+	res, err := Decode(e.cmdINFO([]string{}))
 	assert.Nil(t, err)
 	out := res.(string)
 
@@ -64,32 +65,35 @@ func TestCmdInfoReportsMemoryAndKeyspace(t *testing.T) {
 }
 
 func TestCmdInfoSectionFiltering(t *testing.T) {
-	resetDictStore()
-	res, _ := Decode(defaultEngine.cmdINFO([]string{"memory"}))
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	res, _ := Decode(e.cmdINFO([]string{"memory"}))
 	out := res.(string)
 	assert.Contains(t, out, "# Memory")
 	assert.NotContains(t, out, "# Keyspace", "a section filter must exclude the others")
 
-	res, _ = Decode(defaultEngine.cmdINFO([]string{"keyspace"}))
+	res, _ = Decode(e.cmdINFO([]string{"keyspace"}))
 	out = res.(string)
 	assert.Contains(t, out, "# Keyspace")
 	assert.NotContains(t, out, "# Memory")
 }
 
 func TestCmdInfoReportsTheActivePolicy(t *testing.T) {
-	resetDictStore()
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	for policy, want := range map[EvictionPolicy]string{
 		EvictLRU:    "allkeys-lru",
 		EvictLFU:    "allkeys-lfu",
 		EvictRandom: "allkeys-random",
 	} {
-		withOptions(t, func(o *Options) { o.Eviction = policy })
-		res, _ := Decode(defaultEngine.cmdINFO([]string{"memory"}))
+		reconfigure(t, e, func(o *Options) { o.Eviction = policy })
+		res, _ := Decode(e.cmdINFO([]string{"memory"}))
 		assert.Contains(t, res.(string), "maxmemory_policy:"+want)
 	}
 }
 
 func TestHumanBytes(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		in   uint64
 		want string
@@ -107,15 +111,16 @@ func TestHumanBytes(t *testing.T) {
 }
 
 func TestCmdDbsize(t *testing.T) {
-	resetDictStore()
-	res, _ := Decode(defaultEngine.cmdDBSIZE([]string{}))
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	res, _ := Decode(e.cmdDBSIZE([]string{}))
 	assert.EqualValues(t, 0, res)
 
-	defaultEngine.cmdSET([]string{"a", "1"})
-	defaultEngine.cmdSET([]string{"b", "2"})
-	res, _ = Decode(defaultEngine.cmdDBSIZE([]string{}))
+	e.cmdSET([]string{"a", "1"})
+	e.cmdSET([]string{"b", "2"})
+	res, _ = Decode(e.cmdDBSIZE([]string{}))
 	assert.EqualValues(t, 2, res)
 
-	res, _ = Decode(defaultEngine.cmdDBSIZE([]string{"extra"}))
+	res, _ = Decode(e.cmdDBSIZE([]string{"extra"}))
 	assert.Contains(t, res, "wrong number of arguments")
 }

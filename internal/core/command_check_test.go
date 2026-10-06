@@ -12,6 +12,7 @@ import (
 // an arity error, and repeated as sent, NUL-ended and 128 bytes at most, when
 // there is no such subcommand.
 func TestSubcommandsAreLookedUpAsRedisLooksThemUp(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		args []string
 		want string
@@ -34,6 +35,7 @@ func TestSubcommandsAreLookedUpAsRedisLooksThemUp(t *testing.T) {
 // %s prints them, ending at a NUL; the echo here is cut at 16 KiB as well, so
 // an error never copies an argument the size of the query buffer.
 func TestEchoArgumentIsCsPercentS(t *testing.T) {
+	t.Parallel()
 	require.Equal(t, "a", EchoArgument("a\x00b"))
 	require.Equal(t, strings.Repeat("x", 200), EchoArgument(strings.Repeat("x", 200)))
 	require.Len(t, EchoArgument(strings.Repeat("x", 1<<20)), argumentEchoLimit)
@@ -42,21 +44,23 @@ func TestEchoArgumentIsCsPercentS(t *testing.T) {
 // TestHelpIsRedissForTheSubcommandsThereAre: MEMORY HELP is in Redis's form,
 // simple strings in either protocol, so that "Try MEMORY HELP." has an answer.
 func TestHelpIsRedissForTheSubcommandsThereAre(t *testing.T) {
-	ResetStores()
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	for _, resp3 := range []bool{false, true} {
-		help := string(rawReplyAs(t, resp3, "MEMORY", "help"))
+		help := string(rawReplyAsOn(t, e, resp3, "MEMORY", "help"))
 		require.True(t, strings.HasPrefix(help, "*8\r\n+MEMORY <subcommand> [<arg> [value] [opt] ...]. Subcommands are:\r\n+STATS\r\n"), help)
 		require.True(t, strings.HasSuffix(help, "+HELP\r\n+    Print this help.\r\n"), help)
 	}
-	require.Equal(t, "-ERR wrong number of arguments for 'memory|help' command\r\n", string(rawReply(t, "MEMORY", "HELP", "x")))
+	require.Equal(t, "-ERR wrong number of arguments for 'memory|help' command\r\n", string(rawReplyOn(t, e, "MEMORY", "HELP", "x")))
 }
 
 // TestMemoryUsageReadsSamplesAsRedisDoes: SAMPLES takes a count that is not
 // negative; anything else after the key is a syntax error.
 func TestMemoryUsageReadsSamplesAsRedisDoes(t *testing.T) {
-	ResetStores()
-	run(t, "SET", "k", "v")
-	require.Equal(t, rawReply(t, "MEMORY", "USAGE", "k"), rawReply(t, "MEMORY", "USAGE", "k", "samples", "0"))
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	runOn(t, e, "SET", "k", "v")
+	require.Equal(t, rawReplyOn(t, e, "MEMORY", "USAGE", "k"), rawReplyOn(t, e, "MEMORY", "USAGE", "k", "samples", "0"))
 	for args, want := range map[string]string{
 		"BAD":         "-ERR syntax error\r\n",
 		"SAMPLES":     "-ERR syntax error\r\n",
@@ -64,18 +68,19 @@ func TestMemoryUsageReadsSamplesAsRedisDoes(t *testing.T) {
 		"SAMPLES x":   "-ERR value is not an integer or out of range\r\n",
 		"SAMPLES 5 X": "-ERR syntax error\r\n",
 	} {
-		require.Equal(t, want, string(rawReply(t, "MEMORY", append([]string{"USAGE", "k"}, strings.Fields(args)...)...)), args)
+		require.Equal(t, want, string(rawReplyOn(t, e, "MEMORY", append([]string{"USAGE", "k"}, strings.Fields(args)...)...)), args)
 	}
 }
 
 // TestInfoTakesSectionsAsRedisDoes: any number of sections, a name that is
 // not one adding nothing.
 func TestInfoTakesSectionsAsRedisDoes(t *testing.T) {
-	ResetStores()
-	both := run(t, "INFO", "server", "KEYSPACE").(string)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	both := runOn(t, e, "INFO", "server", "KEYSPACE").(string)
 	require.Contains(t, both, "# Server\r\n")
 	require.Contains(t, both, "# Keyspace\r\n")
 	require.NotContains(t, both, "# Memory\r\n")
-	require.Equal(t, "", run(t, "INFO", "nosuch", "other"))
-	require.Equal(t, run(t, "INFO"), run(t, "INFO", "everything"))
+	require.Equal(t, "", runOn(t, e, "INFO", "nosuch", "other"))
+	require.Equal(t, runOn(t, e, "INFO"), runOn(t, e, "INFO", "everything"))
 }

@@ -56,12 +56,18 @@ func rawReply(t *testing.T, name string, args ...string) []byte {
 // returns the path, so a test can restart from it.
 func withAOF(t *testing.T, fn func()) string {
 	t.Helper()
+	return withAOFOn(t, defaultEngine, fn)
+}
+
+// withAOFOn is withAOF on e.
+func withAOFOn(t *testing.T, e *Engine, fn func()) string {
+	t.Helper()
 	path := filepath.Join(t.TempDir(), "test.aof")
-	ResetStores()
-	assert.NoError(t, OpenAOF(path))
+	e.resetStores()
+	assert.NoError(t, e.OpenAOF(path))
 	fn()
-	assert.NoError(t, FlushAOF())
-	assert.NoError(t, CloseAOF())
+	assert.NoError(t, e.FlushAOF())
+	assert.NoError(t, e.CloseAOF())
 	return path
 }
 
@@ -69,8 +75,14 @@ func withAOF(t *testing.T, fn func()) string {
 // a real restart does.
 func restart(t *testing.T, path string) int {
 	t.Helper()
-	ResetStores()
-	applied, err := LoadAOF(path)
+	return restartOn(t, defaultEngine, path)
+}
+
+// restartOn is restart on e.
+func restartOn(t *testing.T, e *Engine, path string) int {
+	t.Helper()
+	e.resetStores()
+	applied, err := e.LoadAOF(path)
 	assert.NoError(t, err)
 	return applied
 }

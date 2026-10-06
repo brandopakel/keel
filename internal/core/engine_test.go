@@ -467,6 +467,9 @@ func TestEnginesShareNoLog(t *testing.T) {
 // side.
 func TestEnginesShareNoRewrite(t *testing.T) {
 	ResetStores()
+	// What the default engine's rewrites came to outlives its keyspace, so it
+	// is whatever earlier tests left; a's and b's must leave it as it is.
+	defaultOutcome, defaultRewrites := defaultEngine.rewriteOutcome, defaultEngine.aof.rewrites
 	dir := t.TempDir()
 	a := newEngine(Options{})
 	b := newEngine(Options{})
@@ -655,7 +658,8 @@ func TestEnginesShareNoRewrite(t *testing.T) {
 	replays(b)
 	assert.False(t, defaultEngine.RewriteActive())
 	assert.Nil(t, defaultEngine.aof.file)
-	assert.Equal(t, "ok", field(defaultEngine, "aof_last_bgrewrite_status"), "neither's failures are the default engine's")
+	assert.Equal(t, defaultOutcome, defaultEngine.rewriteOutcome, "neither's failures are the default engine's")
+	assert.Equal(t, defaultRewrites, defaultEngine.aof.rewrites, "nor are their rewrites")
 }
 
 // midTransaction is a transport whose own command, run in its place inside an

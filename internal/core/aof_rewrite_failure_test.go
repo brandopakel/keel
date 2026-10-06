@@ -99,9 +99,25 @@ func sameFile(t *testing.T, f *os.File, path string) bool {
 	return os.SameFile(a, b)
 }
 
-// restoreRewriteHooks puts back every injectable step a test may replace.
+// keepRewriteHistory puts back, when t ends, what outlives a rewrite of e's
+// log: what INFO reports of the rewrites so far, the retry limit, the wait
+// for the next automatic rewrite, the budget aborts and the snapshot's retry.
+// A test that fails rewrites on purpose would otherwise leave its failures on
+// e for every later test to read, which on the default engine is every test
+// that runs after it. Called first, so that it runs last.
+func keepRewriteHistory(t *testing.T, e *Engine) {
+	t.Helper()
+	outcome, next, aborts, retry := e.rewriteOutcome, e.nextAutoRewrite, e.rewriteBudgetAborts, e.snapshotRetryAt
+	t.Cleanup(func() {
+		e.rewriteOutcome, e.nextAutoRewrite, e.rewriteBudgetAborts, e.snapshotRetryAt = outcome, next, aborts, retry
+	})
+}
+
+// restoreRewriteHooks puts back every injectable step a test may replace, and
+// what the test's rewrites came to.
 func restoreRewriteHooks(t *testing.T) {
 	t.Helper()
+	keepRewriteHistory(t, defaultEngine)
 	write, sync, open, rename, dir := defaultEngine.rewriteFileWrite, defaultEngine.rewriteFileSync, defaultEngine.rewriteOpenLog, defaultEngine.rewriteRename, defaultEngine.rewriteSyncDir
 	t.Cleanup(func() {
 		if RewriteActive() {

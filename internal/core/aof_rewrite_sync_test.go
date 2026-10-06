@@ -16,9 +16,15 @@ import (
 // only for worker completion here; AdvanceRewrite still consumes the result.
 func waitForRewriteSync(t *testing.T) {
 	t.Helper()
-	if defaultEngine.pendingRewriteIO != nil {
+	waitForRewriteSyncOn(t, defaultEngine)
+}
+
+// waitForRewriteSyncOn is waitForRewriteSync on e.
+func waitForRewriteSyncOn(t *testing.T, e *Engine) {
+	t.Helper()
+	if e.pendingRewriteIO != nil {
 		select {
-		case <-defaultEngine.pendingRewriteIO.done:
+		case <-e.pendingRewriteIO.done:
 		case <-time.After(3 * time.Second):
 			t.Fatal("rewrite I/O did not finish")
 		}
@@ -166,6 +172,7 @@ func TestCancelRewriteSyncTransfersCleanupWithoutReusingPath(t *testing.T) {
 }
 
 func TestRewriteSyncFailureKeepsOriginalLog(t *testing.T) {
+	keepRewriteHistory(t, defaultEngine)
 	ResetStores()
 	path := filepath.Join(t.TempDir(), "store.aof")
 	require.NoError(t, OpenAOF(path))
@@ -187,6 +194,7 @@ func TestRewriteSyncFailureKeepsOriginalLog(t *testing.T) {
 }
 
 func TestRewriteBudgetAbortWhileSyncOwnsFile(t *testing.T) {
+	keepRewriteHistory(t, defaultEngine)
 	for _, budget := range []string{"duration", "dirty bytes"} {
 		t.Run(budget, func(t *testing.T) {
 			ResetStores()
@@ -239,6 +247,7 @@ func TestRewriteBudgetAbortWhileSyncOwnsFile(t *testing.T) {
 }
 
 func TestRewriteDirtyTailSyncFailureKeepsAllAcknowledgedWrites(t *testing.T) {
+	keepRewriteHistory(t, defaultEngine)
 	ResetStores()
 	path := filepath.Join(t.TempDir(), "store.aof")
 	require.NoError(t, OpenAOF(path))

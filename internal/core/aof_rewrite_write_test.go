@@ -85,6 +85,7 @@ func TestBlockedRewriteWriteKeepsServingAndReconciles(t *testing.T) {
 }
 
 func TestRewriteWriteFailureKeepsOriginalLog(t *testing.T) {
+	keepRewriteHistory(t, defaultEngine)
 	for _, kind := range []string{"error", "short write"} {
 		t.Run(kind, func(t *testing.T) {
 			ResetStores()

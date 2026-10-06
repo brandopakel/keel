@@ -255,23 +255,23 @@ func replyPattern(want string) *regexp.Regexp {
 }
 
 func TestRESP2RepliesAreUnchanged(t *testing.T) {
-	ResetStores()
-	t.Cleanup(ResetStores)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	for _, step := range replyScript {
-		got := string(rawReplyAs(t, false, step.args[0], step.args[1:]...))
+		got := string(rawReplyAsOn(t, e, false, step.args[0], step.args[1:]...))
 		assert.Regexp(t, replyPattern(step.resp2), got, "%q", step.args)
 	}
 }
 
 func TestRESP3ReplyShapes(t *testing.T) {
-	ResetStores()
-	t.Cleanup(ResetStores)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	for _, step := range replyScript {
 		want := step.resp3
 		if want == "" {
 			want = step.resp2
 		}
-		got := string(rawReplyAs(t, true, step.args[0], step.args[1:]...))
+		got := string(rawReplyAsOn(t, e, true, step.args[0], step.args[1:]...))
 		assert.Regexp(t, replyPattern(want), got, "%q", step.args)
 	}
 }
@@ -280,12 +280,13 @@ func TestRESP3ReplyShapes(t *testing.T) {
 // RESP3 connection, as Redis sends it, and resp_version says which protocol
 // the connection asking speaks - the same as HELLO's proto.
 func TestRESP3INFOReportsTheConnectionsProtocol(t *testing.T) {
-	ResetStores()
-	resp2 := string(rawReplyAs(t, false, "INFO", "server"))
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	resp2 := string(rawReplyAsOn(t, e, false, "INFO", "server"))
 	assert.True(t, strings.HasPrefix(resp2, "$"), resp2)
 	assert.Contains(t, resp2, "resp_version:2\r\n")
 
-	resp3 := string(rawReplyAs(t, true, "INFO", "server"))
+	resp3 := string(rawReplyAsOn(t, e, true, "INFO", "server"))
 	require.True(t, strings.HasPrefix(resp3, "="), resp3)
 	header, body, _ := strings.Cut(resp3, "\r\n")
 	assert.Equal(t, "="+strconv.Itoa(len(body)-2), header, "the length counts the format and its colon")
@@ -295,12 +296,13 @@ func TestRESP3INFOReportsTheConnectionsProtocol(t *testing.T) {
 }
 
 func TestRESP3MEMORYSTATSIsAMap(t *testing.T) {
-	ResetStores()
-	run(t, "SET", "k", "v")
-	resp2 := rawReplyAs(t, false, "MEMORY", "STATS")
-	resp3 := rawReplyAs(t, true, "MEMORY", "STATS")
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	runOn(t, e, "SET", "k", "v")
+	resp2 := rawReplyAsOn(t, e, false, "MEMORY", "STATS")
+	resp3 := rawReplyAsOn(t, e, true, "MEMORY", "STATS")
 	pairs := 3
-	data_structure.EachKeyspace(func(data_structure.Keyspace) { pairs++ })
+	e.space.EachKeyspace(func(data_structure.Keyspace) { pairs++ })
 	assert.True(t, bytes.HasPrefix(resp2, []byte("*"+strconv.Itoa(2*pairs)+"\r\n")), "%q", resp2)
 	assert.True(t, bytes.HasPrefix(resp3, []byte("%"+strconv.Itoa(pairs)+"\r\n")), "%q", resp3)
 	assert.Equal(t, resp2[bytes.IndexByte(resp2, '\n'):], resp3[bytes.IndexByte(resp3, '\n'):],
@@ -311,16 +313,18 @@ func TestRESP3MEMORYSTATSIsAMap(t *testing.T) {
 // not a reply. A session run over RESP3 writes the same log, byte for byte, as
 // the same session over RESP2, and the same KEEL.DUMP images.
 func TestRESP3NeverReachesTheLogOrADump(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	session := func(resp3 bool) (string, []string) {
 		var dumps []string
-		path := withAOF(t, func() {
+		path := withAOFOn(t, e, func() {
 			for _, step := range replyScript {
 				if step.args[0] == "FLUSHDB" {
 					for _, key := range []string{"s", "h", "l", "z", "g", "p", "bf", "cf", "cms", "mo"} {
-						dumps = append(dumps, string(rawReplyAs(t, resp3, "KEEL.DUMP", key)))
+						dumps = append(dumps, string(rawReplyAsOn(t, e, resp3, "KEEL.DUMP", key)))
 					}
 				}
-				rawReplyAs(t, resp3, step.args[0], step.args[1:]...)
+				rawReplyAsOn(t, e, resp3, step.args[0], step.args[1:]...)
 			}
 		})
 		log, err := os.ReadFile(path)
@@ -347,31 +351,33 @@ func TestRESP3NeverReachesTheLogOrADump(t *testing.T) {
 // each does with a reply - look for an error - must not depend on how the
 // command first arrived.
 func TestReplayAndReplicaApplyAnswerInRESP2(t *testing.T) {
-	ResetStores()
-	t.Cleanup(func() { defaultEngine.replicaApplying, defaultEngine.aof.replaying = false, false })
-	for _, flag := range []*bool{&defaultEngine.replicaApplying, &defaultEngine.aof.replaying} {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	t.Cleanup(func() { e.replicaApplying, e.aof.replaying = false, false })
+	for _, flag := range []*bool{&e.replicaApplying, &e.aof.replaying} {
 		*flag = true
-		assert.Equal(t, "$-1\r\n", string(rawReplyAs(t, true, "GET", "missing")))
+		assert.Equal(t, "$-1\r\n", string(rawReplyAsOn(t, e, true, "GET", "missing")))
 		*flag = false
 	}
-	assert.Equal(t, "_\r\n", string(rawReplyAs(t, true, "GET", "missing")))
+	assert.Equal(t, "_\r\n", string(rawReplyAsOn(t, e, true, "GET", "missing")))
 }
 
 // TestRESP3IsScopedToOneCommand: the protocol belongs to the command that
 // carried it, and nothing after it inherits it - including a command that
 // fails, or one this server does not have.
 func TestRESP3IsScopedToOneCommand(t *testing.T) {
-	ResetStores()
-	rawReplyAs(t, true, "GET", "missing")
-	assert.Equal(t, "$-1\r\n", string(rawReplyAs(t, false, "GET", "missing")))
-	rawReplyAs(t, true, "GET")
-	assert.Equal(t, "$-1\r\n", string(rawReplyAs(t, false, "GET", "missing")))
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	rawReplyAsOn(t, e, true, "GET", "missing")
+	assert.Equal(t, "$-1\r\n", string(rawReplyAsOn(t, e, false, "GET", "missing")))
+	rawReplyAsOn(t, e, true, "GET")
+	assert.Equal(t, "$-1\r\n", string(rawReplyAsOn(t, e, false, "GET", "missing")))
 	var w replyWriter
-	assert.Error(t, EvalAndResponse(&Command{Cmd: "NOSUCH", RESP3: true}, &w))
-	assert.False(t, defaultEngine.replyRESP3)
+	assert.Error(t, e.evalAndResponse(&Command{Cmd: "NOSUCH", RESP3: true}, &w))
+	assert.False(t, e.replyRESP3)
 	assert.Equal(t, "$-1\r\n", string(Encode(nil, false)), "Encode outside a command is RESP2")
 	assert.Equal(t, "_\r\n", string(EncodeAs(nil, false, true)))
-	assert.False(t, defaultEngine.replyRESP3, "EncodeAs leaves the engine's framing alone")
+	assert.False(t, e.replyRESP3, "EncodeAs leaves the engine's framing alone")
 }
 
 // TestRESP3RepliesAreSizedExactly: the collection replies count their framing
@@ -380,26 +386,26 @@ func TestRESP3IsScopedToOneCommand(t *testing.T) {
 // have headers of their own. An exact count fills the buffer to the byte, and
 // the reservation is for that size.
 func TestRESP3RepliesAreSizedExactly(t *testing.T) {
-	ResetStores()
-	t.Cleanup(ResetStores)
-	old := defaultEngine.commandAllocations
-	t.Cleanup(func() { defaultEngine.commandAllocations = old })
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	old := e.commandAllocations
+	t.Cleanup(func() { e.commandAllocations = old })
 	for i := 0; i < 12; i++ {
 		v := strings.Repeat("v", i*13)
-		run(t, "HSET", "h", "field"+strconv.Itoa(i), v)
-		run(t, "RPUSH", "l", v)
-		run(t, "SADD", "s", "member"+v)
-		run(t, "ZADD", "z", []string{"1", "2.5", "-0.125", "inf", "1e300", "-7"}[i%6], "member"+strconv.Itoa(i))
-		run(t, "GEOADD", "g", strconv.Itoa(i), strconv.Itoa(i), "place"+strconv.Itoa(i))
+		runOn(t, e, "HSET", "h", "field"+strconv.Itoa(i), v)
+		runOn(t, e, "RPUSH", "l", v)
+		runOn(t, e, "SADD", "s", "member"+v)
+		runOn(t, e, "ZADD", "z", []string{"1", "2.5", "-0.125", "inf", "1e300", "-7"}[i%6], "member"+strconv.Itoa(i))
+		runOn(t, e, "GEOADD", "g", strconv.Itoa(i), strconv.Itoa(i), "place"+strconv.Itoa(i))
 	}
 	// build runs a handler directly in the given protocol, restoring the
 	// protocol whatever happens, so a failure here cannot leave the rest of
 	// the package's tests encoding RESP3.
 	build := func(args []string, resp3 bool) []byte {
-		saved := defaultEngine.framing
-		defaultEngine.framing = framing{replyRESP3: resp3}
-		defer func() { defaultEngine.framing = saved }()
-		return commandTable[args[0]](defaultEngine, args[1:])
+		saved := e.framing
+		e.framing = framing{replyRESP3: resp3}
+		defer func() { e.framing = saved }()
+		return commandTable[args[0]](e, args[1:])
 	}
 	for _, args := range [][]string{
 		{"HGETALL", "h"}, {"HKEYS", "h"}, {"HMGET", "h", "field1", "missing", "field2"}, {"MGET", "missing", "missing"},
@@ -411,15 +417,15 @@ func TestRESP3RepliesAreSizedExactly(t *testing.T) {
 		{"SCAN", "0", "COUNT", "100"},
 	} {
 		for _, resp3 := range []bool{false, true} {
-			defaultEngine.commandAllocations = &CommandAllocationBudget{Limit: 64 << 20}
+			e.commandAllocations = &CommandAllocationBudget{Limit: 64 << 20}
 			out := build(args, resp3)
 			require.NotEqual(t, byte('-'), out[0], "%v: %q", args, out)
 			assert.Equal(t, len(out), cap(out), "%v resp3=%v is sized to the byte", args, resp3)
-			assert.Equal(t, 3*((len(out)+4095)&^4095), defaultEngine.commandAllocations.ReplyReserved,
+			assert.Equal(t, 3*((len(out)+4095)&^4095), e.commandAllocations.ReplyReserved,
 				"%v resp3=%v reserves what it sends", args, resp3)
 		}
 	}
-	defaultEngine.commandAllocations = old
+	e.commandAllocations = old
 }
 
 // TestRESP3OutputLimitCountsRESP3Framing: the 64 MiB output limit is applied
@@ -429,8 +435,8 @@ func TestRESP3RepliesAreSizedExactly(t *testing.T) {
 // sized so the RESP2 reply is ten bytes under the limit put the RESP3 one 55
 // over, and each is answered by its own size.
 func TestRESP3OutputLimitCountsRESP3Framing(t *testing.T) {
-	ResetStores()
-	t.Cleanup(ResetStores)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	const pairs = 65
 	target := MaxReplyBytes - 10
 	header, score := len("*130\r\n"), len("$3\r\n0.5\r\n")
@@ -445,18 +451,18 @@ func TestRESP3OutputLimitCountsRESP3Framing(t *testing.T) {
 		}
 		z.Add(0.5, strconv.Itoa(100+i)+strings.Repeat("x", n-3), 0)
 	}
-	defaultEngine.zsetStore.Put("z", z)
+	e.zsetStore.Put("z", z)
 
-	saved := defaultEngine.framing
-	defer func() { defaultEngine.framing = saved }()
-	defaultEngine.framing = framing{}
-	resp2 := defaultEngine.cmdZRANGE([]string{"z", "0", "-1", "WITHSCORES"})
+	saved := e.framing
+	defer func() { e.framing = saved }()
+	e.framing = framing{}
+	resp2 := e.cmdZRANGE([]string{"z", "0", "-1", "WITHSCORES"})
 	require.Equal(t, byte('*'), resp2[0])
 	assert.Equal(t, target, len(resp2))
 	resp2 = nil
 
-	defaultEngine.framing = framing{replyRESP3: true}
-	assert.Equal(t, replyTooLarge, defaultEngine.cmdZRANGE([]string{"z", "0", "-1", "WITHSCORES"}))
-	assert.Equal(t, replyTooLarge, defaultEngine.cmdZPOPMIN([]string{"z", "65"}))
+	e.framing = framing{replyRESP3: true}
+	assert.Equal(t, replyTooLarge, e.cmdZRANGE([]string{"z", "0", "-1", "WITHSCORES"}))
+	assert.Equal(t, replyTooLarge, e.cmdZPOPMIN([]string{"z", "65"}))
 	assert.Equal(t, pairs, z.Len(), "a refused pop removes nothing")
 }

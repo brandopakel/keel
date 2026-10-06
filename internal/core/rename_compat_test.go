@@ -17,45 +17,49 @@ import (
 // TestLegacyDumpCommandNamesStillReplay covers logs written before the rename,
 // every one of which records MEMKV.RESTORE.
 func TestLegacyDumpCommandNamesStillReplay(t *testing.T) {
-	ResetStores()
-	run(t, "PFADD", "h", "a", "b", "c")
-	before := run(t, "PFCOUNT", "h")
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	runOn(t, e, "PFADD", "h", "a", "b", "c")
+	before := runOn(t, e, "PFCOUNT", "h")
 
-	payload, ok := run(t, "MEMKV.DUMP", "h").(string)
+	payload, ok := runOn(t, e, "MEMKV.DUMP", "h").(string)
 	assert.True(t, ok, "the old DUMP name still answers")
 
-	ResetStores()
-	assert.Equal(t, "OK", run(t, "MEMKV.RESTORE", "h", payload),
+	e.resetStores()
+	assert.Equal(t, "OK", runOn(t, e, "MEMKV.RESTORE", "h", payload),
 		"the old RESTORE name still loads, or no log written before the rename replays")
-	assert.Equal(t, before, run(t, "PFCOUNT", "h"))
+	assert.Equal(t, before, runOn(t, e, "PFCOUNT", "h"))
 }
 
 func TestNewAndOldDumpNamesAreTheSameCommand(t *testing.T) {
-	ResetStores()
-	run(t, "PFADD", "h", "x", "y")
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	runOn(t, e, "PFADD", "h", "x", "y")
 
-	before := run(t, "PFCOUNT", "h")
+	before := runOn(t, e, "PFCOUNT", "h")
 
-	viaNew, _ := run(t, "KEEL.DUMP", "h").(string)
-	viaOld, _ := run(t, "MEMKV.DUMP", "h").(string)
+	viaNew, _ := runOn(t, e, "KEEL.DUMP", "h").(string)
+	viaOld, _ := runOn(t, e, "MEMKV.DUMP", "h").(string)
 	assert.Equal(t, viaOld, viaNew, "one command, two names")
 
-	ResetStores()
-	assert.Equal(t, "OK", run(t, "KEEL.RESTORE", "h", viaOld),
+	e.resetStores()
+	assert.Equal(t, "OK", runOn(t, e, "KEEL.RESTORE", "h", viaOld),
 		"a payload dumped under either name loads under either name")
 	// OK on its own would pass for a restore that returned success and stored
 	// nothing, which is the failure worth catching here.
-	assert.Equal(t, before, run(t, "PFCOUNT", "h"),
+	assert.Equal(t, before, runOn(t, e, "PFCOUNT", "h"),
 		"and the restored structure estimates what it did before")
-	assert.Equal(t, "hll", run(t, "TYPE", "h"))
+	assert.Equal(t, "hll", runOn(t, e, "TYPE", "h"))
 }
 
 // TestRewriteWritesTheNewNameOnly: the old name is read, never written, so a
 // rewritten log stops mentioning memkv at all.
 func TestRewriteWritesTheNewNameOnly(t *testing.T) {
-	path := withAOF(t, func() {
-		run(t, "PFADD", "h", "a", "b")
-		assert.NoError(t, RewriteAOF())
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	path := withAOFOn(t, e, func() {
+		runOn(t, e, "PFADD", "h", "a", "b")
+		assert.NoError(t, e.RewriteAOF())
 	})
 
 	body, err := os.ReadFile(path)
@@ -68,25 +72,27 @@ func TestRewriteWritesTheNewNameOnly(t *testing.T) {
 // TestALogWrittenUnderTheOldNameStillReplays is the whole-file version: a log
 // full of legacy command names restores the keyspace it recorded.
 func TestALogWrittenUnderTheOldNameStillReplays(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	dir := t.TempDir()
 	path := filepath.Join(dir, "memkv-master.aof")
 
-	ResetStores()
-	run(t, "PFADD", "h", "a", "b", "c")
-	payload, _ := run(t, "KEEL.DUMP", "h").(string)
-	expected := run(t, "PFCOUNT", "h")
+	e.resetStores()
+	runOn(t, e, "PFADD", "h", "a", "b", "c")
+	payload, _ := runOn(t, e, "KEEL.DUMP", "h").(string)
+	expected := runOn(t, e, "PFCOUNT", "h")
 
 	// Hand-built in the shape a pre-rename server wrote.
 	legacy := appendCommand(nil, "SET", "plain", "value")
 	legacy = appendCommand(legacy, "MEMKV.RESTORE", "h", payload)
 	assert.NoError(t, os.WriteFile(path, legacy, 0o644))
 
-	ResetStores()
-	applied, err := LoadAOF(path)
+	e.resetStores()
+	applied, err := e.LoadAOF(path)
 	assert.NoError(t, err)
 	assert.Equal(t, 2, applied)
-	assert.Equal(t, "value", run(t, "GET", "plain"))
-	assert.Equal(t, expected, run(t, "PFCOUNT", "h"),
+	assert.Equal(t, "value", runOn(t, e, "GET", "plain"))
+	assert.Equal(t, expected, runOn(t, e, "PFCOUNT", "h"),
 		"a HyperLogLog restored from a legacy log estimates what it did before")
 }
 
@@ -97,13 +103,14 @@ func TestALogWrittenUnderTheOldNameStillReplays(t *testing.T) {
 // a file created after the rename - and every rewrite of that file would carry
 // it forward, so the alias could never be retired.
 func TestALiveLegacyRestoreIsRecordedUnderTheNewName(t *testing.T) {
-	ResetStores()
-	run(t, "PFADD", "h", "a", "b", "c")
-	payload, _ := run(t, "KEEL.DUMP", "h").(string)
-	expected := run(t, "PFCOUNT", "h")
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	runOn(t, e, "PFADD", "h", "a", "b", "c")
+	payload, _ := runOn(t, e, "KEEL.DUMP", "h").(string)
+	expected := runOn(t, e, "PFCOUNT", "h")
 
-	path := withAOF(t, func() {
-		assert.Equal(t, "OK", run(t, "MEMKV.RESTORE", "h", payload))
+	path := withAOFOn(t, e, func() {
+		assert.Equal(t, "OK", runOn(t, e, "MEMKV.RESTORE", "h", payload))
 	})
 
 	body, err := os.ReadFile(path)
@@ -113,6 +120,6 @@ func TestALiveLegacyRestoreIsRecordedUnderTheNewName(t *testing.T) {
 	assert.NotContains(t, string(body), "MEMKV.RESTORE",
 		"a log written after the rename must not carry the old name forward")
 
-	restart(t, path)
-	assert.Equal(t, expected, run(t, "PFCOUNT", "h"), "and it still replays")
+	restartOn(t, e, path)
+	assert.Equal(t, expected, runOn(t, e, "PFCOUNT", "h"), "and it still replays")
 }
