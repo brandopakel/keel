@@ -25,6 +25,10 @@ import (
 // a rewrite finishing after the pops would replace the history the restarts
 // are meant to replay, hiding a refusal that had been logged.
 func TestRejectedCollectionPopsPreservePipelineAndRestart(t *testing.T) {
+	// Parallel with the other tests, but its subtests run one at a time: each
+	// writes and replays a log of large collections, about 65 MiB of files,
+	// and side by side they would hold several of those at once.
+	t.Parallel()
 	const members = 65
 	count := fmt.Sprint(members)
 	value := strings.Repeat("x", 1<<20)

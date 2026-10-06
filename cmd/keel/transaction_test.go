@@ -95,8 +95,10 @@ var persistenceModes = map[string][]string{
 }
 
 func TestTransactionsOverTheWireAndAcrossRestarts(t *testing.T) {
+	t.Parallel()
 	for mode, policy := range persistenceModes {
 		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
 			args := append([]string{"-appendonly", "-appendfilename", filepath.Join(t.TempDir(), "tx.aof")}, policy...)
 			s := startTestServer(t, args...)
 			c, r := connectTest(t, s)
@@ -141,6 +143,7 @@ func TestTransactionsOverTheWireAndAcrossRestarts(t *testing.T) {
 // TestTransactionDisconnectDiscardsTheQueue: a connection that closes inside a
 // transaction runs nothing it queued, and the memory it held is released.
 func TestTransactionDisconnectDiscardsTheQueue(t *testing.T) {
+	t.Parallel()
 	s := startTestServer(t)
 	observer, or := connectTest(t, s)
 	c, r := connectTest(t, s)
@@ -182,6 +185,7 @@ func retainedInput(t *testing.T, c net.Conn, r *bufio.Reader) int {
 // inside every transaction while another connection reads them both as fast
 // as it can. A reader seeing them differ saw half a transaction.
 func TestTransactionIsAtomicAgainstAConcurrentClient(t *testing.T) {
+	t.Parallel()
 	modes := map[string][]string{
 		"memory":     nil,
 		"io-threads": {"-io-threads", "4"},
@@ -190,6 +194,7 @@ func TestTransactionIsAtomicAgainstAConcurrentClient(t *testing.T) {
 	}
 	for mode, extra := range modes {
 		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
 			args := append([]string(nil), extra...)
 			if len(extra) > 0 && extra[0] == "-appendonly" {
 				args = append(args, "-appendfilename", filepath.Join(t.TempDir(), "atomic.aof"))
@@ -260,6 +265,7 @@ func TestTransactionIsAtomicAgainstAConcurrentClient(t *testing.T) {
 // two complete transactions. Startup keeps both, sets the whole open block
 // aside, and the log is usable afterwards.
 func TestTransactionTornTailIsCutBeforeItsMULTI(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "torn.aof")
 	args := []string{"-appendonly", "-appendfsync", "always", "-appendfilename", path}
@@ -312,8 +318,10 @@ func TestTransactionTornTailIsCutBeforeItsMULTI(t *testing.T) {
 // primary, and a reader on the replica must never see them differ. The
 // replica also refuses a transaction that writes.
 func TestTransactionReachesAReplicaWhole(t *testing.T) {
+	t.Parallel()
 	for _, protocol := range []string{"1", "2"} {
 		t.Run("protocol-"+protocol, func(t *testing.T) {
+			t.Parallel()
 			primary := startTestServer(t, "-appendonly", "-replication-protocol", protocol, "-replication-feed",
 				"-requirepass-env", "KEEL_TEST_PASSWORD", "-appendfilename", filepath.Join(t.TempDir(), "primary"))
 			pc, pr := connectTest(t, primary)

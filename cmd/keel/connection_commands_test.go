@@ -34,6 +34,7 @@ func helloFields(t *testing.T, r *bufio.Reader, header string) map[string]string
 }
 
 func TestHelloNegotiatesRESP2(t *testing.T) {
+	t.Parallel()
 	s := startTestServer(t)
 	c, r := connectTest(t, s)
 
@@ -71,6 +72,7 @@ func TestHelloNegotiatesRESP2(t *testing.T) {
 }
 
 func TestHelloBeforeAuthentication(t *testing.T) {
+	t.Parallel()
 	s := startTestServer(t, "-requirepass-env", "KEEL_TEST_PASSWORD")
 	c, r := connectTest(t, s)
 
@@ -105,6 +107,7 @@ func TestHelloBeforeAuthentication(t *testing.T) {
 }
 
 func TestClientCommands(t *testing.T) {
+	t.Parallel()
 	s := startTestServer(t)
 	c, r := connectTest(t, s)
 	other, otherReader := connectTest(t, s)
@@ -153,6 +156,7 @@ func TestClientCommands(t *testing.T) {
 }
 
 func TestQuitClosesAfterItsReply(t *testing.T) {
+	t.Parallel()
 	s := startTestServer(t, "-requirepass-env", "KEEL_TEST_PASSWORD")
 	c, r := connectTest(t, s)
 	if _, err := io.WriteString(c, request("AUTH", "integration-secret")+request("SET", "before", "1")+

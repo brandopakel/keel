@@ -47,6 +47,8 @@ func configureFrom(t *testing.T, args ...string) data_structure.Limits {
 // when there is one, appended on the caller's thread and rewritten at 100%
 // growth past 64 MiB; and neither a replica nor a feed, in protocol 1.
 func TestDefaultFlagsKeepTheServerSettings(t *testing.T) {
+	// Not parallel: it parses the process's command line into the default
+	// engine's options, which every test in the process shares.
 	got := configureFrom(t)
 	want := data_structure.Limits{Eviction: data_structure.EvictLRU, MaxKeys: 0, MaxMemory: 0,
 		EvictionSamples: 5, LFULogFactor: 10, LFUDecayPeriod: 10000, LCSMaxCells: 134217728}
@@ -67,6 +69,8 @@ func TestDefaultFlagsKeepTheServerSettings(t *testing.T) {
 // and a flag's zero that turns its setting off turns it off, rather than
 // becoming the option's default.
 func TestFlagsReachTheEngine(t *testing.T) {
+	// Not parallel: it parses the process's command line into the default
+	// engine's options, which every test in the process shares.
 	got := configureFrom(t, "-maxmemory", "2mb", "-maxkeys", "7", "-evict", "lfu", "-lru-samples", "9",
 		"-lfu-log-factor", "3", "-lfu-decay-period", "40", "-lcs-max-cells", "1000")
 	want := data_structure.Limits{Eviction: data_structure.EvictLFU, MaxKeys: 7, MaxMemory: 2 << 20,
@@ -113,6 +117,8 @@ func TestFlagsReachTheEngine(t *testing.T) {
 // keyspace only when -maxkeys or -maxmemory says so. Until 2026-10-05 the
 // default was 5,000,000 keys; the owner chose Redis's default instead.
 func TestServerHasNoKeyBoundByDefault(t *testing.T) {
+	// Not parallel: it parses the process's command line into the default
+	// engine's options, which every test in the process shares.
 	if got := configureFrom(t).MaxKeys; got != 0 {
 		t.Fatalf("the default -maxkeys gives the engine a key bound of %d, want none", got)
 	}
@@ -124,6 +130,7 @@ func TestServerHasNoKeyBoundByDefault(t *testing.T) {
 // bounds bytes rather than keys, so it does not; and with no log there is
 // nothing to compact.
 func TestServerWarnsWhenItsLogMayOutgrowARewrite(t *testing.T) {
+	t.Parallel()
 	ceiling := strconv.Itoa(core.RewriteKeyCeiling)
 	for _, c := range []struct {
 		name string
@@ -151,6 +158,7 @@ func TestServerWarnsWhenItsLogMayOutgrowARewrite(t *testing.T) {
 // TestServerReportsItsDefaultEviction: a server started with no eviction flags
 // reports LRU and no memory bound, as it did when config held them.
 func TestServerReportsItsDefaultEviction(t *testing.T) {
+	t.Parallel()
 	s := startTestServer(t)
 	c, r := connectTest(t, s)
 	defer c.Close()
@@ -165,6 +173,7 @@ func TestServerReportsItsDefaultEviction(t *testing.T) {
 // runServer's own Configure, not only through this file's: a server started
 // with -maxkeys 1 holds one key.
 func TestServerEnforcesMaxKeysAtStartup(t *testing.T) {
+	t.Parallel()
 	s := startTestServer(t, "-maxkeys", "1")
 	c, r := connectTest(t, s)
 	defer c.Close()
@@ -184,6 +193,8 @@ func TestServerEnforcesMaxKeysAtStartup(t *testing.T) {
 // server.Options default; with no flags they are the settings the server has
 // always had.
 func TestFlagsReachTheServer(t *testing.T) {
+	// Not parallel: it parses the process's command line into the default
+	// engine's options, which every test in the process shares.
 	configureFrom(t)
 	want := server.Options{Host: "127.0.0.1", Port: 8081, MaxClients: 20000, IOThreads: 1,
 		CronInterval: 100 * time.Millisecond}
@@ -253,6 +264,8 @@ var developFlags = []struct{ name, kind, value string }{
 // engine's and the server's options, and by the subprocess tests, which start
 // the server through main.
 func TestFlagsKeepTheirNamesAndDefaults(t *testing.T) {
+	// Not parallel: it parses the process's command line into the default
+	// engine's options, which every test in the process shares.
 	configureFrom(t)
 	got := map[string][2]string{}
 	flag.CommandLine.VisitAll(func(f *flag.Flag) {
@@ -283,6 +296,7 @@ func TestFlagsKeepTheirNamesAndDefaults(t *testing.T) {
 // a 10 ms cron and concurrent appends on a worker it has to serve, and reap a
 // key nobody reads. TestFlagsReachTheServer checks the values those flags pass.
 func TestServerStartsWithItsListenerAndTransportFlags(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "flags.aof")
 	s := startTestServer(t, "-maxclients", "2", "-io-threads", "2", "-cron-interval-ms", "10",
 		"-requirepass-env", "KEEL_TEST_PASSWORD", "-appendonly", "-appendfilename", path,

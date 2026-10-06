@@ -13,6 +13,7 @@ import (
 )
 
 func TestShutdownWaitReturnsCleanupResult(t *testing.T) {
+	t.Parallel()
 	for _, want := range []error{nil, errors.New("persistence sync failed")} {
 		done := make(chan error, 1)
 		done <- want
@@ -21,12 +22,15 @@ func TestShutdownWaitReturnsCleanupResult(t *testing.T) {
 }
 
 func TestShutdownWaitHonorsSecondSignal(t *testing.T) {
+	t.Parallel()
 	signals := make(chan os.Signal, 1)
 	signals <- syscall.SIGTERM
 	require.EqualError(t, waitForShutdown(make(chan error), signals, time.Minute), "second termination signal")
 }
 
 func TestShutdownWaitUsesConfiguredDeadlineAndCapturesPhase(t *testing.T) {
+	// Not parallel: it captures the process's log output, which a test
+	// beside it would write to as well, and times a deadline.
 	previous := log.Writer()
 	var output bytes.Buffer
 	log.SetOutput(&output)

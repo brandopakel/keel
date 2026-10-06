@@ -8,8 +8,10 @@ import (
 )
 
 func TestAmplifiedRepliesKeepConnectionAndPersistenceUsable(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"off", "barrier", "concurrent"} {
 		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
 			var flags []string
 			if mode != "off" {
 				flags = []string{"-appendonly", "-appendfsync", "always", "-aof-async-append", "-appendfilename", filepath.Join(t.TempDir(), "store.aof")}

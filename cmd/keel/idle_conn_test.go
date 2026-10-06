@@ -41,6 +41,7 @@ func (c *deadlineRecorder) Read([]byte) (int, error)    { return 0, io.EOF }
 func (c *deadlineRecorder) Write(b []byte) (int, error) { return len(b), nil }
 
 func TestIdleConnPreservesDirectionalDeadlines(t *testing.T) {
+	t.Parallel()
 	for _, direction := range []string{"read", "write", "both"} {
 		t.Run(direction, func(t *testing.T) {
 			raw := &deadlineRecorder{}
@@ -73,6 +74,7 @@ func TestIdleConnPreservesDirectionalDeadlines(t *testing.T) {
 }
 
 func TestFailedExplicitDeadlineKeepsIdleRefreshEnabled(t *testing.T) {
+	t.Parallel()
 	for _, direction := range []string{"read", "write", "both"} {
 		t.Run(direction, func(t *testing.T) {
 			raw := &deadlineRecorder{err: errors.New("deadline failed")}
