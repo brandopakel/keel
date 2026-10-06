@@ -175,6 +175,12 @@ type client struct {
 	out              []byte
 	inArena          bool
 	outStart, outEnd int
+
+	// engine is what the connection's commands run on, set when it is
+	// accepted, as a Redis client holds the database it selected. It is the
+	// engine the server was handed. Last, so that every field the loop reads
+	// keeps its offset.
+	engine *core.Engine
 }
 
 // clients is every connected socket, keyed by descriptor.
@@ -491,11 +497,11 @@ func closeClient(c *client) {
 	syscall.Close(c.fd)
 }
 
-// responseRw runs one command and writes its reply. The one thing a command
-// cannot answer for itself is being unknown, which comes back as an error and
-// is answered here.
-func responseRw(cmd *core.Command, rw io.ReadWriter) {
-	if err := core.EvalAndResponse(cmd, rw); err != nil {
+// responseRw runs one command on e and writes its reply. The one thing a
+// command cannot answer for itself is being unknown, which comes back as an
+// error and is answered here.
+func responseRw(e *core.Engine, cmd *core.Command, rw io.ReadWriter) {
+	if err := e.EvalAndResponse(cmd, rw); err != nil {
 		responseErrorRw(err, rw)
 	}
 }
@@ -568,8 +574,9 @@ func ipv4Address(host string, port int) (*syscall.SockaddrInet4, error) {
 // Everything here configures this one socket. A failure is that connection's
 // problem, not the server's, so it costs the client its connection and nothing
 // else. These used to return from the loop, which unwound RunAsyncTCPServer
-// and took every other connected client down over one bad descriptor.
-func acceptClient(serverFD int, mux io_multiplexing.IOMultiplexer, password string) (*client, bool) {
+// and took every other connected client down over one bad descriptor. The
+// connection's commands will run on e.
+func acceptClient(serverFD int, mux io_multiplexing.IOMultiplexer, password string, e *core.Engine) (*client, bool) {
 	connFD, _, err := syscall.Accept(serverFD)
 	if err != nil {
 		log.Println("accept:", err)
@@ -602,7 +609,7 @@ func acceptClient(serverFD int, mux io_multiplexing.IOMultiplexer, password stri
 	}
 	connectionsReceived++
 	return &client{fd: connFD, id: connectionsReceived, lastProgress: time.Now(), interestKnown: true, interest: io_multiplexing.OpRead,
-		password: password}, true
+		password: password, engine: e}, true
 }
 
 // replyBuffer collects the replies produced from one read so they can be sent
@@ -636,10 +643,10 @@ func (r *replyBuffer) Write(p []byte) (int, error) { return r.buf.Write(p) }
 // copy of the whole value - which matters because a large value is nearly
 // always a batch of one, since it fills a read on its own.
 func executeRun(c *client, arena *replyArena) bool {
-	if budget := core.CommandAllocations(); budget != nil {
+	if budget := c.engine.CommandAllocations(); budget != nil {
 		// Arena capacity may overlap already-accounted reply windows; charging
 		// it again is conservative and also covers unused backing capacity.
-		budget.Begin(retainedClientBytes + core.AppendRetainedBytes() + cap(arena.buf))
+		budget.Begin(retainedClientBytes + c.engine.AppendRetainedBytes() + cap(arena.buf))
 		budget.ReplyRetained = retainedReplyBytes
 		defer budget.End()
 	}
@@ -686,8 +693,8 @@ func executeRun(c *client, arena *replyArena) bool {
 	deadline := time.Now().Add(runTimeTarget)
 	c.outStart = len(arena.buf)
 	for _, cmd := range c.cmds {
-		if budget := core.CommandAllocations(); budget != nil {
-			budget.ObserveRetained(retainedClientBytes + core.AppendRetainedBytes() + cap(arena.buf))
+		if budget := c.engine.CommandAllocations(); budget != nil {
+			budget.ObserveRetained(retainedClientBytes + c.engine.AppendRetainedBytes() + cap(arena.buf))
 			budget.ReplyRetained = retainedReplyBytes
 		}
 		capture.p = nil
@@ -736,18 +743,19 @@ func executeRun(c *client, arena *replyArena) bool {
 	return c.inArena
 }
 
-// RunAsyncTCPServer serves on the event loop, as o says, until Stop. It drives
-// the default engine, which has to have been given its options (core.Configure)
-// and its log (StartAOF) first.
-func RunAsyncTCPServer(wg *sync.WaitGroup, o Options) error {
+// RunAsyncTCPServer serves e on the event loop, as o says, until Stop. Every
+// command a connection sends runs on e, and so does the loop's own work. e
+// has to have its log (StartAOF) and replication (InitReplication) started
+// first; its log is the caller's to close.
+func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 	defer wg.Done()
 	o = o.WithDefaults()
 	if interestCacheOff != "" {
 		log.Println("client interest cache off: every registration goes to the kernel")
 	}
 	var requestBudget requestAllocationBudget
-	core.SetCommandAllocations(&core.CommandAllocationBudget{Limit: maxRetainedClientBytes, ReplyLimit: maxRetainedClassBytes})
-	defer core.SetCommandAllocations(nil)
+	e.SetCommandAllocations(&core.CommandAllocationBudget{Limit: maxRetainedClientBytes, ReplyLimit: maxRetainedClassBytes})
+	defer e.SetCommandAllocations(nil)
 	core.ClientBuffers = func() core.ClientBufferStats {
 		return core.ClientBufferStats{Connected: len(clients), InputBytes: retainedInputBytes, ReplyBytes: retainedReplyBytes, TotalBytes: retainedClientBytes,
 			RequestAllocationPeak: requestBudget.peak, RequestAllocationRefusals: requestBudget.refusals.Load(),
@@ -756,7 +764,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, o Options) error {
 	}
 	defer func() { core.ClientBuffers = nil }()
 	defer func() {
-		core.CancelRewrite()
+		e.CancelRewrite()
 		for _, c := range clients {
 			closeClient(c)
 		}
@@ -766,12 +774,12 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, o Options) error {
 	log.Println("starting an asynchronous TCP server on", o.Host, o.Port)
 	// Whether the engine appends its log on a worker is its own option, and
 	// does not change while the loop drives it.
-	asyncAppend := core.Configuration().AsyncAppend
+	asyncAppend := e.Configuration().AsyncAppend
 
 	nextMaintenance := time.Now()
 	var heldReplies []*client
 	paused := make(map[int]*client)
-	var ordered orderedAppend
+	ordered := orderedAppend{engine: e}
 
 	// The connections taking part in each phase of the current cycle, and the
 	// arena their replies are staged in. Kept across cycles and truncated
@@ -832,9 +840,9 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, o Options) error {
 	}
 	setWaker(func() { syscall.Write(wakeupFDs[1], []byte{0}) })
 	defer setWaker(nil) // detach callbacks before closing/reusing the pipe descriptors
-	core.SetRewriteWaker(wake)
-	defer core.SetRewriteWaker(nil)
-	replicaUpdates, stopReplica := startReplicaTransport(o.PrimaryPassword, o.PrimaryTLS)
+	e.SetRewriteWaker(wake)
+	defer e.SetRewriteWaker(nil)
+	replicaUpdates, stopReplica := startReplicaTransport(e, o.PrimaryPassword, o.PrimaryTLS)
 	defer stopReplica()
 
 	// A heartbeat, so work that is due because of the clock happens on a server
@@ -889,8 +897,8 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, o Options) error {
 				return err
 			}
 		}
-		if asyncAppend && !o.ConcurrentAppend && core.AppendPending() {
-			ready, err := core.FlushAOFAsync(wake)
+		if asyncAppend && !o.ConcurrentAppend && e.AppendPending() {
+			ready, err := e.FlushAOFAsync(wake)
 			if err != nil {
 				requestShutdown()
 				return err
@@ -916,7 +924,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, o Options) error {
 					}
 					delete(paused, fd)
 				}
-				if core.RewriteNeedsCycle() {
+				if e.RewriteNeedsCycle() {
 					wake()
 				}
 				// Readiness is level-triggered; re-check after restoring interests.
@@ -929,7 +937,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, o Options) error {
 					syscall.Read(wakeupFDs[0], drain[:])
 				case serverFD:
 					if len(clients) < o.MaxClients {
-						if c, ok := acceptClient(serverFD, ioMultiplexer, o.RequirePass); ok {
+						if c, ok := acceptClient(serverFD, ioMultiplexer, o.RequirePass, e); ok {
 							clients[c.fd] = c
 						}
 					} else {
@@ -950,16 +958,16 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, o Options) error {
 			}
 			if time.Now().After(nextMaintenance) {
 				nextMaintenance = time.Now().Add(time.Second)
-				core.MaintainMemory()
+				e.MaintainMemory()
 				sweepStalledClients(time.Now(), ioMultiplexer, paused, func(c *client) { delete(paused, c.fd) })
 			}
 			continue
 		}
 
-		if !core.AppendPending() && core.AppendBufferedBytes() == 0 {
+		if !e.AppendPending() && e.AppendBufferedBytes() == 0 {
 			select {
 			case update := <-replicaUpdates:
-				err := core.ApplyReplication(update.frame)
+				err := e.ApplyReplication(update.frame)
 				update.applied <- err
 				if err != nil {
 					requestShutdown()
@@ -1008,7 +1016,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, o Options) error {
 					}
 					continue
 				}
-				if c, ok := acceptClient(serverFD, ioMultiplexer, o.RequirePass); ok {
+				if c, ok := acceptClient(serverFD, ioMultiplexer, o.RequirePass, e); ok {
 					clients[c.fd] = c
 				}
 			default:
@@ -1030,7 +1038,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, o Options) error {
 
 		readable = takeQueuedReads(readable)
 		// Phase one: read and parse, in parallel when there is enough of it.
-		requestBudget.begin(retainedClientBytes+core.AppendRetainedBytes()+cap(arena.buf), retainedInputBytes,
+		requestBudget.begin(retainedClientBytes+e.AppendRetainedBytes()+cap(arena.buf), retainedInputBytes,
 			maxRetainedClientBytes, maxRetainedClassBytes)
 		pool.run(readable, false)
 		requestBudget.end()
@@ -1077,7 +1085,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, o Options) error {
 				continue
 			}
 			if executeRun(c, &arena) {
-				c.appendOffset = core.AppendOffset()
+				c.appendOffset = e.AppendOffset()
 				if !accountClient(c) {
 					if c.inArena {
 						arena.buf = arena.buf[:c.outStart]
@@ -1092,8 +1100,8 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, o Options) error {
 		}
 
 		// Reap idle keys before flushing their removal records.
-		if !o.ConcurrentAppend || (!core.AppendPending() && core.AppendBufferedBytes() == 0) {
-			core.ExpireCycle()
+		if !o.ConcurrentAppend || (!e.AppendPending() && e.AppendBufferedBytes() == 0) {
+			e.ExpireCycle()
 		}
 
 		// The log is written and synced here, after every command has run and
@@ -1104,9 +1112,9 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, o Options) error {
 		ready := true
 		var flushErr error
 		if asyncAppend {
-			ready, flushErr = core.FlushAOFAsync(wake)
+			ready, flushErr = e.FlushAOFAsync(wake)
 		} else {
-			flushErr = core.FlushAOF()
+			flushErr = e.FlushAOF()
 		}
 		if flushErr != nil {
 			log.Println("appendonly: write failed, stopping:", flushErr)
@@ -1140,13 +1148,13 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, o Options) error {
 		// the next client turned up, so the loop wakes itself until it is done.
 		// Not deferred: a defer inside this loop would fire once the loop had
 		// ended, which is exactly too late to be of use.
-		if core.RewriteNeedsCycle() {
+		if e.RewriteNeedsCycle() {
 			wake()
 		}
 
 		if o.ConcurrentAppend {
 			writable = ordered.gate(writable, &arena, ioMultiplexer)
-			if len(ordered.deferred) > 0 && !core.AppendPending() {
+			if len(ordered.deferred) > 0 && !e.AppendPending() {
 				wake()
 			}
 		}
@@ -1166,7 +1174,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, o Options) error {
 		now := time.Now()
 		if !now.Before(nextMaintenance) {
 			nextMaintenance = now.Add(time.Second)
-			core.MaintainMemory()
+			e.MaintainMemory()
 			sweepStalledClients(now, ioMultiplexer, paused, func(c *client) { delete(paused, c.fd) })
 		}
 
@@ -1180,7 +1188,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, o Options) error {
 	// which flushes and syncs whatever the last cycle produced - without it a
 	// clean shutdown would lose acknowledged writes, the one kind of loss a
 	// client has no way to notice.
-	if err := core.CloseAOF(); err != nil {
+	if err := e.CloseAOF(); err != nil {
 		return fmt.Errorf("appendonly: close failed: %w", err)
 	}
 	log.Println("event loop stopped")
@@ -1197,10 +1205,10 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, o Options) error {
 // partially understood log means quietly serving a keyspace that is missing
 // whatever came after the part that failed.
 //
-// Whether there is a log, and where, are the default engine's options
-// (core.Options.AppendOnly and AppendFilename), which cmd/keel sets from its
-// flags before it calls this.
-func StartAOF() error { return startAOF(legacyAOFFileName) }
+// It runs on e, the engine the server will serve. Whether there is a log, and
+// where, are e's options (core.Options.AppendOnly and AppendFilename), which
+// cmd/keel makes it with from its flags.
+func StartAOF(e *core.Engine) error { return startAOF(e, legacyAOFFileName) }
 
 // legacyAOFFileName is what the default log was called while the server was
 // called memkv.
@@ -1213,15 +1221,15 @@ func StartAOF() error { return startAOF(legacyAOFFileName) }
 const legacyAOFFileName = "./memkv-master.aof"
 
 // startAOF is StartAOF with the legacy log looked for at legacy.
-func startAOF(legacy string) error {
-	options := core.Configuration().WithDefaults()
+func startAOF(e *core.Engine, legacy string) error {
+	options := e.Configuration().WithDefaults()
 	if !options.AppendOnly {
 		return nil
 	}
 	path := options.AppendFilename
 	// Before the log is read, because a node that cannot establish which term it
 	// is in must not reach the point of serving anything at that term.
-	if err := core.LoadTerm(path); err != nil {
+	if err := e.LoadTerm(path); err != nil {
 		return err
 	}
 
@@ -1231,7 +1239,7 @@ func startAOF(legacy string) error {
 			"new records go to %s", readFrom, path)
 	}
 
-	applied, err := core.LoadAOF(readFrom)
+	applied, err := e.LoadAOF(readFrom)
 	switch {
 	case core.IsTruncatedAOF(err):
 		if repairErr := core.RepairAOFTail(err); repairErr != nil {
@@ -1243,7 +1251,7 @@ func startAOF(legacy string) error {
 	case applied > 0:
 		log.Printf("appendonly: replayed %d commands from %s", applied, readFrom)
 	}
-	if err := core.OpenAOF(path); err != nil {
+	if err := e.OpenAOF(path); err != nil {
 		return err
 	}
 
@@ -1262,7 +1270,7 @@ func startAOF(legacy string) error {
 	// which at startup costs one pass over a keyspace that was just built by
 	// one pass over the same data.
 	if readFrom != path {
-		if err := core.RewriteAOF(); err != nil {
+		if err := e.RewriteAOF(); err != nil {
 			return fmt.Errorf("migrating %s to %s: %w", readFrom, path, err)
 		}
 		log.Printf("appendonly: wrote the replayed keyspace to %s; %s is no longer read",
@@ -1353,14 +1361,14 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 	// Set as the command runs rather than as it was parsed: a HELLO earlier
 	// in the same pipeline has already changed it.
 	cmd.RESP3 = c.resp3
-	responseRw(cmd, w)
+	responseRw(c.engine, cmd, w)
 }
 
 // transact hands a command to the connection's transaction, or to MULTI, EXEC
 // or DISCARD outside one.
 func (c *client) transact(cmd *core.Command, w io.ReadWriter) {
 	var err error
-	if c.tx, err = core.Transact(c.tx, cmd, w, c); err != nil {
+	if c.tx, err = c.engine.Transact(c.tx, cmd, w, c); err != nil {
 		// The transaction ran and its reply cannot be delivered; executeRun
 		// closes the connection, as for any reply over the output limit.
 		c.err = err

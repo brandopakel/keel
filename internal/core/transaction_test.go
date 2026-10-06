@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// session drives transact on its engine the way a connection does, keeping
+// session drives Transact on its engine the way a connection does, keeping
 // the open transaction between commands.
 type session struct {
 	t    *testing.T
@@ -31,9 +31,9 @@ func (s *session) send(parts ...string) string {
 	var err error
 	cmd := &Command{Cmd: strings.ToUpper(parts[0]), Args: parts[1:]}
 	if s.tx != nil || IsTransactionCommand(cmd.Cmd) {
-		s.tx, err = s.e.transact(s.tx, cmd, &w, s.conn)
+		s.tx, err = s.e.Transact(s.tx, cmd, &w, s.conn)
 	} else {
-		err = s.e.evalAndResponse(cmd, &w)
+		err = s.e.EvalAndResponse(cmd, &w)
 	}
 	require.NoError(s.t, err)
 	return string(w.b)
@@ -401,13 +401,13 @@ func TestTransactionReplyBeyondTheLimitClosesAfterRunning(t *testing.T) {
 	indexCommands()
 	t.Cleanup(func() { delete(commandTable, "TEST.MEGABYTE"); delete(commandArity, "TEST.MEGABYTE"); indexCommands() })
 	e.resetStores()
-	tx, _ := e.transact(nil, &Command{Cmd: "MULTI"}, &replyWriter{}, nil)
+	tx, _ := e.Transact(nil, &Command{Cmd: "MULTI"}, &replyWriter{}, nil)
 	for i := 0; i < 70; i++ {
-		e.transact(tx, &Command{Cmd: "TEST.MEGABYTE"}, &replyWriter{}, nil)
+		e.Transact(tx, &Command{Cmd: "TEST.MEGABYTE"}, &replyWriter{}, nil)
 	}
-	e.transact(tx, &Command{Cmd: "SET", Args: []string{"last", "ran"}}, &replyWriter{}, nil)
+	e.Transact(tx, &Command{Cmd: "SET", Args: []string{"last", "ran"}}, &replyWriter{}, nil)
 	var w replyWriter
-	tx, err := e.transact(tx, &Command{Cmd: "EXEC"}, &w, nil)
+	tx, err := e.Transact(tx, &Command{Cmd: "EXEC"}, &w, nil)
 	require.ErrorIs(t, err, ErrTransactionReplyTooLarge)
 	require.Nil(t, tx)
 	require.Empty(t, w.b)
@@ -455,7 +455,7 @@ func TestReplicaAndFencedPrimaryNameAndCountFirst(t *testing.T) {
 	check := func(t *testing.T, refusal string) {
 		t.Helper()
 		var w replyWriter
-		require.EqualError(t, e.evalAndResponse(&Command{Cmd: "NOSUCH", Name: "nosuch", Args: []string{"x"}}, &w),
+		require.EqualError(t, e.EvalAndResponse(&Command{Cmd: "NOSUCH", Name: "nosuch", Args: []string{"x"}}, &w),
 			"ERR unknown command 'nosuch', with args beginning with: 'x' ")
 		require.Equal(t, "-ERR wrong number of arguments for 'set' command\r\n", string(rawReplyOn(t, e, "SET", "k")))
 		require.Equal(t, refusal, string(rawReplyOn(t, e, "SET", "k", "v")))

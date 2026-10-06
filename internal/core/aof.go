@@ -562,7 +562,7 @@ type replayedCommand struct {
 
 func (e *Engine) replayAOFCommand(cmd *Command, at int64) error {
 	sink := &replayWriter{}
-	if err := e.evalAndResponse(cmd, sink); err != nil {
+	if err := e.EvalAndResponse(cmd, sink); err != nil {
 		return fmt.Errorf("replaying %s at byte %d: %w", cmd.Cmd, at, err)
 	}
 	if sink.err != nil {

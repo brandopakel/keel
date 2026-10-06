@@ -33,10 +33,8 @@ func command(parts ...string) *core.Command {
 // against the same retained-input limits as unparsed bytes, and a closed
 // connection gives them back without running any of them.
 func TestQueuedCommandsAreAccountedAsInputAndDiscardedOnClose(t *testing.T) {
-	core.ResetStores()
-	t.Cleanup(core.ResetStores)
 	r, _ := socketPair(t)
-	c := &client{fd: r}
+	c := &client{fd: r, engine: newTestEngine(t, core.Options{})}
 	clients[r] = c
 	before := retainedInputBytes
 	value := strings.Repeat("v", 1<<20)
@@ -48,14 +46,12 @@ func TestQueuedCommandsAreAccountedAsInputAndDiscardedOnClose(t *testing.T) {
 	require.Nil(t, c.tx)
 	require.Equal(t, before, retainedInputBytes)
 	var sink replyBuffer
-	responseRw(command("EXISTS", "a", "b"), &sink)
+	responseRw(c.engine, command("EXISTS", "a", "b"), &sink)
 	require.Equal(t, ":0\r\n", sink.buf.String(), "a transaction ends with its connection")
 }
 
 func TestTransactionPipelinedInOneRun(t *testing.T) {
-	core.ResetStores()
-	t.Cleanup(core.ResetStores)
-	c := &client{fd: -1}
+	c := &client{fd: -1, engine: newTestEngine(t, core.Options{})}
 	got := runOnce(t, c, command("MULTI"), command("SET", "k", "1"), command("INCR", "k"),
 		command("EXEC"), command("GET", "k"))
 	require.Equal(t, "+OK\r\n+QUEUED\r\n+QUEUED\r\n*2\r\n+OK\r\n:2\r\n$1\r\n2\r\n", got)
@@ -82,7 +78,7 @@ func TestAuthenticationStillGatesTransactions(t *testing.T) {
 	require.Nil(t, c.tx)
 	require.Equal(t, "$1\r\nv\r\n", runOnce(t, c, command("GET", "k")))
 	var sink replyBuffer
-	responseRw(command("EXISTS", "k", "after"), &sink)
+	responseRw(c.engine, command("EXISTS", "k", "after"), &sink)
 	require.Equal(t, ":2\r\n", sink.buf.String())
 
 	require.Equal(t, "+OK\r\n+OK\r\n-ERR wrong number of arguments for 'auth' command\r\n"+
@@ -93,9 +89,7 @@ func TestAuthenticationStillGatesTransactions(t *testing.T) {
 // HELLO and CLIENT are queued and run in their place, as Redis runs them; QUIT
 // is never queued, and closing the connection discards the transaction.
 func TestConnectionCommandsInsideATransaction(t *testing.T) {
-	core.ResetStores()
-	t.Cleanup(core.ResetStores)
-	c := &client{fd: -1, id: 7}
+	c := &client{fd: -1, id: 7, engine: newTestEngine(t, core.Options{})}
 	got := runOnce(t, c, command("MULTI"), command("CLIENT", "SETNAME", "app"), command("HELLO", "2"),
 		command("SELECT", "0"), command("ECHO", "hi"), command("CLIENT", "GETNAME"), command("EXEC"))
 	require.True(t, strings.HasPrefix(got, "+OK\r\n+QUEUED\r\n+QUEUED\r\n+QUEUED\r\n+QUEUED\r\n+QUEUED\r\n*5\r\n+OK\r\n*14\r\n"), got)
@@ -111,7 +105,7 @@ func TestConnectionCommandsInsideATransaction(t *testing.T) {
 	require.Equal(t, "+OK\r\n+QUEUED\r\n+OK\r\n", got, "QUIT answers at once and nothing after it runs")
 	require.True(t, c.closeAfterWrite)
 	var sink replyBuffer
-	responseRw(command("EXISTS", "k"), &sink)
+	responseRw(c.engine, command("EXISTS", "k"), &sink)
 	require.Equal(t, ":0\r\n", sink.buf.String())
 }
 
@@ -127,8 +121,9 @@ func TestUndeliverableTransactionReplyClosesTheConnection(t *testing.T) {
 		}
 		oldRespond(c, cmd, w)
 	}
+	e := newTestEngine(t, core.Options{})
 	for _, cmds := range [][]*core.Command{{command("EXEC")}, {command("PING"), command("EXEC"), command("PING")}} {
-		c := &client{fd: -1}
+		c := &client{fd: -1, engine: e}
 		var arena replyArena
 		arena.reset()
 		c.cmds = cmds

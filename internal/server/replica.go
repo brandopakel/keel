@@ -24,10 +24,12 @@ type replicaUpdate struct {
 
 // The transport never accesses the keyspace. One frame at a time crosses to
 // the event loop, and the cursor advances only after successful application.
-func startReplicaTransport(password string, useTLS bool) (<-chan replicaUpdate, func()) {
+// It follows the primary e's role names, from where e's checkpoint resumes,
+// and sends e's term, which it reads atomically from its own goroutine.
+func startReplicaTransport(e *core.Engine, password string, useTLS bool) (<-chan replicaUpdate, func()) {
 	updates := make(chan replicaUpdate, 1)
 	// The primary, and the protocol it is followed in, are the engine's role.
-	role := core.Configuration().WithDefaults()
+	role := e.Configuration().WithDefaults()
 	if role.ReplicaOf == "" {
 		return updates, func() {}
 	}
@@ -35,7 +37,7 @@ func startReplicaTransport(password string, useTLS bool) (<-chan replicaUpdate, 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	protocol := role.ReplicationProtocol
-	initialEpoch, initialOffset := core.ReplicaResumeCursor()
+	initialEpoch, initialOffset := e.ReplicaResumeCursor()
 	go func() {
 		defer close(done)
 		epoch, offset := initialEpoch, initialOffset
@@ -71,7 +73,7 @@ func startReplicaTransport(password string, useTLS bool) (<-chan replicaUpdate, 
 						parts = []string{"KEEL.REPL.PULL2", epoch, strconv.FormatUint(offset, 10), snapshotID, strconv.FormatUint(snapshotOffset, 10)}
 						// Term-zero traffic keeps the original protocol-2 request
 						// shape so rolling upgrades can exchange unchanged frames.
-						if term := core.CurrentTerm(); term != 0 {
+						if term := e.CurrentTerm(); term != 0 {
 							parts = append(parts, strconv.FormatUint(term, 10))
 						}
 					}
@@ -79,7 +81,7 @@ func startReplicaTransport(password string, useTLS bool) (<-chan replicaUpdate, 
 					if protocol == 2 && len(parts) == 5 && errors.Is(err, errReplicationTermRequired) {
 						// A term-zero new replica can discover a promoted primary
 						// without sending new syntax to old term-zero primaries.
-						parts = append(parts, strconv.FormatUint(core.CurrentTerm(), 10))
+						parts = append(parts, strconv.FormatUint(e.CurrentTerm(), 10))
 						body, err = replicaExchange(conn, reader, parts)
 					}
 					if err != nil {

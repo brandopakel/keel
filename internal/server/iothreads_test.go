@@ -215,22 +215,23 @@ func TestCaptureWriterDoesNotCopyASingleReply(t *testing.T) {
 // paths a batch takes, since the whole reason both exist is that each is wrong
 // for the other's case.
 func TestExecuteRunCoalescesABatchButNotASingleReply(t *testing.T) {
+	e := newTestEngine(t, core.Options{})
 	var arena replyArena
 	arena.reset()
 
-	one := &client{fd: -1, cmds: []*core.Command{{Cmd: "PING"}}}
+	one := &client{fd: -1, cmds: []*core.Command{{Cmd: "PING"}}, engine: e}
 	assert.True(t, executeRun(one, &arena))
 	assert.False(t, one.inArena, "a batch of one must not be copied into the arena")
 	assert.Equal(t, "+PONG\r\n", string(one.out))
 	assert.Empty(t, arena.buf)
 
-	many := &client{fd: -1, cmds: []*core.Command{{Cmd: "PING"}, {Cmd: "PING"}, {Cmd: "PING"}}}
+	many := &client{fd: -1, cmds: []*core.Command{{Cmd: "PING"}, {Cmd: "PING"}, {Cmd: "PING"}}, engine: e}
 	assert.True(t, executeRun(many, &arena))
 	assert.True(t, many.inArena, "a batch of several must be coalesced into one write")
 	many.out = arena.buf[many.outStart:many.outEnd]
 	assert.Equal(t, "+PONG\r\n+PONG\r\n+PONG\r\n", string(many.out))
 
-	none := &client{fd: -1}
+	none := &client{fd: -1, engine: e}
 	assert.False(t, executeRun(none, &arena), "nothing to say means nothing to write")
 }
 
@@ -252,7 +253,7 @@ func TestThreadedServerAnswersEveryClient(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(1)
-	go RunAsyncTCPServer(&wg, Options{Host: "127.0.0.1", Port: port, IOThreads: 4})
+	go RunAsyncTCPServer(&wg, newTestEngine(t, core.Options{}), Options{Host: "127.0.0.1", Port: port, IOThreads: 4})
 	defer func() {
 		requestShutdown()
 		wake()

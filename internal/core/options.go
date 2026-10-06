@@ -311,11 +311,16 @@ func (e *Engine) configure(o Options) error {
 	return nil
 }
 
-// Configure holds the default engine, the server's, to o. cmd/keel calls it
-// once with the options its flags describe, before the log is replayed or
-// anything is served, as it once assigned config before anything read it.
+// Configure holds the default engine to o, as NewEngine holds a new engine
+// to its options; plan step 2.7 removes it with the default engine.
 func Configure(o Options) error { return defaultEngine.configure(o) }
 
-// Configuration is the default engine's options, as last given to Configure:
-// Options{} until then.
-func Configuration() Options { return defaultEngine.options }
+// Configuration is the method of that name on the default engine, which plan
+// step 2.7 removes.
+func Configuration() Options { return defaultEngine.Configuration() }
+
+// Configuration is e's options, as they were given to it.
+func (e *Engine) Configuration() Options { return e.options }
+
+// Limits are the limits e's space is held to: its options, resolved.
+func (e *Engine) Limits() data_structure.Limits { return e.space.Limits() }

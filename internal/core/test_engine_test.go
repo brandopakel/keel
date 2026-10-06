@@ -11,6 +11,16 @@ import (
 // engine the server runs on, and a test that runs in parallel must not reach
 // it; TestParallelTestsLeaveTheDefaultEngineAlone checks that none does.
 
+// newEngine is NewEngine for a test, whose options are a mistake in the test
+// when no engine can be held to them, and panic.
+func newEngine(o Options) *Engine {
+	e, err := NewEngine(o)
+	if err != nil {
+		panic(err)
+	}
+	return e
+}
+
 // newTestEngine returns an engine of t's own, held to o, with empty stores in
 // a space of its own, and closes it when t ends: its log, with the append
 // worker, the sync and any rewrite in progress, and its replication snapshot.
@@ -35,7 +45,7 @@ func newTestEngine(t testing.TB, o Options) *Engine {
 // reply. An error the command returns rather than answers - a command this
 // server does not have - comes back as its text.
 //
-// Calling cmdSET and friends directly skips evalAndResponse, and that is
+// Calling cmdSET and friends directly skips EvalAndResponse, and that is
 // where the log is written from - so a test that called them directly would
 // drive the keyspace correctly and record none of it, then pass by observing
 // that the keyspace was correct. Every command here goes the long way round
@@ -43,7 +53,7 @@ func newTestEngine(t testing.TB, o Options) *Engine {
 func runOn(t testing.TB, e *Engine, name string, args ...string) interface{} {
 	t.Helper()
 	var w replyWriter
-	if err := e.evalAndResponse(&Command{Cmd: name, Args: args}, &w); err != nil {
+	if err := e.EvalAndResponse(&Command{Cmd: name, Args: args}, &w); err != nil {
 		return err.Error()
 	}
 	res, _ := Decode(w.b)
@@ -62,7 +72,7 @@ func rawReplyOn(t testing.TB, e *Engine, name string, args ...string) []byte {
 func rawReplyAsOn(t testing.TB, e *Engine, resp3 bool, name string, args ...string) []byte {
 	t.Helper()
 	var w replyWriter
-	if err := e.evalAndResponse(&Command{Cmd: name, Args: args, RESP3: resp3}, &w); err != nil {
+	if err := e.EvalAndResponse(&Command{Cmd: name, Args: args, RESP3: resp3}, &w); err != nil {
 		t.Fatalf("%s: %v", name, err)
 	}
 	return w.b

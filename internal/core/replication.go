@@ -314,7 +314,7 @@ func (e *Engine) ApplyReplication(frame ReplicationFrame) error {
 	defer func() { e.replicaApplying = false }()
 	for _, cmd := range commands {
 		var reply replicationReply
-		if err := e.evalAndResponse(cmd, &reply); err != nil {
+		if err := e.EvalAndResponse(cmd, &reply); err != nil {
 			return err
 		}
 		if len(reply) > 0 && reply[0] == '-' {

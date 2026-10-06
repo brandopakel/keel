@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/brandopakel/keel/internal/core"
-	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // The default log was ./memkv-master.aof before the rename and is
@@ -75,22 +74,27 @@ func TestMigratingFromTheLegacyLogSurvivesASecondRestart(t *testing.T) {
 	assert.NoError(t, os.WriteFile(legacy,
 		[]byte("*3\r\n$3\r\nSET\r\n$8\r\nlegacy-k\r\n$5\r\nvalue\r\n"), 0o644))
 
-	withEngineOptions(t, func(o *core.Options) { o.AppendOnly, o.AppendFilename = true, current })
+	options := core.Options{AppendOnly: true, AppendFilename: current}
+	keys := func(e *core.Engine) string {
+		var reply bytes.Buffer
+		assert.NoError(t, e.EvalAndResponse(&core.Command{Cmd: "DBSIZE"}, &reply))
+		return reply.String()
+	}
 
 	// First start: reads the legacy log, then writes what it read into the
 	// current one before anything else appends to it.
-	core.ResetStores()
-	assert.NoError(t, startAOF(legacy))
-	assert.Equal(t, 1, data_structure.TotalKeys(), "the legacy key is here after one restart")
-	assert.NoError(t, core.EvalAndResponse(
+	e := newTestEngine(t, options)
+	assert.NoError(t, startAOF(e, legacy))
+	assert.Equal(t, ":1\r\n", keys(e), "the legacy key is here after one restart")
+	assert.NoError(t, e.EvalAndResponse(
 		&core.Command{Cmd: "SET", Args: []string{"new-k", "added"}}, &bytes.Buffer{}))
-	assert.NoError(t, core.FlushAOF())
-	assert.NoError(t, core.CloseAOF())
+	assert.NoError(t, e.FlushAOF())
+	assert.NoError(t, e.CloseAOF())
 
-	// Second start: the current file now exists and takes precedence.
-	core.ResetStores()
-	assert.NoError(t, startAOF(legacy))
-	defer core.CloseAOF()
-	assert.Equal(t, 2, data_structure.TotalKeys(),
+	// Second start, on an engine of its own as a restarted server's is: the
+	// current file now exists and takes precedence.
+	e = newTestEngine(t, options)
+	assert.NoError(t, startAOF(e, legacy))
+	assert.Equal(t, ":2\r\n", keys(e),
 		"the key that lived only in the legacy log has to survive the file swap")
 }

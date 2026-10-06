@@ -16,26 +16,21 @@ import (
 	"github.com/brandopakel/keel/internal/server"
 )
 
-// configureFrom parses args as the server's command line and holds the
-// default engine to the options they describe, as runServer does, then
-// returns the limits that engine's space is held to. The flags and the engine
-// are put back when t ends.
-func configureFrom(t *testing.T, args ...string) data_structure.Limits {
+// engineFrom parses args as the server's command line and makes the engine
+// runServer makes from them, holding it to the options they describe. The
+// flags are put back when t ends.
+func engineFrom(t *testing.T, args ...string) *core.Engine {
 	t.Helper()
-	commandLine, argv, options := flag.CommandLine, os.Args, core.Configuration()
-	t.Cleanup(func() {
-		flag.CommandLine, os.Args = commandLine, argv
-		if err := core.Configure(options); err != nil {
-			t.Error(err)
-		}
-	})
+	commandLine, argv := flag.CommandLine, os.Args
+	t.Cleanup(func() { flag.CommandLine, os.Args = commandLine, argv })
 	flag.CommandLine = flag.NewFlagSet("keel", flag.ContinueOnError)
 	os.Args = append([]string{"keel"}, args...)
 	parseFlags()
-	if err := core.Configure(engineOptions()); err != nil {
+	e, err := core.NewEngine(engineOptions())
+	if err != nil {
 		t.Fatal(err)
 	}
-	return data_structure.DefaultSpace.Limits()
+	return e
 }
 
 // TestDefaultFlagsKeepTheServerSettings pins what the server's engine is held
@@ -47,9 +42,11 @@ func configureFrom(t *testing.T, args ...string) data_structure.Limits {
 // when there is one, appended on the caller's thread and rewritten at 100%
 // growth past 64 MiB; and neither a replica nor a feed, in protocol 1.
 func TestDefaultFlagsKeepTheServerSettings(t *testing.T) {
-	// Not parallel: it parses the process's command line into the default
-	// engine's options, which every test in the process shares.
-	got := configureFrom(t)
+	// Not parallel: it parses the process's command line (flag.CommandLine,
+	// os.Args) into the package's flag variables, which every test in the
+	// process shares.
+	e := engineFrom(t)
+	got := e.Limits()
 	want := data_structure.Limits{Eviction: data_structure.EvictLRU, MaxKeys: 0, MaxMemory: 0,
 		EvictionSamples: 5, LFULogFactor: 10, LFUDecayPeriod: 10000, LCSMaxCells: 134217728}
 	if got != want {
@@ -60,7 +57,7 @@ func TestDefaultFlagsKeepTheServerSettings(t *testing.T) {
 		ActiveExpireSamples: 20, ActiveExpirePercent: 25, ActiveExpireRounds: 16,
 		AppendFilename: "./keel-master.aof", Fsync: core.FsyncEverySec,
 		AutoRewritePercentage: 100, AutoRewriteMinSize: 64 << 20, ReplicationProtocol: 1}
-	if options := core.Configuration().WithDefaults(); options != wantOptions {
+	if options := e.Configuration().WithDefaults(); options != wantOptions {
 		t.Fatalf("default flags give the engine %+v, want %+v", options, wantOptions)
 	}
 }
@@ -69,45 +66,43 @@ func TestDefaultFlagsKeepTheServerSettings(t *testing.T) {
 // and a flag's zero that turns its setting off turns it off, rather than
 // becoming the option's default.
 func TestFlagsReachTheEngine(t *testing.T) {
-	// Not parallel: it parses the process's command line into the default
-	// engine's options, which every test in the process shares.
-	got := configureFrom(t, "-maxmemory", "2mb", "-maxkeys", "7", "-evict", "lfu", "-lru-samples", "9",
-		"-lfu-log-factor", "3", "-lfu-decay-period", "40", "-lcs-max-cells", "1000")
+	// Not parallel: it parses the process's command line (flag.CommandLine,
+	// os.Args) into the package's flag variables, which every test in the
+	// process shares.
+	got := engineFrom(t, "-maxmemory", "2mb", "-maxkeys", "7", "-evict", "lfu", "-lru-samples", "9",
+		"-lfu-log-factor", "3", "-lfu-decay-period", "40", "-lcs-max-cells", "1000").Limits()
 	want := data_structure.Limits{Eviction: data_structure.EvictLFU, MaxKeys: 7, MaxMemory: 2 << 20,
 		EvictionSamples: 9, LFULogFactor: 3, LFUDecayPeriod: 40, LCSMaxCells: 1000}
 	if got != want {
 		t.Fatalf("flags hold the engine to %+v, want %+v", got, want)
 	}
 
-	got = configureFrom(t, "-evict", "random", "-lfu-log-factor", "0", "-lfu-decay-period", "0", "-lcs-max-cells", "0")
+	got = engineFrom(t, "-evict", "random", "-lfu-log-factor", "0", "-lfu-decay-period", "0", "-lcs-max-cells", "0").Limits()
 	want = data_structure.Limits{Eviction: data_structure.EvictRandom, MaxKeys: 0,
 		EvictionSamples: 5, LFULogFactor: 0, LFUDecayPeriod: 0, LCSMaxCells: 0}
 	if got != want {
 		t.Fatalf("zero flags hold the engine to %+v, want %+v", got, want)
 	}
 
-	got = configureFrom(t, "-lcs-max-cells", "18446744073709551615")
+	got = engineFrom(t, "-lcs-max-cells", "18446744073709551615").Limits()
 	if got.LCSMaxCells != 0 {
 		t.Fatalf("an LCS bound past 2^63 holds the engine to %d cells, want no bound", got.LCSMaxCells)
 	}
 
-	configureFrom(t, "-active-expire-samples", "7", "-appendonly", "-appendfilename", "/tmp/x.aof",
+	options := engineFrom(t, "-active-expire-samples", "7", "-appendonly", "-appendfilename", "/tmp/x.aof",
 		"-appendfsync", "always", "-aof-async-append", "-auto-aof-rewrite-percentage", "50",
-		"-auto-aof-rewrite-min-size", "1mb", "-replication-feed", "-replication-protocol", "2")
-	options := core.Configuration()
+		"-auto-aof-rewrite-min-size", "1mb", "-replication-feed", "-replication-protocol", "2").Configuration()
 	if options.ActiveExpireSamples != 7 || !options.AppendOnly || options.AppendFilename != "/tmp/x.aof" ||
 		options.Fsync != core.FsyncAlways || !options.AsyncAppend || options.AutoRewritePercentage != 50 ||
 		options.AutoRewriteMinSize != 1<<20 || !options.ReplicationFeed || options.ReplicationProtocol != 2 {
 		t.Fatalf("flags give the engine %+v", options)
 	}
-	configureFrom(t, "-replicaof", "primary.test:6379")
-	if options := core.Configuration(); options.ReplicaOf != "primary.test:6379" {
+	if options := engineFrom(t, "-replicaof", "primary.test:6379").Configuration(); options.ReplicaOf != "primary.test:6379" {
 		t.Fatalf("-replicaof gives the engine %+v", options)
 	}
 
-	configureFrom(t, "-active-expire-samples", "0", "-auto-aof-rewrite-percentage", "0",
-		"-auto-aof-rewrite-min-size", "0")
-	options = core.Configuration()
+	options = engineFrom(t, "-active-expire-samples", "0", "-auto-aof-rewrite-percentage", "0",
+		"-auto-aof-rewrite-min-size", "0").Configuration()
 	if options.ActiveExpireSamples >= 0 || options.AutoRewritePercentage >= 0 || options.AutoRewriteMinSize >= 0 {
 		t.Fatalf("zero flags give the engine %+v, want each of them off", options)
 	}
@@ -117,9 +112,10 @@ func TestFlagsReachTheEngine(t *testing.T) {
 // keyspace only when -maxkeys or -maxmemory says so. Until 2026-10-05 the
 // default was 5,000,000 keys; the owner chose Redis's default instead.
 func TestServerHasNoKeyBoundByDefault(t *testing.T) {
-	// Not parallel: it parses the process's command line into the default
-	// engine's options, which every test in the process shares.
-	if got := configureFrom(t).MaxKeys; got != 0 {
+	// Not parallel: it parses the process's command line (flag.CommandLine,
+	// os.Args) into the package's flag variables, which every test in the
+	// process shares.
+	if got := engineFrom(t).Limits().MaxKeys; got != 0 {
 		t.Fatalf("the default -maxkeys gives the engine a key bound of %d, want none", got)
 	}
 }
@@ -169,9 +165,9 @@ func TestServerReportsItsDefaultEviction(t *testing.T) {
 	s.stop(t)
 }
 
-// TestServerEnforcesMaxKeysAtStartup: the key cap reaches the engine through
-// runServer's own Configure, not only through this file's: a server started
-// with -maxkeys 1 holds one key.
+// TestServerEnforcesMaxKeysAtStartup: the key cap reaches the engine runServer
+// itself makes, not only the one this file makes: a server started with
+// -maxkeys 1 holds one key.
 func TestServerEnforcesMaxKeysAtStartup(t *testing.T) {
 	t.Parallel()
 	s := startTestServer(t, "-maxkeys", "1")
@@ -193,9 +189,10 @@ func TestServerEnforcesMaxKeysAtStartup(t *testing.T) {
 // server.Options default; with no flags they are the settings the server has
 // always had.
 func TestFlagsReachTheServer(t *testing.T) {
-	// Not parallel: it parses the process's command line into the default
-	// engine's options, which every test in the process shares.
-	configureFrom(t)
+	// Not parallel: it parses the process's command line (flag.CommandLine,
+	// os.Args) into the package's flag variables, which every test in the
+	// process shares.
+	engineFrom(t)
 	want := server.Options{Host: "127.0.0.1", Port: 8081, MaxClients: 20000, IOThreads: 1,
 		CronInterval: 100 * time.Millisecond}
 	if got := serverOptions(); got != want {
@@ -206,7 +203,7 @@ func TestFlagsReachTheServer(t *testing.T) {
 	}
 
 	t.Setenv("KEEL_OPTIONS_TEST_PASSWORD", "secret")
-	configureFrom(t, "-host", "0.0.0.0", "-port", "7000", "-maxclients", "12", "-io-threads", "3",
+	engineFrom(t, "-host", "0.0.0.0", "-port", "7000", "-maxclients", "12", "-io-threads", "3",
 		"-cron-interval-ms", "25", "-requirepass-env", "KEEL_OPTIONS_TEST_PASSWORD",
 		"-aof-async-append", "-appendonly", "-aof-concurrent-append", "-primary-tls")
 	want = server.Options{Host: "0.0.0.0", Port: 7000, MaxClients: 12, IOThreads: 3,
@@ -264,9 +261,10 @@ var developFlags = []struct{ name, kind, value string }{
 // engine's and the server's options, and by the subprocess tests, which start
 // the server through main.
 func TestFlagsKeepTheirNamesAndDefaults(t *testing.T) {
-	// Not parallel: it parses the process's command line into the default
-	// engine's options, which every test in the process shares.
-	configureFrom(t)
+	// Not parallel: it parses the process's command line (flag.CommandLine,
+	// os.Args) into the package's flag variables, which every test in the
+	// process shares.
+	engineFrom(t)
 	got := map[string][2]string{}
 	flag.CommandLine.VisitAll(func(f *flag.Flag) {
 		kind, _ := flag.UnquoteUsage(f)

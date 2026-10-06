@@ -28,7 +28,7 @@ import (
 // its member/score pairs only when it was given a count.
 //
 // Which protocol a reply is framed in belongs to the connection. It reaches
-// here on the Command, and evalAndResponse holds it in the framing of the
+// here on the Command, and EvalAndResponse holds it in the framing of the
 // engine running the command for as long as the command runs, the way the
 // log's staging state is held for exactly one command. A handler says what it
 // is answering - a map, a set, a score, a yes-or-no - through the framing's
@@ -45,7 +45,7 @@ import (
 // framing is the protocol a reply is built in: RESP3, or RESP2 when
 // replyRESP3 is false, as it is for the zero value.
 //
-// An Engine embeds the framing of the command running on it. evalAndResponse
+// An Engine embeds the framing of the command running on it. EvalAndResponse
 // sets it from the command and restores it when the command returns, so
 // nothing after the command inherits it. One command runs on an engine at a
 // time, so one framing per engine is enough. A reply built outside any command

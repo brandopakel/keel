@@ -96,7 +96,7 @@ func (e *Engine) applyReplicationV2(frame ReplicationFrame) (err error) {
 			// Gate the old state before reset and keep reads gated until catch-up.
 			e.replicaApplying = true
 			var reply replicationReply
-			err := e.evalAndResponse(&Command{Cmd: "FLUSHDB"}, &reply)
+			err := e.EvalAndResponse(&Command{Cmd: "FLUSHDB"}, &reply)
 			e.replicaApplying = false
 			if err != nil {
 				return err
@@ -217,11 +217,11 @@ func (u replicationUnit) apply(e *Engine) error {
 		}
 	}
 	if u.transaction {
-		e.runTransaction(u.commands, e.evalAndResponse, check)
+		e.runTransaction(u.commands, e.EvalAndResponse, check)
 		return failed
 	}
 	var reply replicationReply
-	err := e.evalAndResponse(u.commands[0], &reply)
+	err := e.EvalAndResponse(u.commands[0], &reply)
 	check(0, reply, err)
 	return failed
 }
