@@ -28,15 +28,12 @@ const (
 
 	// Until the step that moves it.
 	defaultInstance = "the server's engine until callers open their own (plan step 2.7)"
-	transport       = "a hook the server installs for INFO; goes when the server renders INFO (plan phase 6)"
 )
 
 // packageVars is every package-level variable this package may declare, with
 // the reason each one is allowed.
 var packageVars = map[string]string{
 	"defaultEngine": defaultInstance,
-
-	"ClientBuffers": transport,
 
 	"commandTable": table, "commandArity": table, "commands": table,
 	"connectionCommands": table, "containerCommands": table, "clientSubcommands": table,
