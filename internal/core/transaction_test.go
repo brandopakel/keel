@@ -13,8 +13,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // session drives transact on its engine the way a connection does, keeping
@@ -41,27 +39,31 @@ func (s *session) send(parts ...string) string {
 	return string(w.b)
 }
 
-// newSession is a session on the default engine, emptied first.
-func newSession(t *testing.T) *session {
-	ResetStores()
-	return &session{t: t, e: defaultEngine}
+// newSession is a session on e, emptied first.
+func newSession(t *testing.T, e *Engine) *session {
+	e.resetStores()
+	return &session{t: t, e: e}
 }
 
 func TestTransactionQueuesThenRunsInOrder(t *testing.T) {
-	s := newSession(t)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	s := newSession(t, e)
 	require.Equal(t, "+OK\r\n", s.send("MULTI"))
 	require.Equal(t, "+QUEUED\r\n", s.send("SET", "k", "1"))
 	require.Equal(t, "+QUEUED\r\n", s.send("INCR", "k"))
 	require.Equal(t, "+QUEUED\r\n", s.send("GET", "k"))
-	require.Nil(t, defaultEngine.dictStore.Peek("k"), "nothing runs before EXEC")
+	require.Nil(t, e.dictStore.Peek("k"), "nothing runs before EXEC")
 	require.Equal(t, "*3\r\n+OK\r\n:2\r\n$1\r\n2\r\n", s.send("EXEC"))
 	require.Nil(t, s.tx)
-	require.Equal(t, "2", run(t, "GET", "k"))
+	require.Equal(t, "2", runOn(t, e, "GET", "k"))
 	require.Equal(t, "*0\r\n", func() string { s.send("MULTI"); return s.send("EXEC") }(),
 		"an empty transaction answers an empty array")
 }
 
 func TestTransactionRefusalWhileQueueingAbortsIt(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	for name, refused := range map[string][]string{
 		"unknown":     {"NOSUCHCOMMAND", "k"},
 		"arity":       {"GET"},
@@ -71,7 +73,7 @@ func TestTransactionRefusalWhileQueueingAbortsIt(t *testing.T) {
 		"keyless":     {"WATCH"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			s := newSession(t)
+			s := newSession(t, e)
 			s.send("MULTI")
 			require.Equal(t, "+QUEUED\r\n", s.send("SET", "before", "v"))
 			reply := s.send(refused...)
@@ -80,11 +82,11 @@ func TestTransactionRefusalWhileQueueingAbortsIt(t *testing.T) {
 			require.Zero(t, s.tx.RetainedBytes(), "a doomed transaction keeps nothing")
 			require.Equal(t, "-EXECABORT Transaction discarded because of previous errors.\r\n", s.send("EXEC"))
 			require.Nil(t, s.tx)
-			require.Nil(t, defaultEngine.dictStore.Peek("before"))
-			require.Nil(t, defaultEngine.dictStore.Peek("after"))
+			require.Nil(t, e.dictStore.Peek("before"))
+			require.Nil(t, e.dictStore.Peek("after"))
 		})
 	}
-	s := newSession(t)
+	s := newSession(t, e)
 	s.send("MULTI")
 	require.Equal(t, "-ERR unknown command 'NOSUCHCOMMAND'\r\n", s.send("NOSUCHCOMMAND"))
 	require.Equal(t, "-ERR wrong number of arguments for 'get' command\r\n", s.send("GET"))
@@ -92,8 +94,10 @@ func TestTransactionRefusalWhileQueueingAbortsIt(t *testing.T) {
 }
 
 func TestTransactionRuntimeErrorsDoNotStopTheRest(t *testing.T) {
-	s := newSession(t)
-	run(t, "SET", "text", "not a number")
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	s := newSession(t, e)
+	runOn(t, e, "SET", "text", "not a number")
 	s.send("MULTI")
 	s.send("INCR", "text")
 	s.send("SET", "applied", "yes")
@@ -101,12 +105,14 @@ func TestTransactionRuntimeErrorsDoNotStopTheRest(t *testing.T) {
 	s.send("GET", "applied")
 	require.Equal(t, "*4\r\n-ERR value is not an integer or out of range\r\n+OK\r\n"+
 		"-WRONGTYPE Operation against a key holding the wrong kind of value\r\n$3\r\nyes\r\n", s.send("EXEC"))
-	require.Equal(t, "yes", run(t, "GET", "applied"))
-	require.Equal(t, "not a number", run(t, "GET", "text"))
+	require.Equal(t, "yes", runOn(t, e, "GET", "applied"))
+	require.Equal(t, "not a number", runOn(t, e, "GET", "text"))
 }
 
 func TestTransactionControlCommands(t *testing.T) {
-	s := newSession(t)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	s := newSession(t, e)
 	require.Equal(t, "-ERR EXEC without MULTI\r\n", s.send("EXEC"))
 	require.Equal(t, "-ERR DISCARD without MULTI\r\n", s.send("DISCARD"))
 	require.Equal(t, "-ERR wrong number of arguments for 'multi' command\r\n", s.send("MULTI", "now"))
@@ -117,13 +123,13 @@ func TestTransactionControlCommands(t *testing.T) {
 	s.send("SET", "k", "1")
 	require.Equal(t, "-ERR MULTI calls can not be nested\r\n", s.send("MULTI"))
 	require.Equal(t, "*1\r\n+OK\r\n", s.send("EXEC"))
-	require.Equal(t, "1", run(t, "GET", "k"))
+	require.Equal(t, "1", runOn(t, e, "GET", "k"))
 
 	s.send("MULTI")
 	s.send("SET", "k", "2")
 	require.Equal(t, "+OK\r\n", s.send("DISCARD"))
 	require.Nil(t, s.tx)
-	require.Equal(t, "1", run(t, "GET", "k"))
+	require.Equal(t, "1", runOn(t, e, "GET", "k"))
 	require.Equal(t, "-ERR EXEC without MULTI\r\n", s.send("EXEC"), "DISCARD ends the transaction")
 
 	// A malformed EXEC inside a transaction discards it and says why.
@@ -131,7 +137,7 @@ func TestTransactionControlCommands(t *testing.T) {
 	s.send("SET", "k", "3")
 	require.Equal(t, "-EXECABORT Transaction discarded because of: wrong number of arguments for 'exec' command\r\n", s.send("EXEC", "now"))
 	require.Nil(t, s.tx)
-	require.Equal(t, "1", run(t, "GET", "k"))
+	require.Equal(t, "1", runOn(t, e, "GET", "k"))
 
 	// A malformed DISCARD is refused like any command, and aborts.
 	s.send("MULTI")
@@ -139,7 +145,7 @@ func TestTransactionControlCommands(t *testing.T) {
 	require.Equal(t, "-ERR wrong number of arguments for 'discard' command\r\n", s.send("DISCARD", "now"))
 	require.NotNil(t, s.tx)
 	require.Equal(t, "-EXECABORT Transaction discarded because of previous errors.\r\n", s.send("EXEC"))
-	require.Equal(t, "1", run(t, "GET", "k"))
+	require.Equal(t, "1", runOn(t, e, "GET", "k"))
 }
 
 // fakeConnection answers one command the way a transport answers AUTH.
@@ -156,8 +162,10 @@ func (f *fakeConnection) AnswerConnection(cmd *Command, w io.ReadWriter) {
 // The transport's own commands are queued and run in their place, as Redis
 // queues AUTH; their count is checked while queueing like any other command's.
 func TestTransactionQueuesTheTransportsOwnCommands(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	conn := &fakeConnection{}
-	s := newSession(t)
+	s := newSession(t, e)
 	s.conn = conn
 	s.send("MULTI")
 	require.Equal(t, "+QUEUED\r\n", s.send("SET", "k", "1"))
@@ -181,51 +189,55 @@ func TestTransactionQueuesTheTransportsOwnCommands(t *testing.T) {
 // transaction is over. So the block reaches the old log whole before any
 // rewrite begins, and the rewritten log holds its effects without its frames.
 func TestTransactionSchedulesARewriteAsRedisDoes(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	path := filepath.Join(t.TempDir(), "rewrite.aof")
-	ResetStores()
-	require.NoError(t, OpenAOF(path))
+	e.resetStores()
+	require.NoError(t, e.OpenAOF(path))
 	// Closing cancels a rewrite still running without counting it as a
 	// failed one, which would outlive this test on the default engine.
-	t.Cleanup(func() { CloseAOF() })
-	s := &session{t: t, e: defaultEngine}
-	run(t, "SET", "before", "0")
+	t.Cleanup(func() { e.CloseAOF() })
+	s := &session{t: t, e: e}
+	runOn(t, e, "SET", "before", "0")
 	s.send("MULTI")
 	s.send("SET", "a", "1")
 	s.send("BGREWRITEAOF")
 	s.send("SET", "b", "2")
 	require.Equal(t, "*3\r\n+OK\r\n+Background append only file rewriting scheduled\r\n+OK\r\n", s.send("EXEC"))
-	require.False(t, RewriteActive(), "nothing starts in the middle of EXEC")
-	require.Contains(t, infoPersistence(t), "aof_rewrite_scheduled:1\r\n")
+	require.False(t, e.RewriteActive(), "nothing starts in the middle of EXEC")
+	require.Contains(t, infoPersistenceOn(t, e), "aof_rewrite_scheduled:1\r\n")
 	old, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.NotContains(t, string(old), "MULTI", "nothing of the block was flushed while it ran")
 	// The loop's flush writes the block, then starts the scheduled rewrite.
-	require.NoError(t, FlushAOF())
-	require.True(t, RewriteActive())
-	require.Contains(t, infoPersistence(t), "aof_rewrite_scheduled:0\r\n")
+	require.NoError(t, e.FlushAOF())
+	require.True(t, e.RewriteActive())
+	require.Contains(t, infoPersistenceOn(t, e), "aof_rewrite_scheduled:0\r\n")
 	old, err = os.ReadFile(path)
 	require.NoError(t, err)
 	require.Contains(t, string(old), "*1\r\n$5\r\nMULTI\r\n"+string(appendCommand(nil, "SET", "a", "1"))+
 		string(appendCommand(nil, "SET", "b", "2"))+"*1\r\n$4\r\nEXEC\r\n", "the old log holds the block whole")
-	for n := 0; RewriteActive() && n < 1000; n++ {
-		require.NoError(t, FlushAOF())
-		waitForRewriteSync(t)
+	for n := 0; e.RewriteActive() && n < 1000; n++ {
+		require.NoError(t, e.FlushAOF())
+		waitForRewriteSyncOn(t, e)
 	}
-	require.False(t, RewriteActive())
+	require.False(t, e.RewriteActive())
 	body, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.NotContains(t, string(body), "MULTI", "a rewrite writes state, not frames")
-	require.NoError(t, CloseAOF())
-	restart(t, path)
-	require.Equal(t, "1", run(t, "GET", "a"))
-	require.Equal(t, "2", run(t, "GET", "b"))
-	require.Equal(t, "0", run(t, "GET", "before"))
+	require.NoError(t, e.CloseAOF())
+	restartOn(t, e, path)
+	require.Equal(t, "1", runOn(t, e, "GET", "a"))
+	require.Equal(t, "2", runOn(t, e, "GET", "b"))
+	require.Equal(t, "0", runOn(t, e, "GET", "before"))
 }
 
 // UNWATCH answers as Redis does with nothing watched: OK, and inside MULTI it
 // is queued and answers OK in its slot.
 func TestUnwatchAnswersOKAsWithNothingWatched(t *testing.T) {
-	s := newSession(t)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	s := newSession(t, e)
 	require.Equal(t, "+OK\r\n", s.send("UNWATCH"))
 	require.Equal(t, "-ERR wrong number of arguments for 'unwatch' command\r\n", s.send("UNWATCH", "k"))
 	s.send("MULTI")
@@ -240,20 +252,24 @@ func TestUnwatchAnswersOKAsWithNothingWatched(t *testing.T) {
 // WATCH is not implemented. Outside a transaction it is an unknown command;
 // inside one it gets Redis's refusal, which leaves the transaction open.
 func TestWatchIsRefusedInsideMultiAsRedisRefusesIt(t *testing.T) {
-	s := newSession(t)
-	require.Equal(t, "ERR unknown command 'WATCH', with args beginning with: 'k' ", run(t, "WATCH", "k"))
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	s := newSession(t, e)
+	require.Equal(t, "ERR unknown command 'WATCH', with args beginning with: 'k' ", runOn(t, e, "WATCH", "k"))
 	s.send("MULTI")
 	s.send("SET", "k", "1")
 	require.Equal(t, "-ERR WATCH inside MULTI is not allowed\r\n", s.send("WATCH", "k"))
 	require.Equal(t, "*1\r\n+OK\r\n", s.send("EXEC"))
-	require.Equal(t, "1", run(t, "GET", "k"))
+	require.Equal(t, "1", runOn(t, e, "GET", "k"))
 	s.send("MULTI")
 	require.Equal(t, "-ERR wrong number of arguments for 'watch' command\r\n", s.send("WATCH"))
 	require.Equal(t, "-EXECABORT Transaction discarded because of previous errors.\r\n", s.send("EXEC"))
 }
 
 func TestTransactionQueueLimitRefusesAndReleases(t *testing.T) {
-	s := newSession(t)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	s := newSession(t, e)
 	s.send("MULTI")
 	value := strings.Repeat("v", 1<<20)
 	refused := ""
@@ -268,15 +284,16 @@ func TestTransactionQueueLimitRefusesAndReleases(t *testing.T) {
 	require.Equal(t, "+QUEUED\r\n", s.send("SET", "small", "v"))
 	require.Zero(t, s.tx.RetainedBytes())
 	require.Equal(t, "-EXECABORT Transaction discarded because of previous errors.\r\n", s.send("EXEC"))
-	require.Zero(t, data_structure.TotalKeys())
+	require.Zero(t, e.space.TotalKeys())
 }
 
 // EXEC cannot be bounded before it runs, so concurrent appends must never let a
 // run holding it overlap a pending append: it waits at the drained barrier.
 func TestTransactionCommandsTakeTheAppendBarrier(t *testing.T) {
-	ResetStores()
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	for _, name := range []string{"MULTI", "EXEC", "DISCARD"} {
-		_, _, bounded := AppendAdmission([]*Command{{Cmd: "SET", Args: []string{"k", "v"}}, {Cmd: name}})
+		_, _, bounded := e.AppendAdmission([]*Command{{Cmd: "SET", Args: []string{"k", "v"}}, {Cmd: name}})
 		require.False(t, bounded, name)
 	}
 }
@@ -285,6 +302,7 @@ func TestTransactionCommandsTakeTheAppendBarrier(t *testing.T) {
 // command runs, so a command the table did not hold could never run, and an
 // entry for a command nothing answers would be a name that is never unknown.
 func TestEveryCommandHasAnArity(t *testing.T) {
+	t.Parallel()
 	for name := range commandTable {
 		_, counted := commandArity[name]
 		require.True(t, counted, "%s has no arity", name)
@@ -309,6 +327,8 @@ func TestEveryCommandHasAnArity(t *testing.T) {
 // a handler shared with an old name, which names the current one, and the
 // replication pulls, which refuse a node not serving them first.
 func TestCommandArityIsNeverStricterThanTheHandler(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	ownWords := map[string]bool{"MEMKV.DUMP": true, "MEMKV.RESTORE": true, "SRAND": true,
 		"KEEL.REPL.PULL": true, "KEEL.REPL.PULL2": true}
 	for name, arity := range commandArity {
@@ -324,12 +344,12 @@ func TestCommandArityIsNeverStricterThanTheHandler(t *testing.T) {
 			if arityAccepts(arity, args) {
 				continue
 			}
-			ResetStores()
+			e.resetStores()
 			parts := make([]string, args)
 			for i := range parts {
 				parts[i] = "1"
 			}
-			reply := handler(defaultEngine, parts)
+			reply := handler(e, parts)
 			require.True(t, bytes.HasPrefix(reply, []byte("-")), "%s with %d arguments: table refuses, handler answered %q", name, args, reply)
 			if !ownWords[name] {
 				require.Equal(t, string(Encode(wrongArguments(name), false)), string(reply), "%s with %d arguments", name, args)
@@ -341,23 +361,26 @@ func TestCommandArityIsNeverStricterThanTheHandler(t *testing.T) {
 // TestDispatchCountsArgumentsFromTheTable: a command is counted before it runs,
 // and before a replica or a type check looks at it, in Redis's words.
 func TestDispatchCountsArgumentsFromTheTable(t *testing.T) {
-	ResetStores()
-	run(t, "RPUSH", "list", "a")
-	require.Equal(t, "-ERR wrong number of arguments for 'get' command\r\n", string(rawReply(t, "GET")))
-	require.Equal(t, "-ERR wrong number of arguments for 'hset' command\r\n", string(rawReply(t, "HSET", "list", "f")),
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	runOn(t, e, "RPUSH", "list", "a")
+	require.Equal(t, "-ERR wrong number of arguments for 'get' command\r\n", string(rawReplyOn(t, e, "GET")))
+	require.Equal(t, "-ERR wrong number of arguments for 'hset' command\r\n", string(rawReplyOn(t, e, "HSET", "list", "f")),
 		"counted before the key's type is looked at")
-	run(t, "SADD", "set", "a")
-	require.Equal(t, "-ERR wrong number of arguments for 'lpop' command\r\n", string(rawReply(t, "LPOP", "set", "1", "2")),
+	runOn(t, e, "SADD", "set", "a")
+	require.Equal(t, "-ERR wrong number of arguments for 'lpop' command\r\n", string(rawReplyOn(t, e, "LPOP", "set", "1", "2")),
 		"LPOP's own upper bound comes before the key's type too")
-	require.Equal(t, "-ERR wrong number of arguments for 'memory|usage' command\r\n", string(rawReply(t, "MEMORY", "usage")))
-	require.Equal(t, "-ERR unknown subcommand 'nosuch'. Try MEMORY HELP.\r\n", string(rawReply(t, "MEMORY", "nosuch", "x")))
-	require.Equal(t, "-ERR wrong number of arguments for 'memkv.dump' command\r\n", string(rawReply(t, "MEMKV.DUMP")),
+	require.Equal(t, "-ERR wrong number of arguments for 'memory|usage' command\r\n", string(rawReplyOn(t, e, "MEMORY", "usage")))
+	require.Equal(t, "-ERR unknown subcommand 'nosuch'. Try MEMORY HELP.\r\n", string(rawReplyOn(t, e, "MEMORY", "nosuch", "x")))
+	require.Equal(t, "-ERR wrong number of arguments for 'memkv.dump' command\r\n", string(rawReplyOn(t, e, "MEMKV.DUMP")),
 		"an old name is counted under the name it was sent as")
 }
 
 func TestTransactionReplyCeiling(t *testing.T) {
-	s := newSession(t)
-	run(t, "SET", "large", strings.Repeat("x", 40<<20))
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	s := newSession(t, e)
+	runOn(t, e, "SET", "large", strings.Repeat("x", 40<<20))
 	s.send("MULTI")
 	s.send("GET", "large")
 	s.send("GET", "large")
@@ -366,42 +389,47 @@ func TestTransactionReplyCeiling(t *testing.T) {
 	require.True(t, strings.HasPrefix(reply, "*3\r\n$41943040\r\n"))
 	require.True(t, strings.HasSuffix(reply, "\r\n-ERR reply exceeds the 64 MiB output limit\r\n+OK\r\n"),
 		"the second read is refused before it is built, and the write after it still runs and answers")
-	require.Equal(t, "v", run(t, "GET", "after"))
-	require.Equal(t, MaxReplyBytes, defaultEngine.replyCeiling, "the ceiling is only lowered inside EXEC")
+	require.Equal(t, "v", runOn(t, e, "GET", "after"))
+	require.Equal(t, MaxReplyBytes, e.replyCeiling, "the ceiling is only lowered inside EXEC")
 }
 
 func TestTransactionReplyBeyondTheLimitClosesAfterRunning(t *testing.T) {
+	// Not parallel: it adds a command to the package's command table, which
+	// every engine dispatches through.
+	e := newTestEngine(t, Options{})
 	// Replies no admission sees - many small ones - can still add up past the
 	// output limit. The transaction runs whole and the connection is told so.
 	commandTable["TEST.MEGABYTE"] = func(*Engine, []string) []byte { return bytes.Repeat([]byte("+"), 1<<20) }
 	commandArity["TEST.MEGABYTE"] = 1
 	indexCommands()
 	t.Cleanup(func() { delete(commandTable, "TEST.MEGABYTE"); delete(commandArity, "TEST.MEGABYTE"); indexCommands() })
-	ResetStores()
-	tx, _ := Transact(nil, &Command{Cmd: "MULTI"}, &replyWriter{}, nil)
+	e.resetStores()
+	tx, _ := e.transact(nil, &Command{Cmd: "MULTI"}, &replyWriter{}, nil)
 	for i := 0; i < 70; i++ {
-		Transact(tx, &Command{Cmd: "TEST.MEGABYTE"}, &replyWriter{}, nil)
+		e.transact(tx, &Command{Cmd: "TEST.MEGABYTE"}, &replyWriter{}, nil)
 	}
-	Transact(tx, &Command{Cmd: "SET", Args: []string{"last", "ran"}}, &replyWriter{}, nil)
+	e.transact(tx, &Command{Cmd: "SET", Args: []string{"last", "ran"}}, &replyWriter{}, nil)
 	var w replyWriter
-	tx, err := Transact(tx, &Command{Cmd: "EXEC"}, &w, nil)
+	tx, err := e.transact(tx, &Command{Cmd: "EXEC"}, &w, nil)
 	require.ErrorIs(t, err, ErrTransactionReplyTooLarge)
 	require.Nil(t, tx)
 	require.Empty(t, w.b)
-	require.Equal(t, "ran", run(t, "GET", "last"))
+	require.Equal(t, "ran", runOn(t, e, "GET", "last"))
 }
 
 func TestTransactionOnAReplica(t *testing.T) {
-	oldReady, oldUpdated := defaultEngine.replicaReady, defaultEngine.replicaUpdated
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	oldReady, oldUpdated := e.replicaReady, e.replicaUpdated
 	t.Cleanup(func() {
-		defaultEngine.replicaReady, defaultEngine.replicaUpdated = oldReady, oldUpdated
+		e.replicaReady, e.replicaUpdated = oldReady, oldUpdated
 	})
-	s := newSession(t)
-	withOptions(t, func(o *Options) { o.ReplicaOf = "primary.test:6379" })
-	defaultEngine.replicaReady, defaultEngine.replicaUpdated = true, time.Now()
-	defaultEngine.replicaApplying = true
-	run(t, "SET", "k", "from-primary")
-	defaultEngine.replicaApplying = false
+	s := newSession(t, e)
+	reconfigure(t, e, func(o *Options) { o.ReplicaOf = "primary.test:6379" })
+	e.replicaReady, e.replicaUpdated = true, time.Now()
+	e.replicaApplying = true
+	runOn(t, e, "SET", "k", "from-primary")
+	e.replicaApplying = false
 
 	s.send("MULTI")
 	require.Equal(t, "-READONLY You can't write against a read only replica.\r\n", s.send("SET", "k", "local"))
@@ -416,7 +444,7 @@ func TestTransactionOnAReplica(t *testing.T) {
 	// Losing the primary between queueing and EXEC refuses the whole of it.
 	s.send("MULTI")
 	s.send("GET", "k")
-	defaultEngine.replicaUpdated = time.Now().Add(-time.Minute)
+	e.replicaUpdated = time.Now().Add(-time.Minute)
 	require.Equal(t, "-EXECABORT Transaction discarded because of: MASTERDOWN replica has no recent primary state\r\n", s.send("EXEC"))
 }
 
@@ -425,65 +453,71 @@ func TestTransactionOnAReplica(t *testing.T) {
 // with the wrong number of arguments, in those words before their own
 // refusals, as Redis orders them - outside a transaction and while queueing.
 func TestReplicaAndFencedPrimaryNameAndCountFirst(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	check := func(t *testing.T, refusal string) {
 		t.Helper()
 		var w replyWriter
-		require.EqualError(t, EvalAndResponse(&Command{Cmd: "NOSUCH", Name: "nosuch", Args: []string{"x"}}, &w),
+		require.EqualError(t, e.evalAndResponse(&Command{Cmd: "NOSUCH", Name: "nosuch", Args: []string{"x"}}, &w),
 			"ERR unknown command 'nosuch', with args beginning with: 'x' ")
-		require.Equal(t, "-ERR wrong number of arguments for 'set' command\r\n", string(rawReply(t, "SET", "k")))
-		require.Equal(t, refusal, string(rawReply(t, "SET", "k", "v")))
-		s := &session{t: t, e: defaultEngine}
+		require.Equal(t, "-ERR wrong number of arguments for 'set' command\r\n", string(rawReplyOn(t, e, "SET", "k")))
+		require.Equal(t, refusal, string(rawReplyOn(t, e, "SET", "k", "v")))
+		s := &session{t: t, e: e}
 		s.send("MULTI")
 		require.Equal(t, "-ERR unknown command 'NOSUCH'\r\n", s.send("NOSUCH"))
 		require.Equal(t, "-ERR wrong number of arguments for 'set' command\r\n", s.send("SET", "k"))
 		require.Equal(t, "-EXECABORT Transaction discarded because of previous errors.\r\n", s.send("EXEC"))
 	}
 	t.Run("replica without its primary", func(t *testing.T) {
-		oldReady := defaultEngine.replicaReady
-		t.Cleanup(func() { defaultEngine.replicaReady = oldReady })
-		ResetStores()
-		withOptions(t, func(o *Options) { o.ReplicaOf = "primary.test:6379" })
-		defaultEngine.replicaReady = false
+		oldReady := e.replicaReady
+		t.Cleanup(func() { e.replicaReady = oldReady })
+		e.resetStores()
+		reconfigure(t, e, func(o *Options) { o.ReplicaOf = "primary.test:6379" })
+		e.replicaReady = false
 		check(t, "-READONLY You can't write against a read only replica.\r\n")
-		require.Equal(t, "-MASTERDOWN replica has no recent primary state\r\n", string(rawReply(t, "GET", "k")))
+		require.Equal(t, "-MASTERDOWN replica has no recent primary state\r\n", string(rawReplyOn(t, e, "GET", "k")))
 	})
 	t.Run("fenced primary", func(t *testing.T) {
-		setupFailover(t)
-		require.Equal(t, "OK", run(t, "KEEL.PROMOTE", "2"))
-		require.Equal(t, "OK", run(t, "KEEL.FENCE", "3"))
+		setupFailover(t, e)
+		require.Equal(t, "OK", runOn(t, e, "KEEL.PROMOTE", "2"))
+		require.Equal(t, "OK", runOn(t, e, "KEEL.FENCE", "3"))
 		check(t, "-"+errFenced.Error()+"\r\n")
 	})
 }
 
 func TestTransactionFencedBeforeExecRunsNothing(t *testing.T) {
-	setupFailover(t)
-	s := &session{t: t, e: defaultEngine}
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setupFailover(t, e)
+	s := &session{t: t, e: e}
 	s.send("MULTI")
 	s.send("SET", "a", "1")
 	s.send("SET", "b", "2")
-	require.NoError(t, defaultEngine.observeTerm(7))
+	require.NoError(t, e.observeTerm(7))
 	require.Equal(t, "-EXECABORT Transaction discarded because of: "+errFenced.Error()+"\r\n", s.send("EXEC"))
-	require.Nil(t, defaultEngine.dictStore.Peek("a"))
-	require.Nil(t, defaultEngine.dictStore.Peek("b"))
+	require.Nil(t, e.dictStore.Peek("a"))
+	require.Nil(t, e.dictStore.Peek("b"))
 }
 
 // aofBody is the log's bytes once flushed.
-func aofBody(t *testing.T) string {
+func aofBody(t *testing.T, e *Engine) string {
 	t.Helper()
-	require.NoError(t, FlushAOF())
-	body, err := os.ReadFile(defaultEngine.aof.path)
+	require.NoError(t, e.FlushAOF())
+	body, err := os.ReadFile(e.aof.path)
 	require.NoError(t, err)
 	return string(body)
 }
 
 func TestTransactionIsFramedInTheLog(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	path := filepath.Join(t.TempDir(), "tx.aof")
-	ResetStores()
-	require.NoError(t, OpenAOF(path))
-	t.Cleanup(func() { CloseAOF() })
-	s := &session{t: t, e: defaultEngine}
+	e.resetStores()
+	require.NoError(t, e.OpenAOF(path))
+	t.Cleanup(func() { e.CloseAOF() })
+	s := &session{t: t, e: e}
 
-	run(t, "SET", "outside", "1")
+	runOn(t, e, "SET", "outside", "1")
 	s.send("MULTI")
 	s.send("SET", "a", "1")
 	s.send("GET", "a")
@@ -491,47 +525,49 @@ func TestTransactionIsFramedInTheLog(t *testing.T) {
 	s.send("EXEC")
 	want := string(appendCommand(nil, "SET", "outside", "1")) + "*1\r\n$5\r\nMULTI\r\n" +
 		string(appendCommand(nil, "SET", "a", "1")) + string(appendCommand(nil, "INCR", "a")) + "*1\r\n$4\r\nEXEC\r\n"
-	require.Equal(t, want, aofBody(t))
+	require.Equal(t, want, aofBody(t, e))
 
 	// Reads, and writes that all fail, record nothing - and so frame nothing.
-	run(t, "SET", "text", "x")
-	before := aofBody(t)
+	runOn(t, e, "SET", "text", "x")
+	before := aofBody(t, e)
 	s.send("MULTI")
 	s.send("GET", "a")
 	s.send("INCR", "text")
 	s.send("EXEC")
-	require.Equal(t, before, aofBody(t))
+	require.Equal(t, before, aofBody(t, e))
 
 	// A key reaped by a read inside the transaction is removed inside its block.
-	run(t, "SET", "short", "v", "PX", "1")
+	runOn(t, e, "SET", "short", "v", "PX", "1")
 	time.Sleep(5 * time.Millisecond)
-	before = aofBody(t)
+	before = aofBody(t, e)
 	s.send("MULTI")
 	s.send("GET", "short")
 	s.send("SET", "b", "2")
 	s.send("EXEC")
 	require.Equal(t, before+"*1\r\n$5\r\nMULTI\r\n"+string(appendCommand(nil, "DEL", "short"))+
-		string(appendCommand(nil, "SET", "b", "2"))+"*1\r\n$4\r\nEXEC\r\n", aofBody(t))
+		string(appendCommand(nil, "SET", "b", "2"))+"*1\r\n$4\r\nEXEC\r\n", aofBody(t, e))
 
-	require.NoError(t, CloseAOF())
-	restart(t, path)
-	require.Equal(t, "2", run(t, "GET", "a"))
-	require.Equal(t, "2", run(t, "GET", "b"))
-	require.Equal(t, "1", run(t, "GET", "outside"))
-	require.Nil(t, defaultEngine.dictStore.Peek("short"))
+	require.NoError(t, e.CloseAOF())
+	restartOn(t, e, path)
+	require.Equal(t, "2", runOn(t, e, "GET", "a"))
+	require.Equal(t, "2", runOn(t, e, "GET", "b"))
+	require.Equal(t, "1", runOn(t, e, "GET", "outside"))
+	require.Nil(t, e.dictStore.Peek("short"))
 }
 
 // A SET or MSET over a key another type holds replaces it, as Redis's does,
 // and the DEL that replacement is logged as stays inside the transaction's
 // block, in the log and in the protocol 2 stream alike.
 func TestTransactionReplacingWritesStayInsideTheirBlock(t *testing.T) {
-	setupReplicationV2(t)
-	run(t, "HSET", "hash", "f", "v")
-	run(t, "RPUSH", "list", "a")
-	frames := snapshotV2(t)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setupReplicationV2On(t, e)
+	runOn(t, e, "HSET", "hash", "f", "v")
+	runOn(t, e, "RPUSH", "list", "a")
+	frames := snapshotV2On(t, e)
 	base, epoch := frames[0].To, frames[0].Epoch
-	before := aofBody(t)
-	s := &session{t: t, e: defaultEngine}
+	before := aofBody(t, e)
+	s := &session{t: t, e: e}
 	s.send("MULTI")
 	s.send("SET", "hash", "string")
 	s.send("MSET", "list", "x", "other", "y")
@@ -539,41 +575,45 @@ func TestTransactionReplacingWritesStayInsideTheirBlock(t *testing.T) {
 	block := "*1\r\n$5\r\nMULTI\r\n" + string(appendCommand(nil, "DEL", "hash")) +
 		string(appendCommand(nil, "SET", "hash", "string")) + string(appendCommand(nil, "DEL", "list")) +
 		string(appendCommand(nil, "MSET", "list", "x", "other", "y")) + "*1\r\n$4\r\nEXEC\r\n"
-	require.Equal(t, before+block, aofBody(t))
-	require.Equal(t, block, string(pullV2(t, epoch, base, "", 0).Body))
-	path := defaultEngine.aof.path
-	require.NoError(t, CloseAOF())
-	restart(t, path)
-	require.Equal(t, "string", run(t, "GET", "hash"))
-	require.Equal(t, "x", run(t, "GET", "list"))
-	require.Equal(t, "string", run(t, "TYPE", "list"))
+	require.Equal(t, before+block, aofBody(t, e))
+	require.Equal(t, block, string(pullV2On(t, e, epoch, base, "", 0).Body))
+	path := e.aof.path
+	require.NoError(t, e.CloseAOF())
+	restartOn(t, e, path)
+	require.Equal(t, "string", runOn(t, e, "GET", "hash"))
+	require.Equal(t, "x", runOn(t, e, "GET", "list"))
+	require.Equal(t, "string", runOn(t, e, "TYPE", "list"))
 }
 
 func TestTransactionEvictsAfterItsBlock(t *testing.T) {
-	t.Cleanup(func() { CloseAOF() })
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	t.Cleanup(func() { e.CloseAOF() })
 	path := filepath.Join(t.TempDir(), "evict.aof")
-	ResetStores()
-	require.NoError(t, OpenAOF(path))
+	e.resetStores()
+	require.NoError(t, e.OpenAOF(path))
 	value := strings.Repeat("v", 64<<10)
 	for i := 0; i < 8; i++ {
-		run(t, "SET", "old"+strconv.Itoa(i), value)
+		runOn(t, e, "SET", "old"+strconv.Itoa(i), value)
 	}
-	withOptions(t, func(o *Options) { o.MaxMemory = data_structure.TotalMemUsed() + 32<<10 })
-	before := len(aofBody(t))
-	s := &session{t: t, e: defaultEngine}
+	reconfigure(t, e, func(o *Options) { o.MaxMemory = e.space.TotalMemUsed() + 32<<10 })
+	before := len(aofBody(t, e))
+	s := &session{t: t, e: e}
 	s.send("MULTI")
 	s.send("SET", "new1", value)
 	s.send("SET", "new2", value)
 	s.send("EXEC")
-	tail := aofBody(t)[before:]
+	tail := aofBody(t, e)[before:]
 	exec := strings.Index(tail, "*1\r\n$4\r\nEXEC\r\n")
 	require.Positive(t, exec)
 	require.NotContains(t, tail[:exec], "$3\r\nDEL\r\n", "no eviction inside the block")
 	require.Contains(t, tail[exec:], "$3\r\nDEL\r\n", "the budget is enforced once the block is closed")
-	require.LessOrEqual(t, data_structure.TotalMemUsed(), Configuration().MaxMemory)
+	require.LessOrEqual(t, e.space.TotalMemUsed(), e.options.MaxMemory)
 }
 
 func TestTransactionTornTailDropsTheWholeBlock(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	complete := string(appendCommand(nil, "SET", "kept", "1")) + "*1\r\n$5\r\nMULTI\r\n" +
 		string(appendCommand(nil, "SET", "a", "1")) + string(appendCommand(nil, "SET", "b", "1")) + "*1\r\n$4\r\nEXEC\r\n"
 	open := "*1\r\n$5\r\nMULTI\r\n" + string(appendCommand(nil, "SET", "a", "2")) + string(appendCommand(nil, "SET", "b", "2"))
@@ -588,14 +628,14 @@ func TestTransactionTornTailDropsTheWholeBlock(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "torn.aof")
 			require.NoError(t, os.WriteFile(path, []byte(complete+tail), 0o644))
-			ResetStores()
-			_, err := LoadAOF(path)
+			e.resetStores()
+			_, err := e.LoadAOF(path)
 			require.True(t, IsTruncatedAOF(err), "%v", err)
 			if strings.HasPrefix(tail, "*1\r\n$5\r\nMULTI\r\n") {
 				require.ErrorContains(t, err, "incomplete final transaction")
 			}
-			require.Equal(t, "1", run(t, "GET", "a"), "only the complete block was replayed")
-			require.Equal(t, "1", run(t, "GET", "b"))
+			require.Equal(t, "1", runOn(t, e, "GET", "a"), "only the complete block was replayed")
+			require.Equal(t, "1", runOn(t, e, "GET", "b"))
 			require.NoError(t, RepairAOFTail(err))
 			body, readErr := os.ReadFile(path)
 			require.NoError(t, readErr)
@@ -607,8 +647,8 @@ func TestTransactionTornTailDropsTheWholeBlock(t *testing.T) {
 			require.NoError(t, readErr)
 			require.Equal(t, tail, string(saved), "the whole open block is preserved beside the log")
 
-			ResetStores()
-			applied, err := LoadAOF(path)
+			e.resetStores()
+			applied, err := e.LoadAOF(path)
 			require.NoError(t, err)
 			require.Equal(t, 3, applied)
 		})
@@ -616,6 +656,8 @@ func TestTransactionTornTailDropsTheWholeBlock(t *testing.T) {
 }
 
 func TestTransactionFramesThatCannotBeTornRefuseStartup(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	set := string(appendCommand(nil, "SET", "a", "1"))
 	for name, body := range map[string]string{
 		"EXEC without MULTI": set + "*1\r\n$4\r\nEXEC\r\n" + set,
@@ -625,8 +667,8 @@ func TestTransactionFramesThatCannotBeTornRefuseStartup(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "bad.aof")
 			require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
-			ResetStores()
-			_, err := LoadAOF(path)
+			e.resetStores()
+			_, err := e.LoadAOF(path)
 			require.Error(t, err)
 			require.False(t, IsTruncatedAOF(err), "a frame out of place is damage, not a torn tail")
 		})
@@ -634,17 +676,19 @@ func TestTransactionFramesThatCannotBeTornRefuseStartup(t *testing.T) {
 }
 
 func TestReplicationV2DeliversATransactionWhole(t *testing.T) {
-	setupReplicationV2(t)
-	run(t, "SET", "seed", "v")
-	frames := snapshotV2(t)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setupReplicationV2On(t, e)
+	runOn(t, e, "SET", "seed", "v")
+	frames := snapshotV2On(t, e)
 	base, epoch := frames[0].To, frames[0].Epoch
 
 	// Reads publish nothing.
-	s := &session{t: t, e: defaultEngine}
+	s := &session{t: t, e: e}
 	s.send("MULTI")
 	s.send("GET", "seed")
 	s.send("EXEC")
-	require.Equal(t, base, defaultEngine.replicationV2.end)
+	require.Equal(t, base, e.replicationV2.end)
 
 	// A block larger than one frame, so a replica receives it in pieces.
 	large := strings.Repeat("x", 300<<10)
@@ -654,8 +698,8 @@ func TestReplicationV2DeliversATransactionWhole(t *testing.T) {
 	s.send("SET", "last", large)
 	s.send("EXEC")
 	var deltas []ReplicationFrame
-	for offset := base; offset < defaultEngine.replicationV2.end; {
-		f := pullV2(t, epoch, offset, "", 0)
+	for offset := base; offset < e.replicationV2.end; {
+		f := pullV2On(t, e, epoch, offset, "", 0)
 		deltas = append(deltas, f)
 		offset = f.To
 	}
@@ -668,56 +712,60 @@ func TestReplicationV2DeliversATransactionWhole(t *testing.T) {
 	require.True(t, strings.HasSuffix(stream, "*1\r\n$4\r\nEXEC\r\n"))
 	require.Contains(t, stream, "KEEL.RESTORE", "an opaque command publishes its image inside the block")
 
-	path := becomeReplicaV2(t)
+	path := becomeReplicaV2On(t, e)
 	for _, f := range frames {
-		require.NoError(t, ApplyReplication(f))
+		require.NoError(t, e.ApplyReplication(f))
 	}
-	require.NoError(t, ApplyReplication(signedV2(ReplicationFrame{Version: 2, Epoch: epoch, From: base, To: base, CaughtUp: true})))
+	require.NoError(t, e.ApplyReplication(signedV2(ReplicationFrame{Version: 2, Epoch: epoch, From: base, To: base, CaughtUp: true})))
 	for _, f := range deltas[:len(deltas)-1] {
-		require.NoError(t, ApplyReplication(f))
-		require.Nil(t, defaultEngine.dictStore.Peek("first"), "no part of a transaction is visible before all of it")
-		require.Equal(t, int64(0), run(t, "EXISTS", "filter"))
+		require.NoError(t, e.ApplyReplication(f))
+		require.Nil(t, e.dictStore.Peek("first"), "no part of a transaction is visible before all of it")
+		require.Equal(t, int64(0), runOn(t, e, "EXISTS", "filter"))
 	}
-	require.NoError(t, ApplyReplication(deltas[len(deltas)-1]))
-	require.Equal(t, large, run(t, "GET", "first"))
-	require.Equal(t, large, run(t, "GET", "last"))
-	require.Equal(t, int64(1), run(t, "BF.EXISTS", "filter", "member"))
-	require.True(t, defaultEngine.replicaReady)
+	require.NoError(t, e.ApplyReplication(deltas[len(deltas)-1]))
+	require.Equal(t, large, runOn(t, e, "GET", "first"))
+	require.Equal(t, large, runOn(t, e, "GET", "last"))
+	require.Equal(t, int64(1), runOn(t, e, "BF.EXISTS", "filter", "member"))
+	require.True(t, e.replicaReady)
 
 	// The replica frames the block in its own log, and replays it.
-	require.NoError(t, CloseAOF())
+	require.NoError(t, e.CloseAOF())
 	body, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Contains(t, string(body), "*1\r\n$5\r\nMULTI\r\n")
 	require.Contains(t, string(body), "*1\r\n$4\r\nEXEC\r\n")
-	ResetStores()
-	_, err = LoadAOF(path)
+	e.resetStores()
+	_, err = e.LoadAOF(path)
 	require.NoError(t, err)
-	require.Equal(t, large, run(t, "GET", "last"))
+	require.Equal(t, large, runOn(t, e, "GET", "last"))
 }
 
 func TestReplicationV2OversizedTransactionTakesASnapshot(t *testing.T) {
-	setupReplicationV2(t)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setupReplicationV2On(t, e)
 	// A filter publishes its whole image for every command that changes it, so
 	// two small commands can make a block larger than the history.
-	run(t, "BF.RESERVE", "filter", "0.001", "7000000")
-	frames := snapshotV2(t)
+	runOn(t, e, "BF.RESERVE", "filter", "0.001", "7000000")
+	frames := snapshotV2On(t, e)
 	epoch := frames[0].Epoch
-	s := &session{t: t, e: defaultEngine}
+	s := &session{t: t, e: e}
 	s.send("MULTI")
 	s.send("SET", "before", "v")
 	s.send("BF.ADD", "filter", "a")
 	s.send("BF.ADD", "filter", "b")
 	s.send("SET", "after", "v")
 	require.Equal(t, "*4\r\n+OK\r\n:1\r\n:1\r\n+OK\r\n", s.send("EXEC"))
-	require.NotEqual(t, epoch, defaultEngine.replication.epoch, "a block the history cannot hold whole invalidates the stream")
-	require.Zero(t, defaultEngine.replicationV2.end, "and none of it reaches the new epoch's history")
-	run(t, "SET", "later", "v")
-	require.Equal(t, string(appendCommand(nil, "SET", "later", "v")), string(defaultEngine.replicationV2.history[0].body))
-	require.True(t, pullV2(t, epoch, frames[0].To, "", 0).Pending)
+	require.NotEqual(t, epoch, e.replication.epoch, "a block the history cannot hold whole invalidates the stream")
+	require.Zero(t, e.replicationV2.end, "and none of it reaches the new epoch's history")
+	runOn(t, e, "SET", "later", "v")
+	require.Equal(t, string(appendCommand(nil, "SET", "later", "v")), string(e.replicationV2.history[0].body))
+	require.True(t, pullV2On(t, e, epoch, frames[0].To, "", 0).Pending)
 }
 
 func TestReplicationV2RefusesMalformedTransactions(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	set := string(appendCommand(nil, "SET", "k", "v"))
 	for name, body := range map[string]string{
 		"EXEC without MULTI": set + "*1\r\n$4\r\nEXEC\r\n",
@@ -725,39 +773,41 @@ func TestReplicationV2RefusesMalformedTransactions(t *testing.T) {
 		"caught up inside":   "*1\r\n$5\r\nMULTI\r\n" + set,
 	} {
 		t.Run(name, func(t *testing.T) {
-			setupReplicationV2(t)
-			frames := snapshotV2(t)
-			becomeReplicaV2(t)
+			setupReplicationV2On(t, e)
+			frames := snapshotV2On(t, e)
+			becomeReplicaV2On(t, e)
 			for _, f := range frames {
-				require.NoError(t, ApplyReplication(f))
+				require.NoError(t, e.ApplyReplication(f))
 			}
 			base := frames[0].To
 			f := signedV2(ReplicationFrame{Version: 2, Epoch: frames[0].Epoch, From: base, To: base + uint64(len(body)), Body: []byte(body), CaughtUp: true})
-			require.Error(t, ApplyReplication(f))
-			require.False(t, defaultEngine.replicaReady)
-			require.Nil(t, defaultEngine.dictStore.Peek("k"))
+			require.Error(t, e.ApplyReplication(f))
+			require.False(t, e.replicaReady)
+			require.Nil(t, e.dictStore.Peek("k"))
 		})
 	}
 }
 
 func TestReplicationV1SealsATransactionTogether(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	// Runs last, once the options are back: the default engine ends feeding
 	// no stream, with nothing of this one left.
-	t.Cleanup(func() { require.NoError(t, InitReplication()) })
-	t.Cleanup(func() { CloseAOF() })
-	ResetStores()
-	withOptions(t, func(o *Options) { o.ReplicationFeed, o.ReplicationProtocol = true, 1 })
-	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "primary")))
-	require.NoError(t, InitReplication())
+	t.Cleanup(func() { require.NoError(t, e.InitReplication()) })
+	t.Cleanup(func() { e.CloseAOF() })
+	e.resetStores()
+	reconfigure(t, e, func(o *Options) { o.ReplicationFeed, o.ReplicationProtocol = true, 1 })
+	require.NoError(t, e.OpenAOF(filepath.Join(t.TempDir(), "primary")))
+	require.NoError(t, e.InitReplication())
 	pull := func(epoch string, offset uint64) ReplicationFrame {
-		encoded, ok := run(t, "KEEL.REPL.PULL", epoch, strconv.FormatUint(offset, 10)).(string)
+		encoded, ok := runOn(t, e, "KEEL.REPL.PULL", epoch, strconv.FormatUint(offset, 10)).(string)
 		require.True(t, ok)
 		var f ReplicationFrame
 		require.NoError(t, json.Unmarshal([]byte(encoded), &f))
 		return f
 	}
 	first := pull("", 0)
-	s := &session{t: t, e: defaultEngine}
+	s := &session{t: t, e: e}
 	s.send("MULTI")
 	s.send("SET", "a", "1")
 	s.send("SET", "b", "1")
@@ -771,11 +821,13 @@ func TestReplicationV1SealsATransactionTogether(t *testing.T) {
 }
 
 func TestTransactionReplayErrorNamesTheCommand(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	path := filepath.Join(t.TempDir(), "fail.aof")
 	body := "*1\r\n$5\r\nMULTI\r\n" + string(appendCommand(nil, "NOSUCHCOMMAND")) + "*1\r\n$4\r\nEXEC\r\n"
 	require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
-	ResetStores()
-	_, err := LoadAOF(path)
+	e.resetStores()
+	_, err := e.LoadAOF(path)
 	require.Error(t, err)
 	require.False(t, errors.Is(err, errTruncatedAOF))
 	require.ErrorContains(t, err, "replaying NOSUCHCOMMAND at byte 15")

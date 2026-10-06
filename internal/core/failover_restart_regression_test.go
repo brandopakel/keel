@@ -9,70 +9,82 @@ import (
 )
 
 func TestObservedTermCannotGrantAuthorityAfterRestart(t *testing.T) {
-	path := setupFailover(t)
-	require.Equal(t, "OK", run(t, "KEEL.PROMOTE", "1"))
-	require.Equal(t, "OK", run(t, "KEEL.FENCE", "2"))
-	require.False(t, Writable())
-	require.NoError(t, CloseAOF())
-	require.NoError(t, LoadTerm(path))
-	require.False(t, Writable(), "an observed successor term must not become this node's write authority on restart")
-	require.Equal(t, errFenced.Error(), run(t, "SET", "after-restart", "must-refuse"))
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	path := setupFailover(t, e)
+	require.Equal(t, "OK", runOn(t, e, "KEEL.PROMOTE", "1"))
+	require.Equal(t, "OK", runOn(t, e, "KEEL.FENCE", "2"))
+	require.False(t, e.writable())
+	require.NoError(t, e.CloseAOF())
+	require.NoError(t, e.LoadTerm(path))
+	require.False(t, e.writable(), "an observed successor term must not become this node's write authority on restart")
+	require.Equal(t, errFenced.Error(), runOn(t, e, "SET", "after-restart", "must-refuse"))
 }
 
 func TestFailedTermObservationStaysFencedAndRetriesPersistence(t *testing.T) {
-	setupFailover(t)
-	require.Equal(t, "OK", run(t, "KEEL.PROMOTE", "1"))
-	oldSync := defaultEngine.termSync
-	t.Cleanup(func() { defaultEngine.termSync = oldSync })
-	defaultEngine.termSync = func(*os.File) error { return os.ErrPermission }
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setupFailover(t, e)
+	require.Equal(t, "OK", runOn(t, e, "KEEL.PROMOTE", "1"))
+	oldSync := e.termSync
+	t.Cleanup(func() { e.termSync = oldSync })
+	e.termSync = func(*os.File) error { return os.ErrPermission }
 	for i := 0; i < 2; i++ {
-		require.Contains(t, run(t, "KEEL.FENCE", "5"), "recording term")
-		require.Equal(t, uint64(5), CurrentTerm())
-		require.Equal(t, uint64(1), defaultEngine.failover.persisted)
-		require.False(t, Writable())
-		require.Equal(t, errFenced.Error(), run(t, "SET", "blocked", "value"))
+		require.Contains(t, runOn(t, e, "KEEL.FENCE", "5"), "recording term")
+		require.Equal(t, uint64(5), e.CurrentTerm())
+		require.Equal(t, uint64(1), e.failover.persisted)
+		require.False(t, e.writable())
+		require.Equal(t, errFenced.Error(), runOn(t, e, "SET", "blocked", "value"))
 	}
-	defaultEngine.termSync = oldSync
-	require.Equal(t, "OK", run(t, "KEEL.FENCE", "5"))
-	require.Equal(t, uint64(5), defaultEngine.failover.persisted)
-	require.False(t, Writable(), "persisting an observation does not grant authority")
-	require.Equal(t, "OK", run(t, "KEEL.PROMOTE", "6"))
-	require.True(t, Writable())
+	e.termSync = oldSync
+	require.Equal(t, "OK", runOn(t, e, "KEEL.FENCE", "5"))
+	require.Equal(t, uint64(5), e.failover.persisted)
+	require.False(t, e.writable(), "persisting an observation does not grant authority")
+	require.Equal(t, "OK", runOn(t, e, "KEEL.PROMOTE", "6"))
+	require.True(t, e.writable())
 }
 
 func TestReplicaIsNeverReportedWritable(t *testing.T) {
-	setupFailover(t)
-	withOptions(t, func(o *Options) { o.ReplicaOf = "primary.invalid:6379" })
-	require.False(t, Writable())
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setupFailover(t, e)
+	reconfigure(t, e, func(o *Options) { o.ReplicaOf = "primary.invalid:6379" })
+	require.False(t, e.writable())
 }
 
 func TestPromotionWithoutTermStorageDoesNotFenceVolatileCache(t *testing.T) {
-	setupFailover(t)
-	require.NoError(t, CloseAOF())
-	defaultEngine.failover = failoverState{}
-	require.Contains(t, run(t, "KEEL.PROMOTE", "42"), "requires an append-only log")
-	require.Zero(t, CurrentTerm())
-	require.True(t, Writable())
-	require.Equal(t, "OK", run(t, "SET", "still-available", "value"))
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setupFailover(t, e)
+	require.NoError(t, e.CloseAOF())
+	e.failover = failoverState{}
+	require.Contains(t, runOn(t, e, "KEEL.PROMOTE", "42"), "requires an append-only log")
+	require.Zero(t, e.CurrentTerm())
+	require.True(t, e.writable())
+	require.Equal(t, "OK", runOn(t, e, "SET", "still-available", "value"))
 	// FENCE conveys an observation, so it still stops the live node even when
 	// it cannot promise durable recovery of that observation.
-	require.Contains(t, run(t, "KEEL.FENCE", "42"), "recording term")
-	require.False(t, Writable())
+	require.Contains(t, runOn(t, e, "KEEL.FENCE", "42"), "recording term")
+	require.False(t, e.writable())
 }
 
 func TestNonzeroTermsCannotUseProtocol1(t *testing.T) {
-	setupFailover(t)
-	withOptions(t, func(o *Options) { o.ReplicationProtocol, o.ReplicationFeed = 1, true })
-	require.NoError(t, InitReplication())
-	require.Equal(t, "OK", run(t, "KEEL.PROMOTE", "1"))
-	require.Contains(t, run(t, "KEEL.REPL.PULL", "", "0"), "require replication protocol 2")
-	defaultEngine.replicaReady = true
-	require.ErrorContains(t, ApplyReplication(ReplicationFrame{Version: 1}), "require replication protocol 2")
-	require.False(t, defaultEngine.replicaReady)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setupFailover(t, e)
+	reconfigure(t, e, func(o *Options) { o.ReplicationProtocol, o.ReplicationFeed = 1, true })
+	require.NoError(t, e.InitReplication())
+	require.Equal(t, "OK", runOn(t, e, "KEEL.PROMOTE", "1"))
+	require.Contains(t, runOn(t, e, "KEEL.REPL.PULL", "", "0"), "require replication protocol 2")
+	e.replicaReady = true
+	require.ErrorContains(t, e.ApplyReplication(ReplicationFrame{Version: 1}), "require replication protocol 2")
+	require.False(t, e.replicaReady)
 }
 
 func TestCurrentTermCanBeReadByTransport(t *testing.T) {
-	setupFailover(t)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setupFailover(t, e)
 	ready, stop, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	observed := make(chan uint64, 1)
 	go func() {
@@ -81,17 +93,17 @@ func TestCurrentTermCanBeReadByTransport(t *testing.T) {
 		for {
 			select {
 			case <-stop:
-				observed <- CurrentTerm()
+				observed <- e.CurrentTerm()
 				return
 			default:
-				_ = CurrentTerm()
+				_ = e.CurrentTerm()
 				runtime.Gosched()
 			}
 		}
 	}()
 	<-ready
 	for term := uint64(1); term <= 20; term++ {
-		if err := defaultEngine.observeTerm(term); err != nil {
+		if err := e.observeTerm(term); err != nil {
 			close(stop)
 			<-done
 			t.Fatal(err)
@@ -103,20 +115,24 @@ func TestCurrentTermCanBeReadByTransport(t *testing.T) {
 }
 
 func TestProtocol2TermZeroAcceptsLegacyPull(t *testing.T) {
-	setupReplicationV2(t)
-	old := defaultEngine.failover
-	defaultEngine.failover = failoverState{}
-	t.Cleanup(func() { defaultEngine.failover = old })
-	reply := run(t, "KEEL.REPL.PULL2", "", "0", "", "0")
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setupReplicationV2On(t, e)
+	old := e.failover
+	e.failover = failoverState{}
+	t.Cleanup(func() { e.failover = old })
+	reply := runOn(t, e, "KEEL.REPL.PULL2", "", "0", "", "0")
 	require.Contains(t, reply, `"version":2`, "term-zero peers retain the existing protocol-2 request shape")
 }
 
 func TestProtocol2NonzeroTermRequiresExplicitCapability(t *testing.T) {
-	setupReplicationV2(t)
-	old := defaultEngine.failover
-	defaultEngine.failover = failoverState{term: 1, persisted: 1, held: 1}
-	t.Cleanup(func() { defaultEngine.failover = old })
-	require.Equal(t, []byte(ReplicationTermRequiredReply), defaultEngine.cmdReplicationPullV2([]string{"", "0", "", "0"}))
-	require.Contains(t, run(t, "KEEL.REPL.PULL2", "", "0", "", "0", "0"), `"term":1`)
-	require.True(t, Writable())
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setupReplicationV2On(t, e)
+	old := e.failover
+	e.failover = failoverState{term: 1, persisted: 1, held: 1}
+	t.Cleanup(func() { e.failover = old })
+	require.Equal(t, []byte(ReplicationTermRequiredReply), e.cmdReplicationPullV2([]string{"", "0", "", "0"}))
+	require.Contains(t, runOn(t, e, "KEEL.REPL.PULL2", "", "0", "", "0", "0"), `"term":1`)
+	require.True(t, e.writable())
 }

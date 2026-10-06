@@ -140,12 +140,8 @@ func sha256Hex(b []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func dumpImages(t *testing.T, keys []string) ([]byte, map[string]string) {
-	t.Helper()
-	return dumpImagesOn(t, defaultEngine, keys)
-}
-
-// dumpImagesOn is dumpImages on e.
+// dumpImagesOn returns the DUMP image of each of keys on e, each after its
+// key, and each image's SHA-256.
 func dumpImagesOn(t *testing.T, e *Engine, keys []string) ([]byte, map[string]string) {
 	t.Helper()
 	var all []byte

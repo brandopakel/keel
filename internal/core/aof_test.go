@@ -41,24 +41,8 @@ func run(t *testing.T, name string, args ...string) interface{} {
 	return res
 }
 
-// rawReply returns the encoded reply, for the cases where nil and empty differ.
-func rawReply(t *testing.T, name string, args ...string) []byte {
-	t.Helper()
-	var w replyWriter
-	if err := EvalAndResponse(&Command{Cmd: name, Args: args}, &w); err != nil {
-		t.Fatalf("%s: %v", name, err)
-	}
-	return w.b
-}
-
-// withAOF runs fn against a fresh keyspace with the log on, then closes it and
-// returns the path, so a test can restart from it.
-func withAOF(t *testing.T, fn func()) string {
-	t.Helper()
-	return withAOFOn(t, defaultEngine, fn)
-}
-
-// withAOFOn is withAOF on e.
+// withAOFOn runs fn against a fresh keyspace of e with the log on, then closes
+// it and returns the path, so a test can restart from it.
 func withAOFOn(t *testing.T, e *Engine, fn func()) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "test.aof")
@@ -70,14 +54,8 @@ func withAOFOn(t *testing.T, e *Engine, fn func()) string {
 	return path
 }
 
-// restart throws the keyspace away and rebuilds it from the log, which is what
-// a real restart does.
-func restart(t *testing.T, path string) int {
-	t.Helper()
-	return restartOn(t, defaultEngine, path)
-}
-
-// restartOn is restart on e.
+// restartOn throws e's keyspace away and rebuilds it from the log, which is
+// what a real restart does.
 func restartOn(t *testing.T, e *Engine, path string) int {
 	t.Helper()
 	e.resetStores()
