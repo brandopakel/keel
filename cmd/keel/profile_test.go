@@ -10,6 +10,7 @@ import (
 )
 
 func TestProfilesCaptureLiveServerAndRefuseOverwrite(t *testing.T) {
+	t.Parallel()
 	directory := filepath.Join(t.TempDir(), "profiles")
 	server := startTestServer(t, "-profile-dir", directory)
 	connection, reader := connectTest(t, server)

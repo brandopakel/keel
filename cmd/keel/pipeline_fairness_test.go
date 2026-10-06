@@ -11,9 +11,11 @@ import (
 )
 
 func TestDeepPipelineProgressOrderAndRestart(t *testing.T) {
+	t.Parallel()
 	for _, threads := range []string{"1", "4"} {
 		for _, mode := range []string{"off", "barrier", "concurrent"} {
 			t.Run(threads+"/"+mode, func(t *testing.T) {
+				t.Parallel()
 				args := []string{"-io-threads", threads}
 				if mode != "off" {
 					args = append(args, "-appendonly", "-aof-async-append", "-appendfsync", "always", "-appendfilename", filepath.Join(t.TempDir(), "log"))
@@ -67,6 +69,9 @@ func TestDeepPipelineProgressOrderAndRestart(t *testing.T) {
 // commands remain pending. The ordering/restart test above does not establish
 // that overlap: its small replies may already be buffered in the client.
 func TestPipelineYieldsWithCommandsStillPending(t *testing.T) {
+	// Not parallel: it fills the kernel's socket buffers, which every process
+	// on the machine shares, and requires other clients to be answered while it
+	// does, within deadlines that a test filling them beside it would stretch.
 	for _, threads := range []string{"1", "4"} {
 		for _, mode := range []string{"off", "barrier", "concurrent"} {
 			t.Run(threads+"/"+mode, func(t *testing.T) {

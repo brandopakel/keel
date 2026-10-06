@@ -85,12 +85,13 @@ func addBigFilter(t *testing.T, c net.Conn, r *bufio.Reader, path string) {
 }
 
 func TestServerKeepsServingAfterAFailedRewrite(t *testing.T) {
-	t.Setenv("KEEL_TEST_FILE_LIMIT", rewriteFileLimit)
+	t.Parallel()
 	for _, mode := range []string{"always", "everysec", "async", "concurrent"} {
 		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
 			path := filepath.Join(t.TempDir(), "store.aof")
 			args := append([]string{"-appendonly", "-appendfilename", path, "-auto-aof-rewrite-percentage", "0"}, persistenceModes[mode]...)
-			s := startTestServer(t, args...)
+			s := startLimitedTestServer(t, rewriteFileLimit, args...)
 			c, r := connectTest(t, s)
 			expectCall(t, c, r, "+OK", "SET", "before", "1")
 			addBigFilter(t, c, r, path)
@@ -136,7 +137,7 @@ func TestServerKeepsServingAfterAFailedRewrite(t *testing.T) {
 				t.Fatalf("a failed rewrite stopped the server:\n%s", logged)
 			}
 
-			s = startTestServer(t, args...)
+			s = startLimitedTestServer(t, rewriteFileLimit, args...)
 			c, r = connectTest(t, s)
 			for key, value := range map[string]string{"before": "1", "after": "2", "counter": "2", "tx-a": "1", "tx-b": "1"} {
 				expectCall(t, c, r, value, "GET", key)
@@ -153,7 +154,7 @@ func TestServerKeepsServingAfterAFailedRewrite(t *testing.T) {
 			expectCall(t, c, r, "+OK", "SET", "final", "3")
 			c.Close()
 			s.stop(t)
-			s = startTestServer(t, args...)
+			s = startLimitedTestServer(t, rewriteFileLimit, args...)
 			c, r = connectTest(t, s)
 			for key, value := range map[string]string{"before": "1", "after": "2", "counter": "2", "tx-a": "1", "tx-b": "1", "final": "3"} {
 				expectCall(t, c, r, value, "GET", key)
@@ -168,11 +169,11 @@ func TestServerKeepsServingAfterAFailedRewrite(t *testing.T) {
 // Automatic rewrites back off as Redis's do: three attempts, then the limit,
 // and no attempt in the minute after it however many writes arrive.
 func TestAutomaticRewriteBacksOffOnAFailingDisk(t *testing.T) {
-	t.Setenv("KEEL_TEST_FILE_LIMIT", rewriteFileLimit)
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "store.aof")
 	args := []string{"-appendonly", "-appendfsync", "always", "-appendfilename", path,
 		"-auto-aof-rewrite-percentage", "100", "-auto-aof-rewrite-min-size", "1kb"}
-	s := startTestServer(t, args...)
+	s := startLimitedTestServer(t, rewriteFileLimit, args...)
 	c, r := connectTest(t, s)
 	addBigFilter(t, c, r, path)
 	writes := 0
@@ -211,7 +212,7 @@ func TestAutomaticRewriteBacksOffOnAFailingDisk(t *testing.T) {
 			t.Fatalf("%q logged %d times, want %d:\n%s", want, got, n, logged)
 		}
 	}
-	s = startTestServer(t, args...)
+	s = startLimitedTestServer(t, rewriteFileLimit, args...)
 	c, r = connectTest(t, s)
 	expectCall(t, c, r, strconv.Itoa(writes), "GET", "k"+strconv.Itoa(writes%50))
 	c.Close()
@@ -224,13 +225,13 @@ func TestAutomaticRewriteBacksOffOnAFailingDisk(t *testing.T) {
 // needs a snapshot, which is a rewrite: its pulls are paced by the same limit
 // as automatic rewrites, and the first rewrite that works serves it.
 func TestReplicasThroughAFailedRewrite(t *testing.T) {
+	t.Parallel()
 	for _, protocol := range []string{"1", "2"} {
 		t.Run("protocol-"+protocol, func(t *testing.T) {
+			t.Parallel()
 			primaryPath := filepath.Join(t.TempDir(), "primary.aof")
-			t.Setenv("KEEL_TEST_FILE_LIMIT", rewriteFileLimit)
-			primary := startTestServer(t, "-appendonly", "-appendfsync", "always", "-replication-protocol", protocol, "-replication-feed",
+			primary := startLimitedTestServer(t, rewriteFileLimit, "-appendonly", "-appendfsync", "always", "-replication-protocol", protocol, "-replication-feed",
 				"-requirepass-env", "KEEL_TEST_PASSWORD", "-appendfilename", primaryPath, "-auto-aof-rewrite-percentage", "0")
-			t.Setenv("KEEL_TEST_FILE_LIMIT", "")
 			pc, pr := connectTest(t, primary)
 			expectCall(t, pc, pr, "+OK", "AUTH", "integration-secret")
 			expectCall(t, pc, pr, "+OK", "SET", "k", "before")

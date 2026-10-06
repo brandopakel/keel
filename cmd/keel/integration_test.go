@@ -21,6 +21,8 @@ import (
 )
 
 func TestServerProcess(t *testing.T) {
+	// Not parallel: it is the entry point of a test server's own process,
+	// which runs it alone, and in the test process it returns at once.
 	if os.Getenv("KEEL_TEST_SERVER") != "1" {
 		return
 	}
@@ -61,16 +63,28 @@ func startTestServer(t *testing.T, args ...string) *testServer {
 // while ordinary startups and all command deadlines keep their existing limits.
 func startTestServerWithin(t *testing.T, startupTimeout time.Duration, args ...string) *testServer {
 	t.Helper()
-	listener, err := net.Listen("tcp4", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	port := listener.Addr().(*net.TCPAddr).Port
-	listener.Close()
+	return launchTestServer(t, startupTimeout, nil, args...)
+}
+
+// startLimitedTestServer starts a server whose process may write no file
+// larger than fileLimit bytes (TestServerProcess sets RLIMIT_FSIZE), so that
+// a test can fail its disk. The limit is in that server's environment alone:
+// t.Setenv would set it for the test process, which every test running beside
+// it shares, and Go refuses t.Setenv in a parallel test.
+func startLimitedTestServer(t *testing.T, fileLimit string, args ...string) *testServer {
+	t.Helper()
+	return launchTestServer(t, 5*time.Second, []string{"KEEL_TEST_FILE_LIMIT=" + fileLimit}, args...)
+}
+
+// launchTestServer starts the server as a process of its own, with env added
+// to its environment, and waits for it to listen.
+func launchTestServer(t *testing.T, startupTimeout time.Duration, env []string, args ...string) *testServer {
+	t.Helper()
+	port := freePort(t)
 	s := &testServer{addr: fmt.Sprintf("127.0.0.1:%d", port)}
 	argv := append([]string{"-test.run=^TestServerProcess$", "--", "-host", "127.0.0.1", "-port", strconv.Itoa(port)}, args...)
 	s.cmd = exec.Command(os.Args[0], argv...)
-	s.cmd.Env = append(os.Environ(), "KEEL_TEST_SERVER=1", "KEEL_TEST_PASSWORD=integration-secret")
+	s.cmd.Env = append(append(os.Environ(), "KEEL_TEST_SERVER=1", "KEEL_TEST_PASSWORD=integration-secret"), env...)
 	s.cmd.Stdout = &s.log
 	s.cmd.Stderr = &s.log
 	started := time.Now()
@@ -100,6 +114,32 @@ func startTestServerWithin(t *testing.T, startupTimeout time.Duration, args ...s
 	}
 	t.Fatalf("server did not listen within %s (elapsed %s)", startupTimeout, time.Since(started))
 	return nil
+}
+
+// portsHandedOut are the ports freePort has given a test server in this
+// process.
+var portsHandedOut sync.Map
+
+// freePort returns a port no other test server in this process has been given.
+//
+// The kernel picks a free port for a listener on :0, which is closed so that
+// the server can bind the port a moment later. Tests run side by side, so in
+// that moment the kernel may give another test the same port; the second
+// server would fail to bind it, or a test would find the first server
+// answering on its port. A port is therefore handed out once per process.
+func freePort(t *testing.T) int {
+	t.Helper()
+	for {
+		listener, err := net.Listen("tcp4", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		port := listener.Addr().(*net.TCPAddr).Port
+		listener.Close()
+		if _, taken := portsHandedOut.LoadOrStore(port, true); !taken {
+			return port
+		}
+	}
 }
 
 // captureFailure terminates only the test's owned server and reads its log
@@ -289,6 +329,7 @@ func call(t *testing.T, c net.Conn, r *bufio.Reader, parts ...string) string {
 }
 
 func TestAuthenticatedPersistenceAndTornTail(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "store.aof")
 	args := []string{"-appendonly", "-appendfsync", "always", "-appendfilename", path, "-requirepass-env", "KEEL_TEST_PASSWORD"}
 	s := startTestServer(t, args...)
@@ -336,6 +377,9 @@ func TestAuthenticatedPersistenceAndTornTail(t *testing.T) {
 }
 
 func TestSlowReaderDoesNotBlockOtherClients(t *testing.T) {
+	// Not parallel: it fills the kernel's socket buffers, which every process
+	// on the machine shares, and requires other clients to be answered while it
+	// does, within deadlines that a test filling them beside it would stretch.
 	for _, threads := range []string{"1", "4"} {
 		t.Run(threads, func(t *testing.T) {
 			growLoopbackSendBuffers(t, 1)
@@ -395,6 +439,7 @@ func TestSlowReaderDoesNotBlockOtherClients(t *testing.T) {
 }
 
 func TestInvalidModesExitPromptly(t *testing.T) {
+	t.Parallel()
 	for _, args := range [][]string{{"-mode", "net", "-appendonly"}, {"-maxmemory", "18446744073709551615gb"}, {"-mode", "net-nolock"}} {
 		cmd := exec.Command(os.Args[0], append([]string{"-test.run=^TestServerProcess$", "--"}, args...)...)
 		cmd.Env = append(os.Environ(), "KEEL_TEST_SERVER=1")
@@ -405,6 +450,9 @@ func TestInvalidModesExitPromptly(t *testing.T) {
 }
 
 func TestPendingRepliesSurviveOtherTraffic(t *testing.T) {
+	// Not parallel: it fills the kernel's socket buffers, which every process
+	// on the machine shares, and requires other clients to be answered while it
+	// does, within deadlines that a test filling them beside it would stretch.
 	for _, mode := range []string{"kqueue", "kqueue-nobuf"} {
 		t.Run(mode, func(t *testing.T) {
 			s := startTestServer(t, "-mode", mode)
@@ -467,14 +515,15 @@ func (r *replyProgressReader) Read(p []byte) (int, error) {
 }
 
 func TestAOFWriteFailureDoesNotAcknowledge(t *testing.T) {
-	t.Setenv("KEEL_TEST_FILE_LIMIT", "1024")
+	t.Parallel()
 	for _, async := range []bool{false, true} {
 		t.Run(strconv.FormatBool(async), func(t *testing.T) {
+			t.Parallel()
 			args := []string{"-appendonly", "-appendfsync", "always", "-appendfilename", filepath.Join(t.TempDir(), "limited.aof")}
 			if async {
 				args = append(args, "-aof-async-append")
 			}
-			s := startTestServer(t, args...)
+			s := startLimitedTestServer(t, "1024", args...)
 			c, r := connectTest(t, s)
 			defer c.Close()
 			io.WriteString(c, request("SET", "large", strings.Repeat("x", 4096)))
@@ -490,6 +539,7 @@ func TestAOFWriteFailureDoesNotAcknowledge(t *testing.T) {
 }
 
 func TestIdleActiveExpiry(t *testing.T) {
+	t.Parallel()
 	s := startTestServer(t)
 	c, r := connectTest(t, s)
 	defer c.Close()
@@ -512,6 +562,7 @@ func TestIdleActiveExpiry(t *testing.T) {
 // Accepted connections are counted in INFO rather than logged: a line per
 // accept floods the log of any application with a pool or short-lived clients.
 func TestConnectionsCountedNotLogged(t *testing.T) {
+	t.Parallel()
 	s := startTestServer(t)
 	c, r := connectTest(t, s)
 	before := connectionsReceived(t, call(t, c, r, "INFO", "stats"))
@@ -547,8 +598,10 @@ func connectionsReceived(t *testing.T, info string) int {
 }
 
 func TestAsyncAppendPipelineAndRestart(t *testing.T) {
+	t.Parallel()
 	for _, policy := range []string{"always", "everysec", "no"} {
 		t.Run(policy, func(t *testing.T) {
+			t.Parallel()
 			args := []string{"-appendonly", "-aof-async-append", "-appendfsync", policy, "-appendfilename", filepath.Join(t.TempDir(), "log")}
 			s := startTestServer(t, args...)
 			c, r := connectTest(t, s)
@@ -578,6 +631,7 @@ func TestAsyncAppendPipelineAndRestart(t *testing.T) {
 }
 
 func TestReplicaFullSyncWritesAndReconnect(t *testing.T) {
+	t.Parallel()
 	primaryArgs := []string{"-appendonly", "-aof-async-append", "-replication-feed", "-requirepass-env", "KEEL_TEST_PASSWORD", "-appendfilename", filepath.Join(t.TempDir(), "primary")}
 	primary := startTestServer(t, primaryArgs...)
 	pc, pr := connectTest(t, primary)
