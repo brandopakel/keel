@@ -9,8 +9,8 @@ permissions:
   contents: read
 
 env:
-  BASE: 466b90e
-  CAND: 82fb9e8
+  BASE: e6a77aa
+  CAND: f900bf9
 
 jobs:
   timing:
