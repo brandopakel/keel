@@ -394,13 +394,7 @@ func goldenValue(b *bytes.Buffer, value string) {
 	fmt.Fprintf(b, " sha256:%s/%d", hex.EncodeToString(sum[:8]), len(value))
 }
 
-// goldenState describes the default engine's keyspace; see engineState.
-func goldenState(t *testing.T, window goldenWindow) []byte {
-	t.Helper()
-	return goldenStateOn(t, defaultEngine, window)
-}
-
-// goldenStateOn is goldenState on e.
+// goldenStateOn describes e's keyspace; see engineState.
 func goldenStateOn(t *testing.T, e *Engine, window goldenWindow) []byte {
 	t.Helper()
 	return engineState(t, e, window)

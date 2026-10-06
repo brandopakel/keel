@@ -21,17 +21,6 @@ import (
 // long random run; these pin the bytes, so a change to either protocol shows up
 // here first.
 
-// rawReplyAs runs a command the way a connection that negotiated the given
-// protocol would, and returns the reply as written.
-func rawReplyAs(t *testing.T, resp3 bool, name string, args ...string) []byte {
-	t.Helper()
-	var w replyWriter
-	if err := EvalAndResponse(&Command{Cmd: name, Args: args, RESP3: resp3}, &w); err != nil {
-		t.Fatalf("%s: %v", name, err)
-	}
-	return w.b
-}
-
 // replyScript is one session, run in order from an empty keyspace, with the
 // exact reply each protocol gives. The RESP2 column was captured before RESP3
 // existed here, and RESP2 connections must still get it byte for byte - apart
