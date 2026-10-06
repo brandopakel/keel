@@ -106,6 +106,9 @@ func launchTestServer(t *testing.T, startupTimeout time.Duration, env []string, 
 	for time.Now().Before(deadline) {
 		c, err := net.DialTimeout("tcp", s.addr, 50*time.Millisecond)
 		if err == nil {
+			if owners := listenerOwners(port); !strings.HasPrefix(owners, strconv.Itoa(s.cmd.Process.Pid)+"(") || strings.Contains(owners, ",") {
+				t.Logf("PORTDIAG readiness on %s (local %s) reached listener owners %s, server pid %d", s.addr, c.LocalAddr(), owners, s.cmd.Process.Pid)
+			}
 			c.Close()
 			s.startupElapsed = time.Since(started)
 			return s
@@ -139,6 +142,7 @@ func freePort(t *testing.T) int {
 		if _, taken := portsHandedOut.LoadOrStore(port, true); !taken {
 			return port
 		}
+		t.Logf("PORTDIAG probe got port %d, already handed to another test server", port)
 	}
 }
 
