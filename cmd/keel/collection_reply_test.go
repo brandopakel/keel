@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/brandopakel/keel/internal/testlock"
 )
 
 // TestRejectedCollectionPopsPreservePipelineAndRestart sends counted pops whose
@@ -82,6 +84,10 @@ func TestRejectedCollectionPopsPreservePipelineAndRestart(t *testing.T) {
 			t.Run(mode+"/"+col.kind, func(t *testing.T) {
 				var flags []string
 				if mode != "off" {
+					// About 65 MiB of logs: held apart from core's largest
+					// writer, and taken before the log's directory, so that
+					// it is released only once those files are gone.
+					testlock.HoldDiskHeavy(t)
 					flags = []string{"-appendonly", "-appendfsync", "always", "-aof-async-append",
 						"-auto-aof-rewrite-percentage", "0", "-appendfilename", filepath.Join(t.TempDir(), "store.aof")}
 					if mode == "concurrent" {
