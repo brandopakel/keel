@@ -77,7 +77,6 @@ func TestALogWrittenUnderTheOldNameStillReplays(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "memkv-master.aof")
 
-	e.resetStores()
 	runOn(t, e, "PFADD", "h", "a", "b", "c")
 	payload, _ := runOn(t, e, "KEEL.DUMP", "h").(string)
 	expected := runOn(t, e, "PFCOUNT", "h")

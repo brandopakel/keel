@@ -11,6 +11,9 @@ import (
 )
 
 func TestLargeCollectionRepliesRejectBeforeAllocationOrRemoval(t *testing.T) {
+	// Not parallel: it reads the process's heap statistics, which a test
+	// running beside it would move.
+	e := newTestEngine(t, Options{})
 	cases := []struct {
 		name, kind string
 		args       []string
@@ -38,7 +41,7 @@ func TestLargeCollectionRepliesRejectBeforeAllocationOrRemoval(t *testing.T) {
 			if resp3 {
 				name += "/resp3"
 			}
-			t.Run(name, func(t *testing.T) { largeCollectionReplyRejects(t, tc.kind, tc.args, resp3) })
+			t.Run(name, func(t *testing.T) { largeCollectionReplyRejects(t, e, tc.kind, tc.args, resp3) })
 		}
 	}
 }
@@ -46,9 +49,8 @@ func TestLargeCollectionRepliesRejectBeforeAllocationOrRemoval(t *testing.T) {
 // largeCollectionReplyRejects builds a 65 MiB collection of the given kind
 // at "large", runs args against it in the given protocol, and requires the
 // refusal to come before the payload is built or anything is removed.
-func largeCollectionReplyRejects(t *testing.T, kind string, args []string, resp3 bool) {
-	ResetStores()
-	t.Cleanup(ResetStores)
+func largeCollectionReplyRejects(t *testing.T, e *Engine, kind string, args []string, resp3 bool) {
+	e.resetStores()
 	h, l, s, z := data_structure.NewHash(), data_structure.NewList(), data_structure.NewSet(), data_structure.CreateZSet()
 	value := strings.Repeat("x", 1<<20)
 	for i := 0; i < 65; i++ {
@@ -66,18 +68,18 @@ func largeCollectionReplyRejects(t *testing.T, kind string, args []string, resp3
 	}
 	switch kind {
 	case "hash":
-		defaultEngine.hashStore.Put("large", h)
+		e.hashStore.Put("large", h)
 	case "list":
-		defaultEngine.listStore.Put("large", l)
+		e.listStore.Put("large", l)
 	case "set":
-		defaultEngine.setStore.Put("large", s)
+		e.setStore.Put("large", s)
 	case "zset":
-		defaultEngine.zsetStore.Put("large", z)
+		e.zsetStore.Put("large", z)
 	}
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	got := rawReplyAs(t, resp3, args[0], args[1:]...)
+	got := rawReplyAsOn(t, e, resp3, args[0], args[1:]...)
 	runtime.ReadMemStats(&after)
 	require.Less(t, len(got), 1024, "oversized payload must not be built")
 	require.Equal(t, replyTooLarge, got)
@@ -95,10 +97,12 @@ func largeCollectionReplyRejects(t *testing.T, kind string, args []string, resp3
 }
 
 func TestPopRecordAdmissionIncludesLargeKeyBeforeRemoval(t *testing.T) {
+	// Not parallel: it reads the process's heap statistics, which a test
+	// running beside it would move.
+	e := newTestEngine(t, Options{})
 	for _, command := range []string{"SPOP", "ZPOPMIN"} {
 		t.Run(command, func(t *testing.T) {
-			ResetStores()
-			t.Cleanup(ResetStores)
+			e.resetStores()
 			key := strings.Repeat("k", 8<<20)
 			s, z := data_structure.NewSet(), data_structure.CreateZSet()
 			for i := 0; i < 60; i++ {
@@ -110,14 +114,14 @@ func TestPopRecordAdmissionIncludesLargeKeyBeforeRemoval(t *testing.T) {
 				}
 			}
 			if command == "SPOP" {
-				defaultEngine.setStore.Put(key, s)
+				e.setStore.Put(key, s)
 			} else {
-				defaultEngine.zsetStore.Put(key, z)
+				e.zsetStore.Put(key, z)
 			}
 			runtime.GC()
 			var before, after runtime.MemStats
 			runtime.ReadMemStats(&before)
-			got := rawReply(t, command, key, "60")
+			got := rawReplyOn(t, e, command, key, "60")
 			runtime.ReadMemStats(&after)
 			require.Equal(t, replyTooLarge, got, "reply fits but canonical removal record exceeds limit")
 			require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(256<<10))

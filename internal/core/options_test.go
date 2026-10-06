@@ -23,6 +23,15 @@ func withOptions(tb testing.TB, change func(*Options)) {
 	tb.Cleanup(func() { require.NoError(tb, Configure(found)) })
 }
 
+// withOptionsOn is withOptions on e, for a helper that may be handed the
+// default engine: the options it found are put back when tb ends.
+func withOptionsOn(tb testing.TB, e *Engine, change func(*Options)) {
+	tb.Helper()
+	found := e.options
+	reconfigure(tb, e, change)
+	tb.Cleanup(func() { require.NoError(tb, e.configure(found)) })
+}
+
 // reconfigure changes the options of e, an engine the test made, from now on.
 func reconfigure(tb testing.TB, e *Engine, change func(*Options)) {
 	tb.Helper()
