@@ -1036,9 +1036,14 @@ Where the plan above leaves a choice open, step 2.6 settles it this way:
   - the two failures, the goroutine dump twice, were fixed before #122
     merged.
 - **cmd/keel's servers are processes of their own.** Each test server gets
-  a port no other test server in the process has had (`freePort`): the
-  kernel picks a free port, which is closed so the server can bind it, and
-  a test beside it could be given the same one in between. A server's
+  a port from below the range the kernel hands out by itself, tried once
+  per process and kept only if a listener can bind it (`freePort`). A port
+  the kernel picks for a listener on `:0` and closes for the server to bind
+  is free only for that moment. The kernel handed such ports to other
+  tests' probes while race-built servers were still starting, 7 to 14
+  times in each three-pass race run. A readiness check then reached the
+  probe instead of the server, and two tests failed before this changed:
+  one dial was refused and one connection was reset. A server's
   file-size limit is in its own environment (`startLimitedTestServer`)
   rather than the test process's, which `t.Setenv` would change and Go
   refuses in a parallel test. Subtests that each start a server run in
