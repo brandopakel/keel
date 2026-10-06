@@ -177,16 +177,20 @@ func TestDumpCollectionsAndChecksum(t *testing.T) {
 	}
 }
 
+// FuzzRestoreValidation restores whatever it is given into an engine of its
+// own, made once for the target and emptied before each input, as a fuzzing
+// worker runs one input at a time.
 func FuzzRestoreValidation(f *testing.F) {
 	f.Add([]byte{8})
 	f.Add([]byte("KEL1"))
 	f.Add([]byte{1, 'v'})
+	e := newEngine(Options{})
 	f.Fuzz(func(t *testing.T, p []byte) {
 		if len(p) > 1<<20 {
 			return
 		}
-		ResetStores()
-		_ = defaultEngine.restoreKey("fuzz", p)
+		e.resetStores()
+		_ = e.restoreKey("fuzz", p)
 	})
 }
 

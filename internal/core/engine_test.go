@@ -17,8 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// on runs a command on e the way EvalAndResponse runs one on the default
-// engine, and decodes the reply.
+// on runs a command on e the way a connection would, and decodes the reply.
 func on(t *testing.T, e *Engine, name string, args ...string) interface{} {
 	t.Helper()
 	res, _ := Decode(rawOn(t, e, name, args...))
@@ -36,14 +35,12 @@ func rawOn(t *testing.T, e *Engine, name string, args ...string) []byte {
 // TestEnginesShareNoKeys: each engine is a keyspace of its own. A key written
 // on one is not on the other, whatever its type; deleting, flushing, a bound
 // that evicts and the expiry cycle each act on one engine only; and neither
-// touches the default engine the server runs on.
-//
-// Not parallel: other tests run on the default engine, which this one checks
-// is untouched.
+// touches a third engine that stands by.
 func TestEnginesShareNoKeys(t *testing.T) {
-	ResetStores()
-	a := newEngine(Options{})
-	b := newEngine(Options{MaxKeys: 3})
+	t.Parallel()
+	bystander := newTestEngine(t, Options{})
+	a := newTestEngine(t, Options{})
+	b := newTestEngine(t, Options{MaxKeys: 3})
 
 	// Every family, on a; the same names hold other types on b.
 	for _, cmd := range [][]string{
@@ -87,8 +84,8 @@ func TestEnginesShareNoKeys(t *testing.T) {
 	assert.Equal(t, int64(0), on(t, a, "DBSIZE"))
 	assert.Equal(t, int64(3), on(t, b, "DBSIZE"), "a FLUSHDB on a leaves b's keys")
 
-	assert.Zero(t, defaultEngine.space.TotalKeys(), "neither engine wrote to the default one")
-	assert.Zero(t, defaultEngine.ExpiredKeys())
+	assert.Zero(t, bystander.space.TotalKeys(), "neither engine wrote to the one standing by")
+	assert.Zero(t, bystander.ExpiredKeys())
 }
 
 // TestEnginesShareNoCommandScope: what an engine holds for the command running
@@ -96,12 +93,14 @@ func TestEnginesShareNoKeys(t *testing.T) {
 // budget its commands reserve from, the reply ceiling and eviction suspension
 // of its EXEC, and the name GEOSEARCH was sent as - and a command on another
 // engine sees none of it, whether that command runs after it, at the same
-// time, or in the middle of its EXEC.
+// time, or in the middle of its EXEC; and a third engine standing by holds
+// none of it.
 func TestEnginesShareNoCommandScope(t *testing.T) {
-	ResetStores()
+	t.Parallel()
 	const bound = 8
-	a := newEngine(Options{MaxKeys: bound})
-	b := newEngine(Options{MaxKeys: bound})
+	bystander := newTestEngine(t, Options{MaxKeys: bound})
+	a := newTestEngine(t, Options{MaxKeys: bound})
+	b := newTestEngine(t, Options{MaxKeys: bound})
 	value := strings.Repeat("v", 64<<10)
 	for _, e := range []*Engine{a, b} {
 		require.Equal(t, MaxReplyBytes, e.replyCeiling)
@@ -129,7 +128,7 @@ func TestEnginesShareNoCommandScope(t *testing.T) {
 	assert.Positive(t, b.commandAllocations.ReplyReserved)
 	assert.Zero(t, a.commandAllocations.Reserved, "b's reservation is not a's")
 	assert.Equal(t, uint64(1), a.commandAllocations.Refusals)
-	assert.Nil(t, defaultEngine.commandAllocations, "neither budget is the default engine's")
+	assert.Nil(t, bystander.commandAllocations, "neither budget is the bystander's")
 
 	// Each engine's GEOSEARCH error names the command as it was sent there.
 	geosearch := []string{"g", "BYRADIUS", "1", "km", "COUNT", "1"}
@@ -155,7 +154,6 @@ func TestEnginesShareNoCommandScope(t *testing.T) {
 	logs := t.TempDir()
 	require.NoError(t, a.OpenAOF(filepath.Join(logs, "a.aof")))
 	require.NoError(t, b.OpenAOF(filepath.Join(logs, "b.aof")))
-	t.Cleanup(func() { a.CloseAOF(); b.CloseAOF() })
 	var wg sync.WaitGroup
 	for _, side := range []struct {
 		e             *Engine
@@ -272,16 +270,17 @@ func TestEnginesShareNoCommandScope(t *testing.T) {
 // no other. One engine's records, transaction frames, reaped keys and failed
 // disk stay its own; and two engines with a log open on each run side by side
 // through evalAndResponse, one appending on the worker and one synchronously,
-// each log replaying to its own engine's keyspace. Under -race, log state the
-// engines shared would fail here.
+// each log replaying to its own engine's keyspace. A third engine, standing
+// by, is left as it was, and its rewrite is left alone by another engine's
+// writes. Under -race, log state the engines shared would fail here.
 func TestEnginesShareNoLog(t *testing.T) {
-	ResetStores()
-	encoded, written, synced, ready := defaultEngine.AOFPositions()
-	defaultPositions := [4]uint64{encoded, written, synced, ready}
+	t.Parallel()
+	bystander := newTestEngine(t, Options{})
+	encoded, written, synced, ready := bystander.AOFPositions()
+	bystanderPositions := [4]uint64{encoded, written, synced, ready}
 	dir := t.TempDir()
-	a := newEngine(Options{Fsync: FsyncAlways})
-	b := newEngine(Options{Fsync: FsyncAlways})
-	t.Cleanup(func() { a.CloseAOF(); b.CloseAOF() })
+	a := newTestEngine(t, Options{Fsync: FsyncAlways})
+	b := newTestEngine(t, Options{Fsync: FsyncAlways})
 	var aWrites, bSyncs atomic.Int64
 	a.aofWrite = func(f *os.File, body []byte) (int, error) { aWrites.Add(1); return f.Write(body) }
 	b.aofSync = func(f *os.File) error { bSyncs.Add(1); return f.Sync() }
@@ -428,20 +427,19 @@ func TestEnginesShareNoLog(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotContains(t, string(log), side.other, "%s holds only its engine's writes", path)
 	}
-	assert.Nil(t, defaultEngine.aof.file, "neither opened the default engine's log")
-	encoded, written, synced, ready = defaultEngine.AOFPositions()
-	assert.Equal(t, defaultPositions, [4]uint64{encoded, written, synced, ready}, "neither moved the default engine's offsets")
-	assert.Zero(t, defaultEngine.space.TotalKeys())
+	assert.Nil(t, bystander.aof.file, "neither opened the bystander's log")
+	encoded, written, synced, ready = bystander.AOFPositions()
+	assert.Equal(t, bystanderPositions, [4]uint64{encoded, written, synced, ready}, "neither moved the bystander's offsets")
+	assert.Zero(t, bystander.space.TotalKeys())
 
-	// While the default engine rewrites its log, another engine's writes,
+	// While the bystander rewrites its log, another engine's writes,
 	// removals, flushes and close leave that rewrite alone.
-	require.NoError(t, OpenAOF(filepath.Join(dir, "default.aof")))
-	t.Cleanup(func() { CancelRewrite(); CloseAOF() })
+	require.NoError(t, bystander.OpenAOF(filepath.Join(dir, "bystander.aof")))
 	for i := range 10 {
-		require.Equal(t, "OK", run(t, "SET", "s:"+strconv.Itoa(i), "default"))
+		require.Equal(t, "OK", on(t, bystander, "SET", "s:"+strconv.Itoa(i), "bystander"))
 	}
-	require.NoError(t, StartRewrite())
-	c := newEngine(Options{})
+	require.NoError(t, bystander.StartRewrite())
+	c := newTestEngine(t, Options{})
 	require.NoError(t, c.OpenAOF(filepath.Join(dir, "c.aof")))
 	require.Equal(t, "OK", on(t, c, "SET", "s:1", "c"))
 	require.Equal(t, int64(1), on(t, c, "SADD", "set", "only"))
@@ -452,9 +450,9 @@ func TestEnginesShareNoLog(t *testing.T) {
 	require.Equal(t, "OK", on(t, c, "FLUSHDB"))
 	require.NoError(t, c.FlushAOF())
 	require.NoError(t, c.CloseAOF())
-	assert.True(t, RewriteActive(), "c's close leaves the default engine's rewrite running")
-	assert.Empty(t, defaultEngine.rewrite.dirty, "c's keys are not the default engine's dirty keys")
-	assert.Zero(t, defaultEngine.rewrite.pos, "c's flushes do not advance the default engine's rewrite")
+	assert.True(t, bystander.RewriteActive(), "c's close leaves the bystander's rewrite running")
+	assert.Empty(t, bystander.rewrite.dirty, "c's keys are not the bystander's dirty keys")
+	assert.Zero(t, bystander.rewrite.pos, "c's flushes do not advance the bystander's rewrite")
 }
 
 // TestEnginesShareNoRewrite: a rewrite walks its own engine's keyspace and
@@ -464,16 +462,15 @@ func TestEnginesShareNoLog(t *testing.T) {
 // its EXEC schedules, a directory sync its rename leaves pending, what its
 // rewrites come to, the wait they earn and the I/O they are timed by are that
 // engine's alone, whether the engines rewrite one after the other or side by
-// side.
+// side; and a third engine standing by is left with what its own rewrites came
+// to.
 func TestEnginesShareNoRewrite(t *testing.T) {
-	ResetStores()
-	// What the default engine's rewrites came to outlives its keyspace, so it
-	// is whatever earlier tests left; a's and b's must leave it as it is.
-	defaultOutcome, defaultRewrites := defaultEngine.rewriteOutcome, defaultEngine.aof.rewrites
+	t.Parallel()
+	bystander := newTestEngine(t, Options{})
+	bystanderOutcome, bystanderRewrites := bystander.rewriteOutcome, bystander.aof.rewrites
 	dir := t.TempDir()
-	a := newEngine(Options{})
-	b := newEngine(Options{})
-	t.Cleanup(func() { a.CloseAOF(); b.CloseAOF() })
+	a := newTestEngine(t, Options{})
+	b := newTestEngine(t, Options{})
 	var aWoken, bWoken atomic.Int64
 	a.SetRewriteWaker(func() { aWoken.Add(1) })
 	b.SetRewriteWaker(func() { bWoken.Add(1) })
@@ -656,10 +653,10 @@ func TestEnginesShareNoRewrite(t *testing.T) {
 	a.rewriteFileWrite = writeLog
 	replays(a)
 	replays(b)
-	assert.False(t, defaultEngine.RewriteActive())
-	assert.Nil(t, defaultEngine.aof.file)
-	assert.Equal(t, defaultOutcome, defaultEngine.rewriteOutcome, "neither's failures are the default engine's")
-	assert.Equal(t, defaultRewrites, defaultEngine.aof.rewrites, "nor are their rewrites")
+	assert.False(t, bystander.RewriteActive())
+	assert.Nil(t, bystander.aof.file)
+	assert.Equal(t, bystanderOutcome, bystander.rewriteOutcome, "neither's failures are the bystander's")
+	assert.Equal(t, bystanderRewrites, bystander.aof.rewrites, "nor are their rewrites")
 }
 
 // midTransaction is a transport whose own command, run in its place inside an
