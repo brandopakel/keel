@@ -73,10 +73,10 @@ const rewriteChunk = 2048
 // thirty-second budget below, four million leaves roughly half of it spare,
 // which is the margin a slower disk needs.
 //
-// The server's -maxkeys default still allows five million, so a keyspace
-// between four and five million cannot be compacted; and an engine with no key
-// bound (Options.MaxKeys zero, the default for embedded use) may hold more, as
-// a documented limit of persistence rather than of the keyspace. Closing that
+// Neither the server nor an embedded engine bounds its key count by default
+// (MaxKeys zero, as in Redis), so a keyspace may outgrow this; the server warns
+// at startup when it logs with neither -maxkeys nor -maxmemory set. That is a
+// documented limit of persistence rather than of the keyspace. Closing it
 // needs a faster rewrite or a longer budget rather than a larger number here,
 // and the number should not be raised past what has been measured.
 //

@@ -28,8 +28,8 @@ type Options struct {
 	// MaxKeys bounds the keyspace by count: once it is reached, a write
 	// evicts before it lands. Zero is no bound, as in Redis, where only
 	// maxmemory bounds the keyspace. The server's -maxkeys flag sets it, and
-	// its default is the server's cap of 5,000,000 keys. A log rewrite refuses
-	// a keyspace over 4,000,000 keys whatever this is (see RewriteKeyCeiling).
+	// defaults to zero too. A log rewrite refuses a keyspace over 4,000,000
+	// keys whatever this is (see RewriteKeyCeiling).
 	MaxKeys int
 
 	// Eviction is the policy a bound evicts by. The zero value is EvictLRU.

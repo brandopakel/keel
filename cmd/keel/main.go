@@ -89,10 +89,10 @@ func parseFlags() {
 	flag.StringVar(&mode, "mode", "kqueue", "io mode: kqueue (default) | kqueue-nobuf | net | net-small | net-direct | net-chan")
 	flag.StringVar(&maxMemory, "maxmemory", "0",
 		"bound the keyspace in bytes, e.g. 512mb or 2gb; 0 is unbounded")
-	flag.IntVar(&maxKeys, "maxkeys", defaultMaxKeys,
-		"evict once the keyspace reaches this many keys")
+	flag.IntVar(&maxKeys, "maxkeys", 0,
+		"evict once the keyspace reaches this many keys; 0 is unbounded, as in Redis")
 	flag.StringVar(&evictPolicy, "evict", "lru",
-		"eviction policy when -maxkeys is reached: lru | lfu | random")
+		"eviction policy when -maxkeys or -maxmemory is reached: lru | lfu | random")
 	flag.IntVar(&lruSamples, "lru-samples", 5,
 		"keys sampled per eviction; more is more accurate and slower")
 	flag.IntVar(&lfuLogFactor, "lfu-log-factor", 10,
@@ -183,13 +183,16 @@ func parseFlags() {
 	}
 }
 
-// defaultMaxKeys is the server's bound on its key count, -maxkeys's default.
-// An engine has no key bound of its own unless it is given one, as in Redis,
-// so the server's cap is this explicit setting rather than a hidden default
-// (docs/embedding-plan.md, "Decisions"). It stays above the rewrite's key
-// ceiling (core.RewriteKeyCeiling), so that every keyspace the server holds
-// by default up to that ceiling can be compacted.
-const defaultMaxKeys = 5000000
+// unboundedLogWarning is what a server logging its writes says at startup when
+// nothing bounds its keyspace. The server has no key bound unless -maxkeys or
+// -maxmemory sets one, as in Redis (docs/embedding-plan.md, "Decisions"); but
+// unlike Redis's, a log rewrite here refuses a keyspace over
+// core.RewriteKeyCeiling keys, so past that the log cannot be compacted.
+func unboundedLogWarning() string {
+	return fmt.Sprintf("warning: -appendonly with neither -maxkeys nor -maxmemory set: the keyspace is unbounded, "+
+		"and a log rewrite refuses more than %d keys, so past that the log grows without being compacted",
+		core.RewriteKeyCeiling)
+}
 
 // engineOptions are the engine settings the flags describe. A flag's zero
 // that turns its setting off is passed as core.Off, because an option's zero
@@ -327,7 +330,7 @@ func runServer() error {
 	if requirePass != "" && mode != "kqueue" && mode != "kqueue-nobuf" {
 		return fmt.Errorf("authentication requires an event-loop mode")
 	}
-	if maxKeys < 1 || lruSamples < 1 || lfuLogFactor < 0 || lfuDecayPeriod < 0 {
+	if maxKeys < 0 || lruSamples < 1 || lfuLogFactor < 0 || lfuDecayPeriod < 0 {
 		return fmt.Errorf("invalid eviction limits")
 	}
 	if appendOnly && mode != "kqueue" {
@@ -354,6 +357,9 @@ func runServer() error {
 	// anything read them.
 	if err := core.Configure(engineOptions()); err != nil {
 		return err
+	}
+	if appendOnly && maxKeys == 0 && maxMemoryBytes == 0 {
+		log.Println(unboundedLogWarning())
 	}
 	if err := server.StartAOF(); err != nil {
 		return fmt.Errorf("appendonly: %w", err)

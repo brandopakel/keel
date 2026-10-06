@@ -149,7 +149,10 @@ collection members and their key names stream in at most 64 KiB fragments.
 Partly written records finish before dirty-key reconciliation replaces their old
 state. A rewrite is abandoned after 30 seconds, 100,000 dirty keys or an 8 MiB
 dirty-name accounting budget; the original log remains authoritative. Snapshot
-creation refuses more than four million keys. Bulk snapshot sync runs on a worker
+creation refuses more than four million keys. As in Redis, nothing bounds the
+keyspace unless `-maxmemory` or `-maxkeys` does, so a logged keyspace past four
+million keys cannot be compacted; a server started with `-appendonly` and neither
+bound set warns about this at startup. Bulk snapshot sync runs on a worker
 while commands continue; dirty-tail reconciliation precedes the final synchronous
 handoff. Opaque sketch serialization, disk writes and final sync can still stall.
 There is no hard rewrite latency SLA.

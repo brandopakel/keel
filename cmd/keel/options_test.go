@@ -39,19 +39,20 @@ func configureFrom(t *testing.T, args ...string) data_structure.Limits {
 
 // TestDefaultFlagsKeepTheServerSettings pins what the server's engine is held
 // to with no flags, exactly as before the flags were mapped onto engine
-// options rather than into config: the 5,000,000-key cap and LRU, no memory
-// bound, and the sampling, LFU and LCS figures; active expiry at 20 keys a
-// round, 25% and 16 rounds; no log, at ./keel-master.aof under everysec
+// options rather than into config, except the key bound: LRU, no key bound
+// (Redis's default, chosen by the owner on 2026-10-05 over the 5,000,000-key
+// cap), no memory bound, and the sampling, LFU and LCS figures; active expiry
+// at 20 keys a round, 25% and 16 rounds; no log, at ./keel-master.aof under everysec
 // when there is one, appended on the caller's thread and rewritten at 100%
 // growth past 64 MiB; and neither a replica nor a feed, in protocol 1.
 func TestDefaultFlagsKeepTheServerSettings(t *testing.T) {
 	got := configureFrom(t)
-	want := data_structure.Limits{Eviction: data_structure.EvictLRU, MaxKeys: 5000000, MaxMemory: 0,
+	want := data_structure.Limits{Eviction: data_structure.EvictLRU, MaxKeys: 0, MaxMemory: 0,
 		EvictionSamples: 5, LFULogFactor: 10, LFUDecayPeriod: 10000, LCSMaxCells: 134217728}
 	if got != want {
 		t.Fatalf("default flags hold the engine to %+v, want %+v", got, want)
 	}
-	wantOptions := core.Options{MaxKeys: 5000000, Eviction: core.EvictLRU, EvictionSamples: 5,
+	wantOptions := core.Options{MaxKeys: 0, Eviction: core.EvictLRU, EvictionSamples: 5,
 		LFULogFactor: 10, LFUDecayPeriod: 10000, LCSMaxCells: 134217728,
 		ActiveExpireSamples: 20, ActiveExpirePercent: 25, ActiveExpireRounds: 16,
 		AppendFilename: "./keel-master.aof", Fsync: core.FsyncEverySec,
@@ -74,7 +75,7 @@ func TestFlagsReachTheEngine(t *testing.T) {
 	}
 
 	got = configureFrom(t, "-evict", "random", "-lfu-log-factor", "0", "-lfu-decay-period", "0", "-lcs-max-cells", "0")
-	want = data_structure.Limits{Eviction: data_structure.EvictRandom, MaxKeys: 5000000,
+	want = data_structure.Limits{Eviction: data_structure.EvictRandom, MaxKeys: 0,
 		EvictionSamples: 5, LFULogFactor: 0, LFUDecayPeriod: 0, LCSMaxCells: 0}
 	if got != want {
 		t.Fatalf("zero flags hold the engine to %+v, want %+v", got, want)
@@ -107,19 +108,38 @@ func TestFlagsReachTheEngine(t *testing.T) {
 	}
 }
 
-// TestServerKeyCapCoversTheRewriteCeiling: a rewrite ceiling below the
-// keyspace the server holds by default is worse than none - auto-rewrite
-// retries every minute, fails every time, and the log grows without bound -
-// and one above it is dead configuration. This keeps the two numbers in a
-// sane relation to each other.
-func TestServerKeyCapCoversTheRewriteCeiling(t *testing.T) {
-	if core.RewriteKeyCeiling > defaultMaxKeys {
-		t.Errorf("rewrite ceiling %d is above the server's key cap %d: dead configuration",
-			core.RewriteKeyCeiling, defaultMaxKeys)
+// TestServerHasNoKeyBoundByDefault: as in Redis, the server bounds its
+// keyspace only when -maxkeys or -maxmemory says so. Until 2026-10-05 the
+// default was 5,000,000 keys; the owner chose Redis's default instead.
+func TestServerHasNoKeyBoundByDefault(t *testing.T) {
+	if got := configureFrom(t).MaxKeys; got != 0 {
+		t.Fatalf("the default -maxkeys gives the engine a key bound of %d, want none", got)
 	}
-	if core.RewriteKeyCeiling <= defaultMaxKeys/2 {
-		t.Errorf("rewrite ceiling %d is far below the server's key cap %d: legal keyspaces "+
-			"could not compact, which is how a log grows without bound", core.RewriteKeyCeiling, defaultMaxKeys)
+}
+
+// TestServerWarnsOfAnUnboundedLoggedKeyspace: a log rewrite refuses a keyspace
+// over core.RewriteKeyCeiling keys, so a server that logs its writes with
+// nothing bounding its keyspace says so at startup. A bound of either kind,
+// or no log to compact, means no warning.
+func TestServerWarnsOfAnUnboundedLoggedKeyspace(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		args []string
+		warn bool
+	}{
+		{"log and no bound", []string{"-appendonly"}, true},
+		{"log and -maxkeys", []string{"-appendonly", "-maxkeys", "1000"}, false},
+		{"log and -maxmemory", []string{"-appendonly", "-maxmemory", "64mb"}, false},
+		{"no log", nil, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			args := append([]string{"-appendfilename", filepath.Join(t.TempDir(), "unbounded.aof")}, c.args...)
+			s := startTestServer(t, args...)
+			s.stop(t)
+			if got := strings.Contains(s.log.String(), unboundedLogWarning()); got != c.warn {
+				t.Fatalf("warning printed: %v, want %v; server log:\n%s", got, c.warn, s.log.String())
+			}
+		})
 	}
 }
 
@@ -204,7 +224,9 @@ var developFlags = []struct{ name, kind, value string }{
 	{"lfu-log-factor", "int", "10"},
 	{"lru-samples", "int", "5"},
 	{"maxclients", "int", "20000"},
-	{"maxkeys", "int", "5000000"},
+	// The one deliberate change since d56088a: the owner chose Redis's
+	// unbounded default over the 5,000,000-key cap on 2026-10-05.
+	{"maxkeys", "int", "0"},
 	{"maxmemory", "string", "0"},
 	{"mode", "string", "kqueue"},
 	{"port", "int", "8081"},

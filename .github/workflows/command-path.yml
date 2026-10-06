@@ -33,9 +33,10 @@
 #   baseline that borrows them predates the options, so it also gets
 #   internal/core/testdata/command-path/command_path_settings_test.go in that
 #   file's place, which sets the same through config. Every benchmark holds
-#   the engine to the server's 5,000,000-key cap, which a baseline from
+#   the engine to the server's former 5,000,000-key cap, which a baseline from
 #   before step 2.5 held it to by default, so that both sides count keys on
-#   every write.
+#   every write. (The server itself has had no key bound by default since
+#   October 5, 2026; the benchmarks keep the cap so they compare the same work.)
 #
 # What fails the job: more allocations per operation on any row, eviction
 # rows whose evictions/op is not sane on both sides, and any row that does not

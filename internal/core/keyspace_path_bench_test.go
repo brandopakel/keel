@@ -163,12 +163,14 @@ func BenchmarkCommandPathUnderEviction(b *testing.B) {
 	}
 }
 
-// serverKeyCap is the key bound the server's -maxkeys flag defaults to. Every
-// build before step 2.5 of the plan held the default engine to it, whatever
-// ran on it; since then an engine has no key bound unless it is given one. The
-// benchmarks give the engine this one, so that every write counts the
-// keyspace, as the server's writes do, and as a baseline from before step
-// 2.5 counts it.
+// serverKeyCap is the key bound the server's -maxkeys flag defaulted to until
+// 2026-10-05, when the server took Redis's unbounded default. Every build
+// before step 2.5 of the plan held the default engine to it, whatever ran on
+// it; since then an engine has no key bound unless it is given one. The
+// benchmarks still give the engine this one, so that every write counts the
+// keyspace as a baseline from before step 2.5 counts it, and the paired job
+// keeps comparing the same work. (The name stays, so that the benchmark's
+// code keeps the places it has in a baseline's build.)
 const serverKeyCap = 5000000
 
 // holdServerKeyCap holds the default engine to serverKeyCap until b ends. It
