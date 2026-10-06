@@ -28,15 +28,19 @@
 #   step, or 65ebdbc for a cumulative run) builds the candidate's copy of that
 #   file. Both sides then run the same benchmark code against their own build,
 #   and the provenance says so. Every other file is each side's own.
-# - Since step 2.5 those two files set nothing themselves: they take their
-#   settings from command_path_settings_test.go, which sets engine options. A
-#   baseline that borrows them predates the options, so it also gets
+# - Since step 2.5 those two files set nothing themselves, and since step 2.7
+#   they name no engine API either: each family runs on the engine
+#   command_path_settings_test.go hands it, a benchEngine, held to engine
+#   options. A baseline that borrows them predates engines, so it also gets
 #   internal/core/testdata/command-path/command_path_settings_test.go in that
-#   file's place, which sets the same through config. Every benchmark holds
-#   the engine to the server's former 5,000,000-key cap, which a baseline from
-#   before step 2.5 held it to by default, so that both sides count keys on
-#   every write. (The server itself has had no key bound by default since
-#   October 5, 2026; the benchmarks keep the cap so they compare the same work.)
+#   file's place, whose benchEngine is the baseline's one keyspace: it sets the
+#   same through config, empties the stores, and calls the baseline's package
+#   functions. Every method of either is inlined, so both timed loops call the
+#   dispatch directly. Every benchmark holds its engine to the server's former
+#   5,000,000-key cap, which a baseline from before step 2.5 held it to by
+#   default, so that both sides count keys on every write. (The server itself
+#   has had no key bound by default since October 5, 2026; the benchmarks keep
+#   the cap so they compare the same work.)
 #
 # What fails the job: more allocations per operation on any row, eviction
 # rows whose evictions/op is not sane on both sides, and any row that does not
@@ -141,10 +145,10 @@ jobs:
               borrowed="$borrowed $file"
             fi
           done
-          # The borrowed files take their settings from
-          # command_path_settings_test.go. A baseline without it predates the
-          # engine options it uses, so it gets the copy that sets the same
-          # through config (see the header).
+          # The borrowed files take their engine and settings from
+          # command_path_settings_test.go. A baseline without it predates
+          # engines and their options, so it gets the copy that runs on its
+          # one keyspace and sets the same through config (see the header).
           settings=internal/core/command_path_settings_test.go
           legacy=internal/core/testdata/command-path/command_path_settings_test.go
           if [ -n "$borrowed" ] && [ -f "$RUNNER_TEMP/cand/$legacy" ] && [ ! -f "$RUNNER_TEMP/base/$settings" ]; then

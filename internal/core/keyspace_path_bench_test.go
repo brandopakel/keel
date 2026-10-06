@@ -3,8 +3,6 @@ package core
 import (
 	"strconv"
 	"testing"
-
-	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // The sharded keyspace adds a hash of the key name to every store operation.
@@ -18,13 +16,17 @@ import (
 // paired job in command-path.yml compares each change with its base here.
 // Sub-benchmark names are part of that comparison, so a name, once added, is
 // not renamed.
+//
+// It runs on an engine of its own, held to the server's former key cap, where
+// a baseline from before step 2.7 resets its default engine's stores. Its
+// sub-benchmarks share that engine and the keys set up here, as they shared
+// the default engine.
 func BenchmarkCommandPath(b *testing.B) {
-	holdServerKeyCap(b)
-	ResetStores()
+	e := benchEngine{newTestEngine(b, Options{MaxKeys: serverKeyCap})}
 	keys := make([]string, 1000)
 	for i := range keys {
 		keys[i] = "bench:key:" + strconv.Itoa(i)
-		run2(b, "SET", keys[i], "value")
+		run2On(b, e, "SET", keys[i], "value")
 	}
 
 	b.Run("SET", func(b *testing.B) {
@@ -32,7 +34,7 @@ func BenchmarkCommandPath(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			w.b = w.b[:0]
-			EvalAndResponse(&Command{Cmd: "SET", Args: []string{keys[i%len(keys)], "value"}}, &w)
+			e.EvalAndResponse(&Command{Cmd: "SET", Args: []string{keys[i%len(keys)], "value"}}, &w)
 		}
 	})
 	b.Run("GET", func(b *testing.B) {
@@ -40,7 +42,7 @@ func BenchmarkCommandPath(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			w.b = w.b[:0]
-			EvalAndResponse(&Command{Cmd: "GET", Args: []string{keys[i%len(keys)]}}, &w)
+			e.EvalAndResponse(&Command{Cmd: "GET", Args: []string{keys[i%len(keys)]}}, &w)
 		}
 	})
 
@@ -51,10 +53,10 @@ func BenchmarkCommandPath(b *testing.B) {
 		members[i] = "member:" + strconv.Itoa(i)
 	}
 	for i, m := range members {
-		run2(b, "HSET", "bench:hash", m, "value")
-		run2(b, "RPUSH", "bench:list", m)
-		run2(b, "SADD", "bench:set", m)
-		run2(b, "ZADD", "bench:zset", strconv.Itoa(i), m)
+		run2On(b, e, "HSET", "bench:hash", m, "value")
+		run2On(b, e, "RPUSH", "bench:list", m)
+		run2On(b, e, "SADD", "bench:set", m)
+		run2On(b, e, "ZADD", "bench:zset", strconv.Itoa(i), m)
 	}
 	ring := func(n int, build func(i int) *Command) []*Command {
 		cmds := make([]*Command, n)
@@ -92,14 +94,14 @@ func BenchmarkCommandPath(b *testing.B) {
 	} {
 		b.Run(family.name, func(b *testing.B) {
 			for _, cmd := range family.cmds {
-				mustSucceed(b, cmd)
+				mustSucceedOn(b, e, cmd)
 			}
 			var w replyWriter
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				w.b = w.b[:0]
-				EvalAndResponse(family.cmds[i%len(family.cmds)], &w)
+				e.EvalAndResponse(family.cmds[i%len(family.cmds)], &w)
 			}
 		})
 	}
@@ -109,14 +111,14 @@ func BenchmarkCommandPath(b *testing.B) {
 		var w replyWriter
 		push := &Command{Cmd: "LPUSH", Args: []string{"bench:list", "value"}}
 		pop := &Command{Cmd: "RPOP", Args: []string{"bench:list"}}
-		mustSucceed(b, push)
-		mustSucceed(b, pop)
+		mustSucceedOn(b, e, push)
+		mustSucceedOn(b, e, pop)
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			w.b = w.b[:0]
-			EvalAndResponse(push, &w)
-			EvalAndResponse(pop, &w)
+			e.EvalAndResponse(push, &w)
+			e.EvalAndResponse(pop, &w)
 		}
 	})
 }
@@ -125,36 +127,39 @@ func BenchmarkCommandPath(b *testing.B) {
 // SET also runs the evictor: the shared sample pool, the clock and a removal
 // from whichever keyspace the victim lives in. That cross-keyspace path is the
 // one an engine-owned Space must not slow down.
+//
+// Each policy runs on an engine of its own, held to the budget, the policy and
+// the server's former key cap, where a baseline from before step 2.7 resets
+// its default engine's stores and sets the same.
 func BenchmarkCommandPathUnderEviction(b *testing.B) {
 	for _, policy := range []struct {
 		name     string
 		strategy EvictionPolicy
 	}{{"random", EvictRandom}, {"lru", EvictLRU}, {"lfu", EvictLFU}} {
 		b.Run(policy.name, func(b *testing.B) {
-			ResetStores()
-			withOptions(b, func(o *Options) { o.MaxMemory, o.MaxKeys, o.Eviction = 4<<20, serverKeyCap, policy.strategy })
+			e := benchEngine{newTestEngine(b, Options{MaxMemory: 4 << 20, MaxKeys: serverKeyCap, Eviction: policy.strategy})}
 			value := string(make([]byte, 256))
 			cmds := make([]*Command, 1<<16)
 			for i := range cmds {
 				cmds[i] = &Command{Cmd: "SET", Args: []string{"bench:evict:" + strconv.Itoa(i), value}}
 			}
 			for _, cmd := range cmds {
-				mustSucceed(b, cmd)
+				mustSucceedOn(b, e, cmd)
 			}
 			var w replyWriter
-			before := data_structure.Evicted()
+			before := e.space.Evicted()
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				w.b = w.b[:0]
 				// Cycling through four times the names the budget holds keeps
 				// nearly every write a new key, and so an eviction.
-				EvalAndResponse(cmds[i%len(cmds)], &w)
+				e.EvalAndResponse(cmds[i%len(cmds)], &w)
 			}
 			b.StopTimer()
 			// A result for this benchmark is only about eviction if the timed
 			// writes evicted; one that stopped would otherwise just look fast.
-			evicted := data_structure.Evicted() - before
+			evicted := e.space.Evicted() - before
 			b.ReportMetric(float64(evicted)/float64(b.N), "evictions/op")
 			if evicted < uint64(b.N/2) {
 				b.Fatalf("%d evictions over %d writes: the timed path is not the eviction path", evicted, b.N)
@@ -165,37 +170,18 @@ func BenchmarkCommandPathUnderEviction(b *testing.B) {
 
 // serverKeyCap is the key bound the server's -maxkeys flag defaulted to until
 // 2026-10-05, when the server took Redis's unbounded default. Every build
-// before step 2.5 of the plan held the default engine to it, whatever ran on
-// it; since then an engine has no key bound unless it is given one. The
-// benchmarks still give the engine this one, so that every write counts the
-// keyspace as a baseline from before step 2.5 counts it, and the paired job
-// keeps comparing the same work. (The name stays, so that the benchmark's
-// code keeps the places it has in a baseline's build.)
+// before step 2.5 of the plan held its engine to it, whatever ran on it; since
+// then an engine has no key bound unless it is given one. The benchmarks
+// still give their engines this one, so that every write counts the keyspace
+// as a baseline from before step 2.5 counts it, and the paired job keeps
+// comparing the same work.
 const serverKeyCap = 5000000
 
-// holdServerKeyCap holds the default engine to serverKeyCap until b ends. It
-// is a function of its own rather than a closure in the benchmark, so that
-// the benchmark's own closures, which are its timed loops, keep the names and
-// the places they have in a baseline's build.
-func holdServerKeyCap(b *testing.B) { withOptions(b, func(o *Options) { o.MaxKeys = serverKeyCap }) }
-
-// mustSucceed runs cmd once and fails the benchmark if it errors, so a family
-// whose command was removed or broke cannot report the cost of an error reply.
-func mustSucceed(b *testing.B, cmd *Command) {
+// run2On runs a command on e for a benchmark's setup.
+func run2On(b *testing.B, e benchEngine, name string, args ...string) {
 	b.Helper()
 	var w replyWriter
-	if err := EvalAndResponse(cmd, &w); err != nil {
-		b.Fatalf("%s: %v", cmd.Cmd, err)
-	}
-	if len(w.b) > 0 && w.b[0] == '-' {
-		b.Fatalf("%s %v answered %q", cmd.Cmd, cmd.Args, w.b)
-	}
-}
-
-func run2(b *testing.B, name string, args ...string) {
-	b.Helper()
-	var w replyWriter
-	if err := EvalAndResponse(&Command{Cmd: name, Args: args}, &w); err != nil {
+	if err := e.EvalAndResponse(&Command{Cmd: name, Args: args}, &w); err != nil {
 		b.Fatalf("%s: %v", name, err)
 	}
 }

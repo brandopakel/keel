@@ -27,15 +27,14 @@ import (
 // No network is involved: the pull is a command like any other, run where the
 // event loop would run it.
 //
+// Each family runs on an engine of its own (replicaBenchmarkEngine).
+//
 // This file uses only what the package had before step 2.4, what
-// command_path_log_bench_test.go uses, and the settings in
-// command_path_settings_test.go, so command-path.yml can build it into a
-// baseline that does not have it yet. Sub-benchmark names are part of that
-// comparison, so a name, once added, is not renamed.
+// command_path_log_bench_test.go uses, and the engine
+// command_path_settings_test.go hands it, so command-path.yml can build it
+// into a baseline that does not have it yet. Sub-benchmark names are part of
+// that comparison, so a name, once added, is not renamed.
 func BenchmarkCommandPathWithReplica(b *testing.B) {
-	b.Cleanup(ResetStores)
-	replicaBenchmarkSettings(b)
-
 	members := make([]string, 100)
 	for i := range members {
 		members[i] = "member:" + strconv.Itoa(i)
@@ -62,81 +61,81 @@ func BenchmarkCommandPathWithReplica(b *testing.B) {
 		{"SADD", nil, ring(100, func(i int) []*Command { return one("SADD", "bench:set", members[i]) })},
 	} {
 		b.Run(family.name, func(b *testing.B) {
-			ResetStores()
-			if err := OpenAOF(filepath.Join(b.TempDir(), "bench.aof")); err != nil {
+			e := replicaBenchmarkEngine(b)
+			if err := e.OpenAOF(filepath.Join(b.TempDir(), "bench.aof")); err != nil {
 				b.Fatal(err)
 			}
-			defer CloseAOF()
-			if err := InitReplication(); err != nil {
+			defer e.CloseAOF()
+			if err := e.InitReplication(); err != nil {
 				b.Fatal(err)
 			}
 			for _, cmd := range family.setup {
-				mustSucceed(b, cmd)
+				mustSucceedOn(b, e, cmd)
 			}
 			for _, step := range family.steps {
 				for _, cmd := range step {
-					mustSucceed(b, cmd)
+					mustSucceedOn(b, e, cmd)
 				}
 			}
-			if err := FlushAOF(); err != nil {
+			if err := e.FlushAOF(); err != nil {
 				b.Fatal(err)
 			}
-			epoch, before := replicaAttach(b)
+			epoch, before := replicaAttach(b, e)
 			var w replyWriter
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				for _, cmd := range family.steps[i%len(family.steps)] {
 					w.b = w.b[:0]
-					if err := EvalAndResponse(cmd, &w); err != nil || len(w.b) == 0 || w.b[0] == '-' {
+					if err := e.EvalAndResponse(cmd, &w); err != nil || len(w.b) == 0 || w.b[0] == '-' {
 						b.Fatalf("%s %v: %v %q", cmd.Cmd, cmd.Args, err, w.b)
 					}
 				}
 				if i%logCycle == logCycle-1 {
-					if err := FlushAOF(); err != nil {
+					if err := e.FlushAOF(); err != nil {
 						b.Fatal(err)
 					}
 				}
 			}
 			b.StopTimer()
-			if err := FlushAOF(); err != nil {
+			if err := e.FlushAOF(); err != nil {
 				b.Fatal(err)
 			}
 			// Every write this measured reached the stream, in the epoch the
 			// replica attached in: no record is shorter than minRecordBytes.
 			// The history keeps the last 16 MiB, so the replica, had it kept
 			// pulling, is level again after one pull at the end.
-			after, end := replicationPosition(b)
+			after, end := replicationPosition(b, e)
 			if end-before < uint64(b.N)*minRecordBytes {
 				b.Fatalf("the stream grew %d bytes over %d iterations", end-before, b.N)
 			}
 			if after != epoch {
 				b.Fatalf("the stream changed epoch: %s, then %s", epoch, after)
 			}
-			replicaPull(b, epoch, end)
+			replicaPull(b, e, epoch, end)
 		})
 	}
 }
 
-// replicaAttach pulls the stream as a replica that is level with the primary
-// does, and returns the epoch and the offset it is at.
-func replicaAttach(b *testing.B) (string, uint64) {
+// replicaAttach pulls e's stream as a replica that is level with it does,
+// and returns the epoch and the offset it is at.
+func replicaAttach(b *testing.B, e benchEngine) (string, uint64) {
 	b.Helper()
-	epoch, end := replicationPosition(b)
-	if got, _ := replicaPull(b, epoch, end); got != epoch {
+	epoch, end := replicationPosition(b, e)
+	if got, _ := replicaPull(b, e, epoch, end); got != epoch {
 		b.Fatalf("attached to epoch %s, not %s", got, epoch)
 	}
 	return epoch, end
 }
 
-// replicaPull is one protocol 2 delta pull from offset, through the command
-// path, which must be served as a delta; it returns the stream's epoch and
-// end afterwards.
-func replicaPull(b *testing.B, epoch string, offset uint64) (string, uint64) {
+// replicaPull is one protocol 2 delta pull from e's stream at offset,
+// through the command path, which must be served as a delta; it returns the
+// stream's epoch and end afterwards.
+func replicaPull(b *testing.B, e benchEngine, epoch string, offset uint64) (string, uint64) {
 	b.Helper()
 	var w replyWriter
 	cmd := &Command{Cmd: "KEEL.REPL.PULL2", Args: []string{epoch, strconv.FormatUint(offset, 10), "", "0"}}
-	if err := EvalAndResponse(cmd, &w); err != nil {
+	if err := e.EvalAndResponse(cmd, &w); err != nil {
 		b.Fatal(err)
 	}
 	reply, err := Decode(w.b)
@@ -148,14 +147,14 @@ func replicaPull(b *testing.B, epoch string, offset uint64) (string, uint64) {
 	if err != nil || !ok || frame.Full || frame.Epoch != epoch {
 		b.Fatalf("KEEL.REPL.PULL2 %s %d: %v %q", epoch, offset, err, w.b)
 	}
-	return replicationPosition(b)
+	return replicationPosition(b, e)
 }
 
-// replicationPosition reads the primary's epoch and stream end from INFO.
-func replicationPosition(b *testing.B) (string, uint64) {
+// replicationPosition reads e's epoch and stream end from INFO.
+func replicationPosition(b *testing.B, e benchEngine) (string, uint64) {
 	b.Helper()
 	var w replyWriter
-	if err := EvalAndResponse(&Command{Cmd: "INFO", Args: []string{"replication"}}, &w); err != nil {
+	if err := e.EvalAndResponse(&Command{Cmd: "INFO", Args: []string{"replication"}}, &w); err != nil {
 		b.Fatal(err)
 	}
 	var epoch string
