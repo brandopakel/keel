@@ -75,7 +75,7 @@ const rewriteChunk = 2048
 //
 // Neither the server nor an embedded engine bounds its key count by default
 // (MaxKeys zero, as in Redis), so a keyspace may outgrow this; the server warns
-// at startup when it logs with neither -maxkeys nor -maxmemory set. That is a
+// at startup when it logs without a -maxkeys at or below this. That is a
 // documented limit of persistence rather than of the keyspace. Closing it
 // needs a faster rewrite or a longer budget rather than a larger number here,
 // and the number should not be raised past what has been measured.

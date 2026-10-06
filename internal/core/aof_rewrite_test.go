@@ -754,7 +754,7 @@ func TestRewriteRetainsBoundedNameBatches(t *testing.T) {
 
 // Refusing above the ceiling is a clean error rather than a started rewrite.
 // The server has no key bound by default, so it warns at startup when it logs
-// an unbounded keyspace; cmd/keel tests that warning.
+// without a -maxkeys at or below the ceiling; cmd/keel tests that warning.
 func TestRewriteCeilingRefusesCleanly(t *testing.T) {
 	ResetStores()
 	assert.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "ceiling.aof")))

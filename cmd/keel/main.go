@@ -183,15 +183,23 @@ func parseFlags() {
 	}
 }
 
-// unboundedLogWarning is what a server logging its writes says at startup when
-// nothing bounds its keyspace. The server has no key bound unless -maxkeys or
-// -maxmemory sets one, as in Redis (docs/embedding-plan.md, "Decisions"); but
-// unlike Redis's, a log rewrite here refuses a keyspace over
-// core.RewriteKeyCeiling keys, so past that the log cannot be compacted.
-func unboundedLogWarning() string {
-	return fmt.Sprintf("warning: -appendonly with neither -maxkeys nor -maxmemory set: the keyspace is unbounded, "+
-		"and a log rewrite refuses more than %d keys, so past that the log grows without being compacted",
+// rewriteCeilingWarning is what a server logging its writes says at startup
+// when nothing holds its key count at or below core.RewriteKeyCeiling, the most
+// keys a log rewrite takes. The server has no key bound unless -maxkeys sets
+// one, as in Redis (docs/embedding-plan.md, "Decisions"); but unlike Redis's,
+// a rewrite here refuses a larger keyspace, so past the ceiling the log cannot
+// be compacted. -maxmemory bounds bytes rather than keys, so it does not hold
+// the count down: small keys pass the ceiling well inside a modest budget.
+func rewriteCeilingWarning() string {
+	return fmt.Sprintf("warning: -appendonly without -maxkeys at or below %d: a log rewrite refuses more keys than that, "+
+		"so a larger keyspace's log grows without being compacted (-maxmemory bounds bytes, not keys)",
 		core.RewriteKeyCeiling)
+}
+
+// keysMayPassRewriteCeiling reports whether a -maxkeys of keys lets the
+// keyspace outgrow what a log rewrite takes: no bound, or one above it.
+func keysMayPassRewriteCeiling(keys int) bool {
+	return keys == 0 || keys > core.RewriteKeyCeiling
 }
 
 // engineOptions are the engine settings the flags describe. A flag's zero
@@ -358,8 +366,8 @@ func runServer() error {
 	if err := core.Configure(engineOptions()); err != nil {
 		return err
 	}
-	if appendOnly && maxKeys == 0 && maxMemoryBytes == 0 {
-		log.Println(unboundedLogWarning())
+	if appendOnly && keysMayPassRewriteCeiling(maxKeys) {
+		log.Println(rewriteCeilingWarning())
 	}
 	if err := server.StartAOF(); err != nil {
 		return fmt.Errorf("appendonly: %w", err)

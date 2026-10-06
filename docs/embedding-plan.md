@@ -942,8 +942,9 @@ for anything left uncertain: do what Redis does.
   one. On October 5, 2026 the owner chose Redis's default for the server too:
   `-maxkeys` now defaults to 0. The rewrite's four-million-key ceiling and the
   snapshot's one-million-key refusal stay documented limits of persistence, not
-  of the keyspace, and a server started with `-appendonly` and neither
-  `-maxkeys` nor `-maxmemory` logs a startup warning naming the rewrite ceiling.
+  of the keyspace, and a server started with `-appendonly` and no `-maxkeys`
+  at or below the rewrite ceiling logs a startup warning naming it. (`-maxmemory`
+  bounds bytes rather than keys, so it does not hold the count down.)
 - **`Atomic` semantics:** as Redis EXEC. Queued work is isolated and logged as
   one frame; a command that fails inside it does not undo the others, and there
   is no rollback.

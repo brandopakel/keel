@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -117,26 +118,30 @@ func TestServerHasNoKeyBoundByDefault(t *testing.T) {
 	}
 }
 
-// TestServerWarnsOfAnUnboundedLoggedKeyspace: a log rewrite refuses a keyspace
-// over core.RewriteKeyCeiling keys, so a server that logs its writes with
-// nothing bounding its keyspace says so at startup. A bound of either kind,
-// or no log to compact, means no warning.
-func TestServerWarnsOfAnUnboundedLoggedKeyspace(t *testing.T) {
+// TestServerWarnsWhenItsLogMayOutgrowARewrite: a log rewrite refuses a keyspace
+// over core.RewriteKeyCeiling keys, so a server that logs its writes says so at
+// startup unless -maxkeys holds the count at or below the ceiling. -maxmemory
+// bounds bytes rather than keys, so it does not; and with no log there is
+// nothing to compact.
+func TestServerWarnsWhenItsLogMayOutgrowARewrite(t *testing.T) {
+	ceiling := strconv.Itoa(core.RewriteKeyCeiling)
 	for _, c := range []struct {
 		name string
 		args []string
 		warn bool
 	}{
 		{"log and no bound", []string{"-appendonly"}, true},
-		{"log and -maxkeys", []string{"-appendonly", "-maxkeys", "1000"}, false},
-		{"log and -maxmemory", []string{"-appendonly", "-maxmemory", "64mb"}, false},
+		{"log and -maxkeys below the ceiling", []string{"-appendonly", "-maxkeys", "1000"}, false},
+		{"log and -maxkeys at the ceiling", []string{"-appendonly", "-maxkeys", ceiling}, false},
+		{"log and -maxkeys above the ceiling", []string{"-appendonly", "-maxkeys", "5000000"}, true},
+		{"log and only -maxmemory", []string{"-appendonly", "-maxmemory", "64mb"}, true},
 		{"no log", nil, false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			args := append([]string{"-appendfilename", filepath.Join(t.TempDir(), "unbounded.aof")}, c.args...)
 			s := startTestServer(t, args...)
 			s.stop(t)
-			if got := strings.Contains(s.log.String(), unboundedLogWarning()); got != c.warn {
+			if got := strings.Contains(s.log.String(), rewriteCeilingWarning()); got != c.warn {
 				t.Fatalf("warning printed: %v, want %v; server log:\n%s", got, c.warn, s.log.String())
 			}
 		})
