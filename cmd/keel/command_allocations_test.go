@@ -10,6 +10,9 @@ import (
 )
 
 func TestCommandReservationsRecoverAfterSlowReaders(t *testing.T) {
+	// Not parallel: it fills the kernel's socket buffers, which every process
+	// on the machine shares, and requires other clients to be answered while it
+	// does, within deadlines that a test filling them beside it would stretch.
 	// The 24 slow readers below pin about 14 MB of kernel send buffers; have
 	// the kernel find that memory before anything is timed.
 	growLoopbackSendBuffers(t, 24)

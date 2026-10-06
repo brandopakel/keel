@@ -64,6 +64,7 @@ func helloMap(id string) string {
 }
 
 func TestHello3SwitchesTheConnection(t *testing.T) {
+	t.Parallel()
 	s := startTestServer(t)
 	c, r := connectTest(t, s)
 	other, otherReader := connectTest(t, s)
@@ -153,6 +154,7 @@ func TestHello3SwitchesTheConnection(t *testing.T) {
 // TestHello3WithAUTH is the handshake ioredis 6 and redis-py 8 send to a
 // server with a password: protocol and credentials in one HELLO.
 func TestHello3WithAUTH(t *testing.T) {
+	t.Parallel()
 	s := startTestServer(t, "-requirepass-env", "KEEL_TEST_PASSWORD")
 	c, r := connectTest(t, s)
 
@@ -196,6 +198,7 @@ func TestHello3WithAUTH(t *testing.T) {
 // in one write. A command is framed in the protocol its connection has when it
 // runs, not when it was read, so the HELLOs take effect mid-batch.
 func TestRESP3Pipeline(t *testing.T) {
+	t.Parallel()
 	s := startTestServer(t)
 	c, r := connectTest(t, s)
 	id := call(t, c, r, "CLIENT", "ID")
@@ -242,6 +245,7 @@ func TestRESP3Pipeline(t *testing.T) {
 // answered exactly as before RESP3 existed here, and so is one that went to
 // RESP3 and came back with HELLO 2.
 func TestRESP2WireBytesUnchanged(t *testing.T) {
+	t.Parallel()
 	s := startTestServer(t)
 	plain, plainReader := connectTest(t, s)
 	returned, returnedReader := connectTest(t, s)
@@ -296,6 +300,7 @@ func helloMap2(id string) string {
 // GET missing, HGETALL missing, EXEC is [the RESP3 HELLO map, _, %0], and the
 // connection stays on RESP3 afterwards.
 func TestRESP3Transactions(t *testing.T) {
+	t.Parallel()
 	s := startTestServer(t)
 	c, r := connectTest(t, s)
 	id := call(t, c, r, "CLIENT", "ID")

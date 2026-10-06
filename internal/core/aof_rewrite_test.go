@@ -15,6 +15,7 @@ import (
 
 	"github.com/brandopakel/keel/internal/constant"
 	"github.com/brandopakel/keel/internal/data_structure"
+	"github.com/brandopakel/keel/internal/testlock"
 )
 
 // fillOneOfEverythingOn writes a key of every type on e, so a rewrite has to
@@ -338,7 +339,6 @@ func TestRewriteWithoutAppendonlyIsAnError(t *testing.T) {
 func TestRewriteStallProfile(t *testing.T) {
 	// Not parallel: it profiles a rewrite's wall-clock stalls, which tests
 	// running beside it would inflate.
-	e := newTestEngine(t, Options{})
 	if testing.Short() {
 		t.Skip("builds a million keys")
 	}
@@ -347,6 +347,11 @@ func TestRewriteStallProfile(t *testing.T) {
 		// covers correctness under race instrumentation.
 		t.Skip("measures wall-clock latency, which -race inflates about fourfold")
 	}
+	// About 106 MiB of logs: held apart from cmd/keel's largest writer, and
+	// taken before the engine's directory, so that it is released only once
+	// those files are gone.
+	testlock.HoldDiskHeavy(t)
+	e := newTestEngine(t, Options{})
 	path := filepath.Join(t.TempDir(), "profile.aof")
 	require.NoError(t, e.OpenAOF(path))
 	// A diagnostic deadline must not leave a worker or old keyspace traversal

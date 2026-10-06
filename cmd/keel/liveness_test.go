@@ -26,6 +26,7 @@ import (
 // server log names the connection and its state (see sweepStalledClients).
 // That is the check the 48-hour stall did not have.
 func TestConcurrentAppendAnswersEveryRequest(t *testing.T) {
+	t.Parallel()
 	s := startTestServer(t, "-appendonly", "-aof-async-append", "-aof-concurrent-append",
 		"-appendfsync", "always", "-appendfilename", filepath.Join(t.TempDir(), "log"))
 	const connections, rounds = 6, 120

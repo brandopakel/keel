@@ -4,8 +4,9 @@ Status: accepted plan, October 2, 2026. Phases 0 and 1 are done (#88, #90), and 
 the stores, step 2.2, the command scope, step 2.3, persistence (see "Step
 2.1: the stores", "Step 2.2: the command scope" and "Step 2.3: persistence"
 below), and step 2.4, replication and failover (see "Step 2.4:
-replication"), and step 2.5, options in place of `internal/config` (see "Step
-2.5: options").
+replication"), step 2.5, options in place of `internal/config` (see "Step
+2.5: options"), and step 2.6, the suite run in parallel on engines of its own
+(see "Step 2.6: parallel tests").
 
 The owner asked for Keel to be usable as a Go library, not only as a server:
 several independent instances per process, safe for concurrent use, a typed
@@ -914,6 +915,190 @@ plan above leaves a choice open, step 2.5 settles it this way:
   reverted. Rows of 2 to 7% follow where the code lands, not what it does.
   Part 2 ran at 0.990 and 0.992 against develop on EPYC 7763 and 0.990 on
   Xeon 8573C, with no row over 1.04, and at 0.902 against `65ebdbc`.
+
+### Step 2.6: parallel tests
+
+Step 2.6 runs the suite in parallel. Every test that can run on an engine of
+its own now does: core's tests on engines of their own, and cmd/keel's on
+server processes of their own. What stays serial says why in a comment. The
+race job, and a new job that repeats the converted packages in a shuffled
+order under the race detector, then show that the engines share nothing a
+test can see. No product code changes. It took four PRs:
+
+1. **The command families** (#122): the helpers, the census and the shuffled
+   job, and the order dependences that job found among tests still on the
+   default engine.
+2. **Persistence** (#123): the log, its admission and transcript, the
+   rewrite and its failures, the persistence goldens and the allocation
+   admission tests.
+3. **Replication, failover, transactions and expiry** (#124), and the
+   replication goldens.
+4. **cmd/keel** (#125), and this section.
+
+In core, 433 of 482 tests run in parallel, up from 5. In cmd/keel, 37 of 49
+do. Measured by running each package alone, alternating the builds before
+and after on the same runner (run 37519886774, 0ab9855 against the step's last
+commit), the step's wall time per package was:
+
+| Package | Linux | Linux, `-race` | macOS | macOS, `-race` |
+| --- | --- | --- | --- | --- |
+| internal/core | 12.3 → 6.5 s | 32.4 → 16.5 s | 16.4 → 11.5 s | 48.9 → 25.5 s |
+| cmd/keel | 15.3 → 5.9 s | 153.8 → 55.9 s | 18.6 → 10.0 s | 173.3 → 70.4 s |
+| internal/server | 0.1 → 0.1 s | 1.3 → 1.3 s | 0.2 → 0.2 s | 1.5 → 1.7 s |
+
+These are medians of three rounds, or the mean of two under `-race`. In
+the race job, where packages run side by side, cmd/keel was its longest
+package.
+
+Where the plan above leaves a choice open, step 2.6 settles it this way:
+
+- **An engine per test, built by the test.** `newTestEngine(t, Options)`
+  builds an engine in a space of its own, held to the options given, and
+  closes it when the test ends: its log, workers, rewrite and replication
+  snapshot. It takes the test's temporary directory before registering that
+  cleanup, so that a directory holding the engine's files is removed only
+  once the engine has let go of them. Options a test changes mid-way it
+  sets with `reconfigure`.
+- **Helpers take the engine.** `runOn`, `rawReplyOn`, `withAOFOn`,
+  `restartOn`, `setupReplicationV2On` and the rest act on the engine they
+  are given. A helper that may be handed the default engine puts its
+  options back (`withOptionsOn`). Each default-engine form went once
+  nothing called it.
+- **Serial tests run first.** Go runs a package's serial tests before it
+  releases its parallel ones, and never beside them. A test that needs the
+  process to itself therefore stays serial, and says why in a comment:
+  - those that read heap statistics or call `runtime.GC` (25 in core);
+  - those that capture the process's log output (nine rewrite-failure
+    tests in core, one shutdown test in cmd/keel);
+  - those that assert on wall-clock time: two reliability tests that
+    require a call to return within 500 ms, and the rewrite stall profile.
+    A watchdog deadline on work that takes microseconds, and a sleep past a
+    TTL, are not timing tests: a busy machine only lengthens a lower bound;
+  - those that write the package's state: the test that replaces
+    `ClientBuffers`, and the one that adds a command to `commandTable`;
+  - the one that reads every goroutine's stack;
+  - and in cmd/keel, the five that fill the kernel's socket buffers while
+    other clients must be answered within deadlines, the five flag tests,
+    which parse the process's command line into the default engine's
+    options, and `TestServerProcess`, the entry point of a test server's
+    own process.
+- **The census.** `TestParallelTestsLeaveTheDefaultEngineAlone` reads core's
+  source and fails if a test that calls `t.Parallel` reaches what the
+  process shares:
+  - the default engine, by name, through a package function that acts on
+    it, through `data_structure`'s functions over `DefaultSpace`, or
+    through a test helper that does any of these, followed transitively;
+  - a write to a package variable, by name or through an index, a field or
+    a pointer, or `delete` or `clear` on one;
+  - a process-wide call: log output, heap statistics, `runtime.GC`,
+    `testing.AllocsPerRun`, `runtime.Stack`, the environment, the working
+    directory, rlimits and signals.
+
+  It also fails if a method of the package reaches the default engine
+  through a package function. It reads syntax, not types: package-level
+  names through the parser's scopes, and test types' methods by name where
+  they are called. Breaking it on purpose fails it every way it was
+  broken. While the step was written it caught the replication goldens'
+  pulls sending the default engine's term, and the command-table test
+  marked parallel.
+- **Paused tests are goroutines.** A parallel test waits as a parked
+  goroutine until the serial ones finish, so a serial test now runs beside
+  some 250 of them. One test looked for its own drain in a dump of every
+  goroutine's stack, read into a fixed 128 KiB buffer. On CI, whose
+  toolchain path is longer, the paused tests filled the buffer and cut the
+  frame off. It now reads the whole dump.
+- **The default engine is left as found.** The order dependences the
+  shuffled job found were latent on develop. Tests still on the default
+  engine left state that `ResetStores` does not clear: a failed rewrite's
+  outcome, a ready replica, a stream and its dirty keys. The isolation
+  tests then asserted that state's absolute values. Develop's file order
+  had always run them first. Failing shuffled orders, bisected, named three
+  leaking tests; a sweep found nine more.
+  - Each leaking test now puts back what it changed: `CloseAOF` cancels a
+    rewrite without recording a failure, `keepRewriteHistory` puts back
+    what outlives a rewrite, and replication is started afresh once a
+    test's options are back.
+  - The isolation tests compare the default engine with what they found.
+  - A sweep ran every serial test alone, followed by a probe of everything
+    a test could leave on the default engine, and found nothing left.
+- **Shuffled, repeated and hunted.** The race detector job's sibling, `race
+  detector, shuffled and repeated`, runs core and cmd/keel three times in
+  a shuffled order under `-race`. A failure is named with its package, its
+  seed and the command that repeats it. Go shuffles the whole test list
+  before `-run` filters it, so a seed keeps its relative order over any
+  subset, which is how each failing order was bisected to the test that
+  caused it. Throwaway seed hunts, never merged, gave each part:
+  - in core, eight legs of ten shuffled runs and two legs of three
+    shuffled `-race -count=3` runs, every run passing on each part's final
+    code;
+  - in cmd/keel, on Linux and on macOS, two legs of six shuffled runs and
+    two of two shuffled `-race` runs: 32 runs, all passing;
+  - the two failures, the goroutine dump twice, were fixed before #122
+    merged.
+- **cmd/keel's servers are processes of their own.** Each test server gets
+  a port from below the range the kernel hands out by itself, tried once
+  per process and kept only if a listener can bind it (`freePort`). A port
+  the kernel picks for a listener on `:0` and closes for the server to bind
+  is free only for that moment. The kernel handed such ports to other
+  tests' probes while race-built servers were still starting, 7 to 14
+  times in each three-pass race run. A readiness check then reached the
+  probe instead of the server, and two tests failed before this changed:
+  one dial was refused and one connection was reset. A server's
+  file-size limit is in its own environment (`startLimitedTestServer`)
+  rather than the test process's, which `t.Setenv` would change and Go
+  refuses in a parallel test. Subtests that each start a server run in
+  parallel, but for one test whose subtests each write and replay about
+  65 MiB of logs. Side by side they held 380 MiB of files at once, more
+  than the local validation wrapper's 512 MiB budget allows beside the Go
+  build cache. One at a time, the package's peak is 372 MiB.
+- **The largest writers are kept apart across packages.** `go test ./...`
+  runs packages side by side. With core's tests faster, its serial
+  `TestRewriteStallProfile` (106 MiB of logs) came to overlap one of those
+  subtests (65 MiB): CI's file footprint peaked at 162 MiB, against 108 on
+  develop and a warning line of 160 MiB. The worst case was the same before
+  the step; develop's timing had kept them apart. The two now take one lock,
+  `internal/testlock`, an flock on a file in the shared temporary directory,
+  before their directories, so that one is released only once its files are
+  gone.
+  - It is imported only by tests, so the server's binary does not contain
+    it.
+  - A waiter gives up after three minutes, naming the lock and why it
+    exists.
+  - The kernel releases a crashed holder's lock.
+  - Where there is no flock, it does nothing.
+- **internal/server stays serial.** Its tests drive the server's package
+  state: the client registry, the queued reads, the waker and shutdown,
+  which become a `server.Server` in phase 6. They also drive the default
+  engine the server runs on, until step 2.7. Nearly every test touches one
+  or the other. The whole suite takes under two seconds under `-race`, so
+  running its few pure tests in parallel would save nothing measurable,
+  and would need a census of its own.
+- **No benchmarks owed.** No product code changed. The server built with
+  `go build -trimpath -buildvcs=false ./cmd/keel` is the same bytes at
+  0ab9855 and after each of the step's PRs. Each PR ran the paired command-path job against develop as a
+  sanity check. Each came out at a median of 0.999 to 1.007, with
+  allocations unchanged on every row. Single rows moved by up to 11% on one
+  host: ZADD at 1.084 and 1.109 on EPYC 9V45, and at 1.042 when repeated on
+  a Xeon. The benchmarks are in the test binary, which the changed test
+  files rearrange.
+- **What step 2.7 inherits.** What still runs on the default engine is what
+  tests it, or what cannot change yet:
+  - the isolation tests `TestEnginesShareNoKeys`, `...NoCommandScope`,
+    `...NoLog`, `...NoRewrite`, `...NoReplica`, `...NoReplication`,
+    `...NoFailover` and `...NoOptions`, and
+    `TestConfigureHoldsTheDefaultEngine`, with the helpers they use: `run`,
+    `captureStreamV2`, and the default forms of `setupReplicationV2`,
+    `pullV2` and `snapshotV2`;
+  - the benchmarks `BenchmarkCommandPath`,
+    `BenchmarkCommandPathUnderEviction`, `BenchmarkCommandPathWithLog` and
+    `BenchmarkCommandPathWithReplica`, two of whose files `command-path.yml`
+    copies into older baselines, so they keep the helpers those baselines
+    have, `withOptions` among them; and `BenchmarkRewrite` and
+    `BenchmarkSketchRewriteStart`;
+  - the fuzz target `FuzzRestoreValidation`;
+  - internal/server and cmd/keel, which drive the default engine through the
+    package's functions (`EvalAndResponse`, `ExpireCycle`, `OpenAOF` and the
+    rest), and the flag tests in cmd/keel.
 
 ## Risks, in order
 

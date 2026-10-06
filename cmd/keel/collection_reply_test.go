@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/brandopakel/keel/internal/testlock"
 )
 
 // TestRejectedCollectionPopsPreservePipelineAndRestart sends counted pops whose
@@ -25,6 +27,10 @@ import (
 // a rewrite finishing after the pops would replace the history the restarts
 // are meant to replay, hiding a refusal that had been logged.
 func TestRejectedCollectionPopsPreservePipelineAndRestart(t *testing.T) {
+	// Parallel with the other tests, but its subtests run one at a time: each
+	// writes and replays a log of large collections, about 65 MiB of files,
+	// and side by side they would hold several of those at once.
+	t.Parallel()
 	const members = 65
 	count := fmt.Sprint(members)
 	value := strings.Repeat("x", 1<<20)
@@ -78,6 +84,10 @@ func TestRejectedCollectionPopsPreservePipelineAndRestart(t *testing.T) {
 			t.Run(mode+"/"+col.kind, func(t *testing.T) {
 				var flags []string
 				if mode != "off" {
+					// About 65 MiB of logs: held apart from core's largest
+					// writer, and taken before the log's directory, so that
+					// it is released only once those files are gone.
+					testlock.HoldDiskHeavy(t)
 					flags = []string{"-appendonly", "-appendfsync", "always", "-aof-async-append",
 						"-auto-aof-rewrite-percentage", "0", "-appendfilename", filepath.Join(t.TempDir(), "store.aof")}
 					if mode == "concurrent" {
