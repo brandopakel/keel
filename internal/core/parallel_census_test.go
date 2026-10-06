@@ -13,13 +13,14 @@ import (
 )
 
 // processWide are the calls that change, or measure, what every test in the
-// process shares: the log's output, the heap and the collector, the
-// environment, the working directory, resource limits and signals. A test
+// process shares: the log's output, the heap and the collector, every
+// goroutine's stack, the environment, the working directory, resource limits
+// and signals. A test
 // that makes one stays serial: Go runs the serial tests of a package before it
 // starts the parallel ones, and never beside them.
 var processWide = map[string]map[string]bool{
 	"log":     {"SetOutput": true, "SetFlags": true, "SetPrefix": true},
-	"runtime": {"ReadMemStats": true, "GC": true, "GOMAXPROCS": true},
+	"runtime": {"ReadMemStats": true, "GC": true, "GOMAXPROCS": true, "Stack": true, "NumGoroutine": true},
 	"testing": {"AllocsPerRun": true, "Benchmark": true},
 	"debug":   {"SetGCPercent": true, "SetMemoryLimit": true, "FreeOSMemory": true, "SetMaxThreads": true},
 	"os":      {"Setenv": true, "Unsetenv": true, "Chdir": true},

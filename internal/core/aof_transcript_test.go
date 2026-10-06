@@ -300,6 +300,13 @@ func TestAOFTranscriptJoinsOlderAppendBeforeDirectDrain(t *testing.T) {
 		stack := make([]byte, 128<<10)
 		for {
 			n := runtime.Stack(stack, true)
+			if n == len(stack) {
+				// The dump is every goroutine's, the parallel tests waiting
+				// for the serial ones to finish among them, and a full buffer
+				// may have cut it off before the frame looked for.
+				stack = make([]byte, 2*len(stack))
+				continue
+			}
 			for _, frame := range bytes.Split(stack[:n], []byte("\n\n")) {
 				if bytes.Contains(frame, []byte(".pollAppend(")) && bytes.Contains(frame, []byte(".writeAOFBuffer(")) {
 					once.Do(func() { close(release) })
