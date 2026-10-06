@@ -792,10 +792,12 @@ plan above leaves a choice open, step 2.5 settles it this way:
   `DefaultLimits()`, which is what `Options{}` resolves to.
 - **No key bound unless one is set.** `MaxKeys` zero is no bound, as in Redis,
   and the space tests the bound before it counts, so an engine without one no
-  longer counts its keys on every write. The server's cap is `-maxkeys`'s
-  default, `defaultMaxKeys` in `cmd/keel`, and nowhere else. The check that
-  the rewrite's key ceiling stays in a sane relation to it moved beside it,
-  and the ceiling is exported for that, as `core.RewriteKeyCeiling`.
+  longer counts its keys on every write. The server's cap was `-maxkeys`'s
+  default, `defaultMaxKeys` in `cmd/keel`, and nowhere else, with a check
+  beside it that the rewrite's key ceiling stayed in a sane relation to it;
+  the ceiling is exported, as `core.RewriteKeyCeiling`. Since October 5,
+  2026 the server has no key bound by default either (see "Decisions"), and
+  that check became a startup warning naming the ceiling.
 - **LRU is the zero policy.** `config.EvictStrategy` defaulted to random,
   which only tests ever ran under, since the flag defaults to lru. The
   policies are a typed `EvictionPolicy` in `data_structure` (`EvictLRU`,
@@ -935,11 +937,14 @@ for anything left uncertain: do what Redis does.
   defaulting to random is the server-side inconsistency to remove in step 2.5
   (removed: LRU is the zero `core.Options.Eviction`).
 - **Key limit default:** none, as in Redis, where only `maxmemory` bounds the
-  keyspace. `MaxKeys` defaults to zero, meaning unlimited. The server's current
-  5,000,000 cap becomes an explicit `-maxkeys`-style setting rather than a
-  hidden default (done in step 2.5: it is `-maxkeys`'s default in `cmd/keel`). The rewrite's four-million-key ceiling and the snapshot's
-  one-million-key refusal stay documented limits of persistence, not of the
-  keyspace.
+  keyspace. `MaxKeys` defaults to zero, meaning unlimited. Step 2.5 first made
+  the server's 5,000,000 cap an explicit `-maxkeys` default rather than a hidden
+  one. On October 5, 2026 the owner chose Redis's default for the server too:
+  `-maxkeys` now defaults to 0. The rewrite's four-million-key ceiling and the
+  snapshot's one-million-key refusal stay documented limits of persistence, not
+  of the keyspace, and a server started with `-appendonly` and no `-maxkeys`
+  at or below the rewrite ceiling logs a startup warning naming it. (`-maxmemory`
+  bounds bytes rather than keys, so it does not hold the count down.)
 - **`Atomic` semantics:** as Redis EXEC. Queued work is isolated and logged as
   one frame; a command that fails inside it does not undo the others, and there
   is no rollback.
