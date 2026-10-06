@@ -236,9 +236,18 @@ jobs:
         run: |
           set -o pipefail
           if ! go test -race -count=3 -shuffle=on ./internal/core 2>&1 | tee "$RUNNER_TEMP/shuffled.txt"; then
-            awk '/^-test.shuffle /{seed=$2} /^FAIL[ \t]+github.com\//{print $2, seed}' "$RUNNER_TEMP/shuffled.txt" |
-              while read -r pkg seed; do
+            # A package's seed line comes before its FAIL line; a package that
+            # failed to build, or to start, prints a FAIL line and no seed.
+            awk '/^-test.shuffle /{seed=$2} /^FAIL[ \t]+github.com\//{print $2, seed; seed=""}' "$RUNNER_TEMP/shuffled.txt" > "$RUNNER_TEMP/failed.txt"
+            if [ ! -s "$RUNNER_TEMP/failed.txt" ]; then
+              echo "::error title=Shuffled run failed::go test failed without naming a package; see the log above."
+            fi
+            while read -r pkg seed; do
+              if [ -n "$seed" ]; then
                 echo "::error title=Shuffled run failed::$pkg failed in the order of seed $seed; repeat it with: go test -race -count=3 -shuffle=$seed ./${pkg#github.com/brandopakel/keel/}"
-              done
+              else
+                echo "::error title=Shuffled run failed::$pkg failed before it ran its tests in a shuffled order; see the log above."
+              fi
+            done < "$RUNNER_TEMP/failed.txt"
             exit 1
           fi
