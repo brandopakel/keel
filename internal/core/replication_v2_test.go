@@ -16,12 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupReplicationV2(t *testing.T) {
-	t.Helper()
-	setupReplicationV2On(t, defaultEngine)
-}
-
-// setupReplicationV2On is setupReplicationV2 on e.
+// setupReplicationV2On makes e a protocol 2 primary with an empty keyspace and
+// a log of its own, under fsync no, and puts back what it found when t ends.
 func setupReplicationV2On(t *testing.T, e *Engine) {
 	t.Helper()
 	// Registered first, so it runs last, once the options are back: the
@@ -35,9 +31,8 @@ func setupReplicationV2On(t *testing.T, e *Engine) {
 	oldExpiry, oldEviction := e.space.SuspendExpiry, e.space.SuspendEviction
 	t.Cleanup(func() {
 		// Closing cancels a rewrite still running, as a server's shutdown
-		// does, without counting it as a failed one. A failure would outlive
-		// the keyspace and the test, and the default engine would report it
-		// to every test after this one.
+		// does, without counting it as a failed one, which would outlive the
+		// keyspace.
 		e.CloseAOF()
 		e.resetReplicationV2()
 		e.resetReplica()
@@ -48,12 +43,8 @@ func setupReplicationV2On(t *testing.T, e *Engine) {
 	require.NoError(t, e.InitReplication())
 }
 
-func pullV2(t *testing.T, epoch string, offset uint64, snapshot string, part uint64) ReplicationFrame {
-	t.Helper()
-	return pullV2On(t, defaultEngine, epoch, offset, snapshot, part)
-}
-
-// pullV2On is pullV2 on e.
+// pullV2On is one protocol 2 pull from e, as a replica's transport sends it,
+// and the frame it answers, checked.
 func pullV2On(t *testing.T, e *Engine, epoch string, offset uint64, snapshot string, part uint64) ReplicationFrame {
 	t.Helper()
 	// A pull carries the caller's term. These tests are a single node acting as
@@ -69,12 +60,8 @@ func pullV2On(t *testing.T, e *Engine, epoch string, offset uint64, snapshot str
 	return frame
 }
 
-func snapshotV2(t *testing.T) []ReplicationFrame {
-	t.Helper()
-	return snapshotV2On(t, defaultEngine)
-}
-
-// snapshotV2On is snapshotV2 on e.
+// snapshotV2On pulls a whole protocol 2 snapshot from e, driving the rewrite
+// that takes it as e's loop would, and returns its frames.
 func snapshotV2On(t *testing.T, e *Engine) []ReplicationFrame {
 	t.Helper()
 	first := pullV2On(t, e, "", 0, "", 0)

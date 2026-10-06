@@ -24,23 +24,6 @@ func (w *replyWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// run executes a command the way a connection would.
-//
-// Calling cmdSET and friends directly skips EvalAndResponse, and that is where
-// the log is written from - so a test that called them directly would drive the
-// keyspace correctly and record none of it, then pass by observing that the
-// keyspace was correct. Every command here goes the long way round for that
-// reason.
-func run(t *testing.T, name string, args ...string) interface{} {
-	t.Helper()
-	var w replyWriter
-	if err := EvalAndResponse(&Command{Cmd: name, Args: args}, &w); err != nil {
-		return err.Error()
-	}
-	res, _ := Decode(w.b)
-	return res
-}
-
 // withAOFOn runs fn against a fresh keyspace of e with the log on, then closes
 // it and returns the path, so a test can restart from it.
 func withAOFOn(t *testing.T, e *Engine, fn func()) string {

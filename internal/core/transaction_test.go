@@ -194,9 +194,6 @@ func TestTransactionSchedulesARewriteAsRedisDoes(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "rewrite.aof")
 	e.resetStores()
 	require.NoError(t, e.OpenAOF(path))
-	// Closing cancels a rewrite still running without counting it as a
-	// failed one, which would outlive this test on the default engine.
-	t.Cleanup(func() { e.CloseAOF() })
 	s := &session{t: t, e: e}
 	runOn(t, e, "SET", "before", "0")
 	s.send("MULTI")
@@ -791,9 +788,6 @@ func TestReplicationV2RefusesMalformedTransactions(t *testing.T) {
 func TestReplicationV1SealsATransactionTogether(t *testing.T) {
 	t.Parallel()
 	e := newTestEngine(t, Options{})
-	// Runs last, once the options are back: the default engine ends feeding
-	// no stream, with nothing of this one left.
-	t.Cleanup(func() { require.NoError(t, e.InitReplication()) })
 	t.Cleanup(func() { e.CloseAOF() })
 	e.resetStores()
 	reconfigure(t, e, func(o *Options) { o.ReplicationFeed, o.ReplicationProtocol = true, 1 })

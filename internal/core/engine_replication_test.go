@@ -30,31 +30,31 @@ type replicationStream struct {
 	state  string
 }
 
-// captureStreamV2 writes a primary's protocol 2 stream on the default engine,
-// in an epoch of its own: keys named for the primary, a snapshot, then a
-// hash, a filter's image, and a transaction larger than one frame, which a
-// replica holds across frames until its EXEC arrives.
+// captureStreamV2 writes a protocol 2 stream on a primary of its own, in an
+// epoch of its own: keys named for the primary, a snapshot, then a hash, a
+// filter's image, and a transaction larger than one frame, which a replica
+// holds across frames until its EXEC arrives.
 func captureStreamV2(t *testing.T, name string) replicationStream {
 	t.Helper()
 	never := goldenWindow{start: -1, end: -1 - int64(24*time.Hour/time.Millisecond)}
-	ResetStores()
-	require.NoError(t, InitReplication())
+	p := newTestEngine(t, Options{})
+	setupReplicationV2On(t, p)
 	for i := range 20 {
-		run(t, "SET", name+":"+strconv.Itoa(i), name)
+		runOn(t, p, "SET", name+":"+strconv.Itoa(i), name)
 	}
-	frames := snapshotV2(t)
+	frames := snapshotV2On(t, p)
 	s := replicationStream{name: name, epoch: frames[0].Epoch}
-	run(t, "HSET", name+":h", "f", name)
-	run(t, "BF.ADD", name+":bf", name)
-	session := &session{t: t, e: defaultEngine}
+	runOn(t, p, "HSET", name+":h", "f", name)
+	runOn(t, p, "BF.ADD", name+":bf", name)
+	session := &session{t: t, e: p}
 	session.send("MULTI")
 	session.send("SET", name+":first", strings.Repeat(name, 300<<10))
 	session.send("INCR", name+":n")
 	session.send("SET", name+":last", name)
 	session.send("EXEC")
-	run(t, "SET", name+":after", name)
+	runOn(t, p, "SET", name+":after", name)
 	for offset := frames[0].To; ; {
-		f := pullV2(t, s.epoch, offset, "", 0)
+		f := pullV2On(t, p, s.epoch, offset, "", 0)
 		frames = append(frames, f)
 		offset = f.To
 		if f.CaughtUp {
@@ -63,7 +63,7 @@ func captureStreamV2(t *testing.T, name string) replicationStream {
 		}
 	}
 	s.frames = frames
-	s.state = string(engineState(t, defaultEngine, never))
+	s.state = string(engineState(t, p, never))
 	return s
 }
 
@@ -71,11 +71,10 @@ func captureStreamV2(t *testing.T, name string) replicationStream {
 // with a log in dir, as a server started with -replicaof is.
 func replicaEngine(t *testing.T, dir, name string, protocol int) *Engine {
 	t.Helper()
-	// Under fsync no, as the default engine wrote the streams it applies.
-	e := newEngine(Options{ReplicaOf: "primary.test:6379", ReplicationProtocol: protocol, Fsync: FsyncNever})
+	// Under fsync no, as the primaries here write the streams it applies.
+	e := newTestEngine(t, Options{ReplicaOf: "primary.test:6379", ReplicationProtocol: protocol, Fsync: FsyncNever})
 	require.NoError(t, e.OpenAOF(filepath.Join(dir, name+".aof")))
 	require.NoError(t, e.followPrimary())
-	t.Cleanup(func() { e.CloseAOF() })
 	return e
 }
 
@@ -100,26 +99,22 @@ func requireCheckpoint(t *testing.T, e *Engine, epoch string, offset uint64) {
 // following a primary of its own, share none of it: one engine's frames,
 // readiness, position, half-received transaction, checkpoint and failing disk
 // stay its own, whether they apply one after the other, interleaved, or side
-// by side through ApplyReplication, under protocols 2 and 1; and neither
-// touches the default engine's replica. Under -race, replica state the
+// by side through ApplyReplication, under protocols 2 and 1; and none of it
+// reaches a third replica that stands by. Under -race, replica state the
 // engines shared would fail here.
 //
-// The primaries' streams are written first, by the default engine, so that
-// the replicas can be applied in any order; TestEnginesShareNoReplication
-// runs primaries of their own.
+// The primaries' streams are written first, so that the replicas can apply
+// them in any order; TestEnginesShareNoReplication runs primaries and their
+// replicas side by side.
 func TestEnginesShareNoReplica(t *testing.T) {
+	t.Parallel()
 	never := goldenWindow{start: -1, end: -1 - int64(24*time.Hour/time.Millisecond)}
-	setupReplicationV2(t)
+	dir := t.TempDir()
+	bystander := replicaEngine(t, dir, "bystander", 2)
 	streams := []replicationStream{captureStreamV2(t, "a"), captureStreamV2(t, "b")}
 	sa, sb := streams[0], streams[1]
 	require.NotEqual(t, sa.epoch, sb.epoch)
 
-	// The default engine is a replica from here too.
-	require.NoError(t, CloseAOF())
-	ResetStores()
-	withOptions(t, func(o *Options) { o.ReplicationFeed, o.ReplicaOf = false, "primary.test:6379" })
-	require.NoError(t, InitReplication())
-	dir := t.TempDir()
 	a, b := replicaEngine(t, dir, "a", 2), replicaEngine(t, dir, "b", 2)
 	ready := func(e *Engine) bool {
 		return strings.Contains(on(t, e, "INFO", "replication").(string), "replica_ready:1\r\n")
@@ -236,11 +231,10 @@ func TestEnginesShareNoReplica(t *testing.T) {
 		// Restarted on its own log, each resumes from its own checkpoint.
 		path := side.e.aof.path
 		require.NoError(t, side.e.CloseAOF())
-		restarted := newEngine(side.e.options)
+		restarted := newTestEngine(t, side.e.options)
 		_, err := restarted.LoadAOF(path)
 		require.NoError(t, err)
 		require.NoError(t, restarted.OpenAOF(path))
-		t.Cleanup(func() { restarted.CloseAOF() })
 		require.NoError(t, restarted.followPrimary())
 		epoch, offset := restarted.ReplicaResumeCursor()
 		assert.Equal(t, side.s.epoch, epoch, "%s resumes in its primary's epoch", path)
@@ -248,47 +242,43 @@ func TestEnginesShareNoReplica(t *testing.T) {
 		assert.Equal(t, side.s.state, string(engineState(t, restarted, never)))
 	}
 
-	// The default engine, a replica as well, applied none of it.
-	epoch, offset := ReplicaResumeCursor()
+	// The bystander, a replica as well, applied none of it.
+	epoch, offset := bystander.ReplicaResumeCursor()
 	assert.Equal(t, "", epoch)
 	assert.Zero(t, offset)
-	assert.False(t, defaultEngine.replicaReady)
-	assert.Empty(t, defaultEngine.replicaEpoch)
-	assert.Zero(t, defaultEngine.replicaUpdated)
-	assert.False(t, defaultEngine.replicaV2.trusted)
-	assert.Zero(t, defaultEngine.space.TotalKeys())
+	assert.False(t, bystander.replicaReady)
+	assert.Empty(t, bystander.replicaEpoch)
+	assert.Zero(t, bystander.replicaUpdated)
+	assert.False(t, bystander.replicaV2.trusted)
+	assert.Zero(t, bystander.space.TotalKeys())
 
 	// Protocol 1: two primaries' key images, applied side by side.
-	withOptions(t, func(o *Options) { o.ReplicationFeed, o.ReplicaOf, o.ReplicationProtocol = true, "", 1 })
-	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "primary1.aof")))
 	var v1 []replicationStream
 	for _, name := range []string{"a", "b"} {
-		ResetStores()
-		require.NoError(t, InitReplication())
+		p := newTestEngine(t, Options{ReplicationFeed: true, ReplicationProtocol: 1, Fsync: FsyncNever})
+		require.NoError(t, p.OpenAOF(filepath.Join(t.TempDir(), "primary1.aof")))
+		require.NoError(t, p.InitReplication())
 		for i := range 20 {
-			run(t, "SET", name+":"+strconv.Itoa(i), name)
+			runOn(t, p, "SET", name+":"+strconv.Itoa(i), name)
 		}
 		s := replicationStream{name: name}
 		pull := func(epoch string, offset uint64) ReplicationFrame {
-			encoded, ok := run(t, "KEEL.REPL.PULL", epoch, strconv.FormatUint(offset, 10)).(string)
+			encoded, ok := runOn(t, p, "KEEL.REPL.PULL", epoch, strconv.FormatUint(offset, 10)).(string)
 			require.True(t, ok)
 			var f ReplicationFrame
 			require.NoError(t, json.Unmarshal([]byte(encoded), &f))
 			return f
 		}
 		full := pull("", 0)
-		run(t, "HSET", name+":h", "f", name)
-		run(t, "CMS.INITBYDIM", name+":cms", "10", "2")
-		run(t, "DEL", name+":0")
+		runOn(t, p, "HSET", name+":h", "f", name)
+		runOn(t, p, "CMS.INITBYDIM", name+":cms", "10", "2")
+		runOn(t, p, "DEL", name+":0")
 		delta := pull(full.Epoch, full.To)
 		s.frames, s.epoch, s.end = []ReplicationFrame{full, delta}, full.Epoch, delta.To
-		s.state = string(engineState(t, defaultEngine, never))
+		s.state = string(engineState(t, p, never))
 		v1 = append(v1, s)
 	}
-	require.NoError(t, CloseAOF())
-	ResetStores()
-	withOptions(t, func(o *Options) { o.ReplicationFeed, o.ReplicaOf = false, "primary.test:6379" })
-	require.NoError(t, InitReplication())
+	require.NotEqual(t, v1[0].epoch, v1[1].epoch)
 	a1, b1 := replicaEngine(t, dir, "a1", 1), replicaEngine(t, dir, "b1", 1)
 	for i, e := range []*Engine{a1, b1} {
 		wg.Add(1)
@@ -308,8 +298,8 @@ func TestEnginesShareNoReplica(t *testing.T) {
 		assert.Equal(t, v1[i].end, e.replicaOffset)
 		assert.True(t, e.replicaReady)
 	}
-	assert.False(t, defaultEngine.replicaReady)
-	assert.Zero(t, defaultEngine.space.TotalKeys())
+	assert.False(t, bystander.replicaReady)
+	assert.Zero(t, bystander.space.TotalKeys())
 }
 
 // pullFrom runs a replica's pull on primary p, as the transport sends it, and
@@ -394,22 +384,24 @@ func (f *follow) catchUp(t *testing.T) bool {
 // is sent, run side by side on goroutines of their own: each replica ends
 // with its own primary's keyspace, and no primary's stream, snapshot, epoch
 // or acknowledgement is another's. Then one primary's epoch starts again and
-// one primary's log is closed, and the others carry on. The default engine,
-// neither a primary nor a replica, feeds nothing and applies nothing. Under
-// -race, stream state the engines shared would fail here.
+// one primary's log is closed, and the others carry on. A fourth engine
+// standing by, neither a primary nor a replica, as the server is by default,
+// feeds nothing and applies nothing. Under -race, stream state the engines
+// shared would fail here.
 func TestEnginesShareNoReplication(t *testing.T) {
+	t.Parallel()
 	never := goldenWindow{start: -1, end: -1 - int64(24*time.Hour/time.Millisecond)}
-	ResetStores()
-	// The default engine's stream and replica outlive its keyspace, so they
-	// are whatever earlier tests left; the engines here must leave them so.
-	defaultEpoch := defaultEngine.replication.epoch
-	defaultStream := markReplication(defaultEngine)
+	// The bystander starts replication as the server does, in an epoch of its
+	// own; the engines here must leave its stream and replica as they are.
+	bystander := newTestEngine(t, Options{})
+	require.NoError(t, bystander.InitReplication())
+	bystanderEpoch := bystander.replication.epoch
+	bystanderStream := markReplication(bystander)
 	dir := t.TempDir()
 	primary := func(name string, protocol int) *Engine {
-		e := newEngine(Options{ReplicationFeed: true, ReplicationProtocol: protocol})
+		e := newTestEngine(t, Options{ReplicationFeed: true, ReplicationProtocol: protocol})
 		require.NoError(t, e.OpenAOF(filepath.Join(dir, name+".aof")))
 		require.NoError(t, e.InitReplication())
-		t.Cleanup(func() { e.CloseAOF() })
 		return e
 	}
 	pairs := []*follow{
@@ -473,7 +465,7 @@ func TestEnginesShareNoReplication(t *testing.T) {
 	if t.Failed() {
 		return
 	}
-	epochs := map[string]bool{defaultEpoch: true}
+	epochs := map[string]bool{bystanderEpoch: true}
 	for _, pair := range pairs {
 		p, r := pair.p, pair.r
 		assert.Equal(t, string(engineState(t, p, never)), string(engineState(t, r, never)), "%s holds its primary's keyspace", r.aof.path)
@@ -519,9 +511,9 @@ func TestEnginesShareNoReplication(t *testing.T) {
 	_, err := pb.replicationV2.snapshot.ReadAt(make([]byte, 1), 0)
 	assert.NoError(t, err, "b's snapshot is still open")
 
-	// The default engine fed none of it and applied none of it.
-	assert.Equal(t, defaultStream, markReplication(defaultEngine))
-	assert.Zero(t, defaultEngine.space.TotalKeys())
+	// The bystander fed none of it and applied none of it.
+	assert.Equal(t, bystanderStream, markReplication(bystander))
+	assert.Zero(t, bystander.space.TotalKeys())
 }
 
 // replicationMark is what an engine's replication holds between commands that
@@ -558,17 +550,16 @@ func markReplication(e *Engine) replicationMark {
 // a restart reads each engine's own term back; and a replica learns only its
 // own primary's term. Side by side on goroutines, with another goroutine
 // reading each engine's term as the replica transport does, under -race,
-// term state the engines shared would fail here.
+// term state the engines shared would fail here. A third primary, standing
+// by, keeps the term it started with.
 func TestEnginesShareNoFailover(t *testing.T) {
-	ResetStores()
-	defaultTerm, defaultPath := defaultEngine.CurrentTerm(), defaultEngine.failover.path
+	t.Parallel()
 	engine := func(dir string, role Options) (*Engine, string) {
-		e := newEngine(role)
+		e := newTestEngine(t, role)
 		path := filepath.Join(dir, "store.aof")
 		require.NoError(t, e.LoadTerm(path))
 		require.NoError(t, e.OpenAOF(path))
 		require.NoError(t, e.InitReplication())
-		t.Cleanup(func() { e.CloseAOF() })
 		return e, path
 	}
 	termFile := func(path string) string {
@@ -581,6 +572,7 @@ func TestEnginesShareNoFailover(t *testing.T) {
 	}
 	feed := Options{ReplicationFeed: true, ReplicationProtocol: 2}
 	follow2 := Options{ReplicaOf: "primary.test:6379", ReplicationProtocol: 2}
+	bystander, bystanderPath := engine(t.TempDir(), feed)
 	a, aPath := engine(t.TempDir(), feed)
 	b, bPath := engine(t.TempDir(), feed)
 
@@ -692,8 +684,11 @@ func TestEnginesShareNoFailover(t *testing.T) {
 	}
 	assert.Equal(t, uint64(3), ra.CurrentTerm(), "a's replica learned only what a sent it")
 
-	// The default engine saw none of it.
-	assert.Equal(t, defaultTerm, defaultEngine.CurrentTerm())
-	assert.Equal(t, defaultPath, defaultEngine.failover.path)
-	assert.Equal(t, defaultTerm == 0, Writable() || Configuration().ReplicaOf != "")
+	// The bystander saw none of it.
+	assert.Zero(t, bystander.CurrentTerm())
+	assert.Zero(t, bystander.failover.held)
+	assert.False(t, bystander.failover.fenced)
+	assert.True(t, bystander.writable())
+	assert.Equal(t, bystanderPath+termFileName, bystander.failover.path)
+	assert.Equal(t, "none", termFile(bystanderPath))
 }

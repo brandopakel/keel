@@ -95,7 +95,7 @@ func TestConfigureHoldsTheDefaultEngine(t *testing.T) {
 	assert.Equal(t, 5, data_structure.DefaultSpace.MaxKeys())
 	assert.Equal(t, uint64(4096), data_structure.DefaultSpace.MaxMemory())
 	assert.Equal(t, data_structure.DefaultLimits(), own.space.Limits(), "another engine keeps its own")
-	assert.Contains(t, run(t, "INFO", "memory"), "maxmemory:4096\r\nmaxmemory_human:4.00K\r\nmaxmemory_policy:allkeys-lfu\r\n")
+	assert.Contains(t, runOn(t, defaultEngine, "INFO", "memory"), "maxmemory:4096\r\nmaxmemory_human:4.00K\r\nmaxmemory_policy:allkeys-lfu\r\n")
 }
 
 // TestOptionsResolveSettings: what the engine reads is its options with every
@@ -132,21 +132,20 @@ func TestOptionsResolveSettings(t *testing.T) {
 }
 
 // TestEnginesShareNoOptions: an engine's settings are its own. Two engines
-// held to different options, and the default engine held to neither's, each
-// expire, sync and report only as their own options say.
+// held to different options, and a third held to neither's, the defaults,
+// each expire, sync and report only as their own options say.
 func TestEnginesShareNoOptions(t *testing.T) {
-	ResetStores()
-	t.Cleanup(ResetStores)
-	lazy := newEngine(Options{ActiveExpireSamples: Off, Fsync: FsyncAlways, MaxMemory: 1 << 20, Eviction: EvictLFU})
-	eager := newEngine(Options{Fsync: FsyncNever, ReplicationFeed: true, ReplicationProtocol: 2})
+	t.Parallel()
+	third := newTestEngine(t, Options{})
+	lazy := newTestEngine(t, Options{ActiveExpireSamples: Off, Fsync: FsyncAlways, MaxMemory: 1 << 20, Eviction: EvictLFU})
+	eager := newTestEngine(t, Options{Fsync: FsyncNever, ReplicationFeed: true, ReplicationProtocol: 2})
 	dir := t.TempDir()
 	var syncs [2]atomic.Int64
 	for i, e := range []*Engine{lazy, eager} {
 		e.aofSync = func(f *os.File) error { syncs[i].Add(1); return f.Sync() }
 		require.NoError(t, e.OpenAOF(filepath.Join(dir, strconv.Itoa(i)+".aof")))
-		t.Cleanup(func() { e.CloseAOF() })
 	}
-	for _, e := range []*Engine{lazy, eager, defaultEngine} {
+	for _, e := range []*Engine{lazy, eager, third} {
 		for i := 0; i < 50; i++ {
 			on(t, e, "SET", "k"+strconv.Itoa(i), "v", "PX", "1")
 		}
@@ -154,7 +153,7 @@ func TestEnginesShareNoOptions(t *testing.T) {
 	waitPast(10)
 	assert.Zero(t, lazy.ExpireCycle(), "active expiry is off on this engine alone")
 	assert.Positive(t, eager.ExpireCycle())
-	assert.Positive(t, ExpireCycle(), "the default engine expires as its own options say")
+	assert.Positive(t, third.ExpireCycle(), "the third engine expires as its own options say")
 
 	require.Equal(t, "OK", on(t, lazy, "SET", "durable", "v"))
 	require.Equal(t, "OK", on(t, eager, "SET", "durable", "v"))
@@ -168,5 +167,6 @@ func TestEnginesShareNoOptions(t *testing.T) {
 	assert.Contains(t, on(t, eager, "INFO", "memory"), "maxmemory:0\r\nmaxmemory_human:0B\r\nmaxmemory_policy:allkeys-lru\r\n")
 	assert.Contains(t, on(t, eager, "INFO", "replication"), "replication_protocol:2\r\n")
 	assert.Contains(t, on(t, lazy, "INFO", "replication"), "replication_protocol:1\r\n")
-	assert.Equal(t, Options{}, Configuration(), "neither reaches the default engine")
+	assert.Equal(t, Options{}, third.options, "neither reaches the third engine")
+	assert.Equal(t, data_structure.DefaultLimits(), third.space.Limits())
 }
