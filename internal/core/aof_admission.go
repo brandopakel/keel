@@ -29,11 +29,6 @@ const replyFraming = 32
 // barrier path. These conservative bounds cover errors, lazy expiry, SET's
 // canonical expiry records and reads of values written earlier in this run.
 // No store is touched: Peek and TotalMemUsed do not reap or update access state.
-func AppendAdmission(commands []*Command) (logBytes, replyBytes int, ok bool) {
-	return defaultEngine.AppendAdmission(commands)
-}
-
-// AppendAdmission is the package's AppendAdmission on e.
 func (e *Engine) AppendAdmission(commands []*Command) (logBytes, replyBytes int, ok bool) {
 	growth, newKeys, largestWrite := uint64(0), 0, 0
 	// Collections accumulate, and preflight runs before any of this executes,
@@ -261,15 +256,12 @@ func (e *Engine) collectionReplyBound(key string, writtenThisRun int) int {
 	return int(held) + elements*replyFraming + writtenThisRun + replyFraming
 }
 
-// AppendOffset is a logical encoded prefix, independent of rewrite file sizes.
-// Reads inherit this position so they cannot expose an unacknowledged mutation.
-func AppendOffset() uint64           { return defaultEngine.AppendOffset() }
-func AppendReadyOffset() uint64      { return defaultEngine.AppendReadyOffset() }
-func AppendBufferedBytes() int       { return defaultEngine.AppendBufferedBytes() }
-func AppendRetainedBytes() int       { return defaultEngine.AppendRetainedBytes() }
-func AppendHasRoom(reserve int) bool { return defaultEngine.AppendHasRoom(reserve) }
-
-// The same, on e's log.
+// AppendOffset is a logical encoded prefix of e's log, independent of rewrite
+// file sizes. Reads inherit this position so they cannot expose an
+// unacknowledged mutation. AppendReadyOffset is the prefix whose replies may
+// be released, AppendBufferedBytes and AppendRetainedBytes what the log holds
+// in memory, and AppendHasRoom whether a concurrent run of reserve more bytes
+// fits.
 func (e *Engine) AppendOffset() uint64      { return e.appendStarted + uint64(len(e.aof.buf)) }
 func (e *Engine) AppendReadyOffset() uint64 { return e.appendCompleted }
 func (e *Engine) AppendBufferedBytes() int  { return len(e.aof.buf) }
@@ -286,9 +278,6 @@ func (e *Engine) AppendHasRoom(reserve int) bool {
 
 // AOFPositions are logical positions since open; rewrites never reset them.
 // Synced is a conservative prefix: writes racing an everysec Sync remain dirty.
-func AOFPositions() (encoded, written, synced, ready uint64) { return defaultEngine.AOFPositions() }
-
-// AOFPositions is the package's AOFPositions on e.
 func (e *Engine) AOFPositions() (encoded, written, synced, ready uint64) {
 	return e.AppendOffset(), e.appendWritten, e.appendSynced, e.appendCompleted
 }

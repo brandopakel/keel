@@ -27,10 +27,10 @@ import (
 // e's I/O. Step 2.4 moved replication and failover here: the replica, which
 // applies its primary's stream to e's keyspace and e's log; the primary's
 // stream, which carries e's writes to e's replicas, with the role that says
-// which of them e is; and the term that says whether e may write.
-//
-// Until callers open engines of their own (plan phase 3) the server and the
-// tests run on defaultEngine, as the stores run on data_structure.DefaultSpace.
+// which of them e is; and the term that says whether e may write. Step 2.6
+// gave every test an engine of its own, and step 2.7 the server: cmd/keel
+// makes it with NewEngine and hands it to the server, and no engine is the
+// package's.
 //
 // An Engine is not safe for concurrent use. Like the stores in it, it belongs
 // to whoever is executing commands: the event loop's thread today, and the
@@ -62,12 +62,12 @@ type Engine struct {
 	// expiredKeys counts what active expiry has reclaimed, for INFO. Keys
 	// reaped lazily by a read are not counted here, because the number is here
 	// to answer whether the cycle is keeping up. It describes the stores, so
-	// ResetStores clears it with them.
+	// resetStores clears it with them.
 	expiredKeys uint64
 	// expireCursor and memoryCursor are where the expiry cycle and memory
 	// maintenance resume, as positions in the space's registry, and
 	// memoryFirstPhase is the compaction family maintenance starts with next.
-	// They survive ResetStores, as they always have: the registry they index
+	// They survive resetStores, as they always have: the registry they index
 	// is rebuilt in the same order.
 	expireCursor     int
 	memoryCursor     int
@@ -234,14 +234,6 @@ type Engine struct {
 	// none. Only INFO reads it, so it goes after everything a command reads.
 	clientBuffers func() ClientBufferStats
 }
-
-// defaultEngine is the engine the server and the tests run on until each
-// caller opens its own; plan step 2.7 removes it. It lives in DefaultSpace,
-// with the default options until Configure gives it the server's.
-//
-// The pointer never changes. ResetStores rebuilds the stores inside it, so
-// whatever has kept the engine keeps the keyspace a test began from empty.
-var defaultEngine = engineIn(data_structure.DefaultSpace)
 
 // engineIn returns an engine living in space, with no stores yet, and with
 // its persistence I/O the real thing.

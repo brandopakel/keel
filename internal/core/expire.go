@@ -14,10 +14,9 @@ import (
 // there are, it samples and keeps sampling while the sample says there are more
 // - the same argument the eviction pool makes, that a random sample is a cheap
 // way to tell a keyspace with a problem from one without.
-func ExpireCycle() int { return defaultEngine.ExpireCycle() }
-
-// ExpireCycle is the package's ExpireCycle on e: it samples e's stores, from
-// where its last cycle left off, and counts what it takes against e.
+//
+// It samples e's stores, from where its last cycle left off, and counts what
+// it takes against e.
 func (e *Engine) ExpireCycle() int {
 	samples := e.settings.expireSamples
 	if e.replicaOf() != "" || samples <= 0 || e.KeysWithExpiry() == 0 {
@@ -55,14 +54,8 @@ func (e *Engine) ExpireCycle() int {
 	return total
 }
 
-// ExpiredKeys reports how many keys the default engine's cycle has removed.
-func ExpiredKeys() uint64 { return defaultEngine.expiredKeys }
-
 // ExpiredKeys reports how many keys e's cycle has removed.
 func (e *Engine) ExpiredKeys() uint64 { return e.expiredKeys }
-
-// KeysWithExpiry reports how many of the default engine's keys carry a TTL.
-func KeysWithExpiry() int { return defaultEngine.KeysWithExpiry() }
 
 // KeysWithExpiry reports how many of e's keys carry a TTL.
 func (e *Engine) KeysWithExpiry() int {
@@ -71,15 +64,11 @@ func (e *Engine) KeysWithExpiry() int {
 	return n
 }
 
-var _ = data_structure.TotalKeys
-
 // MaintainMemory advances physical table compaction without deleting logical
 // keys or emitting persistence records. It is safe between event-loop phases
 // on both primaries and replicas, including while an immutable append is pending.
-func MaintainMemory() int { return defaultEngine.MaintainMemory() }
-
-// MaintainMemory is the package's MaintainMemory on e: it compacts e's
-// stores, from where its last pass left off.
+//
+// It compacts e's stores, from where its last pass left off.
 func (e *Engine) MaintainMemory() int {
 	work := 0
 	deadline := time.Now().Add(time.Millisecond)

@@ -152,17 +152,13 @@ func persistedName(cmd string) string {
 }
 
 // AOFEnabled reports whether the log is on.
-func AOFEnabled() bool { return defaultEngine.AOFEnabled() }
-
-// AOFEnabled is the package's AOFEnabled on e.
 func (e *Engine) AOFEnabled() bool { return e.aof.file != nil }
 
 // OpenAOF opens the log for appending and installs the removal hook. Call after
 // LoadAOF, so replaying does not append what it is reading.
-func OpenAOF(path string) error { return defaultEngine.OpenAOF(path) }
-
-// OpenAOF is the package's OpenAOF on e: the log is e's, and the removal hook
-// is installed on e's space, so only e's expiry and eviction are recorded in it.
+//
+// The log is e's, and the removal hook is installed on e's space, so only e's
+// expiry and eviction are recorded in it.
 func (e *Engine) OpenAOF(path string) error {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
@@ -239,9 +235,6 @@ func (e *Engine) OpenAOF(path string) error {
 // CloseAOF flushes what is buffered and closes the file. A stop that skipped
 // this would lose up to a cycle's worth of acknowledged writes, which is the
 // one kind of loss a client has no way to detect.
-func CloseAOF() error { return defaultEngine.CloseAOF() }
-
-// CloseAOF is the package's CloseAOF on e.
 func (e *Engine) CloseAOF() error {
 	e.closeReplicationSnapshot()
 	e.CancelRewrite()
@@ -360,9 +353,6 @@ func appendCommand(dst []byte, parts ...string) []byte {
 // ordering that makes appendfsync always mean what it says: a client is told
 // its write succeeded only once the write is on disk. Doing it after the
 // replies would be faster and would be lying.
-func FlushAOF() error { return defaultEngine.FlushAOF() }
-
-// FlushAOF is the package's FlushAOF on e.
 func (e *Engine) FlushAOF() error {
 	if err := e.flushAOF(false); err != nil {
 		return err
@@ -470,10 +460,9 @@ func (e *Engine) flushAOF(closing bool) error {
 // Its MULTI is where the torn tail starts: what was intact of the block goes to
 // the backup with the rest, which is Redis's rule for an AOF that ends inside
 // MULTI.
-func LoadAOF(path string) (int, error) { return defaultEngine.LoadAOF(path) }
-
-// LoadAOF is the package's LoadAOF on e: the log replays into e's keyspace,
-// with eviction and expiry held off in e's space until it has.
+//
+// The log replays into e's keyspace, with eviction and expiry held off in e's
+// space until it has.
 func (e *Engine) LoadAOF(path string) (int, error) {
 	e.aof.recovered = nil
 	f, err := os.Open(path)

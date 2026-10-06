@@ -10,14 +10,6 @@ type CommandAllocationBudget struct {
 	Refusals                                 uint64
 }
 
-// SetCommandAllocations is the method of that name on the default engine,
-// which plan step 2.7 removes.
-func SetCommandAllocations(b *CommandAllocationBudget) { defaultEngine.SetCommandAllocations(b) }
-
-// CommandAllocations is the method of that name on the default engine, which
-// plan step 2.7 removes.
-func CommandAllocations() *CommandAllocationBudget { return defaultEngine.CommandAllocations() }
-
 // SetCommandAllocations installs the event-loop transport's budget on e, or
 // removes it when b is nil. Core-only calls and alternate transports retain
 // their per-command limits without this budget.
