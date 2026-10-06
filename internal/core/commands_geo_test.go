@@ -16,73 +16,81 @@ import (
 // The figures are the Redis documentation's examples for the geo commands, so
 // the checks are against an independent implementation.
 
-func addSicily(t *testing.T) {
+func addSicily(t *testing.T, e *Engine) {
 	t.Helper()
-	ResetStores()
-	assert.EqualValues(t, 2, run(t, "GEOADD", "Sicily",
+	assert.EqualValues(t, 2, runOn(t, e, "GEOADD", "Sicily",
 		"13.361389", "38.115556", "Palermo",
 		"15.087269", "37.502669", "Catania"))
 }
 
 func TestGEOADDCountsNewMembersOnly(t *testing.T) {
-	addSicily(t)
-	assert.EqualValues(t, 0, run(t, "GEOADD", "Sicily", "13.361389", "38.115556", "Palermo"),
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	addSicily(t, e)
+	assert.EqualValues(t, 0, runOn(t, e, "GEOADD", "Sicily", "13.361389", "38.115556", "Palermo"),
 		"the same position again is not an addition")
-	assert.EqualValues(t, 0, run(t, "GEOADD", "Sicily", "13.4", "38.2", "Palermo"),
+	assert.EqualValues(t, 0, runOn(t, e, "GEOADD", "Sicily", "13.4", "38.2", "Palermo"),
 		"moving a member is not an addition either")
-	assert.EqualValues(t, 1, run(t, "GEOADD", "Sicily", "CH", "13.5", "38.3", "Palermo"),
+	assert.EqualValues(t, 1, runOn(t, e, "GEOADD", "Sicily", "CH", "13.5", "38.3", "Palermo"),
 		"CH counts a move")
-	assert.EqualValues(t, 0, run(t, "GEOADD", "Sicily", "NX", "13.6", "38.4", "Palermo"),
+	assert.EqualValues(t, 0, runOn(t, e, "GEOADD", "Sicily", "NX", "13.6", "38.4", "Palermo"),
 		"NX leaves an existing member where it was")
-	assert.EqualValues(t, 0, run(t, "GEOADD", "Sicily", "XX", "14", "37", "Messina"),
+	assert.EqualValues(t, 0, runOn(t, e, "GEOADD", "Sicily", "XX", "14", "37", "Messina"),
 		"XX adds nothing new")
-	assert.EqualValues(t, 2, run(t, "ZCARD", "Sicily"))
-	assert.EqualValues(t, 0, run(t, "GEOADD", "nowhere", "XX", "14", "37", "Messina"))
-	assert.EqualValues(t, 0, run(t, "EXISTS", "nowhere"), "XX on a missing key creates nothing")
+	assert.EqualValues(t, 2, runOn(t, e, "ZCARD", "Sicily"))
+	assert.EqualValues(t, 0, runOn(t, e, "GEOADD", "nowhere", "XX", "14", "37", "Messina"))
+	assert.EqualValues(t, 0, runOn(t, e, "EXISTS", "nowhere"), "XX on a missing key creates nothing")
 }
 
 func TestGEOADDRefusesBadInput(t *testing.T) {
-	ResetStores()
-	assert.Contains(t, run(t, "GEOADD", "k", "13.361389", "38.115556"), "wrong number of arguments")
-	assert.Contains(t, run(t, "GEOADD", "k", "13.361389", "38.115556", "a", "1"), "syntax error",
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	assert.Contains(t, runOn(t, e, "GEOADD", "k", "13.361389", "38.115556"), "wrong number of arguments")
+	assert.Contains(t, runOn(t, e, "GEOADD", "k", "13.361389", "38.115556", "a", "1"), "syntax error",
 		"positions come in threes")
-	assert.Equal(t, "ERR syntax error", run(t, "GEOADD", "k", "NX", "XX", "1", "1", "a"), "Redis's GEOADD calls NX with XX a syntax error")
-	assert.Contains(t, run(t, "GEOADD", "k", "1", "91", "a"), "invalid longitude,latitude pair")
-	assert.Contains(t, run(t, "GEOADD", "k", "181", "1", "a"), "invalid longitude,latitude pair")
-	assert.Contains(t, run(t, "GEOADD", "k", "x", "1", "a"), "not a valid float")
+	assert.Equal(t, "ERR syntax error", runOn(t, e, "GEOADD", "k", "NX", "XX", "1", "1", "a"), "Redis's GEOADD calls NX with XX a syntax error")
+	assert.Contains(t, runOn(t, e, "GEOADD", "k", "1", "91", "a"), "invalid longitude,latitude pair")
+	assert.Contains(t, runOn(t, e, "GEOADD", "k", "181", "1", "a"), "invalid longitude,latitude pair")
+	assert.Contains(t, runOn(t, e, "GEOADD", "k", "x", "1", "a"), "not a valid float")
 	// One bad pair in a batch stores none of the batch.
-	assert.Contains(t, run(t, "GEOADD", "k", "1", "1", "a", "1", "99", "b"), "invalid")
-	assert.EqualValues(t, 0, run(t, "EXISTS", "k"))
+	assert.Contains(t, runOn(t, e, "GEOADD", "k", "1", "1", "a", "1", "99", "b"), "invalid")
+	assert.EqualValues(t, 0, runOn(t, e, "EXISTS", "k"))
 }
 
 func TestGEODIST(t *testing.T) {
-	addSicily(t)
-	assert.Equal(t, "166274.1516", run(t, "GEODIST", "Sicily", "Palermo", "Catania"))
-	assert.Equal(t, "166.2742", run(t, "GEODIST", "Sicily", "Palermo", "Catania", "km"))
-	assert.Equal(t, "103.3182", run(t, "GEODIST", "Sicily", "Palermo", "Catania", "mi"))
-	ft, _ := strconv.ParseFloat(run(t, "GEODIST", "Sicily", "Palermo", "Catania", "FT").(string), 64)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	addSicily(t, e)
+	assert.Equal(t, "166274.1516", runOn(t, e, "GEODIST", "Sicily", "Palermo", "Catania"))
+	assert.Equal(t, "166.2742", runOn(t, e, "GEODIST", "Sicily", "Palermo", "Catania", "km"))
+	assert.Equal(t, "103.3182", runOn(t, e, "GEODIST", "Sicily", "Palermo", "Catania", "mi"))
+	ft, _ := strconv.ParseFloat(runOn(t, e, "GEODIST", "Sicily", "Palermo", "Catania", "FT").(string), 64)
 	assert.InDelta(t, 166274.1516/0.3048, ft, 0.01)
 
-	assert.Equal(t, constant.RespNil, rawReply(t, "GEODIST", "Sicily", "Palermo", "Foo"))
-	assert.Equal(t, constant.RespNil, rawReply(t, "GEODIST", "nosuchkey", "Palermo", "Catania"))
-	assert.Contains(t, run(t, "GEODIST", "Sicily", "Palermo", "Catania", "furlongs"), "unsupported unit")
-	assert.Contains(t, run(t, "GEODIST", "Sicily", "Palermo"), "wrong number of arguments")
+	assert.Equal(t, constant.RespNil, rawReplyOn(t, e, "GEODIST", "Sicily", "Palermo", "Foo"))
+	assert.Equal(t, constant.RespNil, rawReplyOn(t, e, "GEODIST", "nosuchkey", "Palermo", "Catania"))
+	assert.Contains(t, runOn(t, e, "GEODIST", "Sicily", "Palermo", "Catania", "furlongs"), "unsupported unit")
+	assert.Contains(t, runOn(t, e, "GEODIST", "Sicily", "Palermo"), "wrong number of arguments")
 }
 
 func TestGEOHASH(t *testing.T) {
-	addSicily(t)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	addSicily(t, e)
 	assert.Equal(t, []interface{}{"sqc8b49rny0", "sqdtr74hyu0"},
-		run(t, "GEOHASH", "Sicily", "Palermo", "Catania"))
+		runOn(t, e, "GEOHASH", "Sicily", "Palermo", "Catania"))
 	assert.Equal(t, "*3\r\n$11\r\nsqc8b49rny0\r\n$-1\r\n$11\r\nsqdtr74hyu0\r\n",
-		string(rawReply(t, "GEOHASH", "Sicily", "Palermo", "nobody", "Catania")),
+		string(rawReplyOn(t, e, "GEOHASH", "Sicily", "Palermo", "nobody", "Catania")),
 		"a missing member is a null in its position")
-	assert.Equal(t, "*2\r\n$-1\r\n$-1\r\n", string(rawReply(t, "GEOHASH", "nosuchkey", "a", "b")))
-	assert.Equal(t, constant.RespEmptyArray, rawReply(t, "GEOHASH", "Sicily"))
+	assert.Equal(t, "*2\r\n$-1\r\n$-1\r\n", string(rawReplyOn(t, e, "GEOHASH", "nosuchkey", "a", "b")))
+	assert.Equal(t, constant.RespEmptyArray, rawReplyOn(t, e, "GEOHASH", "Sicily"))
 }
 
 func TestGEOPOS(t *testing.T) {
-	addSicily(t)
-	res := run(t, "GEOPOS", "Sicily", "Palermo", "NonExisting", "Catania").([]interface{})
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	addSicily(t, e)
+	res := runOn(t, e, "GEOPOS", "Sicily", "Palermo", "NonExisting", "Catania").([]interface{})
 	assert.Len(t, res, 3)
 
 	palermo := res[0].([]interface{})
@@ -92,22 +100,24 @@ func TestGEOPOS(t *testing.T) {
 	assert.InDelta(t, 38.115556, lat, 1e-5)
 
 	assert.Nil(t, res[1], "a missing member is a null array")
-	assert.Equal(t, "*1\r\n*-1\r\n", string(rawReply(t, "GEOPOS", "Sicily", "nobody")))
-	assert.Equal(t, "*1\r\n*-1\r\n", string(rawReply(t, "GEOPOS", "nosuchkey", "nobody")))
+	assert.Equal(t, "*1\r\n*-1\r\n", string(rawReplyOn(t, e, "GEOPOS", "Sicily", "nobody")))
+	assert.Equal(t, "*1\r\n*-1\r\n", string(rawReplyOn(t, e, "GEOPOS", "nosuchkey", "nobody")))
 }
 
 func TestGEOSEARCHByRadiusAndBox(t *testing.T) {
-	addSicily(t)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	addSicily(t, e)
 	assert.Equal(t, []interface{}{"Catania", "Palermo"},
-		run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "200", "km", "ASC"))
+		runOn(t, e, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "200", "km", "ASC"))
 	assert.Equal(t, []interface{}{"Palermo", "Catania"},
-		run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "200", "km", "DESC"))
+		runOn(t, e, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "200", "km", "DESC"))
 	assert.ElementsMatch(t, []interface{}{"Catania", "Palermo"},
-		run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "200", "km"),
+		runOn(t, e, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "200", "km"),
 		"no order asked, so any order")
 
 	// The documentation's BYBOX example, with its distances.
-	res := run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYBOX", "400", "400", "km",
+	res := runOn(t, e, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYBOX", "400", "400", "km",
 		"ASC", "WITHCOORD", "WITHDIST").([]interface{})
 	assert.Len(t, res, 2)
 	catania := res[0].([]interface{})
@@ -121,7 +131,7 @@ func TestGEOSEARCHByRadiusAndBox(t *testing.T) {
 	assert.Equal(t, "190.4424", palermo[1])
 
 	// Every option at once, in the order the reply carries them.
-	res = run(t, "GEOSEARCH", "Sicily", "FROMMEMBER", "Palermo", "BYRADIUS", "1", "m",
+	res = runOn(t, e, "GEOSEARCH", "Sicily", "FROMMEMBER", "Palermo", "BYRADIUS", "1", "m",
 		"WITHHASH", "WITHDIST", "WITHCOORD").([]interface{})
 	assert.Len(t, res, 1)
 	entry := res[0].([]interface{})
@@ -131,49 +141,53 @@ func TestGEOSEARCHByRadiusAndBox(t *testing.T) {
 	assert.Len(t, entry[3], 2)
 
 	// A radius that reaches nobody is an empty array, not nil.
-	assert.Equal(t, constant.RespEmptyArray, rawReply(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "0", "0", "BYRADIUS", "1", "km"))
-	assert.Equal(t, constant.RespEmptyArray, rawReply(t, "GEOSEARCH", "nosuchkey", "FROMLONLAT", "0", "0", "BYRADIUS", "1", "km"))
+	assert.Equal(t, constant.RespEmptyArray, rawReplyOn(t, e, "GEOSEARCH", "Sicily", "FROMLONLAT", "0", "0", "BYRADIUS", "1", "km"))
+	assert.Equal(t, constant.RespEmptyArray, rawReplyOn(t, e, "GEOSEARCH", "nosuchkey", "FROMLONLAT", "0", "0", "BYRADIUS", "1", "km"))
 }
 
 func TestGEOSEARCHCount(t *testing.T) {
-	addSicily(t)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	addSicily(t, e)
 	assert.Equal(t, []interface{}{"Catania"},
-		run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "200", "km", "COUNT", "1"),
+		runOn(t, e, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "200", "km", "COUNT", "1"),
 		"COUNT without an order means the nearest")
 	assert.Equal(t, []interface{}{"Palermo"},
-		run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "200", "km", "COUNT", "1", "DESC"))
-	any := run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "200", "km", "COUNT", "1", "ANY").([]interface{})
+		runOn(t, e, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "200", "km", "COUNT", "1", "DESC"))
+	any := runOn(t, e, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "200", "km", "COUNT", "1", "ANY").([]interface{})
 	assert.Len(t, any, 1)
 	assert.Contains(t, []interface{}{"Catania", "Palermo"}, any[0])
 
-	assert.Contains(t, run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "200", "km", "COUNT", "0"), "COUNT must be > 0")
-	assert.Contains(t, run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "200", "km", "ANY"), "ANY argument requires COUNT")
+	assert.Contains(t, runOn(t, e, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "200", "km", "COUNT", "0"), "COUNT must be > 0")
+	assert.Contains(t, runOn(t, e, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "200", "km", "ANY"), "ANY argument requires COUNT")
 }
 
 func TestGEOSEARCHRefusesHalfAQuestion(t *testing.T) {
-	addSicily(t)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	addSicily(t, e)
 	// Fewer than six arguments is the wrong number before anything is read.
-	assert.Equal(t, "ERR wrong number of arguments for 'geosearch' command", run(t, "GEOSEARCH", "Sicily", "BYRADIUS", "200", "km"))
+	assert.Equal(t, "ERR wrong number of arguments for 'geosearch' command", runOn(t, e, "GEOSEARCH", "Sicily", "BYRADIUS", "200", "km"))
 	assert.Equal(t, "ERR exactly one of FROMMEMBER or FROMLONLAT can be specified for GEOSEARCH",
-		run(t, "GEOSEARCH", "Sicily", "BYRADIUS", "200", "km", "ASC", "WITHDIST"))
+		runOn(t, e, "GEOSEARCH", "Sicily", "BYRADIUS", "200", "km", "ASC", "WITHDIST"))
 	assert.Equal(t, "ERR exactly one of BYRADIUS and BYBOX can be specified for GEOSEARCH",
-		run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "ASC", "WITHDIST"))
-	assert.Contains(t, run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "200", "leagues"), "unsupported unit")
-	assert.Contains(t, run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "-1", "km"), "cannot be negative")
-	assert.Contains(t, run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "abc", "km"), "need numeric radius")
-	assert.Contains(t, run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "FROMMEMBER", "Palermo", "BYRADIUS", "1", "km"), "syntax error",
+		runOn(t, e, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "ASC", "WITHDIST"))
+	assert.Contains(t, runOn(t, e, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "200", "leagues"), "unsupported unit")
+	assert.Contains(t, runOn(t, e, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "-1", "km"), "cannot be negative")
+	assert.Contains(t, runOn(t, e, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "abc", "km"), "need numeric radius")
+	assert.Contains(t, runOn(t, e, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "FROMMEMBER", "Palermo", "BYRADIUS", "1", "km"), "syntax error",
 		"one kind of centre only")
-	assert.Contains(t, run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "1", "km", "BYBOX", "1", "1", "km"), "syntax error",
+	assert.Contains(t, runOn(t, e, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "1", "km", "BYBOX", "1", "1", "km"), "syntax error",
 		"one kind of extent only")
 	assert.Equal(t, []interface{}{"Palermo"},
-		run(t, "GEOSEARCH", "Sicily", "FROMMEMBER", "Catania", "FROMMEMBER", "Palermo", "BYRADIUS", "1", "km", "BYRADIUS", "5", "km"),
+		runOn(t, e, "GEOSEARCH", "Sicily", "FROMMEMBER", "Catania", "FROMMEMBER", "Palermo", "BYRADIUS", "1", "km", "BYRADIUS", "5", "km"),
 		"the same option again replaces it, as in Redis")
 	assert.Equal(t, "ERR could not decode requested zset member",
-		run(t, "GEOSEARCH", "Sicily", "FROMMEMBER", "nobody", "BYRADIUS", "x", "km"),
+		runOn(t, e, "GEOSEARCH", "Sicily", "FROMMEMBER", "nobody", "BYRADIUS", "x", "km"),
 		"a member is resolved as it is read, ahead of a later argument's error")
-	assert.Contains(t, run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "1", "km", "SIDEWAYS"), "syntax error")
-	assert.Contains(t, run(t, "GEOSEARCH", "Sicily", "FROMMEMBER", "nobody", "BYRADIUS", "1", "km"), "could not decode requested zset member")
-	assert.Contains(t, run(t, "GEOSEARCH", "Sicily"), "wrong number of arguments")
+	assert.Contains(t, runOn(t, e, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "BYRADIUS", "1", "km", "SIDEWAYS"), "syntax error")
+	assert.Contains(t, runOn(t, e, "GEOSEARCH", "Sicily", "FROMMEMBER", "nobody", "BYRADIUS", "1", "km"), "could not decode requested zset member")
+	assert.Contains(t, runOn(t, e, "GEOSEARCH", "Sicily"), "wrong number of arguments")
 }
 
 // TestGEOSEARCHOldRadiusFormIsRedisRefusal: before it took the Redis form,
@@ -181,18 +195,21 @@ func TestGEOSEARCHRefusesHalfAQuestion(t *testing.T) {
 // GEOSEARCH is a read - and Redis counts and refuses the form, so it is
 // answered as Redis answers it.
 func TestGEOSEARCHOldRadiusFormIsRedisRefusal(t *testing.T) {
-	addSicily(t)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	addSicily(t, e)
 	assert.Equal(t, "ERR wrong number of arguments for 'geosearch' command",
-		run(t, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "200000"))
+		runOn(t, e, "GEOSEARCH", "Sicily", "FROMLONLAT", "15", "37", "200000"))
 	assert.Equal(t, "ERR wrong number of arguments for 'geosearch' command",
-		run(t, "GEOSEARCH", "Sicily", "FROMMEMBER", "Palermo", "1000"))
-	assert.Equal(t, "ERR syntax error", run(t, "GEOSEARCH", "Sicily", "FROMMEMBER", "Palermo", "ASC", "WITHDIST", "1000"))
+		runOn(t, e, "GEOSEARCH", "Sicily", "FROMMEMBER", "Palermo", "1000"))
+	assert.Equal(t, "ERR syntax error", runOn(t, e, "GEOSEARCH", "Sicily", "FROMMEMBER", "Palermo", "ASC", "WITHDIST", "1000"))
 }
 
 // TestGEOSEARCHAgreesWithBruteForce checks the search end to end against a
 // plain distance check over every member.
 func TestGEOSEARCHAgreesWithBruteForce(t *testing.T) {
-	ResetStores()
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	rng := rand.New(rand.NewSource(9))
 	type pos struct{ long, lat float64 }
 	points := map[string]pos{}
@@ -200,9 +217,9 @@ func TestGEOSEARCHAgreesWithBruteForce(t *testing.T) {
 		p := pos{-180 + rng.Float64()*360, -85 + rng.Float64()*170}
 		name := fmt.Sprintf("m%d", i)
 		points[name] = p
-		run(t, "GEOADD", "world", fmt.Sprintf("%f", p.long), fmt.Sprintf("%f", p.lat), name)
+		runOn(t, e, "GEOADD", "world", fmt.Sprintf("%f", p.long), fmt.Sprintf("%f", p.lat), name)
 	}
-	assert.EqualValues(t, 3000, run(t, "ZCARD", "world"))
+	assert.EqualValues(t, 3000, runOn(t, e, "ZCARD", "world"))
 
 	for round := 0; round < 20; round++ {
 		cLong := -180 + rng.Float64()*360
@@ -213,7 +230,7 @@ func TestGEOSEARCHAgreesWithBruteForce(t *testing.T) {
 		for name := range points {
 			// The stored position is the centre of the member's box, so the
 			// reference measures from there too.
-			stored, _ := run(t, "GEOPOS", "world", name).([]interface{})
+			stored, _ := runOn(t, e, "GEOPOS", "world", name).([]interface{})
 			coords := stored[0].([]interface{})
 			sLong, _ := strconv.ParseFloat(coords[0].(string), 64)
 			sLat, _ := strconv.ParseFloat(coords[1].(string), 64)
@@ -221,11 +238,11 @@ func TestGEOSEARCHAgreesWithBruteForce(t *testing.T) {
 				want = append(want, name)
 			}
 		}
-		got := run(t, "GEOSEARCH", "world", "FROMLONLAT",
+		got := runOn(t, e, "GEOSEARCH", "world", "FROMLONLAT",
 			strconv.FormatFloat(cLong, 'f', -1, 64), strconv.FormatFloat(cLat, 'f', -1, 64),
 			"BYRADIUS", strconv.FormatFloat(radiusKm, 'f', -1, 64), "km")
 		if want == nil {
-			assert.Equal(t, constant.RespEmptyArray, rawReply(t, "GEOSEARCH", "world", "FROMLONLAT",
+			assert.Equal(t, constant.RespEmptyArray, rawReplyOn(t, e, "GEOSEARCH", "world", "FROMLONLAT",
 				strconv.FormatFloat(cLong, 'f', -1, 64), strconv.FormatFloat(cLat, 'f', -1, 64),
 				"BYRADIUS", strconv.FormatFloat(radiusKm, 'f', -1, 64), "km"))
 			continue

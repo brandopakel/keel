@@ -448,9 +448,15 @@ func BenchmarkRewrite(b *testing.B) {
 // would, and reports whether it is still going.
 func stepRewrite(t *testing.T) bool {
 	t.Helper()
-	assert.NoError(t, AdvanceRewrite())
-	waitForRewriteSync(t)
-	return RewriteActive()
+	return stepRewriteOn(t, defaultEngine)
+}
+
+// stepRewriteOn is stepRewrite on e.
+func stepRewriteOn(t *testing.T, e *Engine) bool {
+	t.Helper()
+	assert.NoError(t, e.AdvanceRewrite())
+	waitForRewriteSyncOn(t, e)
+	return e.RewriteActive()
 }
 
 // TestRewriteSeesTheKeyspaceMoveAndStillGetsItRight is the property the

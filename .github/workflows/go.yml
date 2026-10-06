@@ -210,3 +210,26 @@ jobs:
 
       - name: Repeat rewrite, replication and connection regressions
         run: go test -race ./internal/core ./internal/server -run '^(TestAutomaticRewriteTriggersOnGrowth|TestReplicationApplyFailureDisablesReadsUntilFullSync|TestFlushClientRepliesReleasesAccountingOnMonitorFailure)$' -count=20
+
+  # The packages whose tests run in parallel, each on an engine of its own
+  # (docs/embedding-plan.md, step 2.6), three times over in a shuffled order
+  # under the race detector. A test that depends on another having run first,
+  # or that shares state with one running beside it, fails here rather than
+  # once in a while. -shuffle prints its seed first, and -test.shuffle with
+  # that seed repeats the order. A job of its own, so the race job keeps its
+  # time.
+  race-shuffled:
+    name: race detector, shuffled and repeated
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Test the parallel packages three times, shuffled, with the race detector
+        run: go test -race -count=3 -shuffle=on ./internal/core

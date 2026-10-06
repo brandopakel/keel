@@ -8,14 +8,16 @@ import (
 )
 
 func TestCounterRejectsNoncanonicalIntegersWithoutMutation(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	for _, value := range []string{"", "007", "+1", "-0", " 1", "1 ", "9223372036854775808"} {
 		t.Run(value, func(t *testing.T) {
-			ResetStores()
-			run(t, "HSET", "h", "field", value)
-			if result := string(rawReply(t, "HINCRBY", "h", "field", "2")); !strings.HasPrefix(result, "-ERR") {
+			e.resetStores()
+			runOn(t, e, "HSET", "h", "field", value)
+			if result := string(rawReplyOn(t, e, "HINCRBY", "h", "field", "2")); !strings.HasPrefix(result, "-ERR") {
 				t.Fatalf("invalid hash field incremented: %q", result)
 			}
-			if run(t, "HGET", "h", "field") != value {
+			if runOn(t, e, "HGET", "h", "field") != value {
 				t.Fatal("refused increment changed the hash field")
 			}
 			for _, command := range []string{"INCRBY", "DECRBY", "HINCRBY"} {
@@ -23,10 +25,10 @@ func TestCounterRejectsNoncanonicalIntegersWithoutMutation(t *testing.T) {
 				if command == "HINCRBY" {
 					args = []string{"absent", "field", value}
 				}
-				if result := string(rawReply(t, command, args...)); !strings.HasPrefix(result, "-ERR") {
+				if result := string(rawReplyOn(t, e, command, args...)); !strings.HasPrefix(result, "-ERR") {
 					t.Fatalf("invalid increment accepted by %s", command)
 				}
-				if run(t, "EXISTS", "absent") != int64(0) {
+				if runOn(t, e, "EXISTS", "absent") != int64(0) {
 					t.Fatal("refused increment created a key")
 				}
 			}
@@ -35,6 +37,8 @@ func TestCounterRejectsNoncanonicalIntegersWithoutMutation(t *testing.T) {
 }
 
 func TestCounterLegacyAOFAcceptsHistoricalIntegerSpellings(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	path := filepath.Join(t.TempDir(), "legacy.aof")
 	var history []byte
 	for _, command := range [][]string{
@@ -47,11 +51,11 @@ func TestCounterLegacyAOFAcceptsHistoricalIntegerSpellings(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 0; i < 2; i++ {
-		restart(t, path)
-		if run(t, "HGET", "h", "field") != "2" || run(t, "GET", "string") != "6" {
+		restartOn(t, e, path)
+		if runOn(t, e, "HGET", "h", "field") != "2" || runOn(t, e, "GET", "string") != "6" {
 			t.Fatal("historical accepted counter operations changed on replay")
 		}
-		if err := CloseAOF(); err != nil {
+		if err := e.CloseAOF(); err != nil {
 			t.Fatal(err)
 		}
 	}

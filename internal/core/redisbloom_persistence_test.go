@@ -142,10 +142,16 @@ func sha256Hex(b []byte) string {
 
 func dumpImages(t *testing.T, keys []string) ([]byte, map[string]string) {
 	t.Helper()
+	return dumpImagesOn(t, defaultEngine, keys)
+}
+
+// dumpImagesOn is dumpImages on e.
+func dumpImagesOn(t *testing.T, e *Engine, keys []string) ([]byte, map[string]string) {
+	t.Helper()
 	var all []byte
 	each := map[string]string{}
 	for _, key := range keys {
-		image, ok := defaultEngine.dumpKey(key)
+		image, ok := e.dumpKey(key)
 		require.True(t, ok, "%s holds a filter", key)
 		all = append(all, key...)
 		all = append(all, 0)

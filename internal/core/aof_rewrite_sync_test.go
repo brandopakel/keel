@@ -16,9 +16,15 @@ import (
 // only for worker completion here; AdvanceRewrite still consumes the result.
 func waitForRewriteSync(t *testing.T) {
 	t.Helper()
-	if defaultEngine.pendingRewriteIO != nil {
+	waitForRewriteSyncOn(t, defaultEngine)
+}
+
+// waitForRewriteSyncOn is waitForRewriteSync on e.
+func waitForRewriteSyncOn(t *testing.T, e *Engine) {
+	t.Helper()
+	if e.pendingRewriteIO != nil {
 		select {
-		case <-defaultEngine.pendingRewriteIO.done:
+		case <-e.pendingRewriteIO.done:
 		case <-time.After(3 * time.Second):
 			t.Fatal("rewrite I/O did not finish")
 		}

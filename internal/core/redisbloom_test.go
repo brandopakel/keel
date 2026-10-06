@@ -14,6 +14,7 @@ import (
 // all (a number out of range is still a number).
 
 func TestRedisDoubleReadsAsRedisDoes(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		text string
 		ok   bool
@@ -42,6 +43,7 @@ func TestRedisDoubleReadsAsRedisDoes(t *testing.T) {
 }
 
 func TestRedisIntegerReadsAsRedisDoes(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		text string
 		ok   bool
@@ -64,22 +66,22 @@ func TestRedisIntegerReadsAsRedisDoes(t *testing.T) {
 // log prefix as a log is replayed, so what the earlier build logged - and
 // RedisBloom refuses - applies there too, with no error to stop the replica.
 func TestFilterCommandsFromAnEarlierPrimaryApply(t *testing.T) {
-	ResetStores()
-	t.Cleanup(func() { defaultEngine.replicaApplying = false; ResetStores() })
-	defaultEngine.replicaApplying = true
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	e.replicaApplying = true
 	for _, args := range legacyBloomLog {
-		reply := rawReply(t, args[0], args[1:]...)
+		reply := rawReplyOn(t, e, args[0], args[1:]...)
 		require.NotEqual(t, byte('-'), reply[0], "%q answered %q", args, reply)
 	}
-	defaultEngine.replicaApplying = false
-	_, each := dumpImages(t, legacyBloomKeys)
+	e.replicaApplying = false
+	_, each := dumpImagesOn(t, e, legacyBloomKeys)
 	want := loadRedisBloomPersistence(t)
 	for key, image := range want.LegacyEach {
 		assert.Equal(t, image, each[key], "%s", key)
 	}
 	// A client sending the same commands is held to RedisBloom's rules.
-	assert.Equal(t, "-Not found\r\n", string(rawReply(t, "CF.DEL", "missing", "x")))
-	assert.Equal(t, "-Bad capacity\r\n", string(rawReply(t, "CF.RESERVE", "fresh", "007")))
+	assert.Equal(t, "-Not found\r\n", string(rawReplyOn(t, e, "CF.DEL", "missing", "x")))
+	assert.Equal(t, "-Bad capacity\r\n", string(rawReplyOn(t, e, "CF.RESERVE", "fresh", "007")))
 	assert.Equal(t, "-ERR expansion must be in the range [0, 32768]\r\n",
-		string(rawReply(t, "BF.RESERVE", "fresh", "0.01", "10", "EXPANSION", "100000")))
+		string(rawReplyOn(t, e, "BF.RESERVE", "fresh", "0.01", "10", "EXPANSION", "100000")))
 }

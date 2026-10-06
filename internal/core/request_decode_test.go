@@ -11,6 +11,8 @@ import (
 )
 
 func TestReservedParserRejectsBeforeCopyingLargeArguments(t *testing.T) {
+	// Not parallel: it reads the process's heap statistics, which a test
+	// running beside it would move.
 	wire := appendCommand(nil, "SET", strings.Repeat("k", 2<<20), strings.Repeat("v", 2<<20))
 	runtime.GC()
 	var before, after runtime.MemStats
@@ -29,6 +31,8 @@ func TestReservedParserRejectsBeforeCopyingLargeArguments(t *testing.T) {
 }
 
 func TestReservedParserIncompleteLargeFrameDoesNotCopyEarlierArguments(t *testing.T) {
+	// Not parallel: it reads the process's heap statistics, which a test
+	// running beside it would move.
 	wire := appendCommand(nil, "SET", strings.Repeat("k", 2<<20), strings.Repeat("v", 2<<20))
 	wire = wire[:len(wire)-1]
 	runtime.GC()
@@ -47,6 +51,7 @@ func TestReservedParserIncompleteLargeFrameDoesNotCopyEarlierArguments(t *testin
 }
 
 func TestReservedParserOwnsBytesAndChargesLargeFieldLists(t *testing.T) {
+	t.Parallel()
 	parts := []string{"mset"}
 	for i := 0; i < 40; i++ {
 		parts = append(parts, strings.Repeat("x", i+1))
@@ -64,6 +69,7 @@ func TestReservedParserOwnsBytesAndChargesLargeFieldLists(t *testing.T) {
 }
 
 func TestRequestAllocationSizeRejectsOverflow(t *testing.T) {
+	t.Parallel()
 	for _, n := range []int{-1, int(^uint(0) >> 1)} {
 		_, ok := RequestAllocationSize(n)
 		require.False(t, ok)
@@ -74,6 +80,8 @@ func TestRequestAllocationSizeRejectsOverflow(t *testing.T) {
 }
 
 func TestReservedParserUppercaseExpansionFitsAdmission(t *testing.T) {
+	// Not parallel: it reads the process's heap statistics, which a test
+	// running beside it would move.
 	name := strings.Repeat("\xff", 256<<10)
 	wire := appendCommand(nil, name)
 	want := strings.ToUpper(name)
@@ -146,6 +154,7 @@ func BenchmarkRequestParsingAdmission(b *testing.B) {
 // client spelled it, so every decoder keeps that spelling beside the
 // upper-cased name, and only when the two differ.
 func TestDecodersKeepTheNameAsSent(t *testing.T) {
+	t.Parallel()
 	reserved := func(wire []byte) (*Command, int, error) {
 		return ParseCmdReserved(wire, func(int) bool { return true })
 	}

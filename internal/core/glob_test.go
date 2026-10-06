@@ -9,6 +9,7 @@ import (
 )
 
 func TestGlobMatch(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		pattern, s string
 		want       bool
@@ -110,6 +111,7 @@ func TestGlobMatch(t *testing.T) {
 //
 // This test is a marker for that provenance; the assertions live above.
 func TestGlobMatchAgreesWithRealRedis(t *testing.T) {
+	t.Parallel()
 	assert.False(t, globMatch("[]]", "]"), "']' after '[' closes an empty class")
 	assert.False(t, globMatch("[a-]", "-"), "a trailing '-' is not a literal")
 	assert.False(t, globMatch("?", "é"), "matching is over bytes, not runes")
@@ -124,6 +126,7 @@ func TestGlobMatchAgreesWithRealRedis(t *testing.T) {
 // takes a second to match is a pattern that stalls every other client for a
 // second - it is a denial of service reachable from KEYS.
 func TestGlobMatchDoesNotBacktrackExponentially(t *testing.T) {
+	t.Parallel()
 	pattern := strings.Repeat("a*", 40) + "b"
 	subject := strings.Repeat("a", 200)
 
@@ -139,6 +142,7 @@ func TestGlobMatchDoesNotBacktrackExponentially(t *testing.T) {
 }
 
 func TestGlobCharacterClassesChargeAllBytes(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ pattern, value string }{{"[a-z]", "m"}, {"[\\m]", "m"}, {"[^a-z]", "0"}} {
 		budget := len(tc.pattern)
 		matched, exhausted := globMatchBounded(tc.pattern, tc.value, &budget)

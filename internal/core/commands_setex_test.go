@@ -7,12 +7,14 @@ import (
 )
 
 func TestExpiringSetAliasesPreserveCanonicalPersistence(t *testing.T) {
-	path := withAOF(t, func() {
-		if run(t, "SETEX", "seconds", "600", "value") != "OK" || run(t, "PSETEX", "milliseconds", "600000", "value") != "OK" {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	path := withAOFOn(t, e, func() {
+		if runOn(t, e, "SETEX", "seconds", "600", "value") != "OK" || runOn(t, e, "PSETEX", "milliseconds", "600000", "value") != "OK" {
 			t.Fatal("expiring SET did not succeed")
 		}
 		for _, key := range []string{"seconds", "milliseconds"} {
-			if ttl := run(t, "PTTL", key).(int64); ttl <= 590000 || ttl > 600000 {
+			if ttl := runOn(t, e, "PTTL", key).(int64); ttl <= 590000 || ttl > 600000 {
 				t.Fatalf("incorrect TTL for %s: %d", key, ttl)
 			}
 		}
@@ -21,35 +23,37 @@ func TestExpiringSetAliasesPreserveCanonicalPersistence(t *testing.T) {
 	if err != nil || strings.Contains(string(data), "SETEX") || !strings.Contains(string(data), "PEXPIREAT") {
 		t.Fatal("aliases must persist as backward-readable SET and absolute expiry")
 	}
-	restart(t, path)
-	defer CloseAOF()
+	restartOn(t, e, path)
+	defer e.CloseAOF()
 	for _, key := range []string{"seconds", "milliseconds"} {
-		if run(t, "GET", key) != "value" || run(t, "PTTL", key).(int64) <= 0 {
+		if runOn(t, e, "GET", key) != "value" || runOn(t, e, "PTTL", key).(int64) <= 0 {
 			t.Fatal("value or expiry lost after replay")
 		}
 	}
 }
 
 func TestExpiringSetAliasesValidateBeforeMutation(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	for _, command := range []string{"SETEX", "PSETEX"} {
-		ResetStores()
-		run(t, "SET", "key", "original")
+		e.resetStores()
+		runOn(t, e, "SET", "key", "original")
 		for _, ttl := range []string{"0", "-1", "invalid", "9223372036854775807"} {
-			if result := string(rawReply(t, command, "key", ttl, "replacement")); !strings.HasPrefix(result, "-ERR") {
+			if result := string(rawReplyOn(t, e, command, "key", ttl, "replacement")); !strings.HasPrefix(result, "-ERR") {
 				t.Fatalf("%s accepted invalid TTL %q", command, ttl)
 			}
-			if run(t, "GET", "key") != "original" {
+			if runOn(t, e, "GET", "key") != "original" {
 				t.Fatal("failed command changed value")
 			}
 		}
-		run(t, "HSET", "hash", "field", "value")
-		if !strings.HasPrefix(string(rawReply(t, command, "hash", "0", "replacement")), "-ERR") {
+		runOn(t, e, "HSET", "hash", "field", "value")
+		if !strings.HasPrefix(string(rawReplyOn(t, e, command, "hash", "0", "replacement")), "-ERR") {
 			t.Fatalf("%s accepted an invalid TTL over a hash", command)
 		}
-		if run(t, "TYPE", "hash") != "hash" {
+		if runOn(t, e, "TYPE", "hash") != "hash" {
 			t.Fatal("a refused command replaced the hash before validating")
 		}
-		if string(rawReply(t, command, "hash", "100", "replacement")) != "+OK\r\n" || run(t, "GET", "hash") != "replacement" {
+		if string(rawReplyOn(t, e, command, "hash", "100", "replacement")) != "+OK\r\n" || runOn(t, e, "GET", "hash") != "replacement" {
 			t.Fatalf("%s did not replace a hash, as SET does", command)
 		}
 	}

@@ -9,25 +9,26 @@ import (
 	"github.com/brandopakel/keel/internal/constant"
 )
 
-func setString(key, value string) {
-	defaultEngine.dictStore.Put(key, defaultEngine.dictStore.NewObj(value))
+func setString(e *Engine, key, value string) {
+	e.dictStore.Put(key, e.dictStore.NewObj(value))
 }
 
 // TestCmdLCSDocumentedExample is the example from the Redis documentation,
 // checked all the way out to the wire so that the reply shape - not just the
 // answer - is what a Redis client expects.
 func TestCmdLCSDocumentedExample(t *testing.T) {
-	ResetStores()
-	setString("key1", "ohmytext")
-	setString("key2", "mynewtext")
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setString(e, "key1", "ohmytext")
+	setString(e, "key2", "mynewtext")
 
-	res, _ := Decode(defaultEngine.cmdLCS([]string{"key1", "key2"}))
+	res, _ := Decode(e.cmdLCS([]string{"key1", "key2"}))
 	assert.EqualValues(t, "mytext", res)
 
-	res, _ = Decode(defaultEngine.cmdLCS([]string{"key1", "key2", "LEN"}))
+	res, _ = Decode(e.cmdLCS([]string{"key1", "key2", "LEN"}))
 	assert.EqualValues(t, 6, res)
 
-	res, _ = Decode(defaultEngine.cmdLCS([]string{"key1", "key2", "IDX"}))
+	res, _ = Decode(e.cmdLCS([]string{"key1", "key2", "IDX"}))
 	assert.Equal(t, []interface{}{
 		"matches",
 		[]interface{}{
@@ -39,11 +40,12 @@ func TestCmdLCSDocumentedExample(t *testing.T) {
 }
 
 func TestCmdLCSWithMatchLen(t *testing.T) {
-	ResetStores()
-	setString("key1", "ohmytext")
-	setString("key2", "mynewtext")
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setString(e, "key1", "ohmytext")
+	setString(e, "key2", "mynewtext")
 
-	res, _ := Decode(defaultEngine.cmdLCS([]string{"key1", "key2", "IDX", "WITHMATCHLEN"}))
+	res, _ := Decode(e.cmdLCS([]string{"key1", "key2", "IDX", "WITHMATCHLEN"}))
 	matches := res.([]interface{})[1].([]interface{})
 	assert.Len(t, matches, 2)
 	assert.EqualValues(t, 4, matches[0].([]interface{})[2], "text")
@@ -54,29 +56,31 @@ func TestCmdLCSWithMatchLen(t *testing.T) {
 // matches are worth listing; it does not change what was found, so the reported
 // length still covers the whole subsequence.
 func TestCmdLCSMinMatchLenFiltersRangesNotTheLength(t *testing.T) {
-	ResetStores()
-	setString("key1", "ohmytext")
-	setString("key2", "mynewtext")
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setString(e, "key1", "ohmytext")
+	setString(e, "key2", "mynewtext")
 
-	res, _ := Decode(defaultEngine.cmdLCS([]string{"key1", "key2", "IDX", "MINMATCHLEN", "4"}))
+	res, _ := Decode(e.cmdLCS([]string{"key1", "key2", "IDX", "MINMATCHLEN", "4"}))
 	reply := res.([]interface{})
 	assert.Len(t, reply[1].([]interface{}), 1, "only the four-character match survives")
 	assert.EqualValues(t, 6, reply[3], "the length is still the whole subsequence")
 
-	res, _ = Decode(defaultEngine.cmdLCS([]string{"key1", "key2", "IDX", "MINMATCHLEN", "99"}))
+	res, _ = Decode(e.cmdLCS([]string{"key1", "key2", "IDX", "MINMATCHLEN", "99"}))
 	reply = res.([]interface{})
 	assert.Empty(t, reply[1])
 	assert.EqualValues(t, 6, reply[3])
 }
 
 func TestCmdLCSMissingKeyIsAnEmptyString(t *testing.T) {
-	ResetStores()
-	setString("key1", "hello")
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setString(e, "key1", "hello")
 
-	res, _ := Decode(defaultEngine.cmdLCS([]string{"key1", "nosuchkey"}))
+	res, _ := Decode(e.cmdLCS([]string{"key1", "nosuchkey"}))
 	assert.EqualValues(t, "", res)
 
-	res, _ = Decode(defaultEngine.cmdLCS([]string{"nosuchkey", "alsomissing", "LEN"}))
+	res, _ = Decode(e.cmdLCS([]string{"nosuchkey", "alsomissing", "LEN"}))
 	assert.EqualValues(t, 0, res)
 }
 
@@ -89,37 +93,39 @@ func TestCmdLCSMissingKeyIsAnEmptyString(t *testing.T) {
 // out; the honest fix is a shared key directory, which is a change to the
 // keyspace rather than to LCS.
 func TestCmdLCSOnAKeyOfAnotherType(t *testing.T) {
-	ResetStores()
-	setString("str", "hello")
-	assert.EqualValues(t, 1, mustDecode(t, defaultEngine.cmdSADD([]string{"aset", "hello"})))
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setString(e, "str", "hello")
+	assert.EqualValues(t, 1, mustDecode(t, e.cmdSADD([]string{"aset", "hello"})))
 
-	res, _ := Decode(defaultEngine.cmdLCS([]string{"str", "aset"}))
+	res, _ := Decode(e.cmdLCS([]string{"str", "aset"}))
 	assert.EqualValues(t, "", res, "a set key reads as absent, as it does for GET")
 
 	// Compared as raw bytes: the decoder renders a RESP null bulk string as an
 	// empty Go string, so decoding would not tell a nil reply from "".
-	assert.Equal(t, constant.RespNil, defaultEngine.cmdGET([]string{"aset"}),
+	assert.Equal(t, constant.RespNil, e.cmdGET([]string{"aset"}),
 		"which is the behaviour LCS is being consistent with")
 }
 
 func TestCmdLCSSyntax(t *testing.T) {
-	ResetStores()
-	setString("key1", "abc")
-	setString("key2", "abd")
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setString(e, "key1", "abc")
+	setString(e, "key2", "abd")
 
-	res, _ := Decode(defaultEngine.cmdLCS([]string{"key1"}))
+	res, _ := Decode(e.cmdLCS([]string{"key1"}))
 	assert.Contains(t, res, "wrong number of arguments")
 
-	res, _ = Decode(defaultEngine.cmdLCS([]string{"key1", "key2", "LEN", "IDX"}))
+	res, _ = Decode(e.cmdLCS([]string{"key1", "key2", "LEN", "IDX"}))
 	assert.Contains(t, res, "please just use IDX")
 
-	res, _ = Decode(defaultEngine.cmdLCS([]string{"key1", "key2", "NOPE"}))
+	res, _ = Decode(e.cmdLCS([]string{"key1", "key2", "NOPE"}))
 	assert.Contains(t, res, "syntax error")
 
-	res, _ = Decode(defaultEngine.cmdLCS([]string{"key1", "key2", "IDX", "MINMATCHLEN"}))
+	res, _ = Decode(e.cmdLCS([]string{"key1", "key2", "IDX", "MINMATCHLEN"}))
 	assert.Contains(t, res, "syntax error")
 
-	res, _ = Decode(defaultEngine.cmdLCS([]string{"key1", "key2", "IDX", "MINMATCHLEN", "wat"}))
+	res, _ = Decode(e.cmdLCS([]string{"key1", "key2", "IDX", "MINMATCHLEN", "wat"}))
 	assert.Contains(t, res, "not an integer")
 }
 
@@ -127,30 +133,32 @@ func TestCmdLCSSyntax(t *testing.T) {
 // computing command is safe to expose on a single-threaded server, so it has to
 // be reachable from the command and not just from the library beneath it.
 func TestCmdLCSRefusesWhatWouldStallTheServer(t *testing.T) {
-	ResetStores()
-	setString("big1", strings.Repeat("a", 1000))
-	setString("big2", strings.Repeat("b", 1000))
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setString(e, "big1", strings.Repeat("a", 1000))
+	setString(e, "big2", strings.Repeat("b", 1000))
 
-	withOptions(t, func(o *Options) { o.LCSMaxCells = 999999 })
-	res, _ := Decode(defaultEngine.cmdLCS([]string{"big1", "big2"}))
+	reconfigure(t, e, func(o *Options) { o.LCSMaxCells = 999999 })
+	res, _ := Decode(e.cmdLCS([]string{"big1", "big2"}))
 	assert.Contains(t, res, "String too long for LCS")
 
-	withOptions(t, func(o *Options) { o.LCSMaxCells = 1000000 })
-	res, _ = Decode(defaultEngine.cmdLCS([]string{"big1", "big2", "LEN"}))
+	reconfigure(t, e, func(o *Options) { o.LCSMaxCells = 1000000 })
+	res, _ = Decode(e.cmdLCS([]string{"big1", "big2", "LEN"}))
 	assert.EqualValues(t, 0, res, "exactly at the limit is allowed")
 
-	withOptions(t, func(o *Options) { o.LCSMaxCells = Off })
-	res, _ = Decode(defaultEngine.cmdLCS([]string{"big1", "big2", "LEN"}))
+	reconfigure(t, e, func(o *Options) { o.LCSMaxCells = Off })
+	res, _ = Decode(e.cmdLCS([]string{"big1", "big2", "LEN"}))
 	assert.EqualValues(t, 0, res, "Off removes the bound")
 }
 
 func TestCmdLCSGoesThroughEval(t *testing.T) {
-	ResetStores()
-	setString("key1", "ohmytext")
-	setString("key2", "mynewtext")
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setString(e, "key1", "ohmytext")
+	setString(e, "key2", "mynewtext")
 
 	var out strings.Builder
-	err := EvalAndResponse(&Command{Cmd: "LCS", Args: []string{"key1", "key2", "LEN"}}, &writerOnly{&out})
+	err := e.evalAndResponse(&Command{Cmd: "LCS", Args: []string{"key1", "key2", "LEN"}}, &writerOnly{&out})
 	assert.Nil(t, err)
 	assert.Equal(t, ":6\r\n", out.String())
 }

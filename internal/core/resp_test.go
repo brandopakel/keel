@@ -15,6 +15,7 @@ import (
 // here is a check against the protocol rather than against this decoder.
 
 func TestDecodeEachValueType(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		wire string
@@ -53,6 +54,7 @@ func TestDecodeEachValueType(t *testing.T) {
 }
 
 func TestDecodeStopsAtTheEndOfTheFirstValue(t *testing.T) {
+	t.Parallel()
 	wire := "+first\r\n:2\r\n"
 	got, n, err := core.DecodeOne([]byte(wire))
 	assert.NoError(t, err)
@@ -65,6 +67,7 @@ func TestDecodeStopsAtTheEndOfTheFirstValue(t *testing.T) {
 }
 
 func TestDecodeIncompleteValues(t *testing.T) {
+	t.Parallel()
 	for _, wire := range []string{
 		"", "+", "+OK", "+OK\r", ":", ":12", ":12\r", "$", "$5", "$5\r\n", "$5\r\nhel", "$5\r\nhello", "$5\r\nhello\r",
 		"*", "*2", "*2\r\n", "*2\r\n:1\r\n", "*2\r\n:1\r\n$3\r\nab",
@@ -76,6 +79,7 @@ func TestDecodeIncompleteValues(t *testing.T) {
 }
 
 func TestDecodeRefusesWhatCanNeverBeValid(t *testing.T) {
+	t.Parallel()
 	for _, wire := range []string{
 		"%1\r\n",                    // no such type byte
 		"PING\r\n",                  // inline commands are not RESP
@@ -99,6 +103,7 @@ func TestDecodeRefusesWhatCanNeverBeValid(t *testing.T) {
 // could otherwise open a few hundred thousand of them with one header each and
 // run the decoder out of stack.
 func TestDecodeBoundsNesting(t *testing.T) {
+	t.Parallel()
 	nested := func(depth int) string {
 		return strings.Repeat("*1\r\n", depth) + ":1\r\n"
 	}
@@ -121,6 +126,7 @@ func TestDecodeBoundsNesting(t *testing.T) {
 }
 
 func TestEncodeProducesTheSpecifiedWireForm(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name   string
 		value  interface{}
@@ -166,6 +172,7 @@ func TestEncodeProducesTheSpecifiedWireForm(t *testing.T) {
 }
 
 func TestEncodeThenDecodeRoundTrips(t *testing.T) {
+	t.Parallel()
 	values := []interface{}{
 		"hello", "", int64(-3), []interface{}{"a", int64(1)}, []interface{}{},
 		[]interface{}{[]interface{}{"deep"}, "b"},
@@ -182,6 +189,7 @@ func TestEncodeThenDecodeRoundTrips(t *testing.T) {
 }
 
 func TestParseCmdUpperCasesTheNameAndKeepsTheArguments(t *testing.T) {
+	t.Parallel()
 	wire := "*3\r\n$3\r\nput\r\n$5\r\nhello\r\n$5\r\nWorld\r\n"
 	cmd, n, err := core.ParseCmd([]byte(wire))
 	assert.NoError(t, err)
@@ -226,6 +234,7 @@ func BenchmarkParseCmd(b *testing.B) {
 // A command that has not fully arrived yet must be reported as incomplete so the
 // caller can wait for the rest, rather than being parsed out of bounds.
 func TestParseCmdIncompleteFrame(t *testing.T) {
+	t.Parallel()
 	full := "*3\r\n$3\r\nSET\r\n$5\r\nhello\r\n$5\r\nworld\r\n"
 	// Every strict prefix of a valid command is incomplete, never fatal.
 	for i := 1; i < len(full); i++ {
@@ -245,6 +254,7 @@ func TestParseCmdIncompleteFrame(t *testing.T) {
 // Input that can never become a command must be rejected as a protocol error
 // instead of panicking the server.
 func TestParseCmdProtocolError(t *testing.T) {
+	t.Parallel()
 	cases := []string{
 		"PING\r\n",        // inline command, not a RESP array
 		":1\r\n",          // an integer is not a command
@@ -266,6 +276,7 @@ func TestParseCmdProtocolError(t *testing.T) {
 // Several commands can arrive in one read. Each call consumes exactly one, so a
 // caller can walk the buffer without losing the commands that follow.
 func TestParseCmdPipelined(t *testing.T) {
+	t.Parallel()
 	one := "*1\r\n$4\r\nPING\r\n"
 	two := "*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$1\r\nv\r\n"
 	buf := []byte(one + two + one)
@@ -282,6 +293,7 @@ func TestParseCmdPipelined(t *testing.T) {
 
 // Commands larger than one read buffer used to slice past the end of the data.
 func TestParseCmdLargeBulkString(t *testing.T) {
+	t.Parallel()
 	for _, size := range []int{484, 486, 1024, 65536} {
 		value := strings.Repeat("A", size)
 		raw := fmt.Sprintf("*3\r\n$3\r\nSET\r\n$3\r\nbig\r\n$%d\r\n%s\r\n", size, value)
@@ -296,6 +308,7 @@ func TestParseCmdLargeBulkString(t *testing.T) {
 // The server encodes negative integers itself (see constant.TtlKeyNotExist), so
 // decoding has to round-trip them.
 func TestDecodeNegativeInt(t *testing.T) {
+	t.Parallel()
 	cases := map[string]int64{
 		":-1\r\n": -1,
 		":-2\r\n": -2,
@@ -309,6 +322,7 @@ func TestDecodeNegativeInt(t *testing.T) {
 
 // $-1\r\n is the RESP null bulk string and must decode without consuming a payload.
 func TestDecodeNullBulkString(t *testing.T) {
+	t.Parallel()
 	value, err := core.Decode([]byte("$-1\r\n"))
 	assert.NoError(t, err)
 	assert.EqualValues(t, "", value)
@@ -317,6 +331,7 @@ func TestDecodeNullBulkString(t *testing.T) {
 // TestFrameShortfall covers the sizing hint the reader uses to ask the kernel
 // for exactly the rest of a half-arrived command instead of a fixed chunk.
 func TestFrameShortfall(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		data string
@@ -373,6 +388,7 @@ func TestFrameShortfall(t *testing.T) {
 // TestFrameShortfallMatchesWhatDecodingNeeds ties the hint to the parser: after
 // supplying exactly the reported shortfall, the frame must decode.
 func TestFrameShortfallMatchesWhatDecodingNeeds(t *testing.T) {
+	t.Parallel()
 	full := []byte("*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$2048\r\n" + strings.Repeat("v", 2048) + "\r\n")
 	for _, cut := range []int{25, 30, 100, 1024, len(full) - 1} {
 		partial := full[:cut]

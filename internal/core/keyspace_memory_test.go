@@ -6,16 +6,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/brandopakel/keel/internal/data_structure"
 )
 
-// withBudget puts every keyspace under a byte budget for one test.
-func withBudget(t *testing.T, bytes uint64, policy EvictionPolicy) {
+// withBudget puts every keyspace of e under a byte budget, and empties it.
+func withBudget(t *testing.T, e *Engine, bytes uint64, policy EvictionPolicy) {
 	t.Helper()
-	t.Cleanup(ResetStores)
-	withOptions(t, func(o *Options) { o.MaxMemory, o.MaxKeys, o.Eviction = bytes, 100000000, policy })
-	ResetStores()
+	reconfigure(t, e, func(o *Options) { o.MaxMemory, o.MaxKeys, o.Eviction = bytes, 100000000, policy })
+	e.resetStores()
 }
 
 // TestEveryKeyspaceIsAccounted is the point of the change. Before it, only the
@@ -23,35 +20,37 @@ func withBudget(t *testing.T, bytes uint64, policy EvictionPolicy) {
 // whatever their cardinality - could run past -maxmemory without anything
 // noticing, and eviction had nothing to evict because it only looked at strings.
 func TestEveryKeyspaceIsAccounted(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	cases := []struct {
 		name string
 		fill func(i int)
 	}{
-		{"string", func(i int) { defaultEngine.cmdSET([]string{"s" + strconv.Itoa(i), strings.Repeat("v", 500)}) }},
-		{"set", func(i int) { defaultEngine.cmdSADD([]string{"set" + strconv.Itoa(i), "a", "b", "c", "d", "e"}) }},
-		{"sorted set", func(i int) { defaultEngine.cmdZADD([]string{"z" + strconv.Itoa(i), "1", "a", "2", "b"}) }},
-		{"hyperloglog", func(i int) { defaultEngine.cmdPFADD([]string{"h" + strconv.Itoa(i), "x"}) }},
-		{"cuckoo filter", func(i int) { defaultEngine.cmdCFADD([]string{"c" + strconv.Itoa(i), "x"}) }},
-		{"count-min sketch", func(i int) { defaultEngine.cmdCMSINITBYDIM([]string{"m" + strconv.Itoa(i), "200", "5"}) }},
-		{"bloom filter", func(i int) { defaultEngine.cmdBFMADD([]string{"b" + strconv.Itoa(i), "x"}) }},
+		{"string", func(i int) { e.cmdSET([]string{"s" + strconv.Itoa(i), strings.Repeat("v", 500)}) }},
+		{"set", func(i int) { e.cmdSADD([]string{"set" + strconv.Itoa(i), "a", "b", "c", "d", "e"}) }},
+		{"sorted set", func(i int) { e.cmdZADD([]string{"z" + strconv.Itoa(i), "1", "a", "2", "b"}) }},
+		{"hyperloglog", func(i int) { e.cmdPFADD([]string{"h" + strconv.Itoa(i), "x"}) }},
+		{"cuckoo filter", func(i int) { e.cmdCFADD([]string{"c" + strconv.Itoa(i), "x"}) }},
+		{"count-min sketch", func(i int) { e.cmdCMSINITBYDIM([]string{"m" + strconv.Itoa(i), "200", "5"}) }},
+		{"bloom filter", func(i int) { e.cmdBFMADD([]string{"b" + strconv.Itoa(i), "x"}) }},
 	}
 
 	const budget = 1 << 20 // 1 MB
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			withBudget(t, budget, EvictLRU)
+			withBudget(t, e, budget, EvictLRU)
 			// Enough of every type to exceed the budget: the smallest of
 			// them is a few hundred bytes, so 2000 keys would simply fit and
 			// eviction would never run.
 			for i := 0; i < 6000; i++ {
 				c.fill(i)
 			}
-			used := data_structure.TotalMemUsed()
+			used := e.space.TotalMemUsed()
 			assert.LessOrEqual(t, used, uint64(budget)*11/10,
 				"%s keyspace ran to %d bytes against a %d budget", c.name, used, budget)
-			assert.Greater(t, data_structure.Evicted(), uint64(0),
+			assert.Greater(t, e.space.Evicted(), uint64(0),
 				"%s: eviction should have run", c.name)
-			t.Logf("%-18s held %d keys in %d bytes", c.name, data_structure.TotalKeys(), used)
+			t.Logf("%-18s held %d keys in %d bytes", c.name, e.space.TotalKeys(), used)
 		})
 	}
 }
@@ -59,62 +58,68 @@ func TestEveryKeyspaceIsAccounted(t *testing.T) {
 // TestBudgetIsSharedAcrossKeyspaces checks that the bound is one budget rather
 // than one per store: filling several types together must still total under it.
 func TestBudgetIsSharedAcrossKeyspaces(t *testing.T) {
-	withBudget(t, 1<<20, EvictLRU)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	withBudget(t, e, 1<<20, EvictLRU)
 	for i := 0; i < 1000; i++ {
 		n := strconv.Itoa(i)
-		defaultEngine.cmdSET([]string{"s" + n, strings.Repeat("v", 500)})
-		defaultEngine.cmdSADD([]string{"set" + n, "a", "b", "c"})
-		defaultEngine.cmdPFADD([]string{"h" + n, "x"})
-		defaultEngine.cmdZADD([]string{"z" + n, "1", "a"})
+		e.cmdSET([]string{"s" + n, strings.Repeat("v", 500)})
+		e.cmdSADD([]string{"set" + n, "a", "b", "c"})
+		e.cmdPFADD([]string{"h" + n, "x"})
+		e.cmdZADD([]string{"z" + n, "1", "a"})
 	}
-	used := data_structure.TotalMemUsed()
+	used := e.space.TotalMemUsed()
 	assert.LessOrEqual(t, used, uint64(1<<20)*11/10,
 		"the budget must span every keyspace, not apply to each separately")
-	t.Logf("mixed keyspaces: %d keys in %d bytes", data_structure.TotalKeys(), used)
+	t.Logf("mixed keyspaces: %d keys in %d bytes", e.space.TotalKeys(), used)
 }
 
 // TestEvictionCrossesKeyspaces checks that pressure in one keyspace can free a
 // key from another. Without it, a store full of sketches would be untouchable
 // and the budget could only be met by destroying the strings.
 func TestEvictionCrossesKeyspaces(t *testing.T) {
-	withBudget(t, 512<<10, EvictLRU)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	withBudget(t, e, 512<<10, EvictLRU)
 
 	// Fill with sketches only, so everything the budget holds is one type.
 	for i := 0; i < 4000; i++ {
-		defaultEngine.cmdPFADD([]string{"h" + strconv.Itoa(i), "x"})
+		e.cmdPFADD([]string{"h" + strconv.Itoa(i), "x"})
 	}
-	hllKeys := defaultEngine.hllStore.Len()
+	hllKeys := e.hllStore.Len()
 	assert.Greater(t, hllKeys, 0)
 
 	// Now write strings. The budget is already full of sketches, so room can
 	// only come from evicting them.
 	for i := 0; i < 500; i++ {
-		defaultEngine.cmdSET([]string{"s" + strconv.Itoa(i), strings.Repeat("v", 200)})
+		e.cmdSET([]string{"s" + strconv.Itoa(i), strings.Repeat("v", 200)})
 	}
-	assert.Less(t, defaultEngine.hllStore.Len(), hllKeys,
+	assert.Less(t, e.hllStore.Len(), hllKeys,
 		"pressure from the string keyspace must be able to evict sketches")
-	assert.LessOrEqual(t, data_structure.TotalMemUsed(), uint64(512<<10)*11/10)
+	assert.LessOrEqual(t, e.space.TotalMemUsed(), uint64(512<<10)*11/10)
 }
 
 // TestSetGrowthIsRemeasured covers the Resize hook. A set's size changes as
 // members are added, without going through Put, so the keyspace has to be told
 // - and if it is not, the budget quietly believes an old, smaller figure.
 func TestSetGrowthIsRemeasured(t *testing.T) {
-	withBudget(t, 0, EvictLRU) // unbounded, so nothing is evicted mid-test
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	withBudget(t, e, 0, EvictLRU) // unbounded, so nothing is evicted mid-test
 
-	defaultEngine.cmdSADD([]string{"s", "a"})
-	small := defaultEngine.setStore.MemUsed()
+	e.cmdSADD([]string{"s", "a"})
+	small := e.setStore.MemUsed()
 
 	for i := 0; i < 5000; i++ {
-		defaultEngine.cmdSADD([]string{"s", "member:" + strconv.Itoa(i)})
+		e.cmdSADD([]string{"s", "member:" + strconv.Itoa(i)})
 	}
-	grown := defaultEngine.setStore.MemUsed()
+	grown := e.setStore.MemUsed()
 
 	assert.Greater(t, grown, small+5000*20,
 		"adding 5000 members must be reflected in the keyspace's accounting")
 
-	defaultEngine.cmdSREM([]string{"s", "member:1", "member:2", "member:3"})
-	assert.Less(t, defaultEngine.setStore.MemUsed(), grown, "removing members must shrink it again")
+	e.cmdSREM([]string{"s", "member:1", "member:2", "member:3"})
+	assert.Less(t, e.setStore.MemUsed(), grown, "removing members must shrink it again")
 }
 
 // TestMemoryUsageFindsKeysInEveryKeyspace covers the reporting side. MEMORY
@@ -122,18 +127,20 @@ func TestSetGrowthIsRemeasured(t *testing.T) {
 // every set, sketch and filter - which is exactly the blind spot this change is
 // about, reproduced in the tool meant to reveal it.
 func TestMemoryUsageFindsKeysInEveryKeyspace(t *testing.T) {
-	withBudget(t, 0, EvictLRU)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	withBudget(t, e, 0, EvictLRU)
 
-	defaultEngine.cmdSET([]string{"str", strings.Repeat("v", 100)})
-	defaultEngine.cmdSADD([]string{"set", "a", "b", "c"})
-	defaultEngine.cmdZADD([]string{"zset", "1", "a"})
-	defaultEngine.cmdPFADD([]string{"hll", "x"})
-	defaultEngine.cmdCFADD([]string{"cf", "x"})
-	defaultEngine.cmdCMSINITBYDIM([]string{"cms", "200", "5"})
-	defaultEngine.cmdBFMADD([]string{"bf", "x"})
+	e.cmdSET([]string{"str", strings.Repeat("v", 100)})
+	e.cmdSADD([]string{"set", "a", "b", "c"})
+	e.cmdZADD([]string{"zset", "1", "a"})
+	e.cmdPFADD([]string{"hll", "x"})
+	e.cmdCFADD([]string{"cf", "x"})
+	e.cmdCMSINITBYDIM([]string{"cms", "200", "5"})
+	e.cmdBFMADD([]string{"bf", "x"})
 
 	for _, key := range []string{"str", "set", "zset", "hll", "cf", "cms", "bf"} {
-		res, err := Decode(defaultEngine.cmdMEMORY([]string{"USAGE", key}))
+		res, err := Decode(e.cmdMEMORY([]string{"USAGE", key}))
 		assert.Nil(t, err)
 		n, ok := res.(int64)
 		assert.True(t, ok, "MEMORY USAGE %s should report a size, got %v", key, res)
@@ -142,12 +149,12 @@ func TestMemoryUsageFindsKeysInEveryKeyspace(t *testing.T) {
 
 	// Small sketches retain compact registers; after promotion the full dense
 	// allocation must be charged through the same MEMORY USAGE command.
-	res, _ := Decode(defaultEngine.cmdMEMORY([]string{"USAGE", "hll"}))
+	res, _ := Decode(e.cmdMEMORY([]string{"USAGE", "hll"}))
 	assert.Less(t, res.(int64), int64(1000))
 	for i := 0; i < 1000; i++ {
-		defaultEngine.cmdPFADD([]string{"hll", strconv.Itoa(i)})
+		e.cmdPFADD([]string{"hll", strconv.Itoa(i)})
 	}
-	res, _ = Decode(defaultEngine.cmdMEMORY([]string{"USAGE", "hll"}))
+	res, _ = Decode(e.cmdMEMORY([]string{"USAGE", "hll"}))
 	assert.Greater(t, res.(int64), int64(12000))
 }
 
@@ -156,12 +163,14 @@ func TestMemoryUsageFindsKeysInEveryKeyspace(t *testing.T) {
 // so a filter holding a hundred kilobytes of bits reported about forty bytes.
 // A memory budget built on that figure would have been meaningless.
 func TestBloomFilterSizeIsTheBitArray(t *testing.T) {
-	withBudget(t, 0, EvictLRU)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	withBudget(t, e, 0, EvictLRU)
 
-	defaultEngine.cmdBFRESERVE([]string{"bf", "0.01", "100000"})
-	defaultEngine.cmdBFMADD([]string{"bf", "x"})
+	e.cmdBFRESERVE([]string{"bf", "0.01", "100000"})
+	e.cmdBFMADD([]string{"bf", "x"})
 
-	res, _ := Decode(defaultEngine.cmdMEMORY([]string{"USAGE", "bf"}))
+	res, _ := Decode(e.cmdMEMORY([]string{"USAGE", "bf"}))
 	assert.Greater(t, res.(int64), int64(100000),
 		"a filter sized for 100,000 items at 1%% error holds ~120KB of bits")
 }
