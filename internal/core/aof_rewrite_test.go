@@ -437,24 +437,24 @@ func TestRewriteStallProfile(t *testing.T) {
 func BenchmarkRewrite(b *testing.B) {
 	for _, keys := range []int{10000, 100000, 1000000} {
 		b.Run(strconv.Itoa(keys)+"-string-keys", func(b *testing.B) {
+			e := newTestEngine(b, Options{})
 			path := filepath.Join(b.TempDir(), "bench.aof")
-			ResetStores()
-			if err := OpenAOF(path); err != nil {
+			if err := e.OpenAOF(path); err != nil {
 				b.Fatal(err)
 			}
-			defer CloseAOF()
+			defer e.CloseAOF()
 			var w replyWriter
 			for i := 0; i < keys; i++ {
-				EvalAndResponse(&Command{Cmd: "SET",
+				e.evalAndResponse(&Command{Cmd: "SET",
 					Args: []string{"key:" + strconv.Itoa(i), "value-of-some-length"}}, &w)
 				w.b = w.b[:0]
 			}
-			if err := FlushAOF(); err != nil {
+			if err := e.FlushAOF(); err != nil {
 				b.Fatal(err)
 			}
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				if err := RewriteAOF(); err != nil {
+				if err := e.RewriteAOF(); err != nil {
 					b.Fatal(err)
 				}
 			}

@@ -20,19 +20,17 @@ const minRecordBytes = 16
 // engine, so the paired job in command-path.yml measures it here as well as
 // without a log in BenchmarkCommandPath.
 //
-// The log is under everysec, the server's default, in a temporary directory,
-// with automatic rewrites off (logBenchmarkSettings). The flush runs once
-// every logCycle commands, as the event loop runs it once a cycle, so its
-// write is in the time per command at the share a pipelined cycle pays.
+// Each family runs on an engine of its own (logBenchmarkEngine), with the log
+// under everysec, the server's default, in a temporary directory, and
+// automatic rewrites off. The flush runs once every logCycle commands, as the
+// event loop runs it once a cycle, so its write is in the time per command at
+// the share a pipelined cycle pays.
 //
-// This file uses only what the package had before step 2.3, and the settings
-// in command_path_settings_test.go, so command-path.yml can build it into a
-// baseline that does not have it yet. Sub-benchmark names are part of that
-// comparison, so a name, once added, is not renamed.
+// This file uses only what the package had before step 2.3, and the engine
+// command_path_settings_test.go hands it, so command-path.yml can build it
+// into a baseline that does not have it yet. Sub-benchmark names are part of
+// that comparison, so a name, once added, is not renamed.
 func BenchmarkCommandPathWithLog(b *testing.B) {
-	b.Cleanup(ResetStores)
-	logBenchmarkSettings(b)
-
 	members := make([]string, 100)
 	for i := range members {
 		members[i] = "member:" + strconv.Itoa(i)
@@ -63,46 +61,46 @@ func BenchmarkCommandPathWithLog(b *testing.B) {
 		{"SADD", nil, ring(100, func(i int) []*Command { return one("SADD", "bench:set", members[i]) })},
 	} {
 		b.Run(family.name, func(b *testing.B) {
-			ResetStores()
-			if err := OpenAOF(filepath.Join(b.TempDir(), "bench.aof")); err != nil {
+			e := logBenchmarkEngine(b)
+			if err := e.OpenAOF(filepath.Join(b.TempDir(), "bench.aof")); err != nil {
 				b.Fatal(err)
 			}
-			defer CloseAOF()
+			defer e.CloseAOF()
 			for _, cmd := range family.setup {
-				mustSucceed(b, cmd)
+				mustSucceedOn(b, e, cmd)
 			}
 			for _, step := range family.steps {
 				for _, cmd := range step {
-					mustSucceed(b, cmd)
+					mustSucceedOn(b, e, cmd)
 				}
 			}
-			if err := FlushAOF(); err != nil {
+			if err := e.FlushAOF(); err != nil {
 				b.Fatal(err)
 			}
-			_, before, _, _ := AOFStats()
+			_, before, _, _ := e.AOFStats()
 			var w replyWriter
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				for _, cmd := range family.steps[i%len(family.steps)] {
 					w.b = w.b[:0]
-					if err := EvalAndResponse(cmd, &w); err != nil || len(w.b) == 0 || w.b[0] == '-' {
+					if err := e.EvalAndResponse(cmd, &w); err != nil || len(w.b) == 0 || w.b[0] == '-' {
 						b.Fatalf("%s %v: %v %q", cmd.Cmd, cmd.Args, err, w.b)
 					}
 				}
 				if i%logCycle == logCycle-1 {
-					if err := FlushAOF(); err != nil {
+					if err := e.FlushAOF(); err != nil {
 						b.Fatal(err)
 					}
 				}
 			}
 			b.StopTimer()
-			if err := FlushAOF(); err != nil {
+			if err := e.FlushAOF(); err != nil {
 				b.Fatal(err)
 			}
 			// Every write this measured is in the log: no record is shorter
 			// than minRecordBytes.
-			if _, after, _, _ := AOFStats(); after-before < int64(b.N)*minRecordBytes {
+			if _, after, _, _ := e.AOFStats(); after-before < int64(b.N)*minRecordBytes {
 				b.Fatalf("the log grew %d bytes over %d iterations", after-before, b.N)
 			}
 		})
