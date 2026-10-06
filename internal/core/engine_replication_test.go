@@ -205,7 +205,7 @@ func TestEnginesShareNoReplica(t *testing.T) {
 					return
 				}
 				var w replyWriter
-				if !assert.NoError(t, side.e.evalAndResponse(&Command{Cmd: "GET", Args: []string{side.s.name + ":after"}}, &w)) {
+				if !assert.NoError(t, side.e.EvalAndResponse(&Command{Cmd: "GET", Args: []string{side.s.name + ":after"}}, &w)) {
 					return
 				}
 				// A replica serves reads once a frame says it has caught up.
@@ -307,7 +307,7 @@ func TestEnginesShareNoReplica(t *testing.T) {
 func pullFrom(t *testing.T, p *Engine, name string, args ...string) (ReplicationFrame, bool) {
 	t.Helper()
 	var w replyWriter
-	if !assert.NoError(t, p.evalAndResponse(&Command{Cmd: name, Args: args}, &w)) {
+	if !assert.NoError(t, p.EvalAndResponse(&Command{Cmd: name, Args: args}, &w)) {
 		return ReplicationFrame{}, false
 	}
 	reply, _ := Decode(w.b)
@@ -426,7 +426,7 @@ func TestEnginesShareNoReplication(t *testing.T) {
 			p := pair.p
 			do := func(parts ...string) bool {
 				var w replyWriter
-				err := p.evalAndResponse(&Command{Cmd: parts[0], Args: parts[1:]}, &w)
+				err := p.EvalAndResponse(&Command{Cmd: parts[0], Args: parts[1:]}, &w)
 				return assert.NoError(t, err) && assert.NotEqual(t, byte('-'), w.b[0], "%q: %q", parts, w.b)
 			}
 			for round := range 4 {
@@ -445,7 +445,7 @@ func TestEnginesShareNoReplication(t *testing.T) {
 				for _, cmd := range [][]string{{"MULTI"}, {"SET", "tx", v}, {"LPOP", "l"}, {"CMS.INITBYDIM", "cms:" + v, "10", "2"}, {"EXEC"}} {
 					var w replyWriter
 					var err error
-					if tx, err = p.transact(tx, &Command{Cmd: cmd[0], Args: cmd[1:]}, &w, nil); !assert.NoError(t, err) {
+					if tx, err = p.Transact(tx, &Command{Cmd: cmd[0], Args: cmd[1:]}, &w, nil); !assert.NoError(t, err) {
 						return
 					}
 				}
@@ -453,7 +453,7 @@ func TestEnginesShareNoReplication(t *testing.T) {
 				// Reaped: the read answers nil and logs the key's DEL, which
 				// the stream carries to the replica.
 				var w replyWriter
-				ok = ok && assert.NoError(t, p.evalAndResponse(&Command{Cmd: "GET", Args: []string{"brief"}}, &w)) &&
+				ok = ok && assert.NoError(t, p.EvalAndResponse(&Command{Cmd: "GET", Args: []string{"brief"}}, &w)) &&
 					assert.Equal(t, "$-1\r\n", string(w.b), "brief was reaped")
 				if !ok || !assert.NoError(t, p.FlushAOF()) || !pair.catchUp(t) {
 					return
@@ -654,7 +654,7 @@ func TestEnginesShareNoFailover(t *testing.T) {
 					{Cmd: "KEEL.FENCE", Args: []string{strconv.FormatUint(base+2*i+1, 10)}},
 				} {
 					w.b = w.b[:0]
-					if !assert.NoError(t, e.evalAndResponse(cmd, &w)) || !assert.Equal(t, "+OK\r\n", string(w.b), "%s", cmd.Cmd) {
+					if !assert.NoError(t, e.EvalAndResponse(cmd, &w)) || !assert.Equal(t, "+OK\r\n", string(w.b), "%s", cmd.Cmd) {
 						return
 					}
 				}

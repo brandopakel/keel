@@ -12,7 +12,7 @@ import (
 )
 
 func TestExecuteRunYieldsDeepPipelines(t *testing.T) {
-	c := &client{fd: -1}
+	c := &client{fd: -1, engine: newTestEngine(t, core.Options{})}
 	for i := 0; i < 257; i++ {
 		c.cmds = append(c.cmds, &core.Command{Cmd: "PING"})
 	}
@@ -53,11 +53,10 @@ func TestReadCommandsBoundsDecodedPipelines(t *testing.T) {
 }
 
 func TestLargeFirstReplyYieldsWithoutArenaCopy(t *testing.T) {
-	core.ResetStores()
-	t.Cleanup(core.ResetStores)
+	e := newTestEngine(t, core.Options{})
 	var sink replyBuffer
-	responseRw(&core.Command{Cmd: "SET", Args: []string{"large", strings.Repeat("x", 1<<20)}}, &sink)
-	c := &client{fd: -1, cmds: []*core.Command{{Cmd: "GET", Args: []string{"large"}}, {Cmd: "PING"}}}
+	responseRw(e, &core.Command{Cmd: "SET", Args: []string{"large", strings.Repeat("x", 1<<20)}}, &sink)
+	c := &client{fd: -1, cmds: []*core.Command{{Cmd: "GET", Args: []string{"large"}}, {Cmd: "PING"}}, engine: e}
 	var arena replyArena
 	require.True(t, executeRun(c, &arena))
 	require.Len(t, c.cmds, 1)
@@ -104,10 +103,11 @@ func TestPipelineContinuationWaitsForAppendAndReplyDrain(t *testing.T) {
 	})
 	r, w := socketPair(t)
 	require.NoError(t, syscall.SetNonblock(w, true))
-	c := &client{fd: r, out: []byte("+OK\r\n"), bufferedReady: true, appendOffset: core.AppendReadyOffset() + 1}
+	e := newTestEngine(t, core.Options{})
+	c := &client{fd: r, out: []byte("+OK\r\n"), bufferedReady: true, appendOffset: e.AppendReadyOffset() + 1, engine: e}
 	clients[r] = c
 	mux := &recordingMonitor{operations: make(map[int]io_multiplexing.Operation)}
-	var q orderedAppend
+	q := orderedAppend{engine: e}
 	var arena replyArena
 	require.Empty(t, q.gate([]*client{c}, &arena, mux))
 	require.True(t, c.appendHeld)

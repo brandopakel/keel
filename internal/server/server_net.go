@@ -62,13 +62,13 @@ type execReq struct {
 
 var execCh chan execReq
 
-func startExecutor() {
+func startExecutor(e *core.Engine) {
 	execCh = make(chan execReq, 1024)
 	go func() {
 		for req := range execCh {
 			var rb replyBuffer
 			for _, cmd := range req.cmds {
-				responseRw(cmd, &rb)
+				responseRw(e, cmd, &rb)
 			}
 			out := make([]byte, rb.buf.Len())
 			copy(out, rb.buf.Bytes())
@@ -84,7 +84,7 @@ func bufSizeFor(v NetVariant) int {
 	return readChunkSize
 }
 
-func handleConn(conn net.Conn, variant NetVariant) {
+func handleConn(conn net.Conn, variant NetVariant, e *core.Engine) {
 	defer conn.Close()
 
 	size := bufSizeFor(variant)
@@ -137,10 +137,10 @@ func handleConn(conn net.Conn, variant NetVariant) {
 				} else {
 					for _, cmd := range batch {
 						if EvalUnlocked {
-							responseRw(cmd, out)
+							responseRw(e, cmd, out)
 						} else {
 							evalMu.Lock()
-							responseRw(cmd, out)
+							responseRw(e, cmd, out)
 							evalMu.Unlock()
 						}
 					}
@@ -159,14 +159,14 @@ func handleConn(conn net.Conn, variant NetVariant) {
 	}
 }
 
-// RunNetTCPServer serves on net.Listener with one goroutine per connection, at
-// the address o gives. It is a benchmark mode: the rest of o is the event
+// RunNetTCPServer serves e on net.Listener with one goroutine per connection,
+// at the address o gives. It is a benchmark mode: the rest of o is the event
 // loop's.
-func RunNetTCPServer(wg *sync.WaitGroup, o Options) error {
+func RunNetTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 	defer wg.Done()
 	o = o.WithDefaults()
 	if ActiveNetVariant == NetVariantChannel {
-		startExecutor()
+		startExecutor(e)
 	}
 	addr := net.JoinHostPort(o.Host, itoa(o.Port))
 	log.Println("starting a net.Listener TCP server on", o.Host, o.Port, "variant", ActiveNetVariant)
@@ -196,7 +196,7 @@ func RunNetTCPServer(wg *sync.WaitGroup, o Options) error {
 			log.Println("accept:", err)
 			continue
 		}
-		go handleConn(conn, ActiveNetVariant)
+		go handleConn(conn, ActiveNetVariant, e)
 	}
 }
 

@@ -344,7 +344,7 @@ func runServer() error {
 	if appendOnly && mode != "kqueue" {
 		return fmt.Errorf("-appendonly requires -mode kqueue; other modes are benchmarks")
 	}
-	var serve func(*sync.WaitGroup, server.Options) error
+	var serve func(*sync.WaitGroup, *core.Engine, server.Options) error
 	switch mode {
 	case "kqueue":
 		serve = server.RunAsyncTCPServer
@@ -359,21 +359,23 @@ func runServer() error {
 		return fmt.Errorf("unknown or unsupported mode %q", mode)
 	}
 	fmt.Printf("starting keel %s ...\n", config.BuildVersion())
-	// The engine's settings are the flags', every one passed explicitly, so
-	// that none of the server's is an engine default. They are in place before
-	// the log is replayed, as the variables they replace were assigned before
-	// anything read them.
-	if err := core.Configure(engineOptions()); err != nil {
+	// The server's engine, which this process holds and hands to the server.
+	// Its settings are the flags', every one passed explicitly, so that none
+	// of the server's is an engine default. They are in place before the log
+	// is replayed, as the variables they replace were assigned before anything
+	// read them.
+	e, err := core.NewEngine(engineOptions())
+	if err != nil {
 		return err
 	}
 	if appendOnly && keysMayPassRewriteCeiling(maxKeys) {
 		log.Println(rewriteCeilingWarning())
 	}
-	if err := server.StartAOF(); err != nil {
+	if err := server.StartAOF(e); err != nil {
 		return fmt.Errorf("appendonly: %w", err)
 	}
 
-	if err := core.InitReplication(); err != nil {
+	if err := e.InitReplication(); err != nil {
 		return err
 	}
 
@@ -384,8 +386,8 @@ func runServer() error {
 	wg.Add(1)
 	done := make(chan error, 1)
 	go func() {
-		err := serve(&wg, serverOptions())
-		closeErr := core.CloseAOF()
+		err := serve(&wg, e, serverOptions())
+		closeErr := e.CloseAOF()
 		if err != nil {
 			done <- err
 		} else {

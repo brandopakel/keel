@@ -164,25 +164,26 @@ func IsTransactionCommand(name string) bool {
 	return name == "MULTI" || name == "EXEC" || name == "DISCARD"
 }
 
-// Transact answers cmd for a connection whose open transaction is tx, nil if it
-// has none, and returns the transaction that is open afterwards. The transport
-// calls it for every command while one is open, and for MULTI, EXEC and
-// DISCARD always; conn, which may be nil, answers the commands it handles
-// itself when EXEC reaches them.
+// Transact is the method of that name on the default engine, which plan step
+// 2.7 removes.
+func Transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn Connection) (*Transaction, error) {
+	return defaultEngine.Transact(tx, cmd, w, conn)
+}
+
+// Transact answers cmd on e for a connection whose open transaction is tx,
+// nil if it has none, and returns the transaction that is open afterwards:
+// what EXEC runs, it runs on e. The transport calls it for every command
+// while one is open, and for MULTI, EXEC and DISCARD always; conn, which may
+// be nil, answers the commands it handles itself when EXEC reaches them.
 //
 // Like EvalAndResponse, the error is the connection's rather than the
 // command's: ErrTransactionReplyTooLarge means a transaction ran and its reply
 // cannot be delivered, so the connection has to be closed, which is what any
 // reply over the output limit already costs.
-func Transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn Connection) (*Transaction, error) {
-	return defaultEngine.transact(tx, cmd, w, conn)
-}
-
-// transact is Transact on e: what EXEC runs, it runs on e.
-func (e *Engine) transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn Connection) (*Transaction, error) {
+func (e *Engine) Transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn Connection) (*Transaction, error) {
 	if !IsTransactionCommand(cmd.Cmd) {
 		if tx == nil {
-			return nil, e.evalAndResponse(cmd, w)
+			return nil, e.EvalAndResponse(cmd, w)
 		}
 		if cmd.Cmd == "WATCH" {
 			// WATCH is not implemented, and outside a transaction it is an
@@ -358,7 +359,7 @@ func (tx *Transaction) exec(e *Engine, w io.Writer, conn Connection) error {
 		// command runs, not when it was queued: Redis runs a queued HELLO in
 		// its place, and frames every reply after it in the new protocol.
 		cmd.RESP3 = conn != nil && conn.RESP3()
-		return e.evalAndResponse(cmd, sink)
+		return e.EvalAndResponse(cmd, sink)
 	}
 	e.runTransaction(tx.commands, run, func(i int, reply []byte, err error) {
 		if err == nil && len(reply) == 0 {

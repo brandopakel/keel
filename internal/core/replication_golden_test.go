@@ -147,7 +147,7 @@ func (g *replicationGolden) window() goldenWindow {
 func (g *replicationGolden) call(parts ...string) []byte {
 	g.t.Helper()
 	var w replyWriter
-	require.NoError(g.t, g.e.evalAndResponse(&Command{Cmd: parts[0], Args: parts[1:]}, &w), "%q", parts)
+	require.NoError(g.t, g.e.EvalAndResponse(&Command{Cmd: parts[0], Args: parts[1:]}, &w), "%q", parts)
 	g.cycle()
 	return w.b
 }

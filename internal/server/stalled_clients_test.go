@@ -205,22 +205,23 @@ func TestARunThatAnswersNothingClosesItsClient(t *testing.T) {
 			oldRespond(c, cmd, w)
 		}
 	}
+	e := newTestEngine(t, core.Options{})
 	var arena replyArena
 	arena.reset()
 
-	one := &client{fd: -1, cmds: []*core.Command{{Cmd: "SILENT"}}}
+	one := &client{fd: -1, cmds: []*core.Command{{Cmd: "SILENT"}}, engine: e}
 	require.False(t, executeRun(one, &arena))
 	require.ErrorIs(t, one.err, errUnreplied)
-	many := &client{fd: -1, cmds: []*core.Command{{Cmd: "SILENT"}, {Cmd: "SILENT"}}}
+	many := &client{fd: -1, cmds: []*core.Command{{Cmd: "SILENT"}, {Cmd: "SILENT"}}, engine: e}
 	require.False(t, executeRun(many, &arena))
 	require.ErrorIs(t, many.err, errUnreplied)
 	require.Equal(t, oldUnreplied+2, runsUnreplied)
 	require.Contains(t, logged.String(), `2 command(s) from "SILENT" ran and produced no reply`)
 
-	answered := &client{fd: -1, cmds: []*core.Command{{Cmd: "SILENT"}, {Cmd: "PING"}}}
+	answered := &client{fd: -1, cmds: []*core.Command{{Cmd: "SILENT"}, {Cmd: "PING"}}, engine: e}
 	require.True(t, executeRun(answered, &arena), "a batch with any reply is answered")
 	require.NoError(t, answered.err)
-	idle := &client{fd: -1}
+	idle := &client{fd: -1, engine: e}
 	require.False(t, executeRun(idle, &arena))
 	require.NoError(t, idle.err, "a run with nothing to execute owes nothing")
 	require.Equal(t, oldUnreplied+2, runsUnreplied)

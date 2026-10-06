@@ -10,14 +10,21 @@ type CommandAllocationBudget struct {
 	Refusals                                 uint64
 }
 
-// SetCommandAllocations installs the event-loop transport's budget on the
-// default engine, or removes it when b is nil. Core-only calls and alternate
-// transports retain their per-command limits without this budget.
-func SetCommandAllocations(b *CommandAllocationBudget) { defaultEngine.commandAllocations = b }
+// SetCommandAllocations is the method of that name on the default engine,
+// which plan step 2.7 removes.
+func SetCommandAllocations(b *CommandAllocationBudget) { defaultEngine.SetCommandAllocations(b) }
 
-// CommandAllocations is the budget installed on the default engine, nil when
-// there is none.
-func CommandAllocations() *CommandAllocationBudget { return defaultEngine.commandAllocations }
+// CommandAllocations is the method of that name on the default engine, which
+// plan step 2.7 removes.
+func CommandAllocations() *CommandAllocationBudget { return defaultEngine.CommandAllocations() }
+
+// SetCommandAllocations installs the event-loop transport's budget on e, or
+// removes it when b is nil. Core-only calls and alternate transports retain
+// their per-command limits without this budget.
+func (e *Engine) SetCommandAllocations(b *CommandAllocationBudget) { e.commandAllocations = b }
+
+// CommandAllocations is the budget installed on e, nil when there is none.
+func (e *Engine) CommandAllocations() *CommandAllocationBudget { return e.commandAllocations }
 
 // Begin starts a serial execution run with buffers retained by earlier runs.
 func (b *CommandAllocationBudget) Begin(retained int) {

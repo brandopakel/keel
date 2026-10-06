@@ -24,7 +24,7 @@ func TestUnknownCommandIsAnError(t *testing.T) {
 	t.Parallel()
 	e := newTestEngine(t, Options{})
 	var w replyWriter
-	err := e.evalAndResponse(&Command{Cmd: "NOSUCH", Args: []string{"a"}}, &w)
+	err := e.EvalAndResponse(&Command{Cmd: "NOSUCH", Args: []string{"a"}}, &w)
 	assert.EqualError(t, err, "ERR unknown command 'NOSUCH', with args beginning with: 'a' ")
 	assert.Empty(t, w.b, "nothing is written for it here; the caller replies")
 }
@@ -43,7 +43,7 @@ func TestUnknownCommandDiagnosticIsBoundedBeforeFormatting(t *testing.T) {
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	err := e.evalAndResponse(cmd, &w)
+	err := e.EvalAndResponse(cmd, &w)
 	reply := Encode(err, false)
 	runtime.ReadMemStats(&after)
 	assert.Error(t, err)
@@ -97,7 +97,7 @@ func TestAnErrorQuotingClientInputStaysOneFrame(t *testing.T) {
 	t.Parallel()
 	e := newTestEngine(t, Options{})
 	var w replyWriter
-	err := e.evalAndResponse(&Command{Cmd: "NO\r\nSUCH"}, &w)
+	err := e.EvalAndResponse(&Command{Cmd: "NO\r\nSUCH"}, &w)
 	reply := Encode(err, false)
 	assert.Equal(t, "-ERR unknown command 'NO  SUCH'\r\n", string(reply))
 	assert.Equal(t, 1, bytes.Count(reply, []byte("\r\n")), "one frame")

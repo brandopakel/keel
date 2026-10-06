@@ -5,9 +5,9 @@ import "time"
 // Options are the server's settings: where it listens, how many connections it
 // holds, and how its transport runs. They replace the package variables of
 // internal/config (plan step 2.5); cmd/keel maps its flags onto them and
-// passes them to RunAsyncTCPServer or RunNetTCPServer. The engine the server
-// drives has options of its own, core.Options, which cmd/keel gives it with
-// core.Configure before the server starts.
+// passes them to RunAsyncTCPServer or RunNetTCPServer with the engine they
+// serve. That engine has options of its own, core.Options, which cmd/keel
+// makes it with (core.NewEngine) before the server starts.
 //
 // As with core.Options, the zero value of every field is its default.
 type Options struct {

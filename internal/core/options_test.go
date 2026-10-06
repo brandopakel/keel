@@ -77,18 +77,27 @@ func TestOptionsRefused(t *testing.T) {
 	assert.Panics(t, func() { newEngine(Options{MaxKeys: -1}) })
 }
 
-// TestConfigureHoldsTheDefaultEngine: Configure is how the server's flags reach
-// the default engine, and it reaches no other.
-func TestConfigureHoldsTheDefaultEngine(t *testing.T) {
-	own := newEngine(Options{})
-	found := Configuration()
-	t.Cleanup(func() { require.NoError(t, Configure(found)) })
-	require.NoError(t, Configure(Options{MaxMemory: 4096, MaxKeys: 5, Eviction: EvictLFU}))
-	assert.Equal(t, Options{MaxMemory: 4096, MaxKeys: 5, Eviction: EvictLFU}, Configuration())
-	assert.Equal(t, 5, data_structure.DefaultSpace.MaxKeys())
-	assert.Equal(t, uint64(4096), data_structure.DefaultSpace.MaxMemory())
-	assert.Equal(t, data_structure.DefaultLimits(), own.space.Limits(), "another engine keeps its own")
-	assert.Contains(t, runOn(t, defaultEngine, "INFO", "memory"), "maxmemory:4096\r\nmaxmemory_human:4.00K\r\nmaxmemory_policy:allkeys-lfu\r\n")
+// TestNewEngineHoldsItsOptions: an engine is held to the options it is made
+// with, reports them as given and in INFO, and leaves another engine's alone;
+// options no engine can be held to make no engine, with the reason.
+func TestNewEngineHoldsItsOptions(t *testing.T) {
+	t.Parallel()
+	o := Options{MaxMemory: 4096, MaxKeys: 5, Eviction: EvictLFU}
+	e, err := NewEngine(o)
+	require.NoError(t, err)
+	other := newEngine(Options{})
+	assert.Equal(t, o, e.Configuration())
+	assert.Equal(t, o.limits(), e.Limits())
+	assert.Equal(t, 5, e.Limits().MaxKeys)
+	assert.Equal(t, uint64(4096), e.Limits().MaxMemory)
+	assert.Equal(t, data_structure.DefaultLimits(), other.Limits(), "another engine keeps its own")
+	assert.Equal(t, Options{}, other.Configuration())
+	assert.Contains(t, runOn(t, e, "INFO", "memory"), "maxmemory:4096\r\nmaxmemory_human:4.00K\r\nmaxmemory_policy:allkeys-lfu\r\n")
+	for _, refused := range []Options{{MaxKeys: -1}, {Eviction: EvictionPolicy(3)}, {ActiveExpirePercent: 101}} {
+		e, err := NewEngine(refused)
+		assert.EqualError(t, err, refused.validate().Error(), "%+v", refused)
+		assert.Nil(t, e)
+	}
 }
 
 // TestOptionsResolveSettings: what the engine reads is its options with every

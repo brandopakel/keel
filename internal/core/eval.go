@@ -122,20 +122,21 @@ func (e *Engine) cmdSELECT(args []string) []byte {
 	return constant.RespOk
 }
 
-// EvalAndResponse runs one command and writes its reply to c.
+// EvalAndResponse is the method of that name on the default engine, which
+// plan step 2.7 removes.
+func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
+	return defaultEngine.EvalAndResponse(cmd, c)
+}
+
+// EvalAndResponse runs one command on e and writes its reply to c: the
+// command runs in e's command scope, and its keys are type-checked, its
+// eviction held off and its limits enforced on e's space.
 //
 // The error it returns is the connection's, not the command's: a command that
 // fails answers with a RESP error and returns nil here. The one exception is a
 // command this server does not have, which is returned as an error so that a
 // log replay stops on it rather than skipping past a command it cannot run.
-func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
-	return defaultEngine.evalAndResponse(cmd, c)
-}
-
-// evalAndResponse is EvalAndResponse on e: the command runs on e, in e's
-// command scope, and its keys are type-checked, its eviction held off and its
-// limits enforced on e's space.
-func (e *Engine) evalAndResponse(cmd *Command, c io.ReadWriter) error {
+func (e *Engine) EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	// The reply is framed for the connection's protocol, held on e for exactly
 	// this command - see resp3.go. Log replay and replica apply answer nobody,
 	// and run as RESP2 whatever the command says: what they produce has to be

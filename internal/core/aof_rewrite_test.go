@@ -445,7 +445,7 @@ func BenchmarkRewrite(b *testing.B) {
 			defer e.CloseAOF()
 			var w replyWriter
 			for i := 0; i < keys; i++ {
-				e.evalAndResponse(&Command{Cmd: "SET",
+				e.EvalAndResponse(&Command{Cmd: "SET",
 					Args: []string{"key:" + strconv.Itoa(i), "value-of-some-length"}}, &w)
 				w.b = w.b[:0]
 			}

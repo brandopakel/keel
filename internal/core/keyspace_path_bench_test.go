@@ -22,7 +22,7 @@ import (
 // sub-benchmarks share that engine and the keys set up here, as they shared
 // the default engine.
 func BenchmarkCommandPath(b *testing.B) {
-	e := benchEngine{newTestEngine(b, Options{MaxKeys: serverKeyCap})}
+	e := newTestEngine(b, Options{MaxKeys: serverKeyCap})
 	keys := make([]string, 1000)
 	for i := range keys {
 		keys[i] = "bench:key:" + strconv.Itoa(i)
@@ -137,7 +137,7 @@ func BenchmarkCommandPathUnderEviction(b *testing.B) {
 		strategy EvictionPolicy
 	}{{"random", EvictRandom}, {"lru", EvictLRU}, {"lfu", EvictLFU}} {
 		b.Run(policy.name, func(b *testing.B) {
-			e := benchEngine{newTestEngine(b, Options{MaxMemory: 4 << 20, MaxKeys: serverKeyCap, Eviction: policy.strategy})}
+			e := newTestEngine(b, Options{MaxMemory: 4 << 20, MaxKeys: serverKeyCap, Eviction: policy.strategy})
 			value := string(make([]byte, 256))
 			cmds := make([]*Command, 1<<16)
 			for i := range cmds {
@@ -178,7 +178,7 @@ func BenchmarkCommandPathUnderEviction(b *testing.B) {
 const serverKeyCap = 5000000
 
 // run2On runs a command on e for a benchmark's setup.
-func run2On(b *testing.B, e benchEngine, name string, args ...string) {
+func run2On(b *testing.B, e *Engine, name string, args ...string) {
 	b.Helper()
 	var w replyWriter
 	if err := e.EvalAndResponse(&Command{Cmd: name, Args: args}, &w); err != nil {

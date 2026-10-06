@@ -19,47 +19,13 @@ import (
 // the rest, and data_structure's TotalKeys, Evicted and the rest). Each entry
 // says which part of plan step 2.7 (docs/embedding-plan.md, "Step 2.7: the
 // default engine") moves it onto an engine of its own; a part removes the
-// entries it moves. Part 3 leaves none, and part 4 deletes the default engine,
+// entries it moves. Part 3 left none, and part 4 deletes the default engine,
 // and this census with it.
 //
 // A caller of a listed helper is not listed: removing the helper breaks it.
 // The package's own functions over the default engine are not listed either:
 // they are the default engine, and part 4 deletes them.
-var defaultEngineUsers = map[string]string{
-	// Part 3: the server, cmd/keel, and the test of Configure, which
-	// NewEngine replaces.
-	"internal/core: TestConfigureHoldsTheDefaultEngine": serverPart,
-
-	"internal/server: RunAsyncTCPServer":                                              serverPart,
-	"internal/server: executeRun":                                                     serverPart,
-	"internal/server: responseRw":                                                     serverPart,
-	"internal/server: startAOF":                                                       serverPart,
-	"internal/server: startReplicaTransport":                                          serverPart,
-	"internal/server: client.hello":                                                   serverPart,
-	"internal/server: client.transact":                                                serverPart,
-	"internal/server: orderedAppend.admit":                                            serverPart,
-	"internal/server: orderedAppend.begin":                                            serverPart,
-	"internal/server: orderedAppend.gate":                                             serverPart,
-	"internal/server: clientWithPassword":                                             serverPart,
-	"internal/server: withEngineOptions":                                              serverPart,
-	"internal/server: TestCommandReservationsIncludeOtherClientsAndReleaseAfterDrain": serverPart,
-	"internal/server: TestConnectionCommandsInsideATransaction":                       serverPart,
-	"internal/server: TestLargeFirstReplyYieldsWithoutArenaCopy":                      serverPart,
-	"internal/server: TestMigratingFromTheLegacyLogSurvivesASecondRestart":            serverPart,
-	"internal/server: TestOrderedAdmissionDrainsForUnknownCommandsAndReplyPressure":   serverPart,
-	"internal/server: TestOrderedRepliesAndDependentReadWaitForPersistence":           serverPart,
-	"internal/server: TestPipelineContinuationWaitsForAppendAndReplyDrain":            serverPart,
-	"internal/server: TestQueuedCommandsAreAccountedAsInputAndDiscardedOnClose":       serverPart,
-	"internal/server: TestTransactionPipelinedInOneRun":                               serverPart,
-
-	"cmd/keel: runServer":                             serverPart,
-	"cmd/keel: configureFrom":                         serverPart,
-	"cmd/keel: TestDefaultFlagsKeepTheServerSettings": serverPart,
-	"cmd/keel: TestFlagsReachTheEngine":               serverPart,
-}
-
-// The part of step 2.7 that moves what still uses the default engine.
-const serverPart = "part 3: cmd/keel makes the server's engine and hands it to the server"
+var defaultEngineUsers = map[string]string{}
 
 // TestDefaultEngineUsersAreCensused finds every direct use of the default
 // engine outside the package's own functions over it, and fails on one that
