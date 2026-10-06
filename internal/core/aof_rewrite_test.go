@@ -17,14 +17,8 @@ import (
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
-// fillOneOfEverything writes a key of every type, so a rewrite has to carry all
-// eight keyspaces and not merely the ones a command can rebuild.
-func fillOneOfEverything(t *testing.T) {
-	t.Helper()
-	fillOneOfEverythingOn(t, defaultEngine)
-}
-
-// fillOneOfEverythingOn is fillOneOfEverything on e.
+// fillOneOfEverythingOn writes a key of every type on e, so a rewrite has to
+// carry all eight keyspaces and not merely the ones a command can rebuild.
 func fillOneOfEverythingOn(t *testing.T, e *Engine) {
 	t.Helper()
 	runOn(t, e, "SET", "str", "hello")
@@ -43,13 +37,8 @@ func fillOneOfEverythingOn(t *testing.T, e *Engine) {
 	runOn(t, e, "MORRIS.INCRBY", "mor", "hits", "500000")
 }
 
-// snapshotEverything reads back every value a test compares across a rewrite.
-func snapshotEverything(t *testing.T) map[string]interface{} {
-	t.Helper()
-	return snapshotEverythingOn(t, defaultEngine)
-}
-
-// snapshotEverythingOn is snapshotEverything on e.
+// snapshotEverythingOn reads back from e every value a test compares across a
+// rewrite.
 func snapshotEverythingOn(t *testing.T, e *Engine) map[string]interface{} {
 	t.Helper()
 	set := runOn(t, e, "SMEMBERS", "set").([]interface{})
@@ -469,14 +458,8 @@ func BenchmarkRewrite(b *testing.B) {
 	}
 }
 
-// stepRewrite advances a rewrite by one slice, the way an event-loop cycle
+// stepRewriteOn advances e's rewrite by one slice, the way an event-loop cycle
 // would, and reports whether it is still going.
-func stepRewrite(t *testing.T) bool {
-	t.Helper()
-	return stepRewriteOn(t, defaultEngine)
-}
-
-// stepRewriteOn is stepRewrite on e.
 func stepRewriteOn(t *testing.T, e *Engine) bool {
 	t.Helper()
 	assert.NoError(t, e.AdvanceRewrite())
