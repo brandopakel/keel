@@ -44,7 +44,7 @@ jobs:
           cd internal/core
           failed=0
           for i in $(seq "$RUNS"); do
-            out=$("$RUNNER_TEMP/core.test" -test.shuffle=on -test.count=$count -test.timeout=10m 2>&1); rc=$?
+            rc=0; out=$("$RUNNER_TEMP/core.test" -test.shuffle=on -test.count=$count -test.timeout=10m 2>&1) || rc=$?
             seed=$(echo "$out" | grep -m1 -o -- '-test.shuffle [0-9]*' | awk '{print $2}')
             if [ $rc -ne 0 ]; then
               failed=$((failed+1))
