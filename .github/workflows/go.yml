@@ -1,254 +1,50 @@
-# Build, vet and test on every push to the working branch and every pull
-# request into it.
-#
-# This runs on `develop` alone: it is the only branch, and the one every pull
-# request targets. `main`, which mirrored upstream unchanged, is gone.
-#
-# The matrix runs the floor go.mod declares as well as current Go, because the
-# floor is a claim: the memory accounting in internal/data_structure/memory.go
-# is calibrated against real heap growth, which depends on how the runtime lays
-# maps out. Testing only the newest Go would let that floor rot without anyone
-# noticing.
-#
-# The source floor is Go 1.26. Build with the latest patch of a supported Go
-# release; upstream supports the two newest major lines. Revisit the floor and
-# Docker builder when a new major ships: https://go.dev/doc/devel/release.
+# Throwaway: a seed hunt for order dependence in cmd/keel (step 2.6, part 4).
+# Not for merging; the branch is deleted once its results are recorded.
 name: Go
 
 on:
   workflow_dispatch:
-  push:
-    branches: [develop]
-  pull_request:
-    branches: [develop]
 
 permissions:
   contents: read
 
 jobs:
-  build:
-    name: ${{ matrix.os }} / go ${{ matrix.go }}
+  hunt:
+    name: cmd/keel hunt ${{ matrix.os }} ${{ matrix.mode }} ${{ matrix.leg }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        go: ['1.26', 'stable']
         os: [ubuntu-latest, macos-latest]
-    steps:
-      # Actions are pinned to commit SHAs rather than tags: a tag is mutable and
-      # can be repointed at code this workflow never reviewed. Dependabot bumps
-      # them, since a pin nobody updates is an old action rather than a safe one.
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version: ${{ matrix.go }}
-          cache: true
-
-      - run: go version
-
-      - name: Build
-        run: go build -v ./...
-
-      - name: Vet
-        run: go vet ./...
-
-      # The store and command packages have to build anywhere Go does, because
-      # the embedding plan (docs/embedding-plan.md) makes them a library. The
-      # server's event loop is Linux and macOS only, and stays that way.
-      - name: Portable core
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          for goos in windows freebsd; do
-            GOOS=$goos go build ./internal/core ./internal/data_structure ./internal/config
-          done
-
-      - name: Test
-        if: matrix.os != 'ubuntu-latest' || matrix.go != 'stable'
-        run: go test -v ./...
-
-      # The same suite on one leg, recording the files each test leaves on
-      # disk. A test that nears the local validation wrapper's budget
-      # (scripts/run-local-validation.py: 256 MiB per file, 512 MiB in all)
-      # becomes a warning here, rather than a local failure that looks like a
-      # product bug. -count=1 so every package runs and is measured.
-      - name: Test, recording each test's file footprint
-        if: matrix.os == 'ubuntu-latest' && matrix.go == 'stable'
-        run: python3 scripts/test-file-footprint.py --out "$RUNNER_TEMP/test-footprint" -- go test -v -count=1 ./...
-
-      - name: Keep the test file footprint
-        if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' && matrix.go == 'stable' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: test-file-footprint
-          path: ${{ runner.temp }}/test-footprint/test-file-footprint.json
-          retention-days: 30
-
-      - name: Redis client integration
-        if: matrix.go == 'stable'
-        run: |
-          go build -o /tmp/keel-client-test ./cmd/keel
-          python3 -m venv /tmp/keel-client-venv
-          /tmp/keel-client-venv/bin/python -m pip install 'redis==5.2.1'
-          BIN=/tmp/keel-client-test /tmp/keel-client-venv/bin/python examples/test_client.py
-
-      # Every scripts/test_*.py: the failover model, soak tooling, and the local
-      # validation wrapper and footprint record.
-      - name: Python script tests
-        if: matrix.os == 'ubuntu-latest' && matrix.go == 'stable'
-        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
-
-      # The wrapper is mostly run on macOS, whose file-size limit, signal and
-      # process behaviour it depends on.
-      - name: Local validation wrapper tests on macOS
-        if: matrix.os == 'macos-latest' && matrix.go == 'stable'
-        run: python3 -m unittest discover -s scripts -p 'test_local_validation.py' -v
-
-      - name: Restore fuzz smoke
-        if: matrix.go == 'stable'
-        run: go test ./internal/core -run '^$' -fuzz '^FuzzRestoreValidation$' -fuzztime=10s -parallel=2
-
-      - name: Command parser and integer classification fuzz smoke
-        if: matrix.go == 'stable'
-        run: |
-          go test ./internal/core -run '^$' -fuzz '^FuzzCommandParserMatchesValueDecoder$' -fuzztime=10s -parallel=2
-          go test ./internal/core -run '^$' -fuzz '^FuzzReservedCommandParserMatchesValueDecoder$' -fuzztime=30s -parallel=2
-          go test ./internal/core -run '^$' -fuzz '^FuzzStringEncodingMatchesCanonicalInteger$' -fuzztime=10s -parallel=2
-          go test ./internal/data_structure -run '^$' -fuzz '^FuzzSparseHLLMatchesDense$' -fuzztime=10s -parallel=2
-          go test ./internal/data_structure -run '^$' -fuzz '^FuzzPagedKeyspaceMatchesMap$' -fuzztime=10s -parallel=2
-
-  docker:
-    name: docker image
-    runs-on: ubuntu-latest
+        mode: [plain, race]
+        leg: [1, 2]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
-
-      # Built on every PR rather than only on release, because a Dockerfile
-      # nothing exercises is a Dockerfile that has stopped working and has not
-      # said so. The image is not pushed anywhere from here.
-      - name: Build the image
-        run: docker build -t keel:ci --build-arg VERSION=ci .
-
-      - name: Serve from it
-        run: |
-          # Readiness is the listener answering, not a line in the log: the
-          # server opens its append-only file before it binds the socket, so
-          # waiting for "appendonly: on" and then connecting is a race.
-          wait_ready() {
-            for _ in $(seq 1 30); do
-              if docker run --rm --network host redis:8-alpine \
-                   redis-cli -p "$1" ping 2>/dev/null | grep -q PONG; then
-                echo "responding on $1"; return 0
-              fi
-              sleep 1
-            done
-            echo "nothing answered on $1" >&2; return 1
-          }
-
-          # -appendonly on purpose: it writes into /data as an unprivileged
-          # user, which is the part of the image most likely to be wrong and
-          # the thing the README tells people to run.
-          # A named volume, which is what the README recommends and what a
-          # bind mount is not: Docker gives a named volume the image's
-          # ownership, and creates a missing bind-mount directory as root,
-          # which an unprivileged container cannot write into.
-          docker run -d --name keel-ci -p 127.0.0.1:8081:8081 \
-            -v keel-ci-data:/data keel:ci -host 0.0.0.0 -appendonly
-          wait_ready 8081
-          docker run --rm --network host redis:8-alpine redis-cli -p 8081 rpush l a b c
-          docker run --rm --network host redis:8-alpine redis-cli -p 8081 hset h f v
-          test "$(docker run --rm --network host redis:8-alpine redis-cli -p 8081 dbsize)" = 2
-          # The log has to actually exist, or -appendonly failed quietly.
-          docker exec keel-ci /keel -version
-          docker logs keel-ci
-          docker logs keel-ci 2>&1 | grep -q "appendonly: on"
-          docker rm -f keel-ci
-
-          # The volume has to outlive the container, which is the only reason
-          # to mount one. Recreating against it and finding the keys is the
-          # test; stopping a container and trusting the bytes is not.
-          docker run -d --name keel-again -p 127.0.0.1:8081:8081 \
-            -v keel-ci-data:/data keel:ci -host 0.0.0.0 -appendonly
-          wait_ready 8081
-          test "$(docker run --rm --network host redis:8-alpine redis-cli -p 8081 dbsize)" = 2
-          test "$(docker run --rm --network host redis:8-alpine redis-cli -p 8081 lrange l 0 -1 | tr '\n' ',')" = "a,b,c,"
-          docker rm -f keel-again
-
-          # And the bind-mount form the README documents, made by hand first.
-          mkdir -p /tmp/keel-bind && sudo chown 65534:65534 /tmp/keel-bind
-          docker run -d --name keel-bind -p 127.0.0.1:8082:8081 \
-            -v /tmp/keel-bind:/data keel:ci -host 0.0.0.0 -appendonly
-          wait_ready 8082
-          docker logs keel-bind 2>&1 | grep -q "appendonly: on"
-          docker run --rm --network host redis:8-alpine redis-cli -p 8082 set k v
-          sudo test -f /tmp/keel-bind/keel-master.aof
-          docker rm -f keel-bind
-          docker volume rm keel-ci-data
-
-  race:
-    name: race detector
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-        with:
-          persist-credentials: false
-
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
           cache: true
-
-      # Tests that assert on wall-clock latency skip themselves here: the
-      # detector inflates the durations they measure about fourfold, so running
-      # them under -race measures the instrumentation.
-      - name: Test with the race detector
-        run: go test -race -v ./...
-
-      - name: Repeat rewrite, replication and connection regressions
-        run: go test -race ./internal/core ./internal/server -run '^(TestAutomaticRewriteTriggersOnGrowth|TestReplicationApplyFailureDisablesReadsUntilFullSync|TestFlushClientRepliesReleasesAccountingOnMonitorFailure)$' -count=20
-
-  # The packages whose tests run in parallel, core's each on an engine of its
-  # own and cmd/keel's each on a server process of its own
-  # (docs/embedding-plan.md, step 2.6), three times over in a shuffled order
-  # under the race detector. A test that depends on another having run first,
-  # or that shares state with one running beside it, fails here rather than
-  # once in a while. A failing package's output starts with the seed it was
-  # shuffled with, and the step ends by naming each failing package with the
-  # command that repeats its order. A job of its own, so the race job keeps
-  # its time.
-  race-shuffled:
-    name: race detector, shuffled and repeated
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Test the parallel packages three times, shuffled, with the race detector
+      - name: Shuffled runs
+        env:
+          MODE: ${{ matrix.mode }}
         run: |
-          set -o pipefail
-          if ! go test -race -count=3 -shuffle=on ./internal/core ./cmd/keel 2>&1 | tee "$RUNNER_TEMP/shuffled.txt"; then
-            # A package's seed line comes before its FAIL line; a package that
-            # failed to build, or to start, prints a FAIL line and no seed.
-            awk '/^-test.shuffle /{seed=$2} /^FAIL[ \t]+github.com\//{print $2, seed; seed=""}' "$RUNNER_TEMP/shuffled.txt" > "$RUNNER_TEMP/failed.txt"
-            if [ ! -s "$RUNNER_TEMP/failed.txt" ]; then
-              echo "::error title=Shuffled run failed::go test failed without naming a package; see the log above."
+          runs=6; build=""; [ "$MODE" = race ] && runs=2 && build="-race"
+          go test $build -c -o "$RUNNER_TEMP/keel.test" ./cmd/keel
+          cd cmd/keel
+          failed=0
+          for i in $(seq "$runs"); do
+            start=$(python3 -c 'import time;print(time.time())')
+            rc=0; out=$("$RUNNER_TEMP/keel.test" -test.shuffle=on -test.count=1 -test.timeout=15m 2>&1) || rc=$?
+            took=$(python3 -c "import time;print(round(time.time()-$start,1))")
+            seed=$(echo "$out" | grep -m1 -o -- '-test.shuffle [0-9]*' | awk '{print $2}')
+            if [ $rc -ne 0 ]; then
+              failed=$((failed+1))
+              echo "::error::run $i failed with seed $seed after ${took}s"
+              echo "$out" | grep -E -- '^--- FAIL|^    --- FAIL|Error Trace|Error:|Messages|expected|actual|panic|_test.go:[0-9]+:' | head -60
+            else
+              echo "run $i passed with seed $seed in ${took}s"
             fi
-            while read -r pkg seed; do
-              if [ -n "$seed" ]; then
-                echo "::error title=Shuffled run failed::$pkg failed in the order of seed $seed; repeat it with: go test -race -count=3 -shuffle=$seed ./${pkg#github.com/brandopakel/keel/}"
-              else
-                echo "::error title=Shuffled run failed::$pkg failed before it ran its tests in a shuffled order; see the log above."
-              fi
-            done < "$RUNNER_TEMP/failed.txt"
-            exit 1
-          fi
+          done
+          [ $failed -eq 0 ]
