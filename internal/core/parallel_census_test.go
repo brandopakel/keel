@@ -32,8 +32,9 @@ var processWide = map[string]map[string]bool{
 // engine: by name; through a package function that acts on it, such as
 // EvalAndResponse, ResetStores or OpenAOF; through data_structure's functions
 // over DefaultSpace, the default engine's space; or through a test helper that
-// does any of these. Nor may it assign the package's variables or make a
-// process-wide call (processWide). Go would run such a test beside others that
+// does any of these. Nor may it write to the package's variables, whether
+// by name or through an index, a field or a pointer (commandTable["X"] = ...),
+// or delete from or clear one, nor make a process-wide call (processWide). Go would run such a test beside others that
 // do the same, so that they shared one keyspace, log or heap reading, and the
 // race detector finds only some of that, when the timing shows it.
 //
@@ -149,14 +150,56 @@ func (c *parallelCensus) reaches(n ast.Node, methods bool) string {
 				break
 			}
 			for _, lhs := range x.Lhs {
-				if id, ok := lhs.(*ast.Ident); ok && c.src.packageVars[id.Name] && !c.src.local(id) {
-					found = id.Name + " ="
+				if name := c.packageVarIn(lhs); name != "" {
+					found = name + " ="
+				}
+			}
+		case *ast.IncDecStmt:
+			if name := c.packageVarIn(x.X); name != "" {
+				found = name + x.Tok.String()
+			}
+		}
+		// delete and clear change the map or slice they are handed.
+		if call, ok := n.(*ast.CallExpr); ok && found == "" && len(call.Args) > 0 {
+			if fn, ok := call.Fun.(*ast.Ident); ok && (fn.Name == "delete" || fn.Name == "clear") {
+				if name := c.packageVarIn(call.Args[0]); name != "" {
+					found = fn.Name + "(" + name + ")"
 				}
 			}
 		}
 		return true
 	})
 	return found
+}
+
+// packageVarIn names the package variable that x writes into, through any
+// index, field or pointer - commandTable["X"], defaultEngine.replicaReady or
+// *p for a package-level p - or returns "" when x is rooted elsewhere.
+func (c *parallelCensus) packageVarIn(x ast.Expr) string {
+	for {
+		switch y := x.(type) {
+		case *ast.IndexExpr:
+			x = y.X
+		case *ast.IndexListExpr:
+			x = y.X
+		case *ast.SelectorExpr:
+			if pkg, ok := y.X.(*ast.Ident); ok && c.src.imports[pkg.Name] {
+				return "" // another package's variable; processWide covers the ones that matter
+			}
+			x = y.X
+		case *ast.StarExpr:
+			x = y.X
+		case *ast.ParenExpr:
+			x = y.X
+		case *ast.Ident:
+			if c.src.packageVars[y.Name] && !c.src.local(y) {
+				return y.Name
+			}
+			return ""
+		default:
+			return ""
+		}
+	}
 }
 
 // chain spells out how via reaches what the process shares.

@@ -19,15 +19,20 @@ import (
 
 func setupReplicationV2(t *testing.T) {
 	t.Helper()
-	// The options are put back last, after the replica and the stream are.
+	// Registered first, so it runs last, once the options are back: the
+	// stream and the replica start afresh in the role those give, so that
+	// nothing this test fed or applied stays on the default engine.
+	t.Cleanup(func() { require.NoError(t, InitReplication()) })
+	// The options are put back next, after the replica and the stream are.
 	withOptions(t, func(o *Options) {
 		o.ReplicationProtocol, o.Fsync, o.ReplicationFeed, o.ReplicaOf = 2, FsyncNever, true, ""
 	})
 	oldExpiry, oldEviction := data_structure.DefaultSpace.SuspendExpiry, data_structure.DefaultSpace.SuspendEviction
 	t.Cleanup(func() {
-		if RewriteActive() {
-			defaultEngine.abortRewrite(errors.New("test cleanup"))
-		}
+		// Closing cancels a rewrite still running, as a server's shutdown
+		// does, without counting it as a failed one. A failure would outlive
+		// the keyspace and the test, and the default engine would report it
+		// to every test after this one.
 		CloseAOF()
 		defaultEngine.resetReplicationV2()
 		defaultEngine.resetReplica()

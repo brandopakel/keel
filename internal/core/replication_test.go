@@ -18,6 +18,10 @@ func TestReplicationCanonicalImagesAndOrdering(t *testing.T) {
 		data_structure.DefaultSpace.SuspendEviction = oldEviction
 	}()
 	ResetStores()
+	// Registered before the options are changed, so it runs after they are
+	// put back: the default engine ends as neither the primary nor the
+	// replica it is in this test, with nothing of either left.
+	t.Cleanup(func() { require.NoError(t, InitReplication()) })
 	withOptions(t, func(o *Options) { o.ReplicationFeed = true })
 	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "primary")))
 	require.NoError(t, InitReplication())
@@ -119,6 +123,9 @@ func TestReplicationApplyFailureDisablesReadsUntilFullSync(t *testing.T) {
 	defer func() {
 		data_structure.DefaultSpace.SuspendExpiry, data_structure.DefaultSpace.SuspendEviction = oldExpiry, oldEviction
 	}()
+	// Registered before the options are changed, so it runs after they are
+	// put back: the default engine ends as no replica, with nothing applied.
+	t.Cleanup(func() { require.NoError(t, InitReplication()) })
 	withOptions(t, func(o *Options) { o.ReplicaOf = "test:1" })
 	require.NoError(t, InitReplication())
 	full := ReplicationFrame{Version: 1, Epoch: "0123456789abcdef0123456789abcdef", Full: true, To: 1}

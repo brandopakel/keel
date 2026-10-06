@@ -215,9 +215,10 @@ jobs:
   # (docs/embedding-plan.md, step 2.6), three times over in a shuffled order
   # under the race detector. A test that depends on another having run first,
   # or that shares state with one running beside it, fails here rather than
-  # once in a while. -shuffle prints its seed first, and -test.shuffle with
-  # that seed repeats the order. A job of its own, so the race job keeps its
-  # time.
+  # once in a while. A failing package's output starts with the seed it was
+  # shuffled with, and the step ends by naming each failing package with the
+  # command that repeats its order. A job of its own, so the race job keeps
+  # its time.
   race-shuffled:
     name: race detector, shuffled and repeated
     runs-on: ubuntu-latest
@@ -232,4 +233,12 @@ jobs:
           cache: true
 
       - name: Test the parallel packages three times, shuffled, with the race detector
-        run: go test -race -count=3 -shuffle=on ./internal/core
+        run: |
+          set -o pipefail
+          if ! go test -race -count=3 -shuffle=on ./internal/core 2>&1 | tee "$RUNNER_TEMP/shuffled.txt"; then
+            awk '/^-test.shuffle /{seed=$2} /^FAIL[ \t]+github.com\//{print $2, seed}' "$RUNNER_TEMP/shuffled.txt" |
+              while read -r pkg seed; do
+                echo "::error title=Shuffled run failed::$pkg failed in the order of seed $seed; repeat it with: go test -race -count=3 -shuffle=$seed ./${pkg#github.com/brandopakel/keel/}"
+              done
+            exit 1
+          fi

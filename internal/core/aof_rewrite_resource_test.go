@@ -121,6 +121,7 @@ func TestCancelPartialRewriteKeepsOriginalLog(t *testing.T) {
 }
 
 func TestRewriteDirtyBudgetRefusesBeforeRetainingName(t *testing.T) {
+	keepRewriteHistory(t, defaultEngine)
 	ResetStores()
 	path := filepath.Join(t.TempDir(), "dirty.aof")
 	require.NoError(t, OpenAOF(path))

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -399,7 +400,10 @@ func (f *follow) catchUp(t *testing.T) bool {
 func TestEnginesShareNoReplication(t *testing.T) {
 	never := goldenWindow{start: -1, end: -1 - int64(24*time.Hour/time.Millisecond)}
 	ResetStores()
+	// The default engine's stream and replica outlive its keyspace, so they
+	// are whatever earlier tests left; the engines here must leave them so.
 	defaultEpoch := defaultEngine.replication.epoch
+	defaultStream := markReplication(defaultEngine)
 	dir := t.TempDir()
 	primary := func(name string, protocol int) *Engine {
 		e := newEngine(Options{ReplicationFeed: true, ReplicationProtocol: protocol})
@@ -516,14 +520,35 @@ func TestEnginesShareNoReplication(t *testing.T) {
 	assert.NoError(t, err, "b's snapshot is still open")
 
 	// The default engine fed none of it and applied none of it.
-	assert.Equal(t, defaultEpoch, defaultEngine.replication.epoch)
-	assert.Zero(t, defaultEngine.replicationV2.end)
-	assert.Zero(t, defaultEngine.replication.offset)
-	assert.Empty(t, defaultEngine.replication.dirty)
-	assert.Nil(t, defaultEngine.replicationV2.snapshot)
-	assert.Zero(t, defaultEngine.replicaAck)
-	assert.False(t, defaultEngine.replicaReady)
+	assert.Equal(t, defaultStream, markReplication(defaultEngine))
 	assert.Zero(t, defaultEngine.space.TotalKeys())
+}
+
+// replicationMark is what an engine's replication holds between commands that
+// another engine replicating must not change: the stream it feeds, what its
+// replicas have acknowledged, and the replica it is.
+type replicationMark struct {
+	epoch         string
+	offset, end   uint64
+	dirty         []string
+	snapshot      bool
+	ack           replicaAckState
+	ready         bool
+	replicaEpoch  string
+	replicaOffset uint64
+}
+
+func markReplication(e *Engine) replicationMark {
+	m := replicationMark{
+		epoch: e.replication.epoch, offset: e.replication.offset, end: e.replicationV2.end,
+		snapshot: e.replicationV2.snapshot != nil, ack: e.replicaAck,
+		ready: e.replicaReady, replicaEpoch: e.replicaEpoch, replicaOffset: e.replicaOffset,
+	}
+	for key := range e.replication.dirty {
+		m.dirty = append(m.dirty, key)
+	}
+	slices.Sort(m.dirty)
+	return m
 }
 
 // TestEnginesShareNoFailover: each engine holds its own term, kept in a file

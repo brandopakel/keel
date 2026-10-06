@@ -172,6 +172,7 @@ func TestCancelRewriteSyncTransfersCleanupWithoutReusingPath(t *testing.T) {
 }
 
 func TestRewriteSyncFailureKeepsOriginalLog(t *testing.T) {
+	keepRewriteHistory(t, defaultEngine)
 	ResetStores()
 	path := filepath.Join(t.TempDir(), "store.aof")
 	require.NoError(t, OpenAOF(path))
@@ -193,6 +194,7 @@ func TestRewriteSyncFailureKeepsOriginalLog(t *testing.T) {
 }
 
 func TestRewriteBudgetAbortWhileSyncOwnsFile(t *testing.T) {
+	keepRewriteHistory(t, defaultEngine)
 	for _, budget := range []string{"duration", "dirty bytes"} {
 		t.Run(budget, func(t *testing.T) {
 			ResetStores()
@@ -245,6 +247,7 @@ func TestRewriteBudgetAbortWhileSyncOwnsFile(t *testing.T) {
 }
 
 func TestRewriteDirtyTailSyncFailureKeepsAllAcknowledgedWrites(t *testing.T) {
+	keepRewriteHistory(t, defaultEngine)
 	ResetStores()
 	path := filepath.Join(t.TempDir(), "store.aof")
 	require.NoError(t, OpenAOF(path))
