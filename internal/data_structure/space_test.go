@@ -67,8 +67,7 @@ func TestSpaceLimitsAreHeldByValue(t *testing.T) {
 
 // TestDefaultLimits pins the limits of a space nobody has set any for: no
 // bound on keys or memory, as in Redis, LRU, and Redis's sampling, LFU and
-// LCS figures. The default space starts with them, until the default engine
-// sets its own.
+// LCS figures. An engine made with no options holds its space to them.
 func TestDefaultLimits(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, Limits{Eviction: EvictLRU, MaxKeys: 0, MaxMemory: 0, EvictionSamples: 5,

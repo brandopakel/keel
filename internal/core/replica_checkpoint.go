@@ -136,9 +136,6 @@ func (e *Engine) saveReplicaCheckpoint() error {
 
 // Reads replica cursor state that applyReplicationV2 mutates on the command
 // thread. Callers must invoke this before the replica transport worker starts.
-func ReplicaResumeCursor() (string, uint64) { return defaultEngine.ReplicaResumeCursor() }
-
-// ReplicaResumeCursor is the package's ReplicaResumeCursor on e.
 func (e *Engine) ReplicaResumeCursor() (string, uint64) {
 	if e.replicationProtocol() == 2 && e.replicaV2.trusted {
 		return e.replicaEpoch, e.replicaOffset

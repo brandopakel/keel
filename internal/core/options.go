@@ -311,14 +311,6 @@ func (e *Engine) configure(o Options) error {
 	return nil
 }
 
-// Configure holds the default engine to o, as NewEngine holds a new engine
-// to its options; plan step 2.7 removes it with the default engine.
-func Configure(o Options) error { return defaultEngine.configure(o) }
-
-// Configuration is the method of that name on the default engine, which plan
-// step 2.7 removes.
-func Configuration() Options { return defaultEngine.Configuration() }
-
 // Configuration is e's options, as they were given to it.
 func (e *Engine) Configuration() Options { return e.options }
 

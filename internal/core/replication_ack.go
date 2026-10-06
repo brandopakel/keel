@@ -31,11 +31,6 @@ func (e *Engine) noteReplicaAcknowledged(offset uint64) {
 // ReplicationAcknowledged retains the INFO field names for compatibility. It
 // reports the greatest validated received cursor, its distance from the current
 // stream end and the age of its last confirmation. Age is negative when unknown.
-func ReplicationAcknowledged() (offset, behind uint64, ageMs int64) {
-	return defaultEngine.ReplicationAcknowledged()
-}
-
-// ReplicationAcknowledged is the package's ReplicationAcknowledged on e.
 func (e *Engine) ReplicationAcknowledged() (offset, behind uint64, ageMs int64) {
 	if e.replicaAck.at.IsZero() {
 		return 0, 0, -1

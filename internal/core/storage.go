@@ -9,14 +9,7 @@ import (
 // Each type has its own store, and every one of them is registered with the
 // evictor so that a memory budget spans the lot: before that, only strings were
 // accounted, and a keyspace full of 12KB HyperLogLogs could sail past
-// -maxmemory without anything noticing. The stores are fields of Engine; the
-// server's are defaultEngine's.
-
-func init() { ResetStores() }
-
-// ResetStores rebuilds every keyspace of the default engine and re-registers
-// them. Called at startup, and by tests that need to begin from empty.
-func ResetStores() { defaultEngine.resetStores() }
+// -maxmemory without anything noticing. The stores are fields of Engine.
 
 // NewEngine returns an engine with empty stores, in a space of its own, held
 // to o, or the error for options no engine can be held to.

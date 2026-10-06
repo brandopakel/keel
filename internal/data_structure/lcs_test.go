@@ -321,20 +321,21 @@ func TestLCSMemoryIsFarBelowTheTable(t *testing.T) {
 }
 
 func TestLCSTooLargeGuardsTheEventLoop(t *testing.T) {
+	space := NewSpace(DefaultLimits())
 	small := strings.Repeat("x", 1000)
-	assert.False(t, LCSTooLarge(small, small))
+	assert.False(t, space.LCSTooLarge(small, small))
 
 	big := strings.Repeat("x", 20000)
-	assert.True(t, LCSTooLarge(big, big), "two 20KB strings are 400M cells, past the budget")
+	assert.True(t, space.LCSTooLarge(big, big), "two 20KB strings are 400M cells, past the budget")
 
 	// A long string against a short one is cheap, and must not be refused: the
 	// cost is the product, not the larger of the two. Ten megabytes against
 	// three characters is 30 million cells, well inside the budget.
-	assert.False(t, LCSTooLarge(strings.Repeat("x", 10*1000*1000), "abc"))
+	assert.False(t, space.LCSTooLarge(strings.Repeat("x", 10*1000*1000), "abc"))
 
 	// The product is what counts, so the same ten megabytes against a kilobyte
 	// is refused even though neither string grew.
-	assert.True(t, LCSTooLarge(strings.Repeat("x", 10*1000*1000), strings.Repeat("y", 1000)))
+	assert.True(t, space.LCSTooLarge(strings.Repeat("x", 10*1000*1000), strings.Repeat("y", 1000)))
 }
 
 func BenchmarkLCSLen(bench *testing.B) {

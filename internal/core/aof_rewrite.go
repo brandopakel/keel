@@ -124,9 +124,6 @@ type rewriteState struct {
 }
 
 // RewriteActive reports whether a rewrite is part-way through.
-func RewriteActive() bool { return defaultEngine.RewriteActive() }
-
-// RewriteActive is the package's RewriteActive on e.
 func (e *Engine) RewriteActive() bool { return e.rewrite.active }
 
 func (e *Engine) rewriteWalkDone() bool {
@@ -134,9 +131,6 @@ func (e *Engine) rewriteWalkDone() bool {
 }
 
 // StartRewrite begins one, capturing a slot limit per keyspace.
-func StartRewrite() error { return defaultEngine.StartRewrite() }
-
-// StartRewrite is the package's StartRewrite on e.
 func (e *Engine) StartRewrite() error {
 	if e.aof.file == nil {
 		return fmt.Errorf("appendonly is off")
@@ -202,9 +196,6 @@ func (e *Engine) StartRewrite() error {
 // abandoned, reported and retried later while the log it would have replaced
 // stays the log (see aof_rewrite_status.go), so nothing a rewrite does on its
 // own file stops the server.
-func AdvanceRewrite() error { return defaultEngine.AdvanceRewrite() }
-
-// AdvanceRewrite is the package's AdvanceRewrite on e.
 func (e *Engine) AdvanceRewrite() error {
 	if e.AppendPending() {
 		return nil
@@ -615,9 +606,6 @@ func (e *Engine) abortRewrite(cause error) {
 }
 
 // CancelRewrite abandons a rewrite in progress, for a server shutting down.
-func CancelRewrite() { defaultEngine.CancelRewrite() }
-
-// CancelRewrite is the package's CancelRewrite on e.
 func (e *Engine) CancelRewrite() {
 	if e.rewrite.active {
 		e.abortRewrite(nil)
@@ -704,9 +692,6 @@ func (e *Engine) emitValue(dst []byte, key string) []byte {
 // Used by tests, and by nothing that serves clients. A server driving the
 // loop should start one and let AdvanceRewrite carry it, which is what keeps
 // the stall to a slice at a time.
-func RewriteAOF() error { return defaultEngine.RewriteAOF() }
-
-// RewriteAOF is the package's RewriteAOF on e.
 func (e *Engine) RewriteAOF() error {
 	if err := e.StartRewrite(); err != nil {
 		return err
@@ -783,11 +768,6 @@ func (e *Engine) maybeRewrite() {
 }
 
 // AOFStats reports what INFO needs to say about the log.
-func AOFStats() (baseSize, currentSize int64, rewrites int, keys int) {
-	return defaultEngine.AOFStats()
-}
-
-// AOFStats is the package's AOFStats on e.
 func (e *Engine) AOFStats() (baseSize, currentSize int64, rewrites int, keys int) {
 	if e.aof.file == nil {
 		return 0, 0, 0, 0

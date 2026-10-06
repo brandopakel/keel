@@ -69,10 +69,8 @@ const termFileName = ".term"
 // entirely, which is indistinguishable from a node that was never promoted.
 // Nothing local can tell those apart; it is why the coordinator, not the node,
 // has to be the one that never issues a term twice.
-func LoadTerm(path string) error { return defaultEngine.LoadTerm(path) }
-
-// LoadTerm is the package's LoadTerm on e: e's term is read from beside its
-// own log, and fences e alone.
+//
+// The term is e's: it is read from beside e's own log, and fences e alone.
 func (e *Engine) LoadTerm(path string) error {
 	failover := &e.failover
 	failover.path = path + termFileName
@@ -157,24 +155,15 @@ func (e *Engine) observeTerm(term uint64) error {
 	return nil
 }
 
-// Writable reports whether this node may accept a write.
-func Writable() bool { return defaultEngine.writable() }
-
-// writable is Writable for e: a replica never takes a write, and a primary
-// only while it holds the current term.
+// writable reports whether e may accept a write: a replica never takes one,
+// and a primary only while it holds the current term.
 func (e *Engine) writable() bool {
 	return e.replicaOf() == "" && !e.failover.fenced && e.failover.held == e.failover.term
 }
 
-// CurrentTerm and HeldTerm are what INFO reports, on the default engine.
-// CurrentTerm is also read by the replica transport's goroutine, which is why
-// the term is stored atomically.
-func CurrentTerm() uint64 { return defaultEngine.CurrentTerm() }
-func HeldTerm() uint64    { return defaultEngine.failover.held }
-func Fenced() bool        { return defaultEngine.failover.fenced }
-
-// CurrentTerm is the package's CurrentTerm on e, safe to call from any
-// goroutine.
+// CurrentTerm is e's term, which INFO reports. The replica transport's
+// goroutine reads it too, so it is safe to call from any goroutine: the term is
+// stored atomically.
 func (e *Engine) CurrentTerm() uint64 { return atomic.LoadUint64(&e.failover.term) }
 
 var errFenced = errors.New("FENCED this node is not the holder of the current term")

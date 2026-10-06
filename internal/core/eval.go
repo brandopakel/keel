@@ -122,12 +122,6 @@ func (e *Engine) cmdSELECT(args []string) []byte {
 	return constant.RespOk
 }
 
-// EvalAndResponse is the method of that name on the default engine, which
-// plan step 2.7 removes.
-func EvalAndResponse(cmd *Command, c io.ReadWriter) error {
-	return defaultEngine.EvalAndResponse(cmd, c)
-}
-
 // EvalAndResponse runs one command on e and writes its reply to c: the
 // command runs in e's command scope, and its keys are type-checked, its
 // eviction held off and its limits enforced on e's space.

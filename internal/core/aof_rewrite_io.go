@@ -23,16 +23,10 @@ type rewriteIOJob struct {
 
 // SetRewriteWaker is called by the event-loop owner. Each job captures the
 // callback before starting; it must be safe during shutdown, like append wakeups.
-func SetRewriteWaker(wake func()) { defaultEngine.SetRewriteWaker(wake) }
-
-// SetRewriteWaker is the package's SetRewriteWaker on e.
 func (e *Engine) SetRewriteWaker(wake func()) { e.rewriteWake = wake }
 
 // RewriteNeedsCycle avoids repeatedly waking a loop that cannot advance while
 // the replacement write or sync is blocked. Worker completion provides the next wakeup.
-func RewriteNeedsCycle() bool { return defaultEngine.RewriteNeedsCycle() }
-
-// RewriteNeedsCycle is the package's RewriteNeedsCycle on e.
 func (e *Engine) RewriteNeedsCycle() bool {
 	if !e.rewrite.active {
 		return false
