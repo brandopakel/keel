@@ -16,9 +16,13 @@ func TestObservedTermCannotGrantAuthorityAfterRestart(t *testing.T) {
 	require.Equal(t, "OK", runOn(t, e, "KEEL.FENCE", "2"))
 	require.False(t, e.writable())
 	require.NoError(t, e.CloseAOF())
-	require.NoError(t, e.LoadTerm(path))
-	require.False(t, e.writable(), "an observed successor term must not become this node's write authority on restart")
-	require.Equal(t, errFenced.Error(), runOn(t, e, "SET", "after-restart", "must-refuse"))
+	// The restart is an engine of its own that reads the term file the first
+	// left, so nothing it reports is the first engine's fencing.
+	restarted := newTestEngine(t, Options{})
+	require.NoError(t, restarted.LoadTerm(path))
+	require.Equal(t, uint64(2), restarted.CurrentTerm(), "the restart reads the observed term")
+	require.False(t, restarted.writable(), "an observed successor term must not become this node's write authority on restart")
+	require.Equal(t, errFenced.Error(), runOn(t, restarted, "SET", "after-restart", "must-refuse"))
 }
 
 func TestFailedTermObservationStaysFencedAndRetriesPersistence(t *testing.T) {

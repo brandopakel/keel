@@ -121,16 +121,20 @@ func TestOpaqueReplicationSizesAggregateBeforeAllocating(t *testing.T) {
 	e := newTestEngine(t, Options{})
 	setupReplicationV2On(t, e)
 	// Each image fits alone; their combined delta does not.
-	for _, key := range []string{"first", "second"} {
-		e.cmsStore.Put(key, data_structure.CreateCMS(9<<20, 1))
-		e.replication.dirty[key] = struct{}{}
-	}
+	e.cmsStore.Put("first", data_structure.CreateCMS(9<<20, 1))
+	e.replication.dirty["first"] = struct{}{}
+	alone, fits := e.opaqueReplicationBody()
+	require.True(t, fits, "one image alone fits")
+	require.NotNil(t, alone)
+	alone = nil
+	e.cmsStore.Put("second", data_structure.CreateCMS(9<<20, 1))
+	e.replication.dirty["second"] = struct{}{}
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
 	body, fits := e.opaqueReplicationBody()
 	runtime.ReadMemStats(&after)
-	require.False(t, fits)
+	require.False(t, fits, "two images together do not")
 	require.Nil(t, body)
 	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(256<<10))
 }

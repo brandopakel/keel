@@ -4,13 +4,14 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-// setupFailover gives each test its own log directory and term file, and puts
-// the default engine's failover state back afterwards.
+// setupFailover gives e a log directory and term file of its own, and puts
+// e's failover state back afterwards.
 func setupFailover(t *testing.T, e *Engine) string {
 	t.Helper()
 	oldState := e.failover
@@ -136,14 +137,21 @@ func TestADamagedTermFileStopsEveryRole(t *testing.T) {
 func TestAMissingTermFileIsTermZero(t *testing.T) {
 	t.Parallel()
 	e := newTestEngine(t, Options{})
-	dir := t.TempDir()
-	t.Cleanup(func() { e.failover = failoverState{} })
-	reconfigure(t, e, func(o *Options) { o.ReplicaOf = "" })
+	// Held at a term first, so that loading has something to put back.
+	setupFailover(t, e)
+	require.Equal(t, "OK", runOn(t, e, "KEEL.PROMOTE", "3"))
+	require.Equal(t, uint64(3), e.CurrentTerm())
 	// Every node before its first failover, and every fresh install. Refusing
 	// to start on this would refuse to start on an upgrade.
-	require.NoError(t, e.LoadTerm(filepath.Join(dir, "absent.aof")))
+	absent := filepath.Join(t.TempDir(), "absent.aof")
+	require.NoError(t, e.LoadTerm(absent))
 	require.Equal(t, uint64(0), e.CurrentTerm())
 	require.True(t, e.writable())
+	// And the term file is now the absent log's: a promotion writes it there.
+	require.Equal(t, "OK", runOn(t, e, "KEEL.PROMOTE", "1"))
+	body, err := os.ReadFile(absent + termFileName)
+	require.NoError(t, err)
+	require.Equal(t, "1", strings.TrimSpace(string(body)))
 }
 
 // A term is only acted on once it is on disk. If the write cannot be made

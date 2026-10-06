@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/brandopakel/keel/internal/constant"
 	"github.com/brandopakel/keel/internal/data_structure"
@@ -60,9 +61,13 @@ func TestExpireCycleLeavesLivingKeysAlone(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		runOn(t, e, "SET", "forever"+strconv.Itoa(i), "v")
 	}
+	// A keyspace that says it holds TTLs, to see that the cycles sampled.
+	probe := &expirySamplingProbe{expires: true}
+	e.space.RegisterKeyspace(probe)
 	for i := 0; i < 100; i++ {
 		e.ExpireCycle()
 	}
+	assert.Positive(t, probe.samples, "the cycles sampled the keyspaces with TTLs")
 	assert.Equal(t, 400, e.space.TotalKeys(), "nothing has fallen due yet")
 	assert.EqualValues(t, 0, e.ExpiredKeys())
 }
@@ -151,17 +156,19 @@ func TestExpireCycleKeepsGoingWhileTheSampleSaysThereIsMore(t *testing.T) {
 // TestActiveExpiryCanBeTurnedOff leaves expiry lazy, as it was.
 func TestActiveExpiryCanBeTurnedOff(t *testing.T) {
 	t.Parallel()
-	e := newTestEngine(t, Options{})
-	reconfigure(t, e, func(o *Options) { o.ActiveExpireSamples = Off })
-
-	e.resetStores()
+	e := newTestEngine(t, Options{ActiveExpireSamples: Off})
+	// The control: the same keys and cycles on an engine that samples.
+	control := newTestEngine(t, Options{})
 	for i := 0; i < 100; i++ {
 		runOn(t, e, "SET", "k"+strconv.Itoa(i), "v", "PX", "5")
+		runOn(t, control, "SET", "k"+strconv.Itoa(i), "v", "PX", "5")
 	}
 	waitPast(30)
 	for i := 0; i < 50; i++ {
 		e.ExpireCycle()
+		control.ExpireCycle()
 	}
+	assert.Less(t, control.space.TotalKeys(), 100, "with sampling on, the same cycles reap keys nobody read")
 	assert.Equal(t, 100, e.space.TotalKeys(),
 		"with sampling off, only a read reaps a key")
 	assert.Equal(t, constant.RespNil, rawReplyOn(t, e, "GET", "k0"))
@@ -214,6 +221,8 @@ func TestExpiredKeyFreesItsNameForAnotherType(t *testing.T) {
 	for i := 0; i < 50 && e.space.TotalKeys() > 0; i++ {
 		e.ExpireCycle()
 	}
+	require.Zero(t, e.space.TotalKeys(), "the cycle reaped the key, before any command could")
+	require.EqualValues(t, 1, e.ExpiredKeys())
 	assert.EqualValues(t, 1, runOn(t, e, "SADD", "shared", "member"))
 }
 
