@@ -15,7 +15,9 @@ import (
 )
 
 // TestASecondHolderWaitsForTheFirst: the lock keeps two holders apart, and
-// the second takes it as soon as the first lets go.
+// the second takes it once the first lets go. Nothing is timed: the second
+// must not have the lock while the first holds it, however long it is given,
+// and must get it after.
 func TestASecondHolderWaitsForTheFirst(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "keel-test.lock")
@@ -23,18 +25,34 @@ func TestASecondHolderWaitsForTheFirst(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	got := make(chan func(), 1)
+	failed := make(chan error, 1)
 	go func() {
-		time.Sleep(200 * time.Millisecond)
-		release()
+		second, err := acquire(path, time.Minute)
+		if err != nil {
+			failed <- err
+			return
+		}
+		got <- second
 	}()
-	asked := time.Now()
-	second, err := acquire(path, 10*time.Second)
-	if err != nil {
+	// A while to take the lock it must not get. A slow machine makes taking
+	// it less likely, not more, so this cannot fail by being slow.
+	select {
+	case second := <-got:
+		second()
+		release()
+		t.Fatal("the second holder took the lock while the first held it")
+	case err := <-failed:
+		release()
 		t.Fatal(err)
+	case <-time.After(300 * time.Millisecond):
 	}
-	defer second()
-	if waited := time.Since(asked); waited < 150*time.Millisecond {
-		t.Fatalf("the second holder took the lock after %s, while the first still held it", waited)
+	release()
+	select {
+	case second := <-got:
+		second()
+	case err := <-failed:
+		t.Fatal(err)
 	}
 }
 
