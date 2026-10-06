@@ -51,12 +51,7 @@ func captureLog(t *testing.T) *logCapture {
 	return c
 }
 
-func infoPersistence(t *testing.T) string {
-	t.Helper()
-	return infoPersistenceOn(t, defaultEngine)
-}
-
-// infoPersistenceOn is infoPersistence on e.
+// infoPersistenceOn is e's INFO persistence.
 func infoPersistenceOn(t *testing.T, e *Engine) string {
 	t.Helper()
 	return string(rawReplyOn(t, e, "INFO", "persistence"))
@@ -73,14 +68,9 @@ func persistenceField(t *testing.T, e *Engine, name string) string {
 	return ""
 }
 
-// driveRewrite runs the loop's part until the rewrite ends, requiring every
-// flush to succeed: nothing a rewrite does to its own file is the log's error.
-func driveRewrite(t *testing.T) {
-	t.Helper()
-	driveRewriteOn(t, defaultEngine)
-}
-
-// driveRewriteOn is driveRewrite on e.
+// driveRewriteOn runs the loop's part of e's rewrite until it ends, requiring
+// every flush to succeed: nothing a rewrite does to its own file is the log's
+// error.
 func driveRewriteOn(t *testing.T, e *Engine) {
 	t.Helper()
 	for n := 0; e.RewriteActive() && n < 10000; n++ {

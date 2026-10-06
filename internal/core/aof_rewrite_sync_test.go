@@ -13,13 +13,8 @@ import (
 )
 
 // Existing slice-count tests count emitted slices, not idle I/O polls. Wait
-// only for worker completion here; AdvanceRewrite still consumes the result.
-func waitForRewriteSync(t *testing.T) {
-	t.Helper()
-	waitForRewriteSyncOn(t, defaultEngine)
-}
-
-// waitForRewriteSyncOn is waitForRewriteSync on e.
+// only for e's worker to complete here; AdvanceRewrite still consumes the
+// result.
 func waitForRewriteSyncOn(t *testing.T, e *Engine) {
 	t.Helper()
 	if e.pendingRewriteIO != nil {

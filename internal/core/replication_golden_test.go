@@ -16,15 +16,13 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // The replication stream's bytes, held to what develop wrote before step 2.4
 // of the embedding plan (docs/embedding-plan.md) moved replication and
 // failover into the engine.
 //
-// Each scenario runs a primary on the default engine with the log open, pulls
+// Each scenario runs a primary on an engine of its own with the log open, pulls
 // its stream in-process as a replica would, then turns the same engine into a
 // replica and applies what it pulled. It writes a transcript of everything a
 // peer or an operator can see:
@@ -91,9 +89,9 @@ var replicationGoldenScenarios = []replicationGoldenScenario{
 	{"terms", 2, goldenTerms},
 }
 
-// replicationGolden is one scenario under one mode: a goldenRun for the
-// default engine's log, which is the primary's until becomeReplica, and the
-// transcript it writes.
+// replicationGolden is one scenario under one mode: a goldenRun on an engine
+// of its own, which is the primary until becomeReplica, and the transcript it
+// writes.
 type replicationGolden struct {
 	*goldenRun
 	names   map[string]string
@@ -103,29 +101,10 @@ type replicationGolden struct {
 
 func startReplicationGolden(t *testing.T, mode goldenMode, protocol int) *replicationGolden {
 	t.Helper()
-	found := Configuration()
-	expiry, eviction := data_structure.DefaultSpace.SuspendExpiry, data_structure.DefaultSpace.SuspendEviction
-	restoreTerm := saveGoldenTerm()
-	// Registered before startGoldenRun's, so it runs after the log is closed.
-	t.Cleanup(func() {
-		require.NoError(t, Configure(found))
-		require.NoError(t, InitReplication())
-		data_structure.DefaultSpace.SuspendExpiry, data_structure.DefaultSpace.SuspendEviction = expiry, eviction
-		restoreTerm()
-	})
-	reconfigure(t, defaultEngine, func(o *Options) {
-		o.ReplicationFeed, o.ReplicaOf, o.ReplicationProtocol = true, "", protocol
-	})
-	r, _ := startGoldenRun(t, defaultEngine, mode, nil)
-	require.NoError(t, InitReplication())
+	e := newTestEngine(t, Options{ReplicationFeed: true, ReplicationProtocol: protocol})
+	r, _ := startGoldenRun(t, e, mode, nil)
+	require.NoError(t, e.InitReplication())
 	return &replicationGolden{goldenRun: r, names: map[string]string{}}
-}
-
-// saveGoldenTerm keeps the failover state a scenario's LoadTerm replaces, and
-// returns what puts it back.
-func saveGoldenTerm() func() {
-	saved := defaultEngine.failover
-	return func() { defaultEngine.failover = saved }
 }
 
 func runReplicationGolden(t *testing.T, scenario replicationGoldenScenario, mode goldenMode) []byte {
@@ -168,7 +147,7 @@ func (g *replicationGolden) window() goldenWindow {
 func (g *replicationGolden) call(parts ...string) []byte {
 	g.t.Helper()
 	var w replyWriter
-	require.NoError(g.t, EvalAndResponse(&Command{Cmd: parts[0], Args: parts[1:]}, &w), "%q", parts)
+	require.NoError(g.t, g.e.evalAndResponse(&Command{Cmd: parts[0], Args: parts[1:]}, &w), "%q", parts)
 	g.cycle()
 	return w.b
 }
@@ -294,7 +273,7 @@ func utoa(n uint64) string { return strconv.FormatUint(n, 10) }
 // pull2 is a protocol 2 pull, with the caller's term, as a replica sends it.
 func (g *replicationGolden) pull2(epoch string, offset uint64, snapshotID string, part uint64) ReplicationFrame {
 	g.t.Helper()
-	return decodeGoldenFrame(g.t, g.call("KEEL.REPL.PULL2", epoch, utoa(offset), snapshotID, utoa(part), utoa(CurrentTerm())))
+	return decodeGoldenFrame(g.t, g.call("KEEL.REPL.PULL2", epoch, utoa(offset), snapshotID, utoa(part), utoa(g.e.CurrentTerm())))
 }
 
 // drain2 pulls protocol 2 deltas from offset until one says the replica has
@@ -355,22 +334,22 @@ func (g *replicationGolden) pull1(what, epoch string, offset uint64) Replication
 
 // epoch is the primary's epoch now.
 func (g *replicationGolden) epoch() string {
-	return goldenInfo(g.t, "replication")["primary_epoch"]
+	return goldenInfo(g.t, g.e, "replication")["primary_epoch"]
 }
 
-func goldenInfo(t *testing.T, section string) map[string]string {
+func goldenInfo(t *testing.T, e *Engine, section string) map[string]string {
 	t.Helper()
 	fields := map[string]string{}
-	for _, line := range goldenInfoLines(t, section) {
+	for _, line := range goldenInfoLines(t, e, section) {
 		k, v, _ := strings.Cut(line, ":")
 		fields[k] = v
 	}
 	return fields
 }
 
-func goldenInfoLines(t *testing.T, section string) []string {
+func goldenInfoLines(t *testing.T, e *Engine, section string) []string {
 	t.Helper()
-	text, ok := run(t, "INFO", section).(string)
+	text, ok := runOn(t, e, "INFO", section).(string)
 	require.True(t, ok)
 	var lines []string
 	for _, line := range strings.Split(text, "\r\n") {
@@ -385,7 +364,7 @@ func goldenInfoLines(t *testing.T, section string) []string {
 func (g *replicationGolden) info(what string) {
 	g.t.Helper()
 	var line bytes.Buffer
-	for _, field := range goldenInfoLines(g.t, "replication") {
+	for _, field := range goldenInfoLines(g.t, g.e, "replication") {
 		k, v, _ := strings.Cut(field, ":")
 		switch k {
 		case "replica_last_update_ms", "replication_acked_age_ms":
@@ -401,7 +380,7 @@ func (g *replicationGolden) info(what string) {
 // state writes the keyspace, and returns it.
 func (g *replicationGolden) state(what string) string {
 	g.t.Helper()
-	state := string(goldenState(g.t, g.window()))
+	state := string(goldenStateOn(g.t, g.e, g.window()))
 	g.printf("state %s\n%s", what, strings.TrimSuffix(state, "\n"))
 	return state
 }
@@ -409,7 +388,7 @@ func (g *replicationGolden) state(what string) string {
 // sameState requires the keyspace to be want, and says so in the transcript.
 func (g *replicationGolden) sameState(what, want string) {
 	g.t.Helper()
-	require.Equal(g.t, want, string(goldenState(g.t, g.window())), what)
+	require.Equal(g.t, want, string(goldenStateOn(g.t, g.e, g.window())), what)
 	g.printf("state %s: the same", what)
 }
 
@@ -425,19 +404,19 @@ func (g *replicationGolden) termFile(what, path string) {
 	g.printf("term file %s: %q", what, body)
 }
 
-// becomeReplica turns the default engine into a replica of goldenPrimary with
+// becomeReplica turns the run's engine into a replica of goldenPrimary with
 // a log of its own, as a server started with -replicaof is.
 func (g *replicationGolden) becomeReplica(protocol int) {
 	g.t.Helper()
 	g.cycle()
-	require.NoError(g.t, CloseAOF())
-	ResetStores()
-	reconfigure(g.t, defaultEngine, func(o *Options) {
+	require.NoError(g.t, g.e.CloseAOF())
+	g.e.resetStores()
+	reconfigure(g.t, g.e, func(o *Options) {
 		o.ReplicationFeed, o.ReplicaOf, o.ReplicationProtocol = false, goldenPrimary, protocol
 	})
 	g.path = filepath.Join(filepath.Dir(g.path), "replica.aof")
-	require.NoError(g.t, OpenAOF(g.path))
-	require.NoError(g.t, InitReplication())
+	require.NoError(g.t, g.e.OpenAOF(g.path))
+	require.NoError(g.t, g.e.InitReplication())
 	g.logRead = 0
 	g.printf("replica of %s, protocol %d", goldenPrimary, protocol)
 }
@@ -447,16 +426,16 @@ func (g *replicationGolden) becomeReplica(protocol int) {
 func (g *replicationGolden) restartReplica() {
 	g.t.Helper()
 	g.cycle()
-	require.NoError(g.t, CloseAOF())
-	ResetStores()
-	_, err := LoadAOF(g.path)
+	require.NoError(g.t, g.e.CloseAOF())
+	g.e.resetStores()
+	_, err := g.e.LoadAOF(g.path)
 	require.NoError(g.t, err)
-	require.NoError(g.t, OpenAOF(g.path))
-	require.NoError(g.t, InitReplication())
+	require.NoError(g.t, g.e.OpenAOF(g.path))
+	require.NoError(g.t, g.e.InitReplication())
 	info, err := os.Stat(g.path)
 	require.NoError(g.t, err)
 	g.logRead = int(info.Size())
-	epoch, offset := ReplicaResumeCursor()
+	epoch, offset := g.e.ReplicaResumeCursor()
 	g.printf("replica restarted: resumes at %q %d", g.id("epoch", epoch), offset)
 }
 
@@ -465,7 +444,7 @@ func (g *replicationGolden) restartReplica() {
 func (g *replicationGolden) apply(what string, f ReplicationFrame, kind recordKind) error {
 	g.t.Helper()
 	g.cycle() // protocol 2 waits for a pending append
-	err := ApplyReplication(f)
+	err := g.e.ApplyReplication(f)
 	g.cycle()
 	if err != nil {
 		g.printf("apply %s: error %q", what, err.Error())
@@ -776,7 +755,7 @@ func goldenProtocol1(g *replicationGolden) {
 // then a replica observing a term from a frame and refusing an older one.
 func goldenTerms(g *replicationGolden) {
 	primary := g.path
-	require.NoError(g.t, LoadTerm(primary))
+	require.NoError(g.t, g.e.LoadTerm(primary))
 	g.info("fresh")
 	g.termFile("fresh", primary)
 	g.reply("KEEL.PROMOTE", "0")
@@ -797,7 +776,7 @@ func goldenTerms(g *replicationGolden) {
 	g.reply("KEEL.REPL.PULL2", epoch, "0", "", "0", "5")
 
 	// A restart reads the term back, and starts fenced.
-	require.NoError(g.t, LoadTerm(primary))
+	require.NoError(g.t, g.e.LoadTerm(primary))
 	g.info("restarted")
 	g.reply("SET", "b", "2")
 	g.reply("KEEL.PROMOTE", "5")
@@ -811,12 +790,12 @@ func goldenTerms(g *replicationGolden) {
 	g.termFile("fenced", primary)
 	g.info("fenced")
 	g.reply("SET", "c", "3")
-	reconfigure(g.t, defaultEngine, func(o *Options) { o.ReplicationProtocol = 1 })
+	reconfigure(g.t, g.e, func(o *Options) { o.ReplicationProtocol = 1 })
 	g.reply("KEEL.REPL.PULL", "", "0")
-	reconfigure(g.t, defaultEngine, func(o *Options) { o.ReplicationProtocol = 2 })
+	reconfigure(g.t, g.e, func(o *Options) { o.ReplicationProtocol = 2 })
 
 	g.becomeReplica(2)
-	require.NoError(g.t, LoadTerm(g.path))
+	require.NoError(g.t, g.e.LoadTerm(g.path))
 	g.info("replica-fresh")
 	pending := ReplicationFrame{Version: 2, Epoch: epoch, Full: true, Pending: true, Term: 7}
 	pending.Checksum = frameChecksum(pending)
@@ -836,6 +815,7 @@ func goldenTerms(g *replicationGolden) {
 // skipped otherwise. It was run once, on develop at 9736d8d. Every mode must
 // write the same transcript before anything is written.
 func TestReplicationGoldenCapture(t *testing.T) {
+	t.Parallel()
 	dir := os.Getenv("KEEL_CAPTURE_REPLICATION_GOLDEN")
 	if dir == "" {
 		t.Skip("set KEEL_CAPTURE_REPLICATION_GOLDEN to rewrite the fixture")
@@ -896,6 +876,7 @@ func requireSameTranscript(t *testing.T, want, got []byte, what string) {
 // TestReplicationGoldenTranscriptsAreUnchanged: every scenario, under every
 // mode, writes develop's transcript.
 func TestReplicationGoldenTranscriptsAreUnchanged(t *testing.T) {
+	t.Parallel()
 	if os.Getenv("KEEL_CAPTURE_REPLICATION_GOLDEN") != "" {
 		t.Skip("capturing")
 	}
@@ -918,6 +899,7 @@ func TestReplicationGoldenTranscriptsAreUnchanged(t *testing.T) {
 		require.Equal(t, manifest.Sums[scenario.name], goldenSHA(want.Bytes()), "the fixture's transcript")
 		for _, mode := range goldenModes {
 			t.Run(scenario.name+"/"+mode.name, func(t *testing.T) {
+				t.Parallel()
 				requireSameTranscript(t, want.Bytes(), runReplicationGolden(t, scenario, mode), "the transcript")
 			})
 		}
