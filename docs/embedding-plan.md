@@ -1046,6 +1046,21 @@ Where the plan above leaves a choice open, step 2.6 settles it this way:
   65 MiB of logs. Side by side they held 380 MiB of files at once, more
   than the local validation wrapper's 512 MiB budget allows beside the Go
   build cache. One at a time, the package's peak is 372 MiB.
+- **The largest writers are kept apart across packages.** `go test ./...`
+  runs packages side by side. With core's tests faster, its serial
+  `TestRewriteStallProfile` (106 MiB of logs) came to overlap one of those
+  subtests (65 MiB): CI's file footprint peaked at 162 MiB, against 108 on
+  develop and a warning line of 160 MiB. The worst case was the same before
+  the step; develop's timing had kept them apart. The two now take one lock,
+  `internal/testlock`, an flock on a file in the shared temporary directory,
+  before their directories, so that one is released only once its files are
+  gone.
+  - It is imported only by tests, so the server's binary does not contain
+    it.
+  - A waiter gives up after three minutes, naming the lock and why it
+    exists.
+  - The kernel releases a crashed holder's lock.
+  - Where there is no flock, it does nothing.
 - **internal/server stays serial.** Its tests drive the server's package
   state: the client registry, the queued reads, the waker and shutdown,
   which become a `server.Server` in phase 6. They also drive the default
