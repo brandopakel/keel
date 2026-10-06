@@ -15,83 +15,87 @@ import (
 )
 
 func TestOrderedAppendExecutesWhilePausedAndGatesEachPrefix(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	for _, policy := range []FsyncPolicy{FsyncNever, FsyncEverySec, FsyncAlways} {
 		t.Run(string(policy), func(t *testing.T) {
-			ResetStores()
-			oldWrite := defaultEngine.aofWrite
-			withOptions(t, func(o *Options) { o.Fsync, o.AsyncAppend = policy, true })
+			e.resetStores()
+			oldWrite := e.aofWrite
+			reconfigure(t, e, func(o *Options) { o.Fsync, o.AsyncAppend = policy, true })
 			release := make(chan struct{})
 			var once sync.Once
 			defer func() {
 				once.Do(func() { close(release) })
-				CloseAOF()
-				defaultEngine.aofWrite = oldWrite
+				e.CloseAOF()
+				e.aofWrite = oldWrite
 			}()
 			path := filepath.Join(t.TempDir(), "log")
-			require.NoError(t, OpenAOF(path))
+			require.NoError(t, e.OpenAOF(path))
 			entered := make(chan []byte, 2)
-			defaultEngine.aofWrite = func(f *os.File, body []byte) (int, error) {
+			e.aofWrite = func(f *os.File, body []byte) (int, error) {
 				entered <- bytes.Clone(body)
 				<-release
 				return f.Write(body)
 			}
-			run(t, "SET", "k", "first")
-			first := AppendOffset()
-			ready, err := FlushAOFAsync(nil)
+			runOn(t, e, "SET", "k", "first")
+			first := e.AppendOffset()
+			ready, err := e.FlushAOFAsync(nil)
 			require.NoError(t, err)
 			require.False(t, ready)
 			original := <-entered
 			commands := []*Command{{Cmd: "SET", Args: []string{"k", "second"}}, {Cmd: "GET", Args: []string{"k"}}}
-			reserved, replies, ok := AppendAdmission(commands)
+			reserved, replies, ok := e.AppendAdmission(commands)
 			require.True(t, ok)
-			require.True(t, AppendHasRoom(reserved))
+			require.True(t, e.AppendHasRoom(reserved))
 			require.Positive(t, replies)
-			run(t, "SET", "k", "second")
-			require.Equal(t, "second", run(t, "GET", "k"), "execution proceeds while the first writer is explicitly paused")
-			second := AppendOffset()
+			runOn(t, e, "SET", "k", "second")
+			require.Equal(t, "second", runOn(t, e, "GET", "k"), "execution proceeds while the first writer is explicitly paused")
+			second := e.AppendOffset()
 			require.Greater(t, second, first)
-			require.Zero(t, AppendReadyOffset())
-			require.LessOrEqual(t, len(defaultEngine.aof.buf), reserved)
-			require.Error(t, StartRewrite(), "a rewrite cannot switch file generations across a pending append")
+			require.Zero(t, e.AppendReadyOffset())
+			require.LessOrEqual(t, len(e.aof.buf), reserved)
+			require.Error(t, e.StartRewrite(), "a rewrite cannot switch file generations across a pending append")
 			require.Equal(t, appendCommand(nil, "SET", "k", "first"), original, "worker input must remain an immutable prefix")
 			once.Do(func() { close(release) })
-			defaultEngine.pollAppend(true)
-			require.Equal(t, first, AppendReadyOffset(), "later replies remain gated")
+			e.pollAppend(true)
+			require.Equal(t, first, e.AppendReadyOffset(), "later replies remain gated")
 			if policy == FsyncAlways {
-				require.Equal(t, first, defaultEngine.appendSynced)
+				require.Equal(t, first, e.appendSynced)
 			} else {
-				require.Zero(t, defaultEngine.appendSynced)
+				require.Zero(t, e.appendSynced)
 			}
-			ready, err = FlushAOFAsync(nil)
+			ready, err = e.FlushAOFAsync(nil)
 			require.NoError(t, err)
 			require.False(t, ready)
-			defaultEngine.pollAppend(true)
-			require.Equal(t, second, AppendReadyOffset())
-			require.NoError(t, CloseAOF())
-			require.Equal(t, second, defaultEngine.appendSynced)
+			e.pollAppend(true)
+			require.Equal(t, second, e.AppendReadyOffset())
+			require.NoError(t, e.CloseAOF())
+			require.Equal(t, second, e.appendSynced)
 			for i := 0; i < 2; i++ {
-				ResetStores()
-				_, err = LoadAOF(path)
+				e.resetStores()
+				_, err = e.LoadAOF(path)
 				require.NoError(t, err)
-				require.Equal(t, "second", run(t, "GET", "k"))
+				require.Equal(t, "second", runOn(t, e, "GET", "k"))
 			}
 		})
 	}
 }
 
 func TestOrderedAppendFailuresNeverAdvanceReplyPrefix(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	for _, fault := range []string{"short", "write", "sync"} {
 		t.Run(fault, func(t *testing.T) {
-			ResetStores()
-			oldWrite, oldSync := defaultEngine.aofWrite, defaultEngine.aofSync
+			e.resetStores()
+			oldWrite, oldSync := e.aofWrite, e.aofSync
 			defer func() {
-				CloseAOF()
-				defaultEngine.aofWrite, defaultEngine.aofSync = oldWrite, oldSync
+				e.CloseAOF()
+				e.aofWrite, e.aofSync = oldWrite, oldSync
 			}()
-			withOptions(t, func(o *Options) { o.Fsync = FsyncAlways })
-			require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "log")))
+			reconfigure(t, e, func(o *Options) { o.Fsync = FsyncAlways })
+			require.NoError(t, e.OpenAOF(filepath.Join(t.TempDir(), "log")))
 			diskErr := errors.New("controlled disk failure")
-			defaultEngine.aofWrite = func(f *os.File, b []byte) (int, error) {
+			e.aofWrite = func(f *os.File, b []byte) (int, error) {
 				if fault == "short" {
 					return f.Write(b[:len(b)/2])
 				}
@@ -101,33 +105,34 @@ func TestOrderedAppendFailuresNeverAdvanceReplyPrefix(t *testing.T) {
 				return f.Write(b)
 			}
 			if fault == "sync" {
-				defaultEngine.aofSync = func(*os.File) error { return diskErr }
+				e.aofSync = func(*os.File) error { return diskErr }
 			}
-			run(t, "SET", "first", "v")
-			_, err := FlushAOFAsync(nil)
+			runOn(t, e, "SET", "first", "v")
+			_, err := e.FlushAOFAsync(nil)
 			require.NoError(t, err)
-			run(t, "SET", "speculative", "v")
-			defaultEngine.pollAppend(true)
-			require.Zero(t, AppendReadyOffset())
-			require.Zero(t, defaultEngine.appendSynced)
+			runOn(t, e, "SET", "speculative", "v")
+			e.pollAppend(true)
+			require.Zero(t, e.AppendReadyOffset())
+			require.Zero(t, e.appendSynced)
 			if fault == "short" {
-				require.ErrorIs(t, defaultEngine.aof.failed, io.ErrShortWrite)
+				require.ErrorIs(t, e.aof.failed, io.ErrShortWrite)
 			} else {
-				require.ErrorIs(t, defaultEngine.aof.failed, diskErr)
+				require.ErrorIs(t, e.aof.failed, diskErr)
 			}
-			_, err = FlushAOFAsync(nil)
+			_, err = e.FlushAOFAsync(nil)
 			require.Error(t, err)
-			require.False(t, AppendPending(), "failure must not start the queued suffix")
-			require.Error(t, CloseAOF())
+			require.False(t, e.AppendPending(), "failure must not start the queued suffix")
+			require.Error(t, e.CloseAOF())
 		})
 	}
 }
 
 func TestAppendAdmissionBoundsGrowthRepliesAndCanonicalExpiry(t *testing.T) {
-	ResetStores()
-	defer CloseAOF()
-	withOptions(t, func(o *Options) { o.MaxMemory, o.MaxKeys = 0, 100000 })
-	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "log")))
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	defer e.CloseAOF()
+	reconfigure(t, e, func(o *Options) { o.MaxMemory, o.MaxKeys = 0, 100000 })
+	require.NoError(t, e.OpenAOF(filepath.Join(t.TempDir(), "log")))
 	for _, parts := range [][]string{
 		{"SET", "k", strings.Repeat("v", 4096), "PX", "60000", "GET"},
 		{"GET", "k"}, {"MGET", "k", "missing"}, {"SETEX", "k", "600", "new"},
@@ -135,53 +140,54 @@ func TestAppendAdmissionBoundsGrowthRepliesAndCanonicalExpiry(t *testing.T) {
 		{"MSET", "a", "1", "b", "2"}, {"EXISTS", "a", "b"}, {"TTL", "k"},
 	} {
 		cmd := &Command{Cmd: parts[0], Args: parts[1:]}
-		logBound, replyBound, ok := AppendAdmission([]*Command{cmd})
+		logBound, replyBound, ok := e.AppendAdmission([]*Command{cmd})
 		require.True(t, ok, parts)
-		before := len(defaultEngine.aof.buf)
+		before := len(e.aof.buf)
 		var out replicationReply
-		require.NoError(t, EvalAndResponse(cmd, &out))
-		require.LessOrEqual(t, len(defaultEngine.aof.buf)-before, logBound, parts)
+		require.NoError(t, e.evalAndResponse(cmd, &out))
+		require.LessOrEqual(t, len(e.aof.buf)-before, logBound, parts)
 		require.LessOrEqual(t, len(out), replyBound, parts)
 	}
-	_, _, ok := AppendAdmission([]*Command{{Cmd: "SPOP", Args: []string{"set", "1000"}}})
+	_, _, ok := e.AppendAdmission([]*Command{{Cmd: "SPOP", Args: []string{"set", "1000"}}})
 	require.False(t, ok)
-	withOptions(t, func(o *Options) { o.MaxKeys = 1 })
-	_, _, ok = AppendAdmission([]*Command{{Cmd: "SET", Args: []string{"new", "v"}}})
+	reconfigure(t, e, func(o *Options) { o.MaxKeys = 1 })
+	_, _, ok = e.AppendAdmission([]*Command{{Cmd: "SET", Args: []string{"new", "v"}}})
 	require.False(t, ok, "eviction requires the drained path")
-	withOptions(t, func(o *Options) { o.MaxKeys, o.MaxMemory = 100000, 1 })
-	_, _, ok = AppendAdmission([]*Command{{Cmd: "GET", Args: []string{"a"}}})
+	reconfigure(t, e, func(o *Options) { o.MaxKeys, o.MaxMemory = 100000, 1 })
+	_, _, ok = e.AppendAdmission([]*Command{{Cmd: "GET", Args: []string{"a"}}})
 	require.False(t, ok, "even a read enforces an already exceeded memory limit")
-	require.False(t, AppendHasRoom(maxAsyncAppendBytes))
-	require.False(t, AppendHasRoom(-1))
+	require.False(t, e.AppendHasRoom(maxAsyncAppendBytes))
+	require.False(t, e.AppendHasRoom(-1))
 }
 
 // admissionRun admits a whole run, executes it, and reports what it actually
 // cost. The bound is for the run rather than for each command, so the run is
 // what has to be measured against it.
-func admissionRun(t *testing.T, parts ...[]string) (logBound, replyBound, logUsed, replyUsed int, admitted bool) {
+func admissionRun(t *testing.T, e *Engine, parts ...[]string) (logBound, replyBound, logUsed, replyUsed int, admitted bool) {
 	t.Helper()
 	commands := make([]*Command, 0, len(parts))
 	for _, p := range parts {
 		commands = append(commands, &Command{Cmd: p[0], Args: p[1:]})
 	}
-	logBound, replyBound, admitted = AppendAdmission(commands)
+	logBound, replyBound, admitted = e.AppendAdmission(commands)
 	if !admitted {
 		return 0, 0, 0, 0, false
 	}
-	before := len(defaultEngine.aof.buf)
+	before := len(e.aof.buf)
 	for _, cmd := range commands {
 		var out replicationReply
-		require.NoError(t, EvalAndResponse(cmd, &out))
+		require.NoError(t, e.evalAndResponse(cmd, &out))
 		replyUsed += len(out)
 	}
-	return logBound, replyBound, len(defaultEngine.aof.buf) - before, replyUsed, true
+	return logBound, replyBound, len(e.aof.buf) - before, replyUsed, true
 }
 
 func TestAppendAdmissionBoundsCollectionCommands(t *testing.T) {
-	ResetStores()
-	defer CloseAOF()
-	withOptions(t, func(o *Options) { o.MaxMemory, o.MaxKeys = 0, 100000 })
-	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "log")))
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	defer e.CloseAOF()
+	reconfigure(t, e, func(o *Options) { o.MaxMemory, o.MaxKeys = 0, 100000 })
+	require.NoError(t, e.OpenAOF(filepath.Join(t.TempDir(), "log")))
 
 	value := strings.Repeat("v", 512)
 	for _, run := range [][][]string{
@@ -197,7 +203,7 @@ func TestAppendAdmissionBoundsCollectionCommands(t *testing.T) {
 		{{"ZRANGE", "z", "0", "-1", "WITHSCORES"}}, {{"ZCARD", "z"}},
 		{{"ZSCORE", "z", value}}, {{"ZREM", "z", value}},
 	} {
-		logBound, replyBound, logUsed, replyUsed, ok := admissionRun(t, run...)
+		logBound, replyBound, logUsed, replyUsed, ok := admissionRun(t, e, run...)
 		require.True(t, ok, "%v must be admitted", run)
 		require.LessOrEqual(t, logUsed, logBound, "%v transcript", run)
 		require.LessOrEqual(t, replyUsed, replyBound, "%v reply", run)
@@ -208,10 +214,11 @@ func TestAppendAdmissionBoundsCollectionCommands(t *testing.T) {
 // collection earlier in it, because none of the run has executed when the bound
 // is computed. This is the case a per-command largest-write bound gets wrong.
 func TestAppendAdmissionBoundsReadsOfCollectionsGrownInTheSameRun(t *testing.T) {
-	ResetStores()
-	defer CloseAOF()
-	withOptions(t, func(o *Options) { o.MaxMemory, o.MaxKeys = 0, 100000 })
-	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "log")))
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	defer e.CloseAOF()
+	reconfigure(t, e, func(o *Options) { o.MaxMemory, o.MaxKeys = 0, 100000 })
+	require.NoError(t, e.OpenAOF(filepath.Join(t.TempDir(), "log")))
 
 	big := strings.Repeat("x", 4096)
 	for _, run := range [][][]string{
@@ -220,7 +227,7 @@ func TestAppendAdmissionBoundsReadsOfCollectionsGrownInTheSameRun(t *testing.T) 
 		{{"HSET", "ghash", "a", big, "b", big}, {"HGETALL", "ghash"}},
 		{{"ZADD", "gz", "1", big, "2", big + "b"}, {"ZRANGE", "gz", "0", "-1", "WITHSCORES"}},
 	} {
-		logBound, replyBound, logUsed, replyUsed, ok := admissionRun(t, run...)
+		logBound, replyBound, logUsed, replyUsed, ok := admissionRun(t, e, run...)
 		require.True(t, ok, "%v must be admitted", run)
 		require.LessOrEqual(t, logUsed, logBound, "%v transcript", run)
 		require.LessOrEqual(t, replyUsed, replyBound,
@@ -230,9 +237,10 @@ func TestAppendAdmissionBoundsReadsOfCollectionsGrownInTheSameRun(t *testing.T) 
 
 // Commands whose log record only execution can produce must not be admitted.
 func TestAppendAdmissionRefusesRecordsItCannotPredict(t *testing.T) {
-	ResetStores()
-	defer CloseAOF()
-	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "log")))
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	defer e.CloseAOF()
+	require.NoError(t, e.OpenAOF(filepath.Join(t.TempDir(), "log")))
 	for _, parts := range [][]string{
 		{"SPOP", "s", "10"},              // stages SREM of whichever members it drew
 		{"ZPOPMIN", "z"},                 // likewise
@@ -247,7 +255,7 @@ func TestAppendAdmissionRefusesRecordsItCannotPredict(t *testing.T) {
 		{"BF.ADD", "f", "x"},
 		{"KEEL.RESTORE", "k", "payload"},
 	} {
-		_, _, ok := AppendAdmission([]*Command{{Cmd: parts[0], Args: parts[1:]}})
+		_, _, ok := e.AppendAdmission([]*Command{{Cmd: parts[0], Args: parts[1:]}})
 		require.False(t, ok, "%v must take the drained barrier", parts)
 	}
 }
@@ -258,10 +266,11 @@ func TestAppendAdmissionRefusesRecordsItCannotPredict(t *testing.T) {
 // admitted for. A bound that is too generous only costs a barrier; a bound that
 // is too tight is a budget already spent when the overrun is discovered.
 func TestAppendAdmissionBoundHoldsForRandomRuns(t *testing.T) {
-	ResetStores()
-	defer CloseAOF()
-	withOptions(t, func(o *Options) { o.MaxMemory, o.MaxKeys = 0, 1000000 })
-	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "log")))
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	defer e.CloseAOF()
+	reconfigure(t, e, func(o *Options) { o.MaxMemory, o.MaxKeys = 0, 1000000 })
+	require.NoError(t, e.OpenAOF(filepath.Join(t.TempDir(), "log")))
 
 	rng := rand.New(rand.NewSource(20260907))
 	keys := []string{"a", "b", "c"}
@@ -293,7 +302,7 @@ func TestAppendAdmissionBoundHoldsForRandomRuns(t *testing.T) {
 		for i := 0; i < 1+rng.Intn(5); i++ {
 			run = append(run, shapes[rng.Intn(len(shapes))]())
 		}
-		logBound, replyBound, logUsed, replyUsed, ok := admissionRun(t, run...)
+		logBound, replyBound, logUsed, replyUsed, ok := admissionRun(t, e, run...)
 		if !ok {
 			continue
 		}

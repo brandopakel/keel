@@ -222,15 +222,17 @@ func TestCFReadsAnswerNoForAnotherType(t *testing.T) {
 // build before answered 0 and logged it. Its log still replays: see
 // TestBloomCuckooLegacyLogReplays.
 func TestCFDELOfAMissingKeyIsNotLoggedOrReplicated(t *testing.T) {
-	setupReplicationV2(t)
-	frames := snapshotV2(t)
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setupReplicationV2On(t, e)
+	frames := snapshotV2On(t, e)
 	offset, epoch := frames[len(frames)-1].To, frames[0].Epoch
-	before, err := os.ReadFile(defaultEngine.aof.path)
+	before, err := os.ReadFile(e.aof.path)
 	assert.NoError(t, err)
-	assert.Equal(t, "-Not found\r\n", string(rawReply(t, "CF.DEL", "missing", "x")))
-	assert.NoError(t, FlushAOF())
-	after, err := os.ReadFile(defaultEngine.aof.path)
+	assert.Equal(t, "-Not found\r\n", string(rawReplyOn(t, e, "CF.DEL", "missing", "x")))
+	assert.NoError(t, e.FlushAOF())
+	after, err := os.ReadFile(e.aof.path)
 	assert.NoError(t, err)
 	assert.Equal(t, before, after, "nothing logged")
-	assert.Empty(t, pullV2(t, epoch, offset, "", 0).Body, "nothing replicated")
+	assert.Empty(t, pullV2On(t, e, epoch, offset, "", 0).Body, "nothing replicated")
 }

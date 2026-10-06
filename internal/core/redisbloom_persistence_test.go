@@ -165,16 +165,16 @@ func dumpImagesOn(t *testing.T, e *Engine, keys []string) ([]byte, map[string]st
 // with the log and the protocol 2 feed on, and returns the log, the delta the
 // feed sends a replica that is already caught up with an empty primary, and
 // the dumps.
-func runBloomSessionV2(t *testing.T, resp3 bool) (log, delta, dumps []byte) {
-	setupReplicationV2(t)
-	frames := snapshotV2(t)
+func runBloomSessionV2(t *testing.T, e *Engine, resp3 bool) (log, delta, dumps []byte) {
+	setupReplicationV2On(t, e)
+	frames := snapshotV2On(t, e)
 	offset, epoch := frames[len(frames)-1].To, frames[0].Epoch
 	for _, args := range bloomPersistenceSession {
-		rawReplyAs(t, resp3, args[0], args[1:]...)
+		rawReplyAsOn(t, e, resp3, args[0], args[1:]...)
 	}
-	require.NoError(t, FlushAOF())
+	require.NoError(t, e.FlushAOF())
 	for {
-		f := pullV2(t, epoch, offset, "", 0)
+		f := pullV2On(t, e, epoch, offset, "", 0)
 		require.False(t, f.Full)
 		delta = append(delta, f.Body...)
 		if f.To == offset || f.CaughtUp {
@@ -182,8 +182,8 @@ func runBloomSessionV2(t *testing.T, resp3 bool) (log, delta, dumps []byte) {
 		}
 		offset = f.To
 	}
-	dumps, _ = dumpImages(t, bloomPersistenceKeys)
-	log, err := os.ReadFile(defaultEngine.aof.path)
+	dumps, _ = dumpImagesOn(t, e, bloomPersistenceKeys)
+	log, err := os.ReadFile(e.aof.path)
 	require.NoError(t, err)
 	return log, delta, dumps
 }
@@ -191,14 +191,14 @@ func runBloomSessionV2(t *testing.T, resp3 bool) (log, delta, dumps []byte) {
 // runBloomSessionV1 runs the session with the protocol 1 feed on, pulling a
 // delta after every command so each batch holds one key and the order is the
 // commands'.
-func runBloomSessionV1(t *testing.T, resp3 bool) []byte {
-	t.Cleanup(func() { CloseAOF() })
-	ResetStores()
-	withOptions(t, func(o *Options) { o.ReplicationFeed, o.ReplicaOf, o.ReplicationProtocol = true, "", 1 })
-	require.NoError(t, OpenAOF(filepath.Join(t.TempDir(), "primary.aof")))
-	require.NoError(t, InitReplication())
+func runBloomSessionV1(t *testing.T, e *Engine, resp3 bool) []byte {
+	t.Cleanup(func() { e.CloseAOF() })
+	e.resetStores()
+	withOptionsOn(t, e, func(o *Options) { o.ReplicationFeed, o.ReplicaOf, o.ReplicationProtocol = true, "", 1 })
+	require.NoError(t, e.OpenAOF(filepath.Join(t.TempDir(), "primary.aof")))
+	require.NoError(t, e.InitReplication())
 	pull := func(epoch string, offset uint64) ReplicationFrame {
-		reply := run(t, "KEEL.REPL.PULL", epoch, strconv.FormatUint(offset, 10))
+		reply := runOn(t, e, "KEEL.REPL.PULL", epoch, strconv.FormatUint(offset, 10))
 		encoded, ok := reply.(string)
 		require.True(t, ok, "reply: %v", reply)
 		var f ReplicationFrame
@@ -210,7 +210,7 @@ func runBloomSessionV1(t *testing.T, resp3 bool) []byte {
 	epoch, offset := first.Epoch, first.To
 	var delta []byte
 	for _, args := range bloomPersistenceSession {
-		rawReplyAs(t, resp3, args[0], args[1:]...)
+		rawReplyAsOn(t, e, resp3, args[0], args[1:]...)
 		f := pull(epoch, offset)
 		require.False(t, f.Full, "%q", args)
 		delta = append(delta, f.Body...)
@@ -230,14 +230,13 @@ func writeLegacyBloomLog(t *testing.T) string {
 	return path
 }
 
-func replayLegacyBloomLog(t *testing.T) ([]byte, map[string]string) {
+func replayLegacyBloomLog(t *testing.T, e *Engine) ([]byte, map[string]string) {
 	t.Helper()
-	ResetStores()
-	t.Cleanup(ResetStores)
-	applied, err := LoadAOF(writeLegacyBloomLog(t))
+	e.resetStores()
+	applied, err := e.LoadAOF(writeLegacyBloomLog(t))
 	require.NoError(t, err, "a log the earlier build wrote replays")
 	require.Equal(t, len(legacyBloomLog), applied)
-	return dumpImages(t, legacyBloomKeys)
+	return dumpImagesOn(t, e, legacyBloomKeys)
 }
 
 func loadRedisBloomPersistence(t *testing.T) redisBloomPersistence {
@@ -252,13 +251,15 @@ func loadRedisBloomPersistence(t *testing.T) redisBloomPersistence {
 // TestBloomCuckooPersistenceCapture writes the fixture when asked to, and is
 // skipped otherwise. It was run once, on develop at 6567ca7.
 func TestBloomCuckooPersistenceCapture(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	path := os.Getenv("KEEL_CAPTURE_REDISBLOOM_PERSISTENCE")
 	if path == "" {
 		t.Skip("set KEEL_CAPTURE_REDISBLOOM_PERSISTENCE to rewrite the fixture")
 	}
-	log, v2, dumps := runBloomSessionV2(t, false)
-	v1 := runBloomSessionV1(t, false)
-	legacy, legacyEach := replayLegacyBloomLog(t)
+	log, v2, dumps := runBloomSessionV2(t, e, false)
+	v1 := runBloomSessionV1(t, e, false)
+	legacy, legacyEach := replayLegacyBloomLog(t, e)
 	fixture := redisBloomPersistence{
 		SourceRevision: "6567ca7b844f77bb8697ff0fadec4b4b2136523a",
 		Note:           "Captured before BF/CF replies changed to RedisBloom's; see redisbloom_persistence_test.go.",
@@ -275,17 +276,19 @@ func TestBloomCuckooPersistenceCapture(t *testing.T) {
 // replication streams and the dump images it wrote before the replies
 // changed, from a RESP2 connection and from a RESP3 one.
 func TestBloomCuckooPersistenceIsUnchanged(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	if os.Getenv("KEEL_CAPTURE_REDISBLOOM_PERSISTENCE") != "" {
 		t.Skip("capturing")
 	}
 	want := loadRedisBloomPersistence(t)
 	for _, resp3 := range []bool{false, true} {
 		t.Run("resp3="+strconv.FormatBool(resp3), func(t *testing.T) {
-			log, v2, dumps := runBloomSessionV2(t, resp3)
+			log, v2, dumps := runBloomSessionV2(t, e, resp3)
 			require.Equal(t, want.SessionLog, sha256Hex(log), "the log")
 			require.Equal(t, want.SessionV2Delta, sha256Hex(v2), "the protocol 2 replication delta")
 			require.Equal(t, want.SessionDumps, sha256Hex(dumps), "the dump images")
-			require.Equal(t, want.SessionV1Delta, sha256Hex(runBloomSessionV1(t, resp3)), "the protocol 1 replication deltas")
+			require.Equal(t, want.SessionV1Delta, sha256Hex(runBloomSessionV1(t, e, resp3)), "the protocol 1 replication deltas")
 		})
 	}
 }
@@ -293,11 +296,13 @@ func TestBloomCuckooPersistenceIsUnchanged(t *testing.T) {
 // TestBloomCuckooLegacyLogReplays: a log the earlier build wrote, holding
 // commands RedisBloom refuses, replays to the filters it replayed to then.
 func TestBloomCuckooLegacyLogReplays(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	if os.Getenv("KEEL_CAPTURE_REDISBLOOM_PERSISTENCE") != "" {
 		t.Skip("capturing")
 	}
 	want := loadRedisBloomPersistence(t)
-	got, each := replayLegacyBloomLog(t)
+	got, each := replayLegacyBloomLog(t, e)
 	require.Len(t, want.LegacyEach, len(legacyBloomKeys))
 	for key, image := range want.LegacyEach {
 		require.Equal(t, image, each[key], "%s", key)
@@ -312,23 +317,25 @@ func TestBloomCuckooLegacyLogReplays(t *testing.T) {
 // So the reservation is logged with the option spelled out - a form the
 // earlier build refused - and replays to the filter it made.
 func TestBFRESERVEOfAKeyNamedNONSCALINGIsLoggedSoItReplays(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
 	var before []byte
-	path := withAOF(t, func() {
-		require.Equal(t, "+OK\r\n", string(rawReply(t, "BF.RESERVE", "nonscaling", "0.000001", "50")))
+	path := withAOFOn(t, e, func() {
+		require.Equal(t, "+OK\r\n", string(rawReplyOn(t, e, "BF.RESERVE", "nonscaling", "0.000001", "50")))
 		items := []string{"nonscaling"}
 		for i := 0; i < 50; i++ {
 			items = append(items, "item:"+strconv.Itoa(i))
 		}
-		run(t, "BF.MADD", items...)
-		require.Equal(t, "-ERR non scaling filter is full\r\n", string(rawReply(t, "BF.ADD", "nonscaling", "over")))
-		before, _ = defaultEngine.dumpKey("nonscaling")
+		runOn(t, e, "BF.MADD", items...)
+		require.Equal(t, "-ERR non scaling filter is full\r\n", string(rawReplyOn(t, e, "BF.ADD", "nonscaling", "over")))
+		before, _ = e.dumpKey("nonscaling")
 	})
 	log, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Contains(t, string(log), string(appendCommand(nil, "BF.RESERVE", "nonscaling", "0.000001", "50", "NONSCALING")))
-	restart(t, path)
-	after, ok := defaultEngine.dumpKey("nonscaling")
+	restartOn(t, e, path)
+	after, ok := e.dumpKey("nonscaling")
 	require.True(t, ok)
 	require.Equal(t, before, after, "the filter that does not grow, as it was")
-	require.Equal(t, "*1\r\n$-1\r\n", string(rawReply(t, "BF.INFO", "nonscaling", "EXPANSION")))
+	require.Equal(t, "*1\r\n$-1\r\n", string(rawReplyOn(t, e, "BF.INFO", "nonscaling", "EXPANSION")))
 }

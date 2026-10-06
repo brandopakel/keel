@@ -17,10 +17,11 @@ import (
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
-// session drives Transact the way a connection does, keeping the open
-// transaction between commands.
+// session drives transact on its engine the way a connection does, keeping
+// the open transaction between commands.
 type session struct {
 	t    *testing.T
+	e    *Engine
 	tx   *Transaction
 	conn Connection
 }
@@ -32,17 +33,18 @@ func (s *session) send(parts ...string) string {
 	var err error
 	cmd := &Command{Cmd: strings.ToUpper(parts[0]), Args: parts[1:]}
 	if s.tx != nil || IsTransactionCommand(cmd.Cmd) {
-		s.tx, err = Transact(s.tx, cmd, &w, s.conn)
+		s.tx, err = s.e.transact(s.tx, cmd, &w, s.conn)
 	} else {
-		err = EvalAndResponse(cmd, &w)
+		err = s.e.evalAndResponse(cmd, &w)
 	}
 	require.NoError(s.t, err)
 	return string(w.b)
 }
 
+// newSession is a session on the default engine, emptied first.
 func newSession(t *testing.T) *session {
 	ResetStores()
-	return &session{t: t}
+	return &session{t: t, e: defaultEngine}
 }
 
 func TestTransactionQueuesThenRunsInOrder(t *testing.T) {
@@ -185,7 +187,7 @@ func TestTransactionSchedulesARewriteAsRedisDoes(t *testing.T) {
 	// Closing cancels a rewrite still running without counting it as a
 	// failed one, which would outlive this test on the default engine.
 	t.Cleanup(func() { CloseAOF() })
-	s := &session{t: t}
+	s := &session{t: t, e: defaultEngine}
 	run(t, "SET", "before", "0")
 	s.send("MULTI")
 	s.send("SET", "a", "1")
@@ -430,7 +432,7 @@ func TestReplicaAndFencedPrimaryNameAndCountFirst(t *testing.T) {
 			"ERR unknown command 'nosuch', with args beginning with: 'x' ")
 		require.Equal(t, "-ERR wrong number of arguments for 'set' command\r\n", string(rawReply(t, "SET", "k")))
 		require.Equal(t, refusal, string(rawReply(t, "SET", "k", "v")))
-		s := &session{t: t}
+		s := &session{t: t, e: defaultEngine}
 		s.send("MULTI")
 		require.Equal(t, "-ERR unknown command 'NOSUCH'\r\n", s.send("NOSUCH"))
 		require.Equal(t, "-ERR wrong number of arguments for 'set' command\r\n", s.send("SET", "k"))
@@ -455,7 +457,7 @@ func TestReplicaAndFencedPrimaryNameAndCountFirst(t *testing.T) {
 
 func TestTransactionFencedBeforeExecRunsNothing(t *testing.T) {
 	setupFailover(t)
-	s := &session{t: t}
+	s := &session{t: t, e: defaultEngine}
 	s.send("MULTI")
 	s.send("SET", "a", "1")
 	s.send("SET", "b", "2")
@@ -479,7 +481,7 @@ func TestTransactionIsFramedInTheLog(t *testing.T) {
 	ResetStores()
 	require.NoError(t, OpenAOF(path))
 	t.Cleanup(func() { CloseAOF() })
-	s := &session{t: t}
+	s := &session{t: t, e: defaultEngine}
 
 	run(t, "SET", "outside", "1")
 	s.send("MULTI")
@@ -529,7 +531,7 @@ func TestTransactionReplacingWritesStayInsideTheirBlock(t *testing.T) {
 	frames := snapshotV2(t)
 	base, epoch := frames[0].To, frames[0].Epoch
 	before := aofBody(t)
-	s := &session{t: t}
+	s := &session{t: t, e: defaultEngine}
 	s.send("MULTI")
 	s.send("SET", "hash", "string")
 	s.send("MSET", "list", "x", "other", "y")
@@ -558,7 +560,7 @@ func TestTransactionEvictsAfterItsBlock(t *testing.T) {
 	}
 	withOptions(t, func(o *Options) { o.MaxMemory = data_structure.TotalMemUsed() + 32<<10 })
 	before := len(aofBody(t))
-	s := &session{t: t}
+	s := &session{t: t, e: defaultEngine}
 	s.send("MULTI")
 	s.send("SET", "new1", value)
 	s.send("SET", "new2", value)
@@ -638,7 +640,7 @@ func TestReplicationV2DeliversATransactionWhole(t *testing.T) {
 	base, epoch := frames[0].To, frames[0].Epoch
 
 	// Reads publish nothing.
-	s := &session{t: t}
+	s := &session{t: t, e: defaultEngine}
 	s.send("MULTI")
 	s.send("GET", "seed")
 	s.send("EXEC")
@@ -701,7 +703,7 @@ func TestReplicationV2OversizedTransactionTakesASnapshot(t *testing.T) {
 	run(t, "BF.RESERVE", "filter", "0.001", "7000000")
 	frames := snapshotV2(t)
 	epoch := frames[0].Epoch
-	s := &session{t: t}
+	s := &session{t: t, e: defaultEngine}
 	s.send("MULTI")
 	s.send("SET", "before", "v")
 	s.send("BF.ADD", "filter", "a")
@@ -755,7 +757,7 @@ func TestReplicationV1SealsATransactionTogether(t *testing.T) {
 		return f
 	}
 	first := pull("", 0)
-	s := &session{t: t}
+	s := &session{t: t, e: defaultEngine}
 	s.send("MULTI")
 	s.send("SET", "a", "1")
 	s.send("SET", "b", "1")
