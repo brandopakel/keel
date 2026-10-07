@@ -26,6 +26,17 @@ func waitForRewriteSyncOn(t *testing.T, e *Engine) {
 	}
 }
 
+// waitForLogOn waits for e's log's own append and sync, as the event loop
+// would before its next cycle. AdvanceRewrite makes no progress while either
+// is pending, and a cycle that finds one pending costs next to nothing, so a
+// slow disk can use up any bound on cycles in one fsync. A test that bounds a
+// rewrite's cycles waits for both first: its bound then counts cycles that
+// can advance rather than polls of the disk.
+func waitForLogOn(e *Engine) {
+	e.pollAppend(true)
+	e.pollAOFSync(true)
+}
+
 // Sync-specific tests first drain immutable writes. Their injected Sync may
 // block indefinitely, so this helper must never wait on the sync job itself.
 func advanceToRewriteSync(t *testing.T, e *Engine) {

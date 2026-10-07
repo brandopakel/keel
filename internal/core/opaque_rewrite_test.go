@@ -1,10 +1,12 @@
 package core
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/brandopakel/keel/internal/data_structure"
 	"github.com/stretchr/testify/require"
@@ -36,12 +38,21 @@ func TestOpaqueRewriteReconcilesMutationWithValidHistoricalPayload(t *testing.T)
 	t.Parallel()
 	e := newTestEngine(t, Options{})
 	for _, kind := range []string{"bloom", "cms", "morris", "hll", "cuckoo"} {
-		for _, mutation := range []string{"none", "update", "replace", "delete"} {
+		for _, mutation := range []string{"none", "update", "replace", "delete", "delete/slow-sync"} {
 			t.Run(kind+"/"+mutation, func(t *testing.T) {
 				e.resetStores()
 				path := filepath.Join(t.TempDir(), "store.aof")
 				require.NoError(t, e.OpenAOF(path))
 				t.Cleanup(func() { e.CancelRewrite(); require.NoError(t, e.CloseAOF()); e.resetStores() })
+				// A slow disk: the log's own fsync is still running when the
+				// rewrite is ready to finish, as on a busy CI runner.
+				slowSync := mutation == "delete/slow-sync"
+				if slowSync {
+					mutation = "delete"
+					oldSync := e.aofSync
+					e.aofSync = func(f *os.File) error { time.Sleep(300 * time.Millisecond); return f.Sync() }
+					t.Cleanup(func() { e.aofSync = oldSync })
+				}
 				key := strings.Repeat("k", 96<<10)
 				var update []string
 				switch kind {
@@ -77,7 +88,14 @@ func TestOpaqueRewriteReconcilesMutationWithValidHistoricalPayload(t *testing.T)
 					runOn(t, e, "DEL", key)
 				}
 				want, present := e.dumpKey(key)
+				if slowSync {
+					// Write the DEL and start its everysec sync now.
+					e.aof.lastSync = time.Time{}
+					require.NoError(t, e.flushAOF(false))
+					require.NotNil(t, e.aof.syncPending, "the slow sync must be running while the rewrite advances")
+				}
 				for cycles := 0; e.RewriteActive(); cycles++ {
+					waitForLogOn(e)
 					waitForRewriteSyncOn(t, e)
 					require.Less(t, cycles, 100)
 					before := e.rewrite.written

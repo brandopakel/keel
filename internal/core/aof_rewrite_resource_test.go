@@ -67,13 +67,9 @@ func TestRewriteStreamsOversizedRecordsAcrossMutation(t *testing.T) {
 				}
 				for cycles := 0; e.RewriteActive(); cycles++ {
 					require.Less(t, cycles, 100)
-					// AdvanceRewrite makes no progress while the log's own
-					// append or sync is pending, as after the DEL above. Wait
-					// for both, as the event loop would, so that the bound
-					// counts cycles that can advance rather than polls of a
-					// slow disk.
-					e.pollAppend(true)
-					e.pollAOFSync(true)
+					// The log's own append or sync may be pending, as after
+					// the DEL above.
+					waitForLogOn(e)
 					before := e.rewrite.written
 					require.NoError(t, e.AdvanceRewrite())
 					waitForRewriteSyncOn(t, e)
