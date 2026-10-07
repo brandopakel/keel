@@ -109,8 +109,11 @@ For embedded callers:
   published offset covers their write. That offset means synced under `always`
   and written under `everysec`/`no`, the same gate the server applies to
   replies.
-- **Persistence failures:** an AOF failure latches, and every later call gets
-  `ErrPersistence`.
+- **Persistence failures:** as Redis's (see "Phase 3: the instance
+  contract"). Under `everysec` and `no`, a failed write or sync refuses writes
+  with `ErrPersistence`, Redis's `MISCONF`, while reads are served and the log
+  is retried until it recovers. Under `always`, where Redis exits, the engine
+  refuses every call until it is reopened.
 
 ## API
 
@@ -1431,9 +1434,10 @@ engine lets more than one goroutine call it. An engine that `Open` makes is
 driven by a goroutine of its own, and a write an embedded caller makes is as
 durable when its call returns as a server's write is when the server replies.
 The server keeps driving its own engine. Nothing it shows a client, a log, a
-replica or an operator changes, except what the sidecar lock adds (see "The
-owner's decisions" below). All of it stays in `internal/`: the public package
-and its names are phase 5's. It takes five parts, one PR each, in this order:
+replica or an operator changes: it takes no lock beside its log, and it stops
+at a failed write as it does now (see "Decisions"). All of it stays in
+`internal/`: the public package and its names are phase 5's. It takes five
+parts, one PR each, in this order:
 
 1. **The instance lock**: a `sync.Mutex` in each engine. The server's loop
    holds it for every cycle and releases it only while it waits in the
@@ -1441,19 +1445,24 @@ and its names are phase 5's. It takes five parts, one PR each, in this order:
 2. **`Open` and `Close`**: the server's startup sequence moves from
    `server.StartAOF` into core, and its replay takes a context that can stop
    it. `Open` runs the sequence on a new engine, and `Close` ends one.
-3. **The sidecar lock**: `path.lock`, held from before the log is read until
-   `Close`.
+3. **The sidecar lock**: `path.lock`, which `Open` takes before the log is
+   read and `Close` releases. The server takes none.
 4. **The maintenance goroutine**: the driver of an engine `Open` makes.
 5. **Calls and their durability**: the call an embedded caller makes, the wait
-   for the published offset, and the `ErrPersistence` latch. This part also
-   adds the phase's closing record to this section.
+   for the published offset, and what a failed write or sync does, as Redis
+   does it. This part also adds the phase's closing record to this section.
+
+A fix comes first, in a PR of its own: a legacy log's migration, which on
+develop can lose the legacy keyspace to a crash (see "Context-aware replay"),
+writes the new log under a temporary name and renames it into place. It
+changes `server.startAOF`, which part 2 then moves into core.
 
 The order follows risk, and what each part needs. The instance lock goes
 first because it is the one change on the server's hot path. Measured alone,
 nothing else moves the code it is measured against, and every later part runs
 on it. `Open` and `Close` come next; they change only startup and shutdown.
-The sidecar lock is a part of its own because it is the one change a server's
-operator can see, so it can be reverted alone. The maintenance goroutine is
+The sidecar lock is a part of its own because it is the one platform-specific
+code in the phase, with tests of its own on each platform. The maintenance goroutine is
 the first code that touches an engine from a goroutine of its own, so it
 needs the instance lock. Calls need the goroutine, which flushes for them, and
 `Close`, which stops it. Where the plan above leaves a choice open, phase 3
@@ -1500,21 +1509,23 @@ settles it this way:
   its stores empty, in a space of its own. `Open` then runs what the
   server's startup runs now, in the same order, and starts the engine's
   driver:
-  1. If `o.AppendOnly`, the log's startup. It moves from `server.startAOF`
+  1. If `o.AppendOnly`, the sidecar lock (part 3), which only `Open` takes.
+  2. If `o.AppendOnly`, the log's startup. It moves from `server.startAOF`
      into core, as the method `(*Engine).StartAOF(ctx, legacy)`, and runs:
-     1. the sidecar lock (part 3);
-     2. the term file beside the log (`LoadTerm`), before the log is read;
-     3. the replay of the log at `AppendFilename`; or, when there is no log
+     1. the term file beside the log (`LoadTerm`), before the log is read;
+     2. the replay of the log at `AppendFilename`; or, when there is no log
         there but there is one at the legacy name the server passes, the
         replay of that one. `Open` passes no legacy name;
-     4. the repair of a torn tail: the suffix is saved to a
+     3. the repair of a torn tail: the suffix is saved to a
         `.keel-torn-tail-*` file beside the log and synced, then the log is
         truncated and synced;
-     5. opening the log for appending (`OpenAOF`);
-     6. for a legacy log, rewriting the replayed keyspace into the new log.
-  2. Replication's start (`InitReplication`): its epoch and, for a replica,
+     4. opening the log for appending (`OpenAOF`);
+     5. for a legacy log, the replayed keyspace rewritten into a log under a
+        temporary name, which is synced and renamed onto `AppendFilename`
+        (the fix that precedes this phase).
+  3. Replication's start (`InitReplication`): its epoch and, for a replica,
      its checkpoint.
-  3. From part 4, the maintenance goroutine.
+  4. From part 4, the maintenance goroutine.
 
   Each step logs what the server's startup logs now, in the same words and
   order, because core logs them where `server.startAOF` did: the replay
@@ -1552,16 +1563,16 @@ settles it this way:
 
   A later `Open` replays from the start. The context is checked once more
   when the replay has finished, before anything is written, and not after
-  that. From there, startup runs to completion, for one reason. Stopping
-  after the new log is opened, before a legacy log has been rewritten into
-  it, is the one interruption that loses data: the next start would prefer
-  the new, empty log. Nothing else in startup takes long. The engine does not
-  keep the context.
-  - **A crash in that window** loses the legacy log's keyspace the same way,
-    and does on the server today. Phase 3 moves the migration as it is,
-    under its rule that nothing user-visible changes. Making it crash-safe,
-    by publishing the new log only once it holds the legacy keyspace, is a
-    fix of its own, with a kill-and-reopen test, for the owner to schedule.
+  that. From there, startup runs to completion: it writes, and nothing after
+  the replay takes long. The engine does not keep the context.
+  - **A legacy log's migration** wrote the replayed keyspace into the new log
+    after opening it under its final name, so a crash in between left an
+    empty new log, which the next start preferred to the intact legacy one:
+    the legacy keyspace was lost. The fix that precedes this phase writes it
+    under a temporary name, `path + ".migrating"`, syncs it, and renames it
+    onto the path, syncing the directory, as Redis's rewrites publish a log.
+    A kill before the rename leaves no log at the path, and the next start
+    replays the legacy log again.
 - **`Close`** ends an engine, in this order:
   1. It marks the engine closed, under the lock, so a call already running
      finishes first, and every later call gets `ErrClosed`.
@@ -1571,8 +1582,8 @@ settles it this way:
      buffered, syncs it whatever the fsync policy, and closes the file.
   4. It wakes every call waiting for durability. Each has been either covered
      or failed by the final sync.
-  5. It releases the sidecar lock, last, so that no other instance can open
-     the log while this one may still write to it.
+  5. It releases the sidecar lock, if `Open` took one, last, so that no other
+     instance can open the log while this one may still write to it.
 
   When `Close` returns nil, every write a call has returned for is on disk
   and synced, the log is closed, the sidecar lock is free, and none of the
@@ -1580,8 +1591,8 @@ settles it this way:
   the file and releases the lock, and returns the error. A second `Close`
   returns `ErrClosed`, as a second `os.File.Close` does. The server calls
   `Close` where cmd/keel calls `CloseAOF` now. The loop has closed the log by
-  then, so `Close` only marks the engine closed and releases the sidecar lock,
-  and prints nothing.
+  then, and the server holds no sidecar lock, so `Close` only marks the engine
+  closed, and prints nothing.
 - **The sidecar lock** is an advisory lock on `path + ".lock"`, beside the
   log, as the term file is `path + ".term"`. It cannot be on the log's own
   descriptor, because a rewrite renames a new file over the path.
@@ -1606,11 +1617,10 @@ settles it this way:
     once on a Windows runner, in a throwaway job, so that the Windows lock is
     shown to work and not only to build.
   - **The error** is `ErrLocked`, whose text is `log in use by another
-    instance`. It is returned as `fmt.Errorf("%w: %s", ErrLocked, lockPath)`.
-    The server prints it as it prints any startup error, and exits with
-    status 1: `appendonly: log in use by another instance:
-    ./keel-master.aof.lock`. A lock file that cannot be created or opened is
-    an error too, naming its path. Where the filesystem does not support locks
+    instance`. It is returned as `fmt.Errorf("%w: %s", ErrLocked, lockPath)`,
+    and `Open` wraps it as it wraps the log's startup:
+    `appendonly: log in use by another instance: <path>.lock`. A lock file
+    that cannot be created or opened is an error too, naming its path. Where the filesystem does not support locks
     at all (`ENOTSUP`, `EOPNOTSUPP` or `ENOLCK`), the engine opens without
     one, and logs `appendonly: <path>.lock: <error>; nothing keeps a second
     instance off this log`.
@@ -1619,8 +1629,12 @@ settles it this way:
     the next `Open` takes it. The file is never removed, because removing a
     lock file races with whoever opens it next: one instance would hold a lock
     on the removed file, and another on its replacement.
-  - **The server takes it too**, through the startup it shares with `Open`;
-    this is the owner's decision, below.
+  - **The server takes none** (the owner's decision, October 7, 2026,
+    following Redis, which locks nothing): its startup runs `StartAOF`
+    without `Open`, so it creates no `.lock` file, and two servers on one log
+    behave as they do today. A test checks that the server leaves no lock file.
+    Whether the server takes it is the owner's to revisit in phase 6, when the
+    server's startup becomes `server.Server`'s.
 - **The maintenance goroutine** (part 4) is the driver of an engine `Open`
   makes, as the event loop is the server's. It does the loop's per-cycle
   work, in the loop's order, under the lock: the expiry cycle; the flush
@@ -1649,8 +1663,8 @@ settles it this way:
     plan keeps replication server-only.
 - **Calls** (part 5). `(*Engine).Do(ctx, cmd, w) error` runs the command
   language for an embedded caller, until phase 4's typed operations replace
-  it. It checks its context, takes the lock, and refuses with `ErrClosed` or
-  the persistence latch. Otherwise it runs the command in the scope
+  it. It checks its context, takes the lock, and refuses with `ErrClosed`, or
+  with `ErrPersistence` as a failed log says (below). Otherwise it runs the command in the scope
   `EvalAndResponse` gives it, notes the log's end (`AppendOffset`), and
   releases the lock. It unlocks at each return rather than with `defer`, as
   step 2.3 did for `aofEnd`. A panic in a command is not recovered, as on the
@@ -1668,17 +1682,57 @@ settles it this way:
     write that is not on disk yet, and no client of the server is told what a
     crash could still lose. A call that neither buffered records nor saw any
     buffered does not wait. With no log, nothing is ever buffered, and a call
-    is the lock, the command and the unlock.
+    is the lock, the command and the unlock. While a failed write or sync
+    under `everysec` or `no` holds the buffer back, reads do not wait for it,
+    as Redis answers them (see "Log failures, as Redis's").
   - **Cancelled while waiting**, a call returns the context's error. Its
     command has run and its record will be written, as a Redis client that
     times out has its command run.
-- **The latch.** A failed flush or sync latches. The maintenance goroutine
-  records the error and wakes every waiting call. From then on, every call,
-  read or write, returns `ErrPersistence` wrapping the cause, without running.
-  A waiting call whose records were published before the failure still
-  returns nil. Nothing clears the latch: close the engine and open it again,
-  which replays what reached the disk. The server never latches: it stops at
-  the first failure, as it does now.
+- **Log failures, as Redis's** (the owner's decision, October 7, 2026). What
+  a failed write or sync of an embedded engine's log does follows Redis
+  8.10.1: `flushAppendOnlyFile` in aof.c, the background fsync job in bio.c,
+  and `writeCommandsDeniedByDiskError` and `processCommand` in server.c.
+  - **Under `everysec` and `no`,** a failed or short write of the buffer
+    leaves what was not written buffered and puts the log's write status in
+    error, as Redis's `aof_last_write_status`; a failed background sync puts
+    its sync status in error, as Redis's `aof_bio_fsync_status`. While either
+    is in error:
+    - a write command (the log's `writeCommands`), and `PING`, as Redis
+      refuses it too so that a health check sees the failure, is refused
+      before it runs, with `ErrPersistence` wrapping the cause:
+      `MISCONF Errors writing to the AOF file: <cause>`. Inside a transaction,
+      phase 5's `Atomic` will refuse a block that holds a write, as Redis's
+      EXEC does;
+    - a read runs, and returns without waiting for the buffer, as Redis
+      answers reads while its buffer waits;
+    - a write that ran before the failure, and is waiting for its record,
+      returns the same error. Its record stays buffered and is written when
+      the log recovers, but it is not on disk, and a call returns nil only
+      once its record is. Redis answers such a write OK, because its replies
+      go out whether or not the write succeeded; the published-offset gate
+      is this plan's, and stricter;
+    - the maintenance goroutine retries the write every cycle (Redis retries
+      at every turn of its event loop, and from `serverCron` once a second).
+      A write that succeeds clears the write status, and logs
+      `appendonly: write error looks solved; writes are accepted again`, as
+      Redis logs `AOF write error looks solved, Redis can write again.`; a
+      sync that succeeds clears the sync status. One difference: after a
+      failed background sync Redis queues no new sync until more is written,
+      so with writes refused it can stay in error until an expiry writes a
+      `DEL`. Here the next due sync retries the bytes that failed to sync, so
+      the engine recovers as soon as its disk does;
+    - INFO's `aof_last_write_status` reports `err` while either status is in
+      error, as Redis's does.
+  - **Under `always`,** Redis exits on a failed write or sync: a reply it
+    has given would otherwise describe data that is not on disk. A library
+    must not exit its host's process, so the engine refuses every later call,
+    read or write, with `ErrPersistence`, until it is closed and opened
+    again, which replays what reached the disk. A call waiting for the
+    failed write or sync gets the same error.
+  - **The server keeps its stop** under every policy in phase 3:
+    `appendonly: write failed, stopping`. Changing it to Redis's behaviour
+    under `everysec` and `no` is a change of its own after phase 3 (see
+    "Decisions").
 - **Error sentinels.** Phase 3 adds three to core:
   - `ErrClosed`, `instance is closed`;
   - `ErrLocked`, `log in use by another instance`;
@@ -1688,7 +1742,7 @@ settles it this way:
     matches both the sentinel and the cause.
 
   They are internal: nothing outside the module can name them, and no reply
-  or log line the server writes changes, except `ErrLocked`'s refusal.
+  or log line the server writes changes.
   Phase 5 exports them from package keel as the same values, so that
   `errors.Is` holds across the layers. With them it exports the command
   errors that phase 4 sorts into categories (`ErrWrongType`, `ErrNotFound`,
@@ -1696,11 +1750,11 @@ settles it this way:
   text does not change.
 - **Census.** The three sentinels join core's `packageVars` as sentinels.
   Nothing mutable joins it. The instance lock, the lock file, the closed
-  state, the maintenance goroutine and the latch are fields of the engine,
-  after `clientBuffers`.
-- **Nothing user-visible moves** for the server, except what the sidecar lock
-  adds: not a flag or its default, a reply, a log line, a frame, or the order
-  of startup and shutdown. Each part that changes the server says how it
+  state, the maintenance goroutine and the log's failure states are fields of
+  the engine, after `clientBuffers`.
+- **Nothing user-visible moves** for the server: not a flag or its default, a
+  reply, a log line, a frame, a file beside its log, or the order of startup
+  and shutdown. Each part that changes the server says how it
   checked. Parts 1 to 3 compare both builds' startup and shutdown output
   under the same flags, as step 2.7's part 3 did. They add a legacy log, a
   torn tail, a damaged log and a damaged term file, each of which must give
@@ -1725,8 +1779,7 @@ settles it this way:
     - A child process holding the lock makes `Open` fail. Killed with
       SIGKILL, it leaves the lock free.
     - `Close` releases the lock, and the lock file survives.
-    - A second server on a log another server holds refuses to start, with
-      the line above.
+    - A server started on a log, and stopped, leaves no lock file beside it.
   - **Part 4.**
     - Keys expire with nobody reading them.
     - An everysec log is synced with no calls after the write.
@@ -1738,7 +1791,12 @@ settles it this way:
       call returns. The parent kills it with SIGKILL at an arbitrary point,
       once while a rewrite runs, and reopens the log. Every reported write must
       be there, and a torn tail must have been repaired.
-    - **The latch,** through failing write and sync hooks.
+    - **Log failures,** through failing write and sync hooks, under each
+      policy: under `everysec` and `no`, writes refused with `MISCONF`,
+      reads served, and recovery once the hook heals, with no acknowledged
+      write lost; under `always`, every call refused until the engine is
+      reopened. A kill test runs during a failure window: every write
+      acknowledged before it is in the reopened log.
     - **Group commit:** one sync covering several waiting calls, counted
       through the sync hook.
     - **Cancellation** while a call waits.
@@ -1771,8 +1829,7 @@ settles it this way:
   - the persistence and replication goldens (`testdata/persistence-40eb2f6`,
     `testdata/replication-9736d8d`);
   - the Log compatibility and Replication compatibility workflows. From part
-    2 they start each build through the changed startup, and from part 3
-    they restart servers on logs that a killed server held locked;
+    2 they start each build through the changed startup;
   - native recovery;
   - `BenchmarkCommandPathWithLog` and `...WithReplica` in the paired job;
   - the race job and the shuffled race job;
@@ -1781,25 +1838,6 @@ settles it this way:
   The kill tests write a few KiB. A test that writes tens of MiB takes
   `internal/testlock`'s `HoldDiskHeavy`, and a server test starts its server
   only through cmd/keel's `startTestServer` and its siblings.
-
-- **The owner's decisions.** These are the owner's to make, and each part
-  follows whichever way they are made:
-  - **Whether the server takes the sidecar lock.** This plan recommends that
-    it does: one startup for both, and a second server on one log is silent
-    corruption today. Two things become visible: a `keel-master.aof.lock`
-    file beside the log, and a refusal to start, with the line above, for a
-    second server on a log another holds. Redis takes no such lock. The
-    alternative is that the server skips it until phase 6.
-  - **The latch, against Redis.** Under `everysec`, Redis refuses only writes
-    after a failed AOF write, with `MISCONF`, keeps serving reads, retries
-    the write, and clears the refusal once a retry succeeds. Under `always`,
-    Redis exits. This plan latches every call, reads included, until the
-    engine is reopened, as the accepted "Concurrency" section says. That is
-    stricter than Redis, and matches the server, which stops.
-  - **`Close` without a context.** core's `Close` takes no context, and a
-    second call returns `ErrClosed`. The API sketch has `db.Close(ctx)`;
-    phase 5 chooses the public signature.
-  - **The sentinels' texts**, above, which phase 5 exports.
 
 ## Risks, in order
 
@@ -1835,6 +1873,22 @@ for anything left uncertain: do what Redis does.
   one frame; a command that fails inside it does not undo the others, and there
   is no rollback.
 - **Release target:** the first embeddable release is `v0.2.0-alpha.1`.
+- **Phase 3's choices** (October 7, 2026), following the standing rule:
+  - **The sidecar lock is `Open`'s alone.** The server takes no lock beside
+    its log and creates no `.lock` file, as Redis locks nothing; the owner
+    may revisit this in phase 6.
+  - **Log failures are Redis's.** Under `everysec` and `no`, writes are
+    refused with `MISCONF` while reads are served, and the log is retried
+    until it recovers; under `always`, where Redis exits, an embedded engine
+    refuses every call until it is reopened. The server keeps its stop in
+    phase 3; giving it Redis's `everysec` and `no` behaviour is scheduled as
+    a change of its own after phase 3.
+  - **`Close` takes no context in core,** and a second `Close` returns
+    `ErrClosed`; phase 5 chooses the public signature. The texts are
+    `instance is closed`, `log in use by another instance`, and Redis's
+    `MISCONF Errors writing to the AOF file: <cause>`.
+  - **The legacy migration's crash window is fixed first,** in a PR of its
+    own ahead of phase 3's parts, because it loses data on develop.
 - **`ClientBuffers` moves in step 2.7, not phase 6** (October 6, 2026). Once
   the server holds its engine, the hook is a field and a setter on it, as the
   allocation budget already is; as a package variable, it has every engine in
