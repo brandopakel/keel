@@ -1,41 +1,49 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-// TestASecondServerOnALogRefusesToStart: a server holds the lock beside its
-// log, so a second server started on the same log refuses, with the line a
-// failed startup prints and status 1, and the first goes on serving. Once the
-// first has stopped, cleanly or killed, the log is free again: the kernel
-// released the killed one's lock, and the lock file it left is not a stale
-// lock.
-func TestASecondServerOnALogRefusesToStart(t *testing.T) {
+// TestTheServerTakesNoLockBesideItsLog: an engine core.Open makes takes a
+// lock beside its log, but the server starts its log without Open and takes
+// none, as Redis takes none (docs/embedding-plan.md, "Decisions"). Running,
+// stopped, killed and restarted, it leaves nothing beside its log but what it
+// always has, and a second server started on the log while the first runs
+// starts, as it always has.
+func TestTheServerTakesNoLockBesideItsLog(t *testing.T) {
 	t.Parallel()
-	path := filepath.Join(t.TempDir(), "keel.aof")
+	dir := t.TempDir()
+	path := filepath.Join(dir, "keel.aof")
 	args := []string{"-appendonly", "-appendfsync", "always", "-appendfilename", path}
+	noLock := func(when string) {
+		t.Helper()
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, entry := range entries {
+			if strings.HasSuffix(entry.Name(), ".lock") {
+				t.Fatalf("%s: the server left %s beside its log", when, entry.Name())
+			}
+		}
+	}
+
 	first := startTestServer(t, args...)
 	c, r := connectTest(t, first)
 	expectCall(t, c, r, "+OK", "SET", "k", "first")
-
-	out := refusedTestServer(t, args...)
-	want := "appendonly: log in use by another instance: " + path + ".lock\n"
-	if !strings.HasSuffix(out, want) {
-		t.Fatalf("the second server printed\n%s\nwhich does not end with %q", out, want)
-	}
-	expectCall(t, c, r, "first", "GET", "k")
-	first.stop(t)
-
+	noLock("while it runs")
 	second := startTestServer(t, args...)
-	c, r = connectTest(t, second)
-	expectCall(t, c, r, "first", "GET", "k")
-	expectCall(t, c, r, "+OK", "SET", "k", "second")
-	second.crash(t)
+	noLock("with a second server on the same log")
+	second.stop(t)
+	first.stop(t)
+	noLock("once it has stopped")
 
-	third := startTestServer(t, args...)
-	c, r = connectTest(t, third)
-	expectCall(t, c, r, "second", "GET", "k")
-	third.stop(t)
+	again := startTestServer(t, args...)
+	c, r = connectTest(t, again)
+	expectCall(t, c, r, "first", "GET", "k")
+	again.crash(t)
+	noLock("once it has been killed")
 }
