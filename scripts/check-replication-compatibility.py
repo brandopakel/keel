@@ -205,6 +205,51 @@ def normalize_body(body, start, kind):
     return encode(key_groups(records) if kind == 'protocol1' else opaque_runs(records))
 
 
+def settle_snapshot(chunks, snapshot, normalized):
+    """The frames a protocol 2 snapshot was sent in, as one header that
+    depends only on what the snapshot holds.
+
+    A rewrite cuts a large collection into records at 256 elements, 64 KiB or
+    a millisecond, so two runs of one build can send snapshots that differ in
+    size while their normalized bodies are the same: run 37550776479 compared
+    two identical binaries and failed on a snapshot_bytes 28 bytes apart, one
+    record header. So each run's frames are first checked against the
+    snapshot they carried: every frame names its whole length, each starts
+    where the one before ended, all but the last are the same full size,
+    only the last says it is done, and every other field - the snapshot's
+    identity, its epoch and the stream offsets it covers - is the same in
+    every frame. Then the frames are compared as one header whose
+    snapshot_bytes is the normalized body's length, without the sizes and
+    offsets of the raw cut."""
+    per_frame = ('body_bytes', 'snapshot_offset', 'snapshot_done')
+    shared = {k: v for k, v in chunks[0].items() if k not in per_frame}
+    total, offset = len(snapshot), 0
+    for i, frame in enumerate(chunks):
+        own = {k: v for k, v in frame.items() if k not in per_frame}
+        if own != shared:
+            differ = sorted(k for k in set(own) | set(shared) if own.get(k) != shared.get(k))
+            raise AssertionError(f'snapshot frame {i} differs from the first in {differ}: '
+                                 f'{ {k: own.get(k) for k in differ} } against { {k: shared.get(k) for k in differ} }')
+        if frame.get('snapshot_bytes') != total:
+            raise AssertionError(f"snapshot frame {i} says snapshot_bytes {frame.get('snapshot_bytes')}, "
+                                 f'but the frames carried {total} bytes')
+        if frame.get('snapshot_offset', 0) != offset:
+            raise AssertionError(f"snapshot frame {i} starts at {frame.get('snapshot_offset', 0)}, "
+                                 f'but the frames before it carried {offset} bytes')
+        if i < len(chunks) - 1 and frame['body_bytes'] != chunks[0]['body_bytes']:
+            raise AssertionError(f"snapshot frame {i} carries {frame['body_bytes']} bytes, "
+                                 f"where the first carried {chunks[0]['body_bytes']}")
+        if bool(frame.get('snapshot_done')) != (i == len(chunks) - 1):
+            raise AssertionError(f'snapshot frame {i} of {len(chunks)} says snapshot_done '
+                                 f"{bool(frame.get('snapshot_done'))}")
+        offset += frame['body_bytes']
+    if offset != total:
+        raise AssertionError(f'the snapshot frames carried {offset} bytes of a {total}-byte snapshot')
+    header = {k: v for k, v in chunks[0].items() if k not in ('body_bytes', 'snapshot_offset')}
+    header.update(snapshot_bytes=len(normalized), snapshot_done=True)
+    return header
+
+
 class Names:
     """Random identities named by the order they first appear in."""
     def __init__(self):
@@ -297,14 +342,16 @@ def wire(root, binary, protocol):
             # only the first is kept.
             chunk = wait_for('the snapshot did not start', lambda: (
                 lambda f: None if f.get('pending') else f)(pull('', 0, '', 0)))
-            snapshot, part = b'', 0
+            snapshot, part, chunks = b'', 0, []
             while True:
-                body = keep(chunk)
+                shown, body = describe(chunk, names, start, None)
+                chunks.append(shown)
                 snapshot += body
                 if chunk.get('snapshot_done'):
                     break
                 part += len(body)
                 chunk = pull('', 0, chunk['snapshot_id'], part)
+            out['frames'].append(settle_snapshot(chunks, snapshot, normalize_body(snapshot, start, 'snapshot')))
             bodies.append(('snapshot', snapshot))
             out['info'].append(info_fields(c, names))
             out['replies'] = compat.sha256_of(deltas(c))
