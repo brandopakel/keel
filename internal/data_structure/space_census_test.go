@@ -25,6 +25,7 @@ import (
 // plan step 2.7. An entry whose variable is gone fails the census too, so the
 // list cannot outlive what it excuses.
 var packageVars = map[string]string{
+	"layoutControlSpace":  "a layout control build only; never merged",
 	"keyLookupSeed":       "random per process and never written again, so every space can hash with it",
 	"morrisValue":         "a table computed from morrisA in init and only read after",
 	"morrisProb":          "a table computed from morrisA in init and only read after",
