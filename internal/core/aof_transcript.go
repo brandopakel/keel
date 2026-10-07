@@ -13,7 +13,13 @@ import (
 // ceiling otherwise rejects the fourth ordinary record solely for its header.
 const maxAOFTranscriptBytes = (4 << 20) + (64 << 10)
 
-func (e *Engine) writeAOFBuffer() error {
+// writeAOFBuffer writes what is buffered to e's log. A failed write latches
+// (aof.failed), and every later write returns it, unless the buffer holds
+// whole records and e retries a failed write, as an engine Open makes does
+// under everysec and no (driver.go): then what was not written stays
+// buffered for the next flush to try again, as Redis keeps it. A drain in the
+// middle of a large record cannot keep the record whole, so it always latches.
+func (e *Engine) writeAOFBuffer(wholeRecords bool) error {
 	e.pollAppend(true)
 	if e.aof.failed != nil {
 		return e.aof.failed
@@ -35,8 +41,15 @@ func (e *Engine) writeAOFBuffer() error {
 		}
 		if err != nil {
 			e.aof.buf = e.aof.buf[n:]
+			if d := e.driver; wholeRecords && d != nil && d.retries {
+				d.writeFailed(err)
+				return err
+			}
 			e.aof.failed = err
 			return err
+		}
+		if d := e.driver; d != nil && d.writeFailure != nil {
+			d.writeSolved()
 		}
 		e.publishAOFPrefix()
 		e.aof.buf = e.aof.buf[:0]
@@ -72,7 +85,7 @@ func (e *Engine) growAOFBuffer(size int) {
 func (e *Engine) appendAOFFragment(fragment string) {
 	for len(fragment) > 0 && e.aof.failed == nil {
 		if len(e.aof.buf) == maxAOFTranscriptBytes {
-			if e.writeAOFBuffer() != nil {
+			if e.writeAOFBuffer(false) != nil {
 				return
 			}
 		}

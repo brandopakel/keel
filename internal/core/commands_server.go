@@ -224,7 +224,7 @@ func (e *Engine) cmdINFO(args []string) []byte {
 			active = 1
 		}
 		status := "ok"
-		if e.aof.failed != nil {
+		if e.aof.failed != nil || e.logRetrying() {
 			status = "err"
 		}
 		fmt.Fprintf(&b, "aof_rewrite_in_progress:%d\r\naof_last_write_status:%s\r\naof_buffer_length:%d\r\n", active, status, len(e.aof.buf))
