@@ -18,6 +18,9 @@ import (
 // releases it. On Windows the lock is the file opened with no sharing, which
 // any second open fails, in the process or out of it.
 //
+// Only Open takes it. The server starts its log without Open, and takes no
+// lock beside it, as Redis takes none.
+//
 // There is no stale lock to clear after a crash: the kernel releases a dead
 // process's locks, and the file is left behind, empty and unlocked, for the
 // next instance to take. The file is never removed, because removing a lock
@@ -35,11 +38,33 @@ var ErrLocked = errors.New("log in use by another instance")
 // the platform or the filesystem has no locks: the log is opened without one.
 var errLockUnsupported = errors.New("locks are not supported here")
 
-// lockLog takes the lock beside the log at path. It returns an error wrapping
-// ErrLocked when another instance holds it, one wrapping errLockUnsupported
-// when locks cannot be taken there, and any other failure to create or open
-// the lock file as it comes, naming the file.
-func lockLog(path string) (*logLock, error) {
+// lockLog takes the lock beside e's log, if e has one, and holds it on e
+// until Close. Open calls it before the log's startup; the server's startup
+// does not, so the server takes no lock beside its log, as Redis takes none
+// (the owner's decision; docs/embedding-plan.md, "Decisions"). Where locks
+// cannot be taken at all, the log is opened without one, and that is logged.
+func (e *Engine) lockLog() error {
+	o := e.Configuration().WithDefaults()
+	if !o.AppendOnly {
+		return nil
+	}
+	lock, err := lockLogFile(o.AppendFilename)
+	switch {
+	case err == nil:
+		e.logLock = lock
+	case errors.Is(err, errLockUnsupported):
+		aofLog("%v; nothing keeps a second instance off this log", err)
+	default:
+		return err
+	}
+	return nil
+}
+
+// lockLogFile takes the lock beside the log at path. It returns an error
+// wrapping ErrLocked when another instance holds it, one wrapping
+// errLockUnsupported when locks cannot be taken there, and any other failure
+// to create or open the lock file as it comes, naming the file.
+func lockLogFile(path string) (*logLock, error) {
 	lockPath := path + lockFileSuffix
 	l, err := lockFile(lockPath)
 	if errors.Is(err, ErrLocked) {

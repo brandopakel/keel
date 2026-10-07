@@ -56,7 +56,7 @@ func TestCloseReleasesTheLogsLockAndLeavesItsFile(t *testing.T) {
 	require.NoError(t, e.Close())
 	assert.Equal(t, "", filesIn(t, dir)["keel.aof.lock"], "the file is left behind, empty")
 
-	held, err := lockLog(path)
+	held, err := lockLogFile(path)
 	require.NoError(t, err, "and unlocked")
 	require.NoError(t, held.release())
 
@@ -110,13 +110,13 @@ func TestALogHeldByAnotherProcess(t *testing.T) {
 func TestTheLogLockIsExclusive(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "keel.aof")
-	first, err := lockLog(path)
+	first, err := lockLogFile(path)
 	require.NoError(t, err)
-	_, err = lockLog(path)
+	_, err = lockLogFile(path)
 	require.ErrorIs(t, err, ErrLocked)
 	assert.EqualError(t, err, "log in use by another instance: "+path+".lock")
 	require.NoError(t, first.release())
-	second, err := lockLog(path)
+	second, err := lockLogFile(path)
 	require.NoError(t, err)
 	require.NoError(t, second.release())
 }
@@ -141,11 +141,11 @@ func TestTheLogLockOfAKilledProcessIsFree(t *testing.T) {
 		_ = holder.Wait()
 		t.Fatalf("the holder did not take the lock: %q, %v", line, err)
 	}
-	_, err = lockLog(path)
+	_, err = lockLogFile(path)
 	require.ErrorIs(t, err, ErrLocked)
 	require.NoError(t, holder.Process.Kill())
 	_ = holder.Wait()
-	held, err := lockLog(path)
+	held, err := lockLogFile(path)
 	require.NoError(t, err, "a killed holder's lock is released")
 	require.NoError(t, held.release())
 }
@@ -157,7 +157,7 @@ func TestTheLogLockOfAKilledProcessIsFree(t *testing.T) {
 func TestHelperProcessHoldsALog(t *testing.T) {
 	if path := os.Getenv("KEEL_CORE_HOLD_LOCK"); path != "" {
 		// TestTheLogLockOfAKilledProcessIsFree's: the lock alone.
-		held, err := lockLog(path)
+		held, err := lockLogFile(path)
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)
