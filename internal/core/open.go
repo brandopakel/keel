@@ -67,11 +67,14 @@ func Open(ctx context.Context, o Options) (*Engine, error) {
 	return e, nil
 }
 
-// Close ends e. It marks e closed, stops e's maintenance goroutine and waits
-// for it, then closes e's log, writing and syncing whatever is buffered
-// whatever the fsync policy, so that when it returns nil every write e has
-// run is on disk, and last releases the lock beside the log. Closing a closed
-// engine returns ErrClosed, as closing a closed file does.
+// Close ends e. It marks e closed, so every later call returns ErrClosed,
+// stops e's maintenance goroutine and waits for it, then closes e's log,
+// writing and syncing whatever is buffered whatever the fsync policy, so that
+// when it returns nil every write e has run is on disk. It then wakes the
+// calls waiting for that, and last releases the lock beside the log. If the
+// final flush fails, Close still closes the log and releases its lock, and
+// returns the failure: for an engine Open made, as ErrPersistence. Closing a
+// closed engine returns ErrClosed, as closing a closed file does.
 //
 // It takes e's lock, so whatever else drives e has to have stopped, or let go
 // of it: the server calls it once its loop has returned. Close does not stop a
@@ -92,6 +95,16 @@ func (e *Engine) Close() error {
 	e.stopDriver()
 	e.mu.Lock()
 	err := e.CloseAOF()
+	// The final flush covered every waiting call, or failed them all.
+	if d := e.driver; d != nil {
+		if err != nil {
+			if d.failed == nil {
+				d.failed = err
+			}
+			err = fmt.Errorf("%w: %w", ErrPersistence, err)
+		}
+		d.publish()
+	}
 	// Last, so that no other instance can open the log while this one may
 	// still write to it.
 	if e.logLock != nil {
