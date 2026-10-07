@@ -1,0 +1,163 @@
+# Live telemetry: Keel and Redis under the same load, watched from Grafana.
+#
+# The job starts Keel and Redis 8.10.1 with the same maxmemory (64 MiB) and
+# eviction policy (LRU), puts the standard redis_exporter in front of each,
+# and has Grafana Alloy remote-write both exporters' metrics to the project's
+# Grafana Cloud stack (bench/telemetry/config.alloy). scripts/run-telemetry.py
+# then runs memtier against both at once through four phases: steady load,
+# pipelining, eviction and expiry. In Grafana, the series carry
+# server="keel" or server="redis", the phase, and this run's run_id, branch,
+# sha and host.
+#
+# Two things to read from it:
+# - How each server behaves through the phases, live: memory against
+#   maxmemory, evictions, expiries, clients, throughput where it is reported.
+# - What monitoring built for Redis sees of Keel. Every metric name the
+#   exporter reports for Redis and not for Keel is listed in the step summary
+#   and counted in keel_ci_exporter_metric_names. On October 7, 2026, it was 23
+#   names for Keel against 191 for Redis: Keel's INFO had no commandstats,
+#   latencystats, CPU, hits and misses, or commands processed, and no CONFIG
+#   GET, SLOWLOG or LATENCY.
+#
+# It is not a benchmark: both servers share one unpinned hosted runner. The
+# paired benchmarks (command-path.yml, general-validation.yml's matched job)
+# compare speed.
+#
+# Credentials: GRAFANA_CLOUD_METRICS_TOKEN is an access policy token with
+# metrics:write only. The endpoint and username are the repository variables
+# GRAFANA_CLOUD_PROM_URL and GRAFANA_CLOUD_PROM_USER. A pull request from a
+# fork gets no secrets, so the job runs only for this repository's branches.
+# The free plan keeps metrics for 14 days; each run sends a few hundred
+# series for a few minutes.
+name: Live telemetry
+
+on:
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: Minutes of load, split across the four phases (1 to 60)
+        default: '8'
+  pull_request:
+    branches: [develop]
+    paths: ['.github/workflows/telemetry.yml', 'bench/telemetry/**', 'scripts/run-telemetry.py',
+            'scripts/test_run_telemetry.py']
+
+permissions:
+  contents: read
+
+jobs:
+  telemetry:
+    name: Keel and Redis under load, to Grafana
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      MINUTES: ${{ inputs.minutes || '4' }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version-file: go.mod }
+      - name: Telemetry script tests
+        run: python3 -m unittest discover -s scripts -p 'test_run_telemetry.py' -v
+      - name: Check the run's settings
+        env:
+          TOKEN: ${{ secrets.GRAFANA_CLOUD_METRICS_TOKEN }}
+          PROM_URL: ${{ vars.GRAFANA_CLOUD_PROM_URL }}
+          PROM_USER: ${{ vars.GRAFANA_CLOUD_PROM_USER }}
+        run: |
+          if ! [[ $MINUTES =~ ^[0-9]+$ ]] || (( MINUTES < 1 || MINUTES > 60 )); then
+            echo "minutes must be a whole number from 1 to 60, not '$MINUTES'" >&2
+            exit 1
+          fi
+          missing=''
+          [ -n "$TOKEN" ] || missing="$missing secret GRAFANA_CLOUD_METRICS_TOKEN"
+          [ -n "$PROM_URL" ] || missing="$missing variable GRAFANA_CLOUD_PROM_URL"
+          [ -n "$PROM_USER" ] || missing="$missing variable GRAFANA_CLOUD_PROM_USER"
+          if [ -n "$missing" ]; then
+            echo "not set:$missing" >&2
+            exit 1
+          fi
+      - name: Build Keel
+        run: go build -trimpath -o /tmp/keel ./cmd/keel
+      - name: Build Redis 8.10.1 and memtier 2.5.1
+        # The same pinned sources as general-validation.yml.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential autoconf automake libtool pkg-config libevent-dev libssl-dev zlib1g-dev
+          curl -fL --retry 3 https://download.redis.io/releases/redis-8.10.1.tar.gz -o /tmp/redis-8.10.1.tar.gz
+          echo '60166c95ab7aedaa9dfe516de685be0a4dd87be95ded59ba429df14c13f1b663  /tmp/redis-8.10.1.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/redis-8.10.1.tar.gz -C /tmp
+          make -C /tmp/redis-8.10.1 -j"$(nproc)" build
+          curl -fL --retry 3 https://github.com/redis/memtier_benchmark/archive/refs/tags/2.5.1.tar.gz -o /tmp/memtier.tar.gz
+          echo '9b34e17a0d1d7e70b152eb442c6362161b5b764ce2ea98e97b7c74815bdd90b7  /tmp/memtier.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/memtier.tar.gz -C /tmp
+          python3 scripts/prepare-memtier.py /tmp/memtier_benchmark-2.5.1
+          (cd /tmp/memtier_benchmark-2.5.1 && autoreconf -fi && ./configure && make -j"$(nproc)")
+      - name: Fetch redis_exporter 1.93.0 and Alloy 1.20.1
+        run: |
+          curl -fL --retry 3 https://github.com/oliver006/redis_exporter/releases/download/v1.93.0/redis_exporter-v1.93.0.linux-amd64.tar.gz -o /tmp/redis_exporter.tar.gz
+          echo 'ed2e531fa68ca2b8604544e19d1088fe409d0592b9ab4f3093fba0783c764972  /tmp/redis_exporter.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/redis_exporter.tar.gz -C /tmp
+          curl -fL --retry 3 https://github.com/grafana/alloy/releases/download/v1.20.1/alloy-linux-amd64.zip -o /tmp/alloy.zip
+          echo '451fe650e8277d22d69cb8db50bba809f581fe78decba7fce4027ef185457be9  /tmp/alloy.zip' | sha256sum -c -
+          unzip -q /tmp/alloy.zip -d /tmp/alloy
+      - name: Start the servers, the exporters and Alloy
+        env:
+          GRAFANA_CLOUD_TOKEN: ${{ secrets.GRAFANA_CLOUD_METRICS_TOKEN }}
+          GRAFANA_CLOUD_PROM_URL: ${{ vars.GRAFANA_CLOUD_PROM_URL }}
+          GRAFANA_CLOUD_PROM_USER: ${{ vars.GRAFANA_CLOUD_PROM_USER }}
+          TELEMETRY_BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          mkdir -p dist/telemetry
+          export TELEMETRY_SHA=$(git rev-parse --short=12 HEAD)
+          export TELEMETRY_HOST=$(grep -m1 'model name' /proc/cpuinfo | sed 's/.*: //')
+          { echo "keel $(git rev-parse HEAD)"
+            echo "runner $(uname -srm) cpus $(nproc) $TELEMETRY_HOST"
+            /tmp/redis-8.10.1/src/redis-server --version
+            /tmp/redis_exporter-v1.93.0.linux-amd64/redis_exporter --version 2>&1 | head -1
+            /tmp/alloy/alloy-linux-amd64 --version | head -1; } | tee dist/telemetry/provenance.txt
+          /tmp/keel -port 6391 -maxmemory 64mb -evict lru > dist/telemetry/keel.log 2>&1 &
+          /tmp/redis-8.10.1/src/redis-server --port 6392 --save '' --appendonly no \
+            --maxmemory 64mb --maxmemory-policy allkeys-lru > dist/telemetry/redis.log 2>&1 &
+          for port in 6391 6392; do
+            for _ in $(seq 50); do /tmp/redis-8.10.1/src/redis-cli -p $port PING > /dev/null 2>&1 && break; sleep 0.2; done
+            /tmp/redis-8.10.1/src/redis-cli -p $port PING
+          done
+          exporter=/tmp/redis_exporter-v1.93.0.linux-amd64/redis_exporter
+          $exporter --redis.addr redis://127.0.0.1:6391 --web.listen-address 127.0.0.1:9131 > dist/telemetry/exporter-keel.log 2>&1 &
+          $exporter --redis.addr redis://127.0.0.1:6392 --web.listen-address 127.0.0.1:9132 > dist/telemetry/exporter-redis.log 2>&1 &
+          /tmp/alloy/alloy-linux-amd64 run bench/telemetry/config.alloy --storage.path "$RUNNER_TEMP/alloy" \
+            --server.http.listen-addr 127.0.0.1:12345 > dist/telemetry/alloy.log 2>&1 &
+          sleep 5
+          curl -fsS 127.0.0.1:12345/-/ready
+      - name: Load phases
+        run: |
+          python3 scripts/run-telemetry.py --memtier /tmp/memtier_benchmark-2.5.1/memtier_benchmark \
+            --keel-port 6391 --redis-port 6392 --keel-exporter http://127.0.0.1:9131/metrics \
+            --redis-exporter http://127.0.0.1:9132/metrics --metrics-port 9133 --minutes "$MINUTES" \
+            --out dist/telemetry/load | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Check that Grafana received the metrics
+        if: ${{ !cancelled() }}
+        # Alloy counts what it sent and what the endpoint refused; a refused
+        # token or a write over a free plan limit shows here, not in Grafana.
+        run: |
+          curl -fsS 127.0.0.1:12345/metrics > dist/telemetry/alloy-metrics.txt
+          grep -E '^prometheus_remote_storage_(samples_total|samples_failed_total|samples_dropped_total)' \
+            dist/telemetry/alloy-metrics.txt | tee dist/telemetry/remote-write.txt
+          sent=$(awk '/^prometheus_remote_storage_samples_total/ {s += $2} END {print s + 0}' dist/telemetry/remote-write.txt)
+          failed=$(awk '/^prometheus_remote_storage_samples_(failed|dropped)_total/ {s += $2} END {print s + 0}' dist/telemetry/remote-write.txt)
+          echo "Alloy sent $sent samples to Grafana Cloud; $failed failed or were dropped." | tee -a "$GITHUB_STEP_SUMMARY"
+          if (( sent == 0 || failed > 0 )); then
+            grep -iE 'level=(error|warn)' dist/telemetry/alloy.log | tail -20 >&2
+            exit 1
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: telemetry
+          path: dist/telemetry
+          retention-days: 30
