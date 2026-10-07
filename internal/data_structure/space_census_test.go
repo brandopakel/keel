@@ -25,6 +25,7 @@ import (
 // when every engine owns its own space - and an entry whose variable is gone
 // fails the census too, so the list cannot outlive what it excuses.
 var packageVars = map[string]string{
+	"layoutOnly":          "a layout control build only; never merged",
 	"DefaultSpace":        "the server's space until engines own theirs (plan step 2.7)",
 	"keyLookupSeed":       "random per process and never written again, so every space can hash with it",
 	"morrisValue":         "a table computed from morrisA in init and only read after",

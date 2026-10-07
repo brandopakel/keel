@@ -236,3 +236,8 @@ func OwnerOf(key string) (Keyspace, bool) {
 	}
 	return nil, false
 }
+
+// layoutOnly pads the package's initializer, moving every function after it
+// and nothing else: a layout-only control build of develop's code, never
+// merged.
+var layoutOnly = NewSpace(DefaultLimits())
