@@ -52,8 +52,8 @@ func Open(ctx context.Context, o Options) (*Engine, error) {
 
 // Close ends e: it closes e's log, writing and syncing whatever is buffered
 // whatever the fsync policy, so that when it returns nil every write e has
-// run is on disk. Closing a closed engine returns ErrClosed, as closing a
-// closed file does.
+// run is on disk, and then releases the lock beside the log. Closing a closed
+// engine returns ErrClosed, as closing a closed file does.
 //
 // It takes e's lock, so whatever drives e has to have stopped, or let go of
 // it: the server calls it once its loop has returned. Close does not stop a
@@ -69,14 +69,23 @@ func (e *Engine) Close() error {
 	}
 	e.closed = true
 	err := e.CloseAOF()
+	// Last, so that no other instance can open the log while this one may
+	// still write to it.
+	if e.logLock != nil {
+		if releaseErr := e.logLock.release(); err == nil {
+			err = releaseErr
+		}
+		e.logLock = nil
+	}
 	e.mu.Unlock()
 	return err
 }
 
 // StartAOF runs the log's startup on e, as e's options say: nothing unless
-// AppendOnly, and otherwise the log at AppendFilename replayed into e and
-// opened for appending. It is what the server's startup ran as
-// server.StartAOF, moved here so that Open runs the same sequence.
+// AppendOnly, and otherwise the lock beside the log at AppendFilename taken
+// (loglock.go), and the log replayed into e and opened for appending. It is
+// what the server's startup ran as server.StartAOF, moved here so that Open
+// runs the same sequence. What it has started when it fails, Close ends.
 //
 // Loading first and opening second is deliberate: opening installs the hook
 // that records evictions, and replaying a log with that hook live would append
@@ -106,6 +115,17 @@ func (e *Engine) StartAOF(ctx context.Context, legacy string) error {
 		return nil
 	}
 	path := options.AppendFilename
+	// One instance per log: the lock is taken before anything of the log is
+	// read, and held until Close.
+	lock, err := lockLog(path)
+	switch {
+	case err == nil:
+		e.logLock = lock
+	case errors.Is(err, errLockUnsupported):
+		aofLog("%v; nothing keeps a second instance off this log", err)
+	default:
+		return err
+	}
 	// Before the log is read, because a node that cannot establish which term it
 	// is in must not reach the point of serving anything at that term.
 	if err := e.LoadTerm(path); err != nil {
