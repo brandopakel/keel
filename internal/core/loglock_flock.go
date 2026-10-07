@@ -39,5 +39,15 @@ func lockFile(path string) (*logLock, error) {
 	return nil, err
 }
 
-// release lets go of the lock: closing the descriptor releases its flock.
-func (l *logLock) release() error { return l.file.Close() }
+// release lets go of the lock, and then of the descriptor. Closing the
+// descriptor alone would not do: a process forked by any goroutine, between
+// its fork and its exec, holds a copy of every descriptor, and a flock
+// belongs to the open file they share. Unlocking releases it for every copy at
+// once, so the log is free when release returns.
+func (l *logLock) release() error {
+	unlockErr := syscall.Flock(int(l.file.Fd()), syscall.LOCK_UN)
+	if err := l.file.Close(); err != nil {
+		return err
+	}
+	return unlockErr
+}
