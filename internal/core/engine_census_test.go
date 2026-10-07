@@ -30,7 +30,8 @@ const (
 // packageVars is every package-level variable this package may declare, with
 // the reason each one is allowed.
 var packageVars = map[string]string{
-	"commandTable": table, "commandArity": table, "commands": table,
+	"layoutControlEngine": "a layout control build only; never merged",
+	"commandTable":        table, "commandArity": table, "commands": table,
 	"connectionCommands": table, "containerCommands": table, "clientSubcommands": table,
 	"memorySubcommands": table, "commandKeyspace": table, "multiKeyCommands": table,
 	"strideKeyCommands": table, "argumentsBeforeType": table, "replacingWrites": table,

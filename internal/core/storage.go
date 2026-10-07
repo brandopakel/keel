@@ -11,6 +11,12 @@ import (
 // accounted, and a keyspace full of 12KB HyperLogLogs could sail past
 // -maxmemory without anything noticing. The stores are fields of Engine.
 
+// layoutControlEngine is the default engine's initializer and init, kept for a
+// layout control build only, never merged.
+var layoutControlEngine = engineIn(data_structure.DefaultSpaceForLayoutControl())
+
+func init() { layoutControlEngine.resetStores() }
+
 // NewEngine returns an engine with empty stores, in a space of its own, held
 // to o, or the error for options no engine can be held to.
 //
