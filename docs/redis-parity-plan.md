@@ -203,6 +203,33 @@ session recommends interleaving (October 7, 2026), and so does this plan:
 nothing is written twice, and each family reaches parity as soon as its new
 form exists.
 
+## Where Keel improves on Redis
+
+The owner's rule (October 7, 2026) is to follow Redis in everything
+wire-visible that clients rely on: replies, error strings, INFO field names
+and units, defaults and command behaviour. Where Keel's behaviour is a clear
+improvement, meaning it fixes a Redis flaw that clients don't depend on (a
+stall, a bug, a needless limitation), Keel keeps it. Each such case is:
+- documented as a departure, citing Redis's source;
+- listed in its pull request under "Improvements over Redis".
+
+When it's unclear which a difference is, Keel follows Redis and the case is
+flagged here.
+
+**Open: refused writes under eviction pressure.** Redis bounds the work each
+command spends evicting (`maxmemory-eviction-tenacity`, `performEvictions` in
+`src/evict.c`). When that isn't enough, it answers `OOM command not allowed
+when used memory > 'maxmemory'`, even with an `allkeys-*` policy. Keel evicts
+inline and never refuses. In the first k6 run (#145, October 7):
+- Redis failed 1,106 of 8,553,062 checks, all of them writes in the eviction
+  scenario;
+- Keel failed none of 7,845,956.
+
+Whether Keel's behaviour is an improvement (no refused writes) or a departure
+(a latency spike where Redis would refuse) depends on its eviction-scenario
+p99 against Redis's. The nightly k6 run records both. Until that's
+measured, nothing changes.
+
 ## How each piece is verified
 
 - **Differential tests against one pinned Redis release, byte for byte, in
