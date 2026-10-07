@@ -185,13 +185,30 @@ jobs:
           # (run 37154602660): something fixed per file, which no interval
           # within the run could show. A copy per run turns it into noise
           # between pairs, which the intervals include.
+          #
+          # One row runs a fixed number of times rather than for a fixed time:
+          # BenchmarkCommandPath/INCR. It increments a ring of 1000 counters,
+          # so each counter ends near b.N/1000, and strconv.FormatInt
+          # allocates the new value only from 100 up. Its allocations per
+          # operation therefore climb with b.N, and Go truncates them to an
+          # integer, so the row read 2 in rounds where b.N was 1,000,000 and 3
+          # where it was above 1,190,000, on both sides of one job
+          # (run 37663505131): a faster side ran more iterations and seemed to
+          # allocate more. Its time is unaffected. Changing the benchmark would
+          # make it do different work from a baseline that lacks the change,
+          # so the row is run for 1,000,000 iterations on both sides instead,
+          # about what 200 ms buys on a hosted runner, and every other row
+          # skips it (-test.skip).
           measure() {
             local side=$1 file=$2 round=$3 first=$4
             cp "$RUNNER_TEMP/$side.test" "$RUNNER_TEMP/$side.run"
             { echo "keel-round: $round"
               echo "keel-first: $first"
               (cd "$RUNNER_TEMP/$side/internal/core" && "$RUNNER_TEMP/$side.run" -test.run '^$' \
-                -test.bench '^BenchmarkCommandPath' -test.benchmem -test.benchtime=200ms)
+                -test.bench '^BenchmarkCommandPath' -test.skip '^BenchmarkCommandPath$/^INCR$' \
+                -test.benchmem -test.benchtime=200ms &&
+                "$RUNNER_TEMP/$side.run" -test.run '^$' \
+                -test.bench '^BenchmarkCommandPath$/^INCR$' -test.benchmem -test.benchtime=1000000x)
             } >> "dist/command-path/$file.txt"
             rm "$RUNNER_TEMP/$side.run"
           }
