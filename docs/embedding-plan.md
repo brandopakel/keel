@@ -1683,8 +1683,8 @@ settles it this way:
     crash could still lose. A call that neither buffered records nor saw any
     buffered does not wait. With no log, nothing is ever buffered, and a call
     is the lock, the command and the unlock. While a failed write or sync
-    under `everysec` or `no` holds the buffer back, reads do not wait for it,
-    as Redis answers them (see "Log failures, as Redis's").
+    under `everysec` or `no` holds the buffer back, no call waits for it: its
+    reply stands, as Redis's does (see "Log failures, as Redis's").
   - **Cancelled while waiting**, a call returns the context's error. Its
     command has run and its record will be written, as a Redis client that
     times out has its command run.
@@ -1705,22 +1705,33 @@ settles it this way:
       EXEC does;
     - a read runs, and returns without waiting for the buffer, as Redis
       answers reads while its buffer waits;
-    - a write that ran before the failure, and is waiting for its record,
-      returns the same error. Its record stays buffered and is written when
-      the log recovers, but it is not on disk, and a call returns nil only
-      once its record is. Redis answers such a write OK, because its replies
-      go out whether or not the write succeeded; the published-offset gate
-      is this plan's, and stricter;
+    - a command that ran before the failure was known keeps its reply, as
+      Redis's does: Redis's `beforeSleep` flushes and then sends the pending
+      replies, so a write whose `write(2)` failed is answered OK, its record
+      left in `aof_buf` for the retry (server.c 2057, then 2104; aof.c
+      1539–1552). Here its record stays
+      buffered and is written when the log recovers; a crash before then can
+      lose it, as Redis's everysec window can. Answering it with an error
+      instead would invite a retry that applies an `INCR` or an `LPUSH`
+      twice (the coordinator's call, October 7, 2026, under the owner's
+      "follow Redis");
     - the maintenance goroutine retries the write every cycle (Redis retries
       at every turn of its event loop, and from `serverCron` once a second).
       A write that succeeds clears the write status, and logs
       `appendonly: write error looks solved; writes are accepted again`, as
       Redis logs `AOF write error looks solved, Redis can write again.`; a
-      sync that succeeds clears the sync status. One difference: after a
-      failed background sync Redis queues no new sync until more is written,
-      so with writes refused it can stay in error until an expiry writes a
-      `DEL`. Here the next due sync retries the bytes that failed to sync, so
-      the engine recovers as soon as its disk does;
+      sync that succeeds clears the sync status. One difference, checked
+      against 8.10.1: Redis records a background sync's offset when it queues
+      the sync, not when it succeeds (aof.c 1600–1603); a failed sync sets
+      only its status (bio.c 320–329); and with nothing new to write,
+      `flushAppendOnlyFile` returns without syncing while that offset is level
+      (aof.c 1404–1405), which only a rewrite or a rotation resets (aof.c
+      1108, 1276). So with writes refused, Redis stays in error until an
+      expiry or an eviction writes a `DEL`, or a rewrite runs. Here the next
+      due sync retries the bytes that failed to sync, and the engine recovers
+      as soon as its disk does: a refusal of writes that need never end is
+      not worth copying. It is an improvement over Redis, which the owner
+      approved on October 7, 2026 (see "Decisions");
     - INFO's `aof_last_write_status` reports `err` while either status is in
       error, as Redis's does.
   - **Under `always`,** Redis exits on a failed write or sync: a reply it
@@ -1792,11 +1803,12 @@ settles it this way:
       once while a rewrite runs, and reopens the log. Every reported write must
       be there, and a torn tail must have been repaired.
     - **Log failures,** through failing write and sync hooks, under each
-      policy: under `everysec` and `no`, writes refused with `MISCONF`,
-      reads served, and recovery once the hook heals, with no acknowledged
+      policy: under `everysec` and `no`, writes refused with `MISCONF`, reads
+      served, the write in flight at the failure answered OK, readable, and
+      in the log after recovery once the hook heals, with no acknowledged
       write lost; under `always`, every call refused until the engine is
       reopened. A kill test runs during a failure window: every write
-      acknowledged before it is in the reopened log.
+      acknowledged before the failure began is in the reopened log.
     - **Group commit:** one sync covering several waiting calls, counted
       through the sync hook.
     - **Cancellation** while a call waits.
@@ -1855,7 +1867,14 @@ settles it this way:
 ## Decisions
 
 The owner settled the open questions on October 2, 2026, with a standing rule
-for anything left uncertain: do what Redis does.
+for anything left uncertain: do what Redis does. On October 7, 2026 the owner
+refined it: where Keel's behaviour is a clear improvement over Redis's, on an
+accidental flaw that clients do not depend on (a stall, a bug, a needless
+limitation), Keel keeps it, documents it as a departure citing Redis's source,
+and lists it in its PR under "Improvements over Redis". What clients see and
+rely on - replies, error strings, defaults and command semantics - still
+matches Redis, and where it is unclear which a difference is, Keel follows
+Redis.
 
 - **Eviction default:** LRU, matching the `cmd/keel` flag. `config.EvictStrategy`
   defaulting to random is the server-side inconsistency to remove in step 2.5
@@ -1878,9 +1897,12 @@ for anything left uncertain: do what Redis does.
     its log and creates no `.lock` file, as Redis locks nothing; the owner
     may revisit this in phase 6.
   - **Log failures are Redis's.** Under `everysec` and `no`, writes are
-    refused with `MISCONF` while reads are served, and the log is retried
-    until it recovers; under `always`, where Redis exits, an embedded engine
-    refuses every call until it is reopened. The server keeps its stop in
+    refused with `MISCONF` while reads are served, a command that ran before
+    the failure was known keeps its reply, and the log is retried until it
+    recovers, a failed background sync included, where Redis would wait for
+    new data (the first improvement over Redis, approved); under `always`,
+    where Redis exits, an embedded engine refuses every call until it is
+    reopened. The server keeps its stop in
     phase 3; giving it Redis's `everysec` and `no` behaviour is scheduled as
     a change of its own after phase 3.
   - **`Close` takes no context in core,** and a second `Close` returns
