@@ -186,3 +186,20 @@ func TestINFOClientsSectionHoldsTheCommandBudget(t *testing.T) {
 	info = runOn(t, e, "INFO", "clients").(string)
 	assert.Regexp(t, `^# Clients\r\nconnected_clients:2\r\n(.+\r\n)+command_allocation_refusals:0\r\n\r\n$`, info)
 }
+
+// BenchmarkNoteMemoryPeak: the cost of the event loop's once-a-turn sample of
+// the memory in use, on an engine holding keys of several types.
+func BenchmarkNoteMemoryPeak(b *testing.B) {
+	e := newTestEngine(b, Options{})
+	for i := 0; i < 1000; i++ {
+		k := strconv.Itoa(i)
+		runOn(b, e, "SET", "s"+k, "v")
+		runOn(b, e, "HSET", "h"+k, "f", "v")
+		runOn(b, e, "SADD", "z"+k, "m")
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		e.NoteMemoryPeak()
+	}
+}
