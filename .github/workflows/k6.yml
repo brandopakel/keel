@@ -116,9 +116,11 @@ jobs:
             REDIS_URL=redis://127.0.0.1:$port /tmp/k6 run --no-color "${outputs[@]}" \
               --tag server=$name --tag run_id=$GITHUB_RUN_ID --tag branch="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" \
               --summary-export "dist/k6/summary-$name.json" bench/k6/keel.js > "dist/k6/k6-$name.log" 2>&1 || status=1
-            { echo '```'; sed -n '/THRESHOLDS/,/EXECUTION/p' "dist/k6/k6-$name.log" | grep -vE '^\s*EXECUTION'
-              grep -E 'keel_refused_commands|checks_(succeeded|failed)' "dist/k6/k6-$name.log"
-              grep -h 'first refusal' "dist/k6/k6-$name.log" | sed 's/.*msg="//; s/" source=console//' | sort | uniq -c | sort -rn | head -3
+            # The summary's greps find nothing on a clean run (no refusals), which
+            # must not end the step under -e and pipefail.
+            { echo '```'; sed -n '/THRESHOLDS/,/EXECUTION/p' "dist/k6/k6-$name.log" | grep -vE '^\s*EXECUTION' || true
+              grep -E 'keel_refused_commands|checks_(succeeded|failed)' "dist/k6/k6-$name.log" || true
+              { grep -h 'first refusal' "dist/k6/k6-$name.log" || true; } | sed 's/.*msg="//; s/" source=console//' | sort | uniq -c | sort -rn | head -3 || true
               echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
           done
           exit $status
