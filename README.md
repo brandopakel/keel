@@ -4,9 +4,10 @@ This branch holds data, not code. It keeps the results of Keel's benchmark
 workflows after GitHub deletes their artifacts (30 days), so that a Grafana
 dashboard can show them over months. `scripts/collect-bench-history.py` on
 `develop` writes these files, and `.github/workflows/bench-history.yml` runs it
-after each benchmark run and once a day. Don't edit the files by hand: a run is
+after each benchmark, census and telemetry run, and once a day. Don't edit the files by hand: a run is
 recorded once, keyed by its artifact ID, and the collector rewrites each file
-sorted by time.
+sorted by time. `census/latest.csv` is the one file replaced rather than
+appended to.
 
 Grafana reads the files through its Infinity data source, from
 `https://raw.githubusercontent.com/brandopakel/keel/bench-history/<file>`.
@@ -51,3 +52,35 @@ The matched keyspace adoption job of `.github/workflows/general-validation.yml`
 
 The runs of September 7 and 8, 2026 were read from copies saved hours before
 their artifacts expired.
+
+## census/
+
+The command census of `.github/workflows/command-census.yml`
+(`scripts/command-census.py`): which of Redis's commands and subcommands Keel
+has, as listed by Redis's `COMMAND DOCS`, with RedisBloom, RedisJSON and
+RedisTimeSeries loaded. A command counts as present when Keel knows its name;
+its options are not checked.
+
+- `runs.csv`: one line per census, with `redis_version`, `commands` and
+  `commands_present`, and `subcommands` and `subcommands_present`.
+- `areas.csv`: the same counts per area of each census. An area is a command
+  group (`string`, `list`, `pubsub` and so on) or a module (`module:bf`).
+- `latest.csv`: every command and subcommand of the newest census of
+  `develop`. `kind` is `command` or `subcommand` (written `container|sub`),
+  `since` is the Redis version that added it, `deprecated` is `yes` or `no`,
+  and `keel` is `present` or `missing`. It is replaced only by a newer census
+  of `develop`.
+
+## telemetry/
+
+The Live telemetry workflow (`.github/workflows/telemetry.yml`), which runs
+Keel and Redis under the same load with the standard `redis_exporter` in front
+of each.
+
+- `runs.csv`: one line per run, with how many metric names the exporter
+  reported for Keel (`keel_metric_names`) and for Redis
+  (`redis_metric_names`), how many both have (`shared_metric_names`), and the
+  host. A failed run has empty counts.
+- `phases.csv`: one line per load phase of each run (`steady`, `pipelined`,
+  `eviction`, `expiry`), with each server's ops/s. Both servers share one
+  unpinned runner, so these are not a comparison of speed.
