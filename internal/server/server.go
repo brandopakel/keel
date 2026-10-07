@@ -383,6 +383,11 @@ var clientsClosedSlow, clientsClosedUnanswered, clientsClosedUnread uint64
 // counts a connection only once it is fully set up, on every accept path.
 var connectionsReceived uint64
 
+// connectionsRejected counts connections accepted only to be closed at once
+// because the server already held its most clients, Redis's
+// rejected_connections.
+var connectionsRejected uint64
+
 // runsUnreplied counts runs that executed at least one command and produced
 // no reply. Every command answers in RESP, so this should never happen; if it
 // does, the loop writes nothing, leaves the connection's interest wherever the
@@ -772,9 +777,12 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 		return core.ClientBufferStats{Connected: len(clients), InputBytes: retainedInputBytes, ReplyBytes: retainedReplyBytes, TotalBytes: retainedClientBytes,
 			RequestAllocationPeak: requestBudget.peak, RequestAllocationRefusals: requestBudget.refusals.Load(),
 			ClosedSlow: clientsClosedSlow, ClosedUnanswered: clientsClosedUnanswered, ClosedUnread: clientsClosedUnread,
-			RunsUnreplied: runsUnreplied, ConnectionsReceived: connectionsReceived}
+			RunsUnreplied: runsUnreplied, ConnectionsReceived: connectionsReceived, ConnectionsRejected: connectionsRejected}
 	})
 	defer e.SetClientBuffers(nil)
+	e.SetServerInfo(&core.ServerInfo{Port: o.Port, MaxClients: o.MaxClients, IOThreads: o.IOThreads,
+		Hz: max(1, int(time.Second/o.CronInterval)), Multiplexer: io_multiplexing.API})
+	defer e.SetServerInfo(nil)
 	defer func() {
 		e.CancelRewrite()
 		for _, c := range clients {
@@ -959,6 +967,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 						fd, _, err := syscall.Accept(serverFD)
 						if err == nil {
 							syscall.Close(fd)
+							connectionsRejected++
 						}
 					}
 				default:
@@ -1028,6 +1037,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 					fd, _, err := syscall.Accept(serverFD)
 					if err == nil {
 						syscall.Close(fd)
+						connectionsRejected++
 					}
 					continue
 				}
@@ -1118,6 +1128,8 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 		if !o.ConcurrentAppend || (!e.AppendPending() && e.AppendBufferedBytes() == 0) {
 			e.ExpireCycle()
 		}
+		// Once a turn, not once a command: INFO's used_memory_peak.
+		e.NoteMemoryPeak()
 
 		// The log is written and synced here, after every command has run and
 		// before a single reply goes out. Under appendfsync always that

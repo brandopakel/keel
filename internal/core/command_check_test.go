@@ -82,5 +82,5 @@ func TestInfoTakesSectionsAsRedisDoes(t *testing.T) {
 	require.Contains(t, both, "# Keyspace\r\n")
 	require.NotContains(t, both, "# Memory\r\n")
 	require.Equal(t, "", runOn(t, e, "INFO", "nosuch", "other"))
-	require.Equal(t, runOn(t, e, "INFO"), runOn(t, e, "INFO", "everything"))
+	require.Equal(t, infoSteady(runOn(t, e, "INFO").(string)), infoSteady(runOn(t, e, "INFO", "everything").(string)))
 }

@@ -6,6 +6,9 @@ import (
 	"syscall"
 )
 
+// API names the facility, as Redis's INFO reports it in multiplexing_api.
+const API = "kqueue"
+
 // KQueue is the darwin facility: one kernel queue, and the buffers one wait
 // reports into.
 type KQueue struct {

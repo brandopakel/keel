@@ -1,6 +1,6 @@
 # INFO and monitoring compatibility
 
-Status: plan, October 7, 2026.
+Status: plan, October 7, 2026; part (a) in progress.
 
 Monitoring built for Redis reads `INFO`, `CONFIG GET`, `SLOWLOG` and `LATENCY`.
 The standard Prometheus exporter, `redis_exporter`, and the Grafana dashboards
@@ -81,7 +81,7 @@ where the plan's phase 6 wants server state.
 | `run_id` | - | (a) 40 random hex characters, new at each start |
 | `tcp_port` | - | (a) |
 | `server_time_usec` | - | (a) |
-| `uptime_in_seconds`, `uptime_in_days` | - | (a) From the server's start |
+| `uptime_in_seconds`, `uptime_in_days` | - | (a) From when the engine was made, which the server does at startup |
 | `hz`, `configured_hz` | - | (a) `1000 / -cron-interval-ms`, which is 10 by default, as in Redis |
 | `executable`, `config_file` | - | (a) The executable's absolute path. `config_file` is empty: Keel takes flags. |
 | `io_threads_active` | - | (a) `1` when `-io-threads` is above 1 |
@@ -113,7 +113,7 @@ blank line today, so they fall outside any section. (a) moves them inside.
 | `used_memory_rss`, `used_memory_rss_human` | - | (a) Resident set size from `/proc/self/statm` on Linux. Left out on platforms where Go cannot read it without cgo. |
 | `total_system_memory`, `total_system_memory_human` | - | (a) Physical memory |
 | `maxmemory`, `maxmemory_human`, `maxmemory_policy` | yes | Stays |
-| `mem_allocator` | - | (a) `libc`. Go's allocator is neither jemalloc nor tcmalloc, and `libc` is Redis's value for "not jemalloc". |
+| `mem_allocator` | - | Left out: Go's allocator is none of the allocators Redis names (jemalloc, tcmalloc, libc) |
 | `mem_fragmentation_ratio`, `mem_fragmentation_bytes`, `used_memory_dataset*`, `used_memory_overhead`, `used_memory_startup`, `rss_overhead_*`, `allocator_*` | - | Left out (rules 3 and 4) |
 | `used_memory_lua*`, `used_memory_vm_*`, `used_memory_scripts*`, `used_memory_functions`, `number_of_cached_scripts`, `number_of_functions`, `number_of_libraries`, `used_memory_hash_templates` | - | Left out: no scripting, functions or hash templates |
 | `mem_clients_*`, `mem_aof_buffer`, `mem_replication_backlog`, `mem_total_replication_buffers`, `mem_cluster_*`, `mem_not_counted_for_evict`, `mem_overhead_db_hashtable_rehashing` | - | Left out for now. Each needs an accounting Keel does not keep in Redis's terms. |
@@ -167,10 +167,11 @@ decision of its own, and none of (a) to (d) changes it.
 ## Keyspace
 
 `db0:keys=N,expires=N,avg_ttl=N,subexpiry=N`. Keel reports `keys` and
-`expires`. (a) adds `avg_ttl`: Redis's estimate in milliseconds of the TTL of
-keys that have one, taken from the active expiry cycle's samples, and `0` when
-there are none. It also adds `subexpiry=0`, since Keel has no hash field
-expiry.
+`expires`. `avg_ttl` is Redis's estimate in milliseconds of the TTL of keys
+that have one, taken from the active expiry cycle's samples. It waits for a
+later part, because Keel's keyspaces report how many keys a sample examined
+and removed, not their TTLs. `subexpiry=0` comes with it, since Keel has no
+hash field expiry.
 
 ## Commandstats, Errorstats and Latencystats, all (c)
 
@@ -211,7 +212,7 @@ Live telemetry run after each merge confirms them.
     `redis_total_system_memory_bytes`;
   - `redis_max_clients`, `redis_blocked_clients`, `redis_pubsub_*`,
     `redis_rejected_connections_total`, `redis_cluster_enabled`,
-    `redis_db_avg_ttl_seconds`, and the zero-valued features.
+    and the zero-valued features. (`redis_db_avg_ttl_seconds` waits for `avg_ttl`.)
 - **(b):** `redis_config_maxmemory`, `redis_config_maxclients`,
   `redis_config_io_threads`.
 - **(c):**
