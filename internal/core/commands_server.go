@@ -112,8 +112,10 @@ type ClientBufferStats struct {
 	// stay at zero.
 	ClosedSlow, ClosedUnanswered, ClosedUnread uint64
 	RunsUnreplied                              uint64
-	// ConnectionsReceived counts every connection accepted since startup.
-	ConnectionsReceived uint64
+	// ConnectionsReceived counts every connection accepted since startup, and
+	// ConnectionsRejected every one closed at once because the server already
+	// held its most clients (Redis's rejected_connections).
+	ConnectionsReceived, ConnectionsRejected uint64
 }
 
 // SetClientBuffers installs on e the hook INFO reads the connections of the

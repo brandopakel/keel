@@ -1,6 +1,8 @@
 package core
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"os"
 	"sync"
 	"time"
@@ -235,10 +237,23 @@ type Engine struct {
 	// come last.
 	settings settings
 
+	// What INFO server and memory report of e's life: when e was made, the
+	// random run_id it was given then, and the most memory its stores have
+	// held, with when, sampled once a turn of the event loop
+	// (NoteMemoryPeak) and whenever INFO runs. Nothing a command does reads
+	// them, so they go after settings.
+	started      time.Time
+	runID        string
+	memoryPeak   uint64
+	memoryPeakAt time.Time
+
 	// clientBuffers is how INFO reads the connections of the transport
 	// driving e, which installs it with SetClientBuffers; nil, INFO reports
 	// none. Only INFO reads it, so it goes after everything a command reads.
 	clientBuffers func() ClientBufferStats
+	// serverInfo is what INFO reports of that transport's own settings, which
+	// it installs with SetServerInfo; nil, INFO leaves those fields out.
+	serverInfo *layoutControlServerInfo
 
 	// mu is e's lock, which Lock and Unlock take and release. No command
 	// reads it, so it goes last, and every field a command reads keeps its
@@ -260,6 +275,7 @@ func (e *Engine) Unlock() { e.mu.Unlock() }
 // engineIn returns an engine living in space, with no stores yet, and with
 // its persistence I/O the real thing.
 func engineIn(space *data_structure.Space) *Engine {
+	now := time.Now()
 	e := &Engine{
 		space: space, replyCeiling: MaxReplyBytes,
 		aofWrite: writeLog, aofSync: syncLog,
@@ -274,6 +290,15 @@ func engineIn(space *data_structure.Space) *Engine {
 		settings: Options{}.settings(), role: Options{}.role(),
 		// Never nil, so noteReplicationDirty need not test it on every write.
 		replication: replicationState{dirty: map[string]struct{}{}},
+		started:     now, runID: newRunID(), memoryPeakAt: now,
 	}
 	return e
+}
+
+// newRunID is a run_id as Redis makes one at startup: 40 random hexadecimal
+// characters, which tell one run of a server from the next.
+func newRunID() string {
+	var b [20]byte
+	rand.Read(b[:])
+	return hex.EncodeToString(b[:])
 }
