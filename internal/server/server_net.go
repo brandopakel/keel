@@ -15,18 +15,19 @@ import (
 // netpoller, for the comparison the upstream performance issue asks for.
 //
 // The event-loop design gets one property for free that these do not. A single
-// thread can touch the command stores without synchronisation, but
-// goroutine-per-connection cannot: the package-level maps in core/storage.go
-// have no locking and concurrent access to them is a data race Go turns into a
-// hard crash. NetVariantMutex and NetVariantChannel both preserve the event
-// loop's execution semantics - one command at a time, in arrival order - so
-// what the benchmark compares is the I/O mechanism. Sharding the stores would
-// be faster and would measure a different program.
+// thread can touch the engine without contention, but goroutine-per-connection
+// cannot: the stores have no locking of their own, and concurrent access to
+// them is a data race Go turns into a hard crash. So every command here runs
+// under the engine's lock (core.Engine.Lock), as the event loop's do.
+// NetVariantMutex and NetVariantChannel both preserve the event loop's
+// execution semantics - one command at a time, in arrival order - so what the
+// benchmark compares is the I/O mechanism. Sharding the stores would be faster
+// and would measure a different program.
 type NetVariant int
 
 const (
 	// NetVariantMutex is goroutine-per-connection with execution serialised
-	// behind one mutex. bufio both directions.
+	// behind the engine's lock. bufio both directions.
 	NetVariantMutex NetVariant = iota
 	// NetVariantSmallBuf is the same with 512-byte buffers instead of 4096,
 	// to test how much of the per-connection memory cost is tunable.
@@ -38,13 +39,17 @@ const (
 	// NetVariantChannel keeps one goroutine per connection for I/O but funnels
 	// every command through a single executor goroutine. This is the faithful
 	// "use the standard library for I/O, keep the single-threaded core"
-	// rewrite, and it replaces lock contention with channel handoff.
+	// rewrite, and it replaces lock contention with channel handoff: the
+	// executor takes the engine's lock once a batch, and nothing contends
+	// for it.
 	NetVariantChannel
 )
 
+// ActiveNetVariant is the variant RunNetTCPServer serves. EvalUnlocked has
+// NetVariantMutex and its siblings run each command without the engine's
+// lock, to measure what the lock costs them.
 var (
 	ActiveNetVariant = NetVariantMutex
-	evalMu           sync.Mutex
 	EvalUnlocked     bool
 )
 
@@ -67,9 +72,11 @@ func startExecutor(e *core.Engine) {
 	go func() {
 		for req := range execCh {
 			var rb replyBuffer
+			e.Lock()
 			for _, cmd := range req.cmds {
 				responseRw(e, cmd, &rb)
 			}
+			e.Unlock()
 			out := make([]byte, rb.buf.Len())
 			copy(out, rb.buf.Bytes())
 			req.done <- out
@@ -139,9 +146,9 @@ func handleConn(conn net.Conn, variant NetVariant, e *core.Engine) {
 						if EvalUnlocked {
 							responseRw(e, cmd, out)
 						} else {
-							evalMu.Lock()
+							e.Lock()
 							responseRw(e, cmd, out)
-							evalMu.Unlock()
+							e.Unlock()
 						}
 					}
 				}
