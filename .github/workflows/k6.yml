@@ -1,0 +1,132 @@
+# k6 load test: edge cases under load, against Keel and Redis, into Grafana.
+#
+# bench/k6/keel.js drives one server through five scenarios, one after
+# another: steady GET-heavy load, 512 KiB values, one hot key under
+# contention, keys whose 200 ms TTL must have expired 400 ms later, and writes
+# past maxmemory. Each scenario's checks must pass 99% of the time. The job
+# runs it against Keel from this commit and then against Redis 8.10.1, both
+# with maxmemory 64mb and allkeys-lru, tagged server=keel or server=redis.
+#
+# Results stream to the Grafana Cloud stack's Prometheus (k6's remote-write
+# output, the metrics:write token Live telemetry uses), where k6's metrics
+# carry the scenario, the server and the run. When the K6_CLOUD_TOKEN secret
+# is set, with the K6_CLOUD_PROJECT_ID and K6_CLOUD_STACK_ID variables, the
+# Monday night run and dispatched runs also stream to Grafana Cloud k6, the
+# stack's k6 data source. Pull requests and the other nights do not: Grafana
+# Cloud k6 bills each streamed test at least 1 virtual-user hour (VUh), as
+# (most VUs x minutes) / 60 x 0.75 for local execution. One server's test here
+# is at most 74 VUs x 4 minutes, 3.7 VUh, so a Monday run costs at most 7.4
+# VUh, about 37 VUh a month against the free plan's allowance. The budget is
+# $0, so nothing may rely on overage.
+#
+# It is not a speed comparison: both servers share one unpinned runner. A
+# failed threshold fails the job, on either server: on Keel it is a finding,
+# on Redis a broken test.
+#
+# k6 is v2.3.0 built with xk6-redis v0.4.3 by xk6, from pinned module
+# versions, rather than a binary provisioned at run time.
+name: k6 load test
+
+on:
+  workflow_dispatch:
+    inputs:
+      scale:
+        description: Length of every scenario, as a multiple of the script's (0.1 to 5)
+        default: '1'
+  schedule:
+    - cron: '11 6 * * *'
+  pull_request:
+    branches: [develop]
+    paths: ['bench/k6/**', '.github/workflows/k6.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  k6:
+    name: Edge cases under load, Keel and Redis
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    env:
+      SCALE: ${{ inputs.scale || '1' }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version-file: go.mod }
+      - name: Check the run's settings
+        env:
+          TOKEN: ${{ secrets.GRAFANA_CLOUD_METRICS_TOKEN }}
+        run: |
+          if ! [[ $SCALE =~ ^[0-9]+(\.[0-9]+)?$ ]] || ! awk -v s="$SCALE" 'BEGIN { exit !(s >= 0.1 && s <= 5) }'; then
+            echo "scale must be a number from 0.1 to 5, not '$SCALE'" >&2
+            exit 1
+          fi
+          [ -n "$TOKEN" ] || { echo 'not set: secret GRAFANA_CLOUD_METRICS_TOKEN' >&2; exit 1; }
+      - name: Build k6 with the Redis extension, Keel and Redis 8.10.1
+        run: |
+          go install go.k6.io/xk6@v1.4.14
+          "$(go env GOPATH)/bin/xk6" build v2.3.0 --with github.com/grafana/xk6-redis@v0.4.3 --output /tmp/k6
+          /tmp/k6 version
+          go build -trimpath -o /tmp/keel ./cmd/keel
+          curl -fL --retry 3 https://download.redis.io/releases/redis-8.10.1.tar.gz -o /tmp/redis-8.10.1.tar.gz
+          echo '60166c95ab7aedaa9dfe516de685be0a4dd87be95ded59ba429df14c13f1b663  /tmp/redis-8.10.1.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/redis-8.10.1.tar.gz -C /tmp
+          # src/ alone is the core server; the tarball's top-level make also
+          # builds the bundled modules, and RediSearch does not build here.
+          make -C /tmp/redis-8.10.1/src -j"$(nproc)" BUILD_TLS=no > /tmp/redis-build.log 2>&1 || { tail -60 /tmp/redis-build.log; exit 1; }
+      - name: Start Keel and Redis
+        run: |
+          mkdir -p dist/k6 "$RUNNER_TEMP/redis"
+          /tmp/keel -port 6391 -maxmemory 64mb -evict lru > dist/k6/keel.log 2>&1 &
+          /tmp/redis-8.10.1/src/redis-server --port 6392 --save '' --appendonly no --maxmemory 64mb \
+            --maxmemory-policy allkeys-lru --dir "$RUNNER_TEMP/redis" > dist/k6/redis.log 2>&1 &
+          for port in 6391 6392; do
+            for _ in $(seq 50); do /tmp/redis-8.10.1/src/redis-cli -p $port PING > /dev/null 2>&1 && break; sleep 0.2; done
+            /tmp/redis-8.10.1/src/redis-cli -p $port PING
+          done
+          { echo "keel $(git rev-parse HEAD)"
+            echo "runner $(uname -srm) cpus $(nproc) $(grep -m1 'model name' /proc/cpuinfo | sed 's/.*: //')"
+            /tmp/redis-8.10.1/src/redis-server --version; /tmp/k6 version; } | tee dist/k6/provenance.txt
+      - name: Load test Keel, then Redis
+        env:
+          K6_PROMETHEUS_RW_SERVER_URL: ${{ vars.GRAFANA_CLOUD_PROM_URL }}
+          K6_PROMETHEUS_RW_USERNAME: ${{ vars.GRAFANA_CLOUD_PROM_USER }}
+          K6_PROMETHEUS_RW_PASSWORD: ${{ secrets.GRAFANA_CLOUD_METRICS_TOKEN }}
+          K6_PROMETHEUS_RW_TREND_STATS: 'p(50),p(95),p(99),max'
+          K6_CLOUD_TOKEN: ${{ secrets.K6_CLOUD_TOKEN }}
+          K6_CLOUD_PROJECT_ID: ${{ vars.K6_CLOUD_PROJECT_ID }}
+          K6_CLOUD_STACK_ID: ${{ vars.K6_CLOUD_STACK_ID }}
+        run: |
+          outputs=(-o experimental-prometheus-rw)
+          # Grafana Cloud k6 bills in virtual-user hours: only the weekly
+          # (Monday) scheduled run and dispatched runs stream there.
+          if [ -n "$K6_CLOUD_TOKEN" ] && { [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] ||
+              { [ "$GITHUB_EVENT_NAME" = schedule ] && [ "$(date -u +%u)" = 1 ]; }; }; then
+            outputs+=(-o cloud)
+          fi
+          status=0
+          for server in keel:6391 redis:6392; do
+            name=${server%%:*}; port=${server##*:}
+            echo "## k6 against $name" | tee -a "$GITHUB_STEP_SUMMARY"
+            REDIS_URL=redis://127.0.0.1:$port /tmp/k6 run --no-color "${outputs[@]}" \
+              --tag server=$name --tag run_id=$GITHUB_RUN_ID --tag branch="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" \
+              --summary-export "dist/k6/summary-$name.json" bench/k6/keel.js > "dist/k6/k6-$name.log" 2>&1 || status=1
+            # The summary's greps find nothing on a clean run (no refusals), which
+            # must not end the step under -e and pipefail.
+            { echo '```'; sed -n '/THRESHOLDS/,/EXECUTION/p' "dist/k6/k6-$name.log" | grep -vE '^\s*EXECUTION' || true
+              grep -E 'keel_refused_commands|checks_(succeeded|failed)' "dist/k6/k6-$name.log" || true
+              { grep -h 'first refusal' "dist/k6/k6-$name.log" || true; } | sed 's/.*msg="//; s/" source=console//' | sort | uniq -c | sort -rn | head -3 || true
+              echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
+          done
+          exit $status
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: k6
+          path: dist/k6
+          retention-days: 30
