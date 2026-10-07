@@ -244,6 +244,8 @@ type Engine struct {
 	// reads it, so it goes last, and every field a command reads keeps its
 	// offset.
 	mu sync.Mutex
+	// closed is set by Close, under the lock; see open.go.
+	closed bool
 }
 
 // Lock takes e's lock, waiting until whoever holds it lets go. Its holder is

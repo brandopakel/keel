@@ -79,9 +79,9 @@ type Options struct {
 	// every reply.
 
 	// AppendOnly says the engine keeps its log in AppendFilename, replayed
-	// when it starts. The server's startup reads both (server.StartAOF), until
-	// core.Open runs that sequence (plan phase 3); a caller that opens a log
-	// itself, with OpenAOF, sets neither.
+	// when it starts. The log's startup reads both (StartAOF), which Open and
+	// the server's startup run; a caller that opens a log itself, with
+	// OpenAOF, sets neither.
 	AppendOnly bool
 
 	// AppendFilename is where the log lives. It has no default: AppendOnly
