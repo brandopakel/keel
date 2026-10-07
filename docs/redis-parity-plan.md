@@ -98,6 +98,12 @@ schedule them.
      connect), `TIME`, `ROLE`, `FLUSHALL`, `RESET`, `MONITOR`, the remaining
      `CLIENT` subcommands, and `CONFIG GET` and `SLOWLOG` from the monitoring
      work;
+   - **server settings Redis has and Keel ties to others:** for example the
+     listen backlog. Keel uses `-maxclients` as its backlog
+     (`listenTCP(host, port, o.MaxClients)` in `internal/server/server.go`).
+     Redis has `tcp-backlog`, 511 by default and capped by the kernel's
+     `somaxconn`, independent of `maxclients`. Keel gets the option, with
+     Redis's default;
    - **single-node cluster mode:** `CLUSTER SLOTS`, `SHARDS`, `NODES`,
      `INFO`, `MYID`, `KEYSLOT` and `COUNTKEYSINSLOT`, answering as one node
      that owns all 16384 slots, plus `READONLY`, `READWRITE` and `ASKING`.
