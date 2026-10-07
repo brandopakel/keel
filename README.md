@@ -4,18 +4,19 @@ This branch holds data, not code. It keeps the results of Keel's benchmark
 workflows after GitHub deletes their artifacts (30 days), so that a Grafana
 dashboard can show them over months. `scripts/collect-bench-history.py` on
 `develop` writes these files, and `.github/workflows/bench-history.yml` runs it
-after each benchmark, census and telemetry run, and once a day. Don't edit the files by hand: a run is
-recorded once, keyed by its artifact ID, and the collector rewrites each file
-sorted by time. `census/latest.csv` is the one file replaced rather than
-appended to.
+after each benchmark, census and telemetry run, and once a day. Don't edit the
+files by hand: a run is recorded once, keyed by its artifact ID, and the
+collector rewrites each file sorted by time. `census/latest.csv` is the one
+file replaced rather than appended to.
 
 Grafana reads the files through its Infinity data source, from
 `https://raw.githubusercontent.com/brandopakel/keel/bench-history/<file>`.
 
-Every file has `time` (the run's creation time, UTC), `branch`, `pr` (when the
-commit heads a pull request) and `host`: the runner's CPU model, shortened
-(`EPYC 7763`, `Xeon 8370C`), because results on hosted runners differ by host.
-`artifact_id` and `run_id` link a line to its run.
+Every file has `time` (the run's creation time, UTC) and `branch`, and
+`run_id` links a line to its run. The benchmark and telemetry files also have
+`pr` (when the commit heads a pull request) and `host`: the runner's CPU model,
+shortened (`EPYC 7763`, `Xeon 8370C`), because results on hosted runners differ
+by host.
 
 ## command-path/
 
