@@ -1490,7 +1490,8 @@ settles it this way:
     atomically, as it does now.
   - **The `net` benchmark modes** take the engine's lock where they took
     `evalMu`, which the table at the top of this plan has become the engine
-    lock. `EvalUnlocked` still turns it off, for the benchmark that measures
+    lock, and the channel variant's executor takes it once a batch.
+    `EvalUnlocked` still turns it off, for the benchmark that measures
     without it.
   - **The cost** is two atomic operations per cycle, against a cycle of one or
     more system calls. Part 1 measures it, under "Measured per part".
@@ -1544,17 +1545,23 @@ settles it this way:
   leaves:
   - the files as they were, byte for byte, because a replay only reads, and
     nothing has written yet. No torn tail is repaired, and no log is opened or
-    created;
+    created. The one file startup may have made is the empty lock file beside
+    the log, which it takes before it reads;
   - the sidecar lock released;
   - no engine, because the partly replayed one is discarded.
 
   A later `Open` replays from the start. The context is checked once more
-  before a torn tail is repaired, and not after it. From the repair on,
-  startup runs to completion, for one reason. Stopping after the new log is
-  opened, before a legacy log has been rewritten into it, is the one
-  interruption that loses data: the next start would prefer the new, empty
-  log. Nothing else in startup takes long. The engine does not keep the
-  context.
+  when the replay has finished, before anything is written, and not after
+  that. From there, startup runs to completion, for one reason. Stopping
+  after the new log is opened, before a legacy log has been rewritten into
+  it, is the one interruption that loses data: the next start would prefer
+  the new, empty log. Nothing else in startup takes long. The engine does not
+  keep the context.
+  - **A crash in that window** loses the legacy log's keyspace the same way,
+    and does on the server today. Phase 3 moves the migration as it is,
+    under its rule that nothing user-visible changes. Making it crash-safe,
+    by publishing the new log only once it holds the legacy keyspace, is a
+    fix of its own, with a kill-and-reopen test, for the owner to schedule.
 - **`Close`** ends an engine, in this order:
   1. It marks the engine closed, under the lock, so a call already running
      finishes first, and every later call gets `ErrClosed`.
@@ -1584,7 +1591,7 @@ settles it this way:
     drop it. A `flock` lock belongs to the open file. Two engines in one
     process conflict as two processes do, and only closing the descriptor
     `Open` took releases it. On Linux, `flock` over NFS is carried out with
-    `fcntl` locks, so there two engines in one process are not kept apart,
+    `fcntl` locks, so on NFS two engines in one process are not kept apart,
     though two processes still are.
   - **Platforms.**
     - Linux, macOS, FreeBSD, NetBSD, OpenBSD and DragonFly use `flock`.
@@ -1710,8 +1717,8 @@ settles it this way:
       bytes as before; there is no torn-tail backup, no log is created, and a
       later `Open` replays all of it.
     - `Close` then `Open` gives back the keyspace under each fsync policy.
-    - The server's legacy-log tests keep running through
-      `server.StartAOF`.
+    - The server's legacy-log test runs on the startup it now shares with
+      `Open`, given the legacy name.
   - **Part 3.**
     - A second `Open` of a log in the same process gets `ErrLocked`. After
       the first engine's `Close`, a new `Open` succeeds.
