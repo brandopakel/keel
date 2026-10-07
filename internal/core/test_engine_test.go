@@ -32,9 +32,14 @@ func newTestEngine(t testing.TB, o Options) *Engine {
 }
 
 // runOn executes a command on e the way a connection would, and decodes the
-// reply; run is runOn on the default engine. As with run, an error the
-// command returns rather than answers - a command this server does not have -
-// comes back as its text.
+// reply. An error the command returns rather than answers - a command this
+// server does not have - comes back as its text.
+//
+// Calling cmdSET and friends directly skips evalAndResponse, and that is
+// where the log is written from - so a test that called them directly would
+// drive the keyspace correctly and record none of it, then pass by observing
+// that the keyspace was correct. Every command here goes the long way round
+// for that reason.
 func runOn(t testing.TB, e *Engine, name string, args ...string) interface{} {
 	t.Helper()
 	var w replyWriter
