@@ -1,0 +1,85 @@
+# Benchmark history: keep each benchmark run's results after its artifact
+# expires.
+#
+# GitHub deletes a workflow artifact after 30 days, and Grafana Cloud's free
+# plan keeps pushed metrics for 14. This job copies the numbers worth keeping
+# from each Command path run, and from each run of General cache validation's
+# matched adoption job, into CSV files on the bench-history branch. A Grafana
+# dashboard reads them from raw.githubusercontent.com through the Infinity
+# data source. scripts/collect-bench-history.py says what is kept, and the
+# branch's README.md what each column means.
+#
+# When it runs: after every Command path run and every dispatched General
+# cache validation run, and once a day in case one was missed. A pull
+# request's General cache validation never runs the matched job, so it has
+# nothing to collect and is skipped. The collector records each run once,
+# keyed by its artifact, so a run it has already seen costs nothing, and one
+# still in progress is left for the next collection. Only one collection runs
+# at a time, so two never push over each other.
+#
+# Why it may push: committing to bench-history needs contents: write, and a
+# workflow_run or scheduled job runs from develop whatever triggered it. What
+# it reads from an artifact is data, from a run of this repository: the
+# collector executes nothing from it, refuses a member over 8 MiB, and skips
+# runs from forks. The first checkout keeps no credentials; only the
+# bench-history checkout, which holds no code, can push.
+name: Benchmark history
+
+on:
+  workflow_run:
+    workflows: [Command path, General cache validation]
+    types: [completed]
+  schedule:
+    - cron: '37 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: bench-history
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    name: Collect benchmark history
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.name == 'Command path' ||
+      github.event.workflow_run.event == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        # An explicit bash runs with -o pipefail, so the collector's exit
+        # status survives its pipe into the step summary.
+        shell: bash
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false }
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { ref: bench-history, path: history }
+      - name: Collector tests
+        run: python3 -m unittest discover -s scripts -p 'test_collect_bench_history.py' -v
+      - name: Collect
+        id: collect
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/collect-bench-history.py --repo "$GITHUB_REPOSITORY" --data history 2>&1 \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Push what was collected
+        # An artifact that could not be read fails the collect step, but what
+        # was read is still pushed.
+        if: ${{ !cancelled() && (steps.collect.outcome == 'success' || steps.collect.outcome == 'failure') }}
+        working-directory: history
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'Nothing new to collect.'
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -q -m "Collect benchmark history (run $GITHUB_RUN_ID)"
+          git push origin HEAD:bench-history
