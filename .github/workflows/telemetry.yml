@@ -84,14 +84,17 @@ jobs:
       - name: Build Keel
         run: go build -trimpath -o /tmp/keel ./cmd/keel
       - name: Build Redis 8.10.1 and memtier 2.5.1
-        # The same pinned sources as general-validation.yml.
+        # The same pinned sources as general-validation.yml. The tarball's
+        # top-level make also builds the bundled modules, and RediSearch does
+        # not build on this runner; src/ alone is the core server, as
+        # application-pilot.yml builds it.
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential autoconf automake libtool pkg-config libevent-dev libssl-dev zlib1g-dev
           curl -fL --retry 3 https://download.redis.io/releases/redis-8.10.1.tar.gz -o /tmp/redis-8.10.1.tar.gz
           echo '60166c95ab7aedaa9dfe516de685be0a4dd87be95ded59ba429df14c13f1b663  /tmp/redis-8.10.1.tar.gz' | sha256sum -c -
           tar -xzf /tmp/redis-8.10.1.tar.gz -C /tmp
-          make -C /tmp/redis-8.10.1 -j"$(nproc)" build
+          make -C /tmp/redis-8.10.1/src -j"$(nproc)" BUILD_TLS=no
           curl -fL --retry 3 https://github.com/redis/memtier_benchmark/archive/refs/tags/2.5.1.tar.gz -o /tmp/memtier.tar.gz
           echo '9b34e17a0d1d7e70b152eb442c6362161b5b764ce2ea98e97b7c74815bdd90b7  /tmp/memtier.tar.gz' | sha256sum -c -
           tar -xzf /tmp/memtier.tar.gz -C /tmp
