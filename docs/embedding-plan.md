@@ -1409,6 +1409,17 @@ rows back, where restoring the 64-byte phase recovered about half. Two of the
 three causes were the linker's: functions kept or dropped because something
 unrelated stopped or started using them as values or through an interface.
 
+Two results were over the gate itself, not only a row. Part 3 ran
+pipeline-16 end to end at 0.970 to 0.984 on EPYC 7763, against a floor of
+0.98. Part 4's paired job ran at medians of 1.025 to 1.027, against a ceiling
+of 1.0204. Neither passed on the gate. Each was accepted in review as code
+placement, on its control build: part 3 on develop with the field added,
+and part 4 on the exact-address control, which ran 1.000 and 1.002 where the
+part ran 1.025 to 1.027. The rule above was applied to the median as well as
+to a row: a result put down to code layout is shown to be layout with a
+control build. A later step that reads over the gate needs a control of its
+own; these do not carry over.
+
 ## Risks, in order
 
 1. Moving AOF, rewrite and replication state while MULTI/EXEC changes the same
