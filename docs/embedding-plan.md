@@ -6,7 +6,8 @@ the stores, step 2.2, the command scope, step 2.3, persistence (see "Step
 below), and step 2.4, replication and failover (see "Step 2.4:
 replication"), step 2.5, options in place of `internal/config` (see "Step
 2.5: options"), and step 2.6, the suite run in parallel on engines of its own
-(see "Step 2.6: parallel tests").
+(see "Step 2.6: parallel tests"). Step 2.7, which removes the default engine,
+is planned in "Step 2.7: the default engine".
 
 The owner asked for Keel to be usable as a Go library, not only as a server:
 several independent instances per process, safe for concurrent use, a typed
@@ -1100,6 +1101,246 @@ Where the plan above leaves a choice open, step 2.6 settles it this way:
     package's functions (`EvalAndResponse`, `ExpireCycle`, `OpenAOF` and the
     rest), and the flag tests in cmd/keel.
 
+### Step 2.7: the default engine
+
+Step 2.7 removes `defaultEngine`, the engine that every caller which names
+none runs on, with the 42 package functions in `internal/core` that act on
+it, and `data_structure.DefaultSpace`, its space, with the 14 package
+functions over that. Afterwards a command runs on the engine its caller
+holds, and `cmd/keel` holds the server's. Nothing a client, a log or a
+replica can see may change: not a reply, a record or a frame, not a flag or
+its default, and not the order of startup and shutdown. It takes five PRs,
+in this order:
+
+- **Part 1, core's tests**: the census of the default engine's users
+  (below), the isolation tests, `FuzzRestoreValidation`, and the helpers
+  that served them on the default engine.
+- **Part 2, the benchmarks**, and what lets the two that `command-path.yml`
+  borrows build in a baseline from before there were engines.
+- **Part 3, the server and `cmd/keel`**: `cmd/keel` makes the server's
+  engine and hands it to the server, which runs every command and every
+  cycle's work on it, and their tests make engines of their own.
+- **Part 3b, `ClientBuffers`**, the server's INFO hook, installed on the
+  engine the server drives rather than in a package variable.
+- **Part 4, the default engine itself**: `defaultEngine`, the package
+  functions over it and the package's `init`, then `DefaultSpace` and the
+  package functions over it.
+
+The order follows who uses what. On develop, 52 functions use the default
+engine directly: 27 in core's tests, 21 in internal/server and 4 in
+cmd/keel. core's tests go first because they need nothing new: each
+isolation test already runs on engines of its own and uses the default
+engine as one more. The benchmarks go next, and alone, because every later
+part is measured with them: what they run on has to change, and be shown to
+measure the same, before anything they measure does. The server goes third,
+with the constructor and methods it needs, and leaves nothing that uses the
+default engine. `ClientBuffers` follows it, as a part of its own that can be
+reverted alone, and the last part deletes what nothing calls. Where the plan
+above leaves a choice open, step 2.7 settles it this way:
+
+- **`cmd/keel` owns the server's engine** until phase 6 gives it to
+  `server.Server`. `runServer` makes it with `core.NewEngine(engineOptions())`
+  where it called `core.Configure`, and then runs `server.StartAOF(e)`,
+  `e.InitReplication()`, the server and `e.CloseAOF()`, in the order it runs
+  them on the default engine now. The server is handed the engine:
+  `RunAsyncTCPServer(wg, e, o)`, `RunNetTCPServer(wg, e, o)` and
+  `StartAOF(e)`.
+  - The loop runs its own work on that engine, at the points it runs it
+    now: expiry, the flush, the rewrite's slices, memory maintenance,
+    replica apply and the ordered-append gates; and it installs its
+    allocation budget and rewrite waker on it.
+  - Each connection holds the engine its commands run on, set when it is
+    accepted, as a Redis client holds its `db`. `respond`, `transact`,
+    HELLO's role and `executeRun`'s budget read the connection's. The field
+    goes last in `client`, so no field the loop reads moves, and the struct,
+    312 bytes, stays in the allocator's 320-byte class.
+  - The replica transport reads that engine's role, resume cursor and term;
+    the term is still read atomically.
+- **`core.NewEngine(Options) (*Engine, error)`** returns an engine with empty
+  stores in a space of its own, held to the options given, or the error
+  `Configure` gives for options no engine can be held to. It replaces
+  `Configure` on the default engine, and the package's `init`, which built
+  the default engine's stores before `main` ran. `newEngine`, which panics
+  on refused options, becomes a test helper over it. Phase 3's
+  `core.Open` builds on it, adding the log's replay and the sidecar lock;
+  the names the public package gives any of this are phase 5's to choose.
+- **Each package function becomes its engine's method.** 32 of the 42 are
+  already an Engine method of the same name, which the server calls on its
+  engine. Of the other ten:
+  - `EvalAndResponse` and `Transact` are `evalAndResponse` and `transact`,
+    exported under the function's name, so that one thing has one name;
+  - `SetCommandAllocations`, `CommandAllocations` and `Configuration` become
+    methods of the same name;
+  - `Configure` becomes `NewEngine`. Changing a live engine's options stays
+    unexported (`configure`): nothing outside core does it;
+  - `ResetStores` goes: a caller that needs an empty keyspace makes an
+    engine;
+  - `Writable`, `HeldTerm` and `Fenced` go: only tests called them, and
+    those read the engine's own.
+
+  One method is new: `Limits`, the limits an engine's space is held to,
+  which cmd/keel's flag tests read from `DefaultSpace` now.
+- **`DefaultSpace` goes too.** Only the default engine lives in it, so the
+  last part removes it, with the 14 package functions over it, `OwnerOf`'s
+  copy of the space's method among them. Their other callers (a server
+  test, the eviction benchmark and the flag tests, which move with their
+  parts, and an LCS test in data_structure) ask the engine or the space they
+  hold. No benchmark in data_structure uses them. data_structure's census, and
+  the test that checks it, then list nothing mutable; the `GOOS=windows`
+  build of core and data_structure stays as it is.
+- **The hot path.** No instruction a command runs in core changes.
+  `EvalAndResponse` is inlined at its callers as a load of `defaultEngine`
+  and a direct call of `evalAndResponse`; the server will load the
+  connection's engine instead and make the same direct call, to the same
+  code under its exported name. `Transact` and the budget's reads change the
+  same way. A field added to Engine goes after `settings`, its last, so
+  every field a command reads keeps its offset and the hot instructions stay
+  the same bytes; what is left to move a row is where code lands, which
+  moved single rows by 2 to 7% either way in step 2.5. No engine method is
+  deferred on the server's path (step 2.3: a deferred method is wrapped in a
+  closure and called through it). And the linker drops functions nothing
+  calls, so once part 3 has merged, the package functions are already absent
+  from the server's binary, and part 4 removes only the initializers of
+  `defaultEngine` and `DefaultSpace` from it. Each of these is checked, not
+  assumed:
+  - the server's dispatch (`(*client).respond`, `responseRw`, `executeRun`)
+    with `go tool objdump` before and after part 3, and the connection's
+    layout, `c.engine`'s offset and every other field's;
+  - every new call on the path inlined or direct, with `-gcflags=-m`;
+  - the addresses of the hot functions in the server's and the benchmarks'
+    binaries, with `go tool nm`, before and after parts 3 and 4.
+- **Measured per PR**, as in steps 2.1 to 2.6. The paired command-path job
+  runs at least twice against develop and once against `65ebdbc`, where the
+  step starts at 0.88 to 0.92; part 1, which changes neither the product nor
+  a benchmark, runs it once as a sanity check, as step 2.6 did. A part
+  passes at a median paired ratio of at most 1/0.98 (1.0204) with no row
+  allocating more. A row over 1.04 is run again, and a row put down to code
+  layout is shown to be layout with a control build: the part plus a
+  never-taken branch in a cold function. Parts 1 and 2 change no product
+  code: the server built with `go build -trimpath -buildvcs=false ./cmd/keel`
+  must be the same bytes as develop's. The job measures core's command path,
+  not the server's, so part 3 also runs the server end to end against
+  develop: General validation's matched job, memtier against both builds on
+  one runner with disjoint CPU masks, with its memory matrix.
+- **The benchmarks run on engines of their own, where a baseline resets.**
+  Each side builds its own `BenchmarkCommandPath` and `...UnderEviction`, so
+  a baseline goes on running them on its default engine. The candidate makes
+  an engine wherever the baseline calls `ResetStores`, held to the options
+  set there: the server's former key cap (`serverKeyCap`) and, under
+  eviction, the budget and policy. Both sides then run the same commands on
+  an empty keyspace held to the same options, counting the same keys.
+  `BenchmarkRewrite` and `BenchmarkSketchRewriteStart`, which the job does
+  not run, move the same way. Part 2's runs against develop compare the same
+  product code, so they show by themselves whether a benchmark on an engine
+  of its own measures what it measured on the default engine.
+- **The borrowed benchmarks build in any baseline.** `command-path.yml`
+  builds the candidate's `command_path_log_bench_test.go` and
+  `command_path_replica_bench_test.go` into a baseline that lacks them. For
+  the cumulative comparison that is `65ebdbc`, which has no `Engine` at all,
+  so from part 2 the two files name no engine API:
+  - each family takes its engine from `command_path_settings_test.go`
+    (`logBenchmarkEngine(b)`, `replicaBenchmarkEngine(b)`), a value of type
+    `benchEngine`, and calls only `EvalAndResponse`, `OpenAOF`, `FlushAOF`,
+    `CloseAOF`, `AOFStats` and `InitReplication` on it, and `mustSucceedOn`;
+  - the candidate's settings file makes `benchEngine` an `*Engine` (in part
+    2 a struct holding one, whose `EvalAndResponse` calls `evalAndResponse`
+    until part 3 exports it);
+  - `testdata/command-path/command_path_settings_test.go`, which the job
+    already gives such a baseline in place of that file, makes it an empty
+    struct: making one sets the baseline's config and resets its stores, as
+    the borrowed files do now, and each method calls the baseline's package
+    function of the same name;
+  - every method of either inlines, so in both binaries the timed loop calls
+    the dispatch directly, as it does now (`-gcflags=-m`).
+
+  The job's copy step does not change, and its provenance still names what
+  a baseline borrowed. Part 2's run against `65ebdbc` is the one that shows
+  the old-baseline shim builds and measures there. A baseline at or after
+  step 2.4, develop included, has both files and builds its own.
+- **The census of users.** `TestDefaultEngineUsersAreCensused` lists, with
+  the part that moves it, every function and method in core's tests, in
+  internal/server and in cmd/keel that uses the default engine directly:
+  that names `defaultEngine` or `DefaultSpace`, or calls a package function
+  over either. It fails on one that does and is not listed, and on a listed
+  one that no longer does or is gone, so a use added while the step is under
+  way fails, and so does an entry its part forgot. It reads syntax, as the
+  parallel census does. A caller of a listed helper is not listed: removing
+  the helper breaks it. Part 1 adds it with develop's 52 and leaves 38; part
+  2 leaves 26, all in internal/server and cmd/keel but
+  `TestConfigureHoldsTheDefaultEngine`; part 3 leaves none; and part 4
+  deletes it with the default engine, after which the compiler refuses any
+  use.
+- **What step 2.6 left on the default engine:**
+  - **The isolation tests** run on engines of their own. Where the default
+    engine stood by, a bystander engine made first takes its place, and each
+    test compares on the bystander what it compared on the default engine:
+    its keys and expired count, budget, log positions and file, rewrite and
+    rewrite outcome, replica state, stream and epoch, term and term file,
+    and options. Where the default engine took part (the primary whose
+    streams `TestEnginesShareNoReplica` captures, the engine that writes
+    while another rewrites in `TestEnginesShareNoLog`, the third set of
+    options in `TestEnginesShareNoOptions`) an engine of the test's own does.
+    They then run in parallel. `captureStreamV2` takes the engine it
+    captures from, and `run` and the default forms of `setupReplicationV2`,
+    `pullV2` and `snapshotV2` go.
+  - **`TestConfigureHoldsTheDefaultEngine`** becomes
+    `TestNewEngineHoldsItsOptions` in part 3: an engine is held to the
+    options it was made with, reports them as given and in INFO, and options
+    no engine can be held to make no engine.
+  - **`FuzzRestoreValidation`** restores into an engine of its own, made
+    once for the target and emptied before each input by `resetStores`, the
+    unexported method an engine's stores are built with, as `ResetStores`
+    emptied the default engine. Nothing new is exported for it, and go.yml's
+    fuzz smoke is unchanged.
+  - **The benchmarks**, as above; `withOptions`, `mustSucceed` and `run2`
+    go with them.
+  - **internal/server's tests** each make an engine of their own, whose log
+    is closed when the test ends, and hand it to the connection or loop they
+    drive; `withEngineOptions` goes. They stay serial: they drive the
+    server's package state (the client registry, queued reads, the waker and
+    shutdown) until phase 6. The package joins the shuffled race job, which
+    shuffles serial tests too, so a test that depends on what another left
+    fails there.
+  - **cmd/keel's flag tests** build the engine `runServer` would build from
+    the flags they parse, and read its options and limits. They stay serial,
+    because they parse the process's command line (`flag.CommandLine`,
+    `os.Args`).
+- **`ClientBuffers`** is the hook through which INFO reports the server's
+  connections. The plan had it go in phase 6, when the server renders INFO;
+  it moves in step 2.7 instead (see "Decisions"). Part 3b gives Engine a
+  field for it, after `settings`, which the server sets on the engine it
+  drives (`SetClientBuffers`) as it sets its allocation budget; INFO's
+  clients section and `total_connections_received` read it, and nothing
+  else does, no write or eviction path among them. The server's INFO stays
+  byte-identical, which 3b shows by comparing it between develop's build and
+  its own after the same connections.
+  `TestINFOClientBuffersHasExplicitScopeAndStableValues`, serial because it
+  replaced the package variable, then runs in parallel.
+- **The censuses at the end.** core's `packageVars` loses `ClientBuffers` in
+  3b and `defaultEngine` in part 4, with their reasons (`transport`,
+  `defaultInstance`), leaving the 26 tables and the 57 sentinels.
+  data_structure's loses `DefaultSpace`.
+  `TestParallelTestsLeaveTheDefaultEngineAlone` keeps its checks of package
+  variables and process-wide calls, and loses those of the default engine
+  and `DefaultSpace`, with its check that no method reaches the default
+  engine through a package function, a check the compiler then makes. It
+  becomes `TestParallelTestsShareNoPackageState`.
+- **Nothing user-visible moves.** Flags, defaults, replies, logs, frames,
+  and the order of startup and shutdown, log lines included, stay as they
+  are. Where a part could move a log line or a startup or shutdown step, its
+  PR says how it checked that it did not; for part 3, both builds' startup
+  and shutdown output is compared under the same flags.
+- **Guardrails.** Every part keeps green the persistence and replication
+  goldens (`testdata/persistence-40eb2f6`, `testdata/replication-9736d8d`);
+  the Log compatibility and Replication compatibility workflows, which build
+  the base's server and the change's and pair them both ways, so that from
+  part 3 they start each through `cmd/keel`'s changed startup; native
+  recovery; `BenchmarkCommandPathWithLog` and `...WithReplica` in the paired
+  job; the race job and the shuffled race job; and the footprint step, under
+  160 MiB. No part adds a test that writes tens of MiB or starts a server
+  process; one that did would take `internal/testlock` and start its server
+  through cmd/keel's port helpers.
+
 ## Risks, in order
 
 1. Moving AOF, rewrite and replication state while MULTI/EXEC changes the same
@@ -1134,3 +1375,10 @@ for anything left uncertain: do what Redis does.
   one frame; a command that fails inside it does not undo the others, and there
   is no rollback.
 - **Release target:** the first embeddable release is `v0.2.0-alpha.1`.
+- **`ClientBuffers` moves in step 2.7, not phase 6** (October 6, 2026). Once
+  the server holds its engine, the hook is a field and a setter on it, as the
+  allocation budget already is; as a package variable, it has every engine in
+  a process report the server's connections in INFO, and it is the last
+  mutable entry in core's census. It moves in a PR of its own after the
+  server's (3b), so that the server's measurements stay clean and the move can
+  be reverted alone. Phase 6 still moves INFO's rendering into the server.
