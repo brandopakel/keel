@@ -1,0 +1,80 @@
+# Command census: which of Redis's commands Keel has.
+#
+# Builds Redis 8.10.1 with the bundled modules that build on a hosted runner
+# (RedisBloom, RedisJSON and RedisTimeSeries; vector sets are part of the core
+# server), and Keel from this commit. scripts/command-census.py then reads
+# every command and subcommand from Redis's COMMAND DOCS and asks Keel for each
+# one. The step summary has the count by group, with the missing commands
+# named, and census.json has every command.
+#
+# RediSearch's FT.* commands are not listed: the module does not build on this
+# runner's Rust and clang (see general-validation.yml).
+#
+# It runs on every push to develop that can change the command surface, so
+# that each merge's effect on the count is recorded, and on dispatch. The
+# census is information, not a gate: it fails only when its own method is
+# unsound, which is when Redis does not report one of its own commands as
+# present, or Keel stops answering.
+name: Command census
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [develop]
+    paths: ['internal/**', 'cmd/**', 'go.mod', '.github/workflows/command-census.yml',
+            'scripts/command-census.py']
+  pull_request:
+    branches: [develop]
+    paths: ['.github/workflows/command-census.yml', 'scripts/command-census.py',
+            'scripts/test_command_census.py']
+
+permissions:
+  contents: read
+
+jobs:
+  census:
+    name: Redis commands Keel has
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version-file: go.mod }
+      - name: Census tests
+        run: python3 -m unittest discover -s scripts -p 'test_command_census.py' -v
+      - name: Build Keel
+        run: go build -trimpath -o /tmp/keel ./cmd/keel
+      - name: Build Redis 8.10.1 with RedisBloom, RedisJSON and RedisTimeSeries
+        # make build with module names builds the core server and only those
+        # modules; the same pinned tarball as general-validation.yml.
+        run: |
+          curl -fL --retry 3 https://download.redis.io/releases/redis-8.10.1.tar.gz -o /tmp/redis-8.10.1.tar.gz
+          echo '60166c95ab7aedaa9dfe516de685be0a4dd87be95ded59ba429df14c13f1b663  /tmp/redis-8.10.1.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/redis-8.10.1.tar.gz -C /tmp
+          make -C /tmp/redis-8.10.1 -j"$(nproc)" build redisbloom redisjson redistimeseries > /tmp/redis-build.log 2>&1 \
+            || { tail -60 /tmp/redis-build.log; exit 1; }
+          ls -l /tmp/redis-8.10.1/modules/redisbloom/redisbloom.so /tmp/redis-8.10.1/modules/redisjson/rejson.so \
+            /tmp/redis-8.10.1/modules/redistimeseries/redistimeseries.so
+      - name: Census
+        shell: bash
+        run: |
+          mkdir -p dist/census "$RUNNER_TEMP/redis"
+          m=/tmp/redis-8.10.1/modules
+          /tmp/keel -port 6391 > dist/census/keel.log 2>&1 &
+          /tmp/redis-8.10.1/src/redis-server --port 6392 --save '' --appendonly no --dir "$RUNNER_TEMP/redis" \
+            --loadmodule $m/redisbloom/redisbloom.so --loadmodule $m/redisjson/rejson.so \
+            --loadmodule $m/redistimeseries/redistimeseries.so > dist/census/redis.log 2>&1 &
+          for port in 6391 6392; do
+            for _ in $(seq 50); do /tmp/redis-8.10.1/src/redis-cli -p $port PING > /dev/null 2>&1 && break; sleep 0.2; done
+          done
+          { echo "keel $(git rev-parse HEAD)"; /tmp/redis-8.10.1/src/redis-server --version
+            /tmp/redis-8.10.1/src/redis-cli -p 6392 MODULE LIST; } | tee dist/census/provenance.txt
+          python3 scripts/command-census.py --redis 127.0.0.1:6392 --keel 127.0.0.1:6391 --out dist/census \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: command-census
+          path: dist/census
+          retention-days: 30
