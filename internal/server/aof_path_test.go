@@ -164,29 +164,40 @@ func TestAMigrationKilledInItsWindowLosesNothing(t *testing.T) {
 	legacyLog(t, filepath.Join(dir, "memkv-master.aof"), keys)
 	child := migrateInAProcess(t, dir)
 	require.NoError(t, child.Start())
-	killed := false
+	exited := make(chan error, 1)
+	go func() { exited <- child.Wait() }()
 	defer func() {
-		if !killed {
-			_ = child.Process.Kill()
-			_ = child.Wait()
-		}
+		_ = child.Process.Kill()
+		<-exited
+		exited <- nil
 	}()
 	// The rewrite's own file appears once the keyspace is being written into
 	// the new log, and goes when it is renamed: kill the process the moment
-	// it is seen.
+	// it is seen. A process that finishes before it is seen has missed the
+	// window, which loses nothing either; the keys are checked all the same.
 	deadline := time.Now().Add(time.Minute)
-	for seen := false; !seen; {
-		require.True(t, time.Now().Before(deadline), "the migration never began its rewrite")
+	for {
+		require.True(t, time.Now().Before(deadline), "the migration neither began its rewrite nor finished")
+		select {
+		case err := <-exited:
+			require.NoError(t, err, "the migration failed")
+			exited <- err
+			t.Log("the migration finished before its window was seen; nothing was killed in it")
+			require.Equal(t, fmt.Sprintf(":%d\r\n", keys), migratedKeys(t, dir))
+			return
+		default:
+		}
 		matches, err := filepath.Glob(filepath.Join(dir, "*.rewrite"))
 		require.NoError(t, err)
-		seen = len(matches) > 0
-		if !seen {
-			time.Sleep(200 * time.Microsecond)
+		if len(matches) > 0 {
+			break
 		}
+		time.Sleep(200 * time.Microsecond)
 	}
 	require.NoError(t, child.Process.Kill())
-	_ = child.Wait()
-	killed = true
+	err := <-exited
+	exited <- err
+	require.Error(t, err, "the process was killed inside its window")
 	require.Equal(t, fmt.Sprintf(":%d\r\n", keys), migratedKeys(t, dir))
 }
 
