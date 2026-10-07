@@ -92,6 +92,7 @@ func launchTestServer(t *testing.T, startupTimeout time.Duration, env []string, 
 	if err := s.cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
+	diagAfterStart(t, port, s.cmd.Process.Pid)
 	t.Cleanup(func() {
 		if !s.stopped {
 			if t.Failed() {
