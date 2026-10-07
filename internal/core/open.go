@@ -12,7 +12,8 @@ import (
 //
 // Open is NewEngine, then the log's startup (StartAOF), then replication's
 // start (InitReplication): what the server's startup has always run, in the
-// order it runs it. cmd/keel runs the same three itself, because its loop
+// order it runs it. It then starts the engine's driver, its maintenance
+// goroutine (driver.go). cmd/keel runs the same three itself, because its loop
 // drives the engine and its startup logs a warning between the first two;
 // see "Phase 3: the instance contract" in docs/embedding-plan.md.
 
@@ -21,9 +22,13 @@ import (
 var ErrClosed = errors.New("instance is closed")
 
 // Open returns an engine held to o, with its log replayed and open if
-// o.AppendOnly, and its replication started. Before it reads the log, it takes
-// the lock beside it (loglock.go), which keeps a second instance off the log
-// until Close; the server, which starts its log without Open, takes none.
+// o.AppendOnly, its replication started, and its maintenance goroutine
+// running: from then on whoever touches the engine holds its lock (Lock), as
+// the goroutine does for each cycle. Before it reads the log, it takes the
+// lock beside it (loglock.go), which keeps a second instance off the log until
+// Close; the server, which starts its log without Open, takes none. Open
+// refuses the options only the server's loop can drive: AsyncAppend,
+// ReplicaOf and ReplicationFeed.
 //
 // ctx bounds the startup alone, and the engine does not keep it. Cancelled
 // while the log is replayed, Open stops, returns an error that wraps ctx's,
@@ -36,6 +41,12 @@ var ErrClosed = errors.New("instance is closed")
 func Open(ctx context.Context, o Options) (*Engine, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	switch {
+	case o.AsyncAppend:
+		return nil, errOpenAsyncAppend
+	case o.ReplicaOf != "" || o.ReplicationFeed:
+		return nil, errOpenReplication
 	}
 	e, err := NewEngine(o)
 	if err != nil {
@@ -52,16 +63,18 @@ func Open(ctx context.Context, o Options) (*Engine, error) {
 		_ = e.Close()
 		return nil, err
 	}
+	e.startDriver()
 	return e, nil
 }
 
-// Close ends e: it closes e's log, writing and syncing whatever is buffered
+// Close ends e. It marks e closed, stops e's maintenance goroutine and waits
+// for it, then closes e's log, writing and syncing whatever is buffered
 // whatever the fsync policy, so that when it returns nil every write e has
-// run is on disk, and then releases the lock beside the log. Closing a closed
+// run is on disk, and last releases the lock beside the log. Closing a closed
 // engine returns ErrClosed, as closing a closed file does.
 //
-// It takes e's lock, so whatever drives e has to have stopped, or let go of
-// it: the server calls it once its loop has returned. Close does not stop a
+// It takes e's lock, so whatever else drives e has to have stopped, or let go
+// of it: the server calls it once its loop has returned. Close does not stop a
 // caller that goes on running EvalAndResponse itself, which is the primitive a
 // driver runs under e's lock and checks nothing on a command's path: a driver
 // stops before it closes, as the server's loop does, and the calls embedded
@@ -73,6 +86,11 @@ func (e *Engine) Close() error {
 		return ErrClosed
 	}
 	e.closed = true
+	e.mu.Unlock()
+	// Without the lock, which the goroutine may be waiting for to run its
+	// last cycle; it never runs another once it has returned.
+	e.stopDriver()
+	e.mu.Lock()
 	err := e.CloseAOF()
 	// Last, so that no other instance can open the log while this one may
 	// still write to it.
