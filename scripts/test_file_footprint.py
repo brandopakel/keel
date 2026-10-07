@@ -106,6 +106,28 @@ class FootprintTests(unittest.TestCase):
             self.assertEqual(record['sampling_errors'], [])
             self.assertIn('TestHidden', [t['name'] for t in record['tests']])
 
+    def test_records_each_packages_time_and_passes_output_through(self):
+        # go test's package lines, verbatim in form, among other output.
+        code = ("import sys; print('=== RUN   TestX'); "
+                "print('ok  \\tgithub.com/brandopakel/keel/internal/core\\t12.345s'); "
+                "print('FAIL\\tgithub.com/brandopakel/keel/cmd/keel\\t3.5s'); "
+                "print('ok  \\tgithub.com/brandopakel/keel/internal/config\\t(cached)'); "
+                "print('?   \\tgithub.com/brandopakel/keel/internal/constant\\t[no test files]'); "
+                "print('to stderr', file=sys.stderr)")
+        with tempfile.TemporaryDirectory() as temp:
+            out = Path(temp)/'footprint'
+            result = subprocess.run([sys.executable, str(SCRIPT), '--out', str(out), '--interval', '.05',
+                                     '--', sys.executable, '-c', code], text=True, capture_output=True, timeout=20)
+            self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+            self.assertTrue(result.stdout.startswith('=== RUN   TestX\nok  \tgithub.com/brandopakel/keel/internal/core'),
+                            result.stdout)
+            self.assertIn('to stderr', result.stderr)
+            record = json.loads((out/'test-file-footprint.json').read_text())
+            self.assertEqual(record['packages'], [
+                {'package': 'github.com/brandopakel/keel/cmd/keel', 'result': 'FAIL', 'seconds': 3.5},
+                {'package': 'github.com/brandopakel/keel/internal/core', 'result': 'ok', 'seconds': 12.345},
+            ])
+
     def test_terminated_record_stops_the_command_group(self):
         with tempfile.TemporaryDirectory() as temp:
             out, pid = Path(temp)/'footprint', Path(temp)/'grandchild.pid'
