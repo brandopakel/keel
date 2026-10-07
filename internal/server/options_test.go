@@ -15,6 +15,6 @@ func newTestEngine(t *testing.T, o core.Options) *core.Engine {
 	t.TempDir()
 	e, err := core.NewEngine(o)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = e.CloseAOF() })
+	t.Cleanup(func() { _ = e.Close() })
 	return e
 }

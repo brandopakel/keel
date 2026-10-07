@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -114,6 +115,38 @@ func launchTestServer(t *testing.T, startupTimeout time.Duration, env []string, 
 	}
 	t.Fatalf("server did not answer within %s (elapsed %s): %v", startupTimeout, time.Since(started), last)
 	return nil
+}
+
+// refusedTestServer runs a server that must refuse to start, as a process of
+// its own on a port of its own, and returns what it printed. It fails the test
+// if the server answers, or does not exit with status 1 within a few seconds.
+func refusedTestServer(t *testing.T, args ...string) string {
+	t.Helper()
+	port := freePort(t)
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	argv := append([]string{"-test.run=^TestServerProcess$", "--", "-host", "127.0.0.1", "-port", strconv.Itoa(port)}, args...)
+	cmd := exec.Command(os.Args[0], argv...)
+	cmd.Env = append(os.Environ(), "KEEL_TEST_SERVER=1", "KEEL_TEST_PASSWORD=integration-secret")
+	var log bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &log, &log
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		var exit *exec.ExitError
+		if !errors.As(err, &exit) || exit.ExitCode() != 1 {
+			t.Fatalf("a refused start should exit with status 1, not %v:\n%s", err, log.String())
+		}
+	case <-time.After(5 * time.Second):
+		answered := answersPing(addr, time.Now().Add(time.Second)) == nil
+		_ = cmd.Process.Kill()
+		<-done
+		t.Fatalf("the server started (answering: %t) where it should have refused:\n%s", answered, log.String())
+	}
+	return log.String()
 }
 
 // answersPing reports whether the server at addr answers a PING on a new
