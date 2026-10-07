@@ -1,25 +1,34 @@
 package core
 
 import (
-	"github.com/stretchr/testify/require"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
+// TestINFOClientBuffersHasExplicitScopeAndStableValues: INFO reports the
+// connections of the transport driving its engine, through the hook that
+// transport installed on that engine, in the fields and order it always has;
+// an engine with no hook, another engine among them, reports none.
 func TestINFOClientBuffersHasExplicitScopeAndStableValues(t *testing.T) {
-	// Not parallel: it replaces ClientBuffers, the package's INFO hook,
-	// which every engine's INFO reads.
+	t.Parallel()
 	e := newTestEngine(t, Options{})
-	old := ClientBuffers
-	t.Cleanup(func() { ClientBuffers = old })
-	ClientBuffers = nil
+	other := newTestEngine(t, Options{})
 	require.NotContains(t, string(e.cmdINFO([]string{"clients"})), "connected_clients")
-	ClientBuffers = func() ClientBufferStats {
-		return ClientBufferStats{Connected: 3, InputBytes: 10, ReplyBytes: 20, TotalBytes: 30}
-	}
-	got := string(e.cmdINFO([]string{"clients"}))
-	for _, line := range []string{"connected_clients:3\r\n", "retained_input_bytes:10\r\n", "retained_reply_bytes:20\r\n", "retained_client_bytes:30\r\n"} {
-		require.Contains(t, got, line)
-	}
-	require.False(t, strings.Contains(string(e.cmdINFO([]string{"memory"})), "connected_clients"))
+	e.SetClientBuffers(func() ClientBufferStats {
+		return ClientBufferStats{Connected: 3, InputBytes: 10, ReplyBytes: 20, TotalBytes: 30,
+			RequestAllocationPeak: 40, RequestAllocationRefusals: 5, ClosedSlow: 6, ClosedUnanswered: 7,
+			ClosedUnread: 8, RunsUnreplied: 9, ConnectionsReceived: 11}
+	})
+	assert.Contains(t, string(e.cmdINFO([]string{"clients"})), "# Clients\r\nconnected_clients:3\r\n"+
+		"retained_input_bytes:10\r\nretained_reply_bytes:20\r\nretained_client_bytes:30\r\n"+
+		"request_allocation_peak_bytes:40\r\nrequest_allocation_refusals:5\r\n"+
+		"clients_closed_slow:6\r\nclients_closed_unanswered:7\r\nclients_closed_unread:8\r\nclients_closed_unreplied:9\r\n\r\n")
+	assert.Contains(t, string(e.cmdINFO([]string{"stats"})), "# Stats\r\nevicted_keys:0\r\nexpired_keys:0\r\ntotal_connections_received:11\r\n\r\n")
+	assert.NotContains(t, string(e.cmdINFO([]string{"memory"})), "connected_clients")
+	assert.NotContains(t, string(other.cmdINFO([]string{"clients"})), "connected_clients", "the hook is e's alone")
+	assert.NotContains(t, string(other.cmdINFO([]string{"stats"})), "total_connections_received")
+	e.SetClientBuffers(nil)
+	assert.NotContains(t, string(e.cmdINFO(nil)), "connected_clients")
 }

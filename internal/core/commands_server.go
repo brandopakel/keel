@@ -116,9 +116,11 @@ type ClientBufferStats struct {
 	ConnectionsReceived uint64
 }
 
-// ClientBuffers is installed before accepting event-loop clients and removed
-// after they close. Core-only and alternate transports leave it nil.
-var ClientBuffers func() ClientBufferStats
+// SetClientBuffers installs on e the hook INFO reads the connections of the
+// transport driving e through, or removes it when f is nil. The event loop
+// installs it before accepting clients and removes it after they close;
+// core-only and alternate transports install none.
+func (e *Engine) SetClientBuffers(f func() ClientBufferStats) { e.clientBuffers = f }
 
 // RedisCompatibleVersion is the Redis release whose command forms this server's
 // subset follows - EXPIRE NX/XX/GT/LT, SET GET/EXAT/PXAT, LCS - and the version
@@ -149,8 +151,8 @@ func (e *Engine) cmdINFO(args []string) []byte {
 
 	var b strings.Builder
 	want := func(name string) bool { return every || sections[name] }
-	if want("clients") && ClientBuffers != nil {
-		stats := ClientBuffers()
+	if want("clients") && e.clientBuffers != nil {
+		stats := e.clientBuffers()
 		fmt.Fprintf(&b, "# Clients\r\nconnected_clients:%d\r\nretained_input_bytes:%d\r\nretained_reply_bytes:%d\r\nretained_client_bytes:%d\r\n", stats.Connected, stats.InputBytes, stats.ReplyBytes, stats.TotalBytes)
 		fmt.Fprintf(&b, "request_allocation_peak_bytes:%d\r\nrequest_allocation_refusals:%d\r\n", stats.RequestAllocationPeak, stats.RequestAllocationRefusals)
 		fmt.Fprintf(&b, "clients_closed_slow:%d\r\nclients_closed_unanswered:%d\r\nclients_closed_unread:%d\r\nclients_closed_unreplied:%d\r\n\r\n",
@@ -204,8 +206,8 @@ func (e *Engine) cmdINFO(args []string) []byte {
 	if want("stats") {
 		fmt.Fprintf(&b, "# Stats\r\nevicted_keys:%d\r\nexpired_keys:%d\r\n",
 			e.space.Evicted(), e.ExpiredKeys())
-		if ClientBuffers != nil {
-			fmt.Fprintf(&b, "total_connections_received:%d\r\n", ClientBuffers().ConnectionsReceived)
+		if e.clientBuffers != nil {
+			fmt.Fprintf(&b, "total_connections_received:%d\r\n", e.clientBuffers().ConnectionsReceived)
 		}
 		b.WriteString("\r\n")
 	}
