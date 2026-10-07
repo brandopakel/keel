@@ -232,6 +232,37 @@ func (e *Engine) OpenAOF(path string) error {
 	return nil
 }
 
+// RenameAOF gives e's open log the name path, in the same directory, and
+// syncs the directory, so that the new name survives a crash. A log written
+// under a temporary name is published this way only once it holds what it
+// must: the server's migration of a legacy log writes the replayed keyspace
+// into a log under a temporary name and then renames it onto the name it is
+// kept under, so that a crash before then leaves no log under that name, and
+// the next start replays the legacy log again.
+//
+// The descriptor stays open across the rename, and everything e writes after
+// it, a rewrite included, goes to the log at its new name.
+func (e *Engine) RenameAOF(path string) error {
+	if e.aof.file == nil {
+		return fmt.Errorf("appendonly is off")
+	}
+	if e.rewrite.active {
+		return fmt.Errorf("a rewrite of %s is in progress", e.aof.path)
+	}
+	if err := os.Rename(e.aof.path, path); err != nil {
+		return err
+	}
+	e.aof.path = path
+	if err := syncDir(filepath.Dir(path)); err != nil {
+		// As after a rewrite's rename: the next sync of the log tries the
+		// directory again before it counts the log as durable.
+		e.unsyncedLogDir = filepath.Dir(path)
+		return err
+	}
+	e.unsyncedLogDir = "" // this sync covers an earlier rename's entry too
+	return nil
+}
+
 // CloseAOF flushes what is buffered and closes the file. A stop that skipped
 // this would lose up to a cycle's worth of acknowledged writes, which is the
 // one kind of loss a client has no way to detect.
