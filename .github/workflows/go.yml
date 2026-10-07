@@ -214,9 +214,10 @@ jobs:
   # The packages whose tests run in parallel, core's each on an engine of its
   # own and cmd/keel's each on a server process of its own
   # (docs/embedding-plan.md, step 2.6), three times over in a shuffled order
-  # under the race detector. A test that depends on another having run first,
-  # or that shares state with one running beside it, fails here rather than
-  # once in a while. A failing package's output starts with the seed it was
+  # under the race detector, and internal/server, whose tests stay serial for
+  # the server's package state but each run on an engine of their own (step
+  # 2.7). A test that depends on another having run first, or that shares
+  # state with one running beside it, fails here rather than once in a while. A failing package's output starts with the seed it was
   # shuffled with, and the step ends by naming each failing package with the
   # command that repeats its order. A job of its own, so the race job keeps
   # its time.
@@ -236,7 +237,7 @@ jobs:
       - name: Test the parallel packages three times, shuffled, with the race detector
         run: |
           set -o pipefail
-          if ! go test -race -count=3 -shuffle=on ./internal/core ./cmd/keel 2>&1 | tee "$RUNNER_TEMP/shuffled.txt"; then
+          if ! go test -race -count=3 -shuffle=on ./internal/core ./internal/server ./cmd/keel 2>&1 | tee "$RUNNER_TEMP/shuffled.txt"; then
             # A package's seed line comes before its FAIL line; a package that
             # failed to build, or to start, prints a FAIL line and no seed.
             awk '/^-test.shuffle /{seed=$2} /^FAIL[ \t]+github.com\//{print $2, seed; seed=""}' "$RUNNER_TEMP/shuffled.txt" > "$RUNNER_TEMP/failed.txt"

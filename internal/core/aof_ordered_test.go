@@ -144,7 +144,7 @@ func TestAppendAdmissionBoundsGrowthRepliesAndCanonicalExpiry(t *testing.T) {
 		require.True(t, ok, parts)
 		before := len(e.aof.buf)
 		var out replicationReply
-		require.NoError(t, e.evalAndResponse(cmd, &out))
+		require.NoError(t, e.EvalAndResponse(cmd, &out))
 		require.LessOrEqual(t, len(e.aof.buf)-before, logBound, parts)
 		require.LessOrEqual(t, len(out), replyBound, parts)
 	}
@@ -176,7 +176,7 @@ func admissionRun(t *testing.T, e *Engine, parts ...[]string) (logBound, replyBo
 	before := len(e.aof.buf)
 	for _, cmd := range commands {
 		var out replicationReply
-		require.NoError(t, e.evalAndResponse(cmd, &out))
+		require.NoError(t, e.EvalAndResponse(cmd, &out))
 		replyUsed += len(out)
 	}
 	return logBound, replyBound, len(e.aof.buf) - before, replyUsed, true

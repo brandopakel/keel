@@ -158,7 +158,7 @@ func TestCmdLCSGoesThroughEval(t *testing.T) {
 	setString(e, "key2", "mynewtext")
 
 	var out strings.Builder
-	err := e.evalAndResponse(&Command{Cmd: "LCS", Args: []string{"key1", "key2", "LEN"}}, &writerOnly{&out})
+	err := e.EvalAndResponse(&Command{Cmd: "LCS", Args: []string{"key1", "key2", "LEN"}}, &writerOnly{&out})
 	assert.Nil(t, err)
 	assert.Equal(t, ":6\r\n", out.String())
 }

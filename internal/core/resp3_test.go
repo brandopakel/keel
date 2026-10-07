@@ -362,7 +362,7 @@ func TestRESP3IsScopedToOneCommand(t *testing.T) {
 	rawReplyAsOn(t, e, true, "GET")
 	assert.Equal(t, "$-1\r\n", string(rawReplyAsOn(t, e, false, "GET", "missing")))
 	var w replyWriter
-	assert.Error(t, e.evalAndResponse(&Command{Cmd: "NOSUCH", RESP3: true}, &w))
+	assert.Error(t, e.EvalAndResponse(&Command{Cmd: "NOSUCH", RESP3: true}, &w))
 	assert.False(t, e.replyRESP3)
 	assert.Equal(t, "$-1\r\n", string(Encode(nil, false)), "Encode outside a command is RESP2")
 	assert.Equal(t, "_\r\n", string(EncodeAs(nil, false, true)))

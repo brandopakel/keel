@@ -28,7 +28,7 @@ func on(t *testing.T, e *Engine, name string, args ...string) interface{} {
 func rawOn(t *testing.T, e *Engine, name string, args ...string) []byte {
 	t.Helper()
 	var w replyWriter
-	require.NoError(t, e.evalAndResponse(&Command{Cmd: name, Args: args}, &w))
+	require.NoError(t, e.EvalAndResponse(&Command{Cmd: name, Args: args}, &w))
 	return w.b
 }
 
@@ -49,7 +49,7 @@ func TestEnginesShareNoKeys(t *testing.T) {
 		{"CMS.INITBYDIM", "cms", "10", "2"}, {"MORRIS.INITBYDIM", "m", "8", "2"},
 	} {
 		var w replyWriter
-		require.NoError(t, a.evalAndResponse(&Command{Cmd: cmd[0], Args: cmd[1:]}, &w))
+		require.NoError(t, a.EvalAndResponse(&Command{Cmd: cmd[0], Args: cmd[1:]}, &w))
 		require.NotEqual(t, byte('-'), w.b[0], "%v answered %q", cmd, w.b)
 	}
 	assert.Equal(t, int64(10), on(t, a, "DBSIZE"))
@@ -112,7 +112,7 @@ func TestEnginesShareNoCommandScope(t *testing.T) {
 
 	// A RESP3 command on a frames its own reply, and nothing of b's.
 	var w3 replyWriter
-	require.NoError(t, a.evalAndResponse(&Command{Cmd: "HGETALL", Args: []string{"h"}, RESP3: true}, &w3))
+	require.NoError(t, a.EvalAndResponse(&Command{Cmd: "HGETALL", Args: []string{"h"}, RESP3: true}, &w3))
 	assert.Equal(t, "%1\r\n$1\r\nf\r\n$1\r\nv\r\n", string(w3.b))
 	assert.Equal(t, "*2\r\n$1\r\nf\r\n$1\r\nv\r\n", string(rawOn(t, b, "HGETALL", "h")))
 	assert.False(t, a.replyRESP3, "a's command is over")
@@ -137,14 +137,14 @@ func TestEnginesShareNoCommandScope(t *testing.T) {
 		name string
 	}{{a, "geosearch"}, {b, "GeoSearch"}, {a, "GEOsearch"}} {
 		var w replyWriter
-		require.NoError(t, sent.e.evalAndResponse(&Command{Cmd: "GEOSEARCH", Name: sent.name, Args: geosearch}, &w))
+		require.NoError(t, sent.e.EvalAndResponse(&Command{Cmd: "GEOSEARCH", Name: sent.name, Args: geosearch}, &w))
 		assert.True(t, strings.HasSuffix(string(w.b), " for "+sent.name+"\r\n"), string(w.b))
 		assert.Equal(t, sent.name, sent.e.runningName)
 	}
 	assert.Equal(t, "GeoSearch", b.runningName, "a's commands leave b's name")
 
 	// Side by side, as two engines will run once each has a lock of its own
-	// (plan phase 3), each through evalAndResponse with a log of its own open:
+	// (plan phase 3), each through EvalAndResponse with a log of its own open:
 	// a in RESP3 with a budget too small for the large value, b in RESP2 with
 	// room for it, each counting its runs in a key only its own log records.
 	// The transport begins and ends each run on its budget, as here. Under
@@ -172,7 +172,7 @@ func TestEnginesShareNoCommandScope(t *testing.T) {
 			run := func(name string, args ...string) string {
 				var w replyWriter
 				cmd := &Command{Cmd: strings.ToUpper(name), Name: name, Args: args, RESP3: side.resp3}
-				assert.NoError(t, side.e.evalAndResponse(cmd, &w))
+				assert.NoError(t, side.e.EvalAndResponse(cmd, &w))
 				return string(w.b)
 			}
 			for i := range 200 {
@@ -244,11 +244,11 @@ func TestEnginesShareNoCommandScope(t *testing.T) {
 	for _, cmd := range queued {
 		var w replyWriter
 		var err error
-		tx, err = a.transact(tx, &Command{Cmd: cmd[0], Args: cmd[1:]}, &w, conn)
+		tx, err = a.Transact(tx, &Command{Cmd: cmd[0], Args: cmd[1:]}, &w, conn)
 		require.NoError(t, err)
 	}
 	var w replyWriter
-	_, err := a.transact(tx, &Command{Cmd: "EXEC"}, &w, conn)
+	_, err := a.Transact(tx, &Command{Cmd: "EXEC"}, &w, conn)
 	require.NoError(t, err)
 	replies, _ := Decode(w.b)
 	want := []interface{}{value}
@@ -269,7 +269,7 @@ func TestEnginesShareNoCommandScope(t *testing.T) {
 // through I/O of its own, and a log replays into the engine that reads it and
 // no other. One engine's records, transaction frames, reaped keys and failed
 // disk stay its own; and two engines with a log open on each run side by side
-// through evalAndResponse, one appending on the worker and one synchronously,
+// through EvalAndResponse, one appending on the worker and one synchronously,
 // each log replaying to its own engine's keyspace. A third engine, standing
 // by, is left as it was, and its rewrite is left alone by another engine's
 // writes. Under -race, log state the engines shared would fail here.
@@ -315,7 +315,7 @@ func TestEnginesShareNoLog(t *testing.T) {
 	for _, cmd := range [][]string{{"MULTI"}, {"SET", "t", "a"}, {"INCR", "n"}, {"EXEC"}} {
 		var w replyWriter
 		var err error
-		tx, err = a.transact(tx, &Command{Cmd: cmd[0], Args: cmd[1:]}, &w, nil)
+		tx, err = a.Transact(tx, &Command{Cmd: cmd[0], Args: cmd[1:]}, &w, nil)
 		require.NoError(t, err)
 	}
 	require.Equal(t, "OK", on(t, b, "SET", "brief", "b", "PX", "1"))
@@ -376,7 +376,7 @@ func TestEnginesShareNoLog(t *testing.T) {
 			}
 			do := func(parts ...string) bool {
 				var w replyWriter
-				err := e.evalAndResponse(&Command{Cmd: parts[0], Args: parts[1:]}, &w)
+				err := e.EvalAndResponse(&Command{Cmd: parts[0], Args: parts[1:]}, &w)
 				return assert.NoError(t, err) && assert.NotEqual(t, byte('-'), w.b[0], "%q: %q", parts, w.b)
 			}
 			for i := range 300 {
@@ -389,7 +389,7 @@ func TestEnginesShareNoLog(t *testing.T) {
 					for _, cmd := range [][]string{{"MULTI"}, {"SET", "tx", v}, {"LPOP", "l"}, {"EXEC"}} {
 						var w replyWriter
 						var err error
-						if tx, err = e.transact(tx, &Command{Cmd: cmd[0], Args: cmd[1:]}, &w, nil); !assert.NoError(t, err) {
+						if tx, err = e.Transact(tx, &Command{Cmd: cmd[0], Args: cmd[1:]}, &w, nil); !assert.NoError(t, err) {
 							return
 						}
 					}
@@ -566,7 +566,7 @@ func TestEnginesShareNoRewrite(t *testing.T) {
 	for _, cmd := range []string{"MULTI", "BGREWRITEAOF", "EXEC"} {
 		var w replyWriter
 		var err error
-		tx, err = a.transact(tx, &Command{Cmd: cmd}, &w, nil)
+		tx, err = a.Transact(tx, &Command{Cmd: cmd}, &w, nil)
 		require.NoError(t, err)
 	}
 	assert.Equal(t, "1", field(a, "aof_rewrite_scheduled"))
@@ -629,7 +629,7 @@ func TestEnginesShareNoRewrite(t *testing.T) {
 				for i := 0; side.RewriteActive(); i++ {
 					var w replyWriter
 					cmd := &Command{Cmd: "SET", Args: []string{"side:" + strconv.Itoa(i%20), strconv.Itoa(r)}}
-					if !assert.NoError(t, side.evalAndResponse(cmd, &w)) || !assert.NoError(t, side.FlushAOF()) ||
+					if !assert.NoError(t, side.EvalAndResponse(cmd, &w)) || !assert.NoError(t, side.FlushAOF()) ||
 						!assert.Less(t, i, 100000, "the rewrite did not end") {
 						return
 					}

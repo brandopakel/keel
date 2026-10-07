@@ -18,16 +18,19 @@ func init() { ResetStores() }
 // them. Called at startup, and by tests that need to begin from empty.
 func ResetStores() { defaultEngine.resetStores() }
 
-// newEngine returns an engine of its own, with empty stores in a space of its
-// own, held to o. It is for tests until callers open engines (plan phase 3),
-// so options it cannot be held to are a mistake in the test, and panic.
-func newEngine(o Options) *Engine {
+// NewEngine returns an engine with empty stores, in a space of its own, held
+// to o, or the error for options no engine can be held to.
+//
+// cmd/keel makes the server's engine with it and hands it to the server (plan
+// step 2.7). Phase 3's Open builds on it, adding the log's replay and a lock
+// on the log's path; the names a public package gives either are phase 5's.
+func NewEngine(o Options) (*Engine, error) {
 	e := engineIn(data_structure.NewSpace(o.limits()))
 	if err := e.configure(o); err != nil {
-		panic(err)
+		return nil, err
 	}
 	e.resetStores()
-	return e
+	return e, nil
 }
 
 // resetStores empties e: its space's registry, and every store, rebuilt and

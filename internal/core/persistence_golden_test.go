@@ -187,9 +187,9 @@ func (r *goldenRun) do(parts ...string) string {
 	var w replyWriter
 	var err error
 	if r.tx != nil || IsTransactionCommand(cmd.Cmd) {
-		r.tx, err = r.e.transact(r.tx, cmd, &w, nil)
+		r.tx, err = r.e.Transact(r.tx, cmd, &w, nil)
 	} else {
-		err = r.e.evalAndResponse(cmd, &w)
+		err = r.e.EvalAndResponse(cmd, &w)
 	}
 	require.NoError(r.t, err, "%.80q", parts)
 	r.cycle()

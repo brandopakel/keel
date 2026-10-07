@@ -7,14 +7,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// withEngineOptions changes the options of the engine the server drives, the
-// default engine, for the rest of t, and puts back the ones it found when t
-// ends.
-func withEngineOptions(t *testing.T, change func(*core.Options)) {
+// newTestEngine returns an engine of t's own, held to o, for the server code
+// a test drives to run on, as cmd/keel makes the server's. Its log is closed
+// when t ends, before t's temporary directories are removed.
+func newTestEngine(t *testing.T, o core.Options) *core.Engine {
 	t.Helper()
-	found := core.Configuration()
-	o := found
-	change(&o)
-	require.NoError(t, core.Configure(o))
-	t.Cleanup(func() { require.NoError(t, core.Configure(found)) })
+	t.TempDir()
+	e, err := core.NewEngine(o)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = e.CloseAOF() })
+	return e
 }

@@ -143,7 +143,7 @@ func (c *client) hello(args []string, w io.Writer) {
 	}
 	c.resp3 = resp3
 	role := "master"
-	if core.Configuration().ReplicaOf != "" {
+	if c.engine.Configuration().ReplicaOf != "" {
 		role = "replica"
 	}
 	w.Write(c.encode(core.ReplyMap{

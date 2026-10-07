@@ -10,6 +10,9 @@ import (
 // only. Each client has at most one held reply or deferred parsed run, bounding
 // queue entries by the connection limit; admission separately bounds bytes.
 type orderedAppend struct {
+	// engine is the engine the loop drives, whose log the queue orders
+	// replies behind.
+	engine        *core.Engine
 	held          []*client
 	deferred      []*client
 	drain         bool
@@ -21,10 +24,11 @@ func (q *orderedAppend) begin(pool *ioPool, mux io_multiplexing.IOMultiplexer) (
 	if time.Now().After(q.maintenanceAt) {
 		q.drain = true
 	}
-	if _, err := core.FlushAOFAsync(wake); err != nil {
+	e := q.engine
+	if _, err := e.FlushAOFAsync(wake); err != nil {
 		return nil, err
 	}
-	ready := core.AppendReadyOffset()
+	ready := e.AppendReadyOffset()
 	var writable []*client
 	kept := q.held[:0]
 	for _, c := range q.held {
@@ -41,13 +45,13 @@ func (q *orderedAppend) begin(pool *ioPool, mux io_multiplexing.IOMultiplexer) (
 	clear(q.held[len(kept):])
 	q.held = kept
 	flushClientReplies(pool, mux, writable)
-	if core.AppendPending() || core.AppendBufferedBytes() != 0 {
+	if e.AppendPending() || e.AppendBufferedBytes() != 0 {
 		return nil, nil
 	}
 	if time.Now().After(q.maintenanceAt) {
-		core.ExpireCycle()
+		e.ExpireCycle()
 		q.maintenanceAt = time.Now().Add(100 * time.Millisecond)
-		if _, err := core.FlushAOFAsync(wake); err != nil {
+		if _, err := e.FlushAOFAsync(wake); err != nil {
 			return nil, err
 		}
 	}
@@ -68,19 +72,20 @@ func (q *orderedAppend) admit(c *client, mux io_multiplexing.IOMultiplexer) bool
 	if len(c.cmds) == 0 {
 		return true
 	}
-	logBytes, replyBytes, bounded := core.AppendAdmission(c.cmds)
+	e := q.engine
+	logBytes, replyBytes, bounded := e.AppendAdmission(c.cmds)
 	// Three budgets, each of which can refuse on its own: the encoded log, the
 	// aggregate of everything retained, and the replies alone. The last is what
 	// stops a run being admitted whose replies would crowd out the requests
 	// that have to be read for the queue to drain at all.
-	fits := bounded && core.AppendHasRoom(logBytes) &&
-		retainedClientBytes+core.AppendRetainedBytes()+2*logBytes+3*replyBytes <= maxRetainedClientBytes &&
+	fits := bounded && e.AppendHasRoom(logBytes) &&
+		retainedClientBytes+e.AppendRetainedBytes()+2*logBytes+3*replyBytes <= maxRetainedClientBytes &&
 		retainedReplyBytes+3*replyBytes <= maxRetainedClassBytes
 	if !q.drain && !q.exclusive {
 		if fits {
 			return true
 		}
-		if !core.AppendPending() && core.AppendBufferedBytes() == 0 {
+		if !e.AppendPending() && e.AppendBufferedBytes() == 0 {
 			// Keep the previous barrier semantics for unmodelled/large runs.
 			// No subsequent run executes until this one drains.
 			q.exclusive = true
@@ -98,7 +103,7 @@ func (q *orderedAppend) admit(c *client, mux io_multiplexing.IOMultiplexer) bool
 }
 
 func (q *orderedAppend) gate(writable []*client, arena *replyArena, mux io_multiplexing.IOMultiplexer) []*client {
-	ready := core.AppendReadyOffset()
+	ready := q.engine.AppendReadyOffset()
 	live := writable[:0]
 	for _, c := range writable {
 		if c.appendOffset <= ready {

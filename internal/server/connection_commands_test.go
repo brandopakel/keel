@@ -26,11 +26,9 @@ func upper(s string) string {
 }
 
 // clientWithPassword is a connection accepted by a server whose RequirePass
-// is password, on an empty keyspace.
+// is password, on an engine of its own with an empty keyspace.
 func clientWithPassword(t *testing.T, password string) *client {
-	t.Cleanup(core.ResetStores)
-	core.ResetStores()
-	return &client{fd: -1, password: password}
+	return &client{fd: -1, password: password, engine: newTestEngine(t, core.Options{})}
 }
 
 // TestCommandsAreNamedAndCountedBeforeAuthentication, as Redis 8.10.1 answers
