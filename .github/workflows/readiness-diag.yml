@@ -29,14 +29,14 @@ jobs:
           set -uo pipefail
           uname -a
           mkdir -p dist
-          KEEL_READINESS_DIAG=1 KEEL_DIAG_SECONDS=60 go test ./cmd/keel -run '^(TestDiagBacklogOverflow|TestDiagInheritedProbe)$' -count=1 -v -timeout=10m > dist/experiments.log 2>&1
+          KEEL_READINESS_DIAG=1 KEEL_DIAG_SECONDS=120 go test ./cmd/keel -run '^(TestDiagBacklogOverflow|TestDiagInheritedProbe|TestDiagQueuedReset)$' -count=1 -v -timeout=10m > dist/experiments.log 2>&1
           echo "exit $?"
-          grep -h 'READINESSDIAG' dist/experiments.log | cut -c1-700 | head -80
+          grep -h 'READINESSDIAG' dist/experiments.log | cut -c1-700 | head -120
       - name: In situ, whole suite three times (as Native recovery runs it)
         shell: bash
         run: |
           set -uo pipefail
-          for i in 1 2 3; do
+          for i in 1; do
             go test -v -count=1 ./... > dist/suite-$i.log 2>&1
             echo "suite $i exit $?"
             grep -h 'READINESSDIAG\|^--- FAIL\|^FAIL\|connection refused\|connection reset' dist/suite-$i.log | cut -c1-700 | head -60
@@ -45,7 +45,7 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
-          go test -v -race -count=2 ./cmd/keel > dist/race.log 2>&1
+          go test -v -race -count=1 ./cmd/keel > dist/race.log 2>&1
           echo "race exit $?"
           grep -h 'READINESSDIAG\|^--- FAIL\|^FAIL\|connection refused\|connection reset' dist/race.log | cut -c1-700 | head -60
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

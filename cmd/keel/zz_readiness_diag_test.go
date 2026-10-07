@@ -23,6 +23,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -206,11 +207,56 @@ func TestDiagChildExit(t *testing.T) {
 	}
 }
 
+// diagChildHolders names this process's children that hold the socket with
+// this inode. It looks only at children, so that it is quick enough to
+// catch one between fork and exec.
+func diagChildHolders(ino uint64) string {
+	target := fmt.Sprintf("socket:[%d]", ino)
+	tasks, _ := filepath.Glob("/proc/self/task/*/children")
+	var out []string
+	for _, f := range tasks {
+		b, _ := os.ReadFile(f)
+		for _, pid := range strings.Fields(string(b)) {
+			fds, _ := filepath.Glob("/proc/" + pid + "/fd/*")
+			for _, fd := range fds {
+				if l, _ := os.Readlink(fd); l == target {
+					stat, _ := os.ReadFile("/proc/" + pid + "/stat")
+					st := string(stat)
+					if len(st) > 60 {
+						st = st[:60]
+					}
+					out = append(out, fmt.Sprintf("child pid=%s of %d (fd %s, %d fds open, stat %q)", pid, os.Getpid(), filepath.Base(fd), len(fds), st))
+					break
+				}
+			}
+		}
+	}
+	if len(out) == 0 {
+		return "no child holds it (now)"
+	}
+	return strings.Join(out, "; ")
+}
+
+func diagHasInode(port int, ino uint64) bool {
+	for _, i := range diagListeners(port) {
+		if i == ino {
+			return true
+		}
+	}
+	return false
+}
+
 // TestDiagInheritedProbe does what freePort and launchTestServer do -
 // listen on a port, close it, start a child process, dial the port - while
 // other goroutines start child processes the way parallel tests start their
-// servers. Nothing should be listening at that dial; it counts how often
-// something is, and on Linux names the holder of that listener.
+// servers. Three arms, in turn on each prober:
+//
+//   - immediate: dial right after Close;
+//   - harness: start a child (cmd.Start, as launchTestServer does), then dial;
+//   - lifetime (Linux): poll /proc/net/tcp for the closed probe's inode, and
+//     time how long it stays in LISTEN.
+//
+// Nothing should be listening at any of those dials.
 func TestDiagInheritedProbe(t *testing.T) {
 	if os.Getenv("KEEL_READINESS_DIAG") != "1" {
 		t.Skip("diagnostic")
@@ -230,9 +276,12 @@ func TestDiagInheritedProbe(t *testing.T) {
 		cmd.Env = append(os.Environ(), "KEEL_DIAG_CHILD=1")
 		return cmd
 	}
-	var spawned, probes, immediate, afterStart, refused, other atomic.Int64
+	var spawned atomic.Int64
 	var mu sync.Mutex
+	counts := map[string]int{}
 	var hits []string
+	var startDurations, lifetimes []time.Duration
+	count := func(k string) { mu.Lock(); counts[k]++; mu.Unlock() }
 	var wg sync.WaitGroup
 	for i := 0; i < spawners; i++ {
 		wg.Add(1)
@@ -251,7 +300,7 @@ func TestDiagInheritedProbe(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			span := int64(testPortCeiling - testPortFloor)
-			for time.Now().Before(stop) {
+			for n := i; time.Now().Before(stop); n++ {
 				port := testPortFloor + int((int64(os.Getpid())*7919+next.Add(1))%span)
 				l, err := net.Listen("tcp4", fmt.Sprintf("127.0.0.1:%d", port))
 				if err != nil {
@@ -261,46 +310,74 @@ func TestDiagInheritedProbe(t *testing.T) {
 				if runtime.GOOS == "linux" {
 					ino = diagInode(l)
 				}
-				l.Close()
-				probes.Add(1)
+				arm := []string{"immediate", "harness", "lifetime"}[n%3]
+				if arm == "lifetime" && runtime.GOOS != "linux" {
+					arm = "harness"
+				}
 				addr := fmt.Sprintf("127.0.0.1:%d", port)
-				record := func(when string, c net.Conn) {
+				record := func(when string, c net.Conn, extra string) {
 					holders := "n/a"
 					if runtime.GOOS == "linux" {
-						holders = diagHolders(ino)
-					} else if out, err := exec.Command("lsof", "-nP", fmt.Sprintf("-iTCP:%d", port), "-sTCP:LISTEN").CombinedOutput(); err == nil || len(out) > 0 {
-						holders = strings.TrimSpace(string(out))
+						holders = diagChildHolders(ino)
 					}
 					mu.Lock()
-					if len(hits) < 40 {
-						hits = append(hits, fmt.Sprintf("%s: port %d (probe inode %d, local %s) accepted after Close; holders: %s", when, port, ino, c.LocalAddr(), holders))
+					if len(hits) < 60 {
+						hits = append(hits, fmt.Sprintf("%s: port %d (probe inode %d, local %s) accepted after Close%s; holders: %s", when, port, ino, c.LocalAddr(), extra, holders))
 					}
 					mu.Unlock()
 				}
-				// The dial right after Close.
-				if c, err := net.DialTimeout("tcp", addr, 50*time.Millisecond); err == nil {
-					immediate.Add(1)
-					record("immediately", c)
-					c.Close()
-					continue
+				switch arm {
+				case "immediate":
+					l.Close()
+					count("immediate_probes")
+					if c, err := net.DialTimeout("tcp", addr, 50*time.Millisecond); err == nil {
+						count("immediate_accepted")
+						record("immediate", c, "")
+						c.Close()
+					}
+				case "harness":
+					l.Close()
+					count("harness_probes")
+					cmd := child()
+					began := time.Now()
+					if err := cmd.Start(); err != nil {
+						continue
+					}
+					took := time.Since(began)
+					mu.Lock()
+					startDurations = append(startDurations, took)
+					mu.Unlock()
+					c, err := net.DialTimeout("tcp", addr, 50*time.Millisecond)
+					switch {
+					case err == nil:
+						count("harness_accepted")
+						record("harness", c, fmt.Sprintf(" and a child start of %s", took))
+						c.Close()
+					case errors.Is(err, syscall.ECONNREFUSED):
+						count("harness_refused")
+					default:
+						count("harness_other")
+					}
+					cmd.Wait()
+				case "lifetime":
+					l.Close()
+					closed := time.Now()
+					count("lifetime_probes")
+					if !diagHasInode(port, ino) {
+						continue
+					}
+					count("lifetime_listening_after_close")
+					holders := diagChildHolders(ino)
+					for diagHasInode(port, ino) && time.Since(closed) < 500*time.Millisecond {
+					}
+					life := time.Since(closed)
+					mu.Lock()
+					lifetimes = append(lifetimes, life)
+					if len(hits) < 60 {
+						hits = append(hits, fmt.Sprintf("lifetime: port %d's probe (inode %d) stayed in LISTEN %s after Close; holders at first sight: %s", port, ino, life, holders))
+					}
+					mu.Unlock()
 				}
-				// The harness's order: start a process, then dial.
-				cmd := child()
-				if err := cmd.Start(); err != nil {
-					continue
-				}
-				c, err := net.DialTimeout("tcp", addr, 50*time.Millisecond)
-				switch {
-				case err == nil:
-					afterStart.Add(1)
-					record("after a child started", c)
-					c.Close()
-				case errors.Is(err, syscall.ECONNREFUSED):
-					refused.Add(1)
-				default:
-					other.Add(1)
-				}
-				cmd.Wait()
 			}
 		}(i)
 	}
@@ -308,8 +385,27 @@ func TestDiagInheritedProbe(t *testing.T) {
 	for _, h := range hits {
 		t.Logf("READINESSDIAG inherited-probe hit: %s", h)
 	}
-	t.Logf("READINESSDIAG inherited-probe summary goos=%s goarch=%s cpus=%d seconds=%d spawners=%d probers=%d children_started=%d probes=%d accepted_immediately_after_close=%d accepted_after_child_start=%d refused_after_child_start=%d other=%d",
-		runtime.GOOS, runtime.GOARCH, runtime.NumCPU(), seconds, spawners, probers, spawned.Load(), probes.Load(), immediate.Load(), afterStart.Load(), refused.Load(), other.Load())
+	pct := func(ds []time.Duration) string {
+		if len(ds) == 0 {
+			return "none"
+		}
+		sort.Slice(ds, func(a, b int) bool { return ds[a] < ds[b] })
+		at := func(q float64) time.Duration { return ds[int(q*float64(len(ds)-1))] }
+		return fmt.Sprintf("n=%d min=%s p50=%s p90=%s p99=%s max=%s", len(ds), ds[0], at(0.5), at(0.9), at(0.99), ds[len(ds)-1])
+	}
+	keys := make([]string, 0, len(counts))
+	for k := range counts {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var parts []string
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%d", k, counts[k]))
+	}
+	t.Logf("READINESSDIAG inherited-probe summary goos=%s goarch=%s cpus=%d seconds=%d spawners=%d probers=%d children_started=%d %s",
+		runtime.GOOS, runtime.GOARCH, runtime.NumCPU(), seconds, spawners, probers, spawned.Load(), strings.Join(parts, " "))
+	t.Logf("READINESSDIAG inherited-probe child start (cmd.Start) durations: %s", pct(startDurations))
+	t.Logf("READINESSDIAG inherited-probe LISTEN lifetime after Close, when still listening: %s", pct(lifetimes))
 }
 
 // TestDiagBacklogOverflow listens with a small backlog, never accepts, and
@@ -387,4 +483,39 @@ func listenRaw(port, backlog int) (int, error) {
 		return -1, err
 	}
 	return fd, nil
+}
+
+// TestDiagQueuedReset: what a client sees when the listener its connection
+// is queued on (connected, never accepted) closes - as a forked child's copy
+// of freePort's probe does when the child execs.
+func TestDiagQueuedReset(t *testing.T) {
+	if os.Getenv("KEEL_READINESS_DIAG") != "1" {
+		t.Skip("diagnostic")
+	}
+	l, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := l.Addr().String()
+	readiness, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readiness.Close()
+	plain, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	returned, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, werr := returned.Write([]byte(request("HELLO", "3")))
+	l.Close()
+	returned.SetDeadline(time.Now().Add(2 * time.Second))
+	_, rerr := returned.Read(make([]byte, 64))
+	plain.SetDeadline(time.Now().Add(2 * time.Second))
+	_, perr := plain.Read(make([]byte, 64))
+	_, derr := net.DialTimeout("tcp", addr, time.Second)
+	t.Logf("READINESSDIAG queued-reset goos=%s: write before close: %v; read on the written connection after the listener closed: %v; read on the idle one: %v; next dial: %v", runtime.GOOS, werr, rerr, perr, derr)
 }
