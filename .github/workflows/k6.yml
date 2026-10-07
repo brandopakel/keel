@@ -10,8 +10,14 @@
 # Results stream to the Grafana Cloud stack's Prometheus (k6's remote-write
 # output, the metrics:write token Live telemetry uses), where k6's metrics
 # carry the scenario, the server and the run. When the K6_CLOUD_TOKEN secret
-# is set, with the K6_CLOUD_PROJECT_ID and K6_CLOUD_STACK_ID variables, they
-# also stream to Grafana Cloud k6, the stack's k6 data source.
+# is set, with the K6_CLOUD_PROJECT_ID and K6_CLOUD_STACK_ID variables, the
+# Monday night run and dispatched runs also stream to Grafana Cloud k6, the
+# stack's k6 data source. Pull requests and the other nights do not: Grafana
+# Cloud k6 bills each streamed test at least 1 virtual-user hour (VUh), as
+# (most VUs x minutes) / 60 x 0.75 for local execution. One server's test here
+# is at most 74 VUs x 4 minutes, 3.7 VUh, so a Monday run costs at most 7.4
+# VUh, about 37 VUh a month against the free plan's allowance. The budget is
+# $0, so nothing may rely on overage.
 #
 # It is not a speed comparison: both servers share one unpinned runner. A
 # failed threshold fails the job, on either server: on Keel it is a finding,
@@ -97,7 +103,12 @@ jobs:
           K6_CLOUD_STACK_ID: ${{ vars.K6_CLOUD_STACK_ID }}
         run: |
           outputs=(-o experimental-prometheus-rw)
-          if [ -n "$K6_CLOUD_TOKEN" ]; then outputs+=(-o cloud); fi
+          # Grafana Cloud k6 bills in virtual-user hours: only the weekly
+          # (Monday) scheduled run and dispatched runs stream there.
+          if [ -n "$K6_CLOUD_TOKEN" ] && { [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] ||
+              { [ "$GITHUB_EVENT_NAME" = schedule ] && [ "$(date -u +%u)" = 1 ]; }; }; then
+            outputs+=(-o cloud)
+          fi
           status=0
           for server in keel:6391 redis:6392; do
             name=${server%%:*}; port=${server##*:}
