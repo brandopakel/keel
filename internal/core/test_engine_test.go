@@ -22,7 +22,8 @@ func newEngine(o Options) *Engine {
 
 // newTestEngine returns an engine of t's own, held to o, with empty stores in
 // a space of its own, and closes it when t ends: its log, with the append
-// worker, the sync and any rewrite in progress, and its replication snapshot.
+// worker, the sync and any rewrite in progress, its replication snapshot, and
+// the lock beside its log if it took one.
 //
 // It takes t's temporary directory before it registers that cleanup, because
 // cleanups run last first: the directory a test keeps the engine's log, term
@@ -34,8 +35,9 @@ func newTestEngine(t testing.TB, o Options) *Engine {
 	e := newEngine(o)
 	t.Cleanup(func() {
 		// A test that failed the engine's disk on purpose has checked what
-		// it wanted; closing is for the descriptors and the workers.
-		_ = e.CloseAOF()
+		// it wanted; closing is for the descriptors, the workers and the
+		// lock beside the log.
+		_ = e.Close()
 	})
 	return e
 }
