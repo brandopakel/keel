@@ -1,37 +1,69 @@
 package core
 
-import "testing"
+import (
+	"io"
+	"testing"
+)
 
-// The settings BenchmarkCommandPathWithLog and BenchmarkCommandPathWithReplica
-// run under, set in one place.
+// The engine the command-path benchmarks run on, and the settings
+// BenchmarkCommandPathWithLog and BenchmarkCommandPathWithReplica run under,
+// in one place.
 //
-// command-path.yml builds those benchmarks' files into a baseline that
-// predates them, such as 65ebdbc for the cumulative comparison, which has
-// neither the engine options these set nor this file. So the benchmarks set
-// nothing themselves: they call these, and the job gives such a baseline
+// command-path.yml builds those two benchmarks' files into a baseline that
+// predates them, such as 65ebdbc for the cumulative comparison, which has no
+// Engine, no engine options and not this file. So the two files name no
+// engine API: each family takes its engine from logBenchmarkEngine or
+// replicaBenchmarkEngine, a benchEngine, and calls on it only EvalAndResponse
+// below and Engine's OpenAOF, FlushAOF, CloseAOF, AOFStats and
+// InitReplication, and mustSucceedOn. The job gives such a baseline
 // testdata/command-path/command_path_settings_test.go in place of this file,
-// which sets the same through the config variables that baseline has. A
-// change to one is a change to both.
+// whose benchEngine is that baseline's one keyspace: making one sets the same
+// settings through config and empties the stores, and each of its methods
+// calls the baseline's package function of the same name. A change to one is
+// a change to both.
 
-// logBenchmarkSettings holds the default engine to what the log-on benchmark
-// measures: the log under everysec, the server's default, with automatic
-// rewrites off, and the server's key cap, which every baseline holds its
-// engine to. What it found is put back when b ends.
-func logBenchmarkSettings(b *testing.B) {
-	withOptions(b, func(o *Options) {
-		o.Fsync, o.AutoRewritePercentage, o.MaxKeys = FsyncEverySec, Off, serverKeyCap
-	})
+// benchEngine is the engine a command-path benchmark runs on. Its method is
+// inlined, so a timed loop calls the engine's dispatch directly.
+type benchEngine struct{ *Engine }
+
+// EvalAndResponse runs cmd on the engine, as the package function of that
+// name runs it on a baseline's one keyspace.
+func (e benchEngine) EvalAndResponse(cmd *Command, w io.ReadWriter) error {
+	return e.evalAndResponse(cmd, w)
 }
 
-// replicaBenchmarkSettings is logBenchmarkSettings with the engine a protocol
-// 2 primary that feeds a stream. When b ends, the role it found is put back
-// and the replication state started again for it.
-func replicaBenchmarkSettings(b *testing.B) {
-	b.Cleanup(func() {
-		if err := InitReplication(); err != nil {
-			b.Error(err)
-		}
-	})
-	logBenchmarkSettings(b)
-	withOptions(b, func(o *Options) { o.ReplicationFeed, o.ReplicationProtocol, o.ReplicaOf = true, 2, "" })
+// logBenchmarkEngine returns an engine of b's own held to what the log-on
+// benchmark measures: the log under everysec, the server's default, with
+// automatic rewrites off, and the server's former key cap, which every
+// baseline from before step 2.5 holds its engine to.
+func logBenchmarkEngine(b *testing.B) benchEngine {
+	return benchEngine{newTestEngine(b, logBenchmarkOptions())}
+}
+
+// replicaBenchmarkEngine is logBenchmarkEngine's, as a protocol 2 primary
+// that feeds a stream.
+func replicaBenchmarkEngine(b *testing.B) benchEngine {
+	o := logBenchmarkOptions()
+	o.ReplicationFeed, o.ReplicationProtocol = true, 2
+	return benchEngine{newTestEngine(b, o)}
+}
+
+// logBenchmarkOptions are the options the log-on benchmark's engine is held
+// to.
+func logBenchmarkOptions() Options {
+	return Options{Fsync: FsyncEverySec, AutoRewritePercentage: Off, MaxKeys: serverKeyCap}
+}
+
+// mustSucceedOn runs cmd once on e and fails the benchmark if it errors or
+// answers nothing, so a family whose command was removed or broke cannot
+// report the cost of an error reply, and setup that did nothing cannot pass.
+func mustSucceedOn(b *testing.B, e benchEngine, cmd *Command) {
+	b.Helper()
+	var w replyWriter
+	if err := e.EvalAndResponse(cmd, &w); err != nil {
+		b.Fatalf("%s: %v", cmd.Cmd, err)
+	}
+	if len(w.b) == 0 || w.b[0] == '-' {
+		b.Fatalf("%s %v answered %q", cmd.Cmd, cmd.Args, w.b)
+	}
 }

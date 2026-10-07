@@ -12,19 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// withOptions changes the default engine's options for the rest of tb, and
-// puts back the ones it found when tb ends. A test that changes them more than
-// once calls it each time; the cleanups run last first, so the options the
-// test began with are the ones left.
-func withOptions(tb testing.TB, change func(*Options)) {
-	tb.Helper()
-	found := Configuration()
-	reconfigure(tb, defaultEngine, change)
-	tb.Cleanup(func() { require.NoError(tb, Configure(found)) })
-}
-
-// withOptionsOn is withOptions on e, for a helper that may be handed the
-// default engine: the options it found are put back when tb ends.
+// withOptionsOn changes e's options for the rest of tb, and puts back the
+// ones it found when tb ends. A test that changes them more than once calls it
+// each time; the cleanups run last first, so the options the test began with
+// are the ones left.
 func withOptionsOn(tb testing.TB, e *Engine, change func(*Options)) {
 	tb.Helper()
 	found := e.options
@@ -90,7 +81,9 @@ func TestOptionsRefused(t *testing.T) {
 // the default engine, and it reaches no other.
 func TestConfigureHoldsTheDefaultEngine(t *testing.T) {
 	own := newEngine(Options{})
-	withOptions(t, func(o *Options) { o.MaxMemory, o.MaxKeys, o.Eviction = 4096, 5, EvictLFU })
+	found := Configuration()
+	t.Cleanup(func() { require.NoError(t, Configure(found)) })
+	require.NoError(t, Configure(Options{MaxMemory: 4096, MaxKeys: 5, Eviction: EvictLFU}))
 	assert.Equal(t, Options{MaxMemory: 4096, MaxKeys: 5, Eviction: EvictLFU}, Configuration())
 	assert.Equal(t, 5, data_structure.DefaultSpace.MaxKeys())
 	assert.Equal(t, uint64(4096), data_structure.DefaultSpace.MaxMemory())

@@ -26,20 +26,6 @@ import (
 // The package's own functions over the default engine are not listed either:
 // they are the default engine, and part 4 deletes them.
 var defaultEngineUsers = map[string]string{
-	// Part 2: the benchmarks, and the helpers only they use.
-	"internal/core: BenchmarkCommandPath":              benchmarksPart,
-	"internal/core: BenchmarkCommandPathUnderEviction": benchmarksPart,
-	"internal/core: BenchmarkCommandPathWithLog":       benchmarksPart,
-	"internal/core: BenchmarkCommandPathWithReplica":   benchmarksPart,
-	"internal/core: BenchmarkRewrite":                  benchmarksPart,
-	"internal/core: BenchmarkSketchRewriteStart":       benchmarksPart,
-	"internal/core: mustSucceed":                       benchmarksPart,
-	"internal/core: run2":                              benchmarksPart,
-	"internal/core: replicaBenchmarkSettings":          benchmarksPart,
-	"internal/core: replicaPull":                       benchmarksPart,
-	"internal/core: replicationPosition":               benchmarksPart,
-	"internal/core: withOptions":                       benchmarksPart,
-
 	// Part 3: the server, cmd/keel, and the test of Configure, which
 	// NewEngine replaces.
 	"internal/core: TestConfigureHoldsTheDefaultEngine": serverPart,
@@ -72,11 +58,8 @@ var defaultEngineUsers = map[string]string{
 	"cmd/keel: TestFlagsReachTheEngine":               serverPart,
 }
 
-// The parts of step 2.7 that move what still uses the default engine.
-const (
-	benchmarksPart = "part 2: the benchmarks run on engines of their own"
-	serverPart     = "part 3: cmd/keel makes the server's engine and hands it to the server"
-)
+// The part of step 2.7 that moves what still uses the default engine.
+const serverPart = "part 3: cmd/keel makes the server's engine and hands it to the server"
 
 // TestDefaultEngineUsersAreCensused finds every direct use of the default
 // engine outside the package's own functions over it, and fails on one that
