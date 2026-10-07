@@ -59,6 +59,7 @@ var packageVars = map[string]string{
 	"errNoReply": sentinel, "errNotInTransaction": sentinel, "ErrTransactionReplyTooLarge": sentinel,
 	"errTransactionTooLarge": sentinel, "errWatchInMulti": sentinel,
 	"ErrClosed": sentinel, "ErrLocked": sentinel, "errLockUnsupported": sentinel,
+	"errOpenAsyncAppend": sentinel, "errOpenReplication": sentinel,
 }
 
 // TestPackageStateIsCensused reads the package's own declarations rather than
