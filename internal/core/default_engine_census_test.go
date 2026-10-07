@@ -85,9 +85,11 @@ const (
 // forgot to remove.
 //
 // It reads syntax, not types, as the parallel census does: in this package's
-// tests a package function is one of its names used bare, and elsewhere one
-// selected from the package (core.OpenAOF). A method of the same name, used
-// through a value (e.OpenAOF), is the engine's own and is not a use.
+// own tests a package function is one of its names used bare, and elsewhere,
+// an external test package (core_test) included, one selected from the
+// package under whatever name the file imports it as (core.OpenAOF). A method
+// of the same name, used through a value (e.OpenAOF), is the engine's own and
+// is not a use.
 func TestDefaultEngineUsersAreCensused(t *testing.T) {
 	t.Parallel()
 	engineFunctions := sharedFunctions(t, ".", "defaultEngine")
@@ -103,20 +105,23 @@ func TestDefaultEngineUsersAreCensused(t *testing.T) {
 		require.NotEmpty(t, files, "no source in %s", pkg.dir)
 		fset := token.NewFileSet()
 		for _, name := range files {
-			// This package's own functions over the default engine are the
-			// default engine; only its tests are users of it.
-			own := pkg.dir == "."
+			f, err := parser.ParseFile(fset, name, nil, parser.SkipObjectResolution)
+			require.NoError(t, err)
+			// This package's own code names its functions bare; an external
+			// test package (package core_test) selects them from an import.
+			// Its non-test functions over the default engine are the default
+			// engine; only its tests are users of it.
+			own := pkg.dir == "." && f.Name.Name == "core"
 			if own && !strings.HasSuffix(name, "_test.go") {
 				continue
 			}
-			f, err := parser.ParseFile(fset, name, nil, parser.SkipObjectResolution)
-			require.NoError(t, err)
+			imports := importNames(f)
 			for _, decl := range f.Decls {
 				fn, ok := decl.(*ast.FuncDecl)
 				if !ok || fn.Body == nil {
 					continue
 				}
-				if via := defaultEngineUse(fn.Body, own, engineFunctions, spaceFunctions); via != "" {
+				if via := defaultEngineUse(fn.Body, own, imports, engineFunctions, spaceFunctions); via != "" {
 					found[pkg.name+": "+funcName(fn)] = via
 				}
 			}
@@ -145,11 +150,34 @@ func TestDefaultEngineUsersAreCensused(t *testing.T) {
 	}
 }
 
+// The import paths of the packages whose functions act on the default engine
+// and on its space.
+const (
+	corePath          = "github.com/brandopakel/keel/internal/core"
+	dataStructurePath = "github.com/brandopakel/keel/internal/data_structure"
+)
+
+// importNames maps each name a file refers to an imported package by to that
+// package's path: its alias, or the last element of its path.
+func importNames(f *ast.File) map[string]string {
+	names := map[string]string{}
+	for _, imp := range f.Imports {
+		path := strings.Trim(imp.Path.Value, `"`)
+		name := path[strings.LastIndex(path, "/")+1:]
+		if imp.Name != nil {
+			name = imp.Name.Name
+		}
+		names[name] = path
+	}
+	return names
+}
+
 // defaultEngineUse returns the first use of the default engine in body, or
-// "". In this package (own), that is defaultEngine by name or one of its
-// package functions by bare name; elsewhere, one of those selected from core;
-// and anywhere, DefaultSpace or one of data_structure's functions over it.
-func defaultEngineUse(body ast.Node, own bool, engineFunctions, spaceFunctions map[string]bool) string {
+// "". In this package's own code (own), that is defaultEngine by name or one
+// of its package functions by bare name; elsewhere, one of those selected
+// from core under the name the file imports it as (imports); and anywhere,
+// DefaultSpace or one of data_structure's functions over it.
+func defaultEngineUse(body ast.Node, own bool, imports map[string]string, engineFunctions, spaceFunctions map[string]bool) string {
 	var found string
 	// A selector's name is a field or a method, never the package function
 	// it may share a name with: e.OpenAOF is not OpenAOF.
@@ -165,16 +193,26 @@ func defaultEngineUse(body ast.Node, own bool, engineFunctions, spaceFunctions m
 			if !ok {
 				break
 			}
-			switch {
-			case pkg.Name == "data_structure" && (x.Sel.Name == "DefaultSpace" || spaceFunctions[x.Sel.Name]):
-				found = "data_structure." + x.Sel.Name
-			case !own && pkg.Name == "core" && engineFunctions[x.Sel.Name]:
-				found = "core." + x.Sel.Name
+			switch path := imports[pkg.Name]; {
+			case path == dataStructurePath && (x.Sel.Name == "DefaultSpace" || spaceFunctions[x.Sel.Name]):
+				found = pkg.Name + "." + x.Sel.Name
+			case path == corePath && engineFunctions[x.Sel.Name]:
+				found = pkg.Name + "." + x.Sel.Name
 			}
-		case *ast.KeyValueExpr:
-			// A field's name in a composite literal is not a function.
-			if key, ok := x.Key.(*ast.Ident); ok {
-				selected[key] = true
+		case *ast.CompositeLit:
+			// A struct field's name in a composite literal is not a function.
+			// A map's keys are expressions, which may name one, and a
+			// literal's type is a map only when written as one here; a named
+			// map type's identifier keys would be missed, which no test uses.
+			if _, isMap := x.Type.(*ast.MapType); isMap {
+				break
+			}
+			for _, elt := range x.Elts {
+				if kv, ok := elt.(*ast.KeyValueExpr); ok {
+					if key, ok := kv.Key.(*ast.Ident); ok {
+						selected[key] = true
+					}
+				}
 			}
 		case *ast.Ident:
 			if own && !selected[x] && (x.Name == "defaultEngine" || engineFunctions[x.Name]) {
