@@ -46,7 +46,7 @@ func TestMigratingFromTheLegacyLogSurvivesASecondRestart(t *testing.T) {
 	assert.NoError(t, e.EvalAndResponse(
 		&core.Command{Cmd: "SET", Args: []string{"new-k", "added"}}, &bytes.Buffer{}))
 	assert.NoError(t, e.FlushAOF())
-	assert.NoError(t, e.CloseAOF())
+	assert.NoError(t, e.Close(), "a restart: the log closed, and its lock released")
 
 	// Second start, on an engine of its own as a restarted server's is: the
 	// current file now exists and takes precedence.

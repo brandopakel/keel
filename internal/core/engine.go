@@ -246,6 +246,9 @@ type Engine struct {
 	mu sync.Mutex
 	// closed is set by Close, under the lock; see open.go.
 	closed bool
+	// logLock is the lock beside e's log that StartAOF took, which Close
+	// releases; nil, e holds none. See loglock.go.
+	logLock *logLock
 }
 
 // Lock takes e's lock, waiting until whoever holds it lets go. Its holder is
