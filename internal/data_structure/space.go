@@ -194,3 +194,11 @@ func (s *Space) MaxKeys() int { return s.limits.MaxKeys }
 
 // MaxMemory is the space's bound on its estimated bytes; zero is none.
 func (s *Space) MaxMemory() uint64 { return s.limits.MaxMemory }
+
+// layoutControl pads the package's initializer with the code DefaultSpace's
+// took, so that the code after it lands where it did before part 4 of plan
+// step 2.7 removed DefaultSpace. A layout control build only; never merged.
+var layoutControl = NewSpace(DefaultLimits())
+
+// layoutControlTune adds the last 32 bytes the control needs.
+var layoutControlTune = layoutControl.MaxKeys() + int(layoutControl.MaxMemory())
