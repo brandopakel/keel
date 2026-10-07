@@ -1385,9 +1385,10 @@ varies from run to run; no row allocated more in any run.
   0.988.
 - **Part 3b** ran 0.991 to 0.999, and 0.899 against `65ebdbc`; INFO was
   byte-identical to develop's in five configurations.
-- **Part 4** ran 1.025 to 1.027 against develop, and 0.930 and 0.931
-  against `65ebdbc`, all on EPYC 7763; every row over 1.04 was in the test
-  binary's placement, below. In the server, only the initializers of
+- **Part 4** ran 1.018 to 1.030 against develop in five runs, four of them
+  on EPYC 7763 and one on EPYC 9V45, and 0.930 and 0.931 against `65ebdbc`
+  on EPYC 7763; every row over 1.04 was in the test binary's placement,
+  below. In the server, only the initializers of
   `defaultEngine` and `DefaultSpace` went: no other function changed size,
   and the hot ones moved 192 to 320 bytes, keeping their 64-byte phase. End
   to end, memtier ran at about 1.00 against develop on EPYC 7763, one client
@@ -1411,11 +1412,11 @@ unrelated stopped or started using them as values or through an interface.
 
 Two results were over the gate itself, not only a row. Part 3 ran
 pipeline-16 end to end at 0.970 to 0.984 on EPYC 7763, against a floor of
-0.98. Part 4's paired job ran at medians of 1.025 to 1.027, against a ceiling
+0.98. Part 4's paired job ran at medians of 1.018 to 1.030, against a ceiling
 of 1.0204. Neither passed on the gate. Each was accepted in review as code
 placement, on its control build: part 3 on develop with the field added,
-and part 4 on the exact-address control, which ran 1.000 and 1.002 where the
-part ran 1.025 to 1.027. The rule above was applied to the median as well as
+and part 4 on the exact-address control, which ran 1.000 and 1.002 on EPYC
+7763, where the part ran 1.025 to 1.030. The rule above was applied to the median as well as
 to a row: a result put down to code layout is shown to be layout with a
 control build. A later step that reads over the gate needs a control of its
 own; these do not carry over.
