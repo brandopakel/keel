@@ -1,0 +1,10 @@
+{
+  "name": "keel-framework-checks",
+  "private": true,
+  "type": "module",
+  "description": "Frameworks checked against Redis and Keel by bench/frameworks/run.py.",
+  "dependencies": {
+    "bullmq": "6.3.11",
+    "ioredis": "6.0.0"
+  }
+}
