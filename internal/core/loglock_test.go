@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -103,10 +104,70 @@ func TestALogHeldByAnotherProcess(t *testing.T) {
 	assert.Equal(t, "held", runOn(t, e, "GET", "holder"), "the holder's write is there, and its lock is not")
 }
 
+// TestTheLogLockIsExclusive: the lock itself, on every platform that has one
+// (Windows too, where the log cannot be opened yet): a second holder in the
+// same process is refused, and once the first lets go it is not.
+func TestTheLogLockIsExclusive(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "keel.aof")
+	first, err := lockLog(path)
+	require.NoError(t, err)
+	_, err = lockLog(path)
+	require.ErrorIs(t, err, ErrLocked)
+	assert.EqualError(t, err, "log in use by another instance: "+path+".lock")
+	require.NoError(t, first.release())
+	second, err := lockLog(path)
+	require.NoError(t, err)
+	require.NoError(t, second.release())
+}
+
+// TestTheLogLockOfAKilledProcessIsFree: a process that holds the lock keeps
+// others off it, and once it is killed the lock is free, with no stale lock
+// to clear, on every platform that has one.
+func TestTheLogLockOfAKilledProcessIsFree(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "keel.aof")
+	holder := exec.Command(os.Args[0], "-test.run=^TestHelperProcessHoldsALog$")
+	holder.Env = append(os.Environ(), "KEEL_CORE_HOLD_LOCK="+path)
+	stdin, err := holder.StdinPipe()
+	require.NoError(t, err)
+	stdout, err := holder.StdoutPipe()
+	require.NoError(t, err)
+	require.NoError(t, holder.Start())
+	defer stdin.Close()
+	line, err := bufio.NewReader(stdout).ReadString('\n')
+	if err != nil || line != "held\n" {
+		_ = holder.Process.Kill()
+		_ = holder.Wait()
+		t.Fatalf("the holder did not take the lock: %q, %v", line, err)
+	}
+	_, err = lockLog(path)
+	require.ErrorIs(t, err, ErrLocked)
+	require.NoError(t, holder.Process.Kill())
+	_ = holder.Wait()
+	held, err := lockLog(path)
+	require.NoError(t, err, "a killed holder's lock is released")
+	require.NoError(t, held.release())
+}
+
 // TestHelperProcessHoldsALog is TestALogHeldByAnotherProcess's other process:
 // it opens the log it is given, writes to it, says so, and holds the log until
-// it is killed, or its input closes. In the test process it returns at once.
+// it is killed, or its input closes; given only a lock to hold, it holds that.
+// In the test process it returns at once.
 func TestHelperProcessHoldsALog(t *testing.T) {
+	if path := os.Getenv("KEEL_CORE_HOLD_LOCK"); path != "" {
+		// TestTheLogLockOfAKilledProcessIsFree's: the lock alone.
+		held, err := lockLog(path)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		fmt.Println("held")
+		_, _ = io.Copy(io.Discard, os.Stdin)
+		// Reachable until here, so that no finalizer closes its file.
+		runtime.KeepAlive(held)
+		os.Exit(0)
+	}
 	path := os.Getenv("KEEL_CORE_HOLD_LOG")
 	if path == "" {
 		return
