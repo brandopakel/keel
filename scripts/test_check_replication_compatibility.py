@@ -122,6 +122,17 @@ class SettleSnapshotTest(unittest.TestCase):
                 with self.assertRaises(AssertionError):
                     replication.settle_snapshot(frames, body, normalized)
 
+    def test_a_later_frame_of_another_snapshot_or_stream_fails(self):
+        body = record('RPUSH', 'l', 'a', 'b', 'c') + record('SET', 'k', 'v')
+        normalized = replication.normalize_body(body, self.start, 'snapshot')
+        for field, value in [('snapshot_id', 'snapshot-2'), ('to', 98), ('epoch', 'epoch-2'),
+                             ('from', 1), ('full', False), ('version', 1), ('term', 3)]:
+            with self.subTest(field):
+                frames = self.frames(body, 8)
+                frames[2][field] = value
+                with self.assertRaises(AssertionError):
+                    replication.settle_snapshot(frames, body, normalized)
+
     def test_frames_that_carry_less_than_the_snapshot_fail(self):
         body = record('SET', 'k', 'v')
         with self.assertRaises(AssertionError):

@@ -215,12 +215,21 @@ def settle_snapshot(chunks, snapshot, normalized):
     two identical binaries and failed on a snapshot_bytes 28 bytes apart, one
     record header. So each run's frames are first checked against the
     snapshot they carried: every frame names its whole length, each starts
-    where the one before ended, all but the last are the same full size, and
-    only the last says it is done. Then the frames are compared as one header
-    whose snapshot_bytes is the normalized body's length, without the sizes
-    and offsets of the raw cut."""
+    where the one before ended, all but the last are the same full size,
+    only the last says it is done, and every other field - the snapshot's
+    identity, its epoch and the stream offsets it covers - is the same in
+    every frame. Then the frames are compared as one header whose
+    snapshot_bytes is the normalized body's length, without the sizes and
+    offsets of the raw cut."""
+    per_frame = ('body_bytes', 'snapshot_offset', 'snapshot_done')
+    shared = {k: v for k, v in chunks[0].items() if k not in per_frame}
     total, offset = len(snapshot), 0
     for i, frame in enumerate(chunks):
+        own = {k: v for k, v in frame.items() if k not in per_frame}
+        if own != shared:
+            differ = sorted(k for k in set(own) | set(shared) if own.get(k) != shared.get(k))
+            raise AssertionError(f'snapshot frame {i} differs from the first in {differ}: '
+                                 f'{ {k: own.get(k) for k in differ} } against { {k: shared.get(k) for k in differ} }')
         if frame.get('snapshot_bytes') != total:
             raise AssertionError(f"snapshot frame {i} says snapshot_bytes {frame.get('snapshot_bytes')}, "
                                  f'but the frames carried {total} bytes')
