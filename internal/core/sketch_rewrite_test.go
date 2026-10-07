@@ -2,8 +2,10 @@ package core
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/brandopakel/keel/internal/data_structure"
 	"github.com/stretchr/testify/require"
@@ -39,12 +41,21 @@ func TestSketchDumpSlicesPreserveEnvelopeAcrossAllBoundaries(t *testing.T) {
 func TestSketchRewriteReconcilesWritesAcrossBodySlices(t *testing.T) {
 	t.Parallel()
 	e := newTestEngine(t, Options{})
-	for _, kind := range []string{"cms", "morris"} {
+	for _, kind := range []string{"cms", "morris", "cms/slow-sync"} {
 		t.Run(kind, func(t *testing.T) {
 			e.resetStores()
 			path := filepath.Join(t.TempDir(), "store.aof")
 			require.NoError(t, e.OpenAOF(path))
 			t.Cleanup(func() { e.CancelRewrite(); require.NoError(t, e.CloseAOF()); e.resetStores() })
+			// A slow disk: the log's own fsync is still running when the
+			// rewrite is ready to finish, as on a busy CI runner.
+			slowSync := kind == "cms/slow-sync"
+			if slowSync {
+				kind = "cms"
+				oldSync := e.aofSync
+				e.aofSync = func(f *os.File) error { time.Sleep(300 * time.Millisecond); return f.Sync() }
+				t.Cleanup(func() { e.aofSync = oldSync })
+			}
 			command := "CMS.INCRBY"
 			if kind == "cms" {
 				e.cmsStore.Put("image", data_structure.CreateCMS(1<<20, 1))
@@ -64,8 +75,15 @@ func TestSketchRewriteReconcilesWritesAcrossBodySlices(t *testing.T) {
 				require.NoError(t, e.AdvanceRewrite())
 			}
 			want, _ := e.dumpKey("image")
+			if slowSync {
+				// Write the increments and start their everysec sync now.
+				e.aof.lastSync = time.Time{}
+				require.NoError(t, e.flushAOF(false))
+				require.NotNil(t, e.aof.syncPending, "the slow sync must be running while the rewrite advances")
+			}
 			for cycles := 0; e.RewriteActive(); cycles++ {
 				require.Less(t, cycles, 300)
+				waitForLogOn(e)
 				require.NoError(t, e.FlushAOF())
 				waitForRewriteSyncOn(t, e)
 			}
