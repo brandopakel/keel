@@ -16,6 +16,9 @@ grows and is removed between samples can be missed.
 The command's output passes through unchanged and its exit status is this
 script's exit status. Entries above the warning thresholds become GitHub
 warning annotations, and a table goes to $GITHUB_STEP_SUMMARY when it is set.
+Its standard output is read on the way through for go test's line per
+package, and the record keeps each package's result and time, which the
+bench-history collector charts.
 """
 import argparse
 import importlib.util
@@ -26,6 +29,7 @@ import re
 import signal
 import subprocess
 import sys
+import threading
 import time
 
 # A fresh local Go cache plus go test's build work for the whole suite, which
@@ -114,6 +118,21 @@ def annotation(text):
     return text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
 
 
+# go test's line for a package that ran: its result, its import path and its
+# time, as in "ok  \tgithub.com/brandopakel/keel/internal/core\t12.345s".
+PACKAGE_LINE = re.compile(rb'^(ok|FAIL)\s+(\S+)\s+([0-9.]+)s\b')
+
+
+def pass_through(source, sink, package_times):
+    """Copy source to sink a line at a time, recording go test's package lines."""
+    for line in source:
+        sink.write(line)
+        sink.flush()
+        m = PACKAGE_LINE.match(line)
+        if m:
+            package_times.append(dict(package=m[2].decode(), result=m[1].decode(), seconds=float(m[3])))
+
+
 def main():
     wrapper = local_wrapper()
     file_default, output_default = wrapper.DEFAULT_MAX_FILE_MIB, wrapper.DEFAULT_MAX_OUTPUT_MIB
@@ -160,7 +179,13 @@ def main():
     started = time.monotonic()
     # Its own process group, so that an interrupted or cancelled record also
     # stops the test binaries and servers go test started.
-    process = subprocess.Popen(command, env=env, start_new_session=True)
+    # Its standard output is read on the way through, unchanged, for go test's
+    # line per package: its result and how long it took.
+    process = subprocess.Popen(command, env=env, start_new_session=True, stdout=subprocess.PIPE)
+    package_times = []
+    reader = threading.Thread(target=pass_through, args=(process.stdout, sys.stdout.buffer, package_times),
+                              daemon=True)
+    reader.start()
     try:
         while process.poll() is None:
             take_sample()
@@ -168,6 +193,7 @@ def main():
             time.sleep(args.interval)
     finally:
         stop_group(process)
+        reader.join(timeout=10)
     take_sample()
     elapsed = time.monotonic() - started
     tests = sorted((e for e in entries.values() if not e['name'].startswith('go-build')),
@@ -208,7 +234,8 @@ def main():
                   warn_suite_bytes=int(warn_suite), local_go_build_allowance_mib=LOCAL_GO_BUILD_MIB,
                   peak_concurrent_test_bytes=peak['test_bytes'],
                   peak_build_bytes=max((e['peak_bytes'] for e in build), default=0),
-                  sampling_errors=errors[:20], warnings=warnings, tests=tests)
+                  sampling_errors=errors[:20], warnings=warnings, tests=tests,
+                  packages=sorted(package_times, key=lambda p: p['package']))
     (out/'test-file-footprint.json').write_text(json.dumps(record, indent=2)+'\n')
     for warning in warnings:
         print(f'::warning title=Test outgrows the local validation budget::{annotation(warning)}')
