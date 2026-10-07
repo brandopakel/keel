@@ -65,12 +65,21 @@ checks** measure that. Each check runs a small, real workload against Redis
 - every command the framework sent, read from Redis's `INFO commandstats`
   after the run.
 
-The first frameworks:
+The first run (#143, local against Redis 8.10.2, October 7, 2026):
 
-- **Sidekiq and Celery:** job queues on blocking list pops;
-- **BullMQ:** Lua and streams;
-- **ActionCable:** Pub/Sub;
-- **Rails' cache store:** strings, expiry and `redis_version`.
+| Framework | Keel | Commands it sent that Keel lacks |
+| --- | --- | --- |
+| Rails' cache store | **passes** | none |
+| ActionCable | fails at `SUBSCRIBE` | `PUBLISH`, `SUBSCRIBE`, `UNSUBSCRIBE` |
+| Sidekiq | fails at `BRPOP` | `BRPOP`, `EVALSHA`, `SCRIPT LOAD`, `BITFIELD`, `SSCAN` |
+| Celery | fails at `EVALSHA` | `BRPOP`, `EVALSHA`, `SCRIPT LOAD`, `PUBLISH`, `SUBSCRIBE`, `PSUBSCRIBE`, `UNSUBSCRIBE` |
+| BullMQ | fails at `EVAL` | `EVAL`, `EVALSHA`, `BZPOPMIN`, `XADD`, `XREAD`, `XTRIM`, `HMSET`, `LREM`, `RPOPLPUSH` |
+
+Of the four frameworks Keel fails, **Lua is needed by three**, blocking pops
+by three and Pub/Sub by two. Streams are needed by one. The rest are
+everyday commands (`BITFIELD`, `SSCAN`, `HMSET`, `LREM`, `RPOPLPUSH`). No
+framework passes with Lua alone, or with blocking pops and Pub/Sub alone.
+So those three move together in tier 2, and Streams follow in tier 3.
 
 The census, the framework checks and the monitoring gap (#134) each become a
 Grafana scoreboard, kept over time on the `bench-history` branch (#132).
@@ -95,7 +104,8 @@ schedule them.
      Clients that only speak cluster can then connect.
 
    Each family also gets its missing options.
-2. **Blocking commands and Pub/Sub, about 3 to 4 weeks.**
+2. **Blocking commands, Pub/Sub and Lua, about 6 to 8 weeks.** Together
+   they unblock four of the five frameworks checked.
    - **Blocking pops:** `BLPOP`, `BRPOP`, `BLMOVE`, `BLMPOP`, `BRPOPLPUSH`,
      `BZPOPMIN`, `BZPOPMAX`, `BZMPOP`. Each needs a queue of blocked clients
      per key, wakeups on writes in arrival order, timeouts, the
@@ -104,13 +114,13 @@ schedule them.
    - **Pub/Sub:** `SUBSCRIBE`, `PSUBSCRIBE`, `PUBLISH`, `PUBSUB`, and the
      sharded `S*` forms. RESP3 push messages and RESP2's subscribed
      connection mode come with them.
-3. **Lua, then Streams, about 6 to 8 weeks.**
    - **Scripting:** `EVAL`, `EVALSHA`, `SCRIPT`, `FUNCTION` and `FCALL` on an
      embedded Lua 5.1, the version Redis runs. That covers `redis.call`, the
      script cache, atomicity, and effects replication into the log and
      replicas.
-   - **Streams:** all 20 commands, including consumer groups, and
-     `XREAD BLOCK` on tier 2's blocking machinery.
+3. **Streams, about 3 to 4 weeks.** All 20 commands, including consumer
+   groups, and `XREAD BLOCK` on tier 2's blocking machinery. BullMQ needs
+   them once it has Lua.
 4. **Tracking, ACL, notifications and the rest, about 4 to 6 weeks.**
    - Client tracking: `CLIENT TRACKING`, `CACHING`, `GETREDIR`, on tier 2's
      push messages.
