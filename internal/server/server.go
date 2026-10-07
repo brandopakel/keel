@@ -1251,34 +1251,61 @@ func startAOF(e *core.Engine, legacy string) error {
 	case applied > 0:
 		log.Printf("appendonly: replayed %d commands from %s", applied, readFrom)
 	}
-	if err := e.OpenAOF(path); err != nil {
-		return err
-	}
-
-	// Having replayed the old file, write the whole keyspace into the new one
-	// before anything else appends to it.
-	//
-	// Without this the fallback loses the data it exists to save, one restart
-	// later rather than immediately. The first start reads memkv-master.aof and
-	// opens an empty keel-master.aof; the second start sees keel-master.aof
-	// present, prefers it, and replays only what was written after the
-	// migration. Everything that lived solely in the old log is gone, and the
-	// old log is still sitting there looking like a backup.
-	//
-	// A rewrite is exactly the right thing here: the shortest log producing the
-	// current state. It runs to completion before the server serves anyone,
-	// which at startup costs one pass over a keyspace that was just built by
-	// one pass over the same data.
-	if readFrom != path {
-		if err := e.RewriteAOF(); err != nil {
-			return fmt.Errorf("migrating %s to %s: %w", readFrom, path, err)
+	if readFrom == path {
+		if err := e.OpenAOF(path); err != nil {
+			return err
 		}
+	} else if err := migrateAOF(e, path); err != nil {
+		return fmt.Errorf("migrating %s to %s: %w", readFrom, path, err)
+	} else {
 		log.Printf("appendonly: wrote the replayed keyspace to %s; %s is no longer read",
 			path, readFrom)
 	}
 
 	log.Printf("appendonly: on, %s, appendfsync %s", path, options.Fsync)
 	return nil
+}
+
+// migratingSuffix names the log a legacy log's keyspace is written into before
+// it has the name it is kept under.
+const migratingSuffix = ".migrating"
+
+// migrateAOF writes the keyspace e replayed from a legacy log into a new log
+// at path, and opens it for appending, before anything else appends to it.
+//
+// Without this the fallback loses the data it exists to save, one restart
+// later rather than immediately. The first start reads memkv-master.aof and
+// opens an empty keel-master.aof; the second start sees keel-master.aof
+// present, prefers it, and replays only what was written after the
+// migration. Everything that lived solely in the old log is gone, and the old
+// log is still sitting there looking like a backup.
+//
+// For the same reason, the new log has its name only once it holds the whole
+// keyspace. It is written under path + migratingSuffix, synced, and renamed
+// onto path, the directory synced after, as Redis publishes a rewritten log.
+// The migration used to open path first and rewrite into it, so a crash or a
+// failed rewrite in between left an empty log there, which the next start
+// preferred to the intact legacy one: the legacy keyspace was lost. Now
+// anything that stops it before the rename leaves no log at path, and the
+// next start replays the legacy log again. A log left under the temporary
+// name by such a stop is removed first.
+//
+// A rewrite is exactly the right thing here: the shortest log producing the
+// current state. It runs to completion before the server serves anyone, which
+// at startup costs one pass over a keyspace that was just built by one pass
+// over the same data.
+func migrateAOF(e *core.Engine, path string) error {
+	migrating := path + migratingSuffix
+	if err := os.Remove(migrating); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err := e.OpenAOF(migrating); err != nil {
+		return err
+	}
+	if err := e.RewriteAOF(); err != nil {
+		return err
+	}
+	return e.RenameAOF(path)
 }
 
 // aofReadPath chooses which log to replay at startup.

@@ -123,7 +123,13 @@ type goldenRun struct {
 	start   int64
 	tx      *Transaction
 	replies bytes.Buffer
+	// sent is each command whose reply is in replies, with that reply, so
+	// that a run whose replies differ from the fixture's can say which.
+	sent []goldenSent
 }
+
+// goldenSent is one command of a run, and its reply.
+type goldenSent struct{ command, reply string }
 
 // startGoldenRun opens a run on e, and returns it with the function that ends
 // it: the log closed, the keyspace emptied and the settings it changed
@@ -194,6 +200,7 @@ func (r *goldenRun) do(parts ...string) string {
 	require.NoError(r.t, err, "%.80q", parts)
 	r.cycle()
 	r.replies.Write(w.b)
+	r.sent = append(r.sent, goldenSent{fmt.Sprintf("%.80q", parts), string(w.b)})
 	return string(w.b)
 }
 
@@ -211,6 +218,7 @@ func (r *goldenRun) unrecorded(parts ...string) {
 	n := r.replies.Len()
 	r.do(parts...)
 	r.replies.Truncate(n)
+	r.sent = r.sent[:len(r.sent)-1]
 }
 
 // driveRewrite runs the event loop's part of a rewrite, a cycle at a time,
@@ -231,6 +239,7 @@ func (r *goldenRun) driveRewrite(stop func() bool) {
 // and its replies.
 type goldenLog struct {
 	log, replies, state []byte
+	sent                []goldenSent
 }
 
 func (r *goldenRun) finish() goldenLog {
@@ -241,7 +250,8 @@ func (r *goldenRun) finish() goldenLog {
 	raw, err := os.ReadFile(r.path)
 	require.NoError(r.t, err)
 	window := goldenWindow{r.start, time.Now().UnixMilli()}
-	return goldenLog{log: normalizeGoldenLog(r.t, raw, window), replies: r.replies.Bytes(), state: goldenStateOn(r.t, r.e, window)}
+	return goldenLog{log: normalizeGoldenLog(r.t, raw, window), replies: r.replies.Bytes(), state: goldenStateOn(r.t, r.e, window),
+		sent: r.sent}
 }
 
 func runGoldenScenario(t *testing.T, scenario goldenScenario, mode goldenMode) goldenLog {
@@ -965,11 +975,37 @@ func TestPersistenceGoldenLogsAreUnchanged(t *testing.T) {
 				t.Parallel()
 				got := runGoldenScenario(t, scenario, mode)
 				requireSameLog(t, joinGoldenChunks(t, wantLog), joinGoldenChunks(t, got.log), "the log")
+				if goldenSHA(got.replies) != want.RepliesSHA256 {
+					explainGoldenReplies(t, scenario, mode, want.RepliesSHA256, got)
+				}
 				require.Equal(t, want.RepliesSHA256, goldenSHA(got.replies), "the replies")
 				require.Equal(t, string(wantState), string(got.state), "the keyspace")
 			})
 		}
 	}
+}
+
+// explainGoldenReplies says which reply of got differs, when its replies are
+// not the fixture's. The fixture holds only their hash, so it runs the
+// scenario again in the same mode: if that run's replies are the fixture's,
+// the difference was this run's alone, and the first command whose reply
+// differs between the two is named, with both replies; if not, the difference
+// is the build's, and repeats.
+func explainGoldenReplies(t *testing.T, scenario goldenScenario, mode goldenMode, want string, got goldenLog) {
+	t.Helper()
+	again := runGoldenScenario(t, scenario, mode)
+	if goldenSHA(again.replies) != want {
+		t.Logf("a second run's replies differ from the fixture's too, so the difference repeats: run the test again to see it")
+		return
+	}
+	for i := range min(len(got.sent), len(again.sent)) {
+		if got.sent[i] != again.sent[i] {
+			t.Logf("the replies differ first at command %d of %d, %s: this run answered %q, where a run whose replies are the fixture's answered %q",
+				i+1, len(again.sent), got.sent[i].command, got.sent[i].reply, again.sent[i].reply)
+			return
+		}
+	}
+	t.Logf("this run sent %d commands where a run whose replies are the fixture's sent %d", len(got.sent), len(again.sent))
 }
 
 // TestPersistenceGoldenLogsReplay: develop's logs replay to develop's
