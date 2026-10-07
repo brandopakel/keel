@@ -216,19 +216,26 @@ stall, a bug, a needless limitation), Keel keeps it. Each such case is:
 When it's unclear which a difference is, Keel follows Redis and the case is
 flagged here.
 
-**Open: refused writes under eviction pressure.** Redis bounds the work each
-command spends evicting (`maxmemory-eviction-tenacity`, `performEvictions` in
-`src/evict.c`). When that isn't enough, it answers `OOM command not allowed
-when used memory > 'maxmemory'`, even with an `allkeys-*` policy. Keel evicts
-inline and never refuses. In the first k6 run (#145, October 7):
-- Redis failed 1,106 of 8,553,062 checks, all of them writes in the eviction
-  scenario;
-- Keel failed none of 7,845,956.
+**Open: refused writes under eviction pressure.** Before each write,
+Redis's `processCommand` (`src/server.c`) calls `performEvictions`
+(`src/evict.c`), and rejects the write with `OOM command not allowed when used
+memory > 'maxmemory'` when that returns `EVICT_FAIL`. That happens when an
+eviction pass is still over `maxmemory` and finds no key it can evict
+(`bestkey == NULL`, `goto cant_free`). Running out of eviction time
+(`maxmemory-eviction-tenacity`) returns `EVICT_RUNNING` instead, and the write
+goes ahead.
 
-Whether Keel's behaviour is an improvement (no refused writes) or a departure
-(a latency spike where Redis would refuse) depends on its eviction-scenario
-p99 against Redis's. The nightly k6 run records both. Until that's
-measured, nothing changes.
+In the first k6 run (#145, October 7), with `allkeys-lru` and 16 KiB writes
+far past `maxmemory`:
+- Redis rejected 1,106 of 8,553,062 checks, all writes in the eviction
+  scenario;
+- Keel, which evicts inline, rejected none of 7,845,956.
+
+Why Redis's sampler found nothing evictable there isn't known yet. One
+candidate is memory that isn't the dataset, such as client buffers, keeping
+usage over the limit once the evictable keys are gone. That needs finding out
+before deciding whether Keel's behaviour is an improvement or a departure.
+Until then, nothing changes.
 
 ## How each piece is verified
 
