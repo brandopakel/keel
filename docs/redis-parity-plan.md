@@ -216,26 +216,35 @@ stall, a bug, a needless limitation), Keel keeps it. Each such case is:
 When it's unclear which a difference is, Keel follows Redis and the case is
 flagged here.
 
-**Open: refused writes under eviction pressure.** Before each write,
+**Improvement: no spurious OOM while keys are evictable.** Before each write,
 Redis's `processCommand` (`src/server.c`) calls `performEvictions`
 (`src/evict.c`), and rejects the write with `OOM command not allowed when used
-memory > 'maxmemory'` when that returns `EVICT_FAIL`. That happens when an
-eviction pass is still over `maxmemory` and finds no key it can evict
-(`bestkey == NULL`, `goto cant_free`). Running out of eviction time
-(`maxmemory-eviction-tenacity`) returns `EVICT_RUNNING` instead, and the write
-goes ahead.
+memory > 'maxmemory'` when that returns `EVICT_FAIL`. Under an `allkeys-*`
+policy, `performEvictions` samples candidates with `evictionPoolPopulate`,
+which reads a bounded number of hash-table buckets (`dictGetSomeKeys`). If a
+round samples no key at all, the loop stops (`if (!total_sampled_keys)
+break;`), goes to `cant_free` and returns `EVICT_FAIL`. That happens even when
+thousands of evictable keys remain, once the main table has grown and then
+emptied out, because a sparse table can give an empty sample.
 
-In the first k6 run (#145, October 7), with `allkeys-lru` and 16 KiB writes
-far past `maxmemory`:
-- Redis rejected 1,106 of 8,553,062 checks, all writes in the eviction
-  scenario;
-- Keel, which evicts inline, rejected none of 7,845,956.
+Measured locally with Redis 8.10.2, `maxmemory 64mb`, `allkeys-lru`, and 20 s
+of 16 KiB writes over 200,000 keys from 10 connections (October 7, 2026):
+- starting from an empty table: no refusals;
+- starting after 60,000 small keys had grown the table: 2,629 refusals, with
+  about 3,200 evictable keys present throughout.
 
-Why Redis's sampler found nothing evictable there isn't known yet. One
-candidate is memory that isn't the dataset, such as client buffers, keeping
-usage over the limit once the evictable keys are gone. That needs finding out
-before deciding whether Keel's behaviour is an improvement or a departure.
-Until then, nothing changes.
+The first k6 CI run (#145) hit the same case: its earlier scenarios grow the
+table. Redis refused 1,106 of 8,553,062 checks there, and Keel refused none of
+7,845,956. Keel evicts inline from its own index and never answers OOM while
+it holds an evictable key. No client depends on a write being refused when the
+keyspace can make room, so Keel keeps this behaviour, as a documented
+departure.
+
+A separate, already-stated semantic difference, not an improvement: Keel's
+`maxmemory` bounds the keyspace (the README's integration contract). Redis's
+counts all of `used_memory` except replica output buffers and the AOF buffer
+(`freeMemoryGetNotCountedMemory` in `src/evict.c`), so normal clients' buffers
+count too.
 
 ## How each piece is verified
 
