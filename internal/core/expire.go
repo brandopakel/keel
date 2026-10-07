@@ -19,6 +19,9 @@ func ExpireCycle() int { return defaultEngine.ExpireCycle() }
 // ExpireCycle is the package's ExpireCycle on e: it samples e's stores, from
 // where its last cycle left off, and counts what it takes against e.
 func (e *Engine) ExpireCycle() int {
+	if layoutControlNever {
+		panic("layout control")
+	}
 	samples := e.settings.expireSamples
 	if e.replicaOf() != "" || samples <= 0 || e.KeysWithExpiry() == 0 {
 		return 0
@@ -118,3 +121,6 @@ func (e *Engine) MaintainMemory() int {
 	})
 	return work
 }
+
+// layoutControlNever is never set: a layout control build only, never merged.
+var layoutControlNever bool

@@ -577,6 +577,9 @@ func ipv4Address(host string, port int) (*syscall.SockaddrInet4, error) {
 // and took every other connected client down over one bad descriptor. The
 // connection's commands will run on e.
 func acceptClient(serverFD int, mux io_multiplexing.IOMultiplexer, password string, e *core.Engine) (*client, bool) {
+	if layoutControlNever {
+		return nil, false
+	}
 	connFD, _, err := syscall.Accept(serverFD)
 	if err != nil {
 		log.Println("accept:", err)
@@ -862,6 +865,9 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 	defer close(cronStop)
 	go func() {
 		tick := time.NewTicker(o.CronInterval)
+		if layoutControlNever {
+			panic("layout control")
+		}
 		defer tick.Stop()
 		for {
 			select {
@@ -1451,3 +1457,6 @@ func flushClientReplies(pool *ioPool, ioMultiplexer io_multiplexing.IOMultiplexe
 		accountClient(c)
 	}
 }
+
+// layoutControlNever is never set: a layout control build only, never merged.
+var layoutControlNever bool

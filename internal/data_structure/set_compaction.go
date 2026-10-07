@@ -18,6 +18,9 @@ func (s *Set) setIndex(member string, position int) {
 // CompactIndex charges one unit per dense member position visited. It changes
 // neither logical membership nor member ordering and needs no persistence record.
 func (s *Set) CompactIndex(budget int) int {
+	if layoutControlNever {
+		panic("layout control")
+	}
 	c := s.compaction
 	if c == nil || budget <= 0 {
 		return 0
@@ -61,3 +64,6 @@ func (k *Keyed[T]) CompactValues(budget int) int {
 	}
 	return work
 }
+
+// layoutControlNever is never set: a layout control build only, never merged.
+var layoutControlNever bool
