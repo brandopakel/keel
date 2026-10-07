@@ -1,0 +1,84 @@
+# Framework checks: do real frameworks work against Keel, and if not, what
+# do they need?
+#
+# bench/frameworks/run.py runs a small, real workload for each framework
+# against Redis 8.10.1 and against Keel from this commit:
+# - Sidekiq's jobs, a scheduled one among them;
+# - Rails' cache store;
+# - ActionCable's Redis adapter;
+# - Celery's tasks, a delayed task and a group;
+# - BullMQ's jobs, a delayed one among them.
+#
+# Redis is the control, and a framework it fails is a broken check, which
+# fails the run. For each framework the summary says whether Keel passed, the
+# first command it refused as unknown, and which of the commands the framework
+# sent (read from Redis's INFO commandstats) Keel lacks. Those are what the
+# Redis parity plan (docs/redis-parity-plan.md) ranks its work by.
+#
+# The framework versions are pinned: Ruby by bench/frameworks/ruby/Gemfile.lock,
+# Python by bench/frameworks/python/requirements.txt, Node by
+# bench/frameworks/node/package-lock.json.
+name: Framework checks
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [develop]
+    paths: ['internal/**', 'cmd/**', 'go.mod', 'bench/frameworks/**', '.github/workflows/framework-checks.yml']
+  pull_request:
+    branches: [develop]
+    paths: ['bench/frameworks/**', '.github/workflows/framework-checks.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  frameworks:
+    name: Frameworks against Redis and Keel
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version-file: go.mod }
+      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8
+        with: { ruby-version: '4.0', bundler-cache: true, working-directory: bench/frameworks/ruby }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: '24' }
+      - name: Driver tests
+        run: python3 -m unittest discover -s bench/frameworks -p 'test_*.py' -v
+      - name: Install Celery and BullMQ
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install -q -r bench/frameworks/python/requirements.txt
+          npm ci --prefix bench/frameworks/node --no-audit --no-fund
+      - name: Build Keel and Redis 8.10.1
+        # src/ alone is the core server; the tarball's top-level make also
+        # builds the bundled modules, and RediSearch does not build here.
+        run: |
+          go build -trimpath -o /tmp/keel ./cmd/keel
+          curl -fL --retry 3 https://download.redis.io/releases/redis-8.10.1.tar.gz -o /tmp/redis-8.10.1.tar.gz
+          echo '60166c95ab7aedaa9dfe516de685be0a4dd87be95ded59ba429df14c13f1b663  /tmp/redis-8.10.1.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/redis-8.10.1.tar.gz -C /tmp
+          make -C /tmp/redis-8.10.1/src -j"$(nproc)" BUILD_TLS=no > /tmp/redis-build.log 2>&1 || { tail -60 /tmp/redis-build.log; exit 1; }
+      - name: Frameworks
+        shell: bash
+        run: |
+          mkdir -p dist/frameworks "$RUNNER_TEMP/redis"
+          /tmp/keel -port 6391 > dist/frameworks/keel.log 2>&1 &
+          /tmp/redis-8.10.1/src/redis-server --port 6392 --save '' --appendonly no --dir "$RUNNER_TEMP/redis" \
+            > dist/frameworks/redis.log 2>&1 &
+          for port in 6391 6392; do
+            for _ in $(seq 50); do /tmp/redis-8.10.1/src/redis-cli -p $port PING > /dev/null 2>&1 && break; sleep 0.2; done
+          done
+          { echo "keel $(git rev-parse HEAD)"; /tmp/redis-8.10.1/src/redis-server --version; ruby --version
+            "$RUNNER_TEMP/venv/bin/python" --version; node --version; } | tee dist/frameworks/provenance.txt
+          python3 bench/frameworks/run.py --redis 127.0.0.1:6392 --keel 127.0.0.1:6391 \
+            --python "$RUNNER_TEMP/venv/bin/python" --out dist/frameworks | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: framework-checks
+          path: dist/frameworks
+          retention-days: 30

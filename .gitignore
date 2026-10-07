@@ -5,3 +5,6 @@
 /dist/
 /.venv/
 __pycache__/
+
+# The framework checks install their Node dependencies here in CI.
+/bench/frameworks/node/node_modules
