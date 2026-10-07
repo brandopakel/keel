@@ -3,13 +3,16 @@ package core
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -32,15 +35,16 @@ func killValue(i int) string { return strconv.Itoa(i) + ":" + strings.Repeat("x"
 func TestEveryAcknowledgedWriteSurvivesAKill(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
-		name    string
-		policy  FsyncPolicy
-		rewrite bool
-		acks    int
+		name          string
+		policy        FsyncPolicy
+		rewrite, fail bool
+		acks          int
 	}{
-		{"always", FsyncAlways, false, 300},
-		{"everysec", FsyncEverySec, false, 2000},
-		{"no", FsyncNever, false, 2000},
-		{"everysec, during a rewrite", FsyncEverySec, true, 200},
+		{"always", FsyncAlways, false, false, 300},
+		{"everysec", FsyncEverySec, false, false, 2000},
+		{"no", FsyncNever, false, false, 2000},
+		{"everysec, during a rewrite", FsyncEverySec, true, false, 200},
+		{"everysec, during a failed write", FsyncEverySec, false, true, 100},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -50,6 +54,9 @@ func TestEveryAcknowledgedWriteSurvivesAKill(t *testing.T) {
 			writer.Env = append(os.Environ(), "KEEL_CORE_KILL_LOG="+path, "KEEL_CORE_KILL_FSYNC="+string(c.policy))
 			if c.rewrite {
 				writer.Env = append(writer.Env, "KEEL_CORE_KILL_REWRITE=1")
+			}
+			if c.fail {
+				writer.Env = append(writer.Env, "KEEL_CORE_KILL_FAIL=1")
 			}
 			out, err := writer.StdoutPipe()
 			require.NoError(t, err)
@@ -66,24 +73,40 @@ func TestEveryAcknowledgedWriteSurvivesAKill(t *testing.T) {
 			// Every line the process wrote before it died is read, the ones
 			// still in the pipe when it was killed included. With a rewrite,
 			// the kill comes c.acks writes after it began, and before it ended.
+			// With a failed write, it comes once c.acks writes have been
+			// refused, and only the writes acknowledged before the disk failed
+			// are required: one answered OK while it fails is buffered, not
+			// written, as Redis's is, and a crash then can lose it.
 			acked := map[string]string{}
-			rewriting, since := !c.rewrite, 0
+			// required is what must be in the reopened log: every write
+			// acknowledged, or with a failed write, every one acknowledged
+			// before the disk failed.
+			var required map[string]string
+			started, since := !c.rewrite && !c.fail, 0
 			lines := bufio.NewScanner(out)
 			deadline := time.Now().Add(time.Minute)
-			for since < c.acks || !rewriting {
+			ack := func(fields []string) {
+				i, err := strconv.Atoi(fields[2])
+				require.NoError(t, err)
+				acked[fields[1]] = killValue(i)
+			}
+			for since < c.acks || !started {
 				require.True(t, time.Now().Before(deadline), "the writer reported %d writes in a minute", len(acked))
 				require.True(t, lines.Scan(), "the writer stopped: %v", lines.Err())
 				fields := strings.Fields(lines.Text())
 				switch fields[0] {
 				case "ack":
-					i, err := strconv.Atoi(fields[2])
-					require.NoError(t, err)
-					acked[fields[1]] = killValue(i)
-					if rewriting {
+					ack(fields)
+					if started && !c.fail {
 						since++
 					}
 				case "rewriting":
-					rewriting = true
+					started = true
+				case "failing":
+					started = true
+					required = maps.Clone(acked)
+				case "denied":
+					since++
 				case "rewritten":
 					t.Fatal("the rewrite finished before the kill; it is slowed so that it cannot")
 				default:
@@ -95,14 +118,15 @@ func TestEveryAcknowledgedWriteSurvivesAKill(t *testing.T) {
 			killed = true
 			for lines.Scan() {
 				if fields := strings.Fields(lines.Text()); fields[0] == "ack" {
-					i, err := strconv.Atoi(fields[2])
-					require.NoError(t, err)
-					acked[fields[1]] = killValue(i)
+					ack(fields)
 				}
+			}
+			if required == nil {
+				required = acked
 			}
 
 			e := openTestEngine(t, Options{AppendOnly: true, AppendFilename: path})
-			for key, want := range acked {
+			for key, want := range required {
 				got := mustDo(t, e, "GET", key)
 				if got != fmt.Sprintf("$%d\r\n%s\r\n", len(want), want) {
 					t.Fatalf("%s was acknowledged as %q and reopened as %q", key, want, got)
@@ -114,7 +138,8 @@ func TestEveryAcknowledgedWriteSurvivesAKill(t *testing.T) {
 					torn++
 				}
 			}
-			t.Logf("%d acknowledged writes present after the kill; torn tails repaired: %d", len(acked), torn)
+			t.Logf("%d acknowledged writes, %d of them required, present after the kill; torn tails repaired: %d",
+				len(acked), len(required), torn)
 		})
 	}
 }
@@ -145,6 +170,21 @@ func TestHelperProcessWritesUntilKilled(t *testing.T) {
 		fmt.Fprintf(os.Stdout, format+"\n", args...)
 	}
 	rewrite := os.Getenv("KEEL_CORE_KILL_REWRITE") != ""
+	// Asked to, the disk fails partway through: every write of the log from
+	// then on writes half of what it is given and fails.
+	var failing atomic.Bool
+	if os.Getenv("KEEL_CORE_KILL_FAIL") != "" {
+		holding(e, func() {
+			write := e.aofWrite
+			e.aofWrite = func(f *os.File, b []byte) (int, error) {
+				if failing.Load() {
+					n, _ := write(f, b[:len(b)/2])
+					return n, errors.New("no space left on the test's disk")
+				}
+				return write(f, b)
+			}
+		})
+	}
 	if rewrite {
 		holding(e, func() {
 			write := e.rewriteFileWrite
@@ -158,11 +198,21 @@ func TestHelperProcessWritesUntilKilled(t *testing.T) {
 		go func() {
 			for i := 0; ; i++ {
 				key := fmt.Sprintf("w%d:%d", w, i)
-				if reply, err := do(context.Background(), e, "SET", key, killValue(i)); err != nil || reply != "+OK\r\n" {
+				reply, err := do(context.Background(), e, "SET", key, killValue(i))
+				switch {
+				case errors.Is(err, ErrPersistence) && failing.Load():
+					report("denied %s", key)
+					time.Sleep(time.Millisecond)
+					continue
+				case err != nil || reply != "+OK\r\n":
 					fmt.Fprintln(os.Stderr, key, reply, err)
 					os.Exit(1)
 				}
 				report("ack %s %d", key, i)
+				if w == 0 && i == 300 && os.Getenv("KEEL_CORE_KILL_FAIL") != "" {
+					failing.Store(true)
+					report("failing")
+				}
 				if rewrite && w == 0 && i == 500 {
 					if reply, err := do(context.Background(), e, "BGREWRITEAOF"); err != nil || !strings.Contains(reply, "rewriting started") {
 						fmt.Fprintln(os.Stderr, "BGREWRITEAOF", reply, err)

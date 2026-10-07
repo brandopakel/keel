@@ -421,8 +421,19 @@ func (e *Engine) pollAOFSync(wait bool) {
 	e.aof.syncPending = nil
 	if err == nil {
 		e.appendSynced = max(e.appendSynced, e.aof.syncOffset)
+		if d := e.driver; d != nil && d.syncFailure != nil {
+			d.syncFailure = nil
+		}
+		return
 	}
-	if err != nil && e.aof.failed == nil {
+	if d := e.driver; d != nil && d.retries {
+		// Retried, as the bytes it failed to sync are still unsynced: the
+		// next due sync tries them again (driver.go).
+		d.syncFailed(err)
+		e.aof.dirty = true
+		return
+	}
+	if e.aof.failed == nil {
 		e.aof.failed = err
 	}
 }
@@ -436,7 +447,7 @@ func (e *Engine) flushAOF(closing bool) error {
 	if e.aof.failed != nil {
 		return e.aof.failed
 	}
-	if err := e.writeAOFBuffer(); err != nil {
+	if err := e.writeAOFBuffer(true); err != nil {
 		return err
 	}
 	syncDue := closing || fsync == FsyncAlways ||
