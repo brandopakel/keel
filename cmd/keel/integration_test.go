@@ -104,17 +104,106 @@ func launchTestServer(t *testing.T, startupTimeout time.Duration, env []string, 
 		}
 	})
 	deadline := started.Add(startupTimeout)
+	var last error
 	for time.Now().Before(deadline) {
-		c, err := net.DialTimeout("tcp", s.addr, 50*time.Millisecond)
-		if err == nil {
-			c.Close()
+		if last = answersPing(s.addr, deadline); last == nil {
 			s.startupElapsed = time.Since(started)
 			return s
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("server did not listen within %s (elapsed %s)", startupTimeout, time.Since(started))
+	t.Fatalf("server did not answer within %s (elapsed %s): %v", startupTimeout, time.Since(started), last)
 	return nil
+}
+
+// answersPing reports whether the server at addr answers a PING on a new
+// connection, by deadline: +PONG, or -NOAUTH when it has a password.
+//
+// A connection alone does not show that the server is up. The kernel completes
+// a handshake for any listening socket, and a copy of freePort's probe can
+// still be listening after freePort has closed it (see probePort). The copy
+// never accepts, and when it closes the kernel resets what is queued on it.
+// A readiness check that only dialled could reach the copy: the test's next
+// dial was then refused, because the server had not bound the port yet
+// (TestServerStartsWithItsListenerAndTransportFlags, run 37583994573), or its
+// first read on a connection queued on the copy was reset
+// (TestRESP2WireBytesUnchanged, run 37584062962). Only the server answers.
+func answersPing(addr string, deadline time.Time) error {
+	c, err := net.DialTimeout("tcp", addr, 50*time.Millisecond)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	if err := c.SetDeadline(deadline); err != nil {
+		return err
+	}
+	if _, err := io.WriteString(c, request("PING")); err != nil {
+		return err
+	}
+	line, err := bufio.NewReader(c).ReadString('\n')
+	if err != nil {
+		return err
+	}
+	if line != "+PONG\r\n" && !strings.HasPrefix(line, "-NOAUTH ") {
+		return fmt.Errorf("PING answered %q", line)
+	}
+	return nil
+}
+
+// TestReadinessNeedsTheServersAnswer: a socket that completes handshakes and
+// never answers - a forked child's copy of freePort's probe, or anything else
+// on the port - is not a server that is ready, and the server is.
+func TestReadinessNeedsTheServersAnswer(t *testing.T) {
+	t.Parallel()
+	silent, err := net.Listen("tcp4", fmt.Sprintf("127.0.0.1:%d", freePort(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer silent.Close()
+	if c, err := net.DialTimeout("tcp", silent.Addr().String(), time.Second); err != nil {
+		t.Fatalf("the kernel did not complete a handshake for a listener that never accepts: %v", err)
+	} else {
+		c.Close()
+	}
+	if err := answersPing(silent.Addr().String(), time.Now().Add(200*time.Millisecond)); err == nil {
+		t.Fatal("a listener that never answered counted as a ready server")
+	}
+	// The servers of every other test answer +PONG; one with a password
+	// answers -NOAUTH, and is as ready.
+	s := startTestServer(t, "-requirepass-env", "KEEL_TEST_PASSWORD")
+	if err := answersPing(s.addr, time.Now().Add(5*time.Second)); err != nil {
+		t.Fatalf("a server with a password: %v", err)
+	}
+	s.stop(t)
+}
+
+// TestPortProbeShutsOutForks: no process can be forked while freePort's probe
+// listens, so no child has a copy of its socket to keep listening after
+// freePort closes it; and a port another listener holds is not free.
+//
+// Not parallel: a test starting a server holds ForkLock while it forks, and
+// the TryLock below would then fail for that rather than for the probe.
+func TestPortProbeShutsOutForks(t *testing.T) {
+	port := freePort(t)
+	couldFork := false
+	if !probePort(port, func() {
+		if couldFork = syscall.ForkLock.TryLock(); couldFork {
+			syscall.ForkLock.Unlock()
+		}
+	}) {
+		t.Fatalf("port %d, free a moment ago, could not be probed", port)
+	}
+	if couldFork {
+		t.Fatal("a fork could start while the port probe listened, and its child would keep a copy of the probe")
+	}
+	held, err := net.Listen("tcp4", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	if probePort(port, nil) {
+		t.Fatalf("the probe took port %d while another listener held it", port)
+	}
 }
 
 // Test servers listen on ports from [testPortFloor, testPortCeiling), which is
@@ -143,8 +232,8 @@ var nextTestPort atomic.Int64
 // The next dial was refused, or a connection the probe had queued was reset.
 //
 // Ports below the kernel's own range cannot be handed out that way. Within the
-// process each is tried once, in turn, and kept only if a listener can bind it,
-// which skips any that something else holds.
+// process each is tried once, in turn, and kept only if a listener can bind it
+// (probePort), which skips any that something else holds.
 func freePort(t *testing.T) int {
 	t.Helper()
 	requireTestPortsBelowEphemeral(t)
@@ -152,15 +241,52 @@ func freePort(t *testing.T) int {
 	offset := int64(os.Getpid()) * 7919 % span
 	for tries := int64(0); tries < span; tries++ {
 		port := testPortFloor + int((offset+nextTestPort.Add(1)-1)%span)
-		listener, err := net.Listen("tcp4", fmt.Sprintf("127.0.0.1:%d", port))
-		if err != nil {
-			continue
+		if probePort(port, nil) {
+			return port
 		}
-		listener.Close()
-		return port
 	}
 	t.Fatalf("no free port in [%d, %d) for a test server", testPortFloor, testPortCeiling)
 	return 0
+}
+
+// probePort reports whether a listener can take 127.0.0.1:port, by listening
+// on it and closing it again. during, when not nil, runs while it listens.
+//
+// No process may be forked while the probe exists, so it holds
+// syscall.ForkLock for reading throughout, as the lock's documentation asks of
+// code that creates descriptors; every fork in the process takes it for
+// writing. A child forked while the probe listened would have a copy of the
+// socket until its exec closed it. Close-on-exec closes it in the child only
+// at exec, so the copy outlived freePort's Close, and stayed in LISTEN, on the
+// port this test's server was about to bind. Tests start servers side by side,
+// so forks are frequent. On CI (throwaway branch test/readiness-diag), 1 to 3
+// in every hundred probes were still listening right after Close, held by a
+// child of the test process that had not finished its exec, and on Linux about
+// 3 in a thousand still accepted a dial made after a cmd.Start, as
+// launchTestServer's readiness check is.
+//
+// The socket is made with syscall calls rather than net.Listen. On macOS
+// net.Listen takes ForkLock for reading itself, and taking it again while a
+// fork waits to take it for writing would deadlock.
+func probePort(port int, during func()) bool {
+	syscall.ForkLock.RLock()
+	defer syscall.ForkLock.RUnlock()
+	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		return false
+	}
+	defer syscall.Close(fd)
+	// As the server does (listenTCP), so that a port it could bind is not
+	// refused for a closed connection's TIME_WAIT.
+	if syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1) != nil ||
+		syscall.Bind(fd, &syscall.SockaddrInet4{Port: port, Addr: [4]byte{127, 0, 0, 1}}) != nil ||
+		syscall.Listen(fd, 1) != nil {
+		return false
+	}
+	if during != nil {
+		during()
+	}
+	return true
 }
 
 // requireTestPortsBelowEphemeral fails t when Linux is set to hand out ports
