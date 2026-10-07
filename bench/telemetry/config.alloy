@@ -5,7 +5,10 @@
 // what it reads to the Grafana Cloud stack's metrics store:
 // - redis_exporter in front of Keel, labelled server="keel";
 // - redis_exporter in front of Redis, labelled server="redis";
-// - scripts/run-telemetry.py's own metrics (the load phase), server="load".
+// - scripts/run-telemetry.py's own metrics: the load phase, and the metric
+//   names each exporter reports, which carry their own server label. Its
+//   target sets no server label, which would replace theirs (a scraped label
+//   that clashes with a target label is renamed exported_server).
 // Every series also carries the run's labels (run_id, branch, sha, host), so
 // a dashboard can pick one run out of many.
 //
@@ -21,7 +24,7 @@ prometheus.scrape "telemetry" {
 	targets = [
 		{"__address__" = "127.0.0.1:9131", "server" = "keel"},
 		{"__address__" = "127.0.0.1:9132", "server" = "redis"},
-		{"__address__" = "127.0.0.1:9133", "server" = "load"},
+		{"__address__" = "127.0.0.1:9133"},
 	]
 	job_name        = "keel-ci-telemetry"
 	scrape_interval = "15s"
