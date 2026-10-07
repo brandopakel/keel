@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
@@ -26,7 +27,7 @@ var diagStarts, diagListeningAtStart atomic.Int64
 func TestMain(m *testing.M) {
 	code := m.Run()
 	if os.Getenv("KEEL_TEST_SERVER") != "1" && os.Getenv("KEEL_DIAG_CHILD") != "1" {
-		fmt.Printf("READINESSDIAG summary goos=%s starts=%d listening_right_after_start=%d\n", runtime.GOOS, diagStarts.Load(), diagListeningAtStart.Load())
+		fmt.Printf("READINESSDIAG summary goos=%s starts=%d listening_right_after_start=%d of_which_the_server_itself=%d\n", runtime.GOOS, diagStarts.Load(), diagListeningAtStart.Load(), diagServerItself.Load())
 	}
 	os.Exit(code)
 }
@@ -60,10 +61,81 @@ func diagAfterStart(t *testing.T, port, pid int) {
 	if runtime.GOOS != "linux" {
 		return
 	}
-	if n := diagListening(port); n > 0 {
+	if inodes := diagListenerInodes(port); len(inodes) > 0 {
 		diagListeningAtStart.Add(1)
-		t.Logf("READINESSDIAG %d listener(s) on port %d right after server pid %d started", n, port, pid)
+		for _, ino := range inodes {
+			who := "another process"
+			if diagOwns(pid, ino) {
+				who = "the server itself"
+				diagServerItself.Add(1)
+			}
+			t.Logf("READINESSDIAG listener inode %d on port %d right after server pid %d started: held by %s; holders: %s", ino, port, pid, who, diagHolders(ino))
+		}
 	}
+}
+
+var diagServerItself atomic.Int64
+
+// diagListenerInodes returns the inodes of the sockets in LISTEN on port.
+func diagListenerInodes(port int) []uint64 {
+	var out []uint64
+	for _, table := range []string{"/proc/net/tcp", "/proc/net/tcp6"} {
+		body, err := os.ReadFile(table)
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(body), "\n")[1:] {
+			f := strings.Fields(line)
+			if len(f) < 10 || f[3] != "0A" {
+				continue
+			}
+			i := strings.LastIndex(f[1], ":")
+			if p, err := strconv.ParseUint(f[1][i+1:], 16, 32); err == nil && int(p) == port {
+				ino, _ := strconv.ParseUint(f[9], 10, 64)
+				out = append(out, ino)
+			}
+		}
+	}
+	return out
+}
+
+func diagOwns(pid int, ino uint64) bool {
+	target := fmt.Sprintf("socket:[%d]", ino)
+	fds, _ := filepath.Glob(fmt.Sprintf("/proc/%d/fd/*", pid))
+	for _, fd := range fds {
+		if link, err := os.Readlink(fd); err == nil && link == target {
+			return true
+		}
+	}
+	return false
+}
+
+// diagHolders names every process holding the socket with this inode.
+func diagHolders(ino uint64) string {
+	target := fmt.Sprintf("socket:[%d]", ino)
+	fds, _ := filepath.Glob("/proc/[0-9]*/fd/*")
+	var owners []string
+	seen := map[string]bool{}
+	for _, fd := range fds {
+		if link, err := os.Readlink(fd); err != nil || link != target {
+			continue
+		}
+		pid := strings.Split(fd, "/")[2]
+		if seen[pid] {
+			continue
+		}
+		seen[pid] = true
+		cmd, _ := os.ReadFile("/proc/" + pid + "/cmdline")
+		args := strings.Fields(strings.ReplaceAll(string(cmd), "\x00", " "))
+		if len(args) > 3 {
+			args = args[:3]
+		}
+		owners = append(owners, fmt.Sprintf("pid=%s args=%q", pid, strings.Join(args, " ")))
+	}
+	if len(owners) == 0 {
+		return "none found (closed by now)"
+	}
+	return strings.Join(owners, "; ")
 }
 
 func TestDiagChildExit(t *testing.T) {
