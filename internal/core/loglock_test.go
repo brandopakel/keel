@@ -25,8 +25,10 @@ func TestASecondInstanceOfALogIsRefused(t *testing.T) {
 	path := filepath.Join(dir, "keel.aof")
 	o := Options{AppendOnly: true, AppendFilename: path, Fsync: FsyncAlways}
 	first := openTestEngine(t, o)
-	runOn(t, first, "SET", "k", "first")
-	require.NoError(t, first.FlushAOF())
+	holding(first, func() {
+		runOn(t, first, "SET", "k", "first")
+		require.NoError(t, first.FlushAOF())
+	})
 	before := filesIn(t, dir)
 
 	second, err := Open(context.Background(), o)
@@ -34,14 +36,14 @@ func TestASecondInstanceOfALogIsRefused(t *testing.T) {
 	assert.Nil(t, second)
 	assert.EqualError(t, err, "appendonly: log in use by another instance: "+path+".lock")
 	assert.Equal(t, before, filesIn(t, dir), "the refused instance read and wrote nothing")
-	assert.Equal(t, "first", runOn(t, first, "GET", "k"), "and the first goes on")
+	assert.Equal(t, "first", runLocked(t, first, "GET", "k"), "and the first goes on")
 
 	// Another log beside it is another lock.
 	openTestEngine(t, Options{AppendOnly: true, AppendFilename: filepath.Join(dir, "other.aof")})
 
 	require.NoError(t, first.Close())
 	again := openTestEngine(t, o)
-	assert.Equal(t, "first", runOn(t, again, "GET", "k"))
+	assert.Equal(t, "first", runLocked(t, again, "GET", "k"))
 }
 
 // TestCloseReleasesTheLogsLockAndLeavesItsFile: the lock file stays, empty,
@@ -101,7 +103,7 @@ func TestALogHeldByAnotherProcess(t *testing.T) {
 	_ = stdin.Close()
 
 	e = openTestEngine(t, Options{AppendOnly: true, AppendFilename: path})
-	assert.Equal(t, "held", runOn(t, e, "GET", "holder"), "the holder's write is there, and its lock is not")
+	assert.Equal(t, "held", runLocked(t, e, "GET", "holder"), "the holder's write is there, and its lock is not")
 }
 
 // TestTheLogLockIsExclusive: the lock itself, on every platform that has one
@@ -177,9 +179,13 @@ func TestHelperProcessHoldsALog(t *testing.T) {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	runOn(t, e, "SET", "holder", "held")
-	if err := e.FlushAOF(); err != nil {
-		fmt.Println(err)
+	var flushed error
+	holding(e, func() {
+		runOn(t, e, "SET", "holder", "held")
+		flushed = e.FlushAOF()
+	})
+	if flushed != nil {
+		fmt.Println(flushed)
 		os.Exit(1)
 	}
 	fmt.Println("held")

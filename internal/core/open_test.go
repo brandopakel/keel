@@ -27,6 +27,23 @@ func openTestEngine(t *testing.T, o Options) *Engine {
 	return e
 }
 
+// holding runs fn holding e's lock, as whoever touches an engine Open made
+// has to: its maintenance goroutine runs cycles of its own. The lock is
+// released however fn ends, a failed require included, so that the test's
+// cleanup can close the engine.
+func holding(e *Engine, fn func()) {
+	e.Lock()
+	defer e.Unlock()
+	fn()
+}
+
+// runLocked is runOn, holding e's lock.
+func runLocked(t testing.TB, e *Engine, name string, args ...string) (reply interface{}) {
+	t.Helper()
+	holding(e, func() { reply = runOn(t, e, name, args...) })
+	return reply
+}
+
 // filesIn reads every file in dir, by name.
 func filesIn(t *testing.T, dir string) map[string]string {
 	t.Helper()
@@ -82,14 +99,17 @@ func TestOpenReplaysTheLogCloseLeft(t *testing.T) {
 			t.Parallel()
 			o := Options{AppendOnly: true, AppendFilename: filepath.Join(t.TempDir(), "keel.aof"), Fsync: policy}
 			e := openTestEngine(t, o)
-			require.True(t, e.AOFEnabled())
-			fillOneOfEverythingOn(t, e)
-			want := snapshotEverythingOn(t, e)
+			var want map[string]interface{}
+			holding(e, func() {
+				require.True(t, e.AOFEnabled())
+				fillOneOfEverythingOn(t, e)
+				want = snapshotEverythingOn(t, e)
+			})
 			require.NoError(t, e.Close(), "nothing was flushed before Close: it has to write it all")
 			require.ErrorIs(t, e.Close(), ErrClosed, "closing twice is closing a closed engine")
 
 			again := openTestEngine(t, o)
-			assert.Equal(t, want, snapshotEverythingOn(t, again))
+			holding(again, func() { assert.Equal(t, want, snapshotEverythingOn(t, again)) })
 		})
 	}
 }
@@ -98,9 +118,9 @@ func TestOpenReplaysTheLogCloseLeft(t *testing.T) {
 func TestOpenWithoutALog(t *testing.T) {
 	t.Parallel()
 	e := openTestEngine(t, Options{})
-	assert.False(t, e.AOFEnabled())
-	assert.Equal(t, int64(0), runOn(t, e, "DBSIZE"))
-	assert.Equal(t, "OK", runOn(t, e, "SET", "k", "v"))
+	holding(e, func() { assert.False(t, e.AOFEnabled()) })
+	assert.Equal(t, int64(0), runLocked(t, e, "DBSIZE"))
+	assert.Equal(t, "OK", runLocked(t, e, "SET", "k", "v"))
 	require.NoError(t, e.Close())
 	require.ErrorIs(t, e.Close(), ErrClosed)
 }
@@ -117,9 +137,11 @@ func TestOpenRepairsATornTail(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(intact+torn), 0o644))
 
 	e := openTestEngine(t, Options{AppendOnly: true, AppendFilename: path})
-	assert.Equal(t, "1", runOn(t, e, "GET", "a"))
-	assert.Equal(t, "2", runOn(t, e, "GET", "b"))
-	assert.Equal(t, "$-1\r\n", string(rawReplyOn(t, e, "GET", "c")), "the torn command is not replayed")
+	assert.Equal(t, "1", runLocked(t, e, "GET", "a"))
+	assert.Equal(t, "2", runLocked(t, e, "GET", "b"))
+	holding(e, func() {
+		assert.Equal(t, "$-1\r\n", string(rawReplyOn(t, e, "GET", "c")), "the torn command is not replayed")
+	})
 	require.NoError(t, e.Close())
 
 	files := filesIn(t, dir)
@@ -222,7 +244,7 @@ func TestACancelledReplayLeavesEveryFileAsItWas(t *testing.T) {
 			}
 
 			e = openTestEngine(t, Options{AppendOnly: true, AppendFilename: path})
-			assert.Equal(t, int64(c.records), runOn(t, e, "DBSIZE"), "a later Open replays it all")
+			assert.Equal(t, int64(c.records), runLocked(t, e, "DBSIZE"), "a later Open replays it all")
 		})
 	}
 
