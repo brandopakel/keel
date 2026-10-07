@@ -175,6 +175,12 @@ type client struct {
 	out              []byte
 	inArena          bool
 	outStart, outEnd int
+
+	// engine is never set or read: a layout control build only, never
+	// merged. Part 3 of plan step 2.7 adds this field, and a client is used
+	// as an interface, so the linker keeps the methods of the field's type
+	// that an interface could call; this keeps the same ones linked here.
+	engine *core.Engine
 }
 
 // clients is every connected socket, keyed by descriptor.
