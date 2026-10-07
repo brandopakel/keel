@@ -8,7 +8,7 @@ files on the repository's bench-history branch. A Grafana dashboard reads them
 from raw.githubusercontent.com through the Infinity data source, which fetches
 a URL at query time and stores nothing itself.
 
-Two kinds of run are collected:
+Four kinds of run are collected:
 
 - command-path: the Command path workflow's paired benchmarks
   (.github/workflows/command-path.yml), from comparison.json and
@@ -18,6 +18,17 @@ Two kinds of run are collected:
   suite's summary.json and lscpu.txt. matched/runs.csv gets one line per run,
   failed ones included, and matched/cases.csv one line per workload of each
   suite.
+- census: the Command census workflow's census.json (scripts/command-census.py).
+  census/runs.csv gets one line per run, with how many of Redis's commands and
+  subcommands Keel has, and census/areas.csv one line per area (a command group,
+  or a module) of each run. census/latest.csv holds every command and
+  subcommand of the newest census of develop, with whether Keel has it; it is
+  rewritten, not appended to, when a newer one arrives.
+- telemetry: the Live telemetry workflow's load/compat.json and
+  load/timeline.json, with provenance.txt for the host. telemetry/runs.csv gets
+  one line per run, with how many metric names redis_exporter reported for Keel
+  and for Redis, and telemetry/phases.csv one line per load phase, with each
+  server's ops/s (not a comparison of speed: both share one unpinned runner).
 
 A run is recorded once, keyed by its artifact's ID, so running this again adds
 only what is new. A run still in progress, or from a fork, is skipped. An
@@ -65,7 +76,17 @@ MATCHED_CASES = ['artifact_id', 'run_id', 'time', 'branch', 'pr', 'host', 'suite
                  'candidate_p99_ms', 'baseline_p999_ms', 'candidate_p999_ms', 'baseline_rss_mib',
                  'candidate_rss_mib', 'client_cpu_warnings']
 
-# Which artifact each kind comes from, the members it needs, and its files.
+CENSUS_RUNS = ['artifact_id', 'run_id', 'time', 'event', 'branch', 'pr', 'conclusion', 'redis_version', 'commands',
+               'commands_present', 'subcommands', 'subcommands_present', 'url']
+CENSUS_AREAS = ['artifact_id', 'run_id', 'time', 'branch', 'area', 'commands', 'commands_present', 'subcommands',
+                'subcommands_present']
+CENSUS_LATEST = ['run_id', 'time', 'branch', 'name', 'kind', 'area', 'since', 'deprecated', 'keel']
+TELEMETRY_RUNS = ['artifact_id', 'run_id', 'time', 'event', 'branch', 'pr', 'conclusion', 'host',
+                  'keel_metric_names', 'redis_metric_names', 'shared_metric_names', 'url']
+TELEMETRY_PHASES = ['artifact_id', 'run_id', 'time', 'branch', 'host', 'phase', 'keel_ops', 'redis_ops']
+
+# Which artifact each kind comes from, the members it needs, and its files. A
+# kind with a latest file also keeps one snapshot: the newest run of develop.
 KINDS = {
     'command-path': {'artifact': 'command-path-benchmarks',
                      # The raw outputs only for go test's cpu line (see command_path_records).
@@ -74,6 +95,11 @@ KINDS = {
     'matched': {'artifact': 'matched-keyspace-adoption',
                 'members': re.compile(r'^(lscpu\.txt|(baseline|candidate)-source\.txt|[\w.-]+/summary\.json)$'),
                 'files': {'runs': MATCHED_RUNS, 'cases': MATCHED_CASES}},
+    'census': {'artifact': 'command-census', 'members': re.compile(r'^census\.json$'),
+               'files': {'runs': CENSUS_RUNS, 'areas': CENSUS_AREAS}, 'latest': CENSUS_LATEST},
+    'telemetry': {'artifact': 'telemetry',
+                  'members': re.compile(r'^(provenance\.txt|load/compat\.json|load/timeline\.json)$'),
+                  'files': {'runs': TELEMETRY_RUNS, 'phases': TELEMETRY_PHASES}},
 }
 
 
@@ -216,7 +242,40 @@ def matched_records(artifact_id, run, pr, files):
     return {'runs': runs, 'cases': cases}
 
 
-RECORDS = {'command-path': command_path_records, 'matched': matched_records}
+def census_records(artifact_id, run, pr, files):
+    """runs.csv, areas.csv and latest.csv lines for one census."""
+    census = json.loads(files['census.json'])
+    total = census['summary']['total']
+    runs = [{'artifact_id': artifact_id, **run_fields(run, pr), 'redis_version': census.get('redis_version', ''),
+             'commands': total['commands'], 'commands_present': total['commands_present'],
+             'subcommands': total['subcommands'], 'subcommands_present': total['subcommands_present']}]
+    areas = [{'artifact_id': artifact_id, 'run_id': run['id'], 'time': run['created_at'],
+              'branch': run['head_branch'], 'area': area, **counts}
+             for area, counts in census['summary']['areas'].items()]
+    latest = [{'run_id': run['id'], 'time': run['created_at'], 'branch': run['head_branch'], 'name': c['name'],
+               'kind': c['kind'], 'area': f"module:{c['module']}" if c.get('module') else c['group'],
+               'since': c.get('since', ''), 'deprecated': 'yes' if c.get('deprecated') else 'no', 'keel': c['keel']}
+              for c in census['commands']]
+    return {'runs': runs, 'areas': areas, 'latest': latest}
+
+
+def telemetry_records(artifact_id, run, pr, files):
+    """runs.csv and phases.csv lines for one Live telemetry run."""
+    host = host_of(parse_provenance(files.get('provenance.txt', ''))['cpu_model'])
+    compat = json.loads(files['load/compat.json']) if 'load/compat.json' in files else {}
+    timeline = json.loads(files['load/timeline.json']) if 'load/timeline.json' in files else []
+    runs = [{'artifact_id': artifact_id, **run_fields(run, pr), 'host': host,
+             'keel_metric_names': compat.get('keel', ''), 'redis_metric_names': compat.get('redis', ''),
+             'shared_metric_names': compat.get('shared', '')}]
+    phases = [{'artifact_id': artifact_id, 'run_id': run['id'], 'time': run['created_at'],
+               'branch': run['head_branch'], 'host': host, 'phase': t['phase'],
+               'keel_ops': num(t['ops_per_second'].get('keel'), 0), 'redis_ops': num(t['ops_per_second'].get('redis'), 0)}
+              for t in timeline]
+    return {'runs': runs, 'phases': phases}
+
+
+RECORDS = {'command-path': command_path_records, 'matched': matched_records, 'census': census_records,
+           'telemetry': telemetry_records}
 
 
 def read_members(names_and_readers, pattern):
@@ -248,6 +307,12 @@ class Store:
         self.dir = Path(data) / kind
         self.files = KINDS[kind]['files']
         self.lines = {name: self.load(name, columns) for name, columns in self.files.items()}
+        # The snapshot of the newest run of develop, for a kind that keeps one:
+        # its time as the file has it, and the lines that will replace it.
+        self.latest_columns = KINDS[kind].get('latest')
+        held = self.load('latest', self.latest_columns) if self.latest_columns else []
+        self.latest_time = held[0]['time'] if held else ''
+        self.latest = None
 
     def path(self, name):
         return self.dir / f'{name}.csv'
@@ -268,7 +333,18 @@ class Store:
 
     def add(self, records):
         for name, lines in records.items():
-            self.lines[name] += [{k: str(v) for k, v in line.items()} for line in lines]
+            if name == 'latest':
+                self.offer_latest(lines)
+            else:
+                self.lines[name] += [{k: str(v) for k, v in line.items()} for line in lines]
+
+    def offer_latest(self, lines):
+        """Keep these lines as the snapshot if they come from develop and are
+        newer than the one held. A run collected late cannot replace a newer one."""
+        if not lines or lines[0]['branch'] != 'develop' or lines[0]['time'] <= self.latest_time:
+            return
+        self.latest_time = lines[0]['time']
+        self.latest = [{k: str(v) for k, v in line.items()} for line in lines]
 
     def save(self):
         self.dir.mkdir(parents=True, exist_ok=True)
@@ -279,6 +355,11 @@ class Store:
                 writer = csv.DictWriter(f, fieldnames=columns, lineterminator='\n', quoting=csv.QUOTE_MINIMAL)
                 writer.writeheader()
                 writer.writerows(lines)
+        if self.latest is not None:
+            with open(self.path('latest'), 'w', newline='') as f:
+                writer = csv.DictWriter(f, fieldnames=self.latest_columns, lineterminator='\n')
+                writer.writeheader()
+                writer.writerows(self.latest)
 
 
 class GitHub:

@@ -3,19 +3,19 @@
 #
 # GitHub deletes a workflow artifact after 30 days, and Grafana Cloud's free
 # plan keeps pushed metrics for 14. This job copies the numbers worth keeping
-# from each Command path run, and from each run of General cache validation's
-# matched adoption job, into CSV files on the bench-history branch. A Grafana
-# dashboard reads them from raw.githubusercontent.com through the Infinity
-# data source. scripts/collect-bench-history.py says what is kept, and the
-# branch's README.md what each column means.
+# from each Command path run, each run of General cache validation's matched
+# adoption job, each Command census and each Live telemetry run into CSV files
+# on the bench-history branch. A Grafana dashboard reads them from
+# raw.githubusercontent.com through the Infinity data source.
+# scripts/collect-bench-history.py says what is kept, and the branch's
+# README.md what each column means.
 #
-# When it runs: after every Command path run and every dispatched General
-# cache validation run, and once a day in case one was missed. A pull
-# request's General cache validation never runs the matched job, so it has
-# nothing to collect and is skipped. The collector records each run once,
-# keyed by its artifact, so a run it has already seen costs nothing, and one
-# still in progress is left for the next collection. Only one collection runs
-# at a time, so two never push over each other.
+# When it runs: after every run of those workflows, and once a day in case
+# one was missed. A pull request's General cache validation never runs the
+# matched job, so it has nothing to collect and is skipped. The collector
+# records each run once, keyed by its artifact, so a run it has already seen
+# costs nothing, and one still in progress is left for the next collection.
+# Only one collection runs at a time, so two never push over each other.
 #
 # Why it may push: committing to bench-history needs contents: write, and a
 # workflow_run or scheduled job runs from develop whatever triggered it. What
@@ -27,7 +27,7 @@ name: Benchmark history
 
 on:
   workflow_run:
-    workflows: [Command path, General cache validation]
+    workflows: [Command path, General cache validation, Command census, Live telemetry]
     types: [completed]
   schedule:
     - cron: '37 6 * * *'
@@ -46,7 +46,7 @@ jobs:
     name: Collect benchmark history
     if: >-
       github.event_name != 'workflow_run' ||
-      github.event.workflow_run.name == 'Command path' ||
+      github.event.workflow_run.name != 'General cache validation' ||
       github.event.workflow_run.event == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15

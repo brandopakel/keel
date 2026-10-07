@@ -32,6 +32,11 @@
 name: Live telemetry
 
 on:
+  # Nightly on develop, so that the gap between what monitoring sees of Keel
+  # and of Redis is recorded once a day (scripts/collect-bench-history.py
+  # keeps it on the bench-history branch).
+  schedule:
+    - cron: '41 5 * * *'
   workflow_dispatch:
     inputs:
       minutes:

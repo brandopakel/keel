@@ -38,6 +38,30 @@ COMPARISON = {
     'failures': [],
 }
 
+# command-census.py's census.json, trimmed from run 37658260465.
+CENSUS = {
+    'redis_version': '8.10.1',
+    'summary': {'areas': {'string': {'commands': 26, 'commands_present': 12, 'subcommands': 0, 'subcommands_present': 0},
+                          'module:bf': {'commands': 10, 'commands_present': 6, 'subcommands': 0,
+                                        'subcommands_present': 0}},
+                'total': {'commands': 401, 'commands_present': 107, 'subcommands': 148, 'subcommands_present': 9}},
+    'control_failures': [], 'keel_no_reply': [],
+    'commands': [{'name': 'append', 'kind': 'command', 'group': 'string', 'module': '', 'since': '2.0.0',
+                  'deprecated': False, 'keel': 'missing', 'redis': 'present', 'keel_reply': 'ERR unknown command'},
+                 {'name': 'bf.add', 'kind': 'command', 'group': 'module', 'module': 'bf', 'since': '1.0.0',
+                  'deprecated': False, 'keel': 'present', 'redis': 'present', 'keel_reply': 'ERR wrong number'}],
+}
+
+# The Live telemetry artifact's files, from run 37587041339.
+TELEMETRY = {
+    'provenance.txt': 'keel 2aeb1c8\nrunner Linux 6.17.0-1022-azure x86_64 cpus 4 AMD EPYC 9V74 80-Core Processor\n',
+    'load/compat.json': json.dumps({'keel': 21, 'redis': 188, 'shared': 17, 'redis_only': [], 'keel_only': []}),
+    'load/timeline.json': json.dumps([{'phase': 'steady', 'description': '', 'start': 0, 'end': 1,
+                                       'ops_per_second': {'keel': 95508.3, 'redis': 104308.9}},
+                                      {'phase': 'expiry', 'description': '', 'start': 1, 'end': 2,
+                                       'ops_per_second': {'keel': None, 'redis': 90740.1}}]),
+}
+
 GO_HEADER = 'goos: linux\ngoarch: amd64\ncpu: AMD EPYC 9V74 80-Core Processor                \n'
 
 # Before 65ebdbc (October 3, 2026): no CPU model in the provenance, and rows
@@ -284,6 +308,77 @@ class Collect(unittest.TestCase):
         (self.data / 'command-path/runs.csv').write_text('artifact_id,time\n1,2026-10-01T00:00:00Z\n')
         with self.assertRaisesRegex(SystemExit, 'migrate'):
             cbh.collect(self.gh, self.data, ['command-path'])
+
+
+class NewKinds(unittest.TestCase):
+    def setUp(self):
+        self.run = {'id': 37658260465, 'created_at': '2026-10-07T17:20:12Z', 'event': 'push',
+                    'head_branch': 'develop', 'conclusion': 'success', 'html_url': 'u'}
+
+    def test_census(self):
+        records = cbh.census_records(1, self.run, '', {'census.json': json.dumps(CENSUS)})
+        run, = records['runs']
+        self.assertEqual((run['redis_version'], run['commands'], run['commands_present'], run['subcommands_present']),
+                         ('8.10.1', 401, 107, 9))
+        self.assertEqual({a['area']: a['commands_present'] for a in records['areas']}, {'string': 12, 'module:bf': 6})
+        self.assertEqual([(c['name'], c['area'], c['keel']) for c in records['latest']],
+                         [('append', 'string', 'missing'), ('bf.add', 'module:bf', 'present')])
+
+    def test_telemetry(self):
+        records = cbh.telemetry_records(2, self.run, 134, TELEMETRY)
+        run, = records['runs']
+        self.assertEqual((run['host'], run['keel_metric_names'], run['redis_metric_names'], run['shared_metric_names']),
+                         ('EPYC 9V74', 21, 188, 17))
+        self.assertEqual([(p['phase'], p['keel_ops'], p['redis_ops']) for p in records['phases']],
+                         [('steady', 95508, 104309), ('expiry', '', 90740)])
+
+    def test_members(self):
+        names = ['provenance.txt', 'load/compat.json', 'load/timeline.json', 'load/steady-keel.json', 'alloy.log']
+        self.assertEqual([n for n in names if cbh.KINDS['telemetry']['members'].match(n)], names[:3])
+
+
+class Latest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.data = Path(self.tmp.name) / 'data'
+        self.gh = FakeGitHub()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def census(self, artifact_id, created, branch, present):
+        census = json.loads(json.dumps(CENSUS))
+        census['commands'][0]['keel'] = present
+        self.gh.add('command-census', artifact_id, artifact_id * 10, {'census.json': json.dumps(census)},
+                    created=created, branch=branch)
+
+    def latest(self):
+        return [(r['run_id'], r['name'], r['keel']) for r in read(self.data / 'census/latest.csv')]
+
+    def test_newest_census_of_develop_is_the_snapshot(self):
+        self.census(1, '2026-10-07T10:00:00Z', 'develop', 'missing')
+        self.census(2, '2026-10-07T11:00:00Z', 'develop', 'present')
+        self.census(3, '2026-10-07T12:00:00Z', 'feat/x', 'missing')
+        counts, errors = cbh.collect(self.gh, self.data, ['census'])
+        self.assertEqual((counts, errors), ({'census collected': 3}, []))
+        self.assertEqual(self.latest(), [('20', 'append', 'present'), ('20', 'bf.add', 'present')])
+        self.assertEqual(len(read(self.data / 'census/runs.csv')), 3, 'every run is in the history')
+        self.assertEqual(len(read(self.data / 'census/areas.csv')), 6)
+
+    def test_an_older_census_collected_late_does_not_replace_it(self):
+        self.census(2, '2026-10-07T11:00:00Z', 'develop', 'present')
+        cbh.collect(self.gh, self.data, ['census'])
+        self.census(1, '2026-10-07T10:00:00Z', 'develop', 'missing')
+        cbh.collect(self.gh, self.data, ['census'])
+        self.assertEqual(self.latest()[0], ('20', 'append', 'present'))
+        self.census(4, '2026-10-07T13:00:00Z', 'develop', 'missing')
+        cbh.collect(self.gh, self.data, ['census'])
+        self.assertEqual(self.latest()[0], ('40', 'append', 'missing'))
+
+    def test_no_snapshot_without_a_census_of_develop(self):
+        self.census(3, '2026-10-07T12:00:00Z', 'feat/x', 'missing')
+        cbh.collect(self.gh, self.data, ['census'])
+        self.assertFalse((self.data / 'census/latest.csv').exists())
 
 
 if __name__ == '__main__':
