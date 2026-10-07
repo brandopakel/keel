@@ -249,6 +249,10 @@ type Engine struct {
 	// logLock is the lock beside e's log that StartAOF took, which Close
 	// releases; nil, e holds none. See loglock.go.
 	logLock *logLock
+	// driver is e's maintenance goroutine, which Open starts and Close stops;
+	// nil when something else drives e, as the server's loop does. It is set
+	// before e is shared and never again, so it is read without the lock.
+	driver *driver
 }
 
 // Lock takes e's lock, waiting until whoever holds it lets go. Its holder is
