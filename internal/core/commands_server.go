@@ -3,9 +3,7 @@ package core
 import (
 	"fmt"
 	"strings"
-	"time"
 
-	"github.com/brandopakel/keel/internal/config"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
@@ -112,8 +110,10 @@ type ClientBufferStats struct {
 	// stay at zero.
 	ClosedSlow, ClosedUnanswered, ClosedUnread uint64
 	RunsUnreplied                              uint64
-	// ConnectionsReceived counts every connection accepted since startup.
-	ConnectionsReceived uint64
+	// ConnectionsReceived counts every connection accepted since startup, and
+	// ConnectionsRejected every one closed at once because the server already
+	// held its most clients (Redis's rejected_connections).
+	ConnectionsReceived, ConnectionsRejected uint64
 }
 
 // SetClientBuffers installs on e the hook INFO reads the connections of the
@@ -129,134 +129,6 @@ func (e *Engine) SetClientBuffers(f func() ClientBufferStats) { e.clientBuffers 
 // one. It is not a claim to implement all of Redis 7.0; the README's integration
 // contract is that.
 const RedisCompatibleVersion = "7.0.0"
-
-// cmdINFO reports server state, in the section format redis-cli expects.
-//
-// It exists because eviction is otherwise invisible: without used_memory and
-// evicted_keys there is no way to tell a cache that is working from one that is
-// thrashing.
-//
-// The text is a verbatim string in RESP3, as Redis sends it. resp_version is
-// the protocol of the connection asking, the same as HELLO's proto: 2, or 3
-// after HELLO 3.
-//
-// Any number of sections may be named, as Redis allows; a name that is not a
-// section adds nothing, and all, default and everything are every section.
-func (e *Engine) cmdINFO(args []string) []byte {
-	sections := make(map[string]bool, len(args))
-	for _, arg := range args {
-		sections[strings.ToLower(arg)] = true
-	}
-	every := len(args) == 0 || sections["all"] || sections["default"] || sections["everything"]
-
-	var b strings.Builder
-	want := func(name string) bool { return every || sections[name] }
-	if want("clients") && e.clientBuffers != nil {
-		stats := e.clientBuffers()
-		fmt.Fprintf(&b, "# Clients\r\nconnected_clients:%d\r\nretained_input_bytes:%d\r\nretained_reply_bytes:%d\r\nretained_client_bytes:%d\r\n", stats.Connected, stats.InputBytes, stats.ReplyBytes, stats.TotalBytes)
-		fmt.Fprintf(&b, "request_allocation_peak_bytes:%d\r\nrequest_allocation_refusals:%d\r\n", stats.RequestAllocationPeak, stats.RequestAllocationRefusals)
-		fmt.Fprintf(&b, "clients_closed_slow:%d\r\nclients_closed_unanswered:%d\r\nclients_closed_unread:%d\r\nclients_closed_unreplied:%d\r\n\r\n",
-			stats.ClosedSlow, stats.ClosedUnanswered, stats.ClosedUnread, stats.RunsUnreplied)
-	}
-	if want("clients") && e.commandAllocations != nil {
-		stats := e.commandAllocations
-		fmt.Fprintf(&b, "command_allocation_limit_bytes:%d\r\ncommand_allocation_reserved_bytes:%d\r\ncommand_allocation_peak_bytes:%d\r\ncommand_allocation_refusals:%d\r\n", stats.Limit, stats.Reserved, stats.Peak, stats.Refusals)
-	}
-
-	if want("replication") {
-		role := "primary"
-		if e.replicaOf() != "" {
-			role = "replica"
-		}
-		ready := 0
-		if e.replicaReady {
-			ready = 1
-		}
-		age := int64(-1)
-		if !e.replicaUpdated.IsZero() {
-			age = time.Since(e.replicaUpdated).Milliseconds()
-		}
-		fmt.Fprintf(&b, "# Replication\r\nprimary_epoch:%s\r\nreplica_epoch:%s\r\nreplication_pending_keys:%d\r\nreplication_epoch_invalidated:%t\r\n", e.replication.epoch, e.replicaEpoch, len(e.replication.dirty), e.replication.invalidated)
-		offset, history := e.replication.offset, e.replication.bytes
-		if e.replicationProtocol() == 2 {
-			offset, history = e.replicationV2.end, e.replicationV2.bytes
-			fmt.Fprintf(&b, "replication_snapshot_bytes:%d\r\nreplica_checkpoint_resumed:%t\r\nreplica_snapshot_received:%d\r\n", e.replicationV2.snapshotBytes, e.replicaV2.resumed, e.replicaV2.snapshotReceived)
-			// What the primary knows about its replicas. Lag is the distance
-			// a promotion would lose right now; age says whether replication
-			// is alive at all. Neither is a quorum signal - see
-			// replication_ack.go for why.
-			ackOffset, ackBehind, ackAge := e.ReplicationAcknowledged()
-			fmt.Fprintf(&b, "replication_acked_offset:%d\r\nreplication_lag_bytes:%d\r\nreplication_acked_age_ms:%d\r\n", ackOffset, ackBehind, ackAge)
-		}
-		fmt.Fprintf(&b, "failover_term:%d\r\nfailover_held_term:%d\r\nfailover_fenced:%t\r\nwritable:%t\r\n", e.CurrentTerm(), e.failover.held, e.failover.fenced, e.writable())
-		fmt.Fprintf(&b, "replication_protocol:%d\r\nrole:%s\r\nreplica_ready:%d\r\nreplica_offset:%d\r\nreplica_last_update_ms:%d\r\nprimary_offset:%d\r\nreplication_history_bytes:%d\r\n\r\n", e.replicationProtocol(), role, ready, e.replicaOffset, age, offset, history)
-	}
-	if want("server") {
-		fmt.Fprintf(&b, "# Server\r\nkeel_version:%s\r\nredis_version:%s\r\nredis_mode:standalone\r\nresp_version:%d\r\n\r\n",
-			config.BuildVersion(), RedisCompatibleVersion, e.replyProtocol())
-	}
-	if want("memory") {
-		used := e.space.TotalMemUsed()
-		fmt.Fprintf(&b, "# Memory\r\nused_memory:%d\r\nused_memory_human:%s\r\n",
-			used, humanBytes(used))
-		limits := e.space.Limits()
-		fmt.Fprintf(&b, "maxmemory:%d\r\nmaxmemory_human:%s\r\nmaxmemory_policy:%s\r\n\r\n",
-			limits.MaxMemory, humanBytes(limits.MaxMemory), evictionPolicyName(limits.Eviction))
-	}
-	if want("stats") {
-		fmt.Fprintf(&b, "# Stats\r\nevicted_keys:%d\r\nexpired_keys:%d\r\n",
-			e.space.Evicted(), e.ExpiredKeys())
-		if e.clientBuffers != nil {
-			fmt.Fprintf(&b, "total_connections_received:%d\r\n", e.clientBuffers().ConnectionsReceived)
-		}
-		b.WriteString("\r\n")
-	}
-	if want("persistence") {
-		base, current, rewrites, keys := e.AOFStats()
-		enabled := 0
-		if e.AOFEnabled() {
-			enabled = 1
-		}
-		fmt.Fprintf(&b, "# Persistence\r\naof_enabled:%d\r\naof_base_size:%d\r\naof_current_size:%d\r\n",
-			enabled, base, current)
-		active := 0
-		if e.RewriteActive() {
-			active = 1
-		}
-		status := "ok"
-		if e.aof.failed != nil || e.logRetrying() {
-			status = "err"
-		}
-		fmt.Fprintf(&b, "aof_rewrite_in_progress:%d\r\naof_last_write_status:%s\r\naof_buffer_length:%d\r\n", active, status, len(e.aof.buf))
-		e.rewriteStatusInfo(&b)
-		pending := 0
-		if e.aof.syncPending != nil {
-			pending = 1
-		}
-		encoded, written, synced, ready := e.AOFPositions()
-		fmt.Fprintf(&b, "aof_encoded_offset:%d\r\naof_appended_offset:%d\r\naof_synced_offset:%d\r\naof_reply_offset:%d\r\n", encoded, written, synced, ready)
-		fmt.Fprintf(&b, "aof_pending_fsync:%d\r\naof_pending_append_bytes:%d\r\n", pending, e.appendBytes)
-		fmt.Fprintf(&b, "aof_rewrite_dirty_keys:%d\r\naof_rewrite_dirty_bytes:%d\r\naof_rewrite_budget_aborts:%d\r\n", len(e.rewrite.dirty), e.rewrite.dirtyBytes, e.rewriteBudgetAborts)
-		rewritePending := 0
-		if e.pendingRewriteIO != nil && e.pendingRewriteIO.body == nil {
-			rewritePending = 1
-		}
-		fmt.Fprintf(&b, "aof_rewrite_pending_sync:%d\r\n", rewritePending)
-		pendingWriteBytes := 0
-		if e.pendingRewriteIO != nil {
-			pendingWriteBytes = cap(e.pendingRewriteIO.body)
-		}
-		fmt.Fprintf(&b, "aof_rewrite_pending_write_bytes:%d\r\n", pendingWriteBytes)
-		e.persistenceIOInfo(&b)
-		fmt.Fprintf(&b, "aof_rewrites:%d\r\naof_keys_at_last_rewrite:%d\r\n\r\n", rewrites, keys)
-	}
-	if want("keyspace") {
-		fmt.Fprintf(&b, "# Keyspace\r\ndb0:keys=%d,expires=%d\r\n\r\n",
-			e.space.TotalKeys(), e.KeysWithExpiry())
-	}
-
-	return e.encode(ReplyVerbatim(b.String()), false)
-}
 
 // cmdBGREWRITEAOF starts rewriting the append-only file and returns at once.
 //
