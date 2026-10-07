@@ -747,8 +747,20 @@ func executeRun(c *client, arena *replyArena) bool {
 // command a connection sends runs on e, and so does the loop's own work. e
 // has to have its log (StartAOF) and replication (InitReplication) started
 // first; its log is the caller's to close.
+//
+// The loop holds e's lock from here until it returns, and lets go of it only
+// while it is parked in the multiplexer. So each cycle takes and releases it
+// once, every path through a cycle - each continue and return - runs under
+// it with no unlock of its own to forget, and so does the cleanup deferred
+// below. Nothing else in the server takes it: the I/O threads never touch e,
+// and pool.run returns only once they have finished.
 func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 	defer wg.Done()
+	e.Lock()
+	// A closure rather than the method: deferring e.Unlock itself would make
+	// the linker keep an out-of-line copy of it in core, and every function
+	// after it would move.
+	defer func() { e.Unlock() }()
 	o = o.WithDefaults()
 	if interestCacheOff != "" {
 		log.Println("client interest cache off: every registration goes to the kernel")
@@ -875,8 +887,11 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 
 	for !shuttingDown() {
 		// Park until something is ready. Every other syscall in this loop is
-		// non-blocking, so this is the only place it waits.
+		// non-blocking, so this is the only place it waits, and the only time
+		// it lets go of e's lock.
+		e.Unlock()
 		events, err := ioMultiplexer.Check()
+		e.Lock()
 		if err != nil {
 			if shuttingDown() {
 				break
