@@ -1,0 +1,58 @@
+// Grafana Alloy configuration for the Live telemetry workflow
+// (.github/workflows/telemetry.yml).
+//
+// Alloy scrapes three Prometheus endpoints on the runner and remote-writes
+// what it reads to the Grafana Cloud stack's metrics store:
+// - redis_exporter in front of Keel, labelled server="keel";
+// - redis_exporter in front of Redis, labelled server="redis";
+// - scripts/run-telemetry.py's own metrics (the load phase), server="load".
+// Every series also carries the run's labels (run_id, branch, sha, host), so
+// a dashboard can pick one run out of many.
+//
+// Scrapes are every 15 seconds: 4 data points per series per minute, against
+// the free plan's 1. A run sends a few hundred series for a few minutes, which
+// stays well inside the free plan's active series limit.
+//
+// The endpoint and username are repository variables; the password is the
+// GRAFANA_CLOUD_METRICS_TOKEN secret, an access policy token with metrics:write
+// only, which the workflow passes as GRAFANA_CLOUD_TOKEN.
+
+prometheus.scrape "telemetry" {
+	targets = [
+		{"__address__" = "127.0.0.1:9131", "server" = "keel"},
+		{"__address__" = "127.0.0.1:9132", "server" = "redis"},
+		{"__address__" = "127.0.0.1:9133", "server" = "load"},
+	]
+	job_name        = "keel-ci-telemetry"
+	scrape_interval = "15s"
+	scrape_timeout  = "10s"
+	forward_to      = [prometheus.relabel.drop_runtime.receiver]
+}
+
+// The exporters' own Go runtime metrics say nothing about either server.
+prometheus.relabel "drop_runtime" {
+	rule {
+		source_labels = ["__name__"]
+		regex         = "(go|process|promhttp)_.*"
+		action        = "drop"
+	}
+	forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+}
+
+prometheus.remote_write "grafana_cloud" {
+	endpoint {
+		url = sys.env("GRAFANA_CLOUD_PROM_URL")
+
+		basic_auth {
+			username = sys.env("GRAFANA_CLOUD_PROM_USER")
+			password = sys.env("GRAFANA_CLOUD_TOKEN")
+		}
+	}
+
+	external_labels = {
+		run_id = sys.env("GITHUB_RUN_ID"),
+		branch = sys.env("TELEMETRY_BRANCH"),
+		sha    = sys.env("TELEMETRY_SHA"),
+		host   = sys.env("TELEMETRY_HOST"),
+	}
+}
