@@ -170,22 +170,40 @@ That shapes the order.
 - **Streams are a new family,** written directly in the phase 4 form.
 - **Tiers 4 to 6** come after.
 
-So the open question for the owner and the embedding plan's session is
-whether parity interleaves with phase 4, as above, or waits for the public
-package and `v0.2.0-alpha.1`. The first reaches parity sooner. The second
-ships the library sooner.
+Phase 3 (`Open`/`Close`, the per-instance lock, durability for direct
+callers) still comes before phase 4, as the embedding plan has it.
+
+**`v0.2.0-alpha.1` does not wait for all of tier 1.** The public package
+ships with the families phase 4 has converted by then. A family converted
+later adds its commands and its Go methods in a minor release, so the library
+and parity do not hold each other up.
+
+Phase 6 is about a week. Moving it ahead of phase 5 would let tier 2 start
+before the public package ships. That is the owner's option to weigh.
+
+**The open question is the owner's.** Either parity interleaves with phase 4,
+as above, or it waits until phases 4 to 6 are done. The embedding plan's
+session recommends interleaving (October 7, 2026), and so does this plan:
+nothing is written twice, and each family reaches parity as soon as its new
+form exists.
 
 ## How each piece is verified
 
-- **Differential tests against Redis 8.10.1, byte for byte, in RESP2 and
-  RESP3.** The harness already exists for error replies and replies
+- **Differential tests against one pinned Redis release, byte for byte, in
+  RESP2 and RESP3.** The harness already exists for error replies and replies
   (`scripts/differential.py`, `scripts/error-parity.py`). Each new command
-  joins it, errors included.
+  joins it, errors included. Today the harness and the CI census build Redis
+  8.10.1, and the local census ran against 8.10.2. One change moves the
+  harness, the census and every workflow that builds Redis to 8.10.2 together,
+  before tier 1 starts, so that every parity claim is made against the same
+  release.
 - **The census count rises** by the commands the change adds, and
   `census.json` names them.
 - **The framework checks** that needed the piece start to pass.
 - **On the command path**, the paired command-path job's 0.98 rule and no
   new allocations, the embedding plan's verification for hot-path steps.
+  Every family's tier 1 work is command-path code, so every tier 1 pull
+  request carries this gate.
 - **Persistence and replication** get restart, rewrite and replica checks
   for every write the piece adds, and AOF transcript goldens.
 - **The README's integration contract** gains the piece in the same pull
