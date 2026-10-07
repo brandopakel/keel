@@ -2,6 +2,7 @@ package core
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"hash"
@@ -464,6 +465,21 @@ func (e *Engine) flushAOF(closing bool) error {
 // The log replays into e's keyspace, with eviction and expiry held off in e's
 // space until it has.
 func (e *Engine) LoadAOF(path string) (int, error) {
+	return e.loadAOF(context.Background(), path)
+}
+
+// replayCheckEvery is how many records a replay reads between looks at its
+// context: often enough that a cancelled Open stops within a millisecond or
+// so, and rarely enough that looking costs nothing a replay would notice.
+const replayCheckEvery = 1024
+
+// loadAOF is LoadAOF, stopping when ctx is done. It looks at ctx before every
+// replayCheckEvery-th record that is not inside a transaction's block, so a
+// block is still replayed whole or not at all. Stopped, it returns ctx's
+// error, wrapped with the log's path and where it stopped; the keyspace holds
+// whatever was replayed until then, and nothing has been written anywhere, so
+// the caller discards the engine and the log is as it was.
+func (e *Engine) loadAOF(ctx context.Context, path string) (int, error) {
 	e.aof.recovered = nil
 	f, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -476,7 +492,14 @@ func (e *Engine) LoadAOF(path string) (int, error) {
 	e.aof.replaying = true
 	e.space.SuspendEviction = true
 	e.space.SuspendExpiry = true
+	stopped := false
 	defer func() {
+		if stopped {
+			// The engine is discarded: there is no point expiring or
+			// evicting what was replayed of a log that will be replayed again.
+			e.aof.replaying = false
+			return
+		}
 		priorRemovalHook := e.space.OnRemove
 		e.space.OnRemove = func(_, key string) { e.aof.recovered = append(e.aof.recovered, key) }
 		defer func() { e.space.OnRemove = priorRemovalHook }()
@@ -496,7 +519,13 @@ func (e *Engine) LoadAOF(path string) (int, error) {
 	// where its MULTI began, or -1 outside one.
 	var block []replayedCommand
 	begun := int64(-1)
-	for {
+	for records := 0; ; records++ {
+		if begun < 0 && records%replayCheckEvery == 0 {
+			if err := ctx.Err(); err != nil {
+				stopped = true
+				return applied, fmt.Errorf("replay of %s stopped at byte %d: %w", path, used, err)
+			}
+		}
 		cmd, n, err := readAOFCommand(reader)
 		if err == io.EOF && n == 0 {
 			if begun >= 0 {

@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,52 +12,8 @@ import (
 	"github.com/brandopakel/keel/internal/core"
 )
 
-// The default log was ./memkv-master.aof before the rename and is
-// ./keel-master.aof now. A restart that looked only at the new name would
-// replay nothing and serve an empty keyspace beside the old log, silently.
-func TestAOFReadPath(t *testing.T) {
-	write := func(t *testing.T, path string) {
-		t.Helper()
-		assert.NoError(t, os.WriteFile(path, []byte("*1\r\n$4\r\nPING\r\n"), 0o644))
-	}
-
-	t.Run("reads the current name when it is there", func(t *testing.T) {
-		dir := t.TempDir()
-		current := filepath.Join(dir, "keel-master.aof")
-		legacy := filepath.Join(dir, "memkv-master.aof")
-		write(t, current)
-		assert.Equal(t, current, aofReadPath(current, legacy))
-	})
-
-	t.Run("falls back to the name used before the rename", func(t *testing.T) {
-		dir := t.TempDir()
-		current := filepath.Join(dir, "keel-master.aof")
-		legacy := filepath.Join(dir, "memkv-master.aof")
-		write(t, legacy)
-		assert.Equal(t, legacy, aofReadPath(current, legacy),
-			"a log written before the rename must still be found")
-	})
-
-	t.Run("prefers the current name when both exist", func(t *testing.T) {
-		dir := t.TempDir()
-		current := filepath.Join(dir, "keel-master.aof")
-		legacy := filepath.Join(dir, "memkv-master.aof")
-		write(t, current)
-		write(t, legacy)
-		assert.Equal(t, current, aofReadPath(current, legacy),
-			"the old name is a fallback, not a merge")
-	})
-
-	t.Run("reports the current name when neither exists", func(t *testing.T) {
-		dir := t.TempDir()
-		current := filepath.Join(dir, "keel-master.aof")
-		legacy := filepath.Join(dir, "memkv-master.aof")
-		assert.Equal(t, current, aofReadPath(current, legacy),
-			"a first start writes to the current name")
-	})
-}
-
-// TestMigratingFromTheLegacyLogSurvivesASecondRestart.
+// TestMigratingFromTheLegacyLogSurvivesASecondRestart: the server's legacy log,
+// migrated by the log's startup it passes the legacy name to (StartAOF).
 //
 // The fallback on its own does not save the data, it delays losing it. Start
 // one reads memkv-master.aof and opens an empty keel-master.aof; start two sees
@@ -84,7 +41,7 @@ func TestMigratingFromTheLegacyLogSurvivesASecondRestart(t *testing.T) {
 	// First start: reads the legacy log, then writes what it read into the
 	// current one before anything else appends to it.
 	e := newTestEngine(t, options)
-	assert.NoError(t, startAOF(e, legacy))
+	assert.NoError(t, e.StartAOF(context.Background(), legacy))
 	assert.Equal(t, ":1\r\n", keys(e), "the legacy key is here after one restart")
 	assert.NoError(t, e.EvalAndResponse(
 		&core.Command{Cmd: "SET", Args: []string{"new-k", "added"}}, &bytes.Buffer{}))
@@ -94,7 +51,7 @@ func TestMigratingFromTheLegacyLogSurvivesASecondRestart(t *testing.T) {
 	// Second start, on an engine of its own as a restarted server's is: the
 	// current file now exists and takes precedence.
 	e = newTestEngine(t, options)
-	assert.NoError(t, startAOF(e, legacy))
+	assert.NoError(t, e.StartAOF(context.Background(), legacy))
 	assert.Equal(t, ":2\r\n", keys(e),
 		"the key that lived only in the legacy log has to survive the file swap")
 }

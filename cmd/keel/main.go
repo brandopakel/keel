@@ -387,7 +387,9 @@ func runServer() error {
 	done := make(chan error, 1)
 	go func() {
 		err := serve(&wg, e, serverOptions())
-		closeErr := e.CloseAOF()
+		// The loop has closed the log by now, on a requested stop; on any
+		// other return this closes it. Close also ends the engine.
+		closeErr := e.Close()
 		if err != nil {
 			done <- err
 		} else {
