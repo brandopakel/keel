@@ -24,11 +24,18 @@ import (
 // still lose. With no log nothing is ever buffered, and a call is the lock,
 // the command and the unlock.
 //
-// A failed write or sync of the log latches: from then on every call, read or
-// write, returns ErrPersistence without running. The server never latches; it
-// stops at the first failure.
+// A failed write or sync of the log does what Redis 8.10.1's does
+// (docs/embedding-plan.md, "Log failures, as Redis's"). Under everysec and no
+// it is retried: while it is, write commands and PING are refused with
+// ErrPersistence, Redis's MISCONF error, reads are served, a command that ran
+// before the failure was known keeps its reply and has its record written on
+// recovery, and a write or sync that succeeds clears it. Under always, where
+// Redis exits, it latches: every later call, read or write, returns
+// ErrPersistence without running, as does a call waiting for the failed write
+// or sync, until the engine is reopened. The server does neither in phase 3;
+// it stops at the first failure.
 
-// ErrPersistence is what a call returns once e's log has failed: Redis's
+// ErrPersistence is what a call refused for a failed log returns: Redis's
 // wire error for a failed AOF write, followed by the failure itself.
 var ErrPersistence = errors.New("MISCONF Errors writing to the AOF file")
 
@@ -56,7 +63,7 @@ func (e *Engine) Do(ctx context.Context, cmd *Command, w io.ReadWriter) error {
 		return err
 	}
 	e.mu.Lock()
-	if err := e.callRefusal(); err != nil {
+	if err := e.callRefusal(cmd); err != nil {
 		e.mu.Unlock()
 		return err
 	}
@@ -67,28 +74,60 @@ func (e *Engine) Do(ctx context.Context, cmd *Command, w io.ReadWriter) error {
 		e.mu.Unlock()
 		return failure
 	}
+	// While a failed write or sync is retried, the command's reply stands, as
+	// Redis's does, and its record is written when the log recovers.
 	end := e.AppendOffset()
-	if end <= e.appendCompleted {
+	if end <= e.appendCompleted || e.logRetrying() {
 		e.mu.Unlock()
 		return result
 	}
 	return e.waitPublished(ctx, end, result)
 }
 
-// callRefusal is why a call may not run on e, or nil. The caller holds e's
-// lock.
-func (e *Engine) callRefusal() error {
+// callRefusal is why cmd may not run on e, or nil: e is closed, or nothing
+// flushes its log for it, or its log has failed - every call, where the
+// failure latches, and while it is retried, write commands and PING, as
+// Redis's processCommand refuses them (server.c, writeCommandsDeniedByDiskError).
+// The caller holds e's lock.
+func (e *Engine) callRefusal(cmd *Command) error {
 	switch {
 	case e.closed:
 		return ErrClosed
 	case e.driver == nil:
 		return errNotDriven
 	}
-	return e.persistenceFailure()
+	if failure := e.persistenceFailure(); failure != nil {
+		return failure
+	}
+	if failure := e.retriedFailure(); failure != nil && (writeCommands[cmd.Cmd] || cmd.Cmd == "PING") {
+		return failure
+	}
+	return nil
 }
 
-// persistenceFailure latches a failure of e's log, and returns it as
-// ErrPersistence; nil while the log has not failed. The caller holds e's lock.
+// logRetrying says e's log has a failed write or sync it is retrying (driver.go).
+func (e *Engine) logRetrying() bool {
+	d := e.driver
+	return d != nil && (d.writeFailure != nil || d.syncFailure != nil)
+}
+
+// retriedFailure is the failed write or sync e's log is retrying, as
+// ErrPersistence: Redis's "MISCONF Errors writing to the AOF file: <cause>".
+// nil while there is none. The caller holds e's lock.
+func (e *Engine) retriedFailure() error {
+	d := e.driver
+	switch {
+	case d.writeFailure != nil:
+		return fmt.Errorf("%w: %w", ErrPersistence, d.writeFailure)
+	case d.syncFailure != nil:
+		return fmt.Errorf("%w: %w", ErrPersistence, d.syncFailure)
+	}
+	return nil
+}
+
+// persistenceFailure latches a failure of e's log that is not retried, and
+// returns it as ErrPersistence; nil while there is none. The caller holds e's
+// lock.
 func (e *Engine) persistenceFailure() error {
 	d := e.driver
 	if d.failed == nil {
@@ -100,14 +139,15 @@ func (e *Engine) persistenceFailure() error {
 	return fmt.Errorf("%w: %w", ErrPersistence, d.failed)
 }
 
-// waitPublished returns result once e's published offset covers end, the
-// failure if e's log fails first, or ctx's error if ctx is done first. The
-// caller holds e's lock, which waitPublished releases.
+// waitPublished returns result once e's published offset covers end, or once
+// e's log has failed in a way it retries, when the reply stands as Redis's
+// does; the failure if e's log fails in a way that latches; or ctx's error if
+// ctx is done first. The caller holds e's lock, which waitPublished releases.
 func (e *Engine) waitPublished(ctx context.Context, end uint64, result error) error {
 	d := e.driver
 	d.waiters.Add(1)
 	for {
-		if e.appendCompleted >= end {
+		if e.appendCompleted >= end || e.logRetrying() {
 			d.waiters.Add(-1)
 			e.mu.Unlock()
 			return result

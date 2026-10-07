@@ -211,51 +211,150 @@ func TestOneSyncCoversTheCallsWaitingForIt(t *testing.T) {
 	assert.Equal(t, fmt.Sprintf(":%d\r\n", callers*writes), mustDo(t, again, "DBSIZE"))
 }
 
-// TestAFailedWriteLatches: once the log's write fails, the call waiting for
-// it, and every call after it, read or write, returns ErrPersistence without
-// running; Close returns the failure too, and still lets go of the log, which
-// reopens on what reached it.
-func TestAFailedWriteLatches(t *testing.T) {
-	t.Parallel()
-	o := Options{AppendOnly: true, AppendFilename: filepath.Join(t.TempDir(), "keel.aof"), Fsync: FsyncAlways}
-	e := openTestEngine(t, o)
-	mustDo(t, e, "SET", "before", "v")
-	disk := errors.New("no space left on the test's disk")
-	holding(e, func() {
-		e.aofWrite = func(*os.File, []byte) (int, error) { return 0, disk }
-	})
-
-	_, err := do(context.Background(), e, "SET", "lost", "v")
-	require.ErrorIs(t, err, ErrPersistence)
-	require.ErrorIs(t, err, disk)
-	assert.EqualError(t, err, "MISCONF Errors writing to the AOF file: no space left on the test's disk")
-	for _, cmd := range [][]string{{"GET", "before"}, {"SET", "after", "v"}, {"PING"}} {
-		_, err := do(context.Background(), e, cmd[0], cmd[1:]...)
-		require.ErrorIs(t, err, ErrPersistence, "%v", cmd)
-	}
-	holding(e, func() { assert.Equal(t, "$-1\r\n", string(rawReplyOn(t, e, "GET", "after")), "refused calls do not run") })
-
-	err = e.Close()
-	require.ErrorIs(t, err, ErrPersistence)
-	require.ErrorIs(t, err, disk)
-	again := openTestEngine(t, o)
-	assert.Equal(t, "$1\r\nv\r\n", mustDo(t, again, "GET", "before"))
-	assert.Equal(t, "$-1\r\n", mustDo(t, again, "GET", "lost"), "the failed write never reached the log")
+// failingDisk replaces e's log write and sync with ones that fail while
+// failing is set, as a full or broken disk does; a failing write writes half
+// of what it is given first, as a short write does.
+type failingDisk struct {
+	writes, syncs atomic.Bool
+	err           error
 }
 
-// TestAFailedEverysecSyncLatches: under everysec a call returns once its
-// record is written, so one that returned before the sync failed has
-// succeeded; the failed sync latches, and every later call is refused.
-func TestAFailedEverysecSyncLatches(t *testing.T) {
+func failDisk(e *Engine) *failingDisk {
+	d := &failingDisk{err: errors.New("no space left on the test's disk")}
+	holding(e, func() {
+		write, sync := e.aofWrite, e.aofSync
+		e.aofWrite = func(f *os.File, b []byte) (int, error) {
+			if d.writes.Load() {
+				n, _ := write(f, b[:len(b)/2])
+				return n, d.err
+			}
+			return write(f, b)
+		}
+		e.aofSync = func(f *os.File) error {
+			if d.syncs.Load() {
+				return d.err
+			}
+			return sync(f)
+		}
+	})
+	return d
+}
+
+// TestUnderAlwaysAFailedWriteOrSyncRefusesEveryCall: under always, where
+// Redis exits, a failed write or sync latches. The call waiting for it, and
+// every call after it, read or write, returns ErrPersistence without running,
+// and Close returns it too, still letting go of the log, which reopens on
+// what reached it.
+func TestUnderAlwaysAFailedWriteOrSyncRefusesEveryCall(t *testing.T) {
 	t.Parallel()
-	e := openTestEngine(t, Options{AppendOnly: true, AppendFilename: filepath.Join(t.TempDir(), "keel.aof"), Fsync: FsyncEverySec})
-	disk := errors.New("the test's disk lost its cache")
-	holding(e, func() { e.aofSync = func(*os.File) error { return disk } })
+	for _, what := range []string{"write", "sync"} {
+		t.Run(what, func(t *testing.T) {
+			t.Parallel()
+			o := Options{AppendOnly: true, AppendFilename: filepath.Join(t.TempDir(), "keel.aof"), Fsync: FsyncAlways}
+			e := openTestEngine(t, o)
+			disk := failDisk(e)
+			mustDo(t, e, "SET", "before", "v")
+			if what == "write" {
+				disk.writes.Store(true)
+			} else {
+				disk.syncs.Store(true)
+			}
+			_, err := do(context.Background(), e, "SET", "lost", "v")
+			require.ErrorIs(t, err, ErrPersistence)
+			require.ErrorIs(t, err, disk.err)
+			assert.EqualError(t, err, "MISCONF Errors writing to the AOF file: no space left on the test's disk")
+			for _, cmd := range [][]string{{"GET", "before"}, {"SET", "after", "v"}, {"PING"}} {
+				_, err := do(context.Background(), e, cmd[0], cmd[1:]...)
+				require.ErrorIs(t, err, ErrPersistence, "%v", cmd)
+			}
+			holding(e, func() {
+				assert.Equal(t, "$-1\r\n", string(rawReplyOn(t, e, "GET", "after")), "refused calls do not run")
+			})
+			err = e.Close()
+			require.ErrorIs(t, err, ErrPersistence)
+			again := openTestEngine(t, o)
+			assert.Equal(t, "$1\r\nv\r\n", mustDo(t, again, "GET", "before"))
+		})
+	}
+}
+
+// TestUnderEverysecAndNoAFailedWriteIsRetried: under everysec and no, a failed
+// write is Redis's, not fatal. The write in flight when it fails keeps its
+// reply, as Redis's does, and is readable; while it fails, write commands and
+// PING are refused with MISCONF and do not run, reads are served, and INFO
+// says err. Once the disk heals, the maintenance goroutine's next write
+// succeeds and clears it, writes are accepted again, and every write that was
+// answered OK - the one in flight at the failure included - is in the log.
+func TestUnderEverysecAndNoAFailedWriteIsRetried(t *testing.T) {
+	t.Parallel()
+	for _, policy := range []FsyncPolicy{FsyncEverySec, FsyncNever} {
+		t.Run(string(policy), func(t *testing.T) {
+			t.Parallel()
+			o := Options{AppendOnly: true, AppendFilename: filepath.Join(t.TempDir(), "keel.aof"), Fsync: policy}
+			e := openTestEngine(t, o)
+			disk := failDisk(e)
+			mustDo(t, e, "SET", "before", "v")
+			disk.writes.Store(true)
+
+			assert.Equal(t, "+OK\r\n", mustDo(t, e, "SET", "inflight", "v"), "the write in flight at the failure keeps its reply")
+			holding(e, func() { require.True(t, e.logRetrying(), "its flush failed") })
+			assert.Equal(t, "$1\r\nv\r\n", mustDo(t, e, "GET", "inflight"))
+			assert.Equal(t, "$1\r\nv\r\n", mustDo(t, e, "GET", "before"), "reads are served")
+			for _, cmd := range [][]string{{"SET", "denied", "v"}, {"INCR", "n"}, {"PING"}} {
+				_, err := do(context.Background(), e, cmd[0], cmd[1:]...)
+				require.ErrorIs(t, err, ErrPersistence, "%v", cmd)
+				require.ErrorIs(t, err, disk.err, "%v", cmd)
+			}
+			holding(e, func() {
+				assert.Equal(t, "$-1\r\n", string(rawReplyOn(t, e, "GET", "denied")), "refused writes do not run")
+			})
+			assert.Contains(t, mustDo(t, e, "INFO", "persistence"), "aof_last_write_status:err")
+
+			disk.writes.Store(false)
+			eventually(t, e, "the retried write succeeded", func() bool { return !e.logRetrying() })
+			assert.Equal(t, "+OK\r\n", mustDo(t, e, "SET", "after", "v"), "writes are accepted again")
+			assert.Contains(t, mustDo(t, e, "INFO", "persistence"), "aof_last_write_status:ok")
+			require.NoError(t, e.Close())
+
+			again := openTestEngine(t, o)
+			for _, key := range []string{"before", "inflight", "after"} {
+				assert.Equal(t, "$1\r\nv\r\n", mustDo(t, again, "GET", key), key)
+			}
+			assert.Equal(t, "$-1\r\n", mustDo(t, again, "GET", "denied"))
+		})
+	}
+}
+
+// TestAFailedEverysecSyncIsRetried: under everysec a call returns once its
+// record is written, so one that returned before a background sync failed has
+// succeeded. While the sync fails, writes are refused and reads served; the
+// next due sync retries the bytes that failed to sync, with no new write to
+// prompt it - where Redis queues no new sync until more is written - and its
+// success clears the failure.
+func TestAFailedEverysecSyncIsRetried(t *testing.T) {
+	t.Parallel()
+	o := Options{AppendOnly: true, AppendFilename: filepath.Join(t.TempDir(), "keel.aof"), Fsync: FsyncEverySec}
+	e := openTestEngine(t, o)
+	disk := failDisk(e)
+	disk.syncs.Store(true)
 	mustDo(t, e, "SET", "written", "v")
-	eventually(t, e, "the failed sync latched", func() bool { return e.persistenceFailure() != nil })
-	_, err := do(context.Background(), e, "GET", "written")
+	eventually(t, e, "the background sync failed", func() bool { return e.logRetrying() })
+	_, err := do(context.Background(), e, "SET", "denied", "v")
 	require.ErrorIs(t, err, ErrPersistence)
-	require.ErrorIs(t, err, disk)
+	require.ErrorIs(t, err, disk.err)
+	assert.Equal(t, "$1\r\nv\r\n", mustDo(t, e, "GET", "written"))
+
+	disk.syncs.Store(false)
+	eventually(t, e, "a retried sync succeeded", func() bool { return !e.logRetrying() })
+	holding(e, func() {
+		encoded, _, synced, _ := e.AOFPositions()
+		assert.Equal(t, encoded, synced, "the bytes that failed to sync are synced")
+	})
+	mustDo(t, e, "SET", "after", "v")
+	require.NoError(t, e.Close())
+	again := openTestEngine(t, o)
+	assert.Equal(t, "$1\r\nv\r\n", mustDo(t, again, "GET", "written"))
+	assert.Equal(t, "$1\r\nv\r\n", mustDo(t, again, "GET", "after"))
 }
 
 // TestACancelledWaitReturnsButTheWriteStands: a call whose context is done
