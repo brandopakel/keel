@@ -6,8 +6,8 @@ the stores, step 2.2, the command scope, step 2.3, persistence (see "Step
 below), and step 2.4, replication and failover (see "Step 2.4:
 replication"), step 2.5, options in place of `internal/config` (see "Step
 2.5: options"), and step 2.6, the suite run in parallel on engines of its own
-(see "Step 2.6: parallel tests"). Step 2.7, which removes the default engine,
-is planned in "Step 2.7: the default engine".
+(see "Step 2.6: parallel tests"), and step 2.7, which removed the default
+engine (see "Step 2.7: the default engine").
 
 The owner asked for Keel to be usable as a Go library, not only as a server:
 several independent instances per process, safe for concurrent use, a typed
@@ -1103,28 +1103,29 @@ Where the plan above leaves a choice open, step 2.6 settles it this way:
 
 ### Step 2.7: the default engine
 
-Step 2.7 removes `defaultEngine`, the engine that every caller which names
-none runs on, with the 42 package functions in `internal/core` that act on
+Step 2.7 removed `defaultEngine`, the engine that every caller which named
+none ran on, with the 42 package functions in `internal/core` that acted on
 it, and `data_structure.DefaultSpace`, its space, with the 14 package
-functions over that. Afterwards a command runs on the engine its caller
-holds, and `cmd/keel` holds the server's. Nothing a client, a log or a
-replica can see may change: not a reply, a record or a frame, not a flag or
-its default, and not the order of startup and shutdown. It takes five PRs,
-in this order:
+functions over that. A command now runs on the engine its caller holds, and
+`cmd/keel` holds the server's. Nothing a client, a log or a replica can see
+changed: not a reply, a record or a frame, not a flag or its default, and
+not the order of startup and shutdown. It took five PRs, in this order, and
+a sixth (#129) fixed a flake in a guardrail that the first one met:
 
-- **Part 1, core's tests**: the census of the default engine's users
+- **Part 1, core's tests** (#127): the census of the default engine's users
   (below), the isolation tests, `FuzzRestoreValidation`, and the helpers
   that served them on the default engine.
-- **Part 2, the benchmarks**, and what lets the two that `command-path.yml`
-  borrows build in a baseline from before there were engines.
-- **Part 3, the server and `cmd/keel`**: `cmd/keel` makes the server's
-  engine and hands it to the server, which runs every command and every
-  cycle's work on it, and their tests make engines of their own.
-- **Part 3b, `ClientBuffers`**, the server's INFO hook, installed on the
-  engine the server drives rather than in a package variable.
-- **Part 4, the default engine itself**: `defaultEngine`, the package
-  functions over it and the package's `init`, then `DefaultSpace` and the
-  package functions over it.
+- **Part 2, the benchmarks** (#128), and what lets the two that
+  `command-path.yml` borrows build in a baseline from before there were
+  engines.
+- **Part 3, the server and `cmd/keel`** (#130): `cmd/keel` makes the
+  server's engine and hands it to the server, which runs every command and
+  every cycle's work on it, and their tests make engines of their own.
+- **Part 3b, `ClientBuffers`** (#131), the server's INFO hook, installed on
+  the engine the server drives rather than in a package variable.
+- **Part 4, the default engine itself** (#135): `defaultEngine`, the
+  package functions over it and the package's `init`, then `DefaultSpace`
+  and the package functions over it, and this write-up.
 
 The order follows who uses what. On develop, 52 functions use the default
 engine directly: 27 in core's tests, 21 in internal/server and 4 in
@@ -1152,8 +1153,8 @@ above leaves a choice open, step 2.7 settles it this way:
   - Each connection holds the engine its commands run on, set when it is
     accepted, as a Redis client holds its `db`. `respond`, `transact`,
     HELLO's role and `executeRun`'s budget read the connection's. The field
-    goes last in `client`, so no field the loop reads moves, and the struct,
-    312 bytes, stays in the allocator's 320-byte class.
+    goes last in `client`, so no field the loop reads moves, and the struct
+    grows from 312 to 320 bytes, the same allocator size class.
   - The replica transport reads that engine's role, resume cursor and term;
     the term is still read atomically.
 - **`core.NewEngine(Options) (*Engine, error)`** returns an engine with empty
@@ -1189,10 +1190,10 @@ above leaves a choice open, step 2.7 settles it this way:
   the test that checks it, then list nothing mutable; the `GOOS=windows`
   build of core and data_structure stays as it is.
 - **The hot path.** No instruction a command runs in core changes.
-  `EvalAndResponse` is inlined at its callers as a load of `defaultEngine`
-  and a direct call of `evalAndResponse`; the server will load the
-  connection's engine instead and make the same direct call, to the same
-  code under its exported name. `Transact` and the budget's reads change the
+  `EvalAndResponse` was inlined at its callers as a load of `defaultEngine`
+  and a direct call of `evalAndResponse`; the server loads the connection's
+  engine instead and makes the same direct call, to the same code under its
+  exported name. `Transact` and the budget's reads change the
   same way. A field added to Engine goes after `settings`, its last, so
   every field a command reads keeps its offset and the hot instructions stay
   the same bytes; what is left to move a row is where code lands, which
@@ -1248,8 +1249,11 @@ above leaves a choice open, step 2.7 settles it this way:
   - `testdata/command-path/command_path_settings_test.go`, which the job
     already gives such a baseline in place of that file, makes it an empty
     struct: making one sets the baseline's config and resets its stores, as
-    the borrowed files do now, and each method calls the baseline's package
+    the borrowed files did, and each method calls the baseline's package
     function of the same name;
+  - `mustSucceedOn` fails setup that errors or answers nothing, and the
+    legacy file implements it the same way rather than calling a baseline's
+    more lenient `mustSucceed`, so both sides hold setup to one check;
   - every method of either inlines, so in both binaries the timed loop calls
     the dispatch directly, as it does now (`-gcflags=-m`).
 
@@ -1265,10 +1269,12 @@ above leaves a choice open, step 2.7 settles it this way:
   one that no longer does or is gone, so a use added while the step is under
   way fails, and so does an entry its part forgot. It reads syntax, as the
   parallel census does. A caller of a listed helper is not listed: removing
-  the helper breaks it. Part 1 adds it with develop's 52 and leaves 38; part
-  2 leaves 26, all in internal/server and cmd/keel but
-  `TestConfigureHoldsTheDefaultEngine`; part 3 leaves none; and part 4
-  deletes it with the default engine, after which the compiler refuses any
+  the helper breaks it. A file in an external test package (`core_test`) is
+  read as another package's, and a selector is resolved through the file's
+  imports, aliases included. Part 1 added it with develop's 52 and left 38;
+  part 2 left 26, all in internal/server and cmd/keel but
+  `TestConfigureHoldsTheDefaultEngine`; part 3 left none; and part 4
+  deleted it with the default engine, after which the compiler refuses any
   use.
 - **What step 2.6 left on the default engine:**
   - **The isolation tests** run on engines of their own. Where the default
@@ -1311,9 +1317,9 @@ above leaves a choice open, step 2.7 settles it this way:
   field for it, after `settings`, which the server sets on the engine it
   drives (`SetClientBuffers`) as it sets its allocation budget; INFO's
   clients section and `total_connections_received` read it, and nothing
-  else does, no write or eviction path among them. The server's INFO stays
-  byte-identical, which 3b shows by comparing it between develop's build and
-  its own after the same connections.
+  else does, no write or eviction path among them. The server's INFO stayed
+  byte-identical, which 3b showed by comparing it between develop's build
+  and its own after the same connections.
   `TestINFOClientBuffersHasExplicitScopeAndStableValues`, serial because it
   replaced the package variable, then runs in parallel.
 - **The censuses at the end.** core's `packageVars` loses `ClientBuffers` in
@@ -1340,6 +1346,80 @@ above leaves a choice open, step 2.7 settles it this way:
   160 MiB. No part adds a test that writes tens of MiB or starts a server
   process; one that did would take `internal/testlock` and start its server
   through cmd/keel's port helpers.
+
+What the step measured, part by part. The paired command-path job's medians
+are against develop unless named, on GitHub's hosted runners, whose CPU
+varies from run to run; no row allocated more in any run.
+
+- **Part 1** changed no product code: the server was the same bytes as
+  develop's. In core, 442 of 483 tests ran in parallel, from 433 of 482. The
+  job ran 0.985 and 0.995 as a sanity check. Its Replication compatibility
+  job failed once on macOS with the same server binary on both sides: a
+  snapshot frame's `snapshot_bytes` differed by 28 bytes, one record header,
+  because a rewrite cuts a large collection at a millisecond as well as at
+  256 elements or 64 KiB. #129 now checks each run's snapshot frames against
+  the snapshot they carried, and compares the snapshot as one header sized
+  by its normalized body.
+- **Part 2** changed no product code either. The job ran 1.000 to 1.006,
+  and 0.903 against `65ebdbc`, with the legacy settings file built into it.
+  SET-EX ran 1.044 to 1.051 on EPYC 7763 in four runs. Develop's benchmarks
+  had used `CloseAOF` and `ResetStores` as function values, which kept those
+  wrappers linked; without them the linker dropped them, and every product
+  function after moved 64 or 128 bytes. A control, the part plus a test that
+  is never run and keeps both linked, put every product function at
+  develop's address and ran 1.000 and 0.993, SET-EX 1.007 and 0.992.
+- **Part 3** ran 0.999 to 1.007, and 0.910 against `65ebdbc`. On the
+  connection's path, the only instructions that changed were each load of
+  `defaultEngine` becoming a load of `c.engine`; `RunAsyncTCPServer` grew 257
+  bytes, all of it per cycle. End to end, memtier ran pipeline-16 at 0.970 to
+  0.984 against develop in seven runs on EPYC 7763, and about 1.00 elsewhere.
+  The field was the cause, though not through any instruction: a client is
+  passed to `Transact` as a `core.Connection`, so its type is used in an
+  interface, and its `*core.Engine` field made the linker keep `*Engine`'s
+  exported methods and four `abi.(*MapType)` methods. That added 128 bytes at
+  the start of the text and moved every function in the binary. Develop
+  with the field added and never set put every core, data_structure and
+  runtime function where part 3 has it. Against it, part 3 ran pipeline-16
+  at a median of 0.995 and pipeline-64 at 0.993 over five runs on EPYC 7763,
+  while the field alone, against develop, ran pipeline-16 at 0.979 and
+  0.988.
+- **Part 3b** ran 0.991 to 0.999, and 0.899 against `65ebdbc`; INFO was
+  byte-identical to develop's in five configurations.
+- **Part 4** ran 1.018 to 1.030 against develop in five runs, four of them
+  on EPYC 7763 and one on EPYC 9V45, and 0.930 and 0.931 against `65ebdbc`
+  on EPYC 7763; every row over 1.04 was in the test binary's placement,
+  below. In the server, only the initializers of
+  `defaultEngine` and `DefaultSpace` went: no other function changed size,
+  and the hot ones moved 192 to 320 bytes, keeping their 64-byte phase. End
+  to end, memtier ran at about 1.00 against develop on EPYC 7763, one client
+  at 0.988 to 0.996, and against part 3b on EPYC 9V74. In core's test
+  binary, every hot function was instruction-identical, but deleting the
+  census's test code and the inits moved them all, the generic stores'
+  methods, which are emitted after the package's tests, furthest; against
+  part 3b the job ran 1.030 to 1.032 on Xeon 8573C and EPYC 7763. A control
+  that restored the 64-byte phase of 543 of 544 hot functions ran 1.014 and
+  1.021. A control that kept the deleted test code and the init-time
+  allocations as code that never runs, so that every function in the binary
+  was at 3b's address, ran 0.999 and 0.998; rebuilt on the rebased part, with
+  every function at develop's address, it ran 1.000 and 1.002 on EPYC 7763,
+  and 0.909 against `65ebdbc` on EPYC 9V74.
+
+So every row the step ran over budget was code placement: the instructions
+were the same, and only controls that restored exact addresses brought the
+rows back, where restoring the 64-byte phase recovered about half. Two of the
+three causes were the linker's: functions kept or dropped because something
+unrelated stopped or started using them as values or through an interface.
+
+Two results were over the gate itself, not only a row. Part 3 ran
+pipeline-16 end to end at 0.970 to 0.984 on EPYC 7763, against a floor of
+0.98. Part 4's paired job ran at medians of 1.018 to 1.030, against a ceiling
+of 1.0204. Neither passed on the gate. Each was accepted in review as code
+placement, on its control build: part 3 on develop with the field added,
+and part 4 on the exact-address control, which ran 1.000 and 1.002 on EPYC
+7763, where the part ran 1.025 to 1.030. The rule above was applied to the median as well as
+to a row: a result put down to code layout is shown to be layout with a
+control build. A later step that reads over the gate needs a control of its
+own; these do not carry over.
 
 ## Risks, in order
 

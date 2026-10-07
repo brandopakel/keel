@@ -26,9 +26,8 @@ type appendResult struct {
 func writeLog(f *os.File, body []byte) (int, error) { return f.Write(body) }
 func syncLog(f *os.File) error                      { return f.Sync() }
 
-func AppendPending() bool { return defaultEngine.AppendPending() }
-
-// AppendPending is the package's AppendPending on e.
+// AppendPending reports whether a batch of e's log is out with its append
+// worker.
 func (e *Engine) AppendPending() bool { return e.appendPending != nil }
 
 func (e *Engine) pollAppend(wait bool) {
@@ -71,9 +70,6 @@ func (e *Engine) pollAppend(wait bool) {
 // With !ready, only runs covered by AppendAdmission may execute. Expiry,
 // replication publication and rewrite transitions must wait for the barrier.
 // wake must be safe to call from a worker, including during shutdown.
-func FlushAOFAsync(wake func()) (ready bool, err error) { return defaultEngine.FlushAOFAsync(wake) }
-
-// FlushAOFAsync is the package's FlushAOFAsync on e.
 func (e *Engine) FlushAOFAsync(wake func()) (ready bool, err error) {
 	e.pollAppend(false)
 	e.pollAOFSync(false)

@@ -28,23 +28,21 @@ var processWide = map[string]map[string]bool{
 	"signal":  {"Notify": true, "Ignore": true, "Reset": true},
 }
 
-// TestParallelTestsLeaveTheDefaultEngineAlone: a test that runs in parallel
-// runs on an engine of its own (plan step 2.6). It must not reach the default
-// engine: by name; through a package function that acts on it, such as
-// EvalAndResponse, ResetStores or OpenAOF; through data_structure's functions
-// over DefaultSpace, the default engine's space; or through a test helper that
-// does any of these. Nor may it write to the package's variables, whether
-// by name or through an index, a field or a pointer (commandTable["X"] = ...),
-// or delete from or clear one, nor make a process-wide call (processWide). Go would run such a test beside others that
-// do the same, so that they shared one keyspace, log or heap reading, and the
-// race detector finds only some of that, when the timing shows it.
+// TestParallelTestsShareNoPackageState: a test that runs in parallel runs on
+// an engine of its own (plan step 2.6), and there is no other since step 2.7.
+// It must not write to the package's variables, whether by name or through an
+// index, a field or a pointer (commandTable["X"] = ...), or delete from or
+// clear one, nor make a process-wide call (processWide), itself or through a
+// test helper that does. Go would run such a test beside others that do the
+// same, so that they shared one table, log or heap reading, and the race
+// detector finds only some of that, when the timing shows it.
 //
 // The check reads source, not types. It follows package-level functions and
 // variables by name, and the methods of the test files' own types by method
-// name. The package's own methods it does not follow from a test; instead, it
-// requires that none of them reaches the default engine through a package
-// function, so that a method called on a test's engine stays on that engine.
-func TestParallelTestsLeaveTheDefaultEngineAlone(t *testing.T) {
+// name. The package's own methods it does not follow: a method acts on the
+// engine it is called on, and the engine census keeps the package's
+// variables to tables and sentinels nothing writes.
+func TestParallelTestsShareNoPackageState(t *testing.T) {
 	t.Parallel()
 	census := newParallelCensus(t)
 	var parallel int
@@ -60,20 +58,12 @@ func TestParallelTestsLeaveTheDefaultEngineAlone(t *testing.T) {
 		}
 	}
 	require.NotZero(t, parallel, "the census found no parallel test to check")
-	for _, m := range census.src.methods {
-		if via := census.reaches(m.Body, false); via != "" {
-			t.Errorf("method %s reaches the default engine through %s; use the engine it is a method of",
-				m.Name.Name, census.chain(via))
-		}
-	}
 }
 
 // parallelCensus knows, for each name in the package, whether it reaches what
 // the process shares, and through what.
 type parallelCensus struct {
 	src packageSource
-	// shared are data_structure's functions over DefaultSpace.
-	shared map[string]bool
 	// why holds each package-level name that reaches what the process shares,
 	// and each test method's name prefixed with ".", with what it reaches it
 	// through.
@@ -82,11 +72,7 @@ type parallelCensus struct {
 
 func newParallelCensus(t *testing.T) *parallelCensus {
 	t.Helper()
-	c := &parallelCensus{
-		src:    readPackage(t, "."),
-		shared: sharedFunctions(t, filepath.Join("..", "data_structure"), "DefaultSpace"),
-		why:    map[string]string{},
-	}
+	c := &parallelCensus{src: readPackage(t, "."), why: map[string]string{}}
 	for changed := true; changed; {
 		changed = false
 		for name, bodies := range c.src.named {
@@ -136,9 +122,7 @@ func (c *parallelCensus) reaches(n ast.Node, methods bool) string {
 		case *ast.SelectorExpr:
 			selected[x.Sel] = true
 			if pkg, ok := x.X.(*ast.Ident); ok && c.src.imports[pkg.Name] {
-				if pkg.Name == "data_structure" && (x.Sel.Name == "DefaultSpace" || c.shared[x.Sel.Name]) {
-					found = "data_structure." + x.Sel.Name
-				} else if processWide[pkg.Name][x.Sel.Name] {
+				if processWide[pkg.Name][x.Sel.Name] {
 					found = pkg.Name + "." + x.Sel.Name
 				}
 				return false
@@ -147,9 +131,7 @@ func (c *parallelCensus) reaches(n ast.Node, methods bool) string {
 			if selected[x] || c.src.local(x) {
 				break
 			}
-			if x.Name == "defaultEngine" {
-				found = x.Name
-			} else if _, ok := c.why[x.Name]; ok && c.src.declared[x.Name] {
+			if _, ok := c.why[x.Name]; ok && c.src.declared[x.Name] {
 				found = x.Name
 			}
 		case *ast.AssignStmt:
@@ -180,7 +162,7 @@ func (c *parallelCensus) reaches(n ast.Node, methods bool) string {
 }
 
 // packageVarIn names the package variable that x writes into, through any
-// index, field or pointer - commandTable["X"], defaultEngine.replicaReady or
+// index, field or pointer - commandTable["X"], a variable's field or
 // *p for a package-level p - or returns "" when x is rooted elsewhere.
 func (c *parallelCensus) packageVarIn(x ast.Expr) string {
 	for {
@@ -240,8 +222,6 @@ type packageSource struct {
 	// named holds the bodies of package-level functions and variables by
 	// name, and of the test files' methods by "." + name.
 	named map[string][]sourceBody
-	// methods are the package's own methods, outside its tests.
-	methods []*ast.FuncDecl
 	// declared are the package-level names; packageVars the variables the
 	// package's own code, not its tests, declares; imports the names the
 	// files import packages under.
@@ -301,7 +281,8 @@ func readPackage(t *testing.T, dir string) packageSource {
 				key := d.Name.Name
 				switch {
 				case d.Recv != nil && !isTest:
-					src.methods = append(src.methods, d)
+					// The package's own methods act on the engine they
+					// are called on; the census does not follow them.
 					continue
 				case d.Recv != nil:
 					key = "." + key
@@ -337,36 +318,4 @@ func readPackage(t *testing.T, dir string) packageSource {
 	}
 	sort.Slice(src.tests, func(i, j int) bool { return src.tests[i].Name.Name < src.tests[j].Name.Name })
 	return src
-}
-
-// sharedFunctions names the exported package-level functions of the package
-// in dir that act on its variable global: data_structure's functions over
-// DefaultSpace, which is the default engine's space.
-func sharedFunctions(t *testing.T, dir, global string) map[string]bool {
-	t.Helper()
-	files, err := filepath.Glob(filepath.Join(dir, "*.go"))
-	require.NoError(t, err)
-	shared := map[string]bool{}
-	fset := token.NewFileSet()
-	for _, name := range files {
-		if strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		f, err := parser.ParseFile(fset, name, nil, parser.SkipObjectResolution)
-		require.NoError(t, err)
-		for _, decl := range f.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Recv != nil || fn.Body == nil || !fn.Name.IsExported() {
-				continue
-			}
-			ast.Inspect(fn.Body, func(n ast.Node) bool {
-				if id, ok := n.(*ast.Ident); ok && id.Name == global {
-					shared[fn.Name.Name] = true
-				}
-				return true
-			})
-		}
-	}
-	require.NotEmpty(t, shared, "found no function of %s over %s", dir, global)
-	return shared
 }

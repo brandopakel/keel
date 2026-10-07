@@ -6,10 +6,8 @@ package data_structure
 //
 // All of it used to be package variables, which made the keyspace a singleton:
 // one per process, and no two tests able to run side by side. The embedding
-// plan (docs/embedding-plan.md) gives every engine a Space of its own. Until
-// engines exist the server lives in DefaultSpace, and the package-level
-// functions at the end of this file act on it, so nothing above this package
-// has had to change yet.
+// plan (docs/embedding-plan.md) gives every engine a Space of its own, made
+// with NewSpace; since step 2.7 no space is the package's.
 //
 // A Space is not safe for concurrent use. Like the stores in it, it belongs to
 // whoever is executing commands: the event loop's thread today, and the holder
@@ -196,43 +194,3 @@ func (s *Space) MaxKeys() int { return s.limits.MaxKeys }
 
 // MaxMemory is the space's bound on its estimated bytes; zero is none.
 func (s *Space) MaxMemory() uint64 { return s.limits.MaxMemory }
-
-// DefaultSpace is the space the server's stores live in until each engine owns
-// one. The default engine sets its limits from the engine's options.
-var DefaultSpace = NewSpace(DefaultLimits())
-
-// The package-level functions act on DefaultSpace, so callers read as they did
-// while the plan moves them onto spaces of their own.
-
-func RegisterKeyspace(ks Keyspace)   { DefaultSpace.RegisterKeyspace(ks) }
-func ResetKeyspaces()                { DefaultSpace.ResetKeyspaces() }
-func DeleteAnywhere(key string) bool { return DefaultSpace.DeleteAnywhere(key) }
-func TotalMemUsed() uint64           { return DefaultSpace.TotalMemUsed() }
-func TotalKeys() int                 { return DefaultSpace.TotalKeys() }
-func EachKeyspace(fn func(Keyspace)) { DefaultSpace.EachKeyspace(fn) }
-func Evicted() uint64                { return DefaultSpace.Evicted() }
-func EnforceLimits()                 { DefaultSpace.EnforceLimits() }
-func NewKeyspaceWalk() *KeyspaceWalk { return DefaultSpace.NewKeyspaceWalk() }
-func LCSTooLarge(a, b string) bool   { return DefaultSpace.LCSTooLarge(a, b) }
-func EachKeyspaceFrom(start int, fn func(Keyspace)) int {
-	return DefaultSpace.EachKeyspaceFrom(start, fn)
-}
-func VisitKeyspacesFrom(start int, fn func(Keyspace) bool) int {
-	return DefaultSpace.VisitKeyspacesFrom(start, fn)
-}
-func ScanKeyspaces(cursor uint64, budget int, keep func(Keyspace, string) bool, dst []string) ([]string, uint64) {
-	return DefaultSpace.ScanKeyspaces(cursor, budget, keep, dst)
-}
-
-// OwnerOf repeats (*Space).OwnerOf over DefaultSpace instead of calling it.
-// The type check runs it for every key of every command, and it used to be
-// inlined there; delegating costs the inliner 88 against its budget of 80, so
-// each of those keys would pay for a call that the copy avoids.
-func OwnerOf(key string) (Keyspace, bool) {
-	for _, ks := range DefaultSpace.keyspaces {
-		if ks.Has(key) {
-			return ks, true
-		}
-	}
-	return nil, false
-}

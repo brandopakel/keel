@@ -13,28 +13,23 @@ import (
 
 // Why a package variable may stay, for now or for good.
 //
-// The embedding plan (docs/embedding-plan.md) moves this package's mutable
+// The embedding plan (docs/embedding-plan.md) moved this package's mutable
 // state into Engine, a step at a time, so that two engines in one process share
-// nothing. A new package variable would quietly undo that, and nothing would
-// notice until two instances disagreed. So the census below parses the
-// package's source and fails on any top-level variable packageVars does not
-// list. Each mutable entry names the step that takes it into the engine, and
-// that step removes it here; an entry whose variable is gone fails the census
-// too, so the list cannot outlive what it excuses.
+// nothing; step 2.7 removed the last of it, the default engine. A new package
+// variable would quietly undo that, and nothing would notice until two
+// instances disagreed. So the census below parses the package's source and
+// fails on any top-level variable packageVars does not list. An entry whose
+// variable is gone fails the census too, so the list cannot outlive what it
+// excuses.
 const (
 	// For good: values that are computed once and never written again.
 	sentinel = "an error sentinel, matched by identity and never reassigned"
 	table    = "a table or reply built once and only read after"
-
-	// Until the step that moves it.
-	defaultInstance = "the server's engine until callers open their own (plan step 2.7)"
 )
 
 // packageVars is every package-level variable this package may declare, with
 // the reason each one is allowed.
 var packageVars = map[string]string{
-	"defaultEngine": defaultInstance,
-
 	"commandTable": table, "commandArity": table, "commands": table,
 	"connectionCommands": table, "containerCommands": table, "clientSubcommands": table,
 	"memorySubcommands": table, "commandKeyspace": table, "multiKeyCommands": table,

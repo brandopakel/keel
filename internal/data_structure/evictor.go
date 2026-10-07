@@ -64,7 +64,7 @@ func (s *Space) RegisterKeyspace(ks Keyspace) { s.keyspaces = append(s.keyspaces
 // build fresh stores and must not inherit the previous test's keyspaces.
 //
 // The generator is not reset, and never was: resetting it would change which
-// keys random eviction picks after every ResetStores.
+// keys random eviction picks after every reset of an engine's stores.
 func (s *Space) ResetKeyspaces() {
 	s.keyspaces = nil
 	s.version++
@@ -119,8 +119,8 @@ func (s *Space) TotalMemUsed() uint64 {
 // listing keys will report them in.
 //
 // The registry itself stays unexported. Handing out the slice would let a
-// caller hold it across a ResetStores and go on writing to keyspaces the server
-// has thrown away.
+// caller hold it across a reset of the stores and go on writing to keyspaces
+// the engine has thrown away.
 func (s *Space) EachKeyspace(fn func(Keyspace)) {
 	for _, ks := range s.keyspaces {
 		fn(ks)

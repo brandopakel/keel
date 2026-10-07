@@ -164,12 +164,6 @@ func IsTransactionCommand(name string) bool {
 	return name == "MULTI" || name == "EXEC" || name == "DISCARD"
 }
 
-// Transact is the method of that name on the default engine, which plan step
-// 2.7 removes.
-func Transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn Connection) (*Transaction, error) {
-	return defaultEngine.Transact(tx, cmd, w, conn)
-}
-
 // Transact answers cmd on e for a connection whose open transaction is tx,
 // nil if it has none, and returns the transaction that is open afterwards:
 // what EXEC runs, it runs on e. The transport calls it for every command

@@ -74,13 +74,10 @@ type replicationState struct {
 	invalidated bool
 }
 
-// InitReplication starts replication on the default engine once its log is
-// open, as the server does: a primary's stream in a new epoch, and a replica
+// InitReplication starts replication on e once its log is open, as the server
+// does, and as e's role says: a primary's stream in a new epoch, and a replica
 // that has applied nothing yet and, if it follows a primary, holds off expiry
 // and eviction and reads the checkpoint it restarts from.
-func InitReplication() error { return defaultEngine.InitReplication() }
-
-// InitReplication is the package's InitReplication on e, as e's role says.
 func (e *Engine) InitReplication() error {
 	e.resetReplicationV2()
 	e.replication.dirty = make(map[string]struct{})
@@ -258,11 +255,9 @@ func (e *Engine) cmdReplicationPull(args []string) []byte {
 // ApplyReplication is called only on the event loop. Any failure is fatal to
 // the replica: it must not serve a partially applied frame. Restart requires a
 // fresh full sync before reads are enabled, regardless of local AOF contents.
-func ApplyReplication(frame ReplicationFrame) error { return defaultEngine.ApplyReplication(frame) }
-
-// ApplyReplication is the package's ApplyReplication on e: the frame is
-// applied to e's keyspace, logged in e's log, and moves e's position in its
-// primary's stream.
+//
+// The frame is applied to e's keyspace, logged in e's log, and moves e's
+// position in its primary's stream.
 func (e *Engine) ApplyReplication(frame ReplicationFrame) error {
 	if e.replicationProtocol() == 2 {
 		return e.applyReplicationV2(frame)

@@ -20,12 +20,11 @@ import (
 // notice until two instances disagreed. So the census below parses this
 // package's source and fails on any top-level variable missing from this list.
 //
-// The list holds DefaultSpace and values that are computed once and never
-// written again. It is meant to shrink as the plan proceeds - DefaultSpace goes
-// when every engine owns its own space - and an entry whose variable is gone
-// fails the census too, so the list cannot outlive what it excuses.
+// The list holds only values that are computed once and never written again.
+// DefaultSpace, the server's space until every engine owned its own, went in
+// plan step 2.7. An entry whose variable is gone fails the census too, so the
+// list cannot outlive what it excuses.
 var packageVars = map[string]string{
-	"DefaultSpace":        "the server's space until engines own theirs (plan step 2.7)",
 	"keyLookupSeed":       "random per process and never written again, so every space can hash with it",
 	"morrisValue":         "a table computed from morrisA in init and only read after",
 	"morrisProb":          "a table computed from morrisA in init and only read after",

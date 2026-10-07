@@ -5,11 +5,10 @@ import (
 )
 
 // Tests run on engines of their own (plan step 2.6), so that they can run side
-// by side: a test that calls t.Parallel makes its engine with newTestEngine
-// and drives it through the helpers below, which take the engine they act on.
-// The package's functions, and the helpers that call them, act on the default
-// engine the server runs on, and a test that runs in parallel must not reach
-// it; TestParallelTestsLeaveTheDefaultEngineAlone checks that none does.
+// by side: a test makes its engine with newTestEngine and drives it through
+// the helpers below, which take the engine they act on. There is no other
+// engine since step 2.7; TestParallelTestsShareNoPackageState checks that a
+// test that runs in parallel writes none of the package's state either.
 
 // newEngine is NewEngine for a test, whose options are a mistake in the test
 // when no engine can be held to them, and panic.
