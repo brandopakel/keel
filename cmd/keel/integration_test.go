@@ -92,6 +92,7 @@ func launchTestServer(t *testing.T, startupTimeout time.Duration, env []string, 
 	if err := s.cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
+	diagAfterStart(t, port, s.cmd.Process.Pid)
 	t.Cleanup(func() {
 		if !s.stopped {
 			if t.Failed() {
@@ -107,6 +108,7 @@ func launchTestServer(t *testing.T, startupTimeout time.Duration, env []string, 
 	for time.Now().Before(deadline) {
 		c, err := net.DialTimeout("tcp", s.addr, 50*time.Millisecond)
 		if err == nil {
+			diagAtReadiness(t, port, s.cmd.Process.Pid, c)
 			c.Close()
 			s.startupElapsed = time.Since(started)
 			return s
@@ -156,6 +158,7 @@ func freePort(t *testing.T) int {
 		if err != nil {
 			continue
 		}
+		diagRecordProbe(port, listener)
 		listener.Close()
 		return port
 	}
