@@ -2,12 +2,12 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
-	"os"
 	"runtime"
 	"sync"
 	"syscall"
@@ -1210,20 +1210,14 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 	return nil
 }
 
-// StartAOF loads any existing append-only file and opens it for appending.
-//
-// Loading first and opening second is deliberate: opening installs the hook
-// that records evictions, and replaying a log with that hook live would append
-// what it is currently reading. A truncated final command is the ordinary shape
-// of a crash, so it is logged and the server starts anyway on the commands
-// before it; anything else is a refusal to start, because beginning from a
-// partially understood log means quietly serving a keyspace that is missing
-// whatever came after the part that failed.
-//
-// It runs on e, the engine the server will serve. Whether there is a log, and
-// where, are e's options (core.Options.AppendOnly and AppendFilename), which
-// cmd/keel makes it with from its flags.
-func StartAOF(e *core.Engine) error { return startAOF(e, legacyAOFFileName) }
+// StartAOF runs the log's startup on e (core's Engine.StartAOF): e's log
+// replayed, its torn tail repaired, and the log opened for appending, as e's
+// options say, which cmd/keel makes it with from its flags. It is the
+// sequence core.Open runs, with the server's legacy log looked for, and
+// nothing to stop it: a signal during the replay ends the process.
+func StartAOF(e *core.Engine) error {
+	return e.StartAOF(context.Background(), legacyAOFFileName)
+}
 
 // legacyAOFFileName is what the default log was called while the server was
 // called memkv.
@@ -1234,115 +1228,6 @@ func StartAOF(e *core.Engine) error { return startAOF(e, legacyAOFFileName) }
 // look at. Nothing errors and nothing warns - the keyspace is just gone. The
 // old name is read if it is there and the new one is not; it is never written.
 const legacyAOFFileName = "./memkv-master.aof"
-
-// startAOF is StartAOF with the legacy log looked for at legacy.
-func startAOF(e *core.Engine, legacy string) error {
-	options := e.Configuration().WithDefaults()
-	if !options.AppendOnly {
-		return nil
-	}
-	path := options.AppendFilename
-	// Before the log is read, because a node that cannot establish which term it
-	// is in must not reach the point of serving anything at that term.
-	if err := e.LoadTerm(path); err != nil {
-		return err
-	}
-
-	readFrom := aofReadPath(path, legacy)
-	if readFrom != path {
-		log.Printf("appendonly: reading %s, written before the rename; "+
-			"new records go to %s", readFrom, path)
-	}
-
-	applied, err := e.LoadAOF(readFrom)
-	switch {
-	case core.IsTruncatedAOF(err):
-		if repairErr := core.RepairAOFTail(err); repairErr != nil {
-			return repairErr
-		}
-		log.Printf("appendonly: %v - starting from what was intact", err)
-	case err != nil:
-		return err
-	case applied > 0:
-		log.Printf("appendonly: replayed %d commands from %s", applied, readFrom)
-	}
-	if readFrom == path {
-		if err := e.OpenAOF(path); err != nil {
-			return err
-		}
-	} else if err := migrateAOF(e, path); err != nil {
-		return fmt.Errorf("migrating %s to %s: %w", readFrom, path, err)
-	} else {
-		log.Printf("appendonly: wrote the replayed keyspace to %s; %s is no longer read",
-			path, readFrom)
-	}
-
-	log.Printf("appendonly: on, %s, appendfsync %s", path, options.Fsync)
-	return nil
-}
-
-// migratingSuffix names the log a legacy log's keyspace is written into before
-// it has the name it is kept under.
-const migratingSuffix = ".migrating"
-
-// migrateAOF writes the keyspace e replayed from a legacy log into a new log
-// at path, and opens it for appending, before anything else appends to it.
-//
-// Without this the fallback loses the data it exists to save, one restart
-// later rather than immediately. The first start reads memkv-master.aof and
-// opens an empty keel-master.aof; the second start sees keel-master.aof
-// present, prefers it, and replays only what was written after the
-// migration. Everything that lived solely in the old log is gone, and the old
-// log is still sitting there looking like a backup.
-//
-// For the same reason, the new log has its name only once it holds the whole
-// keyspace. It is written under path + migratingSuffix, synced, and renamed
-// onto path, the directory synced after, as Redis publishes a rewritten log.
-// The migration used to open path first and rewrite into it, so a crash or a
-// failed rewrite in between left an empty log there, which the next start
-// preferred to the intact legacy one: the legacy keyspace was lost. Now
-// anything that stops it before the rename leaves no log at path, and the
-// next start replays the legacy log again. A log left under the temporary
-// name by such a stop is removed first.
-//
-// A rewrite is exactly the right thing here: the shortest log producing the
-// current state. It runs to completion before the server serves anyone, which
-// at startup costs one pass over a keyspace that was just built by one pass
-// over the same data.
-func migrateAOF(e *core.Engine, path string) error {
-	migrating := path + migratingSuffix
-	if err := os.Remove(migrating); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	if err := e.OpenAOF(migrating); err != nil {
-		return err
-	}
-	if err := e.RewriteAOF(); err != nil {
-		return err
-	}
-	return e.RenameAOF(path)
-}
-
-// aofReadPath chooses which log to replay at startup.
-//
-// The default log was ./memkv-master.aof before the server was renamed and is
-// ./keel-master.aof now. Without this, the first restart after the rename finds
-// nothing at the new name, replays nothing, and serves an empty keyspace
-// beside a perfectly good log it never opened - no error and no warning, which
-// is the worst shape a data loss can take.
-//
-// The old name is a fallback and not a merge: if both files are there, the
-// current one is the live log and the old one is whatever was left behind. Only
-// the current name is ever written.
-func aofReadPath(current, legacy string) string {
-	if _, err := os.Stat(current); err == nil {
-		return current
-	}
-	if _, err := os.Stat(legacy); err == nil {
-		return legacy
-	}
-	return current
-}
 
 // respond enforces connection-local authentication before dispatching
 // commands, and answers the commands that concern the connection itself - see

@@ -15,8 +15,8 @@ import (
 // to o, or the error for options no engine can be held to.
 //
 // cmd/keel makes the server's engine with it and hands it to the server (plan
-// step 2.7). Phase 3's Open builds on it, adding the log's replay and a lock
-// on the log's path; the names a public package gives either are phase 5's.
+// step 2.7). Open builds on it, adding the log's startup and replication's;
+// the names a public package gives either are phase 5's.
 func NewEngine(o Options) (*Engine, error) {
 	e := engineIn(data_structure.NewSpace(o.limits()))
 	if err := e.configure(o); err != nil {
