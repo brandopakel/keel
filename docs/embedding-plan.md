@@ -1123,7 +1123,7 @@ a sixth (#129) fixed a flake in a guardrail that the first one met:
   every cycle's work on it, and their tests make engines of their own.
 - **Part 3b, `ClientBuffers`** (#131), the server's INFO hook, installed on
   the engine the server drives rather than in a package variable.
-- **Part 4, the default engine itself** (#133): `defaultEngine`, the
+- **Part 4, the default engine itself** (#135): `defaultEngine`, the
   package functions over it and the package's `init`, then `DefaultSpace`
   and the package functions over it, and this write-up.
 
@@ -1385,18 +1385,23 @@ varies from run to run; no row allocated more in any run.
   0.988.
 - **Part 3b** ran 0.991 to 0.999, and 0.899 against `65ebdbc`; INFO was
   byte-identical to develop's in five configurations.
-- **Part 4** ran PART4_RUNS against develop, and PART4_65 against `65ebdbc`.
-  In the server, only the initializers of `defaultEngine` and `DefaultSpace`
-  went: no other function changed size, and the hot ones moved 192 to 320
-  bytes, keeping their 64-byte phase. End to end, memtier ran at about 1.00
-  on EPYC 7763 and EPYC 9V74. In core's test binary, every hot function was
-  instruction-identical, but deleting the census's test code and the inits
-  moved them all, the generic stores' methods, which are emitted after the
-  package's tests, furthest; against part 3b the job ran 1.030 to 1.032 on
-  Xeon 8573C and EPYC 7763. A control that restored the 64-byte phase of 543
-  of 544 hot functions ran 1.014 and 1.021. A control that kept the deleted
-  test code and the init-time allocations as code that never runs, so that
-  every function in the binary was at 3b's address, ran 0.999 and 0.998.
+- **Part 4** ran 1.025 to 1.027 against develop, and 0.930 and 0.931
+  against `65ebdbc`, all on EPYC 7763; every row over 1.04 was in the test
+  binary's placement, below. In the server, only the initializers of
+  `defaultEngine` and `DefaultSpace` went: no other function changed size,
+  and the hot ones moved 192 to 320 bytes, keeping their 64-byte phase. End
+  to end, memtier ran at about 1.00 against develop on EPYC 7763, one client
+  at 0.988 to 0.996, and against part 3b on EPYC 9V74. In core's test
+  binary, every hot function was instruction-identical, but deleting the
+  census's test code and the inits moved them all, the generic stores'
+  methods, which are emitted after the package's tests, furthest; against
+  part 3b the job ran 1.030 to 1.032 on Xeon 8573C and EPYC 7763. A control
+  that restored the 64-byte phase of 543 of 544 hot functions ran 1.014 and
+  1.021. A control that kept the deleted test code and the init-time
+  allocations as code that never runs, so that every function in the binary
+  was at 3b's address, ran 0.999 and 0.998; rebuilt on the rebased part, with
+  every function at develop's address, it ran 1.000 and 1.002 on EPYC 7763,
+  and 0.909 against `65ebdbc` on EPYC 9V74.
 
 So every row the step ran over budget was code placement: the instructions
 were the same, and only controls that restored exact addresses brought the
