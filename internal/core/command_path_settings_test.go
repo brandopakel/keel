@@ -54,16 +54,16 @@ func logBenchmarkOptions() Options {
 	return Options{Fsync: FsyncEverySec, AutoRewritePercentage: Off, MaxKeys: serverKeyCap}
 }
 
-// mustSucceedOn runs cmd once on e and fails the benchmark if it errors, so a
-// family whose command was removed or broke cannot report the cost of an
-// error reply.
+// mustSucceedOn runs cmd once on e and fails the benchmark if it errors or
+// answers nothing, so a family whose command was removed or broke cannot
+// report the cost of an error reply, and setup that did nothing cannot pass.
 func mustSucceedOn(b *testing.B, e benchEngine, cmd *Command) {
 	b.Helper()
 	var w replyWriter
 	if err := e.EvalAndResponse(cmd, &w); err != nil {
 		b.Fatalf("%s: %v", cmd.Cmd, err)
 	}
-	if len(w.b) > 0 && w.b[0] == '-' {
+	if len(w.b) == 0 || w.b[0] == '-' {
 		b.Fatalf("%s %v answered %q", cmd.Cmd, cmd.Args, w.b)
 	}
 }

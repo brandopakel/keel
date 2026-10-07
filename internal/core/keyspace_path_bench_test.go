@@ -177,11 +177,8 @@ func BenchmarkCommandPathUnderEviction(b *testing.B) {
 // comparing the same work.
 const serverKeyCap = 5000000
 
-// run2On runs a command on e for a benchmark's setup.
+// run2On runs a command on e for a benchmark's setup, which must succeed.
 func run2On(b *testing.B, e benchEngine, name string, args ...string) {
 	b.Helper()
-	var w replyWriter
-	if err := e.EvalAndResponse(&Command{Cmd: name, Args: args}, &w); err != nil {
-		b.Fatalf("%s: %v", name, err)
-	}
+	mustSucceedOn(b, e, &Command{Cmd: name, Args: args})
 }

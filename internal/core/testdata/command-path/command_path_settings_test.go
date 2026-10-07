@@ -62,5 +62,11 @@ func replicaBenchmarkEngine(b *testing.B) benchEngine {
 
 func mustSucceedOn(b *testing.B, _ benchEngine, cmd *Command) {
 	b.Helper()
-	mustSucceed(b, cmd)
+	var w replyWriter
+	if err := EvalAndResponse(cmd, &w); err != nil {
+		b.Fatalf("%s: %v", cmd.Cmd, err)
+	}
+	if len(w.b) == 0 || w.b[0] == '-' {
+		b.Fatalf("%s %v answered %q", cmd.Cmd, cmd.Args, w.b)
+	}
 }
