@@ -3,3 +3,4 @@ artifact_id,run_id,time,event,branch,pr,conclusion,host,keel_metric_names,redis_
 11467750191,37587041339,2026-10-07T07:23:38Z,pull_request,feat/ci-telemetry,134,success,EPYC 7763,21,188,17,https://github.com/brandopakel/keel/actions/runs/37587041339
 11514595218,37691810673,2026-10-07T21:47:02Z,pull_request,feat/collect-census-telemetry,141,success,Xeon 8573C,21,188,17,https://github.com/brandopakel/keel/actions/runs/37691810673
 11515088439,37694804393,2026-10-07T22:13:43Z,pull_request,fix/telemetry-load-target-label,146,success,Xeon 6973P-C,21,188,17,https://github.com/brandopakel/keel/actions/runs/37694804393
+11530096311,37731056640,2026-10-08T05:10:35Z,workflow_dispatch,develop,140,success,EPYC 7763,61,188,57,https://github.com/brandopakel/keel/actions/runs/37731056640
