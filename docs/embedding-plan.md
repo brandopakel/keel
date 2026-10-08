@@ -1722,10 +1722,15 @@ settles it this way:
       in `aof_buf`, which has no bound. Redis truncates a short write back to
       the last whole size when it can (aof.c 1515–1526), and when it cannot,
       keeps the rest after what was written, to write next (aof.c 1547–1551).
-      Here what was written always stays, a record's earlier drains being in
-      the file already, and the rest is written after it, as in Redis's
-      second case. Either way the log is whole once the write succeeds, and a
-      crash before then leaves a torn tail, which the next start repairs, as
+      Phase 3 always took the second course. A change of its own after it
+      takes the first wherever the file ends at a record boundary, for every
+      engine, the server's included: the short write is cut back to the
+      file's own size less what it wrote, so the log stays whole and a crash
+      needs no repair. In the middle of a large record, whose earlier drains
+      are in the file already, and when the cut fails, what was written
+      stays and the rest is written after it, as in Redis's second case.
+      Either way the log is whole once the write succeeds; a crash in the
+      second case leaves a torn tail, which the next start repairs, as
       Redis's `aof-load-truncated` does;
     - the maintenance goroutine retries the write every cycle (Redis retries
       at every turn of its event loop, and from `serverCron` once a second).
