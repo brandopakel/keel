@@ -781,6 +781,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 	})
 	defer e.SetClientBuffers(nil)
 	e.SetServerInfo(&core.ServerInfo{Port: o.Port, MaxClients: o.MaxClients, IOThreads: o.IOThreads,
+		Host: o.Host, RequirePass: o.RequirePass,
 		Hz: max(1, int(time.Second/o.CronInterval)), Multiplexer: io_multiplexing.API})
 	defer e.SetServerInfo(nil)
 	defer func() {

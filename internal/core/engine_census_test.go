@@ -32,7 +32,7 @@ const (
 var packageVars = map[string]string{
 	"commandTable": table, "commandArity": table, "commands": table,
 	"connectionCommands": table, "containerCommands": table, "clientSubcommands": table,
-	"memorySubcommands": table, "commandKeyspace": table, "multiKeyCommands": table,
+	"memorySubcommands": table, "configSubcommands": table, "configHelp": table, "commandKeyspace": table, "multiKeyCommands": table,
 	"strideKeyCommands": table, "argumentsBeforeType": table, "replacingWrites": table,
 	"filterCommands": table, "writeCommands": table, "notInTransaction": table,
 	"answersWithoutData": table, "bfInfoOptions": table, "cfOptions": table, "memoryHelp": table,
@@ -50,7 +50,7 @@ var packageVars = map[string]string{
 	"errCMSNumber": sentinel, "errCMSOverflow": sentinel, "errCMSProb": sentinel, "errCMSWidth": sentinel,
 	"errDecrOverflow": sentinel, "errIncrOverflow": sentinel, "errGeoUnit": sentinel,
 	"errIntegerOutOfRange": sentinel, "errRandomCountRange": sentinel, "errNotAFloat": sentinel,
-	"errNXWithXX": sentinel, "errSyntax": sentinel, "errMinMaxNotFloat": sentinel,
+	"errNXWithXX": sentinel, "errSyntax": sentinel, "errMinMaxNotFloat": sentinel, "errNoConfigFile": sentinel,
 	"errFenced": sentinel, "errLCSType": sentinel, "errNotHLL": sentinel, "errWrongType": sentinel,
 	"errCountNegative": sentinel, "errNotAnInteger": sentinel,
 	"errFilterExists": sentinel, "errFilterNotFound": sentinel, "errReadOnlyReplica": sentinel,

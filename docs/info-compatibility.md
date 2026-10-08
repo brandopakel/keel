@@ -1,6 +1,6 @@
 # INFO and monitoring compatibility
 
-Status: plan, October 7, 2026; part (a) in progress.
+Status: October 7, 2026. Part (a) is merged and part (b) is in review; (c) and (d) are planned.
 
 Monitoring built for Redis reads `INFO`, `CONFIG GET`, `SLOWLOG` and `LATENCY`.
 The standard Prometheus exporter, `redis_exporter`, and the Grafana dashboards
@@ -58,6 +58,8 @@ Each lands on its own, smallest risk first.
   It is the only part that adds work to every command: a counter, and two
   monotonic clock reads for the timing. It has to pass the paired
   command-path job's 0.98 rule, and the timing is measured before it ships.
+  The slow log hides what Redis hides: the arguments of `AUTH`, of `HELLO`'s
+  `AUTH` and of `CONFIG SET requirepass`.
 - **(d) Network bytes**, counted on the connection read and write paths in
   `internal/server`.
 
@@ -192,8 +194,9 @@ hash field expiry.
 
 | Command | Plan |
 | --- | --- |
-| `CONFIG GET pattern [pattern ...]` | (b). Keel's settings under Redis's names: `maxmemory`, `maxmemory-policy`, `maxmemory-samples`, `maxclients`, `appendonly`, `appendfilename`, `appendfsync`, `auto-aof-rewrite-percentage`, `auto-aof-rewrite-min-size`, `bind`, `port`, `io-threads`, `hz`, `lfu-log-factor`, `databases` (`1`), `save` (`""`, no snapshots), `replicaof`, and the slow log and latency settings once (c) lands. A RESP2 flat array, or a RESP3 map. Settings whose meaning differs (`lfu-decay-time` against Keel's access-counted decay) are left out. |
-| `CONFIG SET`, `CONFIG REWRITE` | Refused with Redis's error for an unsupported parameter, until Keel has runtime configuration |
+| `CONFIG GET pattern [pattern ...]` | (b), done. Keel's settings under Redis's names, read live: `maxmemory`, `maxmemory-policy`, `maxmemory-samples`, `lfu-log-factor`, `appendonly`, `appendfilename`, `appendfsync`, `auto-aof-rewrite-percentage`, `auto-aof-rewrite-min-size`, `replicaof` and its old name `slaveof` (`host port`, as Redis writes it), `databases` (`1`), `save` (`""`, no snapshots) and `dir` (the working directory, against which relative paths resolve). With the server, also `port`, `bind`, `maxclients`, `tcp-backlog` (Keel listens with a backlog of `maxclients`), `io-threads`, `hz` and `requirepass`, which Redis gives to any client that has logged in. The slow log and latency settings come with (c). A RESP2 flat array, or a RESP3 map. A name matches without regard to case and comes back as asked; a glob comes back in Redis's spelling. Settings whose meaning differs are left out: `lfu-decay-time` against Keel's access-counted decay; `client-output-buffer-limit`, since Keel's 64 MiB `MaxReplyBytes` caps one reply rather than disconnecting a client that falls behind; and `repl-backlog-size`, since a Keel replica reads the primary's log, not a backlog. |
+| `CONFIG SET parameter value [parameter value ...]` | (b), done. Keel has no runtime configuration yet, so every pair is refused in Redis's words for the first that fails: `Unknown option or number of arguments for CONFIG SET - '<name>'` for a name Keel does not report, `CONFIG SET failed (possibly related to argument '<name>') - can't set immutable config` for one it does, and `can't set protected config` for `dir`, as Redis keeps it by default. An odd count is Redis's `syntax error`. |
+| `CONFIG REWRITE` | (b), done. `The server is running without a config file`, Redis's answer when it was started without one: Keel takes flags. |
 | `CONFIG RESETSTAT` | (c). Resets what Redis resets: commandstats, errorstats, latencystats, hits and misses, error replies, the connection and network counters, and the expired and evicted counts. |
 | `SLOWLOG GET [count]`, `LEN`, `RESET`, `HELP` | (c). Entries are id, Unix time, duration in µs, arguments (at most 32, each cut at 128 bytes as Redis does), client address and name. Defaults are `slowlog-log-slower-than` 10000 and `slowlog-max-len` 128. |
 | `LATENCY LATEST`, `HISTORY`, `RESET`, `DOCTOR`, `HELP` | (c). Redis's latency monitor is off by default (`latency-monitor-threshold 0`), so these answer as an idle monitor: empty replies and `0`. |
@@ -214,7 +217,11 @@ Live telemetry run after each merge confirms them.
     `redis_rejected_connections_total`, `redis_cluster_enabled`,
     and the zero-valued features. (`redis_db_avg_ttl_seconds` waits for `avg_ttl`.)
 - **(b):** `redis_config_maxmemory`, `redis_config_maxclients`,
-  `redis_config_io_threads`.
+  `redis_config_io_threads` and `redis_configured_hz`. Locally, `redis_exporter`
+  1.93.0 read 77 metric names from Keel with (b), against 60 with (a) alone
+  and 199 from Redis 8.10.2. The two `redis_config_*` metrics still missing,
+  `redis_config_client_output_buffer_limit_*` and
+  `redis_config_repl_backlog_size`, are the settings left out above.
 - **(c):**
   - `redis_commands_processed_total`, `redis_keyspace_hits_total`,
     `redis_keyspace_misses_total`, `redis_total_error_replies`;
