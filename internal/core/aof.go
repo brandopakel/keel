@@ -500,6 +500,12 @@ func (e *Engine) flushAOF(closing bool) error {
 	return nil
 }
 
+// layoutPad is part of a layout control, never merged: it is never called,
+// and only moves the code after it by one 32-byte slot.
+//
+//go:noinline
+func layoutPad() {}
+
 // publishFlushed advances the offset whose replies may be released: to what
 // is written, or, when syncedOnly, to what a sync has covered.
 func (e *Engine) publishFlushed(syncedOnly bool) {
