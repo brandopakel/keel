@@ -9,6 +9,11 @@ on:
         description: Run the matched traversal adoption matrix on this runner
         type: boolean
         default: false
+      policy:
+        description: Log policy for the matched standard suite (throwaway branch, never merged)
+        type: choice
+        options: ['off', 'no', 'everysec', 'always']
+        default: 'off'
       baseline:
         description: Exact baseline commit
         type: string
@@ -239,6 +244,7 @@ jobs:
           REPETITIONS: ${{ inputs.repetitions }}
           MEASURE_SECONDS: ${{ inputs.seconds }}
           INCLUDE_MEMORY: ${{ inputs.memory }}
+          MATCHED_POLICY: ${{ inputs.policy }}
           DIAGNOSE_PROFILES: ${{ inputs.profiles }}
         run: |
           python3 - <<'PY'
@@ -257,7 +263,7 @@ jobs:
           server, clients = ','.join(map(str,server_set)), ','.join(map(str,client_set))
           Path('dist/matched/affinity.json').write_text(json.dumps({'server':server,'generator':clients,'topology':topology,'limitation':'Disjoint exposed core groups on one hosted VM; host scheduling and underlying tenancy are uncontrolled.'},indent=2))
           common = ['python3','bench/run-general.py','--candidate','/tmp/keel-candidate','--memtier','/tmp/memtier_benchmark-2.5.1/memtier_benchmark','--server-cpus',server,'--client-cpus',clients,'--load-threads','2']
-          compare = common+['--baseline','/tmp/keel-baseline','--reps',os.environ['REPETITIONS'],'--seconds',os.environ['MEASURE_SECONDS']]
+          compare = common+['--baseline','/tmp/keel-baseline','--reps',os.environ['REPETITIONS'],'--seconds',os.environ['MEASURE_SECONDS'],'--policy',os.environ['MATCHED_POLICY']]
           suites = ['standard'] + (['memory'] if os.environ['INCLUDE_MEMORY'] == 'true' else [])
           for suite in suites:
               selected = ['--cases',os.environ['SELECTED_CASES']] if suite == 'standard' and os.environ['SELECTED_CASES'] else []
