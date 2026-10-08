@@ -7,6 +7,9 @@ import (
 	"time"
 )
 
+// API names the facility, as Redis's INFO reports it in multiplexing_api.
+const API = "epoll"
+
 // Epoll is the Linux facility: one epoll instance, and the buffers one wait
 // reports into.
 type Epoll struct {
