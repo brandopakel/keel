@@ -1833,10 +1833,11 @@ settles it this way:
     - the hot functions' addresses compared with `go tool nm`, as step 2.7
       did.
   - **Part 5** adds a benchmark of `Do`: with no log, under everysec and under
-    always; on one goroutine and on eight; against `EvalAndResponse` with no
-    lock. It is reported but not gated, because there is nothing to pair it
-    with. Its name keeps it out of the paired job's `^BenchmarkCommandPath`,
-    which a baseline without it would fail.
+    always; on one goroutine and on `GOMAXPROCS` of them (`RunParallel`);
+    against `EvalAndResponse` with no lock. It is reported but not gated,
+    because there is nothing to pair it with. Its name keeps it out of the
+    paired job's `^BenchmarkCommandPath`, which a baseline without it would
+    fail.
 - **Guardrails.** Every part keeps green:
   - the persistence and replication goldens (`testdata/persistence-40eb2f6`,
     `testdata/replication-9736d8d`);
@@ -1850,6 +1851,78 @@ settles it this way:
   The kill tests write a few KiB. A test that writes tens of MiB takes
   `internal/testlock`'s `HoldDiskHeavy`, and a server test starts its server
   only through cmd/keel's `startTestServer` and its siblings.
+
+What the phase measured, part by part. The paired command-path job's medians
+are against the part before unless named, on GitHub's hosted runners, whose
+CPU varies from run to run. No row allocated more in any run, and the INCR
+row, pinned in part 1, read 2 → 2 allocations throughout.
+
+- **Part 1** (#148) put the instance lock into the server's loop. On the
+  connection's path, only `RunAsyncTCPServer` changed: the lock at entry, and
+  per cycle Unlock's and Lock's fast paths around `Check`, all inlined.
+  `EvalAndResponse`, `executeRun`, `(*client).respond` and `responseRw` were
+  instruction-identical. In core's test binary every function stayed at
+  develop's address; a `defer e.Unlock()` would have kept an out-of-line
+  `Unlock` and moved 330 functions by 96 bytes, so the loop defers a closure.
+  The job ran 0.999 to 1.001 against develop, and 0.883 to 0.925 against
+  `65ebdbc`; memtier ran 0.991 to 1.009. The INCR row's allocations had
+  flipped between runs: `strconv.FormatInt` allocates for values of 100 and
+  above, and the row's counters grow with `b.N`, so a faster side ran more
+  iterations and seemed to allocate more. The job now runs that row for a
+  fixed 1,000,000 iterations on both sides.
+- **Part 2** (#149) added `Open` and `Close`, and the replay's context check.
+  The server's startup, run in 12 scenarios against develop's, gave the same
+  output, replies, exit status and files in every one. The job ran 0.991 to
+  1.007; two rows went over 1.04 once on EPYC 9V45 and did not repeat.
+  Memtier ran 0.990 to 1.007.
+- **Part 3** (#151) added the lock beside the log. The job ran 0.998 to
+  1.004, and 0.900 against `65ebdbc`. WithReplica/SET read 1.038 to 1.066 in
+  every run, with no instruction on its path changed: the part's new code,
+  and the standard library code its tests link, moved the replication
+  functions 5,216 bytes and flipped their 64-byte phase. A control that
+  restored the phase halved the row's excess, and other rows rose instead. So
+  a reverse control was built: develop plus never-called functions taking the
+  room the part's code takes, where it takes it, which put every function the
+  job runs at the part's exact address. Against develop, it read
+  WithReplica/SET at 1.025 to 1.036 in four runs on EPYC 7763; the part,
+  against it, read 0.996 and 0.999. The row was placement, and the part,
+  its field and its static data included, cost nothing on it. Memtier ran
+  0.993 to 1.021.
+- **Part 4** (#152) added the maintenance goroutine. The job ran 1.002, 1.005
+  and 1.009 on EPYC 7763, with GET, SISMEMBER, PFADD and both SADD rows over
+  1.04 in all three, and 0.926 against `65ebdbc`. The generic stores' methods,
+  which the linker places after core's tests, moved 12,000 bytes and flipped
+  their phase; a control that restored it ran 0.998 twice on EPYC 7763, every
+  row at 1.038 or below, GET at 0.968. In the server only `Close` grew, by 144
+  bytes, which moved what follows it 160 bytes; memtier ran 0.991 to 1.006.
+- **Part 5** added calls, their durability, and Redis's log failures. The job
+  ran 0.977 to 1.003 against part 4 in six runs, and 0.914 against `65ebdbc`;
+  WithReplica/INCR read 1.041 once on EPYC 7763, then 1.031 and 1.035 there
+  and at most 1.033 elsewhere. On the connection's path the server was
+  instruction-identical. On the flush, `pollAOFSync` stopped inlining (its
+  cost went from 63 to 174, against a budget of 80), and `writeAOFBuffer`
+  gained a branch after each write. Memtier ran 0.989 to 1.005 with the log
+  off, and 0.985 to 1.010 under everysec. Under always, which waits for a
+  hosted disk's sync every cycle, single pairs ran from 0.31 to 6.6, so its
+  medians, 0.923 to 1.071, are noise more than measure; the write-heavy
+  workloads read 1.063 and 1.066. The kill tests, four runs of each, found
+  every acknowledged write in the reopened log under each policy and during a
+  rewrite, and, killed while the disk failed, every write acknowledged before
+  the failure (1,150 to 1,228 a run), with the half-written record repaired.
+  Locally, a call cost about 7 ns over the bare command with no log. Under
+  `always`, the sync runs under the lock, as Redis's runs on its main thread,
+  so one sync covered about three calls in the group-commit test (200 calls in
+  67 syncs of 2 ms each); a sync outside the lock is the follow-up after this
+  phase.
+
+So, as in step 2.7, every row that stayed over 1.04 when run again was code
+placement, shown with a control build of its own, and no median was over
+the gate. On a command's path, the only instructions that changed were part
+1's lock pair in the loop and part 5's changes to the flush, whose new
+branches the server's engine never takes. Part 3's row needed the
+exact-address control, built the other way round: on develop, with room left
+for the part's code, since padding added to the part could only move what
+follows it further.
 
 ## Risks, in order
 
