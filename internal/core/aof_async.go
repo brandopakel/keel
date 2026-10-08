@@ -26,6 +26,10 @@ type appendResult struct {
 func writeLog(f *os.File, body []byte) (int, error) { return f.Write(body) }
 func syncLog(f *os.File) error                      { return f.Sync() }
 
+// truncateLog cuts f back to size: the log's aofTruncate, unless a test
+// replaces it on the engine it is failing.
+func truncateLog(f *os.File, size int64) error { return f.Truncate(size) }
+
 // AppendPending reports whether a batch of e's log is out with its append
 // worker.
 func (e *Engine) AppendPending() bool { return e.appendPending != nil }

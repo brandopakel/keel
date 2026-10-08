@@ -85,6 +85,10 @@ type aofState struct {
 	// once MULTI has been written ahead of the block's first record. A
 	// transaction that records nothing writes no frame; see transaction.go.
 	transaction, transactionLogged bool
+	// midRecord is set while the file ends in the middle of a record, which
+	// a drain of a large record leaves it until the record's last part is
+	// written (writeAOFBuffer).
+	midRecord bool
 	// replaying suppresses recording, so loading a log does not write it back
 	// into itself.
 	recovered   []string
@@ -175,6 +179,7 @@ func (e *Engine) OpenAOF(path string) error {
 	e.aof.lastSync = time.Now()
 	e.aof.dirty = false
 	e.aof.failed = nil
+	e.aof.midRecord = false
 	// Counters describe this open file, not whatever the last one did, so they
 	// start again with it. Carrying them over would make a fresh log report
 	// rewrites it has never had.
@@ -447,7 +452,7 @@ func (e *Engine) flushAOF(closing bool) error {
 	if e.aof.failed != nil {
 		return e.aof.failed
 	}
-	if err := e.writeAOFBuffer(); err != nil {
+	if err := e.writeAOFBuffer(false); err != nil {
 		return err
 	}
 	syncDue := closing || fsync == FsyncAlways ||

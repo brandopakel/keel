@@ -140,10 +140,11 @@ func TestAOFTranscriptPartialWriteNeverAdvancesReplyPrefix(t *testing.T) {
 	require.ErrorIs(t, e.CloseAOF(), io.ErrShortWrite)
 	e.aofWrite = oldWrite
 	e.resetStores()
+	// The short write began at a record boundary, so it was cut back off the
+	// log, as Redis truncates one (aof.c 1515-1526): the log is whole, with
+	// no torn tail to repair.
 	_, err := e.LoadAOF(path)
-	var torn *truncatedAOF
-	require.ErrorAs(t, err, &torn)
-	require.NoError(t, RepairAOFTail(err))
+	require.NoError(t, err)
 	for i := 0; i < 2; i++ {
 		restartOn(t, e, path)
 		require.Equal(t, "safe", runOn(t, e, "GET", "before"))

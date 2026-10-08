@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"io"
 	"strconv"
 )
@@ -13,15 +14,26 @@ import (
 // ceiling otherwise rejects the fourth ordinary record solely for its header.
 const maxAOFTranscriptBytes = (4 << 20) + (64 << 10)
 
-// writeAOFBuffer writes what is buffered to e's log. A failed write latches
-// (aof.failed), and every later write returns it, unless e retries a failed
-// write, as an engine Open makes does under everysec and no (driver.go): then
-// what was not written stays buffered, in order, for the maintenance
-// goroutine's next flush to try again, as Redis keeps the rest of its aof_buf
-// after a failed write (aof.c 1539-1552). That holds for a drain in the middle
-// of a large record too: what follows the failure is kept with it
+// writeAOFBuffer writes what is buffered to e's log; drain says it is a drain
+// in the middle of a record (appendAOFFragment), and not a flush of whole
+// records.
+//
+// A write that fails partway is first cut back off the file, as Redis 8.10.1
+// truncates a short write to the last whole size (aof.c 1515-1526), when the
+// file ends at a record boundary: the log is then whole, and the whole buffer
+// is still to be written. When the file ends in the middle of a record, whose
+// earlier drains are on disk, or when the cut fails, what was written stays,
+// and only the rest is still to be written, as Redis does when it cannot
+// truncate (aof.c 1547-1551).
+//
+// The failure then latches (aof.failed), and every later write returns it,
+// unless e retries a failed write, as an engine Open makes does under everysec
+// and no (driver.go): what is still to be written stays buffered, in order,
+// for the maintenance goroutine's next flush to try again, as Redis keeps it
+// in its aof_buf (aof.c 1539-1552). That holds for a drain in the middle of a
+// large record too: what follows the failure is kept with it
 // (appendAOFFragment), so the log is whole once the write succeeds.
-func (e *Engine) writeAOFBuffer() error {
+func (e *Engine) writeAOFBuffer(drain bool) error {
 	e.pollAppend(true)
 	if e.aof.failed != nil {
 		return e.aof.failed
@@ -31,6 +43,12 @@ func (e *Engine) writeAOFBuffer() error {
 	}
 	if len(e.aof.buf) > 0 {
 		n, err := timedPersistenceWrite(&e.appendWriteStats, e.aof.file, e.aof.buf, e.aofWrite)
+		if err == nil && n != len(e.aof.buf) {
+			err = io.ErrShortWrite
+		}
+		if err != nil && n > 0 && !e.aof.midRecord && e.cutShortWrite(n) {
+			n = 0
+		}
 		e.recordAOFDigest(e.aof.buf[:n])
 		e.aof.written += int64(n)
 		e.appendStarted += uint64(n)
@@ -38,10 +56,12 @@ func (e *Engine) writeAOFBuffer() error {
 		if n > 0 {
 			e.aof.dirty = true
 		}
-		if err == nil && n != len(e.aof.buf) {
-			err = io.ErrShortWrite
-		}
 		if err != nil {
+			if n > 0 {
+				// What was written stays, so the file now ends partway
+				// through a record.
+				e.aof.midRecord = true
+			}
 			e.aof.buf = e.aof.buf[n:]
 			e.aof.commandStart = max(e.aof.commandStart-n, 0)
 			if d := e.driver; d != nil && d.retries {
@@ -51,6 +71,7 @@ func (e *Engine) writeAOFBuffer() error {
 			e.aof.failed = err
 			return err
 		}
+		e.aof.midRecord = drain
 		if d := e.driver; d != nil && d.writeFailure != nil {
 			d.writeSolved()
 		}
@@ -65,6 +86,26 @@ func (e *Engine) writeAOFBuffer() error {
 		e.aof.commandStart = 0
 	}
 	return nil
+}
+
+// cutShortWrite cuts the n bytes a short write left at the end of e's log
+// back off it, as Redis truncates a short write (aof.c 1515-1526), and says
+// whether it did. The size to cut back to is the file's own, less n, rather
+// than any count kept of it: the log is opened for appending and only e
+// writes it, so that is exactly where the write began, and a count that had
+// drifted from the file could only make the cut remove what was there before.
+func (e *Engine) cutShortWrite(n int) bool {
+	info, err := e.aof.file.Stat()
+	if err == nil && info.Size() >= int64(n) {
+		err = e.aofTruncate(e.aof.file, info.Size()-int64(n))
+	} else if err == nil {
+		err = fmt.Errorf("the log is %d bytes, fewer than the %d just written", info.Size(), n)
+	}
+	if err != nil {
+		aofLog("could not remove a short write from the log, so the rest is written after it: %v", err)
+		return false
+	}
+	return true
 }
 
 func (e *Engine) publishAOFPrefix() {
@@ -107,7 +148,7 @@ func (e *Engine) appendAOFFragment(fragment string) {
 		if len(e.aof.buf) == maxAOFTranscriptBytes {
 			// A failed drain either latches, ending the loop, or is retried,
 			// keeping the rest of the record (above).
-			if e.writeAOFBuffer() != nil {
+			if e.writeAOFBuffer(true) != nil {
 				continue
 			}
 		}
