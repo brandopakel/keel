@@ -191,9 +191,12 @@ func (e *Engine) EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 
 	suspended := e.space.SuspendEviction
 	e.space.SuspendEviction = true
+	started := nanotime()
 	res := entry.run(e, cmd.Args)
+	took := nanotime() - started
 	stat := &e.commandStats[entry.stat]
 	stat.calls++
+	stat.nanos += uint64(took)
 	if res[0] == '-' {
 		stat.failed++
 	}
