@@ -41,6 +41,17 @@ func filesIn(t *testing.T, dir string) map[string]string {
 	return files
 }
 
+// withLockFile is files and the empty lock file a log's startup creates beside
+// keel.aof before it reads anything: the one file a refused or stopped
+// startup leaves where there was none.
+func withLockFile(files map[string]string) map[string]string {
+	with := map[string]string{"keel.aof.lock": ""}
+	for name, body := range files {
+		with[name] = body
+	}
+	return with
+}
+
 // countingContext reports itself cancelled from the cancelAt-th time its Err
 // is asked for, so a test can stop a replay at a point it chooses by count
 // rather than by timing. Only Err is counted: the replay asks nothing else.
@@ -135,7 +146,7 @@ func TestOpenRefusesADamagedLogAndLeavesItAlone(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, e)
 	assert.True(t, strings.HasPrefix(err.Error(), "appendonly: malformed command at byte "), "%v", err)
-	assert.Equal(t, before, filesIn(t, dir))
+	assert.Equal(t, withLockFile(before), filesIn(t, dir))
 }
 
 // TestOpenRefusesOptionsNoEngineCanBeHeldTo, before it touches anything.
@@ -150,8 +161,9 @@ func TestOpenRefusesOptionsNoEngineCanBeHeldTo(t *testing.T) {
 // context, before or during the replay, or once the replay has finished but
 // before anything is written, returns the context's error and leaves every
 // file the same bytes - here including a torn tail it must not repair, and a
-// term file - with no log created where there was none. A later Open replays
-// all of it.
+// term file - with no log created where there was none. The one file it may
+// leave is the empty lock file beside the log, which it took before reading.
+// A later Open replays all of it.
 func TestACancelledReplayLeavesEveryFileAsItWas(t *testing.T) {
 	t.Parallel()
 	const keys = 5000
@@ -203,21 +215,26 @@ func TestACancelledReplayLeavesEveryFileAsItWas(t *testing.T) {
 			}
 			assert.EqualError(t, err, want)
 			assert.Equal(t, c.look, ctx.calls.Load(), "startup goes on no further once the context is done")
-			assert.Equal(t, before, filesIn(t, dir), "nothing is written before the replay has finished")
+			if c.look == 1 {
+				assert.Equal(t, before, filesIn(t, dir), "a startup stopped before it began touches nothing")
+			} else {
+				assert.Equal(t, withLockFile(before), filesIn(t, dir), "nothing is written before the replay has finished")
+			}
 
 			e = openTestEngine(t, Options{AppendOnly: true, AppendFilename: path})
 			assert.Equal(t, int64(c.records), runOn(t, e, "DBSIZE"), "a later Open replays it all")
 		})
 	}
 
-	// With no log yet, a startup stopped before it began creates none.
+	// With no log yet, a startup stopped once there was nothing to replay
+	// creates none.
 	t.Run("no log yet", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 		e, err := Open(cancelOnLook(2), Options{AppendOnly: true, AppendFilename: filepath.Join(dir, "keel.aof")})
 		require.ErrorIs(t, err, context.Canceled)
 		assert.Nil(t, e)
-		assert.Empty(t, filesIn(t, dir))
+		assert.Equal(t, withLockFile(nil), filesIn(t, dir))
 	})
 }
 
