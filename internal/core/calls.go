@@ -68,8 +68,10 @@ func (e *Engine) Do(ctx context.Context, cmd *Command, w io.ReadWriter) error {
 		return err
 	}
 	result := e.EvalAndResponse(cmd, w)
-	// A command can fail the log itself, draining a large record: then what
-	// it did is not in the log, and it did not succeed.
+	// A command can fail the log itself, draining a large record. Under
+	// always that latches: what it did is not in the log, and it did not
+	// succeed. Under everysec and no the rest of its record is kept for the
+	// retry, as below.
 	if failure := e.persistenceFailure(); failure != nil {
 		e.mu.Unlock()
 		return failure
@@ -109,6 +111,13 @@ func (e *Engine) callRefusal(cmd *Command) error {
 func (e *Engine) logRetrying() bool {
 	d := e.driver
 	return d != nil && (d.writeFailure != nil || d.syncFailure != nil)
+}
+
+// writeRetrying says e's log has a failed write it is retrying, so that what
+// is appended stays buffered for that retry (appendAOFFragment).
+func (e *Engine) writeRetrying() bool {
+	d := e.driver
+	return d != nil && d.writeFailure != nil
 }
 
 // retriedFailure is the failed write or sync e's log is retrying, as

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/brandopakel/keel/internal/testlock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -355,6 +356,69 @@ func TestAFailedEverysecSyncIsRetried(t *testing.T) {
 	again := openTestEngine(t, o)
 	assert.Equal(t, "$1\r\nv\r\n", mustDo(t, again, "GET", "written"))
 	assert.Equal(t, "$1\r\nv\r\n", mustDo(t, again, "GET", "after"))
+}
+
+// TestAFailedDrainOfALargeRecordIsRetried: a record too large for the buffer
+// is drained to the log as it is encoded, so the disk can fail in the middle
+// of one. Under everysec and no, as Redis keeps its whole record in aof_buf,
+// the rest of the record is kept, past the buffer's bound, and the call that
+// wrote it keeps its reply; once the disk heals, the retry writes the rest
+// after what reached the file, the buffer's extra room is let go, and the log
+// reopens on the whole record. Under always, where Redis exits, the failure
+// latches, and the log reopens on what came before the record.
+func TestAFailedDrainOfALargeRecordIsRetried(t *testing.T) {
+	t.Parallel()
+	// About 20 MiB of logs, taken before the engines' directories so that it
+	// is released only once those files are gone.
+	testlock.HoldDiskHeavy(t)
+	// Twice the bound, so that what is kept after the first failed drain is
+	// more than the buffer may otherwise hold.
+	large := strings.Repeat("x", 2*maxAOFTranscriptBytes+128<<10)
+	want := fmt.Sprintf("$%d\r\n%s\r\n", len(large), large)
+	for _, policy := range []FsyncPolicy{FsyncEverySec, FsyncNever, FsyncAlways} {
+		t.Run(string(policy), func(t *testing.T) {
+			t.Parallel()
+			o := Options{AppendOnly: true, AppendFilename: filepath.Join(t.TempDir(), "keel.aof"), Fsync: policy}
+			e := openTestEngine(t, o)
+			disk := failDisk(e)
+			mustDo(t, e, "SET", "before", "v")
+			disk.writes.Store(true)
+
+			reply, err := do(context.Background(), e, "SET", "large", large)
+			if policy == FsyncAlways {
+				require.ErrorIs(t, err, ErrPersistence)
+				require.ErrorIs(t, e.Close(), ErrPersistence)
+				again := openTestEngine(t, o)
+				assert.Equal(t, "$1\r\nv\r\n", mustDo(t, again, "GET", "before"))
+				assert.Equal(t, "$-1\r\n", mustDo(t, again, "GET", "large"), "the torn record is repaired away")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, "+OK\r\n", reply, "the write in flight at the failure keeps its reply")
+			holding(e, func() {
+				require.True(t, e.writeRetrying(), "its drain failed")
+				assert.Greater(t, len(e.aof.buf), maxAOFTranscriptBytes, "the rest of the record is kept, past the bound")
+			})
+			assert.Equal(t, want, mustDo(t, e, "GET", "large"), "reads are served")
+			_, err = do(context.Background(), e, "SET", "denied", "v")
+			require.ErrorIs(t, err, ErrPersistence)
+
+			disk.writes.Store(false)
+			eventually(t, e, "the retried write succeeded", func() bool { return !e.logRetrying() })
+			holding(e, func() {
+				assert.LessOrEqual(t, cap(e.aof.buf), maxAOFTranscriptBytes, "the buffer's extra room is let go")
+			})
+			assert.Equal(t, "+OK\r\n", mustDo(t, e, "SET", "after", "v"))
+			require.NoError(t, e.Close())
+
+			again := openTestEngine(t, o)
+			assert.Equal(t, want, mustDo(t, again, "GET", "large"), "the whole record is in the log")
+			for _, key := range []string{"before", "after"} {
+				assert.Equal(t, "$1\r\nv\r\n", mustDo(t, again, "GET", key), key)
+			}
+			assert.Equal(t, "$-1\r\n", mustDo(t, again, "GET", "denied"))
+		})
+	}
 }
 
 // TestACancelledWaitReturnsButTheWriteStands: a call whose context is done

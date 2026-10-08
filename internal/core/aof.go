@@ -447,7 +447,7 @@ func (e *Engine) flushAOF(closing bool) error {
 	if e.aof.failed != nil {
 		return e.aof.failed
 	}
-	if err := e.writeAOFBuffer(true); err != nil {
+	if err := e.writeAOFBuffer(); err != nil {
 		return err
 	}
 	syncDue := closing || fsync == FsyncAlways ||

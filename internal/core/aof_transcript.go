@@ -14,12 +14,14 @@ import (
 const maxAOFTranscriptBytes = (4 << 20) + (64 << 10)
 
 // writeAOFBuffer writes what is buffered to e's log. A failed write latches
-// (aof.failed), and every later write returns it, unless the buffer holds
-// whole records and e retries a failed write, as an engine Open makes does
-// under everysec and no (driver.go): then what was not written stays
-// buffered for the next flush to try again, as Redis keeps it. A drain in the
-// middle of a large record cannot keep the record whole, so it always latches.
-func (e *Engine) writeAOFBuffer(wholeRecords bool) error {
+// (aof.failed), and every later write returns it, unless e retries a failed
+// write, as an engine Open makes does under everysec and no (driver.go): then
+// what was not written stays buffered, in order, for the maintenance
+// goroutine's next flush to try again, as Redis keeps the rest of its aof_buf
+// after a failed write (aof.c 1539-1552). That holds for a drain in the middle
+// of a large record too: what follows the failure is kept with it
+// (appendAOFFragment), so the log is whole once the write succeeds.
+func (e *Engine) writeAOFBuffer() error {
 	e.pollAppend(true)
 	if e.aof.failed != nil {
 		return e.aof.failed
@@ -41,7 +43,8 @@ func (e *Engine) writeAOFBuffer(wholeRecords bool) error {
 		}
 		if err != nil {
 			e.aof.buf = e.aof.buf[n:]
-			if d := e.driver; wholeRecords && d != nil && d.retries {
+			e.aof.commandStart = max(e.aof.commandStart-n, 0)
+			if d := e.driver; d != nil && d.retries {
 				d.writeFailed(err)
 				return err
 			}
@@ -52,7 +55,13 @@ func (e *Engine) writeAOFBuffer(wholeRecords bool) error {
 			d.writeSolved()
 		}
 		e.publishAOFPrefix()
-		e.aof.buf = e.aof.buf[:0]
+		if cap(e.aof.buf) > maxAOFTranscriptBytes {
+			// A record kept whole past the bound while a failed write was
+			// retried: once it is written, its buffer goes too.
+			e.aof.buf = nil
+		} else {
+			e.aof.buf = e.aof.buf[:0]
+		}
 		e.aof.commandStart = 0
 	}
 	return nil
@@ -82,11 +91,24 @@ func (e *Engine) growAOFBuffer(size int) {
 	e.aof.buf = buf
 }
 
+// appendAOFFragment appends part of a record too large for what is left of the
+// buffer, draining the buffer to the log whenever it fills. While a failed
+// write is retried, it drains nothing: the rest of the record is kept whole,
+// past the bound, as Redis keeps a record in its aof_buf, and the maintenance
+// goroutine writes it, in order, when the log recovers. Writes are refused
+// meanwhile, so what is kept is the record being written, and what expiry or
+// eviction removes, as in Redis.
 func (e *Engine) appendAOFFragment(fragment string) {
 	for len(fragment) > 0 && e.aof.failed == nil {
+		if e.writeRetrying() {
+			e.aof.buf = append(e.aof.buf, fragment...)
+			return
+		}
 		if len(e.aof.buf) == maxAOFTranscriptBytes {
-			if e.writeAOFBuffer(false) != nil {
-				return
+			// A failed drain either latches, ending the loop, or is retried,
+			// keeping the rest of the record (above).
+			if e.writeAOFBuffer() != nil {
+				continue
 			}
 		}
 		n := min(len(fragment), maxAOFTranscriptBytes-len(e.aof.buf))

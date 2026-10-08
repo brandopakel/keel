@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/brandopakel/keel/internal/testlock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,6 +25,21 @@ import (
 // anywhere.
 func killValue(i int) string { return strconv.Itoa(i) + ":" + strings.Repeat("x", (i*37)%1000) }
 
+// largeKillValue is killValue past the log buffer's bound, so that every
+// record is drained to the log as it is encoded, and a failing disk fails it
+// in the middle of a record.
+func largeKillValue(i int) string { return killValue(i) + strings.Repeat("y", maxAOFTranscriptBytes) }
+
+// killFailAt is the write of the writer's first goroutine after which its
+// disk starts failing: later for small values than for large ones, which
+// write megabytes each.
+func killFailAt(large bool) int {
+	if large {
+		return 3
+	}
+	return 300
+}
+
 // TestEveryAcknowledgedWriteSurvivesAKill: a process writes through calls on
 // an engine Open made, from four goroutines, and reports each write once its
 // call has returned. It is killed with SIGKILL, with no Close, at a point
@@ -31,22 +47,29 @@ func killValue(i int) string { return strconv.Itoa(i) + ":" + strings.Repeat("x"
 // Every write it reported is there, under every fsync policy: a call returns
 // only once its record is written, which a killed process does not undo, and
 // under always only once it is synced. One run is killed while a rewrite it
-// started is under way.
+// started is under way; two while the disk fails, one of them in the middle
+// of large records, whose rest is kept for the retry.
 func TestEveryAcknowledgedWriteSurvivesAKill(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
-		name          string
-		policy        FsyncPolicy
-		rewrite, fail bool
-		acks          int
+		name                 string
+		policy               FsyncPolicy
+		rewrite, fail, large bool
+		acks                 int
 	}{
-		{"always", FsyncAlways, false, false, 300},
-		{"everysec", FsyncEverySec, false, false, 2000},
-		{"no", FsyncNever, false, false, 2000},
-		{"everysec, during a rewrite", FsyncEverySec, true, false, 200},
-		{"everysec, during a failed write", FsyncEverySec, false, true, 100},
+		{"always", FsyncAlways, false, false, false, 300},
+		{"everysec", FsyncEverySec, false, false, false, 2000},
+		{"no", FsyncNever, false, false, false, 2000},
+		{"everysec, during a rewrite", FsyncEverySec, true, false, false, 200},
+		{"everysec, during a failed write", FsyncEverySec, false, true, false, 100},
+		{"everysec, during a failed drain of large records", FsyncEverySec, false, true, true, 20},
 	} {
 		t.Run(c.name, func(t *testing.T) {
+			if c.large {
+				// Some 100 MiB of log, taken before the log's directory, so
+				// that it is released only once those files are gone.
+				testlock.HoldDiskHeavy(t)
+			}
 			t.Parallel()
 			dir := t.TempDir()
 			path := filepath.Join(dir, "keel.aof")
@@ -57,6 +80,9 @@ func TestEveryAcknowledgedWriteSurvivesAKill(t *testing.T) {
 			}
 			if c.fail {
 				writer.Env = append(writer.Env, "KEEL_CORE_KILL_FAIL=1")
+			}
+			if c.large {
+				writer.Env = append(writer.Env, "KEEL_CORE_KILL_LARGE=1")
 			}
 			out, err := writer.StdoutPipe()
 			require.NoError(t, err)
@@ -88,7 +114,11 @@ func TestEveryAcknowledgedWriteSurvivesAKill(t *testing.T) {
 			ack := func(fields []string) {
 				i, err := strconv.Atoi(fields[2])
 				require.NoError(t, err)
-				acked[fields[1]] = killValue(i)
+				if c.large {
+					acked[fields[1]] = largeKillValue(i)
+				} else {
+					acked[fields[1]] = killValue(i)
+				}
 			}
 			for since < c.acks || !started {
 				require.True(t, time.Now().Before(deadline), "the writer reported %d writes in a minute", len(acked))
@@ -114,13 +144,17 @@ func TestEveryAcknowledgedWriteSurvivesAKill(t *testing.T) {
 				}
 			}
 			require.NoError(t, writer.Process.Kill())
-			_ = writer.Wait()
-			killed = true
+			// The rest of the pipe is read before Wait, which closes it: read
+			// after, a line still in the pipe would be lost, and one the
+			// scanner had read only part of would come back as a line of its
+			// own. The pipe ends when the dead process's end of it closes.
 			for lines.Scan() {
-				if fields := strings.Fields(lines.Text()); fields[0] == "ack" {
+				if fields := strings.Fields(lines.Text()); len(fields) == 3 && fields[0] == "ack" {
 					ack(fields)
 				}
 			}
+			_ = writer.Wait()
+			killed = true
 			if required == nil {
 				required = acked
 			}
@@ -150,7 +184,11 @@ func TestEveryAcknowledgedWriteSurvivesAKill(t *testing.T) {
 // Asked to, it starts a rewrite after its first few hundred writes, reports
 // "rewriting", and "rewritten" if the rewrite ends; its rewrite's writes each
 // take half a second more, through the engine's own I/O hook, so that the
-// rewrite lasts seconds rather than milliseconds. In the test process it returns at once.
+// rewrite lasts seconds rather than milliseconds. Asked to, its disk starts
+// failing after its first goroutine's killFailAt write, reporting "failing",
+// and "denied <key>" for each write refused while it fails; and asked to, it
+// writes large values (largeKillValue). In the test process it returns at
+// once.
 func TestHelperProcessWritesUntilKilled(t *testing.T) {
 	path := os.Getenv("KEEL_CORE_KILL_LOG")
 	if path == "" {
@@ -170,6 +208,11 @@ func TestHelperProcessWritesUntilKilled(t *testing.T) {
 		fmt.Fprintf(os.Stdout, format+"\n", args...)
 	}
 	rewrite := os.Getenv("KEEL_CORE_KILL_REWRITE") != ""
+	large := os.Getenv("KEEL_CORE_KILL_LARGE") != ""
+	value := killValue
+	if large {
+		value = largeKillValue
+	}
 	// Asked to, the disk fails partway through: every write of the log from
 	// then on writes half of what it is given and fails.
 	var failing atomic.Bool
@@ -198,7 +241,7 @@ func TestHelperProcessWritesUntilKilled(t *testing.T) {
 		go func() {
 			for i := 0; ; i++ {
 				key := fmt.Sprintf("w%d:%d", w, i)
-				reply, err := do(context.Background(), e, "SET", key, killValue(i))
+				reply, err := do(context.Background(), e, "SET", key, value(i))
 				switch {
 				case errors.Is(err, ErrPersistence) && failing.Load():
 					report("denied %s", key)
@@ -209,7 +252,7 @@ func TestHelperProcessWritesUntilKilled(t *testing.T) {
 					os.Exit(1)
 				}
 				report("ack %s %d", key, i)
-				if w == 0 && i == 300 && os.Getenv("KEEL_CORE_KILL_FAIL") != "" {
+				if w == 0 && i == killFailAt(large) && os.Getenv("KEEL_CORE_KILL_FAIL") != "" {
 					failing.Store(true)
 					report("failing")
 				}

@@ -1715,6 +1715,18 @@ settles it this way:
       instead would invite a retry that applies an `INCR` or an `LPUSH`
       twice (the coordinator's call, October 7, 2026, under the owner's
       "follow Redis");
+    - a record too large for what is left of the buffer is drained to the
+      log as it is encoded, so a write can fail in the middle of one. Its
+      start is then in the file and the rest is kept, whole and in order,
+      past the buffer's bound, for the retry, as Redis keeps its whole record
+      in `aof_buf`, which has no bound. Redis truncates a short write back to
+      the last whole size when it can (aof.c 1515–1526), and when it cannot,
+      keeps the rest after what was written, to write next (aof.c 1547–1551).
+      Here what was written always stays, a record's earlier drains being in
+      the file already, and the rest is written after it, as in Redis's
+      second case. Either way the log is whole once the write succeeds, and a
+      crash before then leaves a torn tail, which the next start repairs, as
+      Redis's `aof-load-truncated` does;
     - the maintenance goroutine retries the write every cycle (Redis retries
       at every turn of its event loop, and from `serverCron` once a second).
       A write that succeeds clears the write status, and logs
