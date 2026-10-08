@@ -1683,8 +1683,8 @@ settles it this way:
     crash could still lose. A call that neither buffered records nor saw any
     buffered does not wait. With no log, nothing is ever buffered, and a call
     is the lock, the command and the unlock. While a failed write or sync
-    under `everysec` or `no` holds the buffer back, reads do not wait for it,
-    as Redis answers them (see "Log failures, as Redis's").
+    under `everysec` or `no` holds the buffer back, no call waits for it: its
+    reply stands, as Redis's does (see "Log failures, as Redis's").
   - **Cancelled while waiting**, a call returns the context's error. Its
     command has run and its record will be written, as a Redis client that
     times out has its command run.
@@ -1705,22 +1705,45 @@ settles it this way:
       EXEC does;
     - a read runs, and returns without waiting for the buffer, as Redis
       answers reads while its buffer waits;
-    - a write that ran before the failure, and is waiting for its record,
-      returns the same error. Its record stays buffered and is written when
-      the log recovers, but it is not on disk, and a call returns nil only
-      once its record is. Redis answers such a write OK, because its replies
-      go out whether or not the write succeeded; the published-offset gate
-      is this plan's, and stricter;
+    - a command that ran before the failure was known keeps its reply, as
+      Redis's does: Redis's `beforeSleep` flushes and then sends the pending
+      replies, so a write whose `write(2)` failed is answered OK, its record
+      left in `aof_buf` for the retry (server.c 2057, then 2104; aof.c
+      1539–1552). Here its record stays
+      buffered and is written when the log recovers; a crash before then can
+      lose it, as Redis's everysec window can. Answering it with an error
+      instead would invite a retry that applies an `INCR` or an `LPUSH`
+      twice (the coordinator's call, October 7, 2026, under the owner's
+      "follow Redis");
+    - a record too large for what is left of the buffer is drained to the
+      log as it is encoded, so a write can fail in the middle of one. Its
+      start is then in the file and the rest is kept, whole and in order,
+      past the buffer's bound, for the retry, as Redis keeps its whole record
+      in `aof_buf`, which has no bound. Redis truncates a short write back to
+      the last whole size when it can (aof.c 1515–1526), and when it cannot,
+      keeps the rest after what was written, to write next (aof.c 1547–1551).
+      Here what was written always stays, a record's earlier drains being in
+      the file already, and the rest is written after it, as in Redis's
+      second case. Either way the log is whole once the write succeeds, and a
+      crash before then leaves a torn tail, which the next start repairs, as
+      Redis's `aof-load-truncated` does;
     - the maintenance goroutine retries the write every cycle (Redis retries
       at every turn of its event loop, and from `serverCron` once a second).
       A write that succeeds clears the write status, and logs
       `appendonly: write error looks solved; writes are accepted again`, as
       Redis logs `AOF write error looks solved, Redis can write again.`; a
-      sync that succeeds clears the sync status. One difference: after a
-      failed background sync Redis queues no new sync until more is written,
-      so with writes refused it can stay in error until an expiry writes a
-      `DEL`. Here the next due sync retries the bytes that failed to sync, so
-      the engine recovers as soon as its disk does;
+      sync that succeeds clears the sync status. One difference, checked
+      against 8.10.1: Redis records a background sync's offset when it queues
+      the sync, not when it succeeds (aof.c 1600–1603); a failed sync sets
+      only its status (bio.c 320–329); and with nothing new to write,
+      `flushAppendOnlyFile` returns without syncing while that offset is level
+      (aof.c 1404–1405), which only a rewrite or a rotation resets (aof.c
+      1108, 1276). So with writes refused, Redis stays in error until an
+      expiry or an eviction writes a `DEL`, or a rewrite runs. Here the next
+      due sync retries the bytes that failed to sync, and the engine recovers
+      as soon as its disk does: a refusal of writes that need never end is
+      not worth copying. It is an improvement over Redis, which the owner
+      approved on October 7, 2026 (see "Decisions");
     - INFO's `aof_last_write_status` reports `err` while either status is in
       error, as Redis's does.
   - **Under `always`,** Redis exits on a failed write or sync: a reply it
@@ -1792,11 +1815,12 @@ settles it this way:
       once while a rewrite runs, and reopens the log. Every reported write must
       be there, and a torn tail must have been repaired.
     - **Log failures,** through failing write and sync hooks, under each
-      policy: under `everysec` and `no`, writes refused with `MISCONF`,
-      reads served, and recovery once the hook heals, with no acknowledged
+      policy: under `everysec` and `no`, writes refused with `MISCONF`, reads
+      served, the write in flight at the failure answered OK, readable, and
+      in the log after recovery once the hook heals, with no acknowledged
       write lost; under `always`, every call refused until the engine is
       reopened. A kill test runs during a failure window: every write
-      acknowledged before it is in the reopened log.
+      acknowledged before the failure began is in the reopened log.
     - **Group commit:** one sync covering several waiting calls, counted
       through the sync hook.
     - **Cancellation** while a call waits.
@@ -1821,10 +1845,11 @@ settles it this way:
     - the hot functions' addresses compared with `go tool nm`, as step 2.7
       did.
   - **Part 5** adds a benchmark of `Do`: with no log, under everysec and under
-    always; on one goroutine and on eight; against `EvalAndResponse` with no
-    lock. It is reported but not gated, because there is nothing to pair it
-    with. Its name keeps it out of the paired job's `^BenchmarkCommandPath`,
-    which a baseline without it would fail.
+    always; on one goroutine and on `GOMAXPROCS` of them (`RunParallel`);
+    against `EvalAndResponse` with no lock. It is reported but not gated,
+    because there is nothing to pair it with. Its name keeps it out of the
+    paired job's `^BenchmarkCommandPath`, which a baseline without it would
+    fail.
 - **Guardrails.** Every part keeps green:
   - the persistence and replication goldens (`testdata/persistence-40eb2f6`,
     `testdata/replication-9736d8d`);
@@ -1838,6 +1863,95 @@ settles it this way:
   The kill tests write a few KiB. A test that writes tens of MiB takes
   `internal/testlock`'s `HoldDiskHeavy`, and a server test starts its server
   only through cmd/keel's `startTestServer` and its siblings.
+
+What the phase measured, part by part. The paired command-path job's medians
+are against the part before unless named, on GitHub's hosted runners, whose
+CPU varies from run to run. No row allocated more in any run, and the INCR
+row, pinned in part 1, read 2 → 2 allocations throughout.
+
+- **Part 1** (#148) put the instance lock into the server's loop. On the
+  connection's path, only `RunAsyncTCPServer` changed: the lock at entry, and
+  per cycle Unlock's and Lock's fast paths around `Check`, all inlined.
+  `EvalAndResponse`, `executeRun`, `(*client).respond` and `responseRw` were
+  instruction-identical. In core's test binary every function stayed at
+  develop's address; a `defer e.Unlock()` would have kept an out-of-line
+  `Unlock` and moved 330 functions by 96 bytes, so the loop defers a closure.
+  The job ran 0.999 to 1.001 against develop, and 0.883 to 0.925 against
+  `65ebdbc`; memtier ran 0.991 to 1.009. The INCR row's allocations had
+  flipped between runs: `strconv.FormatInt` allocates for values of 100 and
+  above, and the row's counters grow with `b.N`, so a faster side ran more
+  iterations and seemed to allocate more. The job now runs that row for a
+  fixed 1,000,000 iterations on both sides.
+- **Part 2** (#149) added `Open` and `Close`, and the replay's context check.
+  The server's startup, run in 12 scenarios against develop's, gave the same
+  output, replies, exit status and files in every one. The job ran 0.991 to
+  1.007; two rows went over 1.04 once on EPYC 9V45 and did not repeat.
+  Memtier ran 0.990 to 1.007.
+- **Part 3** (#151) added the lock beside the log. The job ran 0.998 to
+  1.004, and 0.900 against `65ebdbc`. WithReplica/SET read 1.038 to 1.066 in
+  every run, with no instruction on its path changed: the part's new code,
+  and the standard library code its tests link, moved the replication
+  functions 5,216 bytes and flipped their 64-byte phase. A control that
+  restored the phase halved the row's excess, and other rows rose instead. So
+  a reverse control was built: develop plus never-called functions taking the
+  room the part's code takes, where it takes it, which put every function the
+  job runs at the part's exact address. Against develop, it read
+  WithReplica/SET at 1.025 to 1.036 in four runs on EPYC 7763; the part,
+  against it, read 0.996 and 0.999. The row was placement, and the part,
+  its field and its static data included, cost nothing on it. Memtier ran
+  0.993 to 1.021.
+- **Part 4** (#152) added the maintenance goroutine. The job ran 1.002, 1.005
+  and 1.009 on EPYC 7763, with GET, SISMEMBER, PFADD and both SADD rows over
+  1.04 in all three, and 0.926 against `65ebdbc`. The generic stores' methods,
+  which the linker places after core's tests, moved 12,000 bytes and flipped
+  their phase; a control that restored it ran 0.998 twice on EPYC 7763, every
+  row at 1.038 or below, GET at 0.968. In the server only `Close` grew, by 144
+  bytes, which moved what follows it 160 bytes; memtier ran 0.991 to 1.006.
+- **Part 5** added calls, their durability, and Redis's log failures. The job
+  ran 0.971 to 1.012 against part 4 and develop in nine runs, and 0.900 to
+  0.920 against `65ebdbc`; WithReplica/INCR read 1.041 once on EPYC 7763, and
+  at most 1.035 in every repeat. On the connection's path the server was
+  instruction-identical. On the flush, `pollAOFSync` stopped inlining (its
+  cost went from 63 to 174, against a budget of 80), and `writeAOFBuffer`
+  gained a branch after each write. Memtier ran 0.989 to 1.007 with the log
+  off, 0.985 to 1.012 under everysec, and 0.985 to 1.081 under always on the
+  final code; under always, three medians on EPYC 9V45 went under 0.98 once
+  each, with single pairs from 0.31 to 1.31, and none repeated. Matching Redis
+  on a write that fails in the middle of draining a large record, which an
+  earlier version latched on, kept the rest of the record past the buffer's
+  bound for the retry, as Redis keeps its `aof_buf`. The kill tests, four runs
+  of each of six cases, found every acknowledged write in the reopened log
+  under each policy and during a rewrite, and, killed while the disk failed,
+  with small records or in the middle of large ones, every write acknowledged
+  before the failure, with the half-written record repaired. They had been
+  reading the writer's pipe after `Wait` closed it, and so checking fewer
+  writes than were acknowledged; they now read it to its end first. Locally, a
+  call cost about 7 ns over the bare command with no log. Under `always`, the
+  sync runs under the lock, as Redis's runs on its main thread, so one sync
+  covered about three calls in the group-commit test (200 calls in 67 syncs of
+  2 ms each); a sync outside the lock is the follow-up after this phase.
+
+So, as in step 2.7, every row that stayed over 1.04 when run again was code
+placement, shown with a control build of its own, and no median was over
+the gate. On a command's path, the only instructions that changed were part
+1's lock pair in the loop and part 5's changes to the flush, whose new
+branches the server's engine never takes. Part 3's row needed the
+exact-address control, built the other way round: on develop, with room left
+for the part's code, since padding added to the part could only move what
+follows it further.
+
+One gap, for the record. General validation's matched job runs both servers
+with the log off unless told otherwise (`bench/run-general.py --policy off`),
+and the workflow does not tell it otherwise. So the end-to-end runs of parts
+1 to 4 never exercised the log's flush. Nothing was missed by it: none of
+those parts changed the flush, part 2 moving only the log's startup into
+core, and the persistence goldens, native recovery and the compatibility
+workflows ran the log on every part. Part 5, which did change the flush, ran
+the job under `everysec` and `always` as well, from a throwaway branch that
+passes `--policy` through. Persistence work after this phase should not
+depend on remembering that: an `everysec` leg belongs in the matched job as
+standard, beside the default, which is a small change of its own to the
+workflow.
 
 ## Risks, in order
 
@@ -1855,7 +1969,14 @@ settles it this way:
 ## Decisions
 
 The owner settled the open questions on October 2, 2026, with a standing rule
-for anything left uncertain: do what Redis does.
+for anything left uncertain: do what Redis does. On October 7, 2026 the owner
+refined it: where Keel's behaviour is a clear improvement over Redis's, on an
+accidental flaw that clients do not depend on (a stall, a bug, a needless
+limitation), Keel keeps it, documents it as a departure citing Redis's source,
+and lists it in its PR under "Improvements over Redis". What clients see and
+rely on - replies, error strings, defaults and command semantics - still
+matches Redis, and where it is unclear which a difference is, Keel follows
+Redis.
 
 - **Eviction default:** LRU, matching the `cmd/keel` flag. `config.EvictStrategy`
   defaulting to random is the server-side inconsistency to remove in step 2.5
@@ -1878,9 +1999,12 @@ for anything left uncertain: do what Redis does.
     its log and creates no `.lock` file, as Redis locks nothing; the owner
     may revisit this in phase 6.
   - **Log failures are Redis's.** Under `everysec` and `no`, writes are
-    refused with `MISCONF` while reads are served, and the log is retried
-    until it recovers; under `always`, where Redis exits, an embedded engine
-    refuses every call until it is reopened. The server keeps its stop in
+    refused with `MISCONF` while reads are served, a command that ran before
+    the failure was known keeps its reply, and the log is retried until it
+    recovers, a failed background sync included, where Redis would wait for
+    new data (the first improvement over Redis, approved); under `always`,
+    where Redis exits, an embedded engine refuses every call until it is
+    reopened. The server keeps its stop in
     phase 3; giving it Redis's `everysec` and `no` behaviour is scheduled as
     a change of its own after phase 3.
   - **`Close` takes no context in core,** and a second `Close` returns
