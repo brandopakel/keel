@@ -1678,6 +1678,12 @@ settles it this way:
     be published. That flush covers every call that buffered records since
     the last one: one write and, under `always`, one sync, for all of them.
     This is the group commit the plan takes from the existing append offsets.
+    Under `always`, a change of its own after phase 3 moved the sync out of
+    the engine's lock, as under `everysec`, publishing only what a sync has
+    covered: calls that write while one sync runs are covered by the next,
+    where Redis's main thread, and phase 3's maintenance goroutine, synced
+    under everything and covered only the calls written before it. It is an
+    improvement over Redis; the durability gate is unchanged.
   - **Reads wait too**, when anything is buffered. A read may have seen a
     write that is not on disk yet, and no client of the server is told what a
     crash could still lose. A call that neither buffered records nor saw any
