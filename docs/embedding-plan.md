@@ -1908,24 +1908,28 @@ row, pinned in part 1, read 2 → 2 allocations throughout.
   row at 1.038 or below, GET at 0.968. In the server only `Close` grew, by 144
   bytes, which moved what follows it 160 bytes; memtier ran 0.991 to 1.006.
 - **Part 5** added calls, their durability, and Redis's log failures. The job
-  ran 0.977 to 1.003 against part 4 in six runs, and 0.914 against `65ebdbc`;
-  WithReplica/INCR read 1.041 once on EPYC 7763, then 1.031 and 1.035 there
-  and at most 1.033 elsewhere. On the connection's path the server was
+  ran 0.971 to 1.012 against part 4 and develop in nine runs, and 0.900 to
+  0.920 against `65ebdbc`; WithReplica/INCR read 1.041 once on EPYC 7763, and
+  at most 1.035 in every repeat. On the connection's path the server was
   instruction-identical. On the flush, `pollAOFSync` stopped inlining (its
   cost went from 63 to 174, against a budget of 80), and `writeAOFBuffer`
-  gained a branch after each write. Memtier ran 0.989 to 1.005 with the log
-  off, and 0.985 to 1.010 under everysec. Under always, which waits for a
-  hosted disk's sync every cycle, single pairs ran from 0.31 to 6.6, so its
-  medians, 0.923 to 1.071, are noise more than measure; the write-heavy
-  workloads read 1.063 and 1.066. The kill tests, four runs of each, found
-  every acknowledged write in the reopened log under each policy and during a
-  rewrite, and, killed while the disk failed, every write acknowledged before
-  the failure (1,150 to 1,228 a run), with the half-written record repaired.
-  Locally, a call cost about 7 ns over the bare command with no log. Under
-  `always`, the sync runs under the lock, as Redis's runs on its main thread,
-  so one sync covered about three calls in the group-commit test (200 calls in
-  67 syncs of 2 ms each); a sync outside the lock is the follow-up after this
-  phase.
+  gained a branch after each write. Memtier ran 0.989 to 1.007 with the log
+  off, 0.985 to 1.012 under everysec, and 0.985 to 1.081 under always on the
+  final code; under always, three medians on EPYC 9V45 went under 0.98 once
+  each, with single pairs from 0.31 to 1.31, and none repeated. Matching Redis
+  on a write that fails in the middle of draining a large record, which an
+  earlier version latched on, kept the rest of the record past the buffer's
+  bound for the retry, as Redis keeps its `aof_buf`. The kill tests, four runs
+  of each of six cases, found every acknowledged write in the reopened log
+  under each policy and during a rewrite, and, killed while the disk failed,
+  with small records or in the middle of large ones, every write acknowledged
+  before the failure, with the half-written record repaired. They had been
+  reading the writer's pipe after `Wait` closed it, and so checking fewer
+  writes than were acknowledged; they now read it to its end first. Locally, a
+  call cost about 7 ns over the bare command with no log. Under `always`, the
+  sync runs under the lock, as Redis's runs on its main thread, so one sync
+  covered about three calls in the group-commit test (200 calls in 67 syncs of
+  2 ms each); a sync outside the lock is the follow-up after this phase.
 
 So, as in step 2.7, every row that stayed over 1.04 when run again was code
 placement, shown with a control build of its own, and no median was over
@@ -1935,6 +1939,19 @@ branches the server's engine never takes. Part 3's row needed the
 exact-address control, built the other way round: on develop, with room left
 for the part's code, since padding added to the part could only move what
 follows it further.
+
+One gap, for the record. General validation's matched job runs both servers
+with the log off unless told otherwise (`bench/run-general.py --policy off`),
+and the workflow does not tell it otherwise. So the end-to-end runs of parts
+1 to 4 never exercised the log's flush. Nothing was missed by it: none of
+those parts changed the flush, part 2 moving only the log's startup into
+core, and the persistence goldens, native recovery and the compatibility
+workflows ran the log on every part. Part 5, which did change the flush, ran
+the job under `everysec` and `always` as well, from a throwaway branch that
+passes `--policy` through. Persistence work after this phase should not
+depend on remembering that: an `everysec` leg belongs in the matched job as
+standard, beside the default, which is a small change of its own to the
+workflow.
 
 ## Risks, in order
 
