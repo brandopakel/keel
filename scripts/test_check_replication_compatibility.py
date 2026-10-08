@@ -139,6 +139,59 @@ class SettleSnapshotTest(unittest.TestCase):
             replication.settle_snapshot(self.frames(body, 8)[:-1], body, body)
 
 
+class AwaySplitTest(unittest.TestCase):
+    start = 1_790_000_000_000
+
+    def test_one_write_set_cut_into_snapshot_and_deltas_differently_is_not_one_log(self):
+        # Run 37711045835: the same away writes, split differently between a
+        # snapshot and the deltas after it. Their keyspaces are equal, their
+        # log bytes are not, so the writes must not race the full sync.
+        writes = [record('SET', 'away:3:0', i) for i in range(3)]
+        in_snapshot = record('SET', 'away:3:0', 2)
+        as_deltas = b''.join(writes)
+        self.assertNotEqual(replication.normalize_body(in_snapshot, self.start, 'protocol2'),
+                            replication.normalize_body(as_deltas, self.start, 'protocol2'))
+
+    def test_resynced_waits_for_the_new_epoch_and_a_ready_replica(self):
+        states = iter([
+            ({'primary_epoch': 'new', 'primary_offset': '9', 'replication_pending_keys': '0'},
+             {'replica_ready': '1', 'replica_epoch': 'old', 'replica_offset': '9'}),
+            ({'primary_epoch': 'new', 'primary_offset': '9', 'replication_pending_keys': '0'},
+             {'replica_ready': '0', 'replica_epoch': 'new', 'replica_offset': '9'}),
+            ({'primary_epoch': 'new', 'primary_offset': '9', 'replication_pending_keys': '0'},
+             {'replica_ready': '1', 'replica_epoch': 'new', 'replica_offset': '9'})])
+        calls = []
+        def fake(client, section):
+            if client == 'p':
+                calls.append(1)
+                fake.pair = next(states)
+                return fake.pair[0]
+            return fake.pair[1]
+        original = replication.info
+        replication.info = fake
+        try:
+            class S:
+                def __init__(self, c): self.client = c
+            p, r = replication.resynced(S('p'), S('r'), 2, 'old')
+        finally:
+            replication.info = original
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(r['replica_epoch'], 'new')
+
+    def test_resynced_fails_if_the_epoch_did_not_change(self):
+        pair = ({'primary_epoch': 'old', 'primary_offset': '9', 'replication_pending_keys': '0'},
+                {'replica_ready': '1', 'replica_epoch': 'old', 'replica_offset': '9'})
+        original = replication.info
+        replication.info = lambda client, section: pair[0] if client == 'p' else pair[1]
+        try:
+            class S:
+                def __init__(self, c): self.client = c
+            with self.assertRaises(AssertionError):
+                replication.resynced(S('p'), S('r'), 2, 'old')
+        finally:
+            replication.info = original
+
+
 class NamesTest(unittest.TestCase):
     def test_identities_are_named_by_first_appearance(self):
         names = replication.Names()

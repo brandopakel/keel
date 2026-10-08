@@ -90,6 +90,15 @@ def caught_up(primary, replica, protocol, timeout=30):
     return wait_for(f'protocol {protocol} replica did not catch up', check, timeout)
 
 
+def resynced(primary, replica, protocol, old_epoch):
+    """The replica has finished its full sync in a new primary epoch: it is
+    ready in an epoch other than old_epoch, at the primary's offset."""
+    p, r = caught_up(primary, replica, protocol)
+    if p['primary_epoch'] == old_epoch:
+        raise AssertionError('the primary kept its epoch')
+    return p, r
+
+
 def acknowledged(primary):
     """Protocol 2: a pull after catching up acknowledges the stream's end."""
     def check():
@@ -458,6 +467,12 @@ class Pair:
             self.primary.start()
             if info(self.primary.client, 'replication')['primary_epoch'] == epoch:
                 raise AssertionError('a restarted primary kept its epoch')
+            # Round 3 is written only once the replica has finished its full
+            # sync in the new epoch. Written during it, the writes land in the
+            # snapshot or in the deltas after it as timing decides (run
+            # 37711045835: 533 records against 545), and the replica logs of
+            # two pairs differ in how they were cut, not in what they hold.
+            resynced(self.primary, self.replica, self.protocol, epoch)
             while_away(self.primary.client, 3)
             self.level('primary restarted')
             self.replica.stop()
