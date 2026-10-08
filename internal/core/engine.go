@@ -253,6 +253,10 @@ type Engine struct {
 	// nil when something else drives e, as the server's loop does. It is set
 	// before e is shared and never again, so it is read without the lock.
 	driver *driver
+	// aofTruncate cuts the log back to a size, removing a short write: a
+	// file's Truncate, unless a test has replaced it. Last, so that adding it
+	// moved no field before it.
+	aofTruncate func(*os.File, int64) error
 }
 
 // Lock takes e's lock, waiting until whoever holds it lets go. Its holder is
@@ -271,7 +275,7 @@ func (e *Engine) Unlock() { e.mu.Unlock() }
 func engineIn(space *data_structure.Space) *Engine {
 	e := &Engine{
 		space: space, replyCeiling: MaxReplyBytes,
-		aofWrite: writeLog, aofSync: syncLog,
+		aofWrite: writeLog, aofSync: syncLog, aofTruncate: truncateLog,
 		rewriteFileWrite: writeLog, rewriteFileSync: syncLog, rewriteOpenLog: openRewrittenLog,
 		rewriteRename: os.Rename, rewriteSyncDir: syncDir, keyCountForRewrite: space.TotalKeys,
 		checkpointSync: syncFile, checkpointRename: os.Rename, checkpointSyncDir: syncDir,

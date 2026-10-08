@@ -542,6 +542,8 @@ func (e *Engine) finishRewrite() {
 	e.aof.digest, e.aof.digestBytes = e.rewrite.digest, e.rewrite.written
 	e.aof.baseSize = e.rewrite.written
 	e.aof.rewriteBase = e.rewrite.written
+	// The rewritten log ends with its last whole record.
+	e.aof.midRecord = false
 	e.appendSynced = max(e.appendSynced, e.appendCompleted)
 	e.aof.written = 0
 	e.aof.rewrites++
