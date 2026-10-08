@@ -188,9 +188,11 @@ And against the local `redis-server` 8.10.1 (`redis_probe.py`, results in
 - A scheduled `BGREWRITEAOF` whose start fails is dropped and logged. Redis
   keeps it scheduled and retries every tick.
 - `BGREWRITEAOF` with the log off is refused. Redis rewrites anyway.
-- A failed write or sync of the log itself still stops the server. Under
-  `everysec`, Redis instead refuses writes with `MISCONF` and retries. That is
-  separate from rewriting and unchanged here.
+- A failed write or sync of the log itself stopped the server when this was
+  written. It now does what Redis does under `everysec` and `no`: it refuses
+  writes with `MISCONF`, serves reads and retries
+  (`internal/core/log_failures.go`). It still stops under `always`, as Redis
+  exits.
 - A crash part way through a rewrite leaves `.rewrite` behind until the next
   rewrite truncates it. Redis likewise leaves its pid-named temp files.
 

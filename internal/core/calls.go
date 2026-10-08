@@ -31,8 +31,8 @@ import (
 // recovery, and a write or sync that succeeds clears it. Under always, where
 // Redis exits, it latches: every later call, read or write, returns
 // ErrPersistence without running, as does a call waiting for the failed write
-// or sync, until the engine is reopened. The server does neither in phase 3;
-// it stops at the first failure.
+// or sync, until the engine is reopened. The server's engine retries in the
+// same way (log_failures.go), and its loop stops where this one latches.
 
 // ErrPersistence is what a call refused for a failed log returns: Redis's
 // wire error for a failed AOF write, followed by the failure itself.
