@@ -1,0 +1,19 @@
+# Throwaway: shows the log's lock working on Windows, where CI only builds core
+# (phase 3, part 3). Never merged.
+name: Windows log lock probe
+on:
+  push:
+    branches: [test/instance-contract-windows-lock]
+permissions:
+  contents: read
+jobs:
+  lock:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version-file: go.mod }
+      - run: go version
+      - name: The lock, in one process and across processes
+        run: go test -count=5 -v -run "^TestTheLogLock" ./internal/core
