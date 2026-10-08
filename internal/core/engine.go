@@ -255,6 +255,9 @@ type Engine struct {
 	// it installs with SetServerInfo; nil, INFO leaves those fields out.
 	serverInfo *ServerInfo
 
+	// commandStats is Redis's commandstats, one per entry of commands.
+	commandStats []commandStat
+
 	// mu is e's lock, which Lock and Unlock take and release. No command
 	// reads it, so it goes last, and every field a command reads keeps its
 	// offset.
@@ -300,6 +303,7 @@ func engineIn(space *data_structure.Space) *Engine {
 		// Never nil, so noteReplicationDirty need not test it on every write.
 		replication: replicationState{dirty: map[string]struct{}{}},
 		started:     now, runID: newRunID(), memoryPeakAt: now,
+		commandStats: make([]commandStat, len(commands)),
 	}
 	return e
 }

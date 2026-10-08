@@ -160,6 +160,7 @@ func (e *Engine) EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 		e.runningName = cmd.sentName()
 	}
 	if refused != nil {
+		e.commandStats[entry.stat].rejected++
 		_, err := c.Write(e.encode(refused, false))
 		return err
 	}
@@ -191,6 +192,11 @@ func (e *Engine) EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	suspended := e.space.SuspendEviction
 	e.space.SuspendEviction = true
 	res := entry.run(e, cmd.Args)
+	stat := &e.commandStats[entry.stat]
+	stat.calls++
+	if res[0] == '-' {
+		stat.failed++
+	}
 	// With eviction suspended, removals so far are lazy expiry. They precede
 	// this command: recording them after INCR/HSET would delete the recreated key.
 	// Recorded before the reply is written. FlushAOF runs between execution and

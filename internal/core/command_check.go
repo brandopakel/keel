@@ -135,6 +135,8 @@ type commandEntry struct {
 	keys        keyRule
 	container   bool
 	namesItself bool
+	// stat is the entry's place in Engine.commandStats.
+	stat int
 }
 
 // counted reports whether a command of entry's, given args arguments, needs
@@ -152,10 +154,12 @@ func init() { indexCommands() }
 
 func indexCommands() {
 	commands = make(map[string]commandEntry, len(commandArity))
+	stat := 0
 	for name, arity := range commandArity {
 		commands[name] = commandEntry{run: commandTable[name], arity: arity,
 			typed: typedKeyspace(name), keys: keyRuleOf(name),
-			container: subcommandsOf(name) != nil, namesItself: name == "GEOSEARCH"}
+			container: subcommandsOf(name) != nil, namesItself: name == "GEOSEARCH", stat: stat}
+		stat++
 	}
 }
 
