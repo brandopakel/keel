@@ -41,7 +41,7 @@ var commandArity = map[string]int{
 	"TTL": 2, "PTTL": 2, "EXPIRE": -3, "PEXPIREAT": -3,
 	"PEXPIRE": -3, "EXPIREAT": -3, "PERSIST": 2,
 
-	"DBSIZE": 1, "FLUSHDB": -1, "MEMORY": -2, "INFO": -1, "BGREWRITEAOF": 1,
+	"DBSIZE": 1, "FLUSHDB": -1, "MEMORY": -2, "INFO": -1, "CONFIG": -2, "BGREWRITEAOF": 1,
 	"KEEL.DUMP": 2, "KEEL.RESTORE": 3, "MEMKV.DUMP": 2, "MEMKV.RESTORE": 3,
 	"KEEL.PROMOTE": 2, "KEEL.FENCE": 2, "KEEL.REPL.PULL": 3, "KEEL.REPL.PULL2": -5,
 
@@ -104,7 +104,9 @@ type subcommand struct {
 var (
 	clientSubcommands = []subcommand{{"id", 2}, {"setname", 3}, {"getname", 2}, {"setinfo", 4}, {"info", 2}, {"help", 2}}
 	memorySubcommands = []subcommand{{"stats", 2}, {"usage", -3}, {"help", 2}}
-	containerCommands = map[string][]subcommand{"CLIENT": clientSubcommands, "MEMORY": memorySubcommands}
+	configSubcommands = []subcommand{{"get", -3}, {"set", -4}, {"rewrite", 2}, {"help", 2}}
+	containerCommands = map[string][]subcommand{"CLIENT": clientSubcommands, "MEMORY": memorySubcommands,
+		"CONFIG": configSubcommands}
 )
 
 // subcommandsOf is a container command's subcommands, or nil for any other
@@ -115,13 +117,15 @@ func subcommandsOf(name string) []subcommand {
 		return clientSubcommands
 	case "MEMORY":
 		return memorySubcommands
+	case "CONFIG":
+		return configSubcommands
 	}
 	return nil
 }
 
 // commandEntry is one command as dispatch finds it: the handler from
 // commandTable, nil for a command the transport or Transact answers, and the
-// count from commandArity. container marks CLIENT and MEMORY, whose count
+// count from commandArity. container marks CLIENT, MEMORY and CONFIG, whose count
 // depends on the subcommand, and namesItself the one handler that repeats the
 // name it was sent as - see Engine.runningName. Both are worked out once,
 // here, so that a well-formed command is checked with one comparison of its

@@ -209,7 +209,6 @@ KNOWN = {
                'loudly instead of quietly not watching (docs/transactions.md); before AUTH that answers '
                'unknown command rather than NOAUTH, as Redis answers for any command it does not have',
     'object encoding k': 'OBJECT is not implemented; Keel answers it as Redis answers a command it does not have',
-    'config get x': 'CONFIG is not implemented; Keel answers it as Redis answers a command it does not have',
     'client kill x y': 'CLIENT KILL is not implemented; Keel answers it as Redis answers a subcommand it does not have',
     'SELECT 1': 'Keel has one database, and SELECT of any other answers the error for one that does not exist',
     'ZADD zset GT LT 1 m': 'ZADD GT and LT are not implemented, so GT is read as the score, as a Redis without them reads it',
@@ -232,7 +231,7 @@ UNKNOWN = [
     ['nosuch', 'a' * 200], ['nosuch', 'a' * 125, 'b'], ['nosuch', 'a' * 124, 'b', 'c'], ['nosuch', 'a' * 123, 'b', 'c'],
     ['nosuch', *['ab'] * 60], ['nosuch', b'a\x00b', 'c'], [b'n\x00osuch', 'x'], ['nosuch', 'a\r\nb', 'c\nd'],
     [b'no\r\nsuch', 'x'], ['nosuch', ''], ['nosuch', '', 'x'], ['', 'a'], ['nosuch', 'é' * 70], ['é' * 70],
-    [b'\xff\xfe', b'\xc3'], ['watch', 'k'], ['object', 'encoding', 'k'], ['config', 'get', 'x'],
+    [b'\xff\xfe', b'\xc3'], ['watch', 'k'], ['object', 'encoding', 'k'],
 ]
 
 # Generic errors, each with the setup that produces it. Keys are typed by name.
@@ -351,6 +350,10 @@ SUBCOMMANDS = [
     ['client', b'a\x00b'], ['client', 'a\r\nb'], ['client', 'é' * 70], ['client', 'kill', 'x', 'y'],
     ['memory', 'nosuch'], ['MEMORY', 'Nosuch', 'x'], ['memory'], ['memory', 'usage'], ['Memory', 'UsAge'],
     ['memory', 'stats', 'x'], ['MEMORY', 'x' * 200],
+    ['config', 'get', 'x'], ['CONFIG', 'GET', 'nosuch', 'x*'], ['config', 'nosuch'], ['Config', 'get'],
+    ['config', 'help', 'x'], ['CONFIG', 'x' * 200], ['config', 'set', 'x', 'y'], ['config', 'set', 'x'],
+    ['config', 'set', 'x', 'y', 'z'], ['CONFIG', 'SET', 'databases', '2'], ['config', 'set', 'databases', '2', 'x', 'y'],
+    ['config', 'rewrite'], ['config', 'rewrite', 'x'],
 ]
 
 # Commands whose arity Redis does not hold, worded as it words every other.
@@ -464,7 +467,7 @@ def redis_arities(port):
              'SCARD', 'SMEMBERS', 'SISMEMBER', 'SMISMEMBER', 'SPOP', 'SRANDMEMBER', 'ZCOUNT', 'ZRANGEBYSCORE',
              'ZREVRANGEBYSCORE', 'ZINCRBY', 'ZPOPMIN', 'ZPOPMAX', 'ZRANGE', 'ZADD', 'ZRANK', 'ZREM', 'ZSCORE', 'ZCARD',
              'GEOADD', 'GEODIST', 'GEOHASH', 'GEOSEARCH', 'GEOPOS', 'PFADD', 'PFCOUNT', 'PFMERGE', 'AUTH', 'HELLO',
-             'QUIT', 'CLIENT', 'MULTI', 'EXEC', 'DISCARD']
+             'QUIT', 'CLIENT', 'CONFIG', 'MULTI', 'EXEC', 'DISCARD']
     session = Session(port, auth=True, protocol=2)
     try:
         session.socket.sendall(encode(['COMMAND', 'INFO', *names]))

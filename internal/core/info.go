@@ -16,6 +16,10 @@ import (
 // loop installs it with SetServerInfo before accepting clients.
 type ServerInfo struct {
 	Port, MaxClients, IOThreads int
+	// Host is the address the transport listens on, CONFIG GET's bind, and
+	// RequirePass the password its clients log in with, CONFIG GET's
+	// requirepass.
+	Host, RequirePass string
 	// Hz is how many times a second the transport runs its clock-driven work,
 	// Redis's hz.
 	Hz int

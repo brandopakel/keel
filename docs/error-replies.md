@@ -83,13 +83,15 @@ declared names have it.
 
 ## Subcommands
 
-`CLIENT` and `MEMORY` are the container commands Keel has. Their subcommands are
-in the same table: `CLIENT ID`, `SETNAME`, `GETNAME`, `SETINFO`, `INFO`, `HELP`,
-and `MEMORY STATS`, `USAGE`, `HELP`. Any other subcommand gets Redis's error for
-a subcommand it does not have. `CLIENT HELP` and `MEMORY HELP` list the
+`CLIENT`, `MEMORY` and `CONFIG` are the container commands Keel has. Their
+subcommands are in the same table: `CLIENT ID`, `SETNAME`, `GETNAME`, `SETINFO`,
+`INFO`, `HELP`; `MEMORY STATS`, `USAGE`, `HELP`; and `CONFIG GET`, `SET`,
+`REWRITE`, `HELP`. Any other subcommand gets Redis's error for a subcommand it
+does not have. `CLIENT HELP`, `MEMORY HELP` and `CONFIG HELP` list the
 subcommands Keel has, in Redis's form, so `Try CLIENT HELP.` has an answer.
-`OBJECT`, `CONFIG` and `COMMAND` are not implemented, so they are unknown
-commands.
+`CONFIG SET` refuses every setting and `CONFIG REWRITE` has no file to write,
+each in Redis's words (see [INFO compatibility](info-compatibility.md#commands)).
+`OBJECT` and `COMMAND` are not implemented, so they are unknown commands.
 
 ## Authentication
 
@@ -176,7 +178,7 @@ command, subcommand or option it does not have. The harness lists them in
 | Difference | Why it stays |
 | --- | --- |
 | `WATCH` is an unknown command, before authentication too | Not implemented, deliberately: an optimistic-locking API fails loudly instead of not watching. See [transactions](transactions.md) |
-| `OBJECT`, `CONFIG`, `COMMAND` and other commands Keel does not have | Unknown commands, in Redis's words |
+| `OBJECT`, `COMMAND` and other commands Keel does not have | Unknown commands, in Redis's words |
 | `CLIENT KILL`, `LIST` and other subcommands, `MEMORY DOCTOR`/`PURGE`/`MALLOC-STATS` | Unknown subcommands, in Redis's words |
 | `SELECT 1` and above | Keel has one database: `ERR DB index is out of range` |
 | `ZADD GT`/`LT`/`INCR`, `ZRANGE BYLEX`, `SET IFEQ`/`IFNE`/`IFDEQ`/`IFDNE` | Not implemented. The word is read as a score or refused as a syntax error, as a Redis without the option reads it |
