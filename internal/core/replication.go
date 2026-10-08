@@ -345,6 +345,15 @@ func (e *Engine) replicaCommandError(cmd string) error {
 	if e.replicaApplying || e.aof.replaying {
 		return nil
 	}
+	// While a failed write or sync of the log is retried, write commands and
+	// PING are refused, as Redis's processCommand refuses them before the
+	// checks below (server.c 4675-4697). A healthy log costs this one field.
+	// Inside EXEC nothing is: EXEC itself was checked, as Redis checks it.
+	if e.logFailure.failing && !e.aof.transaction {
+		if err := e.diskErrorRefusal(cmd); err != nil {
+			return err
+		}
+	}
 	if e.replicaOf() != "" {
 		if writeCommands[cmd] {
 			// READONLY rather than FENCED even when this replica has seen a

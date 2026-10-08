@@ -426,15 +426,15 @@ func (e *Engine) pollAOFSync(wait bool) {
 	e.aof.syncPending = nil
 	if err == nil {
 		e.appendSynced = max(e.appendSynced, e.aof.syncOffset)
-		if d := e.driver; d != nil && d.syncFailure != nil {
-			d.syncFailure = nil
+		if e.logFailure.sync != nil {
+			e.syncSolved()
 		}
 		return
 	}
-	if d := e.driver; d != nil && d.retries {
+	if e.retriesLogFailures() {
 		// Retried, as the bytes it failed to sync are still unsynced: the
-		// next due sync tries them again (driver.go).
-		d.syncFailed(err)
+		// next due sync tries them again (log_failures.go).
+		e.syncFailed(err)
 		e.aof.dirty = true
 		return
 	}

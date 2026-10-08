@@ -1144,7 +1144,12 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 		} else {
 			flushErr = e.FlushAOF()
 		}
-		if flushErr != nil {
+		// A failed write or sync the log retries, under everysec and no, is
+		// Redis's: this cycle's replies still go out, write commands and PING
+		// are refused with MISCONF until the log recovers, and the next
+		// cycle's flush tries again (core's log_failures.go). Any other
+		// failure stops the server, as Redis exits under always.
+		if flushErr != nil && !e.LogRetrying() {
 			log.Println("appendonly: write failed, stopping:", flushErr)
 			requestShutdown()
 			return flushErr
@@ -1217,7 +1222,14 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 	// clean shutdown would lose acknowledged writes, the one kind of loss a
 	// client has no way to notice.
 	if err := e.CloseAOF(); err != nil {
-		return fmt.Errorf("appendonly: close failed: %w", err)
+		// Under everysec and no, Redis logs a log it cannot flush or sync at
+		// shutdown and exits anyway, with status 0 (server.c 5158-5165);
+		// under always a failed write exits it with status 1 (aof.c
+		// 1537-1538).
+		if !e.RetriesLogFailures() {
+			return fmt.Errorf("appendonly: close failed: %w", err)
+		}
+		log.Println("appendonly: close failed, exiting anyway:", err)
 	}
 	log.Println("event loop stopped")
 	return nil

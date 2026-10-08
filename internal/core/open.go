@@ -101,7 +101,7 @@ func (e *Engine) Close() error {
 			if d.failed == nil {
 				d.failed = err
 			}
-			err = fmt.Errorf("%w: %w", ErrPersistence, err)
+			err = persistenceError{err}
 		}
 		d.publish()
 	}

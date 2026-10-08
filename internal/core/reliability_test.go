@@ -341,7 +341,12 @@ func TestBackgroundSyncDoesNotBlockAndPreservesLaterWrites(t *testing.T) {
 	}
 	e.pollAOFSync(true)
 	require.Less(t, elapsed, 500*time.Millisecond)
-	require.ErrorIs(t, e.FlushAOF(), diskErr)
+	// Under everysec a failed background sync is retried, as Redis's is: the
+	// flush goes on, and the sync status is in error until a sync succeeds.
+	// The final sync at close still fails, and Close says so.
+	require.NoError(t, e.FlushAOF())
+	require.True(t, e.LogRetrying())
+	require.ErrorIs(t, e.logFailure.sync, diskErr)
 	require.ErrorIs(t, e.CloseAOF(), diskErr)
 }
 

@@ -54,51 +54,9 @@ type driver struct {
 	published chan struct{}
 	// failed is the log's failure that latches: a failed write or sync
 	// under always, where Redis exits, or any failure of a log that does not
-	// retry. Every later call returns it, as ErrPersistence.
+	// retry. Every later call returns it, as ErrPersistence. A failure the
+	// log retries is the engine's (log_failures.go).
 	failed error
-
-	// retries says a failed write or sync of the log is retried, as Redis
-	// retries it under everysec and no: set when the engine's policy is not
-	// always. writeFailure and syncFailure are then the log's write and sync
-	// statuses while they are in error - Redis's aof_last_write_status and
-	// aof_bio_fsync_status - nil when they are not; while either is, write
-	// commands are refused (calls.go). writeLogged is when a failed write was
-	// last logged, at most once in writeLogEvery, as Redis logs it.
-	retries                   bool
-	writeFailure, syncFailure error
-	writeLogged               time.Time
-}
-
-// writeLogEvery is how often a write of the log that keeps failing is
-// logged: Redis's AOF_WRITE_LOG_ERROR_RATE.
-const writeLogEvery = 30 * time.Second
-
-// writeFailed puts the log's write status in error, as Redis's
-// flushAppendOnlyFile does when a write under everysec or no fails. The caller
-// holds the engine's lock.
-func (d *driver) writeFailed(err error) {
-	d.writeFailure = err
-	if now := time.Now(); now.Sub(d.writeLogged) > writeLogEvery {
-		d.writeLogged = now
-		aofLog("error writing to the log: %v", err)
-	}
-}
-
-// writeSolved clears the log's write status once a write succeeds, as Redis
-// clears aof_last_write_status. The caller holds the engine's lock.
-func (d *driver) writeSolved() {
-	d.writeFailure = nil
-	aofLog("write error looks solved; writes are accepted again")
-}
-
-// syncFailed puts the log's sync status in error, as Redis's background fsync
-// job does, logging it when it was not already. The caller holds the engine's
-// lock.
-func (d *driver) syncFailed(err error) {
-	if d.syncFailure == nil {
-		aofLog("failed to sync the log: %v", err)
-	}
-	d.syncFailure = err
 }
 
 // publish wakes every call waiting on d's flushes, to look again at what has
@@ -131,7 +89,7 @@ var (
 // is still e's only user.
 func (e *Engine) startDriver() {
 	d := &driver{poke: make(chan struct{}, 1), stop: make(chan struct{}), done: make(chan struct{}),
-		published: make(chan struct{}), retries: e.settings.fsync != FsyncAlways}
+		published: make(chan struct{})}
 	e.driver = d
 	e.SetRewriteWaker(d.wake)
 	go e.drive(d)
