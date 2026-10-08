@@ -50,6 +50,25 @@ func Open(ctx context.Context, o Options) (*Engine, error) {
 	return e, nil
 }
 
+// Reverse layout control, never merged: never-called functions that take
+// the room part 3's growth of Open takes, so that what follows sits where
+// it sits in part 3.
+
+//go:noinline
+func layoutPadOpen0() {}
+
+//go:noinline
+func layoutPadOpen1() {}
+
+//go:noinline
+func layoutPadOpen2() {}
+
+//go:noinline
+func layoutPadOpen3() {}
+
+//go:noinline
+func layoutPadOpen4() {}
+
 // Close ends e: it closes e's log, writing and syncing whatever is buffered
 // whatever the fsync policy, so that when it returns nil every write e has
 // run is on disk. Closing a closed engine returns ErrClosed, as closing a
@@ -72,6 +91,19 @@ func (e *Engine) Close() error {
 	e.mu.Unlock()
 	return err
 }
+
+// Reverse layout control, never merged: never-called functions that take
+// the room part 3's growth of Close takes, so that what follows sits where
+// it sits in part 3.
+
+//go:noinline
+func layoutPadClose0() {}
+
+//go:noinline
+func layoutPadClose1() {}
+
+//go:noinline
+func layoutPadClose2() {}
 
 // StartAOF runs the log's startup on e, as e's options say: nothing unless
 // AppendOnly, and otherwise the log at AppendFilename replayed into e and
