@@ -17,30 +17,51 @@ import (
 
 // reopenedCopy opens a copy of the log at path, in a directory of its own, as
 // the next start after a crash at this moment would open it, and says how
-// many torn tails that start repaired.
-func reopenedCopy(t *testing.T, path string) (*Engine, int) {
+// many torn tails that start repaired. While e is open, the file is read
+// holding e's lock, so that e's maintenance goroutine, which retries a failed
+// write and cuts it back again under that lock, is between two cycles: the
+// copy is the log as a crash between them would leave it. A crash in the
+// middle of a retry, before its cut, leaves a torn tail, as Redis's does.
+func reopenedCopy(t *testing.T, e *Engine, path string) (*Engine, int) {
 	t.Helper()
-	body, err := os.ReadFile(path)
-	require.NoError(t, err)
+	var body []byte
+	betweenCycles(e, func() {
+		var err error
+		body, err = os.ReadFile(path)
+		require.NoError(t, err)
+	})
 	dir := t.TempDir()
 	copied := filepath.Join(dir, "keel.aof")
 	require.NoError(t, os.WriteFile(copied, body, 0o644))
-	e := openTestEngine(t, Options{AppendOnly: true, AppendFilename: copied})
+	opened := openTestEngine(t, Options{AppendOnly: true, AppendFilename: copied})
 	torn := 0
 	for name := range filesIn(t, dir) {
 		if strings.HasPrefix(name, ".keel-torn-tail-") {
 			torn++
 		}
 	}
-	return e, torn
+	return opened, torn
 }
 
-// logSize is the size of the file at path.
-func logSize(t *testing.T, path string) int64 {
+// logSize is the size of the file at path, read between two of e's cycles
+// while e is open, as reopenedCopy reads it.
+func logSize(t *testing.T, e *Engine, path string) (size int64) {
 	t.Helper()
-	info, err := os.Stat(path)
-	require.NoError(t, err)
-	return info.Size()
+	betweenCycles(e, func() {
+		info, err := os.Stat(path)
+		require.NoError(t, err)
+		size = info.Size()
+	})
+	return size
+}
+
+// betweenCycles runs fn holding e's lock, or without it once e is closed.
+func betweenCycles(e *Engine, fn func()) {
+	if e == nil {
+		fn()
+		return
+	}
+	holding(e, fn)
 }
 
 // TestAShortWriteIsCutBackOffTheLog: a write of whole records that fails
@@ -76,7 +97,7 @@ func TestAShortWriteIsCutBackOffTheLog(t *testing.T) {
 				})
 			}
 			mustDo(t, e, "SET", "before", "v")
-			whole := logSize(t, path)
+			whole := logSize(t, e, path)
 			disk.writes.Store(true)
 
 			reply, err := do(context.Background(), e, "SET", "inflight", "v")
@@ -86,13 +107,13 @@ func TestAShortWriteIsCutBackOffTheLog(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, "+OK\r\n", reply)
 			}
-			copied, torn := reopenedCopy(t, path)
+			copied, torn := reopenedCopy(t, e, path)
 			assert.Equal(t, "$1\r\nv\r\n", mustDo(t, copied, "GET", "before"))
 			if c.cutFails {
-				assert.Greater(t, logSize(t, path), whole, "what was written stays")
+				assert.Greater(t, logSize(t, e, path), whole, "what was written stays")
 				assert.Equal(t, 1, torn, "a crash now leaves a torn tail")
 			} else {
-				assert.Equal(t, whole, logSize(t, path), "the short write is cut back off")
+				assert.Equal(t, whole, logSize(t, e, path), "the short write is cut back off")
 				assert.Zero(t, torn, "a crash now leaves a whole log")
 			}
 			assert.Equal(t, "$-1\r\n", mustDo(t, copied, "GET", "inflight"), "not yet written, as in Redis")
@@ -103,7 +124,7 @@ func TestAShortWriteIsCutBackOffTheLog(t *testing.T) {
 			disk.writes.Store(false)
 			eventually(t, e, "the retried write succeeded", func() bool { return !e.logRetrying() })
 			require.NoError(t, e.Close())
-			again, torn := reopenedCopy(t, path)
+			again, torn := reopenedCopy(t, nil, path)
 			assert.Zero(t, torn)
 			assert.Equal(t, "$1\r\nv\r\n", mustDo(t, again, "GET", "before"))
 			assert.Equal(t, "$1\r\nv\r\n", mustDo(t, again, "GET", "inflight"), "written whole by the retry")
@@ -123,12 +144,12 @@ func TestTheServersShortWriteIsCutBackOffTheLog(t *testing.T) {
 	disk := failDisk(e)
 	runOn(t, e, "SET", "before", "v")
 	require.NoError(t, e.FlushAOF())
-	whole := logSize(t, path)
+	whole := logSize(t, e, path)
 	disk.writes.Store(true)
 	runOn(t, e, "SET", "lost", "v")
 	require.ErrorIs(t, e.FlushAOF(), disk.err)
-	assert.Equal(t, whole, logSize(t, path), "the short write is cut back off")
-	copied, torn := reopenedCopy(t, path)
+	assert.Equal(t, whole, logSize(t, e, path), "the short write is cut back off")
+	copied, torn := reopenedCopy(t, e, path)
 	assert.Zero(t, torn)
 	assert.Equal(t, "$1\r\nv\r\n", mustDo(t, copied, "GET", "before"))
 }
@@ -161,22 +182,22 @@ func TestAShortWriteInTheMiddleOfARecordStays(t *testing.T) {
 		}
 	})
 	mustDo(t, e, "SET", "before", "v")
-	whole := logSize(t, path)
+	whole := logSize(t, e, path)
 	failFrom.Store(2)
 
 	large := strings.Repeat("x", 2*maxAOFTranscriptBytes+128<<10)
 	reply, err := do(context.Background(), e, "SET", "large", large)
 	require.NoError(t, err)
 	assert.Equal(t, "+OK\r\n", reply)
-	assert.Greater(t, logSize(t, path), whole+maxAOFTranscriptBytes, "the first drain and the failed write's part stay")
-	copied, torn := reopenedCopy(t, path)
+	assert.Greater(t, logSize(t, e, path), whole+maxAOFTranscriptBytes, "the first drain and the failed write's part stay")
+	copied, torn := reopenedCopy(t, e, path)
 	assert.Equal(t, 1, torn, "a crash now leaves the record's start as a torn tail")
 	assert.Equal(t, "$1\r\nv\r\n", mustDo(t, copied, "GET", "before"))
 
 	failFrom.Store(0)
 	eventually(t, e, "the retried write succeeded", func() bool { return !e.logRetrying() })
 	require.NoError(t, e.Close())
-	again, torn := reopenedCopy(t, path)
+	again, torn := reopenedCopy(t, nil, path)
 	assert.Zero(t, torn)
 	assert.Equal(t, "$"+strconv.Itoa(len(large))+"\r\n"+large+"\r\n", mustDo(t, again, "GET", "large"))
 }
@@ -196,15 +217,15 @@ func TestAShortWriteAfterARewriteIsCutBackExactly(t *testing.T) {
 	assert.Contains(t, mustDo(t, e, "BGREWRITEAOF"), "rewriting started")
 	eventually(t, e, "the rewrite finished", func() bool { return !e.RewriteActive() })
 	mustDo(t, e, "SET", "after", "rewrite")
-	whole := logSize(t, path)
+	whole := logSize(t, e, path)
 
 	disk := failDisk(e)
 	disk.writes.Store(true)
 	reply, err := do(context.Background(), e, "SET", "inflight", "v")
 	require.NoError(t, err)
 	assert.Equal(t, "+OK\r\n", reply)
-	assert.Equal(t, whole, logSize(t, path), "cut back to where the write began")
-	copied, torn := reopenedCopy(t, path)
+	assert.Equal(t, whole, logSize(t, e, path), "cut back to where the write began")
+	copied, torn := reopenedCopy(t, e, path)
 	assert.Zero(t, torn)
 	assert.Equal(t, "$7\r\nrewrite\r\n", mustDo(t, copied, "GET", "after"))
 	assert.Equal(t, "$3\r\n199\r\n", mustDo(t, copied, "GET", "k19"))
@@ -212,7 +233,7 @@ func TestAShortWriteAfterARewriteIsCutBackExactly(t *testing.T) {
 	disk.writes.Store(false)
 	eventually(t, e, "the retried write succeeded", func() bool { return !e.logRetrying() })
 	require.NoError(t, e.Close())
-	again, torn := reopenedCopy(t, path)
+	again, torn := reopenedCopy(t, nil, path)
 	assert.Zero(t, torn)
 	assert.Equal(t, "$1\r\nv\r\n", mustDo(t, again, "GET", "inflight"))
 }
