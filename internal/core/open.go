@@ -56,7 +56,11 @@ func Open(ctx context.Context, o Options) (*Engine, error) {
 // closed file does.
 //
 // It takes e's lock, so whatever drives e has to have stopped, or let go of
-// it: the server calls it once its loop has returned.
+// it: the server calls it once its loop has returned. Close does not stop a
+// caller that goes on running EvalAndResponse itself, which is the primitive a
+// driver runs under e's lock and checks nothing on a command's path: a driver
+// stops before it closes, as the server's loop does, and the calls embedded
+// callers make (plan phase 3, part 5) refuse with ErrClosed.
 func (e *Engine) Close() error {
 	e.mu.Lock()
 	if e.closed {
