@@ -48,21 +48,24 @@ func killFailAt(large bool) int {
 // only once its record is written, which a killed process does not undo, and
 // under always only once it is synced. One run is killed while a rewrite it
 // started is under way; two while the disk fails, one of them in the middle
-// of large records, whose rest is kept for the retry.
+// of large records, whose rest is kept for the retry; and one under always
+// while slow syncs run outside the engine's lock, with calls queued behind
+// them, none of which may have returned before its sync did.
 func TestEveryAcknowledgedWriteSurvivesAKill(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
-		name                 string
-		policy               FsyncPolicy
-		rewrite, fail, large bool
-		acks                 int
+		name                           string
+		policy                         FsyncPolicy
+		rewrite, fail, large, slowSync bool
+		acks                           int
 	}{
-		{"always", FsyncAlways, false, false, false, 300},
-		{"everysec", FsyncEverySec, false, false, false, 2000},
-		{"no", FsyncNever, false, false, false, 2000},
-		{"everysec, during a rewrite", FsyncEverySec, true, false, false, 200},
-		{"everysec, during a failed write", FsyncEverySec, false, true, false, 100},
-		{"everysec, during a failed drain of large records", FsyncEverySec, false, true, true, 20},
+		{"always", FsyncAlways, false, false, false, false, 300},
+		{"always, during slow syncs with calls queued behind them", FsyncAlways, false, false, false, true, 100},
+		{"everysec", FsyncEverySec, false, false, false, false, 2000},
+		{"no", FsyncNever, false, false, false, false, 2000},
+		{"everysec, during a rewrite", FsyncEverySec, true, false, false, false, 200},
+		{"everysec, during a failed write", FsyncEverySec, false, true, false, false, 100},
+		{"everysec, during a failed drain of large records", FsyncEverySec, false, true, true, false, 20},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			if c.large {
@@ -83,6 +86,9 @@ func TestEveryAcknowledgedWriteSurvivesAKill(t *testing.T) {
 			}
 			if c.large {
 				writer.Env = append(writer.Env, "KEEL_CORE_KILL_LARGE=1")
+			}
+			if c.slowSync {
+				writer.Env = append(writer.Env, "KEEL_CORE_KILL_SLOW_SYNC=1")
 			}
 			out, err := writer.StdoutPipe()
 			require.NoError(t, err)
@@ -187,8 +193,8 @@ func TestEveryAcknowledgedWriteSurvivesAKill(t *testing.T) {
 // rewrite lasts seconds rather than milliseconds. Asked to, its disk starts
 // failing after its first goroutine's killFailAt write, reporting "failing",
 // and "denied <key>" for each write refused while it fails; and asked to, it
-// writes large values (largeKillValue). In the test process it returns at
-// once.
+// writes large values (largeKillValue), or syncs slowly. In the test process
+// it returns at once.
 func TestHelperProcessWritesUntilKilled(t *testing.T) {
 	path := os.Getenv("KEEL_CORE_KILL_LOG")
 	if path == "" {
@@ -225,6 +231,18 @@ func TestHelperProcessWritesUntilKilled(t *testing.T) {
 					return n, errors.New("no space left on the test's disk")
 				}
 				return write(f, b)
+			}
+		})
+	}
+	if os.Getenv("KEEL_CORE_KILL_SLOW_SYNC") != "" {
+		// Each sync of the log takes 20 ms, as a slow disk's might, so that
+		// under always the kill most likely lands while one runs outside the
+		// engine's lock, with calls written behind it and waiting for the next.
+		holding(e, func() {
+			sync := e.aofSync
+			e.aofSync = func(f *os.File) error {
+				time.Sleep(20 * time.Millisecond)
+				return sync(f)
 			}
 		})
 	}
