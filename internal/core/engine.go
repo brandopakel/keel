@@ -2,6 +2,7 @@ package core
 
 import (
 	"os"
+	"sync"
 	"time"
 
 	"github.com/brandopakel/keel/internal/data_structure"
@@ -32,9 +33,14 @@ import (
 // makes it with NewEngine and hands it to the server, and no engine is the
 // package's.
 //
-// An Engine is not safe for concurrent use. Like the stores in it, it belongs
-// to whoever is executing commands: the event loop's thread today, and the
-// holder of the engine's lock once there is one (plan phase 3).
+// An Engine belongs to whoever holds its lock (Lock): whoever holds it may
+// run commands on it and drive its work, and nobody else may touch it. No
+// method takes the lock itself - a command runs under its caller's - so a
+// command's path is the same with or without it. The server's event loop holds
+// it for every cycle, and lets go only while it waits for something to be
+// ready (plan phase 3). Until an engine is handed to whatever drives it, the
+// goroutine that made it is its only user, and needs no lock: that is how the
+// server's log is replayed and opened before the loop starts.
 type Engine struct {
 	// space is what the engine's stores have in common: the registry eviction
 	// draws from, its clock and its limits.
@@ -233,7 +239,23 @@ type Engine struct {
 	// driving e, which installs it with SetClientBuffers; nil, INFO reports
 	// none. Only INFO reads it, so it goes after everything a command reads.
 	clientBuffers func() ClientBufferStats
+
+	// mu is e's lock, which Lock and Unlock take and release. No command
+	// reads it, so it goes last, and every field a command reads keeps its
+	// offset.
+	mu sync.Mutex
 }
+
+// Lock takes e's lock, waiting until whoever holds it lets go. Its holder is
+// the one goroutine that may run commands on e and drive e's work: the
+// expiry cycle, the log's flushes, the rewrite's slices, memory maintenance
+// and replica apply. The disk workers e starts own only the bytes and the
+// file they were handed, and hand their results back through channels that
+// the holder polls.
+func (e *Engine) Lock() { e.mu.Lock() }
+
+// Unlock releases e's lock.
+func (e *Engine) Unlock() { e.mu.Unlock() }
 
 // engineIn returns an engine living in space, with no stores yet, and with
 // its persistence I/O the real thing.
