@@ -494,6 +494,21 @@ func (e *Engine) flushAOF(closing bool) error {
 	return nil
 }
 
+// Reverse layout control for follow-up 3, never merged: never-called
+// functions that take the room follow-up 3's growth of flushAOF takes, so
+// that what follows sits where it sits there. init keeps them linked without
+// calling them.
+var layoutNever bool
+
+func init() {
+	if layoutNever {
+		layoutPad0()
+	}
+}
+
+//go:noinline
+func layoutPad0() {}
+
 // LoadAOF replays a log into the keyspace.
 //
 // A crash can leave a half-written command at the end - the process died
