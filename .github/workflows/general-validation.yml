@@ -29,6 +29,10 @@ on:
         description: Include the nine-case memory matrix
         type: boolean
         default: true
+      everysec:
+        description: Also run the standard suite with the log on (appendfsync everysec), on a runner of its own
+        type: boolean
+        default: true
       profiles:
         description: Run separate candidate CPU/heap diagnostics after comparison
         type: boolean
@@ -189,11 +193,21 @@ jobs:
           path: dist/general-ci
           retention-days: 14
 
+  # The standard suite runs both servers with the log off (run-general.py's
+  # --policy off), so it never exercises the log's flush. The everysec leg
+  # runs the same suite with the log on, on a runner of its own, so that
+  # persistence work is measured end to end without anyone remembering to ask
+  # (docs/embedding-plan.md, phase 3's write-up). The memory matrix and the
+  # profiles stay with the log-off leg.
   matched:
-    name: Matched keyspace adoption matrix
+    name: ${{ matrix.policy == 'off' && 'Matched keyspace adoption matrix' || format('Matched keyspace adoption matrix, appendfsync {0}', matrix.policy) }}
     if: github.event_name == 'workflow_dispatch' && inputs.matched
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        policy: ${{ fromJSON(inputs.everysec && '["off","everysec"]' || '["off"]') }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with: { persist-credentials: false, fetch-depth: 0 }
@@ -240,6 +254,7 @@ jobs:
           MEASURE_SECONDS: ${{ inputs.seconds }}
           INCLUDE_MEMORY: ${{ inputs.memory }}
           DIAGNOSE_PROFILES: ${{ inputs.profiles }}
+          LOG_POLICY: ${{ matrix.policy }}
         run: |
           python3 - <<'PY'
           import json, os, subprocess
@@ -257,13 +272,14 @@ jobs:
           server, clients = ','.join(map(str,server_set)), ','.join(map(str,client_set))
           Path('dist/matched/affinity.json').write_text(json.dumps({'server':server,'generator':clients,'topology':topology,'limitation':'Disjoint exposed core groups on one hosted VM; host scheduling and underlying tenancy are uncontrolled.'},indent=2))
           common = ['python3','bench/run-general.py','--candidate','/tmp/keel-candidate','--memtier','/tmp/memtier_benchmark-2.5.1/memtier_benchmark','--server-cpus',server,'--client-cpus',clients,'--load-threads','2']
-          compare = common+['--baseline','/tmp/keel-baseline','--reps',os.environ['REPETITIONS'],'--seconds',os.environ['MEASURE_SECONDS']]
-          suites = ['standard'] + (['memory'] if os.environ['INCLUDE_MEMORY'] == 'true' else [])
+          policy = os.environ['LOG_POLICY']
+          compare = common+['--baseline','/tmp/keel-baseline','--reps',os.environ['REPETITIONS'],'--seconds',os.environ['MEASURE_SECONDS'],'--policy',policy]
+          suites = ['standard'] + (['memory'] if os.environ['INCLUDE_MEMORY'] == 'true' and policy == 'off' else [])
           for suite in suites:
               selected = ['--cases',os.environ['SELECTED_CASES']] if suite == 'standard' and os.environ['SELECTED_CASES'] else []
               subprocess.run(compare+selected+['--suite',suite,'--out','dist/matched/'+suite],check=True)
               subprocess.run(['python3','bench/summarize-general.py','dist/matched/'+suite],check=True)
-          if os.environ['DIAGNOSE_PROFILES'] == 'true':
+          if os.environ['DIAGNOSE_PROFILES'] == 'true' and policy == 'off':
               selected = ['--cases',os.environ['SELECTED_CASES']] if os.environ['SELECTED_CASES'] else ['--cases','working-set-100k']
               subprocess.run(common+selected+['--profiles','--reps','1','--seconds','30','--out','dist/matched/profiles'],check=True)
           PY
@@ -275,4 +291,7 @@ jobs:
           ps -eo pid,comm,pcpu,pmem > dist/matched/processes-after.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
-        with: { name: matched-keyspace-adoption, path: dist/matched, retention-days: 30 }
+        with:
+          name: ${{ matrix.policy == 'off' && 'matched-keyspace-adoption' || format('matched-keyspace-adoption-{0}', matrix.policy) }}
+          path: dist/matched
+          retention-days: 30
