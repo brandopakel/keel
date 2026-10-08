@@ -8,7 +8,7 @@ files on the repository's bench-history branch. A Grafana dashboard reads them
 from raw.githubusercontent.com through the Infinity data source, which fetches
 a URL at query time and stores nothing itself.
 
-Four kinds of run are collected:
+Five kinds of run are collected:
 
 - command-path: the Command path workflow's paired benchmarks
   (.github/workflows/command-path.yml), from comparison.json and
@@ -18,6 +18,10 @@ Four kinds of run are collected:
   suite's summary.json and lscpu.txt. matched/runs.csv gets one line per run,
   failed ones included, and matched/cases.csv one line per workload of each
   suite.
+- matched-everysec: the same job's everysec leg, which runs the standard suite
+  with the log on (appendfsync everysec), from its own artifact, into
+  matched-everysec/runs.csv and matched-everysec/cases.csv, with the same
+  columns.
 - census: the Command census workflow's census.json (scripts/command-census.py).
   census/runs.csv gets one line per run, with how many of Redis's commands and
   subcommands Keel has, and census/areas.csv one line per area (a command group,
@@ -95,6 +99,11 @@ KINDS = {
     'matched': {'artifact': 'matched-keyspace-adoption',
                 'members': re.compile(r'^(lscpu\.txt|(baseline|candidate)-source\.txt|[\w.-]+/summary\.json)$'),
                 'files': {'runs': MATCHED_RUNS, 'cases': MATCHED_CASES}},
+    # The everysec leg's artifact: the same files, kept apart so that a
+    # workload's history with the log on is never mixed with the log off.
+    'matched-everysec': {'artifact': 'matched-keyspace-adoption-everysec',
+                         'members': re.compile(r'^(lscpu\.txt|(baseline|candidate)-source\.txt|[\w.-]+/summary\.json)$'),
+                         'files': {'runs': MATCHED_RUNS, 'cases': MATCHED_CASES}},
     'census': {'artifact': 'command-census', 'members': re.compile(r'^census\.json$'),
                'files': {'runs': CENSUS_RUNS, 'areas': CENSUS_AREAS}, 'latest': CENSUS_LATEST},
     'telemetry': {'artifact': 'telemetry',
@@ -274,8 +283,8 @@ def telemetry_records(artifact_id, run, pr, files):
     return {'runs': runs, 'phases': phases}
 
 
-RECORDS = {'command-path': command_path_records, 'matched': matched_records, 'census': census_records,
-           'telemetry': telemetry_records}
+RECORDS = {'command-path': command_path_records, 'matched': matched_records,
+           'matched-everysec': matched_records, 'census': census_records, 'telemetry': telemetry_records}
 
 
 def read_members(names_and_readers, pattern):

@@ -295,6 +295,15 @@ class Collect(unittest.TestCase):
         self.assertEqual((counts, errors, self.gh.downloads), ({'matched collected': 1}, [], []))
         self.assertEqual(len(read(self.data / 'matched/cases.csv')), 2)
 
+    def test_the_everysec_leg_is_collected_apart(self):
+        self.gh.add('matched-keyspace-adoption', 7, 700, matched_files())
+        self.gh.add('matched-keyspace-adoption-everysec', 8, 700, matched_files())
+        counts, errors = cbh.collect(self.gh, self.data, ['matched', 'matched-everysec'])
+        self.assertEqual((counts, errors), ({'matched collected': 1, 'matched-everysec collected': 1}, []))
+        self.assertEqual([r['artifact_id'] for r in read(self.data / 'matched/runs.csv')], ['7'])
+        self.assertEqual([r['artifact_id'] for r in read(self.data / 'matched-everysec/runs.csv')], ['8'])
+        self.assertEqual(len(read(self.data / 'matched-everysec/cases.csv')), 2)
+
     def test_max_new_bounds_the_work(self):
         for i in range(1, 6):
             self.gh.add('command-path-benchmarks', i, i * 100, command_path_files(), created=f'2026-10-0{i}T00:00:00Z')

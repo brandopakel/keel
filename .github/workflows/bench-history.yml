@@ -4,7 +4,8 @@
 # GitHub deletes a workflow artifact after 30 days, and Grafana Cloud's free
 # plan keeps pushed metrics for 14. This job copies the numbers worth keeping
 # from each Command path run, each run of General cache validation's matched
-# adoption job, each Command census and each Live telemetry run into CSV files
+# adoption job (its log-off and everysec legs, kept apart), each Command
+# census and each Live telemetry run into CSV files
 # on the bench-history branch. A Grafana dashboard reads them from
 # raw.githubusercontent.com through the Infinity data source.
 # scripts/collect-bench-history.py says what is kept, and the branch's
