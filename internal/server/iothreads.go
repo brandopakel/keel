@@ -145,7 +145,13 @@ func (p *ioPool) serve(c *client, write bool, scratch []byte) {
 			part = part[:c.frames[0]]
 		}
 		n, err := syscall.Write(c.fd, part)
+		writesProcessed.Add(1)
 		if n > 0 {
+			if c.replica {
+				netReplOutputBytes.Add(uint64(n))
+			} else {
+				netOutputBytes.Add(uint64(n))
+			}
 			c.out = c.out[n:]
 			if len(c.frames) > 0 {
 				c.frames[0] -= n
