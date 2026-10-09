@@ -134,7 +134,9 @@ func TestAOFTranscriptPartialWriteNeverAdvancesReplyPrefix(t *testing.T) {
 	ready := e.AppendReadyOffset()
 	e.aofWrite = func(f *os.File, body []byte) (int, error) { return f.Write(body[:len(body)/2]) }
 	runOn(t, e, "SET", "torn", strings.Repeat("v", 3*maxAOFTranscriptBytes))
-	require.ErrorIs(t, e.aof.failed, io.ErrShortWrite)
+	// Under everysec the server's log retries the write, as Redis does.
+	require.True(t, e.LogRetrying())
+	require.ErrorIs(t, e.logFailure.write, io.ErrShortWrite)
 	require.Equal(t, ready, e.AppendReadyOffset())
 	require.ErrorIs(t, e.FlushAOF(), io.ErrShortWrite)
 	require.ErrorIs(t, e.CloseAOF(), io.ErrShortWrite)
@@ -171,11 +173,18 @@ func TestAOFTranscriptFailedDrainDoesNotPublishReplication(t *testing.T) {
 			e.aofWrite = func(f *os.File, body []byte) (int, error) {
 				return f.Write(body[:len(body)-tail])
 			}
+			torn := strings.Repeat("v", 2*maxAOFTranscriptBytes)
 			require.NotPanics(t, func() {
-				runOn(t, e, "SET", "torn", strings.Repeat("v", 2*maxAOFTranscriptBytes))
+				runOn(t, e, "SET", "torn", torn)
 			})
-			require.ErrorIs(t, e.aof.failed, io.ErrShortWrite)
-			require.Equal(t, published, e.replicationV2.end, "failed drain must not publish a resliced suffix")
+			// The log retries the write, as Redis's does under no, and keeps
+			// the rest of the record for it, so the command succeeded and is
+			// published whole, as Redis propagates it - never a suffix of it
+			// resliced by the failed drain.
+			require.True(t, e.LogRetrying())
+			require.ErrorIs(t, e.logFailure.write, io.ErrShortWrite)
+			require.Equal(t, published+uint64(len(logRecord("SET", "torn", torn))), e.replicationV2.end,
+				"the command is published whole, not as a resliced suffix")
 			require.Equal(t, ready, e.AppendReadyOffset(), "failure cannot acknowledge either buffered command")
 			require.ErrorIs(t, e.FlushAOF(), io.ErrShortWrite)
 		})

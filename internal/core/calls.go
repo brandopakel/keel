@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 )
 
@@ -32,8 +31,8 @@ import (
 // recovery, and a write or sync that succeeds clears it. Under always, where
 // Redis exits, it latches: every later call, read or write, returns
 // ErrPersistence without running, as does a call waiting for the failed write
-// or sync, until the engine is reopened. The server does neither in phase 3;
-// it stops at the first failure.
+// or sync, until the engine is reopened. The server's engine retries in the
+// same way (log_failures.go), and its loop stops where this one latches.
 
 // ErrPersistence is what a call refused for a failed log returns: Redis's
 // wire error for a failed AOF write, followed by the failure itself.
@@ -107,33 +106,6 @@ func (e *Engine) callRefusal(cmd *Command) error {
 	return nil
 }
 
-// logRetrying says e's log has a failed write or sync it is retrying (driver.go).
-func (e *Engine) logRetrying() bool {
-	d := e.driver
-	return d != nil && (d.writeFailure != nil || d.syncFailure != nil)
-}
-
-// writeRetrying says e's log has a failed write it is retrying, so that what
-// is appended stays buffered for that retry (appendAOFFragment).
-func (e *Engine) writeRetrying() bool {
-	d := e.driver
-	return d != nil && d.writeFailure != nil
-}
-
-// retriedFailure is the failed write or sync e's log is retrying, as
-// ErrPersistence: Redis's "MISCONF Errors writing to the AOF file: <cause>".
-// nil while there is none. The caller holds e's lock.
-func (e *Engine) retriedFailure() error {
-	d := e.driver
-	switch {
-	case d.writeFailure != nil:
-		return fmt.Errorf("%w: %w", ErrPersistence, d.writeFailure)
-	case d.syncFailure != nil:
-		return fmt.Errorf("%w: %w", ErrPersistence, d.syncFailure)
-	}
-	return nil
-}
-
 // persistenceFailure latches a failure of e's log that is not retried, and
 // returns it as ErrPersistence; nil while there is none. The caller holds e's
 // lock.
@@ -145,7 +117,7 @@ func (e *Engine) persistenceFailure() error {
 	if d.failed == nil {
 		return nil
 	}
-	return fmt.Errorf("%w: %w", ErrPersistence, d.failed)
+	return persistenceError{d.failed}
 }
 
 // waitPublished returns result once e's published offset covers end, or once

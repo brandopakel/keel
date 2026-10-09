@@ -313,7 +313,10 @@ func (tx *Transaction) exec(e *Engine, w io.Writer, conn Connection) error {
 	// lost its primary. Either all of a transaction runs or none of it does, so
 	// every command is checked before the first one runs, as Redis checks EXEC.
 	for _, cmd := range tx.commands {
-		if answers(conn, cmd.Cmd) {
+		// PING is refused for a failed log when it arrives, so that a health
+		// check sees the failure, but Redis checks only EXEC's writes when EXEC
+		// comes (server.c 4547-4548).
+		if answers(conn, cmd.Cmd) || cmd.Cmd == "PING" && e.logFailure.failing {
 			continue
 		}
 		if err := e.replicaCommandError(cmd.Cmd); err != nil {

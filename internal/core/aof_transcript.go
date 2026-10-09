@@ -64,16 +64,16 @@ func (e *Engine) writeAOFBuffer(drain bool) error {
 			}
 			e.aof.buf = e.aof.buf[n:]
 			e.aof.commandStart = max(e.aof.commandStart-n, 0)
-			if d := e.driver; d != nil && d.retries {
-				d.writeFailed(err)
+			if e.retriesLogFailures() {
+				e.writeFailed(err)
 				return err
 			}
 			e.aof.failed = err
 			return err
 		}
 		e.aof.midRecord = drain
-		if d := e.driver; d != nil && d.writeFailure != nil {
-			d.writeSolved()
+		if e.logFailure.write != nil {
+			e.writeSolved()
 		}
 		e.publishAOFPrefix()
 		if cap(e.aof.buf) > maxAOFTranscriptBytes {

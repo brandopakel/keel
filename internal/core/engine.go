@@ -272,6 +272,10 @@ type Engine struct {
 	// file's Truncate, unless a test has replaced it. Last, so that adding it
 	// moved no field before it.
 	aofTruncate func(*os.File, int64) error
+	// logFailure is the log's write and sync statuses while a failure of
+	// either is retried (log_failures.go). Last, so that adding it moved no
+	// field before it.
+	logFailure logFailures
 }
 
 // Lock takes e's lock, waiting until whoever holds it lets go. Its holder is

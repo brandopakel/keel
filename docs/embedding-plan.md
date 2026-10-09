@@ -1763,10 +1763,11 @@ settles it this way:
     read or write, with `ErrPersistence`, until it is closed and opened
     again, which replays what reached the disk. A call waiting for the
     failed write or sync gets the same error.
-  - **The server keeps its stop** under every policy in phase 3:
-    `appendonly: write failed, stopping`. Changing it to Redis's behaviour
-    under `everysec` and `no` is a change of its own after phase 3 (see
-    "Decisions").
+  - **The server kept its stop** under every policy in phase 3:
+    `appendonly: write failed, stopping`. A change of its own after phase 3
+    gave it Redis's behaviour under `everysec` and `no`, sharing the
+    engine's retry (`log_failures.go`); it still stops under `always`, for a
+    replica, and with its worker append (see "Decisions").
 - **Error sentinels.** Phase 3 adds three to core:
   - `ErrClosed`, `instance is closed`;
   - `ErrLocked`, `log in use by another instance`;
@@ -2015,9 +2016,12 @@ Redis.
     recovers, a failed background sync included, where Redis would wait for
     new data (the first improvement over Redis, approved); under `always`,
     where Redis exits, an embedded engine refuses every call until it is
-    reopened. The server keeps its stop in
-    phase 3; giving it Redis's `everysec` and `no` behaviour is scheduled as
-    a change of its own after phase 3.
+    reopened. The server kept its stop in
+    phase 3, and took Redis's `everysec` and `no` behaviour in a change of
+    its own after it: it refuses write commands and PING with Redis's
+    `MISCONF` text, its cause in strerror's words, serves reads, retries, and
+    at shutdown logs a log it cannot flush and exits with status 0, as Redis
+    does; under `always`, and for a replica, it still stops, as Redis exits.
   - **`Close` takes no context in core,** and a second `Close` returns
     `ErrClosed`; phase 5 chooses the public signature. The texts are
     `instance is closed`, `log in use by another instance`, and Redis's
