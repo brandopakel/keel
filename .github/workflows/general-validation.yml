@@ -33,6 +33,10 @@ on:
         description: Also run the standard suite with the log on (appendfsync everysec), on a runner of its own
         type: boolean
         default: true
+      worker:
+        description: Append on the worker (-aof-async-append) in the everysec leg (throwaway branch, never merged)
+        type: boolean
+        default: false
       profiles:
         description: Run separate candidate CPU/heap diagnostics after comparison
         type: boolean
@@ -255,6 +259,7 @@ jobs:
           INCLUDE_MEMORY: ${{ inputs.memory }}
           DIAGNOSE_PROFILES: ${{ inputs.profiles }}
           LOG_POLICY: ${{ matrix.policy }}
+          LOG_WORKER: ${{ inputs.worker }}
         run: |
           python3 - <<'PY'
           import json, os, subprocess
@@ -274,6 +279,8 @@ jobs:
           common = ['python3','bench/run-general.py','--candidate','/tmp/keel-candidate','--memtier','/tmp/memtier_benchmark-2.5.1/memtier_benchmark','--server-cpus',server,'--client-cpus',clients,'--load-threads','2']
           policy = os.environ['LOG_POLICY']
           compare = common+['--baseline','/tmp/keel-baseline','--reps',os.environ['REPETITIONS'],'--seconds',os.environ['MEASURE_SECONDS'],'--policy',policy]
+          if os.environ['LOG_WORKER'] == 'true' and policy != 'off':
+              compare = compare+['--worker']
           suites = ['standard'] + (['memory'] if os.environ['INCLUDE_MEMORY'] == 'true' and policy == 'off' else [])
           for suite in suites:
               selected = ['--cases',os.environ['SELECTED_CASES']] if suite == 'standard' and os.environ['SELECTED_CASES'] else []
