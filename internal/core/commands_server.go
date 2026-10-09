@@ -114,6 +114,12 @@ type ClientBufferStats struct {
 	// ConnectionsRejected every one closed at once because the server already
 	// held its most clients (Redis's rejected_connections).
 	ConnectionsReceived, ConnectionsRejected uint64
+	// The bytes clients sent and were sent, apart from what went between a
+	// primary and its replicas, and every read and write the transport made:
+	// Redis's total_net_*_bytes and total_*_processed.
+	NetInputBytes, NetOutputBytes         uint64
+	NetReplInputBytes, NetReplOutputBytes uint64
+	ReadsProcessed, WritesProcessed       uint64
 }
 
 // SetClientBuffers installs on e the hook INFO reads the connections of the

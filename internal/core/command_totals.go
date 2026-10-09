@@ -35,8 +35,11 @@ type commandTotals struct {
 	// CONFIG RESETSTAT, though total_error_replies goes on counting.
 	errorPrefixes  map[string]uint64
 	errorsDisabled bool
-	// ops is instantaneous_ops_per_sec's sampler.
-	ops instantaneousMetric
+	// ops is instantaneous_ops_per_sec's sampler, and the rest the network
+	// rates', instantaneous_input_kbps and its kind, which sample the
+	// transport's byte counts as Redis's serverCron samples its own.
+	ops                            instantaneousMetric
+	netIn, netOut, replIn, replOut instantaneousMetric
 }
 
 const (
@@ -74,6 +77,14 @@ func (m *instantaneousMetric) sample(value uint64, now time.Time) {
 	}
 	m.lastAt, m.lastValue = now, value
 }
+
+// sampledAt is whether the last sample was taken at now, so that the
+// samplers that follow ops take theirs in the same periods.
+func (m *instantaneousMetric) sampledAt(now time.Time) bool { return m.lastAt.Equal(now) }
+
+// kbps is Redis's instantaneous_*_kbps: the rate in bytes, divided by 1024 in
+// single precision, as Redis divides it.
+func (m *instantaneousMetric) kbps() float32 { return float32(m.rate()) / 1024 }
 
 // rate is Redis's getInstantaneousMetric: the mean of the samples, the ones
 // not yet taken counting as zero.
@@ -137,7 +148,22 @@ func (e *Engine) noteError(reply []byte) {
 // passed since the last one. The event loop calls it once a turn and the
 // driver once a cycle, as Redis's serverCron samples it.
 func (e *Engine) SampleCommandRate() {
-	e.totals.ops.sample(e.totals.commands, time.Now())
+	now := time.Now()
+	t := &e.totals
+	t.ops.sample(t.commands, now)
+	if e.clientBuffers == nil {
+		return
+	}
+	if !t.ops.sampledAt(now) {
+		return
+	}
+	// Redis samples input and output with replication's included, and
+	// replication's alone beside them.
+	s := e.clientBuffers()
+	t.netIn.sample(s.NetInputBytes+s.NetReplInputBytes, now)
+	t.netOut.sample(s.NetOutputBytes+s.NetReplOutputBytes, now)
+	t.replIn.sample(s.NetReplInputBytes, now)
+	t.replOut.sample(s.NetReplOutputBytes, now)
 }
 
 // resetStats is CONFIG RESETSTAT: every statistic Redis's resetServerStats

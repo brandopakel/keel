@@ -62,6 +62,7 @@ func startReplicaTransport(e *core.Engine, password string, useTLS bool) (<-chan
 					secure := tls.Client(conn, &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12})
 					conn = secure
 				}
+				conn = replicaConn{conn}
 				reader := bufio.NewReader(conn)
 				conn.SetDeadline(time.Now().Add(3 * time.Second))
 				_, err = replicaExchange(conn, reader, []string{"AUTH", password})
