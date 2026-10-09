@@ -28,7 +28,10 @@ func TestINFOClientBuffersHasExplicitScopeAndStableValues(t *testing.T) {
 		"request_allocation_peak_bytes:40\r\nrequest_allocation_refusals:5\r\n"+
 		"clients_closed_slow:6\r\nclients_closed_unanswered:7\r\nclients_closed_unread:8\r\nclients_closed_unreplied:9\r\n\r\n")
 	assert.Contains(t, string(e.cmdINFO([]string{"stats"})), "# Stats\r\ntotal_connections_received:11\r\n"+
-		"total_commands_processed:0\r\ninstantaneous_ops_per_sec:0\r\nrejected_connections:12\r\nexpired_keys:0\r\nevicted_keys:0\r\n")
+		"total_commands_processed:0\r\ninstantaneous_ops_per_sec:0\r\n"+
+		"total_net_input_bytes:0\r\ntotal_net_output_bytes:0\r\ntotal_net_repl_input_bytes:0\r\ntotal_net_repl_output_bytes:0\r\n"+
+		"instantaneous_input_kbps:0.00\r\ninstantaneous_output_kbps:0.00\r\ninstantaneous_input_repl_kbps:0.00\r\ninstantaneous_output_repl_kbps:0.00\r\n"+
+		"rejected_connections:12\r\nexpired_keys:0\r\nevicted_keys:0\r\n")
 	assert.NotContains(t, string(e.cmdINFO([]string{"memory"})), "connected_clients")
 	assert.NotContains(t, string(other.cmdINFO([]string{"clients"})), "connected_clients", "the hook is e's alone")
 	assert.NotContains(t, string(other.cmdINFO([]string{"stats"})), "total_connections_received")

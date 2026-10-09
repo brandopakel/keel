@@ -236,6 +236,12 @@ func (e *Engine) statsInfo(b *strings.Builder) {
 	}
 	fmt.Fprintf(b, "total_commands_processed:%d\r\ninstantaneous_ops_per_sec:%d\r\n", e.totals.commands, e.totals.ops.rate())
 	if e.clientBuffers != nil {
+		t := &e.totals
+		fmt.Fprintf(b, "total_net_input_bytes:%d\r\ntotal_net_output_bytes:%d\r\ntotal_net_repl_input_bytes:%d\r\ntotal_net_repl_output_bytes:%d\r\n",
+			stats.NetInputBytes+stats.NetReplInputBytes, stats.NetOutputBytes+stats.NetReplOutputBytes,
+			stats.NetReplInputBytes, stats.NetReplOutputBytes)
+		fmt.Fprintf(b, "instantaneous_input_kbps:%.2f\r\ninstantaneous_output_kbps:%.2f\r\ninstantaneous_input_repl_kbps:%.2f\r\ninstantaneous_output_repl_kbps:%.2f\r\n",
+			t.netIn.kbps(), t.netOut.kbps(), t.replIn.kbps(), t.replOut.kbps())
 		fmt.Fprintf(b, "rejected_connections:%d\r\n", stats.ConnectionsRejected)
 	}
 	fmt.Fprintf(b, "expired_keys:%d\r\nevicted_keys:%d\r\n", e.ExpiredKeys(), e.space.Evicted())
@@ -246,6 +252,9 @@ func (e *Engine) statsInfo(b *strings.Builder) {
 	b.WriteString("pubsub_channels:0\r\npubsub_patterns:0\r\npubsubshard_channels:0\r\n" +
 		"latest_fork_usec:0\r\ntotal_forks:0\r\ntracking_total_keys:0\r\ntracking_total_items:0\r\ntracking_total_prefixes:0\r\n")
 	fmt.Fprintf(b, "total_error_replies:%d\r\n", e.totals.errors)
+	if e.clientBuffers != nil {
+		fmt.Fprintf(b, "total_reads_processed:%d\r\ntotal_writes_processed:%d\r\n", stats.ReadsProcessed, stats.WritesProcessed)
+	}
 	fmt.Fprintf(b, "slowlog_commands_count:%d\r\nslowlog_commands_time_ms_max:%.2f\r\nslowlog_commands_time_ms_sum:%.2f\r\n\r\n",
 		e.slowlog.count, float64(e.slowlog.usecMax)/1000, float64(e.slowlog.usecSum)/1000)
 }
