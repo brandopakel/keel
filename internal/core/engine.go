@@ -119,6 +119,10 @@ type Engine struct {
 	appendPending  chan appendResult
 	appendBytes    int
 	appendRetained int
+	// appendRetryAt is when a batch the worker failed to write is tried
+	// again, no sooner than the loop's next cron tick, so that a disk that
+	// fails at once is not tried in a tight loop.
+	appendRetryAt time.Time
 	// The log's logical offsets since it was opened: appendStarted has been
 	// handed to a write, appendWritten written, appendSynced synced, and
 	// appendCompleted may have its replies released.
