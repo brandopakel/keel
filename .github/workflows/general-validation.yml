@@ -164,6 +164,13 @@ jobs:
         run: |
           python3 scripts/error-parity.py --bin /tmp/keel-general --redis /tmp/redis-8.10.1/src/redis-server \
             --redis-module /tmp/redis-8.10.1/modules/redisbloom/redisbloom.so --out dist/general-ci/error-parity
+      - name: INFO counters command by command against Redis 8.10.1 and RedisBloom
+        # How total_commands_processed, total_error_replies, errorstats and the
+        # keyspace hits and misses move for each command, compared with Redis's
+        # (docs/info-compatibility.md, part c).
+        run: |
+          python3 scripts/stats-parity.py --bin /tmp/keel-general --redis /tmp/redis-8.10.1/src/redis-server \
+            --redis-module /tmp/redis-8.10.1/modules/redisbloom/redisbloom.so --out dist/general-ci/stats-parity
       - name: Differential replies, rewrite and two restarts
         run: |
           python3 scripts/differential.py --bin /tmp/keel-general --redis /tmp/redis-8.10.1/src/redis-server --out dist/general-ci/differential --steps 20000
