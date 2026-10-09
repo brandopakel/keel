@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -163,7 +164,14 @@ func init() { indexCommands() }
 func indexCommands() {
 	commands = make(map[string]commandEntry, len(commandArity))
 	statNames = nil
-	for name, arity := range commandArity {
+	// In name order, so that each command has the same place every run.
+	names := make([]string, 0, len(commandArity))
+	for name := range commandArity {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		arity := commandArity[name]
 		stat := uint16(len(statNames))
 		statNames = append(statNames, strings.ToLower(name))
 		for _, sub := range subcommandsOf(name) {
