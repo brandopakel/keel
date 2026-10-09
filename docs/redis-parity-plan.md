@@ -1,7 +1,8 @@
 # Redis parity plan
 
-Status: draft, October 7, 2026. For the owner and the embedding plan's
-session to agree on before any of it is built.
+Status: agreed, October 9, 2026. The embedding plan's session agreed on
+October 7, and the owner decided the open question, the sequencing, on
+October 9: parity interleaves with phase 4 (see below).
 
 The owner decided on October 7, 2026 that Keel implements everything Redis
 has. The README's integration contract lists, as absent:
@@ -187,7 +188,8 @@ That shapes the order.
 - **Tiers 4 to 6** come after.
 
 Phase 3 (`Open`/`Close`, the per-instance lock, durability for direct
-callers) still comes before phase 4, as the embedding plan has it.
+callers) came before phase 4, as the embedding plan has it, and is done:
+#148, #149, #151, #152 and #153, merged October 8, 2026.
 
 **`v0.2.0-alpha.1` does not wait for all of tier 1.** The public package
 ships with the families phase 4 has converted by then. A family converted
@@ -197,11 +199,13 @@ and parity do not hold each other up.
 Phase 6 is about a week. Moving it ahead of phase 5 would let tier 2 start
 before the public package ships. That is the owner's option to weigh.
 
-**The open question is the owner's.** Either parity interleaves with phase 4,
-as above, or it waits until phases 4 to 6 are done. The embedding plan's
-session recommends interleaving (October 7, 2026), and so does this plan:
-nothing is written twice, and each family reaches parity as soon as its new
-form exists.
+**The owner's decision (October 9, 2026): parity interleaves with phase 4.**
+The alternative was to wait until phases 4 to 6 are done. Instead, each
+family's missing commands and options follow right after that family's phase
+4 conversion, family by family, and `v0.2.0-alpha.1` does not wait for all of
+tier 1. Nothing is written twice, and each family reaches parity as soon as
+its new form exists. The embedding plan's session had recommended this on
+October 7.
 
 ## Where Keel improves on Redis
 
