@@ -52,14 +52,19 @@ func subcommandStat(cmd *Command, entry commandEntry) uint16 {
 
 // noteRun counts one run of the command at stat, from started, a reading of
 // nanotime, to now: a call, its time, and whether it failed.
+//
+// The time also goes into the command's latency histogram, as Redis records
+// it with latency-tracking on, its default (latency.go).
 func (e *Engine) noteRun(stat uint16, started int64, failed bool) {
+	micros := microsBetween(started, nanotime())
 	s := &e.cmdStats[stat]
 	s.calls++
-	s.usec += microsBetween(started, nanotime())
+	s.usec += micros
 	if failed {
 		s.failed++
 	}
 	e.totals.commands++
+	e.recordLatency(stat, micros)
 }
 
 // CommandStart is when a command the transport answers itself started: the

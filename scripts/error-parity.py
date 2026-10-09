@@ -354,6 +354,9 @@ SUBCOMMANDS = [
     ['config', 'help', 'x'], ['CONFIG', 'x' * 200], ['config', 'set', 'x', 'y'], ['config', 'set', 'x'],
     ['config', 'set', 'x', 'y', 'z'], ['CONFIG', 'SET', 'databases', '2'], ['config', 'set', 'databases', '2', 'x', 'y'],
     ['config', 'rewrite'], ['config', 'rewrite', 'x'], ['CONFIG', 'RESETSTAT'], ['config', 'resetstat', 'x'],
+    ['latency', 'latest'], ['LATENCY', 'HISTORY', 'command'], ['latency', 'reset'], ['latency', 'reset', 'a', 'b'],
+    ['latency', 'doctor'], ['latency', 'graph', 'command'], ['latency', 'help'], ['latency', 'nosuch'], ['latency'],
+    ['latency', 'history'], ['latency', 'latest', 'x'], ['latency', 'graph'], ['LATENCY', 'x' * 200],
 ]
 
 # Commands whose arity Redis does not hold, worded as it words every other.
@@ -467,7 +470,7 @@ def redis_arities(port):
              'SCARD', 'SMEMBERS', 'SISMEMBER', 'SMISMEMBER', 'SPOP', 'SRANDMEMBER', 'ZCOUNT', 'ZRANGEBYSCORE',
              'ZREVRANGEBYSCORE', 'ZINCRBY', 'ZPOPMIN', 'ZPOPMAX', 'ZRANGE', 'ZADD', 'ZRANK', 'ZREM', 'ZSCORE', 'ZCARD',
              'GEOADD', 'GEODIST', 'GEOHASH', 'GEOSEARCH', 'GEOPOS', 'PFADD', 'PFCOUNT', 'PFMERGE', 'AUTH', 'HELLO',
-             'QUIT', 'CLIENT', 'CONFIG', 'MULTI', 'EXEC', 'DISCARD']
+             'QUIT', 'CLIENT', 'CONFIG', 'LATENCY', 'MULTI', 'EXEC', 'DISCARD']
     session = Session(port, auth=True, protocol=2)
     try:
         session.socket.sendall(encode(['COMMAND', 'INFO', *names]))
