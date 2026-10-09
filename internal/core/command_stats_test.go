@@ -101,13 +101,12 @@ func TestCommandstatsSurviveReplayAsRedisCounts(t *testing.T) {
 	e := newTestEngine(t, Options{})
 	_, err := e.LoadAOF(path)
 	require.NoError(t, err)
-	stats := cmdstats(t, e)
-	assert.Empty(t, stats, "nothing the replay ran")
 	assert.Equal(t, uint64(2), e.totals.commands, "though the block's commands count as processed")
+	assert.Empty(t, cmdstats(t, e), "nothing the replay ran")
 	runOn(t, e, "SET", "d", "4")
 
 	assert.Equal(t, "OK", runOn(t, e, "CONFIG", "RESETSTAT"))
-	stats = cmdstats(t, e)
+	stats := cmdstats(t, e)
 	assert.Equal(t, []string{"config|resetstat"}, keys(stats), "RESETSTAT itself, and INFO once it has answered")
 }
 
