@@ -59,14 +59,15 @@ func (e *Engine) NoteMemoryPeak() uint64 {
 //
 // Any number of sections may be named, as Redis allows; a name that is not a
 // section adds nothing. No name, or default, is Redis's default sections; all
-// and everything add commandstats, which Redis leaves out of the default.
+// and everything add commandstats and latencystats, which Redis leaves out of
+// the default.
 func (e *Engine) cmdINFO(args []string) []byte {
 	sections := make(map[string]bool, len(args))
 	for _, arg := range args {
 		sections[strings.ToLower(arg)] = true
 	}
-	// Redis's default sections, and all of them; commandstats is in all but
-	// not in the default, as in Redis.
+	// Redis's default sections, and all of them; commandstats and
+	// latencystats are in all but not in the default, as in Redis.
 	all := sections["all"] || sections["everything"]
 	every := len(args) == 0 || sections["default"] || all
 
@@ -87,6 +88,7 @@ func (e *Engine) cmdINFO(args []string) []byte {
 		{"cpu", (*Engine).cpuInfo, false},
 		{"commandstats", (*Engine).commandStatsInfo, true},
 		{"errorstats", (*Engine).errorStatsInfo, false},
+		{"latencystats", (*Engine).latencyStatsInfo, true},
 		{"cluster", (*Engine).clusterInfo, false},
 		{"keyspace", (*Engine).keyspaceInfo, false},
 	} {

@@ -334,7 +334,7 @@ func (r *replicationReply) Read(b []byte) (int, error)  { return 0, errors.New("
 // SELECT are here because clients send them while setting up a connection, and
 // a replica that refused them would fail the connection rather than the read;
 // UNWATCH because they send it while putting one back.
-var answersWithoutData = map[string]bool{"PING": true, "INFO": true, "CONFIG": true, "ECHO": true, "SELECT": true,
+var answersWithoutData = map[string]bool{"PING": true, "INFO": true, "CONFIG": true, "LATENCY": true, "ECHO": true, "SELECT": true,
 	"UNWATCH": true}
 
 var errReadOnlyReplica = errors.New("READONLY You can't write against a read only replica.")

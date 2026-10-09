@@ -1,7 +1,7 @@
 # INFO and monitoring compatibility
 
-Status: October 9, 2026. Parts (a) and (b) are merged. (c1), (c2) and (c3a) are
-in review. (c3b), (c3c) and (d) are planned.
+Status: October 9, 2026. Parts (a) and (b) are merged. (c1), (c2), (c3a) and
+(c3b) are in review. (c3c) and (d) are planned.
 
 Monitoring built for Redis reads `INFO`, `CONFIG GET`, `SLOWLOG` and `LATENCY`.
 The standard Prometheus exporter, `redis_exporter`, and the Grafana dashboards
@@ -63,10 +63,9 @@ Each lands on its own, smallest risk first.
     timed, as Redis times it, with no sampling. It ships in three pull
     requests:
     - **(c3a)** commandstats, and the two clock reads it needs;
-    - **(c3b)** latencystats and `LATENCY HISTOGRAM`, from a histogram per
+    - **(c3b)** latencystats and the `LATENCY` command, from a histogram per
       command;
-    - **(c3c)** `SLOWLOG` and the rest of `LATENCY`, with their settings in
-      `CONFIG GET`. The slow log hides what Redis hides: the arguments of
+    - **(c3c)** `SLOWLOG`, with its settings in `CONFIG GET`. The slow log hides what Redis hides: the arguments of
       `AUTH`, of `HELLO`'s `AUTH` and of `CONFIG SET requirepass`.
 
   **What timing costs, measured October 8, 2026.** These are paired
@@ -314,21 +313,37 @@ General validation runs it against Redis 8.10.1 and RedisBloom.
     with `errorstat_ERRORSTATS_DISABLED:count=1`, and nothing more is counted
     by prefix until `CONFIG RESETSTAT`. `total_error_replies` goes on
     counting.
-- **Latencystats (c3b):** `latency_percentiles_usec_<name>:p50=N,p99=N,p99.9=N`,
-  from a histogram per command. Redis keeps these with `latency-tracking`
-  on, its default.
+- **Latencystats (c3b), done:**
+  `latency_percentiles_usec_<name>:p50=N.NNN,p99=N.NNN,p99.9=N.NNN`, in
+  `INFO all`, `everything` and `latencystats`, not in the default, as in
+  Redis.
+  - Each command's time goes into a histogram of its own, as Redis records
+    it with `latency-tracking` on, its default. The time is in nanoseconds,
+    a whole number of microseconds times 1000, kept between 1 ns and 1 s.
+  - The histogram is a line-for-line Go port of the HdrHistogram Redis
+    bundles (`deps/hdr_histogram`), at Redis's settings: 1 ns to 1 s, two
+    significant figures. Its percentiles, and `LATENCY HISTOGRAM`'s buckets,
+    are the ones Redis reports for the same times.
+  - `testdata/hdr_histogram_redis.json` holds the output of Redis's own C
+    code for ten sets of times: none, sub-microsecond, cache reads, a long
+    tail, values over a second, every bucket edge. The port is tested
+    against it.
+  - Percentiles are Redis's defaults (`latency-tracking-info-percentiles`,
+    `50 99 99.9`), and `CONFIG GET` reports them.
+  - `CONFIG RESETSTAT` clears every histogram, and the log's replay records
+    no time, as for commandstats.
 
 ## Commands
 
 | Command | Plan |
 | --- | --- |
-| `CONFIG GET pattern [pattern ...]` | (b), done. Keel's settings under Redis's names, read live: `maxmemory`, `maxmemory-policy`, `maxmemory-samples`, `lfu-log-factor`, `appendonly`, `appendfilename`, `appendfsync`, `auto-aof-rewrite-percentage`, `auto-aof-rewrite-min-size`, `replicaof` and its old name `slaveof` (`host port`, as Redis writes it), `databases` (`1`), `save` (`""`, no snapshots) and `dir` (the working directory, against which relative paths resolve). With the server, also `port`, `bind`, `maxclients`, `tcp-backlog` (Keel listens with a backlog of `maxclients`), `io-threads`, `hz` and `requirepass`, which Redis gives to any client that has logged in. The slow log and latency settings come with (c3b) and (c3c). A RESP2 flat array, or a RESP3 map. A name matches without regard to case and comes back as asked; a glob comes back in Redis's spelling. Settings whose meaning differs are left out: `lfu-decay-time` against Keel's access-counted decay; `client-output-buffer-limit`, since Keel's 64 MiB `MaxReplyBytes` caps one reply rather than disconnecting a client that falls behind; and `repl-backlog-size`, since a Keel replica reads the primary's log, not a backlog. |
+| `CONFIG GET pattern [pattern ...]` | (b), done. Keel's settings under Redis's names, read live: `maxmemory`, `maxmemory-policy`, `maxmemory-samples`, `lfu-log-factor`, `appendonly`, `appendfilename`, `appendfsync`, `auto-aof-rewrite-percentage`, `auto-aof-rewrite-min-size`, `replicaof` and its old name `slaveof` (`host port`, as Redis writes it), `databases` (`1`), `save` (`""`, no snapshots) and `dir` (the working directory, against which relative paths resolve). With the server, also `port`, `bind`, `maxclients`, `tcp-backlog` (Keel listens with a backlog of `maxclients`), `io-threads`, `hz` and `requirepass`, which Redis gives to any client that has logged in. The latency settings (`latency-tracking`, `latency-tracking-info-percentiles`, `latency-monitor-threshold`) come with (c3b), and the slow log's with (c3c). A RESP2 flat array, or a RESP3 map. A name matches without regard to case and comes back as asked; a glob comes back in Redis's spelling. Settings whose meaning differs are left out: `lfu-decay-time` against Keel's access-counted decay; `client-output-buffer-limit`, since Keel's 64 MiB `MaxReplyBytes` caps one reply rather than disconnecting a client that falls behind; and `repl-backlog-size`, since a Keel replica reads the primary's log, not a backlog. |
 | `CONFIG SET parameter value [parameter value ...]` | (b), done. Keel has no runtime configuration yet, so every pair is refused in Redis's words for the first that fails: `Unknown option or number of arguments for CONFIG SET - '<name>'` for a name Keel does not report, `CONFIG SET failed (possibly related to argument '<name>') - can't set immutable config` for one it does, and `can't set protected config` for `dir`, as Redis keeps it by default. An odd count is Redis's `syntax error`. |
 | `CONFIG REWRITE` | (b), done. `The server is running without a config file`, Redis's answer when it was started without one: Keel takes flags. |
-| `CONFIG RESETSTAT` | (c1), done. Resets what Redis's `resetServerStats` resets that Keel reports: `total_commands_processed` and the ops-per-second samples, `total_error_replies` and errorstats, `total_connections_received` and `rejected_connections` (client ids keep growing, as Redis's do), `expired_keys`, `evicted_keys`, `keyspace_hits`, `keyspace_misses`, commandstats, `aof_rewrites` and `aof_rewrites_consecutive_failures`. Each later part adds its own counters (latencystats, the slow log's counts, network bytes). `used_memory_peak` stays, as Redis keeps it. Keel's own fields keep counting. |
+| `CONFIG RESETSTAT` | (c1), done. Resets what Redis's `resetServerStats` resets that Keel reports: `total_commands_processed` and the ops-per-second samples, `total_error_replies` and errorstats, `total_connections_received` and `rejected_connections` (client ids keep growing, as Redis's do), `expired_keys`, `evicted_keys`, `keyspace_hits`, `keyspace_misses`, commandstats, latencystats, `aof_rewrites` and `aof_rewrites_consecutive_failures`. Each later part adds its own counters (the slow log's counts, network bytes). `used_memory_peak` stays, as Redis keeps it. Keel's own fields keep counting. |
 | `SLOWLOG GET [count]`, `LEN`, `RESET`, `HELP` | (c3c). Entries are id, Unix time, duration in µs, arguments (at most 32, each cut at 128 bytes as Redis does), client address and name. Defaults are `slowlog-log-slower-than` 10000 and `slowlog-max-len` 128. |
-| `LATENCY LATEST`, `HISTORY`, `RESET`, `DOCTOR`, `HELP` | (c3c). Redis's latency monitor is off by default (`latency-monitor-threshold 0`), so these answer as an idle monitor: empty replies and `0`. |
-| `LATENCY HISTOGRAM [command ...]` | (c3b), from the latencystats histograms. The exporter reads it for `redis_commands_latencies_usec`. |
+| `LATENCY LATEST`, `HISTORY`, `RESET`, `GRAPH`, `DOCTOR`, `HELP` | (c3b), done. Redis's latency monitor is off by default (`latency-monitor-threshold 0`, which `CONFIG GET` reports), and Keel has none, so these answer as Redis's do when it has never been on: `LATEST` and `HISTORY` an empty array, `RESET` `0`, `GRAPH` Redis's `No samples available for event` error, and `DOCTOR` its report that monitoring is disabled. Each subcommand has Redis's count. |
+| `LATENCY HISTOGRAM [command ...]` | (c3b), done. Each command that has run, or each named (a container brings its subcommands, `config|get` names one, an unknown name nothing): its `calls` and its `histogram_usec`, the cumulative count at each power of two microseconds from 1, as Redis's `fillCommandCDF` walks its histogram. The exporter reads it for `redis_commands_latencies_usec`. |
 
 ## What each part should show in Grafana
 
@@ -360,10 +375,13 @@ Live telemetry run after each merge confirms them.
 - **(c3a):** `redis_commands_total`, `redis_commands_duration_seconds_total`,
   `redis_commands_failed_calls_total` and `redis_commands_rejected_calls_total`,
   by command. 86 metric names from Keel, locally.
-- **(c3b):** `redis_latency_percentiles_usec`, `redis_commands_latencies_usec`.
+- **(c3b):** `redis_latency_percentiles_usec` and `redis_commands_latencies_usec`,
+  by command. 92 metric names from Keel, locally. The exporter's scrape now
+  draws three `ERR` replies from Keel instead of five: `SLOWLOG LEN`,
+  `SLOWLOG GET 1` and `COMMAND INFO COMMANDLOG`.
 - **(c3c):** `redis_slowlog_length`, `redis_slowlog_last_id`,
-  `redis_last_slow_execution_duration_seconds`. With `SLOWLOG` and `LATENCY`
-  answered, the exporter's scrape stops drawing four `ERR` replies from Keel
-  every time; the fifth, `COMMAND INFO`, waits for `COMMAND` (#137, tier 1).
+  `redis_last_slow_execution_duration_seconds`. With `SLOWLOG` answered, the
+  scrape draws one `ERR` reply, `COMMAND INFO`, which waits for `COMMAND`
+  (#137, tier 1).
 - **(d):** `redis_net_input_bytes_total`, `redis_net_output_bytes_total`, and
   their replication forms.

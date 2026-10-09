@@ -83,6 +83,7 @@ CASES = [[c] for c in [
     ['PFMERGE', 'dest', 'str', 'hll'], ['HMGET', 'missing', 'f'], ['ZRANK', 'missing', 'a'],
     # Refusals and the connection's own commands.
     ['NOSUCH'], ['GET'], ['CONFIG', 'nosuch'], ['CLIENT', 'ID'], ['CLIENT', 'SETNAME', 'a b'], ['AUTH', 'x'],
+    ['LATENCY', 'LATEST'], ['LATENCY', 'HISTORY'], ['LATENCY', 'GRAPH', 'x'], ['LATENCY', 'nosuch'],
 ]] + [
     # Transactions: what runs, what is refused while queued, and EXEC's errors.
     [['MULTI'], ['GET', 'str'], ['INCR', 'str'], ['GET', 'missing'], ['EXEC']],

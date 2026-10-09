@@ -260,8 +260,10 @@ type Engine struct {
 	// settings with what INFO alone reads, and the offsets a command reads
 	// on its way in stay as they were.
 	totals commandTotals
-	// cmdStats is INFO commandstats, a line for each entry of statNames.
+	// cmdStats is INFO commandstats, a line for each entry of statNames, and
+	// latency each command's latency histogram, made when it first runs.
 	cmdStats []commandStat
+	latency  []*latencyHistogram
 	// statsReset is the transport's part of CONFIG RESETSTAT, installed with
 	// SetStatsReset; nil, there is none.
 	statsReset func()
@@ -320,6 +322,7 @@ func engineIn(space *data_structure.Space) *Engine {
 		replication: replicationState{dirty: map[string]struct{}{}},
 		started:     now, runID: newRunID(), memoryPeakAt: now,
 		cmdStats: make([]commandStat, len(statNames)),
+		latency:  make([]*latencyHistogram, len(statNames)),
 	}
 	return e
 }
