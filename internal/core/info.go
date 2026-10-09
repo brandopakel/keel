@@ -217,6 +217,9 @@ func (e *Engine) persistenceInfo(b *strings.Builder) {
 	fmt.Fprintf(b, "aof_rewrites:%d\r\naof_keys_at_last_rewrite:%d\r\n\r\n", rewrites, keys)
 }
 
+//go:noinline
+func padK0() {}
+
 func (e *Engine) statsInfo(b *strings.Builder) {
 	b.WriteString("# Stats\r\n")
 	if e.clientBuffers != nil {

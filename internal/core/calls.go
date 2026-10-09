@@ -120,6 +120,45 @@ func (e *Engine) persistenceFailure() error {
 	return persistenceError{d.failed}
 }
 
+//go:noinline
+func padH0() {}
+
+//go:noinline
+func padH1() {}
+
+//go:noinline
+func padH2() {}
+
+//go:noinline
+func padH3() {}
+
+//go:noinline
+func padH4() {}
+
+//go:noinline
+func padH5() {}
+
+//go:noinline
+func padH6() {}
+
+//go:noinline
+func padH7() {}
+
+//go:noinline
+func padH8() {}
+
+//go:noinline
+func padH9() {}
+
+//go:noinline
+func padH10() {}
+
+//go:noinline
+func padH11() {}
+
+//go:noinline
+func padH12() {}
+
 // waitPublished returns result once e's published offset covers end, or once
 // e's log has failed in a way it retries, when the reply stands as Redis's
 // does; the failure if e's log fails in a way that latches; or ctx's error if

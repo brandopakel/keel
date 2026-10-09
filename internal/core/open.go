@@ -117,6 +117,18 @@ func (e *Engine) Close() error {
 	return err
 }
 
+//go:noinline
+func padL0() {}
+
+//go:noinline
+func padL1() {}
+
+//go:noinline
+func padL2() {}
+
+//go:noinline
+func padL3() {}
+
 // StartAOF runs the log's startup on e, as e's options say: nothing unless
 // AppendOnly, and otherwise the log at AppendFilename replayed into e and
 // opened for appending. It is what the server's startup ran as

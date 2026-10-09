@@ -443,6 +443,15 @@ func (e *Engine) pollAOFSync(wait bool) {
 	}
 }
 
+//go:noinline
+func padG0() {}
+
+//go:noinline
+func padG1() {}
+
+//go:noinline
+func padG2() {}
+
 func (e *Engine) flushAOF(closing bool) error {
 	fsync := e.settings.fsync
 	// Under always an engine Open makes syncs outside its lock, as under

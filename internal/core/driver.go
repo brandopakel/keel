@@ -75,6 +75,36 @@ func (d *driver) wake() {
 	}
 }
 
+//go:noinline
+func padI0() {}
+
+//go:noinline
+func padI1() {}
+
+//go:noinline
+func padI2() {}
+
+//go:noinline
+func padI3() {}
+
+//go:noinline
+func padI4() {}
+
+//go:noinline
+func padI5() {}
+
+//go:noinline
+func padI6() {}
+
+//go:noinline
+func padI7() {}
+
+//go:noinline
+func padI8() {}
+
+//go:noinline
+func padI9() {}
+
 // Open drives neither of these. AsyncAppend's batch is held back by the
 // server's loop, which runs no command while one is out; the maintenance
 // goroutine already keeps the log's I/O off callers' goroutines. And a
@@ -94,6 +124,9 @@ func (e *Engine) startDriver() {
 	e.SetRewriteWaker(d.wake)
 	go e.drive(d)
 }
+
+//go:noinline
+func padJ0() {}
 
 // drive is the maintenance goroutine: a cycle at every tick and every poke,
 // until it is stopped.
