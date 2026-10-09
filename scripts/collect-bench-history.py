@@ -8,7 +8,7 @@ files on the repository's bench-history branch. A Grafana dashboard reads them
 from raw.githubusercontent.com through the Infinity data source, which fetches
 a URL at query time and stores nothing itself.
 
-Five kinds of run are collected:
+Seven kinds of run are collected:
 
 - command-path: the Command path workflow's paired benchmarks
   (.github/workflows/command-path.yml), from comparison.json and
@@ -33,6 +33,17 @@ Five kinds of run are collected:
   one line per run, with how many metric names redis_exporter reported for Keel
   and for Redis, and telemetry/phases.csv one line per load phase, with each
   server's ops/s (not a comparison of speed: both share one unpinned runner).
+- frameworks: the Framework checks workflow's frameworks.json
+  (bench/frameworks/run.py). frameworks/runs.csv gets one line per framework
+  of each run: whether Redis (the control) and Keel passed, the first
+  command Keel refused and the commands the framework sent that Keel lacks.
+  frameworks/latest.csv holds, for the newest run of develop, every command each
+  framework sent, how often, and whether Keel has it.
+- ci: go.yml's test-file-footprint.json (scripts/test-file-footprint.py).
+  ci/runs.csv gets one line per run, with the suite's time, the most bytes its
+  tests held at once, the warning line that peak is drawn against, and the
+  warning count. ci/packages.csv gets each package's result and time, and
+  ci/tests.csv the ten tests that held the most on disk.
 
 A run is recorded once, keyed by its artifact's ID, so running this again adds
 only what is new. A run still in progress, or from a fork, is skipped. An
@@ -89,6 +100,15 @@ TELEMETRY_RUNS = ['artifact_id', 'run_id', 'time', 'event', 'branch', 'pr', 'con
                   'keel_metric_names', 'redis_metric_names', 'shared_metric_names', 'url']
 TELEMETRY_PHASES = ['artifact_id', 'run_id', 'time', 'branch', 'host', 'phase', 'keel_ops', 'redis_ops']
 
+FRAMEWORK_RESULTS = ['artifact_id', 'run_id', 'time', 'event', 'branch', 'pr', 'conclusion', 'framework',
+                     'redis_passed', 'keel_passed', 'keel_first_unknown', 'keel_seconds', 'commands_sent',
+                     'keel_lacks', 'url']
+FRAMEWORK_LATEST = ['run_id', 'time', 'branch', 'framework', 'command', 'calls', 'keel']
+CI_RUNS = ['artifact_id', 'run_id', 'time', 'event', 'branch', 'pr', 'conclusion', 'exit_code', 'suite_seconds',
+           'peak_concurrent_test_bytes', 'peak_build_bytes', 'warn_suite_bytes', 'warnings', 'url']
+CI_PACKAGES = ['artifact_id', 'run_id', 'time', 'branch', 'pr', 'package', 'result', 'seconds']
+CI_TESTS = ['artifact_id', 'run_id', 'time', 'branch', 'test', 'package', 'peak_bytes', 'peak_file_bytes']
+
 # Which artifact each kind comes from, the members it needs, and its files. A
 # kind with a latest file also keeps one snapshot: the newest run of develop.
 KINDS = {
@@ -109,6 +129,10 @@ KINDS = {
     'telemetry': {'artifact': 'telemetry',
                   'members': re.compile(r'^(provenance\.txt|load/compat\.json|load/timeline\.json)$'),
                   'files': {'runs': TELEMETRY_RUNS, 'phases': TELEMETRY_PHASES}},
+    'frameworks': {'artifact': 'framework-checks', 'members': re.compile(r'^frameworks\.json$'),
+                   'files': {'runs': FRAMEWORK_RESULTS}, 'latest': FRAMEWORK_LATEST},
+    'ci': {'artifact': 'test-file-footprint', 'members': re.compile(r'^test-file-footprint\.json$'),
+           'files': {'runs': CI_RUNS, 'packages': CI_PACKAGES, 'tests': CI_TESTS}},
 }
 
 
@@ -283,8 +307,46 @@ def telemetry_records(artifact_id, run, pr, files):
     return {'runs': runs, 'phases': phases}
 
 
+def framework_records(artifact_id, run, pr, files):
+    """runs.csv lines, one per framework, and latest.csv lines for one
+    Framework checks run."""
+    record = json.loads(files['frameworks.json'])
+    runs, latest = [], []
+    for r in record.get('results', []):
+        runs.append({'artifact_id': artifact_id, **run_fields(run, pr), 'framework': r['framework'],
+                     'redis_passed': 'yes' if r['redis']['passed'] else 'no',
+                     'keel_passed': 'yes' if r['keel']['passed'] else 'no',
+                     'keel_first_unknown': r['keel'].get('first_unknown', ''), 'keel_seconds': r['keel'].get('seconds', ''),
+                     'commands_sent': len(r.get('commands_used', {})), 'keel_lacks': ' '.join(r.get('keel_lacks', []))})
+        lacks = set(r.get('keel_lacks', []))
+        latest += [{'run_id': run['id'], 'time': run['created_at'], 'branch': run['head_branch'],
+                    'framework': r['framework'], 'command': command, 'calls': calls,
+                    'keel': 'missing' if command in lacks else 'present'}
+                   for command, calls in sorted(r.get('commands_used', {}).items())]
+    return {'runs': runs, 'latest': latest}
+
+
+def ci_records(artifact_id, run, pr, files):
+    """runs.csv, packages.csv and tests.csv lines for one go.yml footprint record.
+    Records from before per-package times (#144) have no packages."""
+    record = json.loads(files['test-file-footprint.json'])
+    runs = [{'artifact_id': artifact_id, **run_fields(run, pr), 'exit_code': record.get('exit_code', ''),
+             'suite_seconds': num(record.get('elapsed_seconds'), 1),
+             'peak_concurrent_test_bytes': record.get('peak_concurrent_test_bytes', ''),
+             'peak_build_bytes': record.get('peak_build_bytes', ''), 'warn_suite_bytes': record.get('warn_suite_bytes', ''),
+             'warnings': len(record.get('warnings', []))}]
+    common = {'artifact_id': artifact_id, 'run_id': run['id'], 'time': run['created_at'], 'branch': run['head_branch']}
+    packages = [{**common, 'pr': pr or '', 'package': p['package'].removeprefix('github.com/brandopakel/keel/'),
+                 'result': p['result'], 'seconds': p['seconds']} for p in record.get('packages', [])]
+    biggest = sorted(record.get('tests', []), key=lambda t: t.get('peak_bytes', 0), reverse=True)[:10]
+    tests = [{**common, 'test': t['name'], 'package': t.get('package') or '', 'peak_bytes': t.get('peak_bytes', ''),
+              'peak_file_bytes': t.get('peak_file_bytes', '')} for t in biggest]
+    return {'runs': runs, 'packages': packages, 'tests': tests}
+
+
 RECORDS = {'command-path': command_path_records, 'matched': matched_records,
-           'matched-everysec': matched_records, 'census': census_records, 'telemetry': telemetry_records}
+           'matched-everysec': matched_records, 'census': census_records, 'telemetry': telemetry_records,
+           'frameworks': framework_records, 'ci': ci_records}
 
 
 def read_members(names_and_readers, pattern):
