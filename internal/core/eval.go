@@ -153,9 +153,13 @@ func (e *Engine) EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 		e.noteError(Encode(err, false))
 		return err
 	}
+	stat := entry.stat
 	var refused error
 	if !entry.counted(len(cmd.Args)) {
 		refused = commandRefusal(cmd, entry, true)
+		if entry.container {
+			stat = subcommandStat(cmd, entry)
+		}
 	}
 	if refused == nil {
 		refused = e.replicaCommandError(cmd.Cmd)
@@ -166,6 +170,9 @@ func (e *Engine) EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	if refused != nil {
 		res := e.encode(refused, false)
 		e.noteError(res)
+		if stat != noStat {
+			e.cmdStats[stat].rejected++
+		}
 		_, err := c.Write(res)
 		return err
 	}
@@ -183,6 +190,12 @@ func (e *Engine) EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	// recovered on the way out of a command, so the two do not differ.
 	e.aofBegin(cmd.Cmd)
 
+	// The command's time runs from here to the end of entry.run, the part
+	// Redis's call() times: the type check is where Redis's command finds its
+	// key's type. Two monotonic clock reads, which the owner accepted as the
+	// cost of Redis's exact commandstats (docs/info-compatibility.md).
+	started := nanotime()
+
 	// A name may only mean one thing at a time, and the stores cannot enforce
 	// that individually because none of them knows about the others. Checked
 	// before execution, so a refused command has not half-run.
@@ -190,8 +203,8 @@ func (e *Engine) EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 		res := e.encode(err, false)
 		// Redis finds the wrong type inside the command, so this counts as a
 		// command that ran and failed.
-		e.totals.commands++
 		e.noteError(res)
+		e.noteRun(stat, started, true)
 		e.aofCommit(cmd, res)
 		_, werr := c.Write(res)
 		e.aofEnd()
@@ -203,10 +216,11 @@ func (e *Engine) EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	res := entry.run(e, cmd.Args)
 	// Counted once it has run, as Redis's call() counts it, so INFO does not
 	// count itself and a CONFIG RESETSTAT counts as the first command after.
-	e.totals.commands++
-	if len(res) > 0 && res[0] == '-' {
+	failed := len(res) > 0 && res[0] == '-'
+	if failed {
 		e.noteError(res)
 	}
+	e.noteRun(stat, started, failed)
 	// With eviction suspended, removals so far are lazy expiry. They precede
 	// this command: recording them after INCR/HSET would delete the recreated key.
 	// Recorded before the reply is written. FlushAOF runs between execution and

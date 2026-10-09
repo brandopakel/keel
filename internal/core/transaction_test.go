@@ -392,15 +392,15 @@ func TestTransactionReplyCeiling(t *testing.T) {
 
 func TestTransactionReplyBeyondTheLimitClosesAfterRunning(t *testing.T) {
 	// Not parallel: it adds a command to the package's command table, which
-	// every engine dispatches through.
-	e := newTestEngine(t, Options{})
+	// every engine dispatches through. The engine is made after, so that its
+	// commandstats have a place for the command.
 	// Replies no admission sees - many small ones - can still add up past the
 	// output limit. The transaction runs whole and the connection is told so.
 	commandTable["TEST.MEGABYTE"] = func(*Engine, []string) []byte { return bytes.Repeat([]byte("+"), 1<<20) }
 	commandArity["TEST.MEGABYTE"] = 1
 	indexCommands()
 	t.Cleanup(func() { delete(commandTable, "TEST.MEGABYTE"); delete(commandArity, "TEST.MEGABYTE"); indexCommands() })
-	e.resetStores()
+	e := newTestEngine(t, Options{})
 	tx, _ := e.Transact(nil, &Command{Cmd: "MULTI"}, &replyWriter{}, nil)
 	for i := 0; i < 70; i++ {
 		e.Transact(tx, &Command{Cmd: "TEST.MEGABYTE"}, &replyWriter{}, nil)
