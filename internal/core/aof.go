@@ -561,12 +561,18 @@ func (e *Engine) loadAOF(ctx context.Context, path string) (int, error) {
 	totals := e.totals
 	totals.errorPrefixes = maps.Clone(e.totals.errorPrefixes)
 	inBlocks := uint64(0)
-	// commandstats are left as they were, a MULTI block's commands' too:
-	// Redis's call() updates them only outside the loading of its log
-	// (update_command_stats, isAOFLoadingContext), though it counts every
-	// call in total_commands_processed.
+	// commandstats and the latency histograms are left as they were, a MULTI
+	// block's commands' too: Redis's call() updates them only outside the
+	// loading of its log (update_command_stats, isAOFLoadingContext), though
+	// it counts every call in total_commands_processed. The replay records
+	// its latencies in histograms of its own, which are dropped.
 	stats := slices.Clone(e.cmdStats)
-	defer copy(e.cmdStats, stats)
+	latency := e.latency
+	e.latency = make([]*latencyHistogram, len(latency))
+	defer func() {
+		copy(e.cmdStats, stats)
+		e.latency = latency
+	}()
 	defer func() {
 		// Hits and misses stay as the replay left them: Redis's lookupKey
 		// counts them whoever looks, its replay included (PFMERGE, which

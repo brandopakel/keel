@@ -90,6 +90,11 @@ func (e *Engine) configParameters() []configParameter {
 		// One database, and no snapshots: Redis's value for save turned off.
 		{"databases", "1"},
 		{"save", ""},
+		// Every command's latency is tracked, at Redis's default percentiles,
+		// and there is no latency monitor: Redis's defaults (latency.go).
+		{"latency-tracking", "yes"},
+		{"latency-tracking-info-percentiles", "50 99 99.9"},
+		{"latency-monitor-threshold", "0"},
 	}
 	// Relative paths, the log's among them, resolve against it, as against
 	// Redis's dir.

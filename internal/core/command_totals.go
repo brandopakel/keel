@@ -146,6 +146,7 @@ func (e *Engine) SampleCommandRate() {
 func (e *Engine) resetStats() {
 	e.totals = commandTotals{}
 	clear(e.cmdStats)
+	clear(e.latency)
 	e.expiredKeys = 0
 	e.space.ResetEvicted()
 	e.aof.rewrites = 0
