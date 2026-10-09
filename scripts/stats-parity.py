@@ -5,8 +5,10 @@ Each case runs on both servers the same way, on one connection: FLUSHDB, the
 same base keys, CONFIG RESETSTAT, the case's commands, then INFO stats and
 errorstats. What the case moved is compared field by field:
 total_commands_processed, total_error_replies, keyspace_hits,
-keyspace_misses and every errorstat_ line (docs/info-compatibility.md, part
-c). Replies are not compared; scripts/error-parity.py does that.
+keyspace_misses, every errorstat_ line, and each cmdstat_ line's calls,
+rejected_calls and failed_calls (docs/info-compatibility.md, part c). The
+time a command took is not compared, being the time it took; replies are
+not compared either: scripts/error-parity.py does that.
 
 A field Keel does not report yet is listed under not_reported rather than as
 a mismatch, so the script can run ahead of the part that adds the field.
@@ -112,6 +114,10 @@ def counters(info):
             fields[name] = int(value)
         elif name.startswith('errorstat_'):
             fields[name] = int(value.removeprefix('count='))
+        elif name.startswith('cmdstat_'):
+            stats = dict(part.split('=', 1) for part in value.split(','))
+            for counter in ('calls', 'rejected_calls', 'failed_calls'):
+                fields[f'{name}.{counter}'] = int(stats[counter])
     return fields
 
 
@@ -124,7 +130,7 @@ def run_case(port, base, case):
         session.call('CONFIG', 'RESETSTAT')
         for command in case:
             session.call(*command)
-        return counters(session.call('INFO', 'stats', 'errorstats'))
+        return counters(session.call('INFO', 'stats', 'errorstats', 'commandstats'))
     finally:
         session.close()
 
@@ -132,9 +138,12 @@ def run_case(port, base, case):
 def compare(keel, redis):
     """The fields that differ, and those Keel does not report at all."""
     mismatched, not_reported = {}, []
+    keel_cmdstats = any(name.startswith('cmdstat_') for name in keel)
     for name in sorted(set(keel) | set(redis)):
         if name in FIELDS and name not in keel:
             not_reported.append(name)
+        elif name.startswith('cmdstat_') and not keel_cmdstats:
+            not_reported.append('commandstats')
         elif keel.get(name) != redis.get(name):
             mismatched[name] = {'keel': keel.get(name), 'redis': redis.get(name)}
     return mismatched, not_reported
@@ -165,6 +174,8 @@ def main(argv=None):
             servers.stop()
     failed = [r for r in results if r['mismatched']]
     not_reported = sorted({name for r in results for name in r['not_reported']})
+    for r in results:
+        r['not_reported'] = sorted(set(r['not_reported']))
     report = {'cases': len(results), 'mismatched_cases': len(failed), 'not_reported': not_reported,
               'redis_version': parity.subprocess.run([str(args.redis), '--version'], capture_output=True,
                                                      text=True).stdout.strip()}

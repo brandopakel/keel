@@ -96,11 +96,6 @@ func (e *Engine) noteLookup(held bool) {
 	}
 }
 
-// NoteCommand counts a command the transport ran itself, such as AUTH, HELLO
-// or CLIENT, toward total_commands_processed. Commands that run on e count
-// themselves.
-func (e *Engine) NoteCommand() { e.totals.commands++ }
-
 // NoteErrorReply counts an error reply the transport sent itself, such as
 // NOAUTH or a protocol error, toward total_error_replies and errorstats.
 // Replies e produces count themselves. A reply that is not an error is not
@@ -150,6 +145,7 @@ func (e *Engine) SampleCommandRate() {
 // count, such as used_memory_peak, which Redis keeps too, is left alone.
 func (e *Engine) resetStats() {
 	e.totals = commandTotals{}
+	clear(e.cmdStats)
 	e.expiredKeys = 0
 	e.space.ResetEvicted()
 	e.aof.rewrites = 0
