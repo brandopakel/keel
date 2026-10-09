@@ -190,15 +190,21 @@ func (e *Engine) Transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn C
 			reply := e.encode(errWatchInMulti, false)
 			if len(cmd.Args) == 0 {
 				reply = tx.refuse(wrongArguments("WATCH"))
+				e.NoteCommandRefused(cmd)
 			} else {
 				// Redis runs WATCH inside a transaction rather than queue it,
 				// and it is its refusal that answers.
-				defer func() { e.totals.commands++ }()
+				defer e.NoteCommandRan(cmd, e.StartCommand())
 			}
 			_, err := out.Write(reply)
 			return tx, err
 		}
-		_, err := out.Write(tx.queue(e, cmd, conn))
+		reply := tx.queue(e, cmd, conn)
+		if len(reply) > 0 && reply[0] == '-' {
+			// Refused while queueing, as Redis refuses it before it runs.
+			e.NoteCommandRefused(cmd)
+		}
+		_, err := out.Write(reply)
 		return tx, err
 	}
 	if err := CommandError(cmd); err != nil {
@@ -206,6 +212,7 @@ func (e *Engine) Transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn C
 		// malformed MULTI, EXEC or DISCARD is refused as any command would be:
 		// inside a transaction that aborts it, and a malformed EXEC answers
 		// EXECABORT, discarding the transaction if there is one.
+		e.NoteCommandRefused(cmd)
 		if cmd.Cmd == "EXEC" {
 			_, err := out.Write(Refusal(cmd, err))
 			return nil, err
@@ -215,8 +222,9 @@ func (e *Engine) Transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn C
 	}
 	// MULTI, EXEC and DISCARD run, so they count, their refusals of a
 	// connection in the wrong state included, as Redis finds those inside
-	// the command. What EXEC runs counts as it runs, and EXEC after it.
-	defer func() { e.totals.commands++ }()
+	// the command. What EXEC runs counts as it runs, and EXEC after it, its
+	// time theirs and its own together, as Redis times it.
+	start := e.StartCommand()
 	var reply []byte
 	switch {
 	case cmd.Cmd == "MULTI" && tx != nil:
@@ -231,9 +239,14 @@ func (e *Engine) Transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn C
 	case cmd.Cmd == "DISCARD":
 		tx, reply = nil, constant.RespOk
 	default:
-		return nil, tx.exec(e, out, conn)
+		// EXEC fails only for its own refusal, EXECABORT: what its commands
+		// answered is theirs, as Redis's call() counts it.
+		aborted, err := tx.exec(e, out, conn)
+		e.noteRun(statOf(cmd), start.started, aborted)
+		return nil, err
 	}
 	_, err := out.Write(reply)
+	e.NoteCommandRan(cmd, start)
 	return tx, err
 }
 
@@ -330,10 +343,12 @@ func writeExecAbort(w io.Writer, cause error) error {
 const transactionReplySlack = 128
 
 // exec runs tx on e, in e's command scope.
-func (tx *Transaction) exec(e *Engine, w io.Writer, conn Connection) error {
+//
+// aborted is whether EXEC answered EXECABORT and ran nothing.
+func (tx *Transaction) exec(e *Engine, w io.Writer, conn Connection) (aborted bool, err error) {
 	if tx.aborted {
 		_, err := w.Write(execAbortReply)
-		return err
+		return true, err
 	}
 	// What was allowed when a command was queued may not be allowed now: the
 	// node may have been fenced by a higher term since, or a replica may have
@@ -347,7 +362,7 @@ func (tx *Transaction) exec(e *Engine, w io.Writer, conn Connection) error {
 			continue
 		}
 		if err := e.replicaCommandError(cmd.Cmd); err != nil {
-			return writeExecAbort(w, err)
+			return true, writeExecAbort(w, err)
 		}
 	}
 
@@ -407,14 +422,14 @@ func (tx *Transaction) exec(e *Engine, w io.Writer, conn Connection) error {
 		e.replyCeiling = ceiling(i + 1)
 	})
 	if overflow {
-		return ErrTransactionReplyTooLarge
+		return false, ErrTransactionReplyTooLarge
 	}
 	out := appendArrayHeader(make([]byte, 0, total), n)
 	for _, reply := range replies {
 		out = append(out, reply...)
 	}
-	_, err := w.Write(out)
-	return err
+	_, err = w.Write(out)
+	return false, err
 }
 
 // runTransaction runs commands on e as one unit through run, for EXEC and for

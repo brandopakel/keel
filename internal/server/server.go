@@ -1295,35 +1295,40 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 		return
 	}
 	// What the engine and the transaction answer they count themselves; what
-	// is answered here is counted here, as it runs and as its errors are
-	// written (countedReplies).
+	// is answered here is counted here: as it runs, with its time, and as
+	// its errors are written (countedReplies), or as refused.
 	own := countedReplies{c.engine, w}
 	locked := c.password != "" && !c.authenticated
 	if locked || core.IsConnectionCommand(cmd.Cmd) {
 		if err := core.CommandError(cmd); err != nil {
 			own.Write(core.Refusal(cmd, err))
+			c.engine.NoteCommandRefused(cmd)
 			return
 		}
 	}
 	switch cmd.Cmd {
 	case "AUTH":
+		start := c.engine.StartCommand()
 		c.auth(cmd.Args, own)
-		c.engine.NoteCommand()
+		c.engine.NoteCommandRan(cmd, start)
 		return
 	case "HELLO":
+		start := c.engine.StartCommand()
 		c.hello(cmd.Args, own)
-		c.engine.NoteCommand()
+		c.engine.NoteCommandRan(cmd, start)
 		return
 	case "QUIT":
 		// Nothing after QUIT runs: executeRun stops at closeAfterWrite, and the
 		// write phase closes the connection once this reply has gone.
+		start := c.engine.StartCommand()
 		w.Write([]byte("+OK\r\n"))
 		c.closeAfterWrite = true
-		c.engine.NoteCommand()
+		c.engine.NoteCommandRan(cmd, start)
 		return
 	}
 	if locked {
 		own.Write(core.Refusal(cmd, errNoAuth))
+		c.engine.NoteCommandRefused(cmd)
 		return
 	}
 	if core.IsTransactionCommand(cmd.Cmd) {
@@ -1331,8 +1336,9 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 		return
 	}
 	if cmd.Cmd == "CLIENT" {
+		start := c.engine.StartCommand()
 		c.clientCommand(cmd, own)
-		c.engine.NoteCommand()
+		c.engine.NoteCommandRan(cmd, start)
 		return
 	}
 	// Set as the command runs rather than as it was parsed: a HELLO earlier

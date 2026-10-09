@@ -11,6 +11,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -560,6 +561,16 @@ func (e *Engine) loadAOF(ctx context.Context, path string) (int, error) {
 	totals := e.totals
 	totals.errorPrefixes = maps.Clone(e.totals.errorPrefixes)
 	inBlocks := uint64(0)
+	// commandstats likewise: what a MULTI block's commands added is kept.
+	stats := slices.Clone(e.cmdStats)
+	var keptStats []commandStat
+	defer func() {
+		copy(e.cmdStats, stats)
+		for i, kept := range keptStats {
+			s := &e.cmdStats[i]
+			s.calls, s.usec, s.rejected, s.failed = s.calls+kept.calls, s.usec+kept.usec, s.rejected+kept.rejected, s.failed+kept.failed
+		}
+	}()
 	defer func() {
 		// Hits and misses stay as the replay left them: Redis's lookupKey
 		// counts them whoever looks, its replay included (PFMERGE, which
@@ -634,8 +645,23 @@ func (e *Engine) loadAOF(ctx context.Context, path string) (int, error) {
 			return applied, fmt.Errorf("EXEC without MULTI at byte %d", used)
 		case cmd.Cmd == "EXEC":
 			for _, queued := range block {
+				stat := statOf(queued.cmd)
+				var before commandStat
+				if stat != noStat {
+					before = e.cmdStats[stat]
+				}
 				if err := e.replayAOFCommand(queued.cmd, queued.at); err != nil {
 					return applied, err
+				}
+				if stat != noStat {
+					if keptStats == nil {
+						keptStats = make([]commandStat, len(e.cmdStats))
+					}
+					after, k := e.cmdStats[stat], &keptStats[stat]
+					k.calls += after.calls - before.calls
+					k.usec += after.usec - before.usec
+					k.rejected += after.rejected - before.rejected
+					k.failed += after.failed - before.failed
 				}
 				applied++
 				inBlocks++

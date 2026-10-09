@@ -58,32 +58,39 @@ func (e *Engine) NoteMemoryPeak() uint64 {
 // after HELLO 3.
 //
 // Any number of sections may be named, as Redis allows; a name that is not a
-// section adds nothing, and all, default and everything are every section.
+// section adds nothing. No name, or default, is Redis's default sections; all
+// and everything add commandstats, which Redis leaves out of the default.
 func (e *Engine) cmdINFO(args []string) []byte {
 	sections := make(map[string]bool, len(args))
 	for _, arg := range args {
 		sections[strings.ToLower(arg)] = true
 	}
-	every := len(args) == 0 || sections["all"] || sections["default"] || sections["everything"]
+	// Redis's default sections, and all of them; commandstats is in all but
+	// not in the default, as in Redis.
+	all := sections["all"] || sections["everything"]
+	every := len(args) == 0 || sections["default"] || all
 
 	// The sections in the order Redis writes them.
 	var b strings.Builder
 	for _, s := range [...]struct {
 		name  string
 		write func(*Engine, *strings.Builder)
+		// extra is a section outside Redis's default ones.
+		extra bool
 	}{
-		{"server", (*Engine).serverInfoSection},
-		{"clients", (*Engine).clientsInfo},
-		{"memory", (*Engine).memoryInfo},
-		{"persistence", (*Engine).persistenceInfo},
-		{"stats", (*Engine).statsInfo},
-		{"replication", (*Engine).replicationInfo},
-		{"cpu", (*Engine).cpuInfo},
-		{"errorstats", (*Engine).errorStatsInfo},
-		{"cluster", (*Engine).clusterInfo},
-		{"keyspace", (*Engine).keyspaceInfo},
+		{"server", (*Engine).serverInfoSection, false},
+		{"clients", (*Engine).clientsInfo, false},
+		{"memory", (*Engine).memoryInfo, false},
+		{"persistence", (*Engine).persistenceInfo, false},
+		{"stats", (*Engine).statsInfo, false},
+		{"replication", (*Engine).replicationInfo, false},
+		{"cpu", (*Engine).cpuInfo, false},
+		{"commandstats", (*Engine).commandStatsInfo, true},
+		{"errorstats", (*Engine).errorStatsInfo, false},
+		{"cluster", (*Engine).clusterInfo, false},
+		{"keyspace", (*Engine).keyspaceInfo, false},
 	} {
-		if every || sections[s.name] {
+		if (every && !s.extra) || (all && s.extra) || sections[s.name] {
 			s.write(e, &b)
 		}
 	}
