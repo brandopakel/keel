@@ -84,6 +84,7 @@ CASES = [[c] for c in [
     # Refusals and the connection's own commands.
     ['NOSUCH'], ['GET'], ['CONFIG', 'nosuch'], ['CLIENT', 'ID'], ['CLIENT', 'SETNAME', 'a b'], ['AUTH', 'x'],
     ['LATENCY', 'LATEST'], ['LATENCY', 'HISTORY'], ['LATENCY', 'GRAPH', 'x'], ['LATENCY', 'nosuch'],
+    ['SLOWLOG', 'LEN'], ['SLOWLOG', 'GET', '0'], ['SLOWLOG', 'GET', '-2'], ['SLOWLOG', 'GET', '1', '2'], ['SLOWLOG', 'nosuch'],
 ]] + [
     # Transactions: what runs, what is refused while queued, and EXEC's errors.
     [['MULTI'], ['GET', 'str'], ['INCR', 'str'], ['GET', 'missing'], ['EXEC']],

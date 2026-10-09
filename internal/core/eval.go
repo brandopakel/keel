@@ -38,7 +38,7 @@ var commandTable = map[string]func(*Engine, []string) []byte{
 	"KEEL.PROMOTE": (*Engine).cmdPROMOTE, "KEEL.FENCE": (*Engine).cmdFENCE,
 	"KEEL.REPL.PULL": (*Engine).cmdReplicationPull, "KEEL.REPL.PULL2": (*Engine).cmdReplicationPullV2,
 	"DBSIZE": (*Engine).cmdDBSIZE, "FLUSHDB": (*Engine).cmdFLUSHDB, "MEMORY": (*Engine).cmdMEMORY,
-	"INFO": (*Engine).cmdINFO, "CONFIG": (*Engine).cmdCONFIG, "LATENCY": (*Engine).cmdLATENCY, "BGREWRITEAOF": (*Engine).cmdBGREWRITEAOF, "KEEL.DUMP": (*Engine).cmdDUMP,
+	"INFO": (*Engine).cmdINFO, "CONFIG": (*Engine).cmdCONFIG, "LATENCY": (*Engine).cmdLATENCY, "SLOWLOG": (*Engine).cmdSLOWLOG, "BGREWRITEAOF": (*Engine).cmdBGREWRITEAOF, "KEEL.DUMP": (*Engine).cmdDUMP,
 	"KEEL.RESTORE": (*Engine).cmdRESTORE,
 	// The names from before the server was renamed, so a log written then
 	// still replays; a command is written to the log under its current name.
@@ -204,7 +204,7 @@ func (e *Engine) EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 		// Redis finds the wrong type inside the command, so this counts as a
 		// command that ran and failed.
 		e.noteError(res)
-		e.noteRun(stat, started, true)
+		e.noteRun(cmd, stat, started, true)
 		e.aofCommit(cmd, res)
 		_, werr := c.Write(res)
 		e.aofEnd()
@@ -220,7 +220,7 @@ func (e *Engine) EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	if failed {
 		e.noteError(res)
 	}
-	e.noteRun(stat, started, failed)
+	e.noteRun(cmd, stat, started, failed)
 	// With eviction suspended, removals so far are lazy expiry. They precede
 	// this command: recording them after INCR/HSET would delete the recreated key.
 	// Recorded before the reply is written. FlushAOF runs between execution and

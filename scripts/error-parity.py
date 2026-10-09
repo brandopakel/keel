@@ -357,6 +357,9 @@ SUBCOMMANDS = [
     ['latency', 'latest'], ['LATENCY', 'HISTORY', 'command'], ['latency', 'reset'], ['latency', 'reset', 'a', 'b'],
     ['latency', 'doctor'], ['latency', 'graph', 'command'], ['latency', 'help'], ['latency', 'nosuch'], ['latency'],
     ['latency', 'history'], ['latency', 'latest', 'x'], ['latency', 'graph'], ['LATENCY', 'x' * 200],
+    ['slowlog', 'get', '0'], ['SLOWLOG', 'GET', '-2'], ['slowlog', 'get', 'x'], ['slowlog', 'get', '+1'],
+    ['slowlog', 'get', '1', '2'], ['slowlog', 'len', 'x'], ['slowlog', 'reset', 'now'], ['slowlog', 'help'],
+    ['slowlog', 'nosuch'], ['slowlog'], ['SLOWLOG', 'x' * 200], ['slowlog', 'help', 'x'],
 ]
 
 # Commands whose arity Redis does not hold, worded as it words every other.
@@ -412,6 +415,9 @@ def build_cases(redis_arities, modules):
         cases.append(case('subcommand queued', [['MULTI'], command, ['EXEC']]))
     for command in GENERIC:
         cases.append(case('generic', [command], setup=SETUP))
+    # The slow log's length straight after it is emptied, the same on both
+    # whatever ran slowly before.
+    cases.append(case('slow log emptied', [['SLOWLOG', 'RESET'], ['SLOWLOG', 'LEN']]))
     # A failed AUTH inside EXEC leaves no element in Redis 8.10.1's reply, whose
     # header still counts one, so a client reading it waits forever; AUTH is
     # not queued here.
@@ -470,7 +476,7 @@ def redis_arities(port):
              'SCARD', 'SMEMBERS', 'SISMEMBER', 'SMISMEMBER', 'SPOP', 'SRANDMEMBER', 'ZCOUNT', 'ZRANGEBYSCORE',
              'ZREVRANGEBYSCORE', 'ZINCRBY', 'ZPOPMIN', 'ZPOPMAX', 'ZRANGE', 'ZADD', 'ZRANK', 'ZREM', 'ZSCORE', 'ZCARD',
              'GEOADD', 'GEODIST', 'GEOHASH', 'GEOSEARCH', 'GEOPOS', 'PFADD', 'PFCOUNT', 'PFMERGE', 'AUTH', 'HELLO',
-             'QUIT', 'CLIENT', 'CONFIG', 'LATENCY', 'MULTI', 'EXEC', 'DISCARD']
+             'QUIT', 'CLIENT', 'CONFIG', 'LATENCY', 'SLOWLOG', 'MULTI', 'EXEC', 'DISCARD']
     session = Session(port, auth=True, protocol=2)
     try:
         session.socket.sendall(encode(['COMMAND', 'INFO', *names]))

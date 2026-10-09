@@ -245,7 +245,9 @@ func (e *Engine) statsInfo(b *strings.Builder) {
 	fmt.Fprintf(b, "keyspace_hits:%d\r\nkeyspace_misses:%d\r\n", e.totals.hits, e.totals.misses)
 	b.WriteString("pubsub_channels:0\r\npubsub_patterns:0\r\npubsubshard_channels:0\r\n" +
 		"latest_fork_usec:0\r\ntotal_forks:0\r\ntracking_total_keys:0\r\ntracking_total_items:0\r\ntracking_total_prefixes:0\r\n")
-	fmt.Fprintf(b, "total_error_replies:%d\r\n\r\n", e.totals.errors)
+	fmt.Fprintf(b, "total_error_replies:%d\r\n", e.totals.errors)
+	fmt.Fprintf(b, "slowlog_commands_count:%d\r\nslowlog_commands_time_ms_max:%.2f\r\nslowlog_commands_time_ms_sum:%.2f\r\n\r\n",
+		e.slowlog.count, float64(e.slowlog.usecMax)/1000, float64(e.slowlog.usecSum)/1000)
 }
 
 func (e *Engine) replicationInfo(b *strings.Builder) {

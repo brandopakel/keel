@@ -264,6 +264,8 @@ type Engine struct {
 	// latency each command's latency histogram, made when it first runs.
 	cmdStats []commandStat
 	latency  []*latencyHistogram
+	// slowlog is SLOWLOG's (slowlog.go).
+	slowlog slowlog
 	// statsReset is the transport's part of CONFIG RESETSTAT, installed with
 	// SetStatsReset; nil, there is none.
 	statsReset func()
@@ -323,6 +325,7 @@ func engineIn(space *data_structure.Space) *Engine {
 		started:     now, runID: newRunID(), memoryPeakAt: now,
 		cmdStats: make([]commandStat, len(statNames)),
 		latency:  make([]*latencyHistogram, len(statNames)),
+		slowlog:  newSlowlog(),
 	}
 	return e
 }

@@ -8,7 +8,9 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/netip"
 	"runtime"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -142,7 +144,9 @@ type client struct {
 	password string
 	// id numbers the connection for HELLO and CLIENT ID; name, libName and
 	// libVersion are what CLIENT SETNAME and CLIENT SETINFO recorded.
-	id                        uint64
+	id uint64
+	// addr is the peer's address, as Redis writes one (peerAddr).
+	addr                      string
 	name, libName, libVersion string
 	// resp3 is set by HELLO 3 and cleared by HELLO 2, and frames every reply
 	// the connection is sent from the command after it.
@@ -592,7 +596,7 @@ func ipv4Address(host string, port int) (*syscall.SockaddrInet4, error) {
 // and took every other connected client down over one bad descriptor. The
 // connection's commands will run on e.
 func acceptClient(serverFD int, mux io_multiplexing.IOMultiplexer, password string, e *core.Engine) (*client, bool) {
-	connFD, _, err := syscall.Accept(serverFD)
+	connFD, peer, err := syscall.Accept(serverFD)
 	if err != nil {
 		log.Println("accept:", err)
 		return nil, false
@@ -623,7 +627,7 @@ func acceptClient(serverFD int, mux io_multiplexing.IOMultiplexer, password stri
 		return nil, false
 	}
 	connectionsReceived++
-	return &client{fd: connFD, id: connectionsReceived, lastProgress: time.Now(), interestKnown: true, interest: io_multiplexing.OpRead,
+	return &client{fd: connFD, id: connectionsReceived, addr: peerAddr(peer), lastProgress: time.Now(), interestKnown: true, interest: io_multiplexing.OpRead,
 		password: password, engine: e}, true
 }
 
@@ -1294,6 +1298,8 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 		c.transact(cmd, w)
 		return
 	}
+	// The slow log reads who sent a command only if the command was slow.
+	cmd.Client = c
 	// What the engine and the transaction answer they count themselves; what
 	// is answered here is counted here: as it runs, with its time, and as
 	// its errors are written (countedReplies), or as refused.
@@ -1346,6 +1352,26 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 	cmd.RESP3 = c.resp3
 	responseRw(c.engine, cmd, w)
 }
+
+// peerAddr is a peer's address as Redis writes one (connection.h's
+// formatAddr): ip:port, or [ip]:port for IPv6, and a Unix socket's path with
+// port 0, which is how SLOWLOG GET reports the client that sent a command.
+func peerAddr(sa syscall.Sockaddr) string {
+	switch a := sa.(type) {
+	case *syscall.SockaddrInet4:
+		return netip.AddrFrom4(a.Addr).String() + ":" + strconv.Itoa(a.Port)
+	case *syscall.SockaddrInet6:
+		return "[" + netip.AddrFrom16(a.Addr).String() + "]:" + strconv.Itoa(a.Port)
+	case *syscall.SockaddrUnix:
+		return a.Name + ":0"
+	}
+	return ""
+}
+
+// PeerAddr and ClientName are what the engine's slow log records of the
+// connection a command came from (core.CommandClient).
+func (c *client) PeerAddr() string   { return c.addr }
+func (c *client) ClientName() string { return c.name }
 
 // countedReplies counts each error the transport writes itself toward INFO's
 // total_error_replies and errorstats. Each reply is one write.
