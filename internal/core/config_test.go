@@ -103,13 +103,15 @@ func TestConfigRepliesInEitherProtocol(t *testing.T) {
 	assert.Equal(t, []interface{}{"CONFIG <subcommand> [<arg> [value] [opt] ...]. Subcommands are:",
 		"GET <pattern>", "    Return parameters matching the glob-like <pattern> and their values.",
 		"SET <directive> <value>", "    Set the configuration <directive> to <value>.",
+		"RESETSTAT", "    Reset statistics reported by the INFO command.",
 		"REWRITE", "    Rewrite the configuration file.",
 		"HELP", "    Print this help."}, runOn(t, e, "CONFIG", "HELP"))
 	for args, want := range map[string]string{
 		"":              "-ERR wrong number of arguments for 'config' command\r\n",
 		"GET":           "-ERR wrong number of arguments for 'config|get' command\r\n",
 		"SET a":         "-ERR wrong number of arguments for 'config|set' command\r\n",
-		"resetstat":     "-ERR unknown subcommand 'resetstat'. Try CONFIG HELP.\r\n",
+		"resetstat x":   "-ERR wrong number of arguments for 'config|resetstat' command\r\n",
+		"nosuch":        "-ERR unknown subcommand 'nosuch'. Try CONFIG HELP.\r\n",
 		"HELP extra":    "-ERR wrong number of arguments for 'config|help' command\r\n",
 		"REWRITE":       "-ERR The server is running without a config file\r\n",
 		"rewrite extra": "-ERR wrong number of arguments for 'config|rewrite' command\r\n",

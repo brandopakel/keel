@@ -353,7 +353,7 @@ SUBCOMMANDS = [
     ['config', 'get', 'x'], ['CONFIG', 'GET', 'nosuch', 'x*'], ['config', 'nosuch'], ['Config', 'get'],
     ['config', 'help', 'x'], ['CONFIG', 'x' * 200], ['config', 'set', 'x', 'y'], ['config', 'set', 'x'],
     ['config', 'set', 'x', 'y', 'z'], ['CONFIG', 'SET', 'databases', '2'], ['config', 'set', 'databases', '2', 'x', 'y'],
-    ['config', 'rewrite'], ['config', 'rewrite', 'x'],
+    ['config', 'rewrite'], ['config', 'rewrite', 'x'], ['CONFIG', 'RESETSTAT'], ['config', 'resetstat', 'x'],
 ]
 
 # Commands whose arity Redis does not hold, worded as it words every other.
