@@ -242,7 +242,7 @@ func (e *Engine) Transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn C
 		// EXEC fails only for its own refusal, EXECABORT: what its commands
 		// answered is theirs, as Redis's call() counts it.
 		aborted, err := tx.exec(e, out, conn)
-		e.noteRun(statOf(cmd), start.started, aborted)
+		e.noteRun(cmd, statOf(cmd), start.started, aborted)
 		return nil, err
 	}
 	_, err := out.Write(reply)
