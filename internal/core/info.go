@@ -79,6 +79,7 @@ func (e *Engine) cmdINFO(args []string) []byte {
 		{"stats", (*Engine).statsInfo},
 		{"replication", (*Engine).replicationInfo},
 		{"cpu", (*Engine).cpuInfo},
+		{"errorstats", (*Engine).errorStatsInfo},
 		{"cluster", (*Engine).clusterInfo},
 		{"keyspace", (*Engine).keyspaceInfo},
 	} {
@@ -219,15 +220,21 @@ func (e *Engine) persistenceInfo(b *strings.Builder) {
 
 func (e *Engine) statsInfo(b *strings.Builder) {
 	b.WriteString("# Stats\r\n")
+	var stats ClientBufferStats
 	if e.clientBuffers != nil {
-		stats := e.clientBuffers()
-		fmt.Fprintf(b, "total_connections_received:%d\r\nrejected_connections:%d\r\n", stats.ConnectionsReceived, stats.ConnectionsRejected)
+		stats = e.clientBuffers()
+		fmt.Fprintf(b, "total_connections_received:%d\r\n", stats.ConnectionsReceived)
+	}
+	fmt.Fprintf(b, "total_commands_processed:%d\r\ninstantaneous_ops_per_sec:%d\r\n", e.totals.commands, e.totals.ops.rate())
+	if e.clientBuffers != nil {
+		fmt.Fprintf(b, "rejected_connections:%d\r\n", stats.ConnectionsRejected)
 	}
 	fmt.Fprintf(b, "expired_keys:%d\r\nevicted_keys:%d\r\n", e.ExpiredKeys(), e.space.Evicted())
 	// Keel evicts no clients and has no scripts, Pub/Sub or client tracking,
 	// and it never forks.
 	b.WriteString("evicted_clients:0\r\nevicted_scripts:0\r\npubsub_channels:0\r\npubsub_patterns:0\r\npubsubshard_channels:0\r\n" +
-		"latest_fork_usec:0\r\ntotal_forks:0\r\ntracking_total_keys:0\r\ntracking_total_items:0\r\ntracking_total_prefixes:0\r\n\r\n")
+		"latest_fork_usec:0\r\ntotal_forks:0\r\ntracking_total_keys:0\r\ntracking_total_items:0\r\ntracking_total_prefixes:0\r\n")
+	fmt.Fprintf(b, "total_error_replies:%d\r\n\r\n", e.totals.errors)
 }
 
 func (e *Engine) replicationInfo(b *strings.Builder) {

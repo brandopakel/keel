@@ -6,6 +6,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/brandopakel/keel/internal/constant"
 )
 
 // configHelp is Redis's CONFIG HELP, for the subcommands this server has.
@@ -14,6 +16,8 @@ var configHelp = HelpReply("CONFIG",
 	"    Return parameters matching the glob-like <pattern> and their values.",
 	"SET <directive> <value>",
 	"    Set the configuration <directive> to <value>.",
+	"RESETSTAT",
+	"    Reset statistics reported by the INFO command.",
 	"REWRITE",
 	"    Rewrite the configuration file.")
 
@@ -21,7 +25,7 @@ var configHelp = HelpReply("CONFIG",
 // without a config file. Keel takes flags, so it never has one.
 var errNoConfigFile = errors.New("ERR The server is running without a config file")
 
-// cmdCONFIG implements CONFIG GET, SET, REWRITE and HELP.
+// cmdCONFIG implements CONFIG GET, SET, RESETSTAT, REWRITE and HELP.
 //
 // CONFIG GET reports the settings Keel has under Redis's parameter names, in
 // Redis's units and formats, so that tools built for Redis read them
@@ -29,8 +33,7 @@ var errNoConfigFile = errors.New("ERR The server is running without a config fil
 // gives another meaning, is not reported at all; Redis answers a name it does
 // not know with nothing either. Keel has no runtime configuration yet, so
 // CONFIG SET refuses every setting, in Redis's words for one it cannot set.
-// RESETSTAT waits for the per-command statistics it resets, and answers as an
-// unknown subcommand until then.
+// RESETSTAT resets what Redis's resets that Keel reports (resetStats).
 //
 // The subcommand and its count have been checked against the command table by
 // the time this runs; see containerCommands.
@@ -45,6 +48,9 @@ func (e *Engine) cmdCONFIG(args []string) []byte {
 		return e.encode(e.configSet(args[1:]), false)
 	case "rewrite":
 		return e.encode(errNoConfigFile, false)
+	case "resetstat":
+		e.resetStats()
+		return constant.RespOk
 	}
 	return e.encode(e.configGet(args[1:]), false)
 }

@@ -8,6 +8,7 @@ import (
 	"hash"
 	"io"
 	"log"
+	"maps"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -552,6 +553,17 @@ func (e *Engine) loadAOF(ctx context.Context, path string) (int, error) {
 		return 0, err
 	}
 	defer f.Close()
+	// What the replay runs is not counted, but for the commands of a MULTI
+	// block: Redis's replay runs each command bypassing call(), which is where
+	// it counts commands, except that EXEC runs its block through call()
+	// (aof.c's loadSingleAppendOnlyFile, multi.c's execCommand).
+	totals := e.totals
+	totals.errorPrefixes = maps.Clone(e.totals.errorPrefixes)
+	inBlocks := uint64(0)
+	defer func() {
+		e.totals = totals
+		e.totals.commands += inBlocks
+	}()
 	e.aof.replaying = true
 	e.space.SuspendEviction = true
 	e.space.SuspendExpiry = true
@@ -621,6 +633,7 @@ func (e *Engine) loadAOF(ctx context.Context, path string) (int, error) {
 					return applied, err
 				}
 				applied++
+				inBlocks++
 			}
 			clear(block)
 			block, begun = block[:0], -1

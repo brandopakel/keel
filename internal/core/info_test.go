@@ -32,7 +32,7 @@ func infoFields(t testing.TB, info string) map[string]string {
 // time, the uptime, the processor time and the resident memory - masked, so
 // that two replies can be compared.
 func infoSteady(info string) string {
-	return regexp.MustCompile(`(?m)^(server_time_usec|uptime_in_seconds|uptime_in_days|used_cpu_[a-z_]+|used_memory_rss(_human)?):.*$`).
+	return regexp.MustCompile(`(?m)^(server_time_usec|uptime_in_seconds|uptime_in_days|used_cpu_[a-z_]+|used_memory_rss(_human)?|total_commands_processed|instantaneous_ops_per_sec):.*$`).
 		ReplaceAllString(info, "$1:*")
 }
 
@@ -53,9 +53,9 @@ func infoSectionNames(info string) []string {
 func TestINFOSectionsComeInRedisOrder(t *testing.T) {
 	t.Parallel()
 	e := newTestEngine(t, Options{})
-	want := []string{"Server", "Memory", "Persistence", "Stats", "Replication", "CPU", "Cluster", "Keyspace"}
+	want := []string{"Server", "Memory", "Persistence", "Stats", "Replication", "CPU", "Errorstats", "Cluster", "Keyspace"}
 	if runtime.GOOS == "windows" {
-		want = []string{"Server", "Memory", "Persistence", "Stats", "Replication", "Cluster", "Keyspace"}
+		want = []string{"Server", "Memory", "Persistence", "Stats", "Replication", "Errorstats", "Cluster", "Keyspace"}
 	}
 	assert.Equal(t, want, infoSectionNames(runOn(t, e, "INFO").(string)))
 
