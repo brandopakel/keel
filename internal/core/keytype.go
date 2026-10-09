@@ -345,6 +345,30 @@ func typedKeyspace(name string) string {
 	return space
 }
 
+// keyspaceReads are the commands that look their keys up to read them, as
+// Redis's commands of the same names call lookupKeyRead and RedisBloom's open
+// their keys with REDISMODULE_READ alone: each key looked up is a keyspace hit
+// or a miss. The type check counts them for the typed ones, which look up
+// every key they name, as Redis's do, in the same order and stopping at the
+// same wrong type; the rest count where they look (MGET, EXISTS, TYPE, TTL,
+// PTTL, SET's GET option, the filters' reads). Writes look their keys up to
+// write them and count nothing, as Redis's lookupKeyWrite does, but for
+// PFMERGE, which Redis reads every key of, its destination included.
+//
+// SRAND, MORRIS.QUERY, MORRIS.INFO and KEEL.DUMP have no Redis counterpart of
+// their own name; they count as SRANDMEMBER, CMS.QUERY, CMS.INFO and DUMP do.
+var keyspaceReads = map[string]bool{
+	"GET": true, "LCS": true,
+	"HGET": true, "HMGET": true, "HEXISTS": true, "HLEN": true, "HKEYS": true, "HVALS": true, "HGETALL": true,
+	"LLEN": true, "LINDEX": true, "LRANGE": true,
+	"SCARD": true, "SMEMBERS": true, "SISMEMBER": true, "SMISMEMBER": true, "SRANDMEMBER": true, "SRAND": true,
+	"ZCOUNT": true, "ZRANGEBYSCORE": true, "ZREVRANGEBYSCORE": true, "ZRANGE": true, "ZRANK": true, "ZSCORE": true,
+	"ZCARD":   true,
+	"GEODIST": true, "GEOHASH": true, "GEOSEARCH": true, "GEOPOS": true,
+	"PFCOUNT": true, "PFMERGE": true,
+	"CMS.QUERY": true, "MORRIS.QUERY": true,
+}
+
 // checkKeyTypes reports an error if any key the command names is already held
 // by a different kind of store: the command's own refusal of its arguments,
 // where Redis reads those first, and otherwise Redis's refusal of the type.
@@ -358,8 +382,21 @@ func (e *Engine) checkKeyTypes(cmd *Command, entry commandEntry) error {
 		return nil
 	}
 
-	for _, key := range keysBy(cmd, entry.keys) {
-		if owner, held := e.space.OwnerOf(key); held && owner.KeyspaceName() != space {
+	keys := keysBy(cmd, entry.keys)
+	for i, key := range keys {
+		owner, held := e.space.OwnerOf(key)
+		if entry.reads {
+			e.noteLookup(held)
+		}
+		if held && owner.KeyspaceName() != space {
+			if entry.reads && entry.keys == keyFirstTwo {
+				// Redis's LCS looks both its keys up before it checks the
+				// type of either.
+				for _, rest := range keys[i+1:] {
+					_, held := e.space.OwnerOf(rest)
+					e.noteLookup(held)
+				}
+			}
 			if arguments := argumentsBeforeType[cmd.Cmd]; arguments != nil {
 				if err := arguments(e, cmd.Args); err != nil {
 					return err

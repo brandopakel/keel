@@ -141,6 +141,9 @@ func (e *Engine) cmdMORRISINFO(args []string) []byte {
 		return e.encode(wrongArguments("MORRIS.INFO"), false)
 	}
 	key := args[0]
+	// A keyspace hit or a miss, as CMS.INFO's is in RedisBloom.
+	_, held := e.space.OwnerOf(key)
+	e.noteLookup(held)
 	m, exist := e.morrisStore.Peek(key)
 	if !exist {
 		return e.encode(errors.New(fmt.Sprintf("Morris counter with key '%s' does not exist", key)), false)

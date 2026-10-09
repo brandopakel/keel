@@ -232,7 +232,9 @@ func (e *Engine) statsInfo(b *strings.Builder) {
 	fmt.Fprintf(b, "expired_keys:%d\r\nevicted_keys:%d\r\n", e.ExpiredKeys(), e.space.Evicted())
 	// Keel evicts no clients and has no scripts, Pub/Sub or client tracking,
 	// and it never forks.
-	b.WriteString("evicted_clients:0\r\nevicted_scripts:0\r\npubsub_channels:0\r\npubsub_patterns:0\r\npubsubshard_channels:0\r\n" +
+	b.WriteString("evicted_clients:0\r\nevicted_scripts:0\r\n")
+	fmt.Fprintf(b, "keyspace_hits:%d\r\nkeyspace_misses:%d\r\n", e.totals.hits, e.totals.misses)
+	b.WriteString("pubsub_channels:0\r\npubsub_patterns:0\r\npubsubshard_channels:0\r\n" +
 		"latest_fork_usec:0\r\ntotal_forks:0\r\ntracking_total_keys:0\r\ntracking_total_items:0\r\ntracking_total_prefixes:0\r\n")
 	fmt.Fprintf(b, "total_error_replies:%d\r\n\r\n", e.totals.errors)
 }

@@ -52,6 +52,15 @@ func (e *Engine) filterKeyStatus(key string, own data_structure.Keyspace) filter
 	return filterOtherType
 }
 
+// filterKeyRead is filterKeyStatus for a command that reads the filter, which
+// RedisBloom opens with REDISMODULE_READ alone: the key is a keyspace hit or
+// a miss, a key of another type a hit (keyspaceReads).
+func (e *Engine) filterKeyRead(key string, own data_structure.Keyspace) filterStatus {
+	status := e.filterKeyStatus(key, own)
+	e.noteLookup(status != filterMissing)
+	return status
+}
+
 // moduleArgIndex is RMUtil_ArgIndex: the first argument equal to name, any
 // case, or -1. RedisBloom looks for its options among every argument, the key
 // and the numbers before them included, and so does this; a filter named
