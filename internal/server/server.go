@@ -1110,8 +1110,17 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 			if o.ConcurrentAppend && !ordered.admit(c, ioMultiplexer) {
 				continue
 			}
+			before := e.AppendOffset()
 			if executeRun(c, &arena) {
 				c.appendOffset = e.AppendOffset()
+				// While the worker's failed batch is retried, a run that
+				// recorded nothing - reads, and the writes refused with
+				// MISCONF - is answered now, as Redis answers them; the
+				// writes whose records wait in the buffer are answered once
+				// they are written, as every reply in this mode is.
+				if c.appendOffset == before && e.LogRetrying() {
+					c.appendOffset = e.AppendReadyOffset()
+				}
 				if !accountClient(c) {
 					if c.inArena {
 						arena.buf = arena.buf[:c.outStart]
@@ -1155,7 +1164,15 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 			return flushErr
 		}
 		if !ready && !o.ConcurrentAppend {
+			ready := e.AppendReadyOffset()
+			answered := writable[:0]
 			for _, c := range writable {
+				if c.appendOffset <= ready {
+					// Nothing of its run waits for the worker: answered
+					// below, with this cycle's other replies.
+					answered = append(answered, c)
+					continue
+				}
 				if c.inArena {
 					c.out = append([]byte(nil), arena.buf[c.outStart:c.outEnd]...)
 					c.outBytes = cap(c.out)
@@ -1172,7 +1189,11 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 				paused[c.fd] = c
 				heldReplies = append(heldReplies, c)
 			}
-			continue
+			clear(writable[len(answered):])
+			writable = answered
+			if len(writable) == 0 {
+				continue
+			}
 		}
 
 		// A rewrite advances one slice per cycle, inside the flush above, and

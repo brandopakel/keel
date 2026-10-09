@@ -37,12 +37,13 @@ type logFailures struct {
 const writeLogEvery = 30 * time.Second
 
 // RetriesLogFailures says a failed write or sync of e's log is retried rather
-// than latched: under everysec and no, unless e is a replica or appends on
-// the server's worker. The caller holds e's lock.
+// than latched: under everysec and no, unless e is a replica. A batch the
+// server's worker fails to write is retried the same way (aof_async.go). The
+// caller holds e's lock.
 func (e *Engine) RetriesLogFailures() bool { return e.retriesLogFailures() }
 
 func (e *Engine) retriesLogFailures() bool {
-	return e.settings.fsync != FsyncAlways && !e.settings.asyncAppend && e.replicaOf() == ""
+	return e.settings.fsync != FsyncAlways && e.replicaOf() == ""
 }
 
 // writeFailed puts the log's write status in error, as Redis's
