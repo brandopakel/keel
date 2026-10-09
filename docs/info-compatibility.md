@@ -296,8 +296,11 @@ General validation runs it against Redis 8.10.1 and RedisBloom.
   - `usec_per_call` is computed in single precision, as Redis computes it.
   - Lines come in name order; Redis's come in its hash table's order, which
     no client relies on.
-  - The log's replay counts only its `MULTI` blocks' commands, as for
-    `total_commands_processed`. `CONFIG RESETSTAT` clears every line.
+  - The log's replay counts no command's line, a `MULTI` block's
+    included: Redis's `call()` updates commandstats only outside the loading
+    of its log (`update_command_stats`, `isAOFLoadingContext`), though it
+    counts every call it makes in `total_commands_processed`.
+    `CONFIG RESETSTAT` clears every line.
   - Not yet: `slowlog_count`, `slowlog_time_ms_sum` and
     `slowlog_time_ms_max`, which Redis 8.10 adds to a command's line once
     it has been slow-logged. They come with (c3c).

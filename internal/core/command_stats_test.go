@@ -87,9 +87,9 @@ func pick(m map[string]string, keys ...string) map[string]string {
 	return out
 }
 
-// TestCommandstatsSurviveReplayAsRedisCounts: replaying the log counts the
-// commands of its MULTI blocks, which Redis's EXEC runs through call(), and
-// nothing else; CONFIG RESETSTAT clears every line.
+// TestCommandstatsSurviveReplayAsRedisCounts: replaying the log counts no
+// command's line, a MULTI block's included, as Redis's call() updates none
+// while its log loads; CONFIG RESETSTAT clears every line.
 func TestCommandstatsSurviveReplayAsRedisCounts(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "replay.aof")
@@ -102,8 +102,9 @@ func TestCommandstatsSurviveReplayAsRedisCounts(t *testing.T) {
 	_, err := e.LoadAOF(path)
 	require.NoError(t, err)
 	stats := cmdstats(t, e)
-	assert.Equal(t, "1", stats["set"]["calls"], "the block's SET only")
-	assert.Equal(t, "1", stats["incr"]["calls"])
+	assert.Empty(t, stats, "nothing the replay ran")
+	assert.Equal(t, uint64(2), e.totals.commands, "though the block's commands count as processed")
+	runOn(t, e, "SET", "d", "4")
 
 	assert.Equal(t, "OK", runOn(t, e, "CONFIG", "RESETSTAT"))
 	stats = cmdstats(t, e)
