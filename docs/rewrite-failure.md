@@ -23,9 +23,11 @@ by a protocol 2 replica's snapshot:
 - Automatic rewrites are retried with Redis's backoff (see [Retrying](#retrying)).
   `BGREWRITEAOF` always starts one at once.
 
-Only a failure of the log itself stops the server, as before. That covers a
-failed write or sync of the log and, after a rewrite's rename, a directory sync
-that still fails when retried (see [After the rename](#after-the-rename)).
+Only a failure of the log itself can stop the server. Under `always` that is a
+failed write or sync of the log, as Redis exits; under `everysec` and `no` those
+are retried with writes refused, as Redis retries them. A directory sync after
+a rewrite's rename that still fails when retried stops the server under every
+policy (see [After the rename](#after-the-rename)).
 
 ## Each step, before and after
 
@@ -40,7 +42,7 @@ that still fails when retried (see [After the rename](#after-the-rename)).
 | Closing `.rewrite` | Server stopped | Failed rewrite |
 | Opening the new file for appending | Done after the rename, with the old descriptor already closed; a failure left the log closed and stopped the server | Done before the rename; a failure is a failed rewrite |
 | Rename onto the log | Server stopped | Failed rewrite. If the rename took effect despite its error, for example a network filesystem's lost reply, the new file is the log and is used |
-| Directory sync after the rename | Server stopped | The new file is the log; the directory sync is retried before the log's next sync, and a second failure stops the server as any failed sync of the log does |
+| Directory sync after the rename | Server stopped | The new file is the log; the directory sync is retried before the log's next sync, and a second failure stops the server under every policy |
 | Closing the replaced log | Server stopped | Logged; its contents are superseded |
 | Opening the protocol 2 snapshot after the swap | Server stopped | Logged; a waiting replica's pulls start the next rewrite no sooner than a minute later |
 | Duration or dirty-key budget | Abandoned, served on, logged `rewrite abandoned` | The same, now also reported as a failed rewrite; the next automatic attempt still waits a minute |

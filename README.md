@@ -111,11 +111,18 @@ portions of Redis's [SET](https://redis.io/docs/latest/commands/set/) and
 ```
 
 - `always`: append and sync before successful replies. A write or sync failure stops
-  the server without sending staged success replies.
+  the server without sending staged success replies, as Redis exits.
 - `everysec`: append before replies; sync in a background worker on the clock, including idle periods.
-  At most one sync runs at a time. A reported background failure stops the server at the next loop check.
-  A crash can lose recent writes. Slow storage can stretch the nominal one-second window.
+  At most one sync runs at a time. A crash can lose recent writes. Slow storage can
+  stretch the nominal one-second window.
 - `no`: append before replies; let the OS schedule durability, with a sync on clean shutdown.
+
+Under `everysec` and `no`, a failed write or sync of the log does what Redis does:
+the server keeps serving, refuses write commands and `PING` with
+`MISCONF Errors writing to the AOF file: <cause>`, serves reads, reports
+`aof_last_write_status:err`, and retries every cycle until the disk recovers,
+when writes are accepted again. A clean shutdown while the log is failing is
+logged and exits with status 0, as Redis exits.
 
 Startup streams the AOF. A torn final command is copied to a `.keel-torn-tail-*`
 file beside the log, then the log is truncated to the last complete command before
