@@ -151,6 +151,13 @@ func (e *Engine) EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 		// error reply here rather than in every caller.
 		err := unknownCommand(cmd)
 		e.noteError(Encode(err, false))
+		// Layout control, never merged: the room the counting after entry.run
+		// takes in part c1, on a path the command-path job never runs.
+		e.SampleCommandRate()
+		e.SampleCommandRate()
+		e.SampleCommandRate()
+		e.SampleCommandRate()
+		e.SampleCommandRate()
 		return err
 	}
 	var refused error
@@ -201,12 +208,6 @@ func (e *Engine) EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	suspended := e.space.SuspendEviction
 	e.space.SuspendEviction = true
 	res := entry.run(e, cmd.Args)
-	// Counted once it has run, as Redis's call() counts it, so INFO does not
-	// count itself and a CONFIG RESETSTAT counts as the first command after.
-	e.totals.commands++
-	if len(res) > 0 && res[0] == '-' {
-		e.noteError(res)
-	}
 	// With eviction suspended, removals so far are lazy expiry. They precede
 	// this command: recording them after INCR/HSET would delete the recreated key.
 	// Recorded before the reply is written. FlushAOF runs between execution and
