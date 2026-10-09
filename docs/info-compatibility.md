@@ -1,7 +1,7 @@
 # INFO and monitoring compatibility
 
-Status: October 9, 2026. Parts (a) and (b) are merged, and (c1) is in review.
-(c2), (c3) and (d) are planned.
+Status: October 9, 2026. Parts (a) and (b) are merged, and (c1) and (c2) are in
+review. (c3) and (d) are planned.
 
 Monitoring built for Redis reads `INFO`, `CONFIG GET`, `SLOWLOG` and `LATENCY`.
 The standard Prometheus exporter, `redis_exporter`, and the Grafana dashboards
@@ -162,7 +162,7 @@ blank line today, so they fall outside any section. (a) moves them inside.
 | `total_connections_received` | yes | Stays |
 | `evicted_keys`, `expired_keys` | yes | Stays |
 | `total_commands_processed`, `instantaneous_ops_per_sec` | - | (c1), done. A command counts once it has run, as Redis's `call()` counts it (see below). Ops per second is the mean of the last 16 samples, taken every 100 ms, as Redis takes them. |
-| `keyspace_hits`, `keyspace_misses` | - | (c2) Counted on the key lookups of read commands, per key, as Redis's `lookupKeyRead` counts them |
+| `keyspace_hits`, `keyspace_misses` | - | (c2), done. Each key a command looks up to read, as Redis's `lookupKeyRead` counts it (see below) |
 | `total_error_replies` | - | (c1), done. Every error reply, refusals included, inside `EXEC`'s reply too |
 | `unexpected_error_replies` | - | Left out. Redis counts the errors its replication link or its AOF client receives; Keel's replication is its own, so it has no counterpart. |
 | `total_net_input_bytes`, `total_net_output_bytes`, `instantaneous_input_kbps`, `instantaneous_output_kbps` | - | (d) |
@@ -223,6 +223,34 @@ hash field expiry.
   refusals, the transport's own (`NOAUTH`, protocol errors), and those
   inside `EXEC`'s reply.
 
+**What counts as a keyspace hit or miss (c2)** follows Redis's `lookupKey()`
+and RedisBloom's `RedisModule_OpenKey` modes:
+- Each key a command looks up to read is a hit if it is held, whatever its
+  type, and a miss if not. An expired key is a miss, as Redis expires it on
+  the lookup.
+- These commands count, per key named:
+  - `GET`, `MGET`, `LCS`;
+  - `EXISTS` (per argument, repeats included), `TYPE`, `TTL`, `PTTL`;
+  - the hash, list, set and sorted-set reads, and `GEODIST`, `GEOHASH`,
+    `GEOPOS`, `GEOSEARCH`;
+  - `PFCOUNT`, and `PFMERGE` with its destination;
+  - `SET`'s `GET` option;
+  - RedisBloom's reads (`BF.EXISTS`, `BF.MEXISTS`, `BF.INFO`, `CF.EXISTS`,
+    `CF.MEXISTS`, `CF.COUNT`, `CF.INFO`, `CMS.QUERY`).
+- Writes count nothing, as Redis's `lookupKeyWrite` counts nothing. Nor do
+  `KEYS`, `SCAN` and `MEMORY USAGE`.
+- A command that reads several keys stops counting where Redis's stops, at
+  the first key of the wrong type (`PFCOUNT`, `PFMERGE`). `LCS` looks both
+  its keys up first.
+- `SRAND`, `MORRIS.QUERY`, `MORRIS.INFO` and `KEEL.DUMP` have no Redis
+  counterpart of their own name. They count as `SRANDMEMBER`, `CMS.QUERY`,
+  `CMS.INFO` and `DUMP` do.
+- The log's replay counts the keys it reads, as Redis's does (`PFMERGE`).
+
+The typed reads count in the type check, which already looks every key up,
+so counting costs an increment. `MGET` asks the other stores about a key the
+strings do not hold only if they hold any key at all.
+
 `scripts/stats-parity.py` checks all of this against Redis. It runs each case
 on both servers, on one connection, after the same keys and a
 `CONFIG RESETSTAT`, and compares how `total_commands_processed`,
@@ -261,7 +289,7 @@ General validation runs it against Redis 8.10.1 and RedisBloom.
 | `CONFIG GET pattern [pattern ...]` | (b), done. Keel's settings under Redis's names, read live: `maxmemory`, `maxmemory-policy`, `maxmemory-samples`, `lfu-log-factor`, `appendonly`, `appendfilename`, `appendfsync`, `auto-aof-rewrite-percentage`, `auto-aof-rewrite-min-size`, `replicaof` and its old name `slaveof` (`host port`, as Redis writes it), `databases` (`1`), `save` (`""`, no snapshots) and `dir` (the working directory, against which relative paths resolve). With the server, also `port`, `bind`, `maxclients`, `tcp-backlog` (Keel listens with a backlog of `maxclients`), `io-threads`, `hz` and `requirepass`, which Redis gives to any client that has logged in. The slow log and latency settings come with (c3). A RESP2 flat array, or a RESP3 map. A name matches without regard to case and comes back as asked; a glob comes back in Redis's spelling. Settings whose meaning differs are left out: `lfu-decay-time` against Keel's access-counted decay; `client-output-buffer-limit`, since Keel's 64 MiB `MaxReplyBytes` caps one reply rather than disconnecting a client that falls behind; and `repl-backlog-size`, since a Keel replica reads the primary's log, not a backlog. |
 | `CONFIG SET parameter value [parameter value ...]` | (b), done. Keel has no runtime configuration yet, so every pair is refused in Redis's words for the first that fails: `Unknown option or number of arguments for CONFIG SET - '<name>'` for a name Keel does not report, `CONFIG SET failed (possibly related to argument '<name>') - can't set immutable config` for one it does, and `can't set protected config` for `dir`, as Redis keeps it by default. An odd count is Redis's `syntax error`. |
 | `CONFIG REWRITE` | (b), done. `The server is running without a config file`, Redis's answer when it was started without one: Keel takes flags. |
-| `CONFIG RESETSTAT` | (c1), done. Resets what Redis's `resetServerStats` resets that Keel reports: `total_commands_processed` and the ops-per-second samples, `total_error_replies` and errorstats, `total_connections_received` and `rejected_connections` (client ids keep growing, as Redis's do), `expired_keys`, `evicted_keys`, `aof_rewrites` and `aof_rewrites_consecutive_failures`. Each later part adds its own counters (hits and misses, commandstats, latencystats, the slow log's counts, network bytes). `used_memory_peak` stays, as Redis keeps it. Keel's own fields keep counting. |
+| `CONFIG RESETSTAT` | (c1), done. Resets what Redis's `resetServerStats` resets that Keel reports: `total_commands_processed` and the ops-per-second samples, `total_error_replies` and errorstats, `total_connections_received` and `rejected_connections` (client ids keep growing, as Redis's do), `expired_keys`, `evicted_keys`, `keyspace_hits`, `keyspace_misses`, `aof_rewrites` and `aof_rewrites_consecutive_failures`. Each later part adds its own counters (commandstats, latencystats, the slow log's counts, network bytes). `used_memory_peak` stays, as Redis keeps it. Keel's own fields keep counting. |
 | `SLOWLOG GET [count]`, `LEN`, `RESET`, `HELP` | (c3). Entries are id, Unix time, duration in µs, arguments (at most 32, each cut at 128 bytes as Redis does), client address and name. Defaults are `slowlog-log-slower-than` 10000 and `slowlog-max-len` 128. |
 | `LATENCY LATEST`, `HISTORY`, `RESET`, `DOCTOR`, `HELP` | (c3). Redis's latency monitor is off by default (`latency-monitor-threshold 0`), so these answer as an idle monitor: empty replies and `0`. |
 | `LATENCY HISTOGRAM [command ...]` | (c3), from the latencystats histograms. The exporter reads it for `redis_commands_latencies_usec`. |
@@ -291,7 +319,8 @@ Live telemetry run after each merge confirms them.
   metric names from Keel with (c1), against 77 with (b) and 200 from Redis
   8.10.2, given the same commands and one `WRONGTYPE`. The exporter reports no
   `instantaneous_ops_per_sec` for either server.
-- **(c2):** `redis_keyspace_hits_total`, `redis_keyspace_misses_total`.
+- **(c2):** `redis_keyspace_hits_total` and `redis_keyspace_misses_total`, the
+  same as Redis's for the same commands. 82 metric names from Keel, locally.
 - **(c3):**
   - `redis_commands_total`, `redis_commands_duration_seconds_total`,
     `redis_commands_failed_calls_total`, `redis_commands_rejected_calls_total`;

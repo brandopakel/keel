@@ -76,6 +76,9 @@ CASES = [[c] for c in [
     ['GEOSEARCH', 'geo', 'FROMMEMBER', 'palermo', 'BYRADIUS', '200', 'km', 'ASC'], ['GEOPOS', 'geo', 'palermo', 'none'],
     ['GEOSEARCH', 'missing', 'FROMLONLAT', '15', '37', 'BYRADIUS', '10', 'km'], ['PFADD', 'hll', 'c'],
     ['PFCOUNT', 'hll'], ['PFCOUNT', 'hll', 'missing'], ['PFMERGE', 'dest', 'hll'],
+    # Where a wrong type stops a command that reads several keys.
+    ['LCS', 'hash', 'str'], ['LCS', 'str', 'hash'], ['PFCOUNT', 'hll', 'str', 'missing'],
+    ['PFMERGE', 'dest', 'str', 'hll'], ['HMGET', 'missing', 'f'], ['ZRANK', 'missing', 'a'],
     # Refusals and the connection's own commands.
     ['NOSUCH'], ['GET'], ['CONFIG', 'nosuch'], ['CLIENT', 'ID'], ['CLIENT', 'SETNAME', 'a b'], ['AUTH', 'x'],
 ]] + [
@@ -86,6 +89,7 @@ CASES = [[c] for c in [
     [['EXEC']], [['DISCARD']], [['MULTI'], ['MULTI'], ['EXEC']],
     # Several commands on one connection.
     [['GET', 'str'], ['GET', 'missing'], ['HGET', 'hash', 'f'], ['NOSUCH']],
+    [['MGET', 'str', 'missing'], ['SET', 'str', 'y', 'GET'], ['EXISTS', 'hash', 'missing'], ['TTL', 'list']],
 ]
 MODULE_CASES = [[c] for c in [
     ['BF.ADD', 'bf', 'b'], ['BF.EXISTS', 'bf', 'a'], ['BF.EXISTS', 'missing', 'a'], ['BF.MADD', 'bf', 'c', 'd'],

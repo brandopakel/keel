@@ -183,3 +183,81 @@ func TestResetStatResetsWhatRedisResets(t *testing.T) {
 	assert.Zero(t, e.rewriteOutcome.failures)
 	assert.Equal(t, peak, e.memoryPeak, "Redis keeps used_memory_peak")
 }
+
+// lookups is e's keyspace hits and misses.
+func lookups(e *Engine) [2]uint64 { return [2]uint64{e.totals.hits, e.totals.misses} }
+
+// TestKeyspaceLookupsCountAsRedisLookupKeyRead: each key a command looks up
+// to read is a hit or a miss, a key of another type a hit and an expired one
+// a miss; writes count nothing, but PFMERGE's every key and SET's GET option.
+func TestKeyspaceLookupsCountAsRedisLookupKeyRead(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		cmds  [][]string
+		want  [2]uint64
+		setup [][]string
+	}{
+		{"GET held", [][]string{{"GET", "str"}}, [2]uint64{1, 0}, nil},
+		{"GET missing", [][]string{{"GET", "nosuch"}}, [2]uint64{0, 1}, nil},
+		{"GET of another type", [][]string{{"GET", "hash"}}, [2]uint64{1, 0}, nil},
+		{"MGET", [][]string{{"MGET", "str", "nosuch", "hash", "str"}}, [2]uint64{3, 1}, nil},
+		{"EXISTS repeats", [][]string{{"EXISTS", "str", "nosuch", "str"}}, [2]uint64{2, 1}, nil},
+		{"TYPE, TTL and PTTL", [][]string{{"TYPE", "str"}, {"TTL", "nosuch"}, {"PTTL", "hash"}}, [2]uint64{2, 1}, nil},
+		{"SET's GET", [][]string{{"SET", "str", "x", "GET"}, {"SET", "new", "x", "GET"}, {"SET", "hash", "x", "GET"}}, [2]uint64{2, 1}, nil},
+		{"writes", [][]string{{"SET", "a", "1"}, {"INCR", "a"}, {"HSET", "hash", "g", "2"}, {"DEL", "str"}, {"EXPIRE", "a", "9"}}, [2]uint64{0, 0}, nil},
+		{"LCS", [][]string{{"LCS", "str", "nosuch"}}, [2]uint64{1, 1}, nil},
+		{"LCS looks both up first", [][]string{{"LCS", "hash", "str"}}, [2]uint64{2, 0}, nil},
+		{"PFMERGE reads its destination", [][]string{{"PFMERGE", "dest", "hll"}}, [2]uint64{1, 1}, [][]string{{"PFADD", "hll", "a"}}},
+		{"a filter's reads", [][]string{{"BF.EXISTS", "bf", "a"}, {"BF.EXISTS", "nosuch", "a"}, {"BF.ADD", "bf", "b"}, {"BF.INFO", "str"}},
+			[2]uint64{2, 1}, [][]string{{"BF.RESERVE", "bf", "0.01", "100"}}},
+		{"expired", [][]string{{"GET", "gone"}, {"MGET", "gone"}, {"EXISTS", "gone"}}, [2]uint64{0, 3}, [][]string{{"SET", "gone", "v"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			e := newTestEngine(t, Options{})
+			runOn(t, e, "SET", "str", "abc")
+			runOn(t, e, "HSET", "hash", "f", "v")
+			for _, c := range tc.setup {
+				runOn(t, e, c[0], c[1:]...)
+			}
+			if tc.name == "expired" {
+				e.dictStore.SetExpiryAt("gone", 1)
+			}
+			e.totals = commandTotals{}
+			for _, c := range tc.cmds {
+				runOn(t, e, c[0], c[1:]...)
+			}
+			assert.Equal(t, tc.want, lookups(e), "hits and misses")
+		})
+	}
+}
+
+// TestKeyspaceLookupsAreReportedAndReset: INFO reports them where Redis does,
+// RESETSTAT resets them, and a replay of the log keeps what it counted.
+func TestKeyspaceLookupsAreReportedAndReset(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	runOn(t, e, "GET", "nosuch")
+	runOn(t, e, "SET", "k", "v")
+	runOn(t, e, "GET", "k")
+	stats := statsOn(t, e)
+	assert.Equal(t, "1", stats["keyspace_hits"])
+	assert.Equal(t, "1", stats["keyspace_misses"])
+	runOn(t, e, "CONFIG", "RESETSTAT")
+	stats = statsOn(t, e)
+	assert.Equal(t, "0", stats["keyspace_hits"])
+	assert.Equal(t, "0", stats["keyspace_misses"])
+
+	path := filepath.Join(t.TempDir(), "replay.aof")
+	var log []byte
+	for _, cmd := range [][]string{{"PFADD", "hll", "a"}, {"PFMERGE", "dest", "hll"}} {
+		log = append(log, encodeStringArray(cmd)...)
+	}
+	require.NoError(t, os.WriteFile(path, log, 0o600))
+	replayed := newTestEngine(t, Options{})
+	_, err := replayed.LoadAOF(path)
+	require.NoError(t, err)
+	assert.Equal(t, [2]uint64{1, 1}, lookups(replayed), "Redis's lookupKey counts its replay's reads")
+	assert.Zero(t, replayed.totals.commands)
+}

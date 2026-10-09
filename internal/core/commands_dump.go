@@ -182,6 +182,9 @@ func (e *Engine) cmdDUMP(args []string) []byte {
 	if len(args) != 1 {
 		return e.encode(wrongArguments("KEEL.DUMP"), false)
 	}
+	// A keyspace hit or a miss, as DUMP's is in Redis.
+	_, held := e.space.OwnerOf(args[0])
+	e.noteLookup(held)
 	plan, ok := e.planDump(args[0], MaxReplyBytes)
 	if !ok {
 		return e.nullReply()

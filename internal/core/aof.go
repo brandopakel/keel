@@ -561,8 +561,13 @@ func (e *Engine) loadAOF(ctx context.Context, path string) (int, error) {
 	totals.errorPrefixes = maps.Clone(e.totals.errorPrefixes)
 	inBlocks := uint64(0)
 	defer func() {
+		// Hits and misses stay as the replay left them: Redis's lookupKey
+		// counts them whoever looks, its replay included (PFMERGE, which
+		// it logs, reads its keys).
+		hits, misses := e.totals.hits, e.totals.misses
 		e.totals = totals
 		e.totals.commands += inBlocks
+		e.totals.hits, e.totals.misses = hits, misses
 	}()
 	e.aof.replaying = true
 	e.space.SuspendEviction = true

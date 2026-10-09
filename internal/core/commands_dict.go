@@ -140,6 +140,11 @@ func (e *Engine) setCommand(name string, args []string) []byte {
 		other, otherHeld = e.space.OwnerOf(key)
 		otherHeld = otherHeld && other.KeyspaceName() != e.dictStore.KeyspaceName()
 	}
+	if get {
+		// GET reads the old value as Redis's lookupKeyRead does, so it is a
+		// keyspace hit or a miss, a key of another type a hit.
+		e.noteLookup(obj != nil || otherHeld)
+	}
 	if otherHeld && get {
 		return e.encode(errWrongType, false)
 	}
@@ -244,6 +249,7 @@ func (e *Engine) cmdTTL(args []string) []byte {
 		return e.encode(wrongArguments("TTL"), false)
 	}
 	left := e.remainingTTL(args[0])
+	e.noteLookup(left != -2)
 	if left < 0 {
 		return e.encode(left, false)
 	}
@@ -255,7 +261,9 @@ func (e *Engine) cmdPTTL(args []string) []byte {
 	if len(args) != 1 {
 		return e.encode(wrongArguments("PTTL"), false)
 	}
-	return e.encode(e.remainingTTL(args[0]), false)
+	left := e.remainingTTL(args[0])
+	e.noteLookup(left != -2)
+	return e.encode(left, false)
 }
 
 // cmdDEL removes keys from whichever keyspace holds them.
