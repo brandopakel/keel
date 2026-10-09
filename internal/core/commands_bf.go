@@ -239,7 +239,7 @@ func (e *Engine) cmdBFMADD(args []string) []byte {
 // bloomForRead is the filter a read asks about: RedisBloom's BF.EXISTS and
 // BF.MEXISTS answer no for a key that holds anything else.
 func (e *Engine) bloomForRead(key string) (*data_structure.SBChain, bool) {
-	if e.filterKeyStatus(key, e.sbStore) != filterHeld {
+	if e.filterKeyRead(key, e.sbStore) != filterHeld {
 		return nil, false
 	}
 	return e.bloomFor(key)
@@ -276,7 +276,7 @@ func (e *Engine) cmdBFINFO(args []string) []byte {
 	if len(args) != 1 && len(args) != 2 {
 		return e.encode(wrongArguments("BF.INFO"), false)
 	}
-	switch e.filterKeyStatus(args[0], e.sbStore) {
+	switch e.filterKeyRead(args[0], e.sbStore) {
 	case filterMissing:
 		return e.encode(errFilterNotFound, false)
 	case filterOtherType:
