@@ -53,6 +53,12 @@ func (e *Engine) pollAppend(wait bool) {
 	e.appendRetained = 0
 	if result.err == nil {
 		e.appendCompleted = result.end
+		// A batch is whole records, so the file ends at a record boundary.
+		e.aof.midRecord = false
+	} else if result.n > 0 && !e.aof.midRecord && e.cutShortWrite(result.n) {
+		// Cut back, as the loop's own short write is (aof_transcript.go),
+		// so that the log ends at its last whole record.
+		result.n = 0
 	}
 	e.recordAOFDigest(result.body[:result.n])
 	e.aof.written += int64(result.n)
@@ -65,9 +71,34 @@ func (e *Engine) pollAppend(wait bool) {
 		e.aof.dirty = false
 		e.aof.lastSync = time.Now()
 	}
-	if result.err != nil && e.aof.failed == nil {
-		e.aof.failed = result.err
+	if result.err == nil {
+		if e.logFailure.write != nil {
+			e.writeSolved()
+		}
+		return
 	}
+	if result.n > 0 {
+		e.aof.midRecord = true
+	}
+	if !e.retriesLogFailures() {
+		if e.aof.failed == nil {
+			e.aof.failed = result.err
+		}
+		return
+	}
+	// Retried, as Redis retries a failed write under everysec and no
+	// (log_failures.go): what the worker did not write goes back to the
+	// front of the buffer, ahead of whatever was recorded since, and the
+	// offsets handed out for it stand, so the next batch writes it in order
+	// and the replies held to it go out once it is written. Not before the
+	// loop's next tick: a disk that fails at once would otherwise be tried
+	// as fast as the worker returns.
+	rest := result.body[result.n:]
+	e.aof.buf = append(rest[:len(rest):len(rest)], e.aof.buf...)
+	e.aof.commandStart += len(rest)
+	e.appendStarted -= uint64(len(rest))
+	e.appendRetryAt = time.Now().Add(100 * time.Millisecond)
+	e.writeFailed(result.err)
 }
 
 // FlushAOFAsync starts or polls a batch. ready means its replies may be sent.
@@ -85,6 +116,9 @@ func (e *Engine) FlushAOFAsync(wake func()) (ready bool, err error) {
 	}
 	if e.aof.file == nil || len(e.aof.buf) == 0 {
 		return true, e.FlushAOF()
+	}
+	if e.logFailure.write != nil && time.Now().Before(e.appendRetryAt) {
+		return false, nil
 	}
 	if len(e.aof.buf) > maxAsyncAppendBytes {
 		e.aof.failed = fmt.Errorf("async AOF batch exceeds %d bytes", maxAsyncAppendBytes)

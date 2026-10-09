@@ -150,3 +150,96 @@ func TestServerStopsWhenItsLogFailsUnderAlways(t *testing.T) {
 		})
 	}
 }
+
+// TestServerRetriesAFailedWorkerBatch: with -aof-async-append under everysec,
+// a batch the worker cannot write is retried as the loop's own failed write
+// is. The write whose record no longer fits is not answered until it is
+// written, as nothing in this mode is answered before its record; meanwhile,
+// on another connection, writes and PING are refused with MISCONF, reads are
+// served and INFO says err. Stopped with SIGTERM, the server exits with
+// status 0; killed, it leaves a whole log, as the worker's short write was
+// cut back off it. Either way every acknowledged write is in the log at the
+// next start, and the unanswered one is not.
+func TestServerRetriesAFailedWorkerBatch(t *testing.T) {
+	t.Parallel()
+	for _, end := range []string{"stop", "crash"} {
+		t.Run(end, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "store.aof")
+			args := []string{"-appendonly", "-appendfilename", path, "-auto-aof-rewrite-percentage", "0", "-appendfsync", "everysec", "-aof-async-append"}
+			s := startLimitedTestServer(t, logFileLimit, args...)
+			a, ra := connectTest(t, s)
+			acked := 0
+			held := make(chan error, 1)
+			for ; ; acked++ {
+				if acked == 1000 {
+					t.Fatal("the log never reached its limit")
+				}
+				if _, err := io.WriteString(a, request("SET", "k"+strconv.Itoa(acked), killedValue)); err != nil {
+					t.Fatal(err)
+				}
+				answered := make(chan string, 1)
+				go func() {
+					got, err := readValue(ra)
+					if err != nil {
+						held <- err
+						return
+					}
+					answered <- got
+				}()
+				select {
+				case got := <-answered:
+					if got != "+OK" {
+						t.Fatalf("SET k%d answered %q", acked, got)
+					}
+					continue
+				case <-time.After(2 * time.Second):
+				}
+				// Held: its record is the one the worker could not write.
+				break
+			}
+			if acked < 10 {
+				t.Fatalf("the log failed after %d writes", acked)
+			}
+			b, rb := connectTest(t, s)
+			const misconf = "-MISCONF Errors writing to the AOF file: File too large"
+			expectCall(t, b, rb, misconf, "SET", "denied", "v")
+			expectCall(t, b, rb, misconf, "PING")
+			expectCall(t, b, rb, killedValue, "GET", "k0")
+			expectInfo(t, persistenceInfo(t, b, rb), map[string]string{"aof_last_write_status": "err"})
+			b.Close()
+
+			if end == "stop" {
+				s.stop(t)
+				if logged := s.log.String(); !strings.Contains(logged, "appendonly: close failed, exiting anyway: ") {
+					t.Fatalf("want the failed close logged:\n%s", logged)
+				}
+			} else {
+				s.crash(t)
+			}
+			a.Close()
+			select {
+			case err := <-held:
+				if err == nil {
+					t.Fatal("the held write was answered")
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("the held connection did not end")
+			}
+			if logged := s.log.String(); strings.Contains(logged, "write failed, stopping") {
+				t.Fatalf("a failed batch stopped the server:\n%s", logged)
+			}
+
+			s = startTestServer(t, args...)
+			c, r := connectTest(t, s)
+			for i := range acked {
+				expectCall(t, c, r, killedValue, "GET", "k"+strconv.Itoa(i))
+			}
+			expectCall(t, c, r, "$-1", "GET", "k"+strconv.Itoa(acked))
+			s.stop(t)
+			if logged := s.log.String(); strings.Contains(logged, "truncated final command") {
+				t.Fatalf("the log needed a repair:\n%s", logged)
+			}
+		})
+	}
+}
