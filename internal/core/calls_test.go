@@ -74,6 +74,17 @@ func returned(fn func()) <-chan struct{} {
 	return done
 }
 
+// entered waits for a sync to reach g's gate, failing t rather than hanging
+// if none does within a deadline only a hang would reach.
+func (g *gatedSync) awaitSync(t *testing.T) {
+	t.Helper()
+	select {
+	case <-g.entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("no sync reached the gate")
+	}
+}
+
 // stillRunning fails t if done has closed. It waits a while first: a slow
 // machine can only make done later, never sooner, so this is not a timing
 // assertion.
@@ -164,7 +175,7 @@ func TestAReadWaitsForTheWriteItSaw(t *testing.T) {
 
 	var reply string
 	read := returned(func() { reply = mustDo(t, e, "GET", "k") })
-	<-g.entered
+	g.awaitSync(t)
 	stillRunning(t, read, "a read of a write that is not yet synced")
 	g.release()
 	<-read
@@ -201,15 +212,75 @@ func TestOneSyncCoversTheCallsWaitingForIt(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-	// About 2.4 calls a sync on an M-series Mac: each woken call takes the
-	// lock again to see what was published, and the next flush takes it
-	// after some of them. One a call would be no group commit at all.
+	// About four calls a sync on an M-series Mac, where the sync was inside
+	// the engine's lock and covered about three (200 calls in 67 syncs) until
+	// it moved out of it. Calls that write while a sync runs are covered by
+	// the next one, but the first call written after a sync ends starts one
+	// of its own. One a call would be no group commit at all.
 	t.Logf("%d calls, each returned once synced, in %d syncs", callers*writes, syncs.Load())
 	assert.Less(t, syncs.Load(), int64(callers*writes), "calls that wait together share a sync")
 	require.NoError(t, e.Close())
 
 	again := openTestEngine(t, o)
 	assert.Equal(t, fmt.Sprintf(":%d\r\n", callers*writes), mustDo(t, again, "DBSIZE"))
+}
+
+// TestUnderAlwaysCallsQueueBehindASyncOutsideTheLock: under always, the sync
+// runs outside the engine's lock. While one is held, the lock is free, later
+// calls run and their records reach the file, and none of them returns: each
+// waits for a sync that covers it. Once the held sync ends, one more sync
+// covers every call that queued behind it.
+func TestUnderAlwaysCallsQueueBehindASyncOutsideTheLock(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "keel.aof")
+	e := openTestEngine(t, Options{AppendOnly: true, AppendFilename: path, Fsync: FsyncAlways})
+	g := gateSync(e)
+	g.hold()
+	// Released however the test ends, so that a failure here cannot leave
+	// the engine's Close waiting on a held sync.
+	var release sync.Once
+	t.Cleanup(func() { release.Do(g.release) })
+	first := returned(func() { mustDo(t, e, "SET", "first", "v") })
+	g.awaitSync(t)
+
+	locked := returned(func() { holding(e, func() {}) })
+	select {
+	case <-locked:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the lock is held through the sync")
+	}
+	const queued = 4
+	calls := make([]<-chan struct{}, queued)
+	for i := range queued {
+		calls[i] = returned(func() { mustDo(t, e, "SET", fmt.Sprintf("queued%d", i), "v") })
+	}
+	eventually(t, e, "the queued calls' records are written", func() bool {
+		body, err := os.ReadFile(path)
+		require.NoError(t, err)
+		for i := range queued {
+			if !strings.Contains(string(body), logRecord("SET", fmt.Sprintf("queued%d", i), "v")) {
+				return false
+			}
+		}
+		return true
+	})
+	stillRunning(t, first, "the call whose sync is held")
+	for i, done := range calls {
+		stillRunning(t, done, fmt.Sprintf("queued call %d, written but not synced", i))
+	}
+
+	release.Do(g.release)
+	<-first
+	for _, done := range calls {
+		<-done
+	}
+	assert.Equal(t, int64(2), g.syncs.Load(), "the held sync, then one for every call queued behind it")
+	holding(e, func() {
+		encoded, written, synced, ready := e.AOFPositions()
+		assert.Equal(t, encoded, written)
+		assert.Equal(t, encoded, synced)
+		assert.Equal(t, encoded, ready)
+	})
 }
 
 // failingDisk replaces e's log write and sync with ones that fail while
@@ -433,7 +504,7 @@ func TestACancelledWaitReturnsButTheWriteStands(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	var err error
 	call := returned(func() { _, err = do(ctx, e, "SET", "k", "v") })
-	<-g.entered
+	g.awaitSync(t)
 	stillRunning(t, call, "a call whose write is not synced")
 	cancel()
 	<-call
@@ -455,7 +526,7 @@ func TestCloseFinishesTheCallsWaitingOnIt(t *testing.T) {
 	g.hold()
 	var callErr, closeErr error
 	call := returned(func() { _, callErr = do(context.Background(), e, "SET", "k", "v") })
-	<-g.entered
+	g.awaitSync(t)
 	closed := returned(func() { closeErr = e.Close() })
 	stillRunning(t, closed, "Close, while the maintenance goroutine syncs")
 	g.release()

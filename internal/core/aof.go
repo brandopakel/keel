@@ -445,7 +445,13 @@ func (e *Engine) pollAOFSync(wait bool) {
 
 func (e *Engine) flushAOF(closing bool) error {
 	fsync := e.settings.fsync
-	e.pollAOFSync(closing || fsync == FsyncAlways)
+	// Under always an engine Open makes syncs outside its lock, as under
+	// everysec, and publishes only what a sync has covered: the calls that
+	// buffer records while one sync runs wait for the next, which covers them
+	// all (group commit). The server's loop, which holds the lock throughout
+	// and answers after the flush, syncs in line, as Redis's main thread does.
+	syncedOnly := fsync == FsyncAlways && e.driver != nil
+	e.pollAOFSync(closing || fsync == FsyncAlways && !syncedOnly)
 	if e.aof.file == nil {
 		return nil
 	}
@@ -464,7 +470,7 @@ func (e *Engine) flushAOF(closing bool) error {
 			e.aof.failed = err
 			return err
 		}
-		if !closing && fsync == FsyncEverySec {
+		if !closing && (fsync == FsyncEverySec || syncedOnly) {
 			result := make(chan error, 1)
 			file, syncFile, stats := e.aof.file, e.aofSync, &e.appendSyncStats
 			wake := e.rewriteWake
@@ -479,7 +485,7 @@ func (e *Engine) flushAOF(closing bool) error {
 					wake()
 				}
 			}()
-			e.appendCompleted = e.appendWritten
+			e.publishFlushed(syncedOnly)
 			return nil
 		}
 		if err := timedPersistenceSync(&e.appendSyncStats, e.aof.file, e.aofSync); err != nil {
@@ -490,8 +496,18 @@ func (e *Engine) flushAOF(closing bool) error {
 		e.aof.dirty = false
 		e.appendSynced = e.appendWritten
 	}
-	e.appendCompleted = e.appendWritten
+	e.publishFlushed(syncedOnly)
 	return nil
+}
+
+// publishFlushed advances the offset whose replies may be released: to what
+// is written, or, when syncedOnly, to what a sync has covered.
+func (e *Engine) publishFlushed(syncedOnly bool) {
+	if syncedOnly {
+		e.appendCompleted = e.appendSynced
+		return
+	}
+	e.appendCompleted = e.appendWritten
 }
 
 // LoadAOF replays a log into the keyspace.
