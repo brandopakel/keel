@@ -386,6 +386,9 @@ func (tx *Transaction) exec(e *Engine, w io.Writer, conn Connection) error {
 	return err
 }
 
+//go:noinline
+func padF0() {}
+
 // runTransaction runs commands on e as one unit through run, for EXEC and for
 // a block a replica has received. The unit is framed in the log and in the
 // protocol 2 stream, and eviction in e's space waits until the block is

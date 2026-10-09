@@ -86,6 +86,18 @@ func (e *Engine) Do(ctx context.Context, cmd *Command, w io.ReadWriter) error {
 	return e.waitPublished(ctx, end, result)
 }
 
+//go:noinline
+func padB0() {}
+
+//go:noinline
+func padB1() {}
+
+//go:noinline
+func padB2() {}
+
+//go:noinline
+func padB3() {}
+
 // callRefusal is why cmd may not run on e, or nil: e is closed, or nothing
 // flushes its log for it, or its log has failed - every call, where the
 // failure latches, and while it is retried, write commands and PING, as
@@ -182,3 +194,18 @@ func (e *Engine) waitPublished(ctx context.Context, end uint64, result error) er
 		e.mu.Lock()
 	}
 }
+
+//go:noinline
+func padC0() {}
+
+//go:noinline
+func padC1() {}
+
+//go:noinline
+func padC2() {}
+
+//go:noinline
+func padC3() {}
+
+//go:noinline
+func padC4() {}

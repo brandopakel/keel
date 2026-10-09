@@ -366,3 +366,30 @@ func (e *Engine) replicaCommandError(cmd string) error {
 	}
 	return nil
 }
+
+//go:noinline
+func padE0() {}
+
+//go:noinline
+func padE1() {}
+
+//go:noinline
+func padE2() {}
+
+//go:noinline
+func padE3() {}
+
+//go:noinline
+func padE4() {}
+
+//go:noinline
+func padE5() {}
+
+//go:noinline
+func padE6() {}
+
+//go:noinline
+func padE7() {}
+
+//go:noinline
+func padE8() {}

@@ -88,6 +88,12 @@ func (e *Engine) writeAOFBuffer(drain bool) error {
 	return nil
 }
 
+//go:noinline
+func padA0() {}
+
+//go:noinline
+func padA1() {}
+
 // cutShortWrite cuts the n bytes a short write left at the end of e's log
 // back off it, as Redis truncates a short write (aof.c 1515-1526), and says
 // whether it did. The size to cut back to is the file's own, less n, rather
