@@ -255,6 +255,15 @@ type Engine struct {
 	// it installs with SetServerInfo; nil, INFO leaves those fields out.
 	serverInfo *ServerInfo
 
+	// totals are INFO's command and error counts (command_totals.go). Every
+	// command adds to them, but only after it has run, so they go after
+	// settings with what INFO alone reads, and the offsets a command reads
+	// on its way in stay as they were.
+	totals commandTotals
+	// statsReset is the transport's part of CONFIG RESETSTAT, installed with
+	// SetStatsReset; nil, there is none.
+	statsReset func()
+
 	// mu is e's lock, which Lock and Unlock take and release. No command
 	// reads it, so it goes last, and every field a command reads keeps its
 	// offset.

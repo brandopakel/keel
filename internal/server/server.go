@@ -383,6 +383,16 @@ var clientsClosedSlow, clientsClosedUnanswered, clientsClosedUnread uint64
 // counts a connection only once it is fully set up, on every accept path.
 var connectionsReceived uint64
 
+// connectionsReceivedBase is where INFO's total_connections_received counts
+// from: CONFIG RESETSTAT moves it up to connectionsReceived. connectionsReceived
+// itself numbers the clients, and is never reset, so client ids keep growing
+// across a reset as Redis's do.
+var connectionsReceivedBase uint64
+
+// resetConnectionStats is the transport's part of CONFIG RESETSTAT:
+// total_connections_received and rejected_connections start again from zero.
+func resetConnectionStats() { connectionsReceivedBase, connectionsRejected = connectionsReceived, 0 }
+
 // connectionsRejected counts connections accepted only to be closed at once
 // because the server already held its most clients, Redis's
 // rejected_connections.
@@ -777,9 +787,12 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 		return core.ClientBufferStats{Connected: len(clients), InputBytes: retainedInputBytes, ReplyBytes: retainedReplyBytes, TotalBytes: retainedClientBytes,
 			RequestAllocationPeak: requestBudget.peak, RequestAllocationRefusals: requestBudget.refusals.Load(),
 			ClosedSlow: clientsClosedSlow, ClosedUnanswered: clientsClosedUnanswered, ClosedUnread: clientsClosedUnread,
-			RunsUnreplied: runsUnreplied, ConnectionsReceived: connectionsReceived, ConnectionsRejected: connectionsRejected}
+			RunsUnreplied: runsUnreplied, ConnectionsReceived: connectionsReceived - connectionsReceivedBase,
+			ConnectionsRejected: connectionsRejected}
 	})
 	defer e.SetClientBuffers(nil)
+	e.SetStatsReset(resetConnectionStats)
+	defer e.SetStatsReset(nil)
 	e.SetServerInfo(&core.ServerInfo{Port: o.Port, MaxClients: o.MaxClients, IOThreads: o.IOThreads,
 		Host: o.Host, RequirePass: o.RequirePass,
 		Hz: max(1, int(time.Second/o.CronInterval)), Multiplexer: io_multiplexing.API})
@@ -1091,6 +1104,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 			if c.err != nil {
 				if errors.Is(c.err, core.ErrRequestAllocation) {
 					c.out = requestAllocationReply
+					e.NoteErrorReply(c.out)
 					c.closeAfterWrite = true
 					if !accountClient(c) {
 						closeClient(c)
@@ -1099,6 +1113,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 					writable = append(writable, c)
 				} else if errors.Is(c.err, core.ErrProtocol) {
 					c.out = core.Encode(c.err, false)
+					e.NoteErrorReply(c.out)
 					c.closeAfterWrite = true
 					writable = append(writable, c)
 				} else {
@@ -1129,8 +1144,10 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 		if !o.ConcurrentAppend || (!e.AppendPending() && e.AppendBufferedBytes() == 0) {
 			e.ExpireCycle()
 		}
-		// Once a turn, not once a command: INFO's used_memory_peak.
+		// Once a turn, not once a command: INFO's used_memory_peak, and
+		// instantaneous_ops_per_sec's sample when one is due.
 		e.NoteMemoryPeak()
+		e.SampleCommandRate()
 
 		// The log is written and synced here, after every command has run and
 		// before a single reply goes out. Under appendfsync always that
@@ -1265,29 +1282,36 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 		c.transact(cmd, w)
 		return
 	}
+	// What the engine and the transaction answer they count themselves; what
+	// is answered here is counted here, as it runs and as its errors are
+	// written (countedReplies).
+	own := countedReplies{c.engine, w}
 	locked := c.password != "" && !c.authenticated
 	if locked || core.IsConnectionCommand(cmd.Cmd) {
 		if err := core.CommandError(cmd); err != nil {
-			w.Write(core.Refusal(cmd, err))
+			own.Write(core.Refusal(cmd, err))
 			return
 		}
 	}
 	switch cmd.Cmd {
 	case "AUTH":
-		c.auth(cmd.Args, w)
+		c.auth(cmd.Args, own)
+		c.engine.NoteCommand()
 		return
 	case "HELLO":
-		c.hello(cmd.Args, w)
+		c.hello(cmd.Args, own)
+		c.engine.NoteCommand()
 		return
 	case "QUIT":
 		// Nothing after QUIT runs: executeRun stops at closeAfterWrite, and the
 		// write phase closes the connection once this reply has gone.
 		w.Write([]byte("+OK\r\n"))
 		c.closeAfterWrite = true
+		c.engine.NoteCommand()
 		return
 	}
 	if locked {
-		w.Write(core.Refusal(cmd, errNoAuth))
+		own.Write(core.Refusal(cmd, errNoAuth))
 		return
 	}
 	if core.IsTransactionCommand(cmd.Cmd) {
@@ -1295,13 +1319,27 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 		return
 	}
 	if cmd.Cmd == "CLIENT" {
-		c.clientCommand(cmd, w)
+		c.clientCommand(cmd, own)
+		c.engine.NoteCommand()
 		return
 	}
 	// Set as the command runs rather than as it was parsed: a HELLO earlier
 	// in the same pipeline has already changed it.
 	cmd.RESP3 = c.resp3
 	responseRw(c.engine, cmd, w)
+}
+
+// countedReplies counts each error the transport writes itself toward INFO's
+// total_error_replies and errorstats. Each reply is one write.
+type countedReplies struct {
+	e *core.Engine
+	w io.ReadWriter
+}
+
+func (r countedReplies) Read(p []byte) (int, error) { return r.w.Read(p) }
+func (r countedReplies) Write(p []byte) (int, error) {
+	r.e.NoteErrorReply(p)
+	return r.w.Write(p)
 }
 
 // transact hands a command to the connection's transaction, or to MULTI, EXEC

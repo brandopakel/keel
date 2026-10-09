@@ -139,6 +139,9 @@ func (s *Space) TotalKeys() int {
 // Evicted reports how many keys eviction has removed.
 func (s *Space) Evicted() uint64 { return s.evicted }
 
+// ResetEvicted starts Evicted's count again from zero, for CONFIG RESETSTAT.
+func (s *Space) ResetEvicted() { s.evicted = 0 }
+
 func (s *Space) nextRand() uint64 {
 	s.rng ^= s.rng << 13
 	s.rng ^= s.rng >> 7

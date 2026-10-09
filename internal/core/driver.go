@@ -162,6 +162,8 @@ func (e *Engine) drive(d *driver) {
 func (e *Engine) maintain(d *driver, nextMemory *time.Time) {
 	// Reap idle keys before flushing their removal records, as the loop does.
 	e.ExpireCycle()
+	// instantaneous_ops_per_sec's sample, when one is due, as the loop takes it.
+	e.SampleCommandRate()
 	// A failed flush is a state, not an error to act on here: one the log
 	// retries leaves its write or sync status in error until a later flush
 	// succeeds, and one it does not latches (aof.failed), where the server
