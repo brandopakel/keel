@@ -49,8 +49,9 @@ func killFailAt(large bool) int {
 // under always only once it is synced. One run is killed while a rewrite it
 // started is under way; two while the disk fails, one of them in the middle
 // of large records, whose rest is kept for the retry; and one under always
-// while slow syncs run outside the engine's lock, with calls queued behind
-// them, none of which may have returned before its sync did.
+// killed inside a slow sync that has reported calls written behind it, which
+// a sync run under the engine's lock could not have: none of those calls may
+// have returned, and every write acknowledged before must be there.
 func TestEveryAcknowledgedWriteSurvivesAKill(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
@@ -115,6 +116,16 @@ func TestEveryAcknowledgedWriteSurvivesAKill(t *testing.T) {
 			// before the disk failed.
 			var required map[string]string
 			started, since := !c.rewrite && !c.fail, 0
+			// With slow syncs, the kill comes once c.acks writes have been
+			// acknowledged and a sync has reported calls written behind it:
+			// the kill then lands in that sync, with those calls waiting for
+			// the next.
+			behindSync := !c.slowSync
+			// How many syncs could not take the lock while they ran, and how
+			// many could: a sync under the lock never can, and one outside it
+			// only fails to while calls hold it, so a run of the first with
+			// none of the second is a sync under the lock.
+			lockedSyncs, syncs := 0, 0
 			lines := bufio.NewScanner(out)
 			deadline := time.Now().Add(time.Minute)
 			ack := func(fields []string) {
@@ -126,7 +137,7 @@ func TestEveryAcknowledgedWriteSurvivesAKill(t *testing.T) {
 					acked[fields[1]] = killValue(i)
 				}
 			}
-			for since < c.acks || !started {
+			for since < c.acks || !started || !behindSync {
 				require.True(t, time.Now().Before(deadline), "the writer reported %d writes in a minute", len(acked))
 				require.True(t, lines.Scan(), "the writer stopped: %v", lines.Err())
 				fields := strings.Fields(lines.Text())
@@ -143,6 +154,16 @@ func TestEveryAcknowledgedWriteSurvivesAKill(t *testing.T) {
 					required = maps.Clone(acked)
 				case "denied":
 					since++
+				case "syncing":
+					n, err := strconv.Atoi(fields[1])
+					require.NoError(t, err)
+					syncs++
+					if since >= c.acks && n > 0 {
+						behindSync = true
+					}
+				case "locked":
+					lockedSyncs++
+					require.False(t, lockedSyncs >= 20 && syncs == 0, "syncs run under the engine's lock, so no call can write behind one")
 				case "rewritten":
 					t.Fatal("the rewrite finished before the kill; it is slowed so that it cannot")
 				default:
@@ -235,13 +256,36 @@ func TestHelperProcessWritesUntilKilled(t *testing.T) {
 		})
 	}
 	if os.Getenv("KEEL_CORE_KILL_SLOW_SYNC") != "" {
-		// Each sync of the log takes 20 ms, as a slow disk's might, so that
-		// under always the kill most likely lands while one runs outside the
-		// engine's lock, with calls written behind it and waiting for the next.
+		// Each sync of the log takes up to 20 ms, as a slow disk's might, and
+		// says what it found: "syncing <bytes>", how much calls had written
+		// behind it by then, read under the engine's lock, which a sync
+		// outside the lock can take; or "locked", when it could not take it
+		// in those 20 ms - every sync, when syncs run under the lock, as
+		// before the change this case is for, and now and then one that
+		// calls kept the lock from. The parent kills on a sync with calls
+		// written behind it.
 		holding(e, func() {
 			sync := e.aofSync
 			e.aofSync = func(f *os.File) error {
-				time.Sleep(20 * time.Millisecond)
+				deadline := time.Now().Add(20 * time.Millisecond)
+				var behind uint64
+				locked := false
+				for time.Now().Before(deadline) {
+					if e.mu.TryLock() {
+						locked = true
+						behind = e.AppendOffset() - e.aof.syncOffset
+						e.mu.Unlock()
+						if behind > 0 {
+							break
+						}
+					}
+					time.Sleep(time.Millisecond)
+				}
+				if !locked {
+					report("locked")
+				} else {
+					report("syncing %d", behind)
+				}
 				return sync(f)
 			}
 		})

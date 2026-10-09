@@ -74,6 +74,17 @@ func returned(fn func()) <-chan struct{} {
 	return done
 }
 
+// entered waits for a sync to reach g's gate, failing t rather than hanging
+// if none does within a deadline only a hang would reach.
+func (g *gatedSync) awaitSync(t *testing.T) {
+	t.Helper()
+	select {
+	case <-g.entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("no sync reached the gate")
+	}
+}
+
 // stillRunning fails t if done has closed. It waits a while first: a slow
 // machine can only make done later, never sooner, so this is not a timing
 // assertion.
@@ -164,7 +175,7 @@ func TestAReadWaitsForTheWriteItSaw(t *testing.T) {
 
 	var reply string
 	read := returned(func() { reply = mustDo(t, e, "GET", "k") })
-	<-g.entered
+	g.awaitSync(t)
 	stillRunning(t, read, "a read of a write that is not yet synced")
 	g.release()
 	<-read
@@ -230,7 +241,7 @@ func TestUnderAlwaysCallsQueueBehindASyncOutsideTheLock(t *testing.T) {
 	var release sync.Once
 	t.Cleanup(func() { release.Do(g.release) })
 	first := returned(func() { mustDo(t, e, "SET", "first", "v") })
-	<-g.entered
+	g.awaitSync(t)
 
 	locked := returned(func() { holding(e, func() {}) })
 	select {
@@ -493,7 +504,7 @@ func TestACancelledWaitReturnsButTheWriteStands(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	var err error
 	call := returned(func() { _, err = do(ctx, e, "SET", "k", "v") })
-	<-g.entered
+	g.awaitSync(t)
 	stillRunning(t, call, "a call whose write is not synced")
 	cancel()
 	<-call
@@ -515,7 +526,7 @@ func TestCloseFinishesTheCallsWaitingOnIt(t *testing.T) {
 	g.hold()
 	var callErr, closeErr error
 	call := returned(func() { _, callErr = do(context.Background(), e, "SET", "k", "v") })
-	<-g.entered
+	g.awaitSync(t)
 	closed := returned(func() { closeErr = e.Close() })
 	stillRunning(t, closed, "Close, while the maintenance goroutine syncs")
 	g.release()
