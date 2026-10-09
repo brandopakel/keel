@@ -32,7 +32,7 @@ const (
 var packageVars = map[string]string{
 	"commandTable": table, "commandArity": table, "commands": table,
 	"connectionCommands": table, "containerCommands": table, "clientSubcommands": table,
-	"memorySubcommands": table, "configSubcommands": table, "configHelp": table, "commandKeyspace": table, "multiKeyCommands": table,
+	"memorySubcommands": table, "configSubcommands": table, "configHelp": table, "keyspaceReads": table, "commandKeyspace": table, "multiKeyCommands": table,
 	"strideKeyCommands": table, "argumentsBeforeType": table, "replacingWrites": table,
 	"filterCommands": table, "writeCommands": table, "notInTransaction": table,
 	"answersWithoutData": table, "bfInfoOptions": table, "cfOptions": table, "memoryHelp": table,
