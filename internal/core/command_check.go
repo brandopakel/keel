@@ -42,7 +42,7 @@ var commandArity = map[string]int{
 	"TTL": 2, "PTTL": 2, "EXPIRE": -3, "PEXPIREAT": -3,
 	"PEXPIRE": -3, "EXPIREAT": -3, "PERSIST": 2,
 
-	"DBSIZE": 1, "FLUSHDB": -1, "MEMORY": -2, "INFO": -1, "CONFIG": -2, "LATENCY": -2, "BGREWRITEAOF": 1,
+	"DBSIZE": 1, "FLUSHDB": -1, "MEMORY": -2, "INFO": -1, "CONFIG": -2, "LATENCY": -2, "SLOWLOG": -2, "BGREWRITEAOF": 1,
 	"KEEL.DUMP": 2, "KEEL.RESTORE": 3, "MEMKV.DUMP": 2, "MEMKV.RESTORE": 3,
 	"KEEL.PROMOTE": 2, "KEEL.FENCE": 2, "KEEL.REPL.PULL": 3, "KEEL.REPL.PULL2": -5,
 
@@ -109,8 +109,10 @@ var (
 	// Redis's LATENCY subcommands, with Redis's counts.
 	latencySubcommands = []subcommand{{"doctor", 2}, {"graph", 3}, {"help", 2}, {"histogram", -2}, {"history", 3},
 		{"latest", 2}, {"reset", -2}}
-	containerCommands = map[string][]subcommand{"CLIENT": clientSubcommands, "MEMORY": memorySubcommands,
-		"CONFIG": configSubcommands, "LATENCY": latencySubcommands}
+	// Redis's SLOWLOG subcommands, with Redis's counts.
+	slowlogSubcommands = []subcommand{{"get", -2}, {"help", 2}, {"len", 2}, {"reset", 2}}
+	containerCommands  = map[string][]subcommand{"CLIENT": clientSubcommands, "MEMORY": memorySubcommands,
+		"CONFIG": configSubcommands, "LATENCY": latencySubcommands, "SLOWLOG": slowlogSubcommands}
 )
 
 // subcommandsOf is a container command's subcommands, or nil for any other
@@ -125,6 +127,8 @@ func subcommandsOf(name string) []subcommand {
 		return configSubcommands
 	case "LATENCY":
 		return latencySubcommands
+	case "SLOWLOG":
+		return slowlogSubcommands
 	}
 	return nil
 }

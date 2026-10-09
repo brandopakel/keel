@@ -1,7 +1,7 @@
 # INFO and monitoring compatibility
 
-Status: October 9, 2026. Parts (a) and (b) are merged. (c1), (c2), (c3a) and
-(c3b) are in review. (c3c) and (d) are planned.
+Status: October 9, 2026. Parts (a) and (b) are merged. (c1), (c2), (c3a), (c3b)
+and (c3c) are in review. (d) is planned.
 
 Monitoring built for Redis reads `INFO`, `CONFIG GET`, `SLOWLOG` and `LATENCY`.
 The standard Prometheus exporter, `redis_exporter`, and the Grafana dashboards
@@ -100,6 +100,19 @@ Each lands on its own, smallest risk first.
     correction, cannot make a command's time negative or huge in Keel, as
     it can in Redis. In steady time the two clocks agree, and no client
     depends on the step.
+
+  **The slow log's secrets (c3c).** Redis redacts what it treats as secret in
+  the slow log, as `(redacted)`: `AUTH`'s password, and its user in the
+  three-argument form; the user and password after `HELLO`'s `AUTH`; and the
+  value of a sensitive setting in `CONFIG SET` (`requirepass`, `masterauth`,
+  `masteruser` and the two TLS key passwords).
+  - **Improvement over Redis:** Redis redacts them only once the command
+    has got as far as reading them. So an `AUTH` of more than two arguments
+    (refused for its syntax first), a `HELLO` of an unsupported protocol
+    version (refused first), or a `CONFIG SET` of an odd count (refused
+    first) lands in the slow log with the password as sent, if it runs
+    slowly enough. Keel redacts them whatever the command goes on to do. No
+    client reads its own password back from `SLOWLOG GET`.
 - **(d) Network bytes**, counted on the connection read and write paths in
   `internal/server`.
 
@@ -185,7 +198,7 @@ blank line today, so they fall outside any section. (a) moves them inside.
 | `total_net_repl_input_bytes`, `total_net_repl_output_bytes`, `instantaneous_*_repl_kbps` | - | (d), on the replication connections |
 | `rejected_connections` | - | (a) Connections refused at `-maxclients` |
 | `total_reads_processed`, `total_writes_processed` | - | (d) Socket reads and writes that moved bytes |
-| `slowlog_commands_count`, `slowlog_commands_time_ms_max`, `slowlog_commands_time_ms_sum` | - | (c3c) |
+| `slowlog_commands_count`, `slowlog_commands_time_ms_max`, `slowlog_commands_time_ms_sum` | - | (c3c), done. The commands the slow log has taken since the last `CONFIG RESETSTAT`, and their time, in milliseconds with two decimals |
 | `pubsub_channels`, `pubsub_patterns`, `pubsubshard_channels`, `tracking_total_*`, `evicted_clients`, `evicted_scripts` | - | (a) `0` |
 | `total_forks`, `latest_fork_usec` | - | (a) `0`: Keel never forks |
 | `sync_full`, `sync_partial_ok`, `sync_partial_err` | - | Left out until Keel's replication protocol is mapped onto Redis's terms |
@@ -300,9 +313,9 @@ General validation runs it against Redis 8.10.1 and RedisBloom.
     of its log (`update_command_stats`, `isAOFLoadingContext`), though it
     counts every call it makes in `total_commands_processed`.
     `CONFIG RESETSTAT` clears every line.
-  - Not yet: `slowlog_count`, `slowlog_time_ms_sum` and
-    `slowlog_time_ms_max`, which Redis 8.10 adds to a command's line once
-    it has been slow-logged. They come with (c3c).
+  - Once the slow log has taken a command, its line adds `slowlog_count`,
+    `slowlog_time_ms_sum` and `slowlog_time_ms_max`, as Redis 8.10's does
+    (c3c).
 - **Errorstats (c1), done:** `errorstat_<PREFIX>:count=N`, in Redis's
   default sections, between CPU and Cluster.
   - The prefix is the error's first word (`ERR`, `WRONGTYPE`, `NOAUTH`) when
@@ -337,11 +350,11 @@ General validation runs it against Redis 8.10.1 and RedisBloom.
 
 | Command | Plan |
 | --- | --- |
-| `CONFIG GET pattern [pattern ...]` | (b), done. Keel's settings under Redis's names, read live: `maxmemory`, `maxmemory-policy`, `maxmemory-samples`, `lfu-log-factor`, `appendonly`, `appendfilename`, `appendfsync`, `auto-aof-rewrite-percentage`, `auto-aof-rewrite-min-size`, `replicaof` and its old name `slaveof` (`host port`, as Redis writes it), `databases` (`1`), `save` (`""`, no snapshots) and `dir` (the working directory, against which relative paths resolve). With the server, also `port`, `bind`, `maxclients`, `tcp-backlog` (Keel listens with a backlog of `maxclients`), `io-threads`, `hz` and `requirepass`, which Redis gives to any client that has logged in. The latency settings (`latency-tracking`, `latency-tracking-info-percentiles`, `latency-monitor-threshold`) come with (c3b), and the slow log's with (c3c). A RESP2 flat array, or a RESP3 map. A name matches without regard to case and comes back as asked; a glob comes back in Redis's spelling. Settings whose meaning differs are left out: `lfu-decay-time` against Keel's access-counted decay; `client-output-buffer-limit`, since Keel's 64 MiB `MaxReplyBytes` caps one reply rather than disconnecting a client that falls behind; and `repl-backlog-size`, since a Keel replica reads the primary's log, not a backlog. |
+| `CONFIG GET pattern [pattern ...]` | (b), done. Keel's settings under Redis's names, read live: `maxmemory`, `maxmemory-policy`, `maxmemory-samples`, `lfu-log-factor`, `appendonly`, `appendfilename`, `appendfsync`, `auto-aof-rewrite-percentage`, `auto-aof-rewrite-min-size`, `replicaof` and its old name `slaveof` (`host port`, as Redis writes it), `databases` (`1`), `save` (`""`, no snapshots) and `dir` (the working directory, against which relative paths resolve). With the server, also `port`, `bind`, `maxclients`, `tcp-backlog` (Keel listens with a backlog of `maxclients`), `io-threads`, `hz` and `requirepass`, which Redis gives to any client that has logged in. The latency settings (`latency-tracking`, `latency-tracking-info-percentiles`, `latency-monitor-threshold`) came with (c3b), and the slow log's (`slowlog-log-slower-than`, `slowlog-max-len`, `slowlog-entry-max-argc`, `slowlog-entry-max-string-len`) with (c3c). A RESP2 flat array, or a RESP3 map. A name matches without regard to case and comes back as asked; a glob comes back in Redis's spelling. Settings whose meaning differs are left out: `lfu-decay-time` against Keel's access-counted decay; `client-output-buffer-limit`, since Keel's 64 MiB `MaxReplyBytes` caps one reply rather than disconnecting a client that falls behind; and `repl-backlog-size`, since a Keel replica reads the primary's log, not a backlog. |
 | `CONFIG SET parameter value [parameter value ...]` | (b), done. Keel has no runtime configuration yet, so every pair is refused in Redis's words for the first that fails: `Unknown option or number of arguments for CONFIG SET - '<name>'` for a name Keel does not report, `CONFIG SET failed (possibly related to argument '<name>') - can't set immutable config` for one it does, and `can't set protected config` for `dir`, as Redis keeps it by default. An odd count is Redis's `syntax error`. |
 | `CONFIG REWRITE` | (b), done. `The server is running without a config file`, Redis's answer when it was started without one: Keel takes flags. |
-| `CONFIG RESETSTAT` | (c1), done. Resets what Redis's `resetServerStats` resets that Keel reports: `total_commands_processed` and the ops-per-second samples, `total_error_replies` and errorstats, `total_connections_received` and `rejected_connections` (client ids keep growing, as Redis's do), `expired_keys`, `evicted_keys`, `keyspace_hits`, `keyspace_misses`, commandstats, latencystats, `aof_rewrites` and `aof_rewrites_consecutive_failures`. Each later part adds its own counters (the slow log's counts, network bytes). `used_memory_peak` stays, as Redis keeps it. Keel's own fields keep counting. |
-| `SLOWLOG GET [count]`, `LEN`, `RESET`, `HELP` | (c3c). Entries are id, Unix time, duration in µs, arguments (at most 32, each cut at 128 bytes as Redis does), client address and name. Defaults are `slowlog-log-slower-than` 10000 and `slowlog-max-len` 128. |
+| `CONFIG RESETSTAT` | (c1), done. Resets what Redis's `resetServerStats` resets that Keel reports: `total_commands_processed` and the ops-per-second samples, `total_error_replies` and errorstats, `total_connections_received` and `rejected_connections` (client ids keep growing, as Redis's do), `expired_keys`, `evicted_keys`, `keyspace_hits`, `keyspace_misses`, commandstats, latencystats, the slow log's counts (not its entries, which `SLOWLOG RESET` clears), `aof_rewrites` and `aof_rewrites_consecutive_failures`. Network bytes join them with (d). `used_memory_peak` stays, as Redis keeps it. Keel's own fields keep counting. |
+| `SLOWLOG GET [count]`, `LEN`, `RESET`, `HELP` | (c3c), done. The commands that took `slowlog-log-slower-than` microseconds or more (10000), newest first, at most `slowlog-max-len` (128). Each entry has Redis 8.10's seven fields: id, Unix time, duration in µs, the arguments (at most `slowlog-entry-max-argc`, 32, the last place saying how many more; each cut at `slowlog-entry-max-string-len`, 128 bytes, saying how many more), the client's address (`ip:port`, `[ip]:port` for IPv6, as Redis writes it) and name, and how many arguments the command really had. `EXEC` is not logged, as in Redis; what it runs is. `GET`'s count is read as Redis reads it, `-1` meaning all. The four settings are Redis's defaults, which `CONFIG GET` reports. `CONFIG RESETSTAT` clears the counts and keeps the entries, and the log's replay adds none. |
 | `LATENCY LATEST`, `HISTORY`, `RESET`, `GRAPH`, `DOCTOR`, `HELP` | (c3b), done. Redis's latency monitor is off by default (`latency-monitor-threshold 0`, which `CONFIG GET` reports), and Keel has none, so these answer as Redis's do when it has never been on: `LATEST` and `HISTORY` an empty array, `RESET` `0`, `GRAPH` Redis's `No samples available for event` error, and `DOCTOR` its report that monitoring is disabled. Each subcommand has Redis's count. |
 | `LATENCY HISTOGRAM [command ...]` | (c3b), done. Each command that has run, or each named (a container brings its subcommands, `config|get` names one, an unknown name nothing): its `calls` and its `histogram_usec`, the cumulative count at each power of two microseconds from 1, as Redis's `fillCommandCDF` walks its histogram. The exporter reads it for `redis_commands_latencies_usec`. |
 
@@ -380,8 +393,9 @@ Live telemetry run after each merge confirms them.
   draws three `ERR` replies from Keel instead of five: `SLOWLOG LEN`,
   `SLOWLOG GET 1` and `COMMAND INFO COMMANDLOG`.
 - **(c3c):** `redis_slowlog_length`, `redis_slowlog_last_id`,
-  `redis_last_slow_execution_duration_seconds`. With `SLOWLOG` answered, the
-  scrape draws one `ERR` reply, `COMMAND INFO`, which waits for `COMMAND`
-  (#137, tier 1).
+  `redis_last_slow_execution_duration_seconds` and
+  `redis_slowlog_commands_total`. 98 metric names from Keel, locally. With
+  `SLOWLOG` answered, the scrape draws one `ERR` reply from Keel, `COMMAND
+  INFO`, which waits for `COMMAND` (#137, tier 1).
 - **(d):** `redis_net_input_bytes_total`, `redis_net_output_bytes_total`, and
   their replication forms.

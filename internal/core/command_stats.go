@@ -11,6 +11,9 @@ import (
 // all, and how often it was refused before it ran or failed as it ran.
 type commandStat struct {
 	calls, usec, rejected, failed uint64
+	// The slow log's count of the command and its time, in microseconds,
+	// which Redis 8.10 adds to the command's line once it has one.
+	slowlogCount, slowlogUsecSum, slowlogUsecMax uint64
 }
 
 // statNames are the names commandstats reports, Redis's: each command in
@@ -55,7 +58,7 @@ func subcommandStat(cmd *Command, entry commandEntry) uint16 {
 //
 // The time also goes into the command's latency histogram, as Redis records
 // it with latency-tracking on, its default (latency.go).
-func (e *Engine) noteRun(stat uint16, started int64, failed bool) {
+func (e *Engine) noteRun(cmd *Command, stat uint16, started int64, failed bool) {
 	micros := microsBetween(started, nanotime())
 	s := &e.cmdStats[stat]
 	s.calls++
@@ -65,6 +68,9 @@ func (e *Engine) noteRun(stat uint16, started int64, failed bool) {
 	}
 	e.totals.commands++
 	e.recordLatency(stat, micros)
+	if int64(micros) >= e.slowlog.slowerThan {
+		e.noteSlow(cmd, stat, micros)
+	}
 }
 
 // CommandStart is when a command the transport answers itself started: the
@@ -90,7 +96,7 @@ func (e *Engine) NoteCommandRan(cmd *Command, start CommandStart) {
 		e.totals.commands++
 		return
 	}
-	e.noteRun(stat, start.started, e.totals.errors > start.errors)
+	e.noteRun(cmd, stat, start.started, e.totals.errors > start.errors)
 }
 
 // NoteCommandRefused counts a command the transport refused before it ran,
@@ -121,8 +127,13 @@ func (e *Engine) commandStatsInfo(b *strings.Builder) {
 		if s.calls != 0 {
 			perCall = float32(s.usec) / float32(s.calls)
 		}
-		fmt.Fprintf(b, "cmdstat_%s:calls=%d,usec=%d,usec_per_call=%.2f,rejected_calls=%d,failed_calls=%d\r\n",
+		fmt.Fprintf(b, "cmdstat_%s:calls=%d,usec=%d,usec_per_call=%.2f,rejected_calls=%d,failed_calls=%d",
 			statNames[i], s.calls, s.usec, perCall, s.rejected, s.failed)
+		if s.slowlogCount > 0 {
+			fmt.Fprintf(b, ",slowlog_count=%d,slowlog_time_ms_sum=%.2f,slowlog_time_ms_max=%.2f",
+				s.slowlogCount, float64(s.slowlogUsecSum)/1000, float64(s.slowlogUsecMax)/1000)
+		}
+		b.WriteString("\r\n")
 	}
 	b.WriteString("\r\n")
 }

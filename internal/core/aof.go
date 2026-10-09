@@ -569,9 +569,12 @@ func (e *Engine) loadAOF(ctx context.Context, path string) (int, error) {
 	stats := slices.Clone(e.cmdStats)
 	latency := e.latency
 	e.latency = make([]*latencyHistogram, len(latency))
+	slow := e.slowlog
 	defer func() {
 		copy(e.cmdStats, stats)
 		e.latency = latency
+		// Nor does Redis's slow log hear of a command its replay runs.
+		e.slowlog = slow
 	}()
 	defer func() {
 		// Hits and misses stay as the replay left them: Redis's lookupKey

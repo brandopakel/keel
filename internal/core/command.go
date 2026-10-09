@@ -18,6 +18,17 @@ type Command struct {
 	// The connection sets it as the command runs rather than as it is parsed,
 	// because a HELLO earlier in the same pipeline changes it.
 	RESP3 bool
+	// Client is the connection that sent the command, which the slow log
+	// records when the command is slow; nil for a command no connection sent.
+	Client CommandClient
+}
+
+// CommandClient is what the slow log records of a connection: its address,
+// as Redis writes a peer's (ip:port, or [ip]:port for IPv6), and the name it
+// gave itself with CLIENT SETNAME or HELLO.
+type CommandClient interface {
+	PeerAddr() string
+	ClientName() string
 }
 
 // sentName is the command's name as the client spelled it.
