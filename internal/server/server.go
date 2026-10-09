@@ -954,6 +954,23 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 				// Readiness is level-triggered; re-check after restoring interests.
 				continue
 			}
+			if !e.AppendPending() && e.LogRetrying() {
+				// The batch failed and is retried from the buffer (core's
+				// aof_async.go). The connections paused while it was out are
+				// read again, as Redis reads while its log is failing: their
+				// reads and refusals are answered, their writes held to the
+				// retry. The ones whose replies are held stay paused.
+				for fd, c := range paused {
+					if clients[fd] != c || len(c.out) > 0 {
+						continue
+					}
+					if err := c.setInterest(ioMultiplexer, io_multiplexing.OpRead); err != nil {
+						closeClient(c)
+					}
+					delete(paused, fd)
+				}
+				continue
+			}
 			for _, ev := range events {
 				switch ev.Fd {
 				case wakeupFDs[0]:
