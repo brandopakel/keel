@@ -223,6 +223,14 @@ hash field expiry.
   refusals, the transport's own (`NOAUTH`, protocol errors), and those
   inside `EXEC`'s reply.
 
+`scripts/stats-parity.py` checks all of this against Redis. It runs each case
+on both servers, on one connection, after the same keys and a
+`CONFIG RESETSTAT`, and compares how `total_commands_processed`,
+`total_error_replies`, errorstats and the keyspace hits and misses moved. That
+covers every command the two share, with present and missing keys and the
+wrong type, plus refusals, transactions and the connection's own commands.
+General validation runs it against Redis 8.10.1 and RedisBloom.
+
 
 - **Commandstats (c3):**
   `cmdstat_<name>:calls=N,usec=N,usec_per_call=N.NN,rejected_calls=N,failed_calls=N`.
