@@ -385,10 +385,13 @@ func (e *Engine) checkKeyTypes(cmd *Command, entry commandEntry) error {
 	keys := keysBy(cmd, entry.keys)
 	for i, key := range keys {
 		owner, held := e.space.OwnerOf(key)
-		if entry.reads {
-			e.noteLookup(held)
-		}
 		if held && owner.KeyspaceName() != space {
+			// Layout control, never merged: the room c2's counting above takes,
+			// on the wrong type's path, which the command-path job never runs.
+			e.SampleCommandRate()
+			e.SampleCommandRate()
+			e.SampleCommandRate()
+			e.SampleCommandRate()
 			if entry.reads && entry.keys == keyFirstTwo {
 				// Redis's LCS looks both its keys up before it checks the
 				// type of either.
