@@ -2137,13 +2137,22 @@ the public package can speak the protocol without each other.
   (`Status`, `Error`, `Int`, `Bulk`, `Null`, `NullArray`, `Bool`, `Double`,
   `Verbatim`, `Array`, `Set`, `Map`, `Pair`, `Raw`), an `Admission` it asks
   before it grows to a size, and `Reserve` for a reply a command has sized
-  before building it. A refusal replaces the reply and ends it. A bulk
-  string is sized exactly, admitted, and allocated once, as
-  `encodeBoundedString` allocates one today; the transport takes `Bytes`
-  by reference, as it takes a handler's slice. The engine implements
-  `Admission` with `admitReply` when the first family writes through it;
-  until then nothing on a command's path uses `Reply`, which is why this
-  step's measurement is the move's alone.
+  before building it. A refusal replaces the reply and ends it. Its
+  contract keeps three things the server's reply path has today:
+  - a bulk string is sized exactly, admitted, and allocated once, as
+    `encodeBoundedString` allocates one;
+  - the transport takes `Bytes` by reference, as it takes a handler's slice,
+    and keeps a batch-of-one reply until its write phase, so a `Reply` never
+    reuses a buffer: `Reset` forgets the last command's, and the next
+    command allocates its own;
+  - `+OK`, `:0`, `:1`, the nulls, the booleans and the empty map and set are
+    the shared constants the handlers answer with, held by reference while
+    they are the whole reply, so a command that answers one of them
+    allocates nothing, as it allocates nothing now.
+
+  The engine implements `Admission` with `admitReply` when the first family
+  writes through it; until then nothing on a command's path uses `Reply`,
+  which is why this step's measurement is the move's alone.
 
 ## Risks, in order
 
