@@ -169,8 +169,14 @@ func TestServerRetriesAFailedWorkerBatch(t *testing.T) {
 			args := []string{"-appendonly", "-appendfilename", path, "-auto-aof-rewrite-percentage", "0", "-appendfsync", "everysec", "-aof-async-append"}
 			s := startLimitedTestServer(t, logFileLimit, args...)
 			a, ra := connectTest(t, s)
+			// The second connection asks INFO whether the log has failed. A
+			// reply on the first that is only slow is not a held one: the
+			// write is held only once INFO says the log is in error, and a
+			// reply that arrives before then is counted and the loop goes on.
+			b, rb := connectTest(t, s)
 			acked := 0
 			held := make(chan error, 1)
+			replies := make(chan string, 1)
 			for ; ; acked++ {
 				if acked == 1000 {
 					t.Fatal("the log never reached its limit")
@@ -178,30 +184,35 @@ func TestServerRetriesAFailedWorkerBatch(t *testing.T) {
 				if _, err := io.WriteString(a, request("SET", "k"+strconv.Itoa(acked), killedValue)); err != nil {
 					t.Fatal(err)
 				}
-				answered := make(chan string, 1)
 				go func() {
 					got, err := readValue(ra)
 					if err != nil {
 						held <- err
 						return
 					}
-					answered <- got
+					replies <- got
 				}()
-				select {
-				case got := <-answered:
-					if got != "+OK" {
-						t.Fatalf("SET k%d answered %q", acked, got)
+				answered, failing := false, false
+				for !answered && !failing {
+					select {
+					case got := <-replies:
+						if got != "+OK" {
+							t.Fatalf("SET k%d answered %q", acked, got)
+						}
+						answered = true
+					case <-time.After(200 * time.Millisecond):
+						failing = persistenceInfo(t, b, rb)["aof_last_write_status"] == "err"
 					}
-					continue
-				case <-time.After(2 * time.Second):
 				}
-				// Held: its record is the one the worker could not write.
-				break
+				if failing {
+					// Held: its record is the one the worker could not
+					// write. Nothing can answer it now but the stop.
+					break
+				}
 			}
 			if acked < 10 {
 				t.Fatalf("the log failed after %d writes", acked)
 			}
-			b, rb := connectTest(t, s)
 			const misconf = "-MISCONF Errors writing to the AOF file: File too large"
 			expectCall(t, b, rb, misconf, "SET", "denied", "v")
 			expectCall(t, b, rb, misconf, "PING")
