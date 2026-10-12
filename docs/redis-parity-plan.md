@@ -57,10 +57,10 @@ every command Keel has, every argument form Redis's own specifications
 document (`src/commands/*.json` in the Redis source: each optional argument,
 each alternative of each choice, each repeated argument given twice, and so
 each option Redis 8 added) is sent to Keel and to Redis, and the replies are
-compared. The first run, local against Redis 8.10.2 with the 8.10.1
-specifications (October 12, 2026; the CI run is against 8.10.1), found Keel
-accepting **207 of the 217 forms** of its 100 commands and subcommands, with
-10 refused and none answered differently:
+compared. The first CI run, against Redis 8.10.1 (run 38302176673, October
+12, 2026; a local run against 8.10.2 agreed), found Keel accepting **207 of
+the 217 forms** of its 100 commands and subcommands, with 10 refused and none
+answered differently:
 
 | Area | Commands | Forms | Accepted | Refused | Refused forms |
 | --- | ---: | ---: | ---: | ---: | --- |
