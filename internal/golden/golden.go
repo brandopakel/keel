@@ -279,6 +279,10 @@ const (
 	// FlagRecordsSorted sorts the arguments after the key of each record the
 	// command appended, for a pop that removes members in a random order.
 	FlagRecordsSorted = "records-sorted"
+	// FlagZero, written zero:<key>, replaces the value that follows the key
+	// named, in a map or a RESP2 flat array of pairs, with the integer 0: a
+	// field whose number is the machine's, a filter's Size.
+	FlagZero = "zero:"
 )
 
 // Normalize applies flags to reply, in order, and returns the result. A
@@ -286,21 +290,27 @@ const (
 func Normalize(reply []byte, flags []string) ([]byte, error) {
 	for _, flag := range flags {
 		var err error
-		switch flag {
-		case FlagRecordsSorted:
+		switch {
+		case flag == FlagRecordsSorted:
 			// Applied to the records, not the reply.
-		case FlagMasked:
+		case flag == FlagMasked:
 			if len(reply) > 0 {
 				reply = reply[:1]
 			}
-		case FlagTTLSeconds:
+		case flag == FlagTTLSeconds:
 			reply, err = roundTTL(reply, 3600)
-		case FlagTTLMillis:
+		case flag == FlagTTLMillis:
 			reply, err = roundTTL(reply, 3600_000)
-		case FlagSorted, FlagPairs, FlagValues:
+		case flag == FlagSorted || flag == FlagPairs || flag == FlagValues:
 			var n *node
 			if n, err = parse(reply); err == nil {
-				n.rewrite(flag)
+				n.rewrite(flag, "")
+				reply = n.encode(nil)
+			}
+		case strings.HasPrefix(flag, FlagZero) && len(flag) > len(FlagZero):
+			var n *node
+			if n, err = parse(reply); err == nil {
+				n.rewrite(FlagZero, strings.TrimPrefix(flag, FlagZero))
 				reply = n.encode(nil)
 			}
 		default:
@@ -465,13 +475,13 @@ func (n *node) encode(dst []byte) []byte {
 	return dst
 }
 
-// rewrite applies flag to n and everything under it.
-func (n *node) rewrite(flag string) {
+// rewrite applies flag to n and everything under it; key is FlagZero's.
+func (n *node) rewrite(flag, key string) {
 	if !n.aggregate() {
 		return
 	}
 	for _, item := range n.items {
-		item.rewrite(flag)
+		item.rewrite(flag, key)
 	}
 	switch flag {
 	case FlagSorted:
@@ -501,5 +511,29 @@ func (n *node) rewrite(flag string) {
 		for i := 1; i < len(n.items); i += 2 {
 			n.items[i] = &node{kind: ':', raw: []byte(":0\r\n")}
 		}
+	case FlagZero:
+		if len(n.items)%2 != 0 || n.kind == '~' {
+			return
+		}
+		for i := 0; i < len(n.items); i += 2 {
+			if n.items[i].text() == key {
+				n.items[i+1] = &node{kind: ':', raw: []byte(":0\r\n")}
+			}
+		}
 	}
+}
+
+// text is a simple or bulk string's payload, or "" for any other value.
+func (n *node) text() string {
+	switch n.kind {
+	case '+':
+		return string(n.raw[1 : len(n.raw)-2])
+	case '$':
+		if n.null {
+			return ""
+		}
+		_, payload, _ := bytes.Cut(n.raw, []byte("\r\n"))
+		return string(payload[:len(payload)-2])
+	}
+	return ""
 }

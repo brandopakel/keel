@@ -14,10 +14,12 @@ This script is how the fixture is written, so that it is written the same
 way every time:
 
 1. It reads the revision each test names (commandGoldenRevision and
-   connectionGoldenRevision) and refuses to run unless both name the
-   checkout's HEAD, in the short form `git rev-parse --short=7` prints, and
-   the working tree holds no change outside tests, fixtures, scripts and
-   docs. The fixture then describes develop, and nothing else.
+   connectionGoldenRevision) and refuses to run unless both name the same
+   revision, in the short form `git rev-parse --short=7` prints, and nothing
+   outside tests, fixtures, scripts and docs differs between that revision
+   and the working tree. The fixture then describes that revision, and
+   nothing else, though it may be captured on a branch that adds tests to
+   it.
 2. It runs both capture tests through scripts/run-local-validation.py, with
    the wrapper's time and disk limits and its disposable Go cache, into a
    fresh directory under dist/. Each capture runs every case three times in
@@ -90,21 +92,25 @@ def fixture_targets(root=ROOT):
     return targets
 
 
-def head_revision(root=ROOT):
-    return subprocess.run(['git', '-C', str(root), 'rev-parse', '--short=7', 'HEAD'], check=True,
-                          capture_output=True, text=True).stdout.strip()
+def git(root, *args):
+    return subprocess.run(['git', '-C', str(root), *args], check=True, capture_output=True, text=True).stdout
 
 
-def changed_source(root=ROOT):
-    """Paths the working tree changes against HEAD, apart from the harmless."""
-    status = subprocess.run(['git', '-C', str(root), 'status', '--porcelain', '--untracked-files=all'],
-                            check=True, capture_output=True, text=True).stdout
-    changed = []
-    for line in status.splitlines():
-        path = line[3:].split(' -> ')[-1]
-        if not HARMLESS.search(path):
-            changed.append(path)
-    return changed
+def resolve(revision, root=ROOT):
+    """A revision's full hash, or None when the repository does not hold it."""
+    try:
+        return git(root, 'rev-parse', '--verify', '--quiet', revision + '^{commit}').strip()
+    except subprocess.CalledProcessError:
+        return None
+
+
+def changed_source(revision, root=ROOT):
+    """Paths that differ between revision and the working tree, committed or
+    not, apart from the harmless."""
+    committed = git(root, 'diff', '--name-only', revision, 'HEAD').splitlines()
+    status = git(root, 'status', '--porcelain', '--untracked-files=all')
+    pending = [line[3:].split(' -> ')[-1] for line in status.splitlines()]
+    return sorted({path for path in committed + pending if not HARMLESS.search(path)})
 
 
 def summarize(fixture):
@@ -134,16 +140,20 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     targets = fixture_targets()
-    head = head_revision()
-    for target in targets:
-        if target['revision'] != head:
-            print(f"{target['source']} names revision {target['revision']}, and HEAD is {head}: "
-                  'set the constant to the revision being captured first', file=sys.stderr)
-            return 2
+    revisions = {t['revision'] for t in targets}
+    if len(revisions) != 1:
+        print('the corpora name different revisions: ' + ', '.join(f"{t['source']} {t['revision']}" for t in targets),
+              file=sys.stderr)
+        return 2
+    revision = revisions.pop()
+    if resolve(revision) is None:
+        print(f'the corpora name revision {revision}, which this repository does not hold', file=sys.stderr)
+        return 2
     if not args.check:
-        changed = changed_source()
+        changed = changed_source(revision)
         if changed:
-            print('the working tree changes what a command may answer; commit or stash first:', file=sys.stderr)
+            print(f'the tree differs from {revision} in what a command may answer; set the constants to the '
+                  'revision being captured, or commit or stash first:', file=sys.stderr)
             for path in changed:
                 print(f'  {path}', file=sys.stderr)
             return 2

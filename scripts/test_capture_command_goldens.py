@@ -60,6 +60,16 @@ class Fixtures(unittest.TestCase):
             self.assertEqual(ccg.summarize(Path(tmp)), dict(cases=2, commands=3, records=2))
 
 
+class Revisions(unittest.TestCase):
+    def test_resolves_a_revision(self):
+        self.assertIsNone(ccg.resolve('0000000'))
+        self.assertRegex(ccg.resolve('HEAD'), r'^[0-9a-f]{40}$')
+
+    def test_changed_source_against_head_is_the_working_tree(self):
+        for path in ccg.changed_source('HEAD'):
+            self.assertNotRegex(path, ccg.HARMLESS)
+
+
 class Harmless(unittest.TestCase):
     def test_what_may_differ_from_head(self):
         for path in ('internal/core/x_test.go', 'internal/core/testdata/commands-abc1234/strings.txt', 'docs/plan.md',

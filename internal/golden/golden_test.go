@@ -63,6 +63,8 @@ func TestNormalizers(t *testing.T) {
 		{"%2\r\n+a\r\n:5\r\n+b\r\n:6\r\n", "%2\r\n+a\r\n:0\r\n+b\r\n:0\r\n", []string{FlagValues}},
 		{"*4\r\n+a\r\n:5\r\n+b\r\n:6\r\n", "*4\r\n+a\r\n:0\r\n+b\r\n:0\r\n", []string{FlagValues}},
 		{"=10\r\ntxt:hello\r\n", "=", []string{FlagMasked}},
+		{"*4\r\n+Size\r\n:5\r\n+Items\r\n:6\r\n", "*4\r\n+Size\r\n:0\r\n+Items\r\n:6\r\n", []string{FlagZero + "Size"}},
+		{"%2\r\n$4\r\nSize\r\n:5\r\n+Items\r\n:6\r\n", "%2\r\n$4\r\nSize\r\n:0\r\n+Items\r\n:6\r\n", []string{FlagZero + "Size"}},
 		{":3599\r\n", ":3600\r\n", []string{FlagTTLSeconds}},
 		{":7199500\r\n", ":7200000\r\n", []string{FlagTTLMillis}},
 		{":-2\r\n", ":-2\r\n", []string{FlagTTLSeconds}},
@@ -77,6 +79,8 @@ func TestNormalizers(t *testing.T) {
 		require.Equal(t, tc.want, string(got), "%q %v", tc.reply, tc.flags)
 	}
 	_, err := Normalize([]byte("+OK\r\n"), []string{"nosuch"})
+	require.Error(t, err)
+	_, err = Normalize([]byte("+OK\r\n"), []string{""})
 	require.Error(t, err)
 	_, err = Normalize([]byte("+OK\r\n"), []string{FlagTTLSeconds})
 	require.Error(t, err)
