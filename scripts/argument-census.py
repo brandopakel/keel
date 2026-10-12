@@ -196,6 +196,19 @@ class Side:
             reply = self.admin.call(command)
             if reply[0] == '-':
                 self.fixture_failures[' '.join(command)] = reply[1]
+        self.settle()
+
+    def settle(self):
+        """Wait for a log rewrite the previous form started to finish, so that
+        BGREWRITEAOF has its documented reply rather than 'already in
+        progress'."""
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            info = self.admin.call(['INFO', 'persistence'])
+            if info[0] == '-' or ('aof_rewrite_in_progress:1' not in str(info[1]) and
+                                  'aof_rewrite_scheduled:1' not in str(info[1])):
+                return
+            time.sleep(.02)
 
     def send(self, prelude, argv):
         """The reply to argv on a fresh connection, after the prelude; None
