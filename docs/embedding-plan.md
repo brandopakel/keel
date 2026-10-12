@@ -7,8 +7,10 @@ below), and step 2.4, replication and failover (see "Step 2.4:
 replication"), step 2.5, options in place of `internal/config` (see "Step
 2.5: options"), and step 2.6, the suite run in parallel on engines of its own
 (see "Step 2.6: parallel tests"), and step 2.7, which removed the default
-engine (see "Step 2.7: the default engine"). Phase 2 is complete; phase 3 is
-planned in "Phase 3: the instance contract".
+engine (see "Step 2.7: the default engine"). Phase 2 is complete, and so is
+phase 3 (see "Phase 3: the instance contract"; #148, #149, #151, #152 and
+#153). Phase 4 began on October 12, 2026 with its golden corpora (see "Phase
+4: operations").
 
 The owner asked for Keel to be usable as a Go library, not only as a server:
 several independent instances per process, safe for concurrent use, a typed
@@ -1964,6 +1966,106 @@ passes `--policy` through. Persistence work after this phase should not
 depend on remembering that: an `everysec` leg belongs in the matched job as
 standard, beside the default, which is a small change of its own to the
 workflow.
+
+### Phase 4: operations
+
+Phase 4 changes how a command is parsed, run and answered, and nothing a
+client, a log or a replica sees may change by a byte. Its steps, one or more
+PRs each, in this order:
+
+1. **Golden corpora** (step 4.0, below): what every command answers and
+   records, captured from develop before anything moves, and compared on
+   every run since.
+2. **`internal/resp`**: request parsing and the RESP2 and RESP3 reply encoders
+   in a leaf package, and a `Reply` sink the command language writes into,
+   keeping reserve-before-allocate and the zero-copy reply paths.
+3. **One operation-descriptor table**: `commandTable`, `commandKeyspace`,
+   `writeCommands`, `commandArity` and the key rules become one table of
+   descriptors - name, handler, arity, flags, key specs, ACL categories, group
+   and subcommands - generated from Redis 8.10.1's `src/commands` JSON for the
+   commands Keel has, with hand-written descriptors for Keel's own, so that
+   `COMMAND` can be answered from it.
+4. **Strings as the template family**: typed operations with typed results,
+   typed errors and canonical records, the command language mapping strings
+   onto them, byte-identical against the corpora; then the string commands
+   Keel lacks (docs/redis-parity-plan.md), and a recipe for the families that
+   follow.
+
+Then keys and TTL, then hashes, each family converted and then completed.
+
+#### Step 4.0: golden corpora
+
+The persistence goldens (`testdata/persistence-40eb2f6`) hold the log's bytes
+through flushes, rewrites and transactions, and the replication goldens
+(`testdata/replication-9736d8d`) the stream's; both hold replies only as a
+hash of one session's. Phase 4 needs each command's own answer and records,
+command by command, in both protocols, so that a difference names the command
+and the byte. Step 4.0 adds two corpora, captured from develop at `72ed0cd`:
+
+- **The command corpus** (`internal/core/command_golden_test.go`, the cases in
+  `command_golden_corpus_test.go`, the fixture in
+  `internal/core/testdata/commands-72ed0cd/`): 65 sessions in 16 families,
+  1,829 commands, 432 log records. Each session runs on an engine of its own
+  with the log open under fsync no, once as a RESP2 connection and once as a
+  RESP3 one; the fixture holds both replies beside each command, and the
+  records the command appended, which have to be the same bytes either way. It
+  sends every command the engine runs (`commandArity` less the connection
+  commands), every write command in a form the log recorded, and every error
+  text the handlers hold. Each family's case holds the paths of its commands:
+  every reply shape, every option, and every refusal in the order Redis gives
+  them, the error-parity harness's cases among them. Cases also hold what only
+  an engine's state can show: lazy and active expiry's DELs, a write over a
+  key of another type, EXEC's framing and the errors inside it, a replica's
+  READONLY and MASTERDOWN, a fenced primary, a log that fails and recovers
+  (Redis's MISCONF), an exhausted allocation budget, a reply over the ceiling,
+  a memory bound's OOM, and dump images restored under both names.
+- **The connection corpus** (`internal/server/connection_golden_test.go`, the
+  fixture in `internal/server/testdata/connection-72ed0cd/`): 8 sessions and
+  154 commands through the server's own run of a connection's commands
+  (`executeRun`): AUTH, HELLO, QUIT and CLIENT, the refusals before a
+  connection has logged in, and those commands queued inside MULTI; each run
+  once from a connection starting in RESP2 and once from one starting in
+  RESP3.
+- **The format** (`internal/golden`): text, one line a thing (`case`, `>`
+  command, `2` and `3` replies, `~` record, `!` harness step), with a string
+  past 1 KiB held as its digest. What is not the same from run to run is
+  normalized, and the fixture says how at each command: a set's members and
+  the keys of KEYS and SCAN sorted; a hash's pairs sorted by field; a TTL
+  rounded to the hour; MEMORY STATS's values zeroed; INFO, PTTL, MEMORY USAGE,
+  `CONFIG GET *` (which holds `dir`) and a pull's frame held to their type
+  byte; a pop's SREM record sorted; a relative expiry's PEXPIREAT normalized
+  as the persistence goldens normalize one. Nothing else is masked.
+- **The generator** (`scripts/capture-command-goldens.py`): refuses to run
+  unless the revision each test names is HEAD and the tree changes nothing
+  outside tests, fixtures, scripts and docs; runs both capture tests through
+  the local validation wrapper; copies the result into the fixture
+  directories; and runs the replay tests once. The capture runs every case
+  three times in each protocol and refuses a case that is not the same from
+  run to run. To recapture after an intended change: set the two revision
+  constants to the new develop revision, run the script, and review the
+  fixture's diff as the change's wire-visible effect.
+- **The gates**, which `go test ./...` runs on every push:
+  `TestCommandGoldenRepliesAreUnchanged` and
+  `TestConnectionGoldenRepliesAreUnchanged` replay every case and name the
+  first step whose reply or records differ;
+  `TestCommandGoldensCoverEveryCommand` reads the corpus against
+  `commandArity` and `writeCommands`; and the two
+  `...CoverEveryErrorText` tests read every error text the package's source
+  can answer with (`golden.ErrorTexts`: literals with an error class,
+  literals an encoded error is built from, and capitalised error literals in
+  files that encode replies) and fail unless the fixture answers it or
+  `uncoveredErrorTexts` excuses it with a reason. Fifteen are excused: the
+  transport's own refusals (protocol errors, the request budget), which no
+  command answers; I/O failures of the term file, a snapshot and a rewrite's
+  file; snapshots over their limits; a 16 MiB transaction; SCAN's work limit;
+  and the reply for a value Encode has no form for, which is a bug. An
+  excused text the fixture comes to answer, or the source drops, fails the
+  test, so the list cannot rot.
+
+What the corpora do not hold: the transport's framing of a reply (the arena,
+the zero-copy capture of a large reply, the io threads), which the paired
+command-path job and the client suites cover; and what the persistence and
+replication goldens hold already.
 
 ## Risks, in order
 

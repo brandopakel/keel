@@ -299,5 +299,11 @@ count too.
   request carries this gate.
 - **Persistence and replication** get restart, rewrite and replica checks
   for every write the piece adds, and AOF transcript goldens.
+- **The command corpora** (the embedding plan's step 4.0) hold every
+  command's RESP2 and RESP3 replies and log records, captured from develop
+  and replayed on every run. A piece that changes a reply on purpose
+  recaptures them with `scripts/capture-command-goldens.py`, and the
+  fixture's diff is the change's wire-visible effect, reviewed as such; a
+  new command adds its case to the corpus.
 - **The README's integration contract** gains the piece in the same pull
   request.
