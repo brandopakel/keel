@@ -37,6 +37,9 @@ Five kinds of run are collected:
   (scripts/reply-census.py) goes the same way to census/reply-runs.csv (how
   many cases have Redis's reply shape in RESP2 and RESP3, and the reply schema
   violations), census/reply-areas.csv and the snapshot census/replies.csv.
+  Its config.json (scripts/config-census.py) goes to census/config-runs.csv
+  (how many of Redis's configuration directives Keel reports, maps or lacks)
+  and the snapshot census/config.csv (every directive).
 - telemetry: the Live telemetry workflow's load/compat.json and
   load/timeline.json, with provenance.txt for the host. telemetry/runs.csv gets
   one line per run, with how many metric names redis_exporter reported for Keel
@@ -109,6 +112,10 @@ REPLY_AREAS = ['artifact_id', 'run_id', 'time', 'branch', 'area', 'commands', 'c
 REPLY_CASES = ['run_id', 'time', 'branch', 'command', 'area', 'case', 'form', 'protocol', 'sent', 'result',
                'keel_shape', 'redis_shape', 'keel', 'redis', 'keel_schema', 'redis_schema', 'redis_function',
                'redis_at']
+CONFIG_RUNS = ['artifact_id', 'run_id', 'time', 'event', 'branch', 'pr', 'conclusion', 'redis_version', 'configs',
+               'has', 'mapped', 'lacks', 'lacks_used', 'lacks_tested', 'documented', 'same_value', 'url']
+CONFIG_DIRECTIVES = ['run_id', 'time', 'branch', 'name', 'alias', 'family', 'kind', 'flags', 'documented', 'class',
+                     'keel_value', 'redis_value', 'note', 'used_by', 'test_files']
 TELEMETRY_RUNS = ['artifact_id', 'run_id', 'time', 'event', 'branch', 'pr', 'conclusion', 'host',
                   'keel_metric_names', 'redis_metric_names', 'shared_metric_names', 'url']
 TELEMETRY_PHASES = ['artifact_id', 'run_id', 'time', 'branch', 'host', 'phase', 'keel_ops', 'redis_ops']
@@ -129,10 +136,12 @@ KINDS = {
     'matched-everysec': {'artifact': 'matched-keyspace-adoption-everysec',
                          'members': re.compile(r'^(lscpu\.txt|(baseline|candidate)-source\.txt|[\w.-]+/summary\.json)$'),
                          'files': {'runs': MATCHED_RUNS, 'cases': MATCHED_CASES}},
-    'census': {'artifact': 'command-census', 'members': re.compile(r'^(census|arguments|replies)\.json$'),
+    'census': {'artifact': 'command-census', 'members': re.compile(r'^(census|arguments|replies|config)\.json$'),
                'files': {'runs': CENSUS_RUNS, 'areas': CENSUS_AREAS, 'argument-runs': ARGUMENT_RUNS,
-                         'argument-areas': ARGUMENT_AREAS, 'reply-runs': REPLY_RUNS, 'reply-areas': REPLY_AREAS},
-               'snapshots': {'latest': CENSUS_LATEST, 'arguments': ARGUMENT_FORMS, 'replies': REPLY_CASES}},
+                         'argument-areas': ARGUMENT_AREAS, 'reply-runs': REPLY_RUNS, 'reply-areas': REPLY_AREAS,
+                         'config-runs': CONFIG_RUNS},
+               'snapshots': {'latest': CENSUS_LATEST, 'arguments': ARGUMENT_FORMS, 'replies': REPLY_CASES,
+                             'config': CONFIG_DIRECTIVES}},
     'telemetry': {'artifact': 'telemetry',
                   'members': re.compile(r'^(provenance\.txt|load/compat\.json|load/timeline\.json)$'),
                   'files': {'runs': TELEMETRY_RUNS, 'phases': TELEMETRY_PHASES}},
@@ -280,8 +289,8 @@ def matched_records(artifact_id, run, pr, files):
 
 def census_records(artifact_id, run, pr, files):
     """runs.csv, areas.csv and latest.csv lines for one census, and the
-    argument and reply censuses' lines when their arguments.json and
-    replies.json are in the artifact."""
+    argument, reply and configuration censuses' lines when their
+    arguments.json, replies.json and config.json are in the artifact."""
     census = json.loads(files['census.json'])
     total = census['summary']['total']
     runs = [{'artifact_id': artifact_id, **run_fields(run, pr), 'redis_version': census.get('redis_version', ''),
@@ -299,6 +308,8 @@ def census_records(artifact_id, run, pr, files):
         records.update(argument_records(artifact_id, run, pr, json.loads(files['arguments.json'])))
     if 'replies.json' in files:
         records.update(reply_records(artifact_id, run, pr, json.loads(files['replies.json'])))
+    if 'config.json' in files:
+        records.update(config_records(artifact_id, run, pr, json.loads(files['config.json'])))
     return records
 
 
@@ -345,6 +356,24 @@ def reply_records(artifact_id, run, pr, replies):
               'redis_at': commands.get(c['command'], {}).get('at', '')}
              for c in replies['cases']]
     return {'reply-runs': runs, 'reply-areas': areas, 'replies': cases}
+
+
+CONFIG_COUNTS = ['configs', 'has', 'mapped', 'lacks', 'lacks_used', 'lacks_tested', 'documented', 'same_value']
+
+
+def config_records(artifact_id, run, pr, config):
+    """config-runs.csv and config.csv lines for one configuration census."""
+    total = config['summary']['total']
+    runs = [{'artifact_id': artifact_id, **run_fields(run, pr), 'redis_version': config.get('redis_version', ''),
+             **{k: total.get(k, '') for k in CONFIG_COUNTS}}]
+    directives = [{'run_id': run['id'], 'time': run['created_at'], 'branch': run['head_branch'], 'name': c['name'],
+                   'alias': c['alias'], 'family': c['family'], 'kind': c['kind'], 'flags': ' '.join(c['flags']),
+                   'documented': c['documented'], 'class': c['class'],
+                   'keel_value': c['keel_value'] if c['keel_value'] is not None else '',
+                   'redis_value': c['redis_value'] if c['redis_value'] is not None else '', 'note': c['note'],
+                   'used_by': '; '.join(c['used_by']), 'test_files': c['test_files']}
+                  for c in config['configs'] if c['redis_value'] is not None or not c.get('condition')]
+    return {'config-runs': runs, 'config': directives}
 
 
 def telemetry_records(artifact_id, run, pr, files):
