@@ -2094,6 +2094,57 @@ the zero-copy capture of a large reply, the io threads), which the paired
 command-path job and the client suites cover; and what the persistence and
 replication goldens hold already.
 
+#### Step 4.1: internal/resp
+
+`internal/resp` is the protocol as a leaf package: the parser that turns
+bytes into a `Command` (`ParseCmd`, `ParseCmdReserved`, `DecodeOne`,
+`FrameShortfall`, the request budget's `RequestAllocationSize`), the
+encoders that frame a reply (`Encode`, `EncodeAs`, the `Append` helpers, and
+`Framing`, which chooses RESP2 or RESP3 with the reply types `Map`, `Double`,
+`Bool`, `Verbatim` and `Field`), the reply sizes the admission checks use
+(`MaxReplyBytes`, `AddBulkSize`, `DecimalDigits`), and `Reply`, the sink. It
+imports only `internal/constant`, so the server, the engine and, in phase 5,
+the public package can speak the protocol without each other.
+
+- **The move changed no handler and no hot-path file.** The engine keeps
+  every name it used - `Command` (an alias), `parsedCommand`, `Encode`,
+  `ParseCmd`, the `append` helpers, `framing` and its methods, `ReplyMap` and
+  its kin, `MaxReplyBytes`, `addBulkSize` - as wrappers over `resp` in
+  `resp.go` and `resp3.go`, all 34 of which the compiler inlines
+  (`-gcflags=-m`). `framing` stays the engine's one-byte field, so no field of
+  `Engine` moved, and a method of it builds the `resp.Framing` it stands for
+  on the way through (`wire`). The server reaches the parser through the
+  same `core` names. Only the two readers of a command's spelling changed, to
+  `SentName`, which the alias exports. The wrappers go once the server and
+  the families import `resp` directly, after the INFO work that holds those
+  files merges.
+- **What moved in the disassembly** (`go tool objdump` of the server built
+  from the step before and after, addresses normalized): `aofCommit`,
+  `cmdINCR`, `(*client).respond` and `responseRw` are instruction-identical;
+  `checkKeyTypes`, `executeRun` and `readCommandsReserved` differ only in
+  data offsets and branch displacements; `cmdGET` and
+  `encodeBoundedString` keep their instruction counts with registers
+  renamed; `cmdMGET` and `increment` gain four instructions and `setCommand`
+  eight, from the inlined wrappers. `framing.encode` is no longer a function
+  of its own: its callers call `resp.Framing.Encode`.
+- **The parser's tests moved with it** (`resp_test.go`,
+  `request_decode_test.go`, `parse_profile_test.go`), with the two
+  differential fuzz targets the Go and request-admission workflows run.
+  The engine's `resp3_test.go`, which pins each command's bytes in both
+  protocols, stays with the engine, as do the corpora.
+- **`Reply`** is the sink the command language writes into from step 4.3:
+  a buffer framed in the connection's protocol, with the shapes a reply has
+  (`Status`, `Error`, `Int`, `Bulk`, `Null`, `NullArray`, `Bool`, `Double`,
+  `Verbatim`, `Array`, `Set`, `Map`, `Pair`, `Raw`), an `Admission` it asks
+  before it grows to a size, and `Reserve` for a reply a command has sized
+  before building it. A refusal replaces the reply and ends it. A bulk
+  string is sized exactly, admitted, and allocated once, as
+  `encodeBoundedString` allocates one today; the transport takes `Bytes`
+  by reference, as it takes a handler's slice. The engine implements
+  `Admission` with `admitReply` when the first family writes through it;
+  until then nothing on a command's path uses `Reply`, which is why this
+  step's measurement is the move's alone.
+
 ## Risks, in order
 
 1. Moving AOF, rewrite and replication state while MULTI/EXEC changes the same
