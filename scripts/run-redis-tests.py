@@ -223,16 +223,21 @@ def run_unit(server_kind, binary, redis_src, unit, out, timeout):
 
 
 def run(args):
+    """Run the group's units in turn, rewriting group.json after each so
+    that a job stopped by its own time limit still reports the units it
+    finished."""
     units = GROUPS[args.group]
     results = []
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
     for unit in units:
         print(f'== {unit} against {args.server}', flush=True)
         result = run_unit(args.server, args.bin, args.redis_src, unit, args.out, args.timeout)
         results.append(result)
         print(f"   {result['outcome']}: {len(result['passed'])} passed, {len(result['failed'])} failed, "
               f"{len(result['ignored'])} ignored, {result['not_run']} not run, {result['seconds']} s", flush=True)
-    (Path(args.out) / 'group.json').write_text(json.dumps({'server': args.server, 'group': args.group,
-                                                           'units': results}, indent=1) + '\n')
+        (out / 'group.json').write_text(json.dumps({'server': args.server, 'group': args.group, 'units': results,
+                                                    'complete': len(results) == len(units)}, indent=1) + '\n')
     return 0
 
 
