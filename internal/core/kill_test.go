@@ -315,8 +315,16 @@ func TestHelperProcessWritesUntilKilled(t *testing.T) {
 				}
 				report("ack %s %d", key, i)
 				if w == 0 && i == killFailAt(large) && os.Getenv("KEEL_CORE_KILL_FAIL") != "" {
-					failing.Store(true)
+					// Reported before the disk fails, not after: the parent
+					// takes the writes acknowledged up to this line as the
+					// ones that must survive, and once the disk is failing
+					// a call returns at once, its reply standing as Redis's
+					// does, with its record waiting for the retry. Set first,
+					// such a write could be acknowledged, and reported,
+					// before this line, and required although it was never
+					// written (run 37891109176, w3:288).
 					report("failing")
+					failing.Store(true)
 				}
 				if rewrite && w == 0 && i == 500 {
 					if reply, err := do(context.Background(), e, "BGREWRITEAOF"); err != nil || !strings.Contains(reply, "rewriting started") {
