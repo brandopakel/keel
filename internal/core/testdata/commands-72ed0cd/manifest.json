@@ -1,0 +1,103 @@
+{
+  "source_revision": "72ed0cd",
+  "captured": "2026-10-12",
+  "note": "Every command's RESP2 and RESP3 replies and log records on develop, before phase 4 of the embedding plan; see command_golden_test.go.",
+  "files": {
+    "bloom.txt": {
+      "sha256": "bb179de17067b8737945ac1b37a90cf337bd2e88852a34b4f433403abd4e13ad",
+      "cases": 3,
+      "commands": 85,
+      "records": 19
+    },
+    "cuckoo.txt": {
+      "sha256": "d034c86c3c7c8981768a6af7f680f65006d1a49d073f12a0b5ac0bccc3936c7e",
+      "cases": 2,
+      "commands": 93,
+      "records": 28
+    },
+    "dump.txt": {
+      "sha256": "107ecb5b71fa22974d6289e7e6716cbc96eb7b3e1df822f0f130beb2dcbc9332",
+      "cases": 2,
+      "commands": 75,
+      "records": 31
+    },
+    "geo.txt": {
+      "sha256": "241b94362fe0a4240ab2cc47715d6a1369cbbcd81952df01177f2e5afe905c6c",
+      "cases": 3,
+      "commands": 104,
+      "records": 9
+    },
+    "hashes.txt": {
+      "sha256": "fc84e5bc644f937464a0d3780c4ff1d60e8bc7641df2e87f5de36a4e19dcea7d",
+      "cases": 3,
+      "commands": 83,
+      "records": 21
+    },
+    "hll.txt": {
+      "sha256": "6b4e2ea85ecaa49460d99a592e57aab6a511cce1dff6b5fabf341b263f2b211a",
+      "cases": 1,
+      "commands": 33,
+      "records": 13
+    },
+    "keys.txt": {
+      "sha256": "04c1ab9e3da43d2da64e52feb265736265db141a2ad30852d3fe8119f81f6499",
+      "cases": 7,
+      "commands": 172,
+      "records": 79
+    },
+    "lists.txt": {
+      "sha256": "3935a2c2225d6f5087fc5b1f4f5804afe31c5065b71e12c4ca4ec63d2a4b671d",
+      "cases": 3,
+      "commands": 104,
+      "records": 30
+    },
+    "refusals.txt": {
+      "sha256": "4696a86620063d8ed97ffac2f358a8a0ed942f7dc89c97c71563abfab2e066a6",
+      "cases": 2,
+      "commands": 201,
+      "records": 0
+    },
+    "replication.txt": {
+      "sha256": "48ffbf1c1b195c5174f390fde8cd3322e0e61eca78a055f954ebb9354604c40b",
+      "cases": 7,
+      "commands": 76,
+      "records": 3
+    },
+    "server.txt": {
+      "sha256": "3a171fa1be1f48f44baef5c423ecf7e892cdba49bd210a6dd79c872869d1ae91",
+      "cases": 9,
+      "commands": 143,
+      "records": 21
+    },
+    "sets.txt": {
+      "sha256": "e52dfe522e5aa80719fe30f57ebf68c645aec19209c7a6e31f46cf0d2ff2776a",
+      "cases": 3,
+      "commands": 83,
+      "records": 20
+    },
+    "sketches.txt": {
+      "sha256": "596cb8b05d15957059cf48997c82137ae0acd855ee524a774cba1e40c1f25e94",
+      "cases": 2,
+      "commands": 81,
+      "records": 13
+    },
+    "strings.txt": {
+      "sha256": "878db8387d057b11608f7adaa9d59d98e8cd5a9572d02693d08689a0277743c9",
+      "cases": 9,
+      "commands": 208,
+      "records": 92
+    },
+    "transactions.txt": {
+      "sha256": "9ce59c9c6f24438b60e6c5c190812720c3705ac197a5f730e08f778f092c35f8",
+      "cases": 4,
+      "commands": 116,
+      "records": 26
+    },
+    "zsets.txt": {
+      "sha256": "08bb2ebe8ac604bcb4a270ff7aef58afffe47d6c18a9ddc1b480065609f6bf80",
+      "cases": 5,
+      "commands": 172,
+      "records": 26
+    }
+  }
+}
