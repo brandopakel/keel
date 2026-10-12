@@ -98,6 +98,24 @@ CONFIG = {
                  'redis_value': None, 'note': '', 'used_by': [], 'test_files': 0, 'family': 'replication'}],
 }
 
+# The Redis tests workflow's redis-tests.json, trimmed.
+REDIS_TESTS = {
+    'skipped_units': {'unit/shutdown': 'stops and restarts the server'},
+    'totals': {'keel': {'units': 2, 'passed': 100, 'failed': 44, 'ignored': 3, 'not_run': 0, 'units_crashed': 0,
+                        'units_timed_out': 1, 'units_exception': 0},
+               'redis': {'units': 2, 'passed': 150, 'failed': 1, 'ignored': 3, 'not_run': 0, 'units_crashed': 0,
+                         'units_timed_out': 0, 'units_exception': 0}},
+    'units': [{'unit': 'unit/scan', 'keel': None,
+               'redis': {'outcome': 'ok', 'passed': 6, 'failed': 1, 'ignored': 0, 'not_run': 0, 'seconds': 2.0,
+                         'failing': ['x'], 'details': {}, 'exception': ''}},
+              {'unit': 'unit/type/string', 'keel': {'outcome': 'timeout', 'passed': 100, 'failed': 44, 'ignored': 3,
+                                                     'not_run': 0, 'seconds': 900.0, 'failing': ['GETEX EX option'],
+                                                     'details': {'GETEX EX option': "ERR unknown command 'getex'"},
+                                                     'exception': ''},
+               'redis': {'outcome': 'ok', 'passed': 144, 'failed': 0, 'ignored': 3, 'not_run': 0, 'seconds': 5.0,
+                         'failing': [], 'details': {}, 'exception': ''}}],
+}
+
 # The Live telemetry artifact's files, from run 37587041339.
 TELEMETRY = {
     'provenance.txt': 'keel 2aeb1c8\nrunner Linux 6.17.0-1022-azure x86_64 cpus 4 AMD EPYC 9V74 80-Core Processor\n',
@@ -420,6 +438,30 @@ class NewKinds(unittest.TestCase):
         self.assertEqual((directive['name'], directive['class'], directive['keel_value'], directive['used_by'],
                           directive['test_files']), ('maxmemory', 'has', '0', 'redis_exporter (config_maxmemory)', 19))
         self.assertTrue(cbh.KINDS['census']['members'].match('config.json'))
+
+    def test_redis_tests(self):
+        records = cbh.redis_test_records(3, self.run, '', {'redis-tests.json': json.dumps(REDIS_TESTS)})
+        run, = records['redis-tests']
+        self.assertEqual((run['units'], run['redis_passed'], run['keel_passed'], run['keel_failed'],
+                          run['keel_units_timed_out'], run['parity']), (2, 150, 100, 44, 1, 0.6667))
+        self.assertEqual([(u['unit'], u['keel_passed'], u['keel_outcome'], u['redis_passed']) for u in
+                          records['redis-tests-units']], [('unit/scan', '', '', 6), ('unit/type/string', 100, 'timeout', 144)])
+        self.assertEqual(records['redis-tests-failing'],
+                         [{'run_id': 37658260465, 'time': '2026-10-07T17:20:12Z', 'branch': 'develop',
+                           'unit': 'unit/type/string', 'test': 'GETEX EX option', 'detail': "ERR unknown command 'getex'"}])
+
+    def test_redis_tests_files_live_under_census(self):
+        gh = FakeGitHub()
+        gh.add('redis-tests', 7, 70, {'redis-tests.json': json.dumps(REDIS_TESTS)}, created='2026-10-13T01:00:00Z',
+               branch='develop')
+        with tempfile.TemporaryDirectory() as tmp:
+            counts, errors = cbh.collect(gh, tmp, ['redis-tests'])
+            self.assertEqual((counts, errors), ({'redis-tests collected': 1}, []))
+            self.assertEqual(sorted(p.name for p in (Path(tmp) / 'census').iterdir()),
+                             ['redis-tests-failing.csv', 'redis-tests-units.csv', 'redis-tests.csv'])
+            self.assertEqual(read(Path(tmp) / 'census/redis-tests.csv')[0]['keel_passed'], '100')
+            counts, _ = cbh.collect(gh, tmp, ['redis-tests'])
+            self.assertEqual(counts, {}, 'recorded once')
 
     def test_telemetry(self):
         records = cbh.telemetry_records(2, self.run, 134, TELEMETRY)
