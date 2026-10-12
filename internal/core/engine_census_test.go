@@ -31,6 +31,7 @@ const (
 // the reason each one is allowed.
 var packageVars = map[string]string{
 	"commandTable": table, "commandArity": table, "commands": table,
+	"redisCommandSpecs": table, "keelCommandSpecs": table, "oneKey": table, "oneKeyRead": table, "oneKeyWrite": table,
 	"connectionCommands": table, "containerCommands": table, "clientSubcommands": table,
 	"memorySubcommands": table, "configSubcommands": table, "configHelp": table, "commandKeyspace": table, "multiKeyCommands": table,
 	"strideKeyCommands": table, "argumentsBeforeType": table, "replacingWrites": table,

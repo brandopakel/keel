@@ -1,0 +1,184 @@
+#!/usr/bin/env python3
+"""Generate Keel's descriptors of Redis's commands from Redis's own specs.
+
+Redis declares every command in src/commands/<name>.json: its arity, its
+command flags, its ACL categories, its group, and its key specs, which say
+where in the arguments its keys are. Phase 4 of the embedding plan
+(docs/embedding-plan.md, "Step 4.2") answers COMMAND from one descriptor
+table, and this script writes the part of that table Redis's specs decide,
+for the commands Keel has: internal/core/command_specs.go. Keel's own commands
+(KEEL.*, MEMKV.*, MORRIS.*, SRAND) and RedisBloom's (BF.*, CF.*, CMS.*), which
+Redis's specs do not hold, keep descriptors written by hand.
+
+Only facts are copied - names, numbers and flags - and none of the text
+Redis's specs carry (summaries, histories, argument documentation), which is
+Redis's under its license where the numbers are not anyone's.
+
+Which commands Keel has is read from internal/core/command_check.go: the
+names in commandArity, and the subcommands of each container. A name Redis
+has no spec for is left out; a name whose spec is found is written whether
+or not Keel's arity agrees, and TestCommandSpecsAgreeWithTheTables says
+where they differ.
+
+    python3 scripts/generate-command-specs.py --redis-src /path/to/redis-8.10.1
+    python3 scripts/generate-command-specs.py --redis-src ... --check   # CI: the file is current
+
+The Redis source is the release tarball CI already downloads, pinned by
+checksum in .github/workflows/general-validation.yml; nothing of it is
+checked in.
+"""
+import argparse
+import json
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+ROOT = Path(__file__).resolve().parent.parent
+CHECK = ROOT / 'internal' / 'core' / 'command_check.go'
+OUT = ROOT / 'internal' / 'core' / 'command_specs.go'
+REDIS_VERSION = '8.10.1'
+
+
+def keel_commands(source=CHECK):
+    """The command names Keel has, and each container's subcommands, read from
+    command_check.go: ("GET", None), ("CONFIG", "GET"), ..."""
+    text = source.read_text()
+    arity = re.search(r'var commandArity = map\[string\]int\{(.*?)\n\}', text, re.DOTALL)
+    if not arity:
+        raise ValueError(f'{source}: no commandArity')
+    names = [(n, None) for n in re.findall(r'"([^"]+)":\s*-?\d+', arity.group(1))]
+    for container, body in re.findall(r'(\w+)Subcommands\s*=\s*\[\]subcommand\{(.*?)\}\s*$', text, re.MULTILINE):
+        for sub in re.findall(r'\{"([^"]+)",\s*-?\d+\}', body):
+            names.append((container.upper(), sub.upper()))
+    return names
+
+
+def spec_file(commands, name, sub):
+    """The JSON file Redis keeps a command's spec in."""
+    if sub is None:
+        return commands / f'{name.lower()}.json'
+    return commands / f'{name.lower()}-{sub.lower()}.json'
+
+
+def load_spec(path, name, sub):
+    body = json.loads(path.read_text())
+    key = sub or name
+    if key not in body:
+        raise ValueError(f'{path}: no entry {key}')
+    spec = body[key]
+    if sub is not None and spec.get('container') != name:
+        raise ValueError(f'{path}: container {spec.get("container")!r}, want {name!r}')
+    return spec
+
+
+def key_spec(ks):
+    """One key spec as the Go table holds it."""
+    begin = ks['begin_search']
+    find = ks['find_keys']
+    out = {'flags': ks.get('flags') or []}
+    if 'index' in begin:
+        out['begin'] = ('index', begin['index']['pos'], '', 0)
+    elif 'keyword' in begin:
+        out['begin'] = ('keyword', 0, begin['keyword']['keyword'], begin['keyword']['startfrom'])
+    else:
+        out['begin'] = ('unknown', 0, '', 0)
+    if 'range' in find:
+        r = find['range']
+        out['find'] = ('range', dict(lastKey=r['lastkey'], step=r['step'], limit=r['limit']))
+    elif 'keynum' in find:
+        k = find['keynum']
+        out['find'] = ('keynum', dict(keynumIdx=k['keynumidx'], firstKey=k['firstkey'], step=k['step']))
+    else:
+        out['find'] = ('unknown', {})
+    return out
+
+
+def collect(redis_src, names):
+    """The specs of the commands in names that Redis has, by Keel's name."""
+    commands = Path(redis_src) / 'src' / 'commands'
+    if not commands.is_dir():
+        raise ValueError(f'{commands} is not a directory; --redis-src names the unpacked redis-{REDIS_VERSION} tree')
+    specs = {}
+    for name, sub in names:
+        path = spec_file(commands, name, sub)
+        if not path.exists():
+            continue
+        spec = load_spec(path, name, sub)
+        full = name if sub is None else f'{name}|{sub}'
+        specs[full] = {
+            'arity': spec['arity'],
+            'group': spec.get('group', ''),
+            'flags': spec.get('command_flags') or [],
+            'acl': spec.get('acl_categories') or [],
+            'keys': [key_spec(ks) for ks in spec.get('key_specs') or []],
+        }
+    return specs
+
+
+def go_strings(values):
+    if not values:
+        return 'nil'
+    return '[]string{' + ', '.join(json.dumps(v) for v in values) + '}'
+
+
+def render(specs):
+    lines = [
+        f'// Code generated by scripts/generate-command-specs.py from Redis {REDIS_VERSION} src/commands; DO NOT EDIT.',
+        '',
+        'package core',
+        '',
+        f'// redisCommandSpecs is what Redis {REDIS_VERSION} declares of each command Keel',
+        '// has, by name, a subcommand as container|sub: its arity, its group, its',
+        '// command flags, its ACL categories and its key specs. Keel\'s own commands',
+        '// and RedisBloom\'s are not here; see command_specs_keel.go.',
+        'var redisCommandSpecs = map[string]commandSpec{',
+    ]
+    for name in sorted(specs):
+        s = specs[name]
+        keys = 'nil'
+        if s['keys']:
+            parts = []
+            for k in s['keys']:
+                b = k['begin']
+                f = k['find']
+                find = ', '.join(f'{field}: {value}' for field, value in f[1].items())
+                parts.append('{flags: %s, begin: keyBegin{kind: %s, pos: %d, keyword: %s, startFrom: %d}, '
+                             'find: keyFind{kind: %s%s}}'
+                             % (go_strings(k['flags']), json.dumps(b[0]), b[1], json.dumps(b[2]), b[3],
+                                json.dumps(f[0]), ', ' + find if find else ''))
+            keys = '[]keySpec{' + ', '.join(parts) + '}'
+        lines.append('\t%s: {arity: %d, group: %s, flags: %s, acl: %s, keys: %s},'
+                     % (json.dumps(name), s['arity'], json.dumps(s['group']), go_strings(s['flags']), go_strings(s['acl']), keys))
+    lines += ['}', '']
+    return gofmt('\n'.join(lines))
+
+
+def gofmt(text):
+    """text as gofmt lays it out, so that the file is what a reader of the
+    tree expects and --check compares like with like."""
+    return subprocess.run(['gofmt'], input=text, capture_output=True, text=True, check=True).stdout
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('--redis-src', required=True, type=Path, help=f'the unpacked redis-{REDIS_VERSION} source tree')
+    ap.add_argument('--out', type=Path, default=OUT, help=f'the Go file to write (default {OUT.relative_to(ROOT)})')
+    ap.add_argument('--check', action='store_true', help='write nothing; fail if the file is not what would be written')
+    args = ap.parse_args(argv)
+    specs = collect(args.redis_src, keel_commands())
+    text = render(specs)
+    if args.check:
+        current = args.out.read_text() if args.out.exists() else ''
+        if current != text:
+            print(f'{args.out} is not what Redis {REDIS_VERSION} declares; run the generator', file=sys.stderr)
+            return 1
+        print(f'{args.out}: {len(specs)} commands, current')
+        return 0
+    args.out.write_text(text)
+    print(f'{args.out}: {len(specs)} commands')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

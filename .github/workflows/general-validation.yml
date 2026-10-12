@@ -160,6 +160,13 @@ jobs:
           make -C /tmp/redis-8.10.1 -j"$(nproc)" build redisbloom
           /tmp/redis-8.10.1/src/redis-server --version
           ls -l /tmp/redis-8.10.1/modules/redisbloom/redisbloom.so
+      - name: Command specs against Redis 8.10.1's src/commands
+        # The generated descriptors (internal/core/command_specs.go) are what
+        # Redis declares for every command Keel has, read from the same
+        # tarball, and the generator writes that file.
+        run: |
+          python3 scripts/generate-command-specs.py --redis-src /tmp/redis-8.10.1 --check
+          KEEL_REDIS_SRC=/tmp/redis-8.10.1 go test ./internal/core -run '^TestRedisCommandSpecsMatchRedisSource$' -count=1 -v
       - name: Error replies byte for byte against Redis 8.10.1 and RedisBloom
         run: |
           python3 scripts/error-parity.py --bin /tmp/keel-general --redis /tmp/redis-8.10.1/src/redis-server \
