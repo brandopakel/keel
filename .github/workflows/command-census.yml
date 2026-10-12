@@ -1,4 +1,5 @@
-# Command census: which of Redis's commands Keel has.
+# Command census: which of Redis's commands Keel has, and which of their
+# documented argument forms it takes.
 #
 # Builds Redis 8.10.1 with the bundled modules that build on a hosted runner
 # (RedisBloom, RedisJSON and RedisTimeSeries; vector sets are part of the core
@@ -7,6 +8,13 @@
 # one. The step summary has the count by group, with the missing commands
 # named, and census.json has every command.
 #
+# scripts/argument-census.py then sends every documented argument form of the
+# commands Keel has (from the Redis source's src/commands/*.json, read as
+# data) to a Keel and a Redis of its own, each with a password and the log
+# on, and compares the replies: arguments.json has every form with both
+# replies, and the step summary the counts by group with the refused forms
+# named.
+#
 # RediSearch's FT.* commands are not listed: the module does not build on this
 # runner's Rust and clang (see general-validation.yml).
 #
@@ -14,7 +22,7 @@
 # that each merge's effect on the count is recorded, and on dispatch. The
 # census is information, not a gate: it fails only when its own method is
 # unsound, which is when Redis does not report one of its own commands as
-# present, or Keel stops answering.
+# present, refuses one of the argument forms, or Keel stops answering.
 name: Command census
 
 on:
@@ -22,11 +30,12 @@ on:
   push:
     branches: [develop]
     paths: ['internal/**', 'cmd/**', 'go.mod', '.github/workflows/command-census.yml',
-            'scripts/command-census.py']
+            'scripts/command-census.py', 'scripts/argument-census.py', 'scripts/redis_commands.py']
   pull_request:
     branches: [develop]
     paths: ['.github/workflows/command-census.yml', 'scripts/command-census.py',
-            'scripts/test_command_census.py']
+            'scripts/test_command_census.py', 'scripts/argument-census.py', 'scripts/redis_commands.py',
+            'scripts/test_argument_census.py']
 
 permissions:
   contents: read
@@ -42,7 +51,7 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with: { go-version-file: go.mod }
       - name: Census tests
-        run: python3 -m unittest discover -s scripts -p 'test_command_census.py' -v
+        run: python3 -m unittest discover -s scripts -p 'test_*census.py' -v
       - name: Build Keel
         run: go build -trimpath -o /tmp/keel ./cmd/keel
       - name: Build Redis 8.10.1 with RedisBloom, RedisJSON and RedisTimeSeries
@@ -72,6 +81,13 @@ jobs:
             /tmp/redis-8.10.1/src/redis-cli -p 6392 MODULE LIST; } | tee dist/census/provenance.txt
           python3 scripts/command-census.py --redis 127.0.0.1:6392 --keel 127.0.0.1:6391 --out dist/census \
             | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Argument census
+        # Its own Keel and Redis, with a password and the log on, from the
+        # same binaries; the specifications from the same source tree.
+        shell: bash
+        run: |
+          python3 -I scripts/argument-census.py --bin /tmp/keel --redis-server /tmp/redis-8.10.1/src/redis-server \
+            --commands /tmp/redis-8.10.1/src/commands --out dist/census | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:

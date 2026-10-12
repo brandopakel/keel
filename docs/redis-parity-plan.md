@@ -51,9 +51,39 @@ TimeSeries come in CI.
 | array (8.x) | 0/18 | all |
 | vector sets (8.x) | 0/13 | all |
 
-The census checks names, not options. `ZADD GT`, `LT` and `INCR`, and
-`ZRANGE BYLEX`, are known gaps inside commands Keel has. A second census pass
-over each command's documented arguments will find the rest.
+The name census checks names, not options. The **argument census**
+(`scripts/argument-census.py`, in the same workflow) checks the options: for
+every command Keel has, every argument form Redis's own specifications
+document (`src/commands/*.json` in the Redis source: each optional argument,
+each alternative of each choice, each repeated argument given twice, and so
+each option Redis 8 added) is sent to Keel and to Redis, and the replies are
+compared. The first run, local against Redis 8.10.2 with the 8.10.1
+specifications (October 12, 2026; the CI run is against 8.10.1), found Keel
+accepting **207 of the 217 forms** of its 100 commands and subcommands, with
+10 refused and none answered differently:
+
+| Area | Commands | Forms | Accepted | Refused | Refused forms |
+| --- | ---: | ---: | ---: | ---: | --- |
+| connection | 12 | 18 | 18 | 0 | |
+| generic | 13 | 35 | 35 | 0 | |
+| geo | 5 | 32 | 32 | 0 | |
+| hash | 11 | 14 | 14 | 0 | |
+| hyperloglog | 3 | 8 | 8 | 0 | |
+| list | 9 | 13 | 13 | 0 | |
+| server | 11 | 18 | 16 | 2 | `CONFIG SET` (parsed, then refused: no setting is writable) |
+| set | 8 | 13 | 13 | 0 | |
+| sorted_set | 12 | 32 | 28 | 4 | `ZADD GT`, `LT`, `INCR`; `ZRANGE BYLEX` |
+| string | 12 | 30 | 26 | 4 | `SET IFEQ`, `IFNE`, `IFDEQ`, `IFDNE` (8.4) |
+| transactions | 4 | 4 | 4 | 0 | |
+
+Of the four forms Redis 8 added to commands Keel has, none is accepted. The
+forms a command has are limited by what Keel has: `ZRANGE` without `BYLEX`
+also lacks the lexical bounds, `SET` without `IFDEQ` the digest conditions.
+Module commands have no specification in `src/commands` and are covered by
+`scripts/redisbloom-parity.py` instead. Every run's counts go to
+`census/argument-runs.csv` and `census/argument-areas.csv` on the
+`bench-history` branch, and every form of the newest run of `develop`, with
+both replies, to `census/arguments.csv`.
 
 ## How priorities are set
 

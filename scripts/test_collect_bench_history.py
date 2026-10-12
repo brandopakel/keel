@@ -52,6 +52,22 @@ CENSUS = {
                   'deprecated': False, 'keel': 'present', 'redis': 'present', 'keel_reply': 'ERR wrong number'}],
 }
 
+# The argument census's arguments.json, trimmed.
+ARGUMENTS = {
+    'redis_version': '8.10.1',
+    'summary': {'areas': {'string': {'commands': 12, 'forms': 30, 'accepted': 26, 'refused': 4, 'wrong_reply': 0,
+                                     'no_reply': 0, 'control': 0, 'redis8_forms': 4, 'redis8_accepted': 0}},
+                'total': {'commands': 100, 'forms': 217, 'accepted': 207, 'refused': 10, 'wrong_reply': 0,
+                          'no_reply': 0, 'control': 0, 'redis8_forms': 4, 'redis8_accepted': 0}},
+    'forms': [{'command': 'set', 'area': 'string', 'label': '', 'since': '1.0.0', 'argv': ['SET', 'str', 'v'],
+               'class': 'accepted', 'detail': '', 'keel': '+OK', 'redis': '+OK'},
+              {'command': 'set', 'area': 'string', 'label': 'IFEQ', 'since': '8.4.0',
+               'argv': ['SET', 'str', 'v', 'IFEQ', 's'], 'class': 'refused', 'detail': 'not parsed',
+               'keel': '-ERR syntax error', 'redis': '$-1'},
+              {'command': 'shutdown', 'area': 'server', 'label': '', 'since': '1.0.0', 'argv': [],
+               'class': 'not probed', 'detail': 'stops the server', 'keel': '', 'redis': ''}],
+}
+
 # The Live telemetry artifact's files, from run 37587041339.
 TELEMETRY = {
     'provenance.txt': 'keel 2aeb1c8\nrunner Linux 6.17.0-1022-azure x86_64 cpus 4 AMD EPYC 9V74 80-Core Processor\n',
@@ -332,6 +348,22 @@ class NewKinds(unittest.TestCase):
         self.assertEqual({a['area']: a['commands_present'] for a in records['areas']}, {'string': 12, 'module:bf': 6})
         self.assertEqual([(c['name'], c['area'], c['keel']) for c in records['latest']],
                          [('append', 'string', 'missing'), ('bf.add', 'module:bf', 'present')])
+        self.assertNotIn('argument-runs', records, 'a census from before the argument census')
+
+    def test_argument_census(self):
+        records = cbh.census_records(1, self.run, '', {'census.json': json.dumps(CENSUS),
+                                                      'arguments.json': json.dumps(ARGUMENTS)})
+        run, = records['argument-runs']
+        self.assertEqual((run['redis_version'], run['commands'], run['forms'], run['accepted'], run['refused'],
+                          run['wrong_reply'], run['redis8_forms'], run['redis8_accepted']),
+                         ('8.10.1', 100, 217, 207, 10, 0, 4, 0))
+        area, = records['argument-areas']
+        self.assertEqual((area['area'], area['forms'], area['accepted'], area['refused']), ('string', 30, 26, 4))
+        self.assertEqual([(f['command'], f['form'], f['sent'], f['class'], f['keel']) for f in records['arguments']],
+                         [('set', 'base', 'SET str v', 'accepted', '+OK'),
+                          ('set', 'IFEQ', 'SET str v IFEQ s', 'refused', '-ERR syntax error')],
+                         'not probed commands are not forms')
+        self.assertTrue(cbh.KINDS['census']['members'].match('arguments.json'))
 
     def test_telemetry(self):
         records = cbh.telemetry_records(2, self.run, 134, TELEMETRY)
@@ -355,11 +387,13 @@ class Latest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def census(self, artifact_id, created, branch, present):
+    def census(self, artifact_id, created, branch, present, arguments=False):
         census = json.loads(json.dumps(CENSUS))
         census['commands'][0]['keel'] = present
-        self.gh.add('command-census', artifact_id, artifact_id * 10, {'census.json': json.dumps(census)},
-                    created=created, branch=branch)
+        files = {'census.json': json.dumps(census)}
+        if arguments:
+            files['arguments.json'] = json.dumps(ARGUMENTS)
+        self.gh.add('command-census', artifact_id, artifact_id * 10, files, created=created, branch=branch)
 
     def latest(self):
         return [(r['run_id'], r['name'], r['keel']) for r in read(self.data / 'census/latest.csv')]
@@ -388,6 +422,22 @@ class Latest(unittest.TestCase):
         self.census(3, '2026-10-07T12:00:00Z', 'feat/x', 'missing')
         cbh.collect(self.gh, self.data, ['census'])
         self.assertFalse((self.data / 'census/latest.csv').exists())
+
+    def test_argument_forms_are_a_snapshot_of_their_own(self):
+        self.census(1, '2026-10-07T10:00:00Z', 'develop', 'missing')
+        self.census(2, '2026-10-07T11:00:00Z', 'develop', 'present', arguments=True)
+        counts, errors = cbh.collect(self.gh, self.data, ['census'])
+        self.assertEqual((counts, errors), ({'census collected': 2}, []))
+        forms = read(self.data / 'census/arguments.csv')
+        self.assertEqual([(f['run_id'], f['command'], f['form'], f['class']) for f in forms],
+                         [('20', 'set', 'base', 'accepted'), ('20', 'set', 'IFEQ', 'refused')])
+        self.assertEqual(len(read(self.data / 'census/argument-runs.csv')), 1, 'the older run had no argument census')
+        self.assertEqual(len(read(self.data / 'census/runs.csv')), 2)
+        # A newer census of develop without arguments.json leaves the snapshot.
+        self.census(3, '2026-10-07T12:00:00Z', 'develop', 'present')
+        cbh.collect(self.gh, self.data, ['census'])
+        self.assertEqual(read(self.data / 'census/arguments.csv')[0]['run_id'], '20')
+        self.assertEqual(read(self.data / 'census/latest.csv')[0]['run_id'], '30')
 
 
 if __name__ == '__main__':

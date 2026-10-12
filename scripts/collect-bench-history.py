@@ -27,7 +27,13 @@ Five kinds of run are collected:
   subcommands Keel has, and census/areas.csv one line per area (a command group,
   or a module) of each run. census/latest.csv holds every command and
   subcommand of the newest census of develop, with whether Keel has it; it is
-  rewritten, not appended to, when a newer one arrives.
+  rewritten, not appended to, when a newer one arrives. The same artifact's
+  arguments.json (scripts/argument-census.py) goes to census/argument-runs.csv
+  (one line per run: how many documented argument forms of the commands Keel
+  has it accepts, refuses or answers differently), census/argument-areas.csv
+  (the same per area) and census/arguments.csv (every form of the newest
+  census of develop, with both replies; rewritten like latest.csv). A run from
+  before the argument census has no lines there.
 - telemetry: the Live telemetry workflow's load/compat.json and
   load/timeline.json, with provenance.txt for the host. telemetry/runs.csv gets
   one line per run, with how many metric names redis_exporter reported for Keel
@@ -85,12 +91,20 @@ CENSUS_RUNS = ['artifact_id', 'run_id', 'time', 'event', 'branch', 'pr', 'conclu
 CENSUS_AREAS = ['artifact_id', 'run_id', 'time', 'branch', 'area', 'commands', 'commands_present', 'subcommands',
                 'subcommands_present']
 CENSUS_LATEST = ['run_id', 'time', 'branch', 'name', 'kind', 'area', 'since', 'deprecated', 'keel']
+ARGUMENT_RUNS = ['artifact_id', 'run_id', 'time', 'event', 'branch', 'pr', 'conclusion', 'redis_version', 'commands',
+                 'forms', 'accepted', 'refused', 'wrong_reply', 'no_reply', 'control', 'redis8_forms',
+                 'redis8_accepted', 'url']
+ARGUMENT_AREAS = ['artifact_id', 'run_id', 'time', 'branch', 'area', 'commands', 'forms', 'accepted', 'refused',
+                  'wrong_reply', 'redis8_forms', 'redis8_accepted']
+ARGUMENT_FORMS = ['run_id', 'time', 'branch', 'command', 'area', 'form', 'since', 'sent', 'class', 'detail', 'keel',
+                  'redis']
 TELEMETRY_RUNS = ['artifact_id', 'run_id', 'time', 'event', 'branch', 'pr', 'conclusion', 'host',
                   'keel_metric_names', 'redis_metric_names', 'shared_metric_names', 'url']
 TELEMETRY_PHASES = ['artifact_id', 'run_id', 'time', 'branch', 'host', 'phase', 'keel_ops', 'redis_ops']
 
 # Which artifact each kind comes from, the members it needs, and its files. A
-# kind with a latest file also keeps one snapshot: the newest run of develop.
+# kind's snapshots are rewritten rather than appended to: each holds the
+# newest run of develop.
 KINDS = {
     'command-path': {'artifact': 'command-path-benchmarks',
                      # The raw outputs only for go test's cpu line (see command_path_records).
@@ -104,8 +118,10 @@ KINDS = {
     'matched-everysec': {'artifact': 'matched-keyspace-adoption-everysec',
                          'members': re.compile(r'^(lscpu\.txt|(baseline|candidate)-source\.txt|[\w.-]+/summary\.json)$'),
                          'files': {'runs': MATCHED_RUNS, 'cases': MATCHED_CASES}},
-    'census': {'artifact': 'command-census', 'members': re.compile(r'^census\.json$'),
-               'files': {'runs': CENSUS_RUNS, 'areas': CENSUS_AREAS}, 'latest': CENSUS_LATEST},
+    'census': {'artifact': 'command-census', 'members': re.compile(r'^(census|arguments)\.json$'),
+               'files': {'runs': CENSUS_RUNS, 'areas': CENSUS_AREAS, 'argument-runs': ARGUMENT_RUNS,
+                         'argument-areas': ARGUMENT_AREAS},
+               'snapshots': {'latest': CENSUS_LATEST, 'arguments': ARGUMENT_FORMS}},
     'telemetry': {'artifact': 'telemetry',
                   'members': re.compile(r'^(provenance\.txt|load/compat\.json|load/timeline\.json)$'),
                   'files': {'runs': TELEMETRY_RUNS, 'phases': TELEMETRY_PHASES}},
@@ -252,7 +268,8 @@ def matched_records(artifact_id, run, pr, files):
 
 
 def census_records(artifact_id, run, pr, files):
-    """runs.csv, areas.csv and latest.csv lines for one census."""
+    """runs.csv, areas.csv and latest.csv lines for one census, and the
+    argument census's lines when its arguments.json is in the artifact."""
     census = json.loads(files['census.json'])
     total = census['summary']['total']
     runs = [{'artifact_id': artifact_id, **run_fields(run, pr), 'redis_version': census.get('redis_version', ''),
@@ -265,7 +282,30 @@ def census_records(artifact_id, run, pr, files):
                'kind': c['kind'], 'area': f"module:{c['module']}" if c.get('module') else c['group'],
                'since': c.get('since', ''), 'deprecated': 'yes' if c.get('deprecated') else 'no', 'keel': c['keel']}
               for c in census['commands']]
-    return {'runs': runs, 'areas': areas, 'latest': latest}
+    records = {'runs': runs, 'areas': areas, 'latest': latest}
+    if 'arguments.json' in files:
+        records.update(argument_records(artifact_id, run, pr, json.loads(files['arguments.json'])))
+    return records
+
+
+ARGUMENT_COUNTS = ['commands', 'forms', 'accepted', 'refused', 'wrong_reply', 'redis8_forms', 'redis8_accepted']
+
+
+def argument_records(artifact_id, run, pr, arguments):
+    """argument-runs.csv, argument-areas.csv and arguments.csv lines for one
+    argument census."""
+    total = arguments['summary']['total']
+    runs = [{'artifact_id': artifact_id, **run_fields(run, pr), 'redis_version': arguments.get('redis_version', ''),
+             **{k: total.get(k, '') for k in ARGUMENT_COUNTS + ['no_reply', 'control']}}]
+    areas = [{'artifact_id': artifact_id, 'run_id': run['id'], 'time': run['created_at'],
+              'branch': run['head_branch'], 'area': area, **{k: counts.get(k, '') for k in ARGUMENT_COUNTS}}
+             for area, counts in arguments['summary']['areas'].items()]
+    forms = [{'run_id': run['id'], 'time': run['created_at'], 'branch': run['head_branch'],
+              'command': f['command'], 'area': f['area'], 'form': f['label'] or 'base', 'since': f['since'],
+              'sent': ' '.join(f['argv']), 'class': f['class'], 'detail': f['detail'], 'keel': f['keel'],
+              'redis': f['redis']}
+             for f in arguments['forms'] if f['class'] != 'not probed']
+    return {'argument-runs': runs, 'argument-areas': areas, 'arguments': forms}
 
 
 def telemetry_records(artifact_id, run, pr, files):
@@ -316,12 +356,13 @@ class Store:
         self.dir = Path(data) / kind
         self.files = KINDS[kind]['files']
         self.lines = {name: self.load(name, columns) for name, columns in self.files.items()}
-        # The snapshot of the newest run of develop, for a kind that keeps one:
-        # its time as the file has it, and the lines that will replace it.
-        self.latest_columns = KINDS[kind].get('latest')
-        held = self.load('latest', self.latest_columns) if self.latest_columns else []
-        self.latest_time = held[0]['time'] if held else ''
-        self.latest = None
+        # Each snapshot of the newest run of develop, for a kind that keeps
+        # them: its time as the file has it, and the lines that will replace it.
+        self.snapshots = KINDS[kind].get('snapshots', {})
+        self.snapshot_time, self.snapshot = {}, {}
+        for name, columns in self.snapshots.items():
+            held = self.load(name, columns)
+            self.snapshot_time[name] = held[0]['time'] if held else ''
 
     def path(self, name):
         return self.dir / f'{name}.csv'
@@ -342,18 +383,18 @@ class Store:
 
     def add(self, records):
         for name, lines in records.items():
-            if name == 'latest':
-                self.offer_latest(lines)
+            if name in self.snapshots:
+                self.offer_snapshot(name, lines)
             else:
                 self.lines[name] += [{k: str(v) for k, v in line.items()} for line in lines]
 
-    def offer_latest(self, lines):
+    def offer_snapshot(self, name, lines):
         """Keep these lines as the snapshot if they come from develop and are
         newer than the one held. A run collected late cannot replace a newer one."""
-        if not lines or lines[0]['branch'] != 'develop' or lines[0]['time'] <= self.latest_time:
+        if not lines or lines[0]['branch'] != 'develop' or lines[0]['time'] <= self.snapshot_time[name]:
             return
-        self.latest_time = lines[0]['time']
-        self.latest = [{k: str(v) for k, v in line.items()} for line in lines]
+        self.snapshot_time[name] = lines[0]['time']
+        self.snapshot[name] = [{k: str(v) for k, v in line.items()} for line in lines]
 
     def save(self):
         self.dir.mkdir(parents=True, exist_ok=True)
@@ -364,11 +405,11 @@ class Store:
                 writer = csv.DictWriter(f, fieldnames=columns, lineterminator='\n', quoting=csv.QUOTE_MINIMAL)
                 writer.writeheader()
                 writer.writerows(lines)
-        if self.latest is not None:
-            with open(self.path('latest'), 'w', newline='') as f:
-                writer = csv.DictWriter(f, fieldnames=self.latest_columns, lineterminator='\n')
+        for name, lines in self.snapshot.items():
+            with open(self.path(name), 'w', newline='') as f:
+                writer = csv.DictWriter(f, fieldnames=self.snapshots[name], lineterminator='\n')
                 writer.writeheader()
-                writer.writerows(self.latest)
+                writer.writerows(lines)
 
 
 class GitHub:
