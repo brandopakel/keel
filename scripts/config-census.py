@@ -287,7 +287,7 @@ def main(argv=None):
     documented = parse_conf(args.source / 'redis.conf', names)
     uses = test_uses(args.source / 'tests', names)
     flags = keel_flags(args.bin)
-    servers = ac.Servers(args.out / 'servers')
+    servers = ac.Servers(args.out / 'config-servers')
     try:
         keel_port = servers.start_keel(args.bin)
         redis_port = servers.start_redis(args.redis_server)
