@@ -104,7 +104,7 @@ class Servers:
         self.env = {k: os.environ[k] for k in ('PATH', 'HOME', 'TMPDIR') if k in os.environ}
 
     def start_keel(self, binary):
-        directory = self.out / 'keel'
+        directory = (self.out / 'keel').resolve()  # each server runs in its own directory
         directory.mkdir(parents=True)
         port = free_port()
         env = dict(self.env, KEEL_ARGUMENT_CENSUS_PASSWORD=self.password)
@@ -117,7 +117,7 @@ class Servers:
         return port
 
     def start_redis(self, binary):
-        directory = self.out / 'redis'
+        directory = (self.out / 'redis').resolve()
         directory.mkdir(parents=True)
         port = free_port()
         log = (directory / 'server.log').open('wb')
