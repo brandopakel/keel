@@ -160,6 +160,19 @@ class Servers:
             log.close()
 
 
+def redis_version(port, password):
+    """The version a server reports in INFO server."""
+    c = Connection(port, password)
+    try:
+        reply = c.call(['INFO', 'server'])
+    finally:
+        c.close()
+    match = reply[0] != '-' and re.search(r'redis_version:(\S+)', reply[1] or '')
+    if not match:
+        raise RuntimeError(f'INFO server answered {rc.text(reply)}')
+    return match[1]
+
+
 def probe_present(port, password, specs):
     """Which commands and subcommands a server knows, by name: an unknown
     command or subcommand error means it does not, any other reply means it
@@ -390,12 +403,7 @@ def main(argv=None):
     try:
         keel_port = servers.start_keel(args.bin)
         redis_port = servers.start_redis(args.redis_server)
-        c = Connection(redis_port, servers.password)
-        try:
-            info = c.call(['INFO', 'server'])[1]
-        finally:
-            c.close()
-        redis_version = re.search(r'redis_version:(\S+)', info)[1]
+        version = redis_version(redis_port, servers.password)
         present = probe_present(keel_port, servers.password, specs)
         redis_present = probe_present(redis_port, servers.password, specs)
         fixture = Fixture(present & redis_present)
@@ -408,13 +416,13 @@ def main(argv=None):
     summary = summarise(rows)
     control = [r for r in rows if r['class'] == 'control']
     no_reply = [r for r in rows if r['class'] == 'no reply']
-    result = {'redis_version': redis_version, 'commands_dir': str(args.commands), 'summary': summary,
+    result = {'redis_version': version, 'commands_dir': str(args.commands), 'summary': summary,
               'control_failures': [{k: r[k] for k in ('command', 'label', 'argv', 'detail', 'keel', 'redis')}
                                    for r in control],
               'keel_no_reply': [{k: r[k] for k in ('command', 'label', 'argv', 'detail')} for r in no_reply],
               'fixture_failures': fixture_failures, 'forms': rows}
     (args.out / 'arguments.json').write_text(json.dumps(result, indent=1) + '\n')
-    text = markdown(summary, rows, redis_version)
+    text = markdown(summary, rows, version)
     failed = control or no_reply or any(fixture_failures.values())
     if failed:
         text += '\n**FAILED**\n\n'
