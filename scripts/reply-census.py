@@ -453,7 +453,7 @@ def main(argv=None):
     args.out.mkdir(parents=True, exist_ok=True)
     specs = rc.load_specs(args.source / 'commands')
     source = Source(args.source)
-    servers = ac.Servers(args.out / 'servers')
+    servers = ac.Servers(args.out / 'reply-servers')
     try:
         keel_port = servers.start_keel(args.bin)
         redis_port = servers.start_redis(args.redis_server)
