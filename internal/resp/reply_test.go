@@ -4,8 +4,11 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"unsafe"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/brandopakel/keel/internal/constant"
 )
 
 // admission refuses any reply over limit bytes with refusal, and counts what
@@ -32,11 +35,15 @@ func TestReplyWritesEachShapeInBothProtocols(t *testing.T) {
 		resp2, resp3 string
 	}{
 		{"status", func(r *Reply) { r.Status("OK") }, "+OK\r\n", "+OK\r\n"},
+		{"pong", func(r *Reply) { r.Status("PONG") }, "+PONG\r\n", "+PONG\r\n"},
 		{"error", func(r *Reply) { r.Error(errors.New("ERR no\r\nway")) }, "-ERR no  way\r\n", "-ERR no  way\r\n"},
 		{"int", func(r *Reply) { r.Int(-7) }, ":-7\r\n", ":-7\r\n"},
+		{"ints", func(r *Reply) { r.Int(0).Int(1).Int(2) }, ":0\r\n:1\r\n:2\r\n", ":0\r\n:1\r\n:2\r\n"},
 		{"bulk", func(r *Reply) { r.Bulk("a\r\nb") }, "$4\r\na\r\nb\r\n", "$4\r\na\r\nb\r\n"},
 		{"null", func(r *Reply) { r.Null() }, "$-1\r\n", "_\r\n"},
 		{"null array", func(r *Reply) { r.NullArray() }, "*-1\r\n", "_\r\n"},
+		{"empty map", func(r *Reply) { r.EmptyMap() }, "*0\r\n", "%0\r\n"},
+		{"empty set", func(r *Reply) { r.EmptySet() }, "*0\r\n", "~0\r\n"},
 		{"bool", func(r *Reply) { r.Bool(true).Bool(false) }, ":1\r\n:0\r\n", "#t\r\n#f\r\n"},
 		{"double", func(r *Reply) { r.Double("2.5") }, "$3\r\n2.5\r\n", ",2.5\r\n"},
 		{"verbatim", func(r *Reply) { r.Verbatim("hi") }, "$2\r\nhi\r\n", "=6\r\ntxt:hi\r\n"},
@@ -45,6 +52,7 @@ func TestReplyWritesEachShapeInBothProtocols(t *testing.T) {
 		{"map", func(r *Reply) { r.Map(1).Bulk("f").Bulk("v") }, "*2\r\n$1\r\nf\r\n$1\r\nv\r\n", "%1\r\n$1\r\nf\r\n$1\r\nv\r\n"},
 		{"pair", func(r *Reply) { r.Array(1).Pair().Bulk("m").Double("1") }, "*1\r\n$1\r\nm\r\n$1\r\n1\r\n", "*1\r\n*2\r\n$1\r\nm\r\n,1\r\n"},
 		{"raw", func(r *Reply) { r.Raw([]byte("+PONG\r\n")) }, "+PONG\r\n", "+PONG\r\n"},
+		{"raw after canned", func(r *Reply) { r.Null().Raw([]byte("x")) }, "$-1\r\nx", "_\r\nx"},
 	} {
 		for _, resp3 := range []bool{false, true} {
 			var r Reply
@@ -61,23 +69,81 @@ func TestReplyWritesEachShapeInBothProtocols(t *testing.T) {
 	}
 }
 
-func TestReplyAdmitsBeforeItAllocates(t *testing.T) {
+// first is the address of a slice's first byte, to tell a shared constant
+// from a copy.
+func first(b []byte) uintptr { return uintptr(unsafe.Pointer(&b[0])) }
+
+func TestReplyAnswersCannedRepliesWithoutAllocating(t *testing.T) {
+	// Not parallel: AllocsPerRun refuses to run beside other tests.
+	for _, tc := range []struct {
+		write  func(r *Reply)
+		canned []byte
+	}{
+		{func(r *Reply) { r.Status("OK") }, constant.RespOk},
+		{func(r *Reply) { r.Int(0) }, constant.RespZero},
+		{func(r *Reply) { r.Int(1) }, constant.RespOne},
+		{func(r *Reply) { r.Bool(true) }, constant.RespOne},
+		{func(r *Reply) { r.Null() }, constant.RespNil},
+		{func(r *Reply) { r.NullArray() }, constant.RespNilArray},
+		{func(r *Reply) { r.EmptySet() }, constant.RespEmptyArray},
+	} {
+		var r Reply
+		allocs := testing.AllocsPerRun(100, func() {
+			r.Reset(Framing{})
+			tc.write(&r)
+		})
+		require.Zero(t, allocs, "%q", tc.canned)
+		require.Equal(t, first(tc.canned), first(r.Bytes()), "%q is the shared constant, by reference", tc.canned)
+	}
+	var r Reply
+	r.Reset(Framing{RESP3: true})
+	r.Null()
+	require.Equal(t, first(constant.Resp3Null), first(r.Bytes()))
+	// A canned value followed by anything is copied into a buffer of the
+	// reply's own, and the constant is untouched.
+	r.Int(2)
+	require.Equal(t, "_\r\n:2\r\n", string(r.Bytes()))
+	require.Equal(t, "_\r\n", string(constant.Resp3Null))
+}
+
+func TestReplyGivesEachCommandABufferOfItsOwn(t *testing.T) {
 	t.Parallel()
+	var r Reply
+	r.Reset(Framing{})
+	r.Bulk("first")
+	kept := r.Bytes()
+	r.Reset(Framing{})
+	require.Empty(t, r.Bytes())
+	r.Bulk("second")
+	require.Equal(t, "$5\r\nfirst\r\n", string(kept), "the transport's reply is not written over by the next command")
+	require.Equal(t, "$6\r\nsecond\r\n", string(r.Bytes()))
+	require.NotEqual(t, first(kept), first(r.Bytes()))
+}
+
+func TestReplyAdmitsBeforeItAllocates(t *testing.T) {
+	// Not parallel: AllocsPerRun refuses to run beside other tests.
 	a := &admission{limit: 100, refusal: []byte("-ERR no room\r\n")}
 	r := &Reply{Admission: a}
 	value := strings.Repeat("v", 50)
-	r.Bulk(value)
-	require.Equal(t, []int{len(value) + 7}, a.asked, "the exact encoded size, before the copy")
-	require.Equal(t, len(value)+7, cap(r.Bytes()), "allocated once, to the admitted size")
+	allocs := testing.AllocsPerRun(10, func() {
+		r.Reset(Framing{})
+		r.Bulk(value)
+	})
+	require.Equal(t, 1.0, allocs, "the buffer, once")
+	require.Equal(t, len(value)+7, a.asked[len(a.asked)-1], "the exact encoded size, before the copy")
+	require.Equal(t, len(value)+7, cap(r.Bytes()), "allocated to the admitted size")
 	require.False(t, r.Refused())
 
+	a.asked = nil
 	r.Reset(Framing{})
-	r.Int(1).Bulk(strings.Repeat("v", 200))
+	r.Int(2).Bulk(strings.Repeat("v", 200))
 	require.True(t, r.Refused())
 	require.Equal(t, "-ERR no room\r\n", string(r.Bytes()), "the refusal replaces what was written")
-	require.Equal(t, []int{len(value) + 7, 4 + 200 + 8}, a.asked, "asked for the whole reply so far")
-	r.Status("OK").Int(2).Null().Array(1).Raw([]byte("x"))
+	require.Equal(t, first(a.refusal), first(r.Bytes()), "by reference")
+	require.Equal(t, []int{4 + 200 + 8}, a.asked, "asked for the whole reply so far")
+	r.Status("OK").Int(2).Null().Array(1).Raw([]byte("x")).Bulk("y").Double("1")
 	require.Equal(t, "-ERR no room\r\n", string(r.Bytes()), "nothing after a refusal is written")
+	require.False(t, r.Reserve(1))
 
 	r.Reset(Framing{})
 	require.False(t, r.Refused())
