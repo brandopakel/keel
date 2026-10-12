@@ -51,8 +51,9 @@ flags `WRITE`, `READONLY`, `DENYOOM`, `NO_AUTH`, `NO_MULTI`, `STALE`,
 ## Looking a command up
 
 `lookupCommandLogic` (`server.c:3633-3647`) fetches `argv[0]` from the
-`server.commands` dict (names are stored lower case; the dict compares case
-insensitively) and, when the command has subcommands and `argc > 1`, looks
+`server.commands` dict (names are stored lower case; the dict hashes and
+compares without regard to case, `commandTableDictType`, `server.c:678-681`)
+and, when the command has subcommands and `argc > 1`, looks
 `argv[1]` up in `subcommands_dict` (`:3645`); a container called with one
 word returns the container itself, whose `proc` is `NULL` (`:3639`).
 `lookupCommandBySds` (`:3653-3675`) splits a `container|sub` name on `|` for
@@ -301,8 +302,9 @@ or the stale estimate is high (`:318-330`). The slow cycle's time limit is
 expires (`:412-413`), repeats while more than 10% of a sample were expired
 (`:447`), and stops at the time limit (`:484-485`); the stale percentage is
 `total_expired / total_sampled` (`:502`). Each expired key goes through
-`activeExpireCycleTryExpire` (`:40-54`): delete and propagate, count
-`expired_keys` (`stat_expiredkeys_active`), and propagate at once
+`activeExpireCycleTryExpire` (`:40-54`): delete and propagate, count it
+in `expired_keys_active` (`stat_expiredkeys_active`, `:48`; INFO prints it
+beside `expired_keys` at `server.c:6762-6763`), and propagate at once
 (`postExecutionUnitOperations`, `:52`), so the log holds one `DEL` per key
 rather than a transaction.
 
