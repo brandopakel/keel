@@ -68,6 +68,22 @@ ARGUMENTS = {
                'class': 'not probed', 'detail': 'stops the server', 'keel': '', 'redis': ''}],
 }
 
+# The reply census's replies.json, trimmed.
+REPLIES = {
+    'redis_version': '8.10.1',
+    'summary': {'areas': {'string': {'commands': 12, 'cases': 116, 'same': 108, 'differs': 0, 'refused': 8,
+                                     'no_reply': 0, 'resp3_cases': 58, 'resp3_same': 54,
+                                     'keel_schema_violations': 0, 'redis_schema_violations': 0}},
+                'total': {'commands': 100, 'cases': 906, 'same': 886, 'differs': 0, 'refused': 20, 'no_reply': 0,
+                          'resp3_cases': 453, 'resp3_same': 443, 'keel_schema_violations': 2,
+                          'redis_schema_violations': 1}},
+    'commands': {'get': {'area': 'string', 'function': 'getCommand', 'at': 't_string.c:270', 'sites': [],
+                         'schema': True}},
+    'cases': [{'command': 'get', 'area': 'string', 'case': 'form', 'label': '', 'since': '1.0.0',
+               'argv': ['GET', 'str'], 'protocol': 3, 'result': 'same', 'detail': '', 'keel': '$abc',
+               'redis': '$abc', 'keel_shape': '$', 'redis_shape': '$', 'keel_schema': 'ok', 'redis_schema': 'ok'}],
+}
+
 # The Live telemetry artifact's files, from run 37587041339.
 TELEMETRY = {
     'provenance.txt': 'keel 2aeb1c8\nrunner Linux 6.17.0-1022-azure x86_64 cpus 4 AMD EPYC 9V74 80-Core Processor\n',
@@ -364,6 +380,21 @@ class NewKinds(unittest.TestCase):
                           ('set', 'IFEQ', 'SET str v IFEQ s', 'refused', '-ERR syntax error')],
                          'not probed commands are not forms')
         self.assertTrue(cbh.KINDS['census']['members'].match('arguments.json'))
+        self.assertNotIn('reply-runs', records, 'a census from before the reply census')
+
+    def test_reply_census(self):
+        records = cbh.census_records(1, self.run, '', {'census.json': json.dumps(CENSUS),
+                                                      'replies.json': json.dumps(REPLIES)})
+        run, = records['reply-runs']
+        self.assertEqual((run['redis_version'], run['commands'], run['cases'], run['same'], run['refused'],
+                          run['resp3_same'], run['keel_schema_violations'], run['redis_schema_violations']),
+                         ('8.10.1', 100, 906, 886, 20, 443, 2, 1))
+        area, = records['reply-areas']
+        self.assertEqual((area['area'], area['cases'], area['same'], area['refused']), ('string', 116, 108, 8))
+        case, = records['replies']
+        self.assertEqual((case['command'], case['form'], case['protocol'], case['sent'], case['result'],
+                          case['keel_shape'], case['redis_at']), ('get', 'base', 3, 'GET str', 'same', '$', 't_string.c:270'))
+        self.assertTrue(cbh.KINDS['census']['members'].match('replies.json'))
 
     def test_telemetry(self):
         records = cbh.telemetry_records(2, self.run, 134, TELEMETRY)
@@ -393,6 +424,7 @@ class Latest(unittest.TestCase):
         files = {'census.json': json.dumps(census)}
         if arguments:
             files['arguments.json'] = json.dumps(ARGUMENTS)
+            files['replies.json'] = json.dumps(REPLIES)
         self.gh.add('command-census', artifact_id, artifact_id * 10, files, created=created, branch=branch)
 
     def latest(self):
@@ -432,6 +464,8 @@ class Latest(unittest.TestCase):
         self.assertEqual([(f['run_id'], f['command'], f['form'], f['class']) for f in forms],
                          [('20', 'set', 'base', 'accepted'), ('20', 'set', 'IFEQ', 'refused')])
         self.assertEqual(len(read(self.data / 'census/argument-runs.csv')), 1, 'the older run had no argument census')
+        self.assertEqual(len(read(self.data / 'census/reply-runs.csv')), 1)
+        self.assertEqual(read(self.data / 'census/replies.csv')[0]['run_id'], '20')
         self.assertEqual(len(read(self.data / 'census/runs.csv')), 2)
         # A newer census of develop without arguments.json leaves the snapshot.
         self.census(3, '2026-10-07T12:00:00Z', 'develop', 'present')
