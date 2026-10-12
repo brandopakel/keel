@@ -16,6 +16,8 @@ import (
 // loop installs it with SetServerInfo before accepting clients.
 type ServerInfo struct {
 	Port, MaxClients, IOThreads int
+	// TCPBacklog is the transport's listen backlog, CONFIG GET's tcp-backlog.
+	TCPBacklog int
 	// Host is the address the transport listens on, CONFIG GET's bind, and
 	// RequirePass the password its clients log in with, CONFIG GET's
 	// requirepass.

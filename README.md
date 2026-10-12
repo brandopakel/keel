@@ -141,7 +141,8 @@ without progress for 30 seconds is closed (checked approximately once a second),
 so is one whose parsed request the server has not answered in that time; `INFO clients`
 counts the two separately (`clients_closed_slow`, `clients_closed_unanswered`), and the
 second is logged with the connection's state because it indicates a server fault.
-`-maxclients` bounds connected clients. Retained user-space input/output buffers
+`-maxclients` bounds connected clients; `-tcp-backlog` is the listen backlog,
+511 by default as in Redis, which the kernel caps at its `somaxconn`. Retained user-space input/output buffers
 also share a 256 MiB limit; excess clients are closed. These are resource limits, not an RSS guarantee;
 input and replies each have a 192 MiB retained-buffer ceiling within that total.
 Amplifying collection reads and `KEEL.DUMP` size their replies before construction;

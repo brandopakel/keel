@@ -193,7 +193,7 @@ func TestFlagsReachTheServer(t *testing.T) {
 	// os.Args) into the package's flag variables, which every test in the
 	// process shares.
 	engineFrom(t)
-	want := server.Options{Host: "127.0.0.1", Port: 8081, MaxClients: 20000, IOThreads: 1,
+	want := server.Options{Host: "127.0.0.1", Port: 8081, MaxClients: 20000, TCPBacklog: 511, IOThreads: 1,
 		CronInterval: 100 * time.Millisecond}
 	if got := serverOptions(); got != want {
 		t.Fatalf("default flags give the server %+v, want %+v", got, want)
@@ -203,10 +203,10 @@ func TestFlagsReachTheServer(t *testing.T) {
 	}
 
 	t.Setenv("KEEL_OPTIONS_TEST_PASSWORD", "secret")
-	engineFrom(t, "-host", "0.0.0.0", "-port", "7000", "-maxclients", "12", "-io-threads", "3",
+	engineFrom(t, "-host", "0.0.0.0", "-port", "7000", "-maxclients", "12", "-tcp-backlog", "64", "-io-threads", "3",
 		"-cron-interval-ms", "25", "-requirepass-env", "KEEL_OPTIONS_TEST_PASSWORD",
 		"-aof-async-append", "-appendonly", "-aof-concurrent-append", "-primary-tls")
-	want = server.Options{Host: "0.0.0.0", Port: 7000, MaxClients: 12, IOThreads: 3,
+	want = server.Options{Host: "0.0.0.0", Port: 7000, MaxClients: 12, TCPBacklog: 64, IOThreads: 3,
 		CronInterval: 25 * time.Millisecond, RequirePass: "secret", ConcurrentAppend: true, PrimaryTLS: true}
 	if got := serverOptions(); got != want {
 		t.Fatalf("flags give the server %+v, want %+v", got, want)
@@ -237,6 +237,8 @@ var developFlags = []struct{ name, kind, value string }{
 	{"lfu-log-factor", "int", "10"},
 	{"lru-samples", "int", "5"},
 	{"maxclients", "int", "20000"},
+	// Added after the phase: Redis's tcp-backlog, with Redis's default.
+	{"tcp-backlog", "int", "511"},
 	// The one deliberate change since d56088a: the owner chose Redis's
 	// unbounded default over the 5,000,000-key cap on 2026-10-05.
 	{"maxkeys", "int", "0"},

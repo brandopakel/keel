@@ -66,14 +66,14 @@ func TestConfigGetReportsTheTransportsSettingsOnceItHasSaid(t *testing.T) {
 	t.Parallel()
 	e := newTestEngine(t, Options{})
 	assert.Empty(t, configPairs(t, e, "port", "bind", "maxclients", "hz", "requirepass"))
-	e.SetServerInfo(&ServerInfo{Port: 6390, MaxClients: 50, IOThreads: 4, Hz: 10, Multiplexer: "epoll",
+	e.SetServerInfo(&ServerInfo{Port: 6390, MaxClients: 50, TCPBacklog: 511, IOThreads: 4, Hz: 10, Multiplexer: "epoll",
 		Host: "0.0.0.0", RequirePass: "secret"})
 	got := map[string]string{}
 	for _, p := range configPairs(t, e, "*") {
 		got[p[0]] = p[1]
 	}
 	for name, want := range map[string]string{"port": "6390", "bind": "0.0.0.0", "maxclients": "50",
-		"tcp-backlog": "50", "io-threads": "4", "hz": "10", "requirepass": "secret"} {
+		"tcp-backlog": "511", "io-threads": "4", "hz": "10", "requirepass": "secret"} {
 		assert.Equal(t, want, got[name], name)
 	}
 }
