@@ -18,7 +18,9 @@
 # RESP2 and RESP3, and compares the shape of every reply with Redis's and
 # Keel's RESP3 replies with Redis's own reply schemas: replies.json and the
 # mismatches in the step summary, each with where in the Redis source the
-# reply is built.
+# reply is built. scripts/config-census.py compares Redis's configuration
+# table (src/config.c) and redis.conf with Keel's CONFIG GET and flags:
+# config.json, and the counts in the step summary.
 #
 # RediSearch's FT.* commands are not listed: the module does not build on this
 # runner's Rust and clang (see general-validation.yml).
@@ -36,12 +38,13 @@ on:
     branches: [develop]
     paths: ['internal/**', 'cmd/**', 'go.mod', '.github/workflows/command-census.yml',
             'scripts/command-census.py', 'scripts/argument-census.py', 'scripts/redis_commands.py',
-            'scripts/reply-census.py']
+            'scripts/reply-census.py', 'scripts/config-census.py']
   pull_request:
     branches: [develop]
     paths: ['.github/workflows/command-census.yml', 'scripts/command-census.py',
             'scripts/test_command_census.py', 'scripts/argument-census.py', 'scripts/redis_commands.py',
-            'scripts/test_argument_census.py', 'scripts/reply-census.py', 'scripts/test_reply_census.py']
+            'scripts/test_argument_census.py', 'scripts/reply-census.py', 'scripts/test_reply_census.py',
+            'scripts/config-census.py', 'scripts/test_config_census.py']
 
 permissions:
   contents: read
@@ -99,6 +102,11 @@ jobs:
         run: |
           python3 -I scripts/reply-census.py --bin /tmp/keel --redis-server /tmp/redis-8.10.1/src/redis-server \
             --source /tmp/redis-8.10.1/src --out dist/census | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Configuration census
+        shell: bash
+        run: |
+          python3 -I scripts/config-census.py --bin /tmp/keel --redis-server /tmp/redis-8.10.1/src/redis-server \
+            --source /tmp/redis-8.10.1 --out dist/census | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:

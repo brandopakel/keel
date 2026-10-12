@@ -84,6 +84,20 @@ REPLIES = {
                'redis': '$abc', 'keel_shape': '$', 'redis_shape': '$', 'keel_schema': 'ok', 'redis_schema': 'ok'}],
 }
 
+# The configuration census's config.json, trimmed.
+CONFIG = {
+    'redis_version': '8.10.1',
+    'summary': {'total': {'configs': 218, 'has': 20, 'mapped': 5, 'lacks': 193, 'lacks_used': 4, 'lacks_tested': 90,
+                          'documented': 200, 'same_value': 13},
+                'families': {'tls': {'configs': 22, 'has': 0, 'mapped': 0, 'lacks': 22}}},
+    'configs': [{'name': 'maxmemory', 'alias': '', 'kind': 'sizet', 'flags': [], 'condition': '',
+                 'documented': 'example', 'class': 'has', 'keel_value': '0', 'redis_value': '0', 'note': '',
+                 'used_by': ['redis_exporter (config_maxmemory)'], 'test_files': 19, 'family': 'memory and eviction'},
+                {'name': 'repl-compression', 'alias': '', 'kind': 'int', 'flags': ['IMMUTABLE_CONFIG'],
+                 'condition': '#ifdef USE_COMPRESSION', 'documented': 'no', 'class': 'lacks', 'keel_value': None,
+                 'redis_value': None, 'note': '', 'used_by': [], 'test_files': 0, 'family': 'replication'}],
+}
+
 # The Live telemetry artifact's files, from run 37587041339.
 TELEMETRY = {
     'provenance.txt': 'keel 2aeb1c8\nrunner Linux 6.17.0-1022-azure x86_64 cpus 4 AMD EPYC 9V74 80-Core Processor\n',
@@ -396,6 +410,17 @@ class NewKinds(unittest.TestCase):
                           case['keel_shape'], case['redis_at']), ('get', 'base', 3, 'GET str', 'same', '$', 't_string.c:270'))
         self.assertTrue(cbh.KINDS['census']['members'].match('replies.json'))
 
+    def test_config_census(self):
+        records = cbh.census_records(1, self.run, '', {'census.json': json.dumps(CENSUS),
+                                                      'config.json': json.dumps(CONFIG)})
+        run, = records['config-runs']
+        self.assertEqual((run['configs'], run['has'], run['mapped'], run['lacks'], run['lacks_used']),
+                         (218, 20, 5, 193, 4))
+        directive, = records['config']
+        self.assertEqual((directive['name'], directive['class'], directive['keel_value'], directive['used_by'],
+                          directive['test_files']), ('maxmemory', 'has', '0', 'redis_exporter (config_maxmemory)', 19))
+        self.assertTrue(cbh.KINDS['census']['members'].match('config.json'))
+
     def test_telemetry(self):
         records = cbh.telemetry_records(2, self.run, 134, TELEMETRY)
         run, = records['runs']
@@ -425,6 +450,7 @@ class Latest(unittest.TestCase):
         if arguments:
             files['arguments.json'] = json.dumps(ARGUMENTS)
             files['replies.json'] = json.dumps(REPLIES)
+            files['config.json'] = json.dumps(CONFIG)
         self.gh.add('command-census', artifact_id, artifact_id * 10, files, created=created, branch=branch)
 
     def latest(self):
@@ -466,6 +492,8 @@ class Latest(unittest.TestCase):
         self.assertEqual(len(read(self.data / 'census/argument-runs.csv')), 1, 'the older run had no argument census')
         self.assertEqual(len(read(self.data / 'census/reply-runs.csv')), 1)
         self.assertEqual(read(self.data / 'census/replies.csv')[0]['run_id'], '20')
+        self.assertEqual(len(read(self.data / 'census/config-runs.csv')), 1)
+        self.assertEqual(read(self.data / 'census/config.csv')[0]['name'], 'maxmemory')
         self.assertEqual(len(read(self.data / 'census/runs.csv')), 2)
         # A newer census of develop without arguments.json leaves the snapshot.
         self.census(3, '2026-10-07T12:00:00Z', 'develop', 'present')
