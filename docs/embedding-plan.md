@@ -2031,13 +2031,21 @@ and the byte. Step 4.0 adds two corpora, captured from develop at `72ed0cd`:
   past 1 KiB held as its digest. What is not the same from run to run is
   normalized, and the fixture says how at each command: a set's members and
   the keys of KEYS and SCAN sorted; a hash's pairs sorted by field; a TTL
-  rounded to the hour; MEMORY STATS's values zeroed; INFO, PTTL, MEMORY USAGE,
-  `CONFIG GET *` (which holds `dir`) and a pull's frame held to their type
-  byte; a pop's SREM record sorted; a relative expiry's PEXPIREAT normalized
-  as the persistence goldens normalize one. Nothing else is masked.
+  rounded to the hour; MEMORY STATS's values zeroed; a filter's `Size`, an
+  estimate built from the machine's base sizes, zeroed in BF.INFO; INFO,
+  PTTL, MEMORY USAGE, `CONFIG GET *` (which holds `dir`) and a pull's frame
+  held to their type byte; a pop's SREM record sorted; a relative expiry's
+  PEXPIREAT normalized as the persistence goldens normalize one. Nothing else
+  is masked. The first capture, on macOS arm64, found two things that differ
+  on Linux x86-64: that `Size`, and the coordinates GEOPOS decodes for the
+  origin, whose last digits differ under arm64's fused multiply-add
+  (`0.0000012673605809254695` against `0.0000012673605796694755`); the
+  corpus holds the origin's geohash and not its coordinates.
 - **The generator** (`scripts/capture-command-goldens.py`): refuses to run
-  unless the revision each test names is HEAD and the tree changes nothing
-  outside tests, fixtures, scripts and docs; runs both capture tests through
+  unless both corpora name one revision and nothing outside tests, fixtures,
+  scripts and docs differs between it and the tree, so that a fixture
+  describes the revision it names though it is captured on a branch that
+  adds tests to it; runs both capture tests through
   the local validation wrapper; copies the result into the fixture
   directories; and runs the replay tests once. The capture runs every case
   three times in each protocol and refuses a case that is not the same from

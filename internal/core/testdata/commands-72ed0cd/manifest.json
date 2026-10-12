@@ -4,7 +4,7 @@
   "note": "Every command's RESP2 and RESP3 replies and log records on develop, before phase 4 of the embedding plan; see command_golden_test.go.",
   "files": {
     "bloom.txt": {
-      "sha256": "bb179de17067b8737945ac1b37a90cf337bd2e88852a34b4f433403abd4e13ad",
+      "sha256": "840be97747c81d012bb66cfd875bbaa9e6a894f995c834ab91ed4a4b7e1efac7",
       "cases": 3,
       "commands": 85,
       "records": 19
@@ -22,7 +22,7 @@
       "records": 31
     },
     "geo.txt": {
-      "sha256": "241b94362fe0a4240ab2cc47715d6a1369cbbcd81952df01177f2e5afe905c6c",
+      "sha256": "a27cfb7ed22caab8db74c29a49cacb8a5987c40b40ccd259e3bbc1b53a45d972",
       "cases": 3,
       "commands": 104,
       "records": 9
