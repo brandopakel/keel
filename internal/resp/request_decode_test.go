@@ -1,4 +1,4 @@
-package core
+package resp
 
 import (
 	"errors"
@@ -109,7 +109,7 @@ func FuzzReservedCommandParserMatchesValueDecoder(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, wire []byte) {
 		got, used, err := ParseCmdReserved(wire, func(int) bool { return true })
-		want, expectedUsed, expectedErr := parseCmdGeneric(wire)
+		want, expectedUsed, expectedErr := ParseCmdReference(wire)
 		if !errors.Is(err, expectedErr) || used != expectedUsed || !reflect.DeepEqual(got, want) {
 			t.Fatalf("reserved parser mismatch: got %#v/%d/%v; reference %#v/%d/%v", got, used, err, want, expectedUsed, expectedErr)
 		}
@@ -158,7 +158,7 @@ func TestDecodersKeepTheNameAsSent(t *testing.T) {
 	reserved := func(wire []byte) (*Command, int, error) {
 		return ParseCmdReserved(wire, func(int) bool { return true })
 	}
-	for _, parse := range []func([]byte) (*Command, int, error){ParseCmd, parseCmdGeneric, reserved} {
+	for _, parse := range []func([]byte) (*Command, int, error){ParseCmd, ParseCmdReference, reserved} {
 		for _, c := range []struct{ sent, cmd, name string }{
 			{"get", "GET", "get"}, {"GET", "GET", ""}, {"GeT", "GET", "GeT"}, {"", "", ""},
 			{"é", "É", "é"}, {"\xff", "�", "\xff"},
@@ -167,7 +167,7 @@ func TestDecodersKeepTheNameAsSent(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, c.cmd, cmd.Cmd, "%q", c.sent)
 			require.Equal(t, c.name, cmd.Name, "%q", c.sent)
-			require.Equal(t, c.sent, cmd.sentName())
+			require.Equal(t, c.sent, cmd.SentName())
 		}
 	}
 }

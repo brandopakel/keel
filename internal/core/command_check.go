@@ -273,7 +273,7 @@ func EchoArgument(s string) string {
 // left. A command sent with no arguments is named alone.
 func unknownCommand(cmd *Command) error {
 	b := append(make([]byte, 0, 64+2*echoLimit+8), "ERR unknown command '"...)
-	b = appendEcho(b, cmd.sentName(), echoLimit)
+	b = appendEcho(b, cmd.SentName(), echoLimit)
 	b = append(b, '\'')
 	if len(cmd.Args) > 0 {
 		b = append(b, ", with args beginning with: "...)

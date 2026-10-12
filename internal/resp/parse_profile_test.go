@@ -1,4 +1,4 @@
-package core
+package resp
 
 import (
 	"errors"
@@ -19,7 +19,7 @@ func FuzzCommandParserMatchesValueDecoder(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, wire []byte) {
 		got, used, err := ParseCmd(wire)
-		want, expectedUsed, expectedErr := parseCmdGeneric(wire)
+		want, expectedUsed, expectedErr := ParseCmdReference(wire)
 		if !errors.Is(err, expectedErr) || used != expectedUsed || !reflect.DeepEqual(got, want) {
 			t.Fatalf("parser mismatch: got %#v/%d/%v; reference %#v/%d/%v", got, used, err, want, expectedUsed, expectedErr)
 		}

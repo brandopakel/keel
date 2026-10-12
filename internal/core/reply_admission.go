@@ -6,29 +6,8 @@ import (
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
-// MaxReplyBytes is the per-client encoded output ceiling. Amplifying reads
-// enforce it before allocating their payload, independently of append mode.
-const MaxReplyBytes = 64 << 20
-
+// replyTooLarge refuses a reply that would pass MaxReplyBytes.
 var replyTooLarge = []byte("-ERR reply exceeds the 64 MiB output limit\r\n")
-
-func decimalDigits(n int) int {
-	digits := 1
-	for n >= 10 {
-		n /= 10
-		digits++
-	}
-	return digits
-}
-
-// addBulkSize checks before adding, including RESP framing, without overflowing.
-func addBulkSize(size, length int) (int, bool) {
-	framing := decimalDigits(length) + 5
-	if length > MaxReplyBytes-size-framing {
-		return size, false
-	}
-	return size + length + framing, true
-}
 
 // encodeLookupArray sizes the complete reply before allocating it. Lookup must
 // not grow values between passes; command execution is single-threaded. Expiry

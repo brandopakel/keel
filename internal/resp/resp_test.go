@@ -1,4 +1,4 @@
-package core_test
+package resp_test
 
 import (
 	"errors"
@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/brandopakel/keel/internal/core"
+	"github.com/brandopakel/keel/internal/resp"
 )
 
 // The wire forms below are the ones the RESP specification gives, so a case
@@ -45,7 +45,7 @@ func TestDecodeEachValueType(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, n, err := core.DecodeOne([]byte(c.wire))
+			got, n, err := resp.DecodeOne([]byte(c.wire))
 			assert.NoError(t, err)
 			assert.Equal(t, c.want, got)
 			assert.Equal(t, len(c.wire), n, "the whole value and nothing more is consumed")
@@ -56,12 +56,12 @@ func TestDecodeEachValueType(t *testing.T) {
 func TestDecodeStopsAtTheEndOfTheFirstValue(t *testing.T) {
 	t.Parallel()
 	wire := "+first\r\n:2\r\n"
-	got, n, err := core.DecodeOne([]byte(wire))
+	got, n, err := resp.DecodeOne([]byte(wire))
 	assert.NoError(t, err)
 	assert.Equal(t, "first", got)
 	assert.Equal(t, len("+first\r\n"), n)
 
-	got, err = core.Decode([]byte(wire))
+	got, err = resp.Decode([]byte(wire))
 	assert.NoError(t, err)
 	assert.Equal(t, "first", got, "Decode ignores what follows")
 }
@@ -72,8 +72,8 @@ func TestDecodeIncompleteValues(t *testing.T) {
 		"", "+", "+OK", "+OK\r", ":", ":12", ":12\r", "$", "$5", "$5\r\n", "$5\r\nhel", "$5\r\nhello", "$5\r\nhello\r",
 		"*", "*2", "*2\r\n", "*2\r\n:1\r\n", "*2\r\n:1\r\n$3\r\nab",
 	} {
-		_, n, err := core.DecodeOne([]byte(wire))
-		assert.True(t, errors.Is(err, core.ErrIncompleteFrame), "%q should be incomplete, got %v", wire, err)
+		_, n, err := resp.DecodeOne([]byte(wire))
+		assert.True(t, errors.Is(err, resp.ErrIncompleteFrame), "%q should be incomplete, got %v", wire, err)
 		assert.Zero(t, n)
 	}
 }
@@ -93,8 +93,8 @@ func TestDecodeRefusesWhatCanNeverBeValid(t *testing.T) {
 		"*1048577\r\n",              // an array above the 1M element bound
 		"*1\r\n%\r\n",               // a bad element spoils the array
 	} {
-		_, n, err := core.DecodeOne([]byte(wire))
-		assert.True(t, errors.Is(err, core.ErrProtocol), "%q should be a protocol error, got %v", wire, err)
+		_, n, err := resp.DecodeOne([]byte(wire))
+		assert.True(t, errors.Is(err, resp.ErrProtocol), "%q should be a protocol error, got %v", wire, err)
 		assert.Zero(t, n)
 	}
 }
@@ -107,22 +107,22 @@ func TestDecodeBoundsNesting(t *testing.T) {
 	nested := func(depth int) string {
 		return strings.Repeat("*1\r\n", depth) + ":1\r\n"
 	}
-	v, _, err := core.DecodeOne([]byte(nested(32)))
+	v, _, err := resp.DecodeOne([]byte(nested(32)))
 	assert.NoError(t, err, "32 levels are allowed")
 	for i := 0; i < 32; i++ {
 		v = v.([]interface{})[0]
 	}
 	assert.Equal(t, int64(1), v)
 
-	_, _, err = core.DecodeOne([]byte(nested(33)))
-	assert.True(t, errors.Is(err, core.ErrProtocol), "33 are not: got %v", err)
-	_, _, err = core.DecodeOne([]byte(nested(200000)))
-	assert.True(t, errors.Is(err, core.ErrProtocol), "and a stack's worth is refused at the bound, not after it")
+	_, _, err = resp.DecodeOne([]byte(nested(33)))
+	assert.True(t, errors.Is(err, resp.ErrProtocol), "33 are not: got %v", err)
+	_, _, err = resp.DecodeOne([]byte(nested(200000)))
+	assert.True(t, errors.Is(err, resp.ErrProtocol), "and a stack's worth is refused at the bound, not after it")
 
 	// A partial deep frame is still incomplete rather than a protocol error,
 	// as long as it is within the bound.
-	_, _, err = core.DecodeOne([]byte(strings.Repeat("*1\r\n", 10)))
-	assert.True(t, errors.Is(err, core.ErrIncompleteFrame))
+	_, _, err = resp.DecodeOne([]byte(strings.Repeat("*1\r\n", 10)))
+	assert.True(t, errors.Is(err, resp.ErrIncompleteFrame))
 }
 
 func TestEncodeProducesTheSpecifiedWireForm(t *testing.T) {
@@ -166,7 +166,7 @@ func TestEncodeProducesTheSpecifiedWireForm(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			assert.Equal(t, c.want, string(core.Encode(c.value, c.simple)))
+			assert.Equal(t, c.want, string(resp.Encode(c.value, c.simple)))
 		})
 	}
 }
@@ -178,26 +178,26 @@ func TestEncodeThenDecodeRoundTrips(t *testing.T) {
 		[]interface{}{[]interface{}{"deep"}, "b"},
 	}
 	for _, v := range values {
-		got, err := core.Decode(core.Encode(v, false))
+		got, err := resp.Decode(resp.Encode(v, false))
 		assert.NoError(t, err)
 		assert.Equal(t, v, got, "%#v", v)
 	}
-	got, _ := core.Decode(core.Encode([]string{"x", "y"}, false))
+	got, _ := resp.Decode(resp.Encode([]string{"x", "y"}, false))
 	assert.Equal(t, []interface{}{"x", "y"}, got)
-	got, _ = core.Decode(core.Encode([]int{1, 2}, false))
+	got, _ = resp.Decode(resp.Encode([]int{1, 2}, false))
 	assert.Equal(t, []interface{}{int64(1), int64(2)}, got)
 }
 
 func TestParseCmdUpperCasesTheNameAndKeepsTheArguments(t *testing.T) {
 	t.Parallel()
 	wire := "*3\r\n$3\r\nput\r\n$5\r\nhello\r\n$5\r\nWorld\r\n"
-	cmd, n, err := core.ParseCmd([]byte(wire))
+	cmd, n, err := resp.ParseCmd([]byte(wire))
 	assert.NoError(t, err)
 	assert.Equal(t, len(wire), n)
 	assert.Equal(t, "PUT", cmd.Cmd)
 	assert.Equal(t, []string{"hello", "World"}, cmd.Args, "arguments keep their case")
 
-	cmd, _, err = core.ParseCmd([]byte("*1\r\n$4\r\nping\r\n"))
+	cmd, _, err = resp.ParseCmd([]byte("*1\r\n$4\r\nping\r\n"))
 	assert.NoError(t, err)
 	assert.Equal(t, "PING", cmd.Cmd)
 	assert.Empty(t, cmd.Args)
@@ -212,7 +212,7 @@ func benchEncode(b *testing.B, size int) {
 	b.SetBytes(int64(size))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = core.Encode(v, false)
+		_ = resp.Encode(v, false)
 	}
 }
 
@@ -225,7 +225,7 @@ func BenchmarkParseCmd(b *testing.B) {
 	raw := []byte(fmt.Sprintf("*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$%d\r\n%s\r\n", 64, strings.Repeat("v", 64)))
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		if _, _, err := core.ParseCmd(raw); err != nil {
+		if _, _, err := resp.ParseCmd(raw); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -238,14 +238,14 @@ func TestParseCmdIncompleteFrame(t *testing.T) {
 	full := "*3\r\n$3\r\nSET\r\n$5\r\nhello\r\n$5\r\nworld\r\n"
 	// Every strict prefix of a valid command is incomplete, never fatal.
 	for i := 1; i < len(full); i++ {
-		cmd, n, err := core.ParseCmd([]byte(full[:i]))
+		cmd, n, err := resp.ParseCmd([]byte(full[:i]))
 		assert.Nil(t, cmd)
 		assert.Zero(t, n)
-		assert.True(t, errors.Is(err, core.ErrIncompleteFrame),
+		assert.True(t, errors.Is(err, resp.ErrIncompleteFrame),
 			"prefix of length %d should be incomplete, got %v", i, err)
 	}
 
-	cmd, n, err := core.ParseCmd([]byte(full))
+	cmd, n, err := resp.ParseCmd([]byte(full))
 	assert.NoError(t, err)
 	assert.EqualValues(t, len(full), n)
 	assert.EqualValues(t, "SET", cmd.Cmd)
@@ -265,10 +265,10 @@ func TestParseCmdProtocolError(t *testing.T) {
 		"*1000000000\r\n", // absurd element count must not be allocated
 	}
 	for _, c := range cases {
-		cmd, n, err := core.ParseCmd([]byte(c))
+		cmd, n, err := resp.ParseCmd([]byte(c))
 		assert.Nil(t, cmd, "input %q", c)
 		assert.Zero(t, n, "input %q", c)
-		assert.True(t, errors.Is(err, core.ErrProtocol),
+		assert.True(t, errors.Is(err, resp.ErrProtocol),
 			"input %q should be a protocol error, got %v", c, err)
 	}
 }
@@ -283,7 +283,7 @@ func TestParseCmdPipelined(t *testing.T) {
 
 	var got []string
 	for len(buf) > 0 {
-		cmd, n, err := core.ParseCmd(buf)
+		cmd, n, err := resp.ParseCmd(buf)
 		assert.NoError(t, err)
 		got = append(got, cmd.Cmd)
 		buf = buf[n:]
@@ -297,7 +297,7 @@ func TestParseCmdLargeBulkString(t *testing.T) {
 	for _, size := range []int{484, 486, 1024, 65536} {
 		value := strings.Repeat("A", size)
 		raw := fmt.Sprintf("*3\r\n$3\r\nSET\r\n$3\r\nbig\r\n$%d\r\n%s\r\n", size, value)
-		cmd, n, err := core.ParseCmd([]byte(raw))
+		cmd, n, err := resp.ParseCmd([]byte(raw))
 		assert.NoError(t, err, "size %d", size)
 		assert.EqualValues(t, len(raw), n)
 		assert.EqualValues(t, "SET", cmd.Cmd)
@@ -314,7 +314,7 @@ func TestDecodeNegativeInt(t *testing.T) {
 		":-2\r\n": -2,
 	}
 	for k, v := range cases {
-		value, err := core.Decode([]byte(k))
+		value, err := resp.Decode([]byte(k))
 		assert.NoError(t, err)
 		assert.EqualValues(t, v, value)
 	}
@@ -323,7 +323,7 @@ func TestDecodeNegativeInt(t *testing.T) {
 // $-1\r\n is the RESP null bulk string and must decode without consuming a payload.
 func TestDecodeNullBulkString(t *testing.T) {
 	t.Parallel()
-	value, err := core.Decode([]byte("$-1\r\n"))
+	value, err := resp.Decode([]byte("$-1\r\n"))
 	assert.NoError(t, err)
 	assert.EqualValues(t, "", value)
 }
@@ -380,7 +380,7 @@ func TestFrameShortfall(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			assert.Equal(t, c.want, core.FrameShortfall([]byte(c.data)))
+			assert.Equal(t, c.want, resp.FrameShortfall([]byte(c.data)))
 		})
 	}
 }
@@ -392,14 +392,14 @@ func TestFrameShortfallMatchesWhatDecodingNeeds(t *testing.T) {
 	full := []byte("*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$2048\r\n" + strings.Repeat("v", 2048) + "\r\n")
 	for _, cut := range []int{25, 30, 100, 1024, len(full) - 1} {
 		partial := full[:cut]
-		short := core.FrameShortfall(partial)
+		short := resp.FrameShortfall(partial)
 		if short == 0 {
 			continue // not knowable at this cut, which is allowed
 		}
 		assert.Equal(t, len(full), cut+short,
 			"shortfall at cut %d must land exactly on the end of the frame", cut)
 
-		_, _, err := core.ParseCmd(full[:cut+short])
+		_, _, err := resp.ParseCmd(full[:cut+short])
 		assert.NoError(t, err, "supplying the shortfall must complete the frame")
 	}
 }
