@@ -60,8 +60,6 @@ func TestCommandGoldensCoverEveryCommand(t *testing.T) {
 // case does reach has to leave this list, and a text that leaves the source
 // has to leave it too.
 var uncoveredErrorTexts = map[string]string{
-	"ERR Protocol error: invalid RESP input":                                     "the transport's refusal of bytes that are not a command; no command answers it",
-	"ERR request allocation budget exhausted":                                    "the transport's refusal while parsing a request; no command answers it",
 	"ERR command produced no reply":                                              "EXEC's stand-in for a command that wrote nothing, which no command does",
 	"ERR transaction exceeds the %d MiB queued command limit":                    "queueing 16 MiB of commands, which the corpus does not hold",
 	"ERR persisting term: %w":                                                    "a term file that cannot be written: a disk failure",
@@ -74,7 +72,6 @@ var uncoveredErrorTexts = map[string]string{
 	"ERR invalid snapshot position":                                              "a protocol 2 pull into a snapshot that is not there, which needs a stream of its own",
 	"ERR SCAN pattern work limit exceeded; use a simpler MATCH or smaller COUNT": "a MATCH that costs a million steps of backtracking against the keys of one SCAN",
 	"ERR Can't execute an AOF background rewriting. Please check the server logs for more information.": "a rewrite whose file cannot be opened: a disk failure",
-	"ERR cannot encode a %T as a reply": "a handler answering with a value Encode has no form for, which is a bug and no command has",
 }
 
 // TestCommandGoldensCoverEveryErrorText: every error text the package can

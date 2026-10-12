@@ -36,7 +36,7 @@ var packageVars = map[string]string{
 	"strideKeyCommands": table, "argumentsBeforeType": table, "replacingWrites": table,
 	"filterCommands": table, "writeCommands": table, "notInTransaction": table,
 	"answersWithoutData": table, "bfInfoOptions": table, "cfOptions": table, "memoryHelp": table,
-	"crlf": table, "queuedReply": table, "execAbortReply": table, "allocationPressure": table,
+	"queuedReply": table, "execAbortReply": table, "allocationPressure": table,
 	"replyTooLarge": table, "transactionOpenFrame": table, "transactionCloseFrame": table,
 
 	"errTruncatedAOF": sentinel, "errTooLargeForBudget": sentinel, "errTooLargeForOneKey": sentinel,

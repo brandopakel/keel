@@ -157,7 +157,7 @@ func (e *Engine) EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 		refused = e.replicaCommandError(cmd.Cmd)
 	}
 	if entry.namesItself {
-		e.runningName = cmd.sentName()
+		e.runningName = cmd.SentName()
 	}
 	if refused != nil {
 		_, err := c.Write(e.encode(refused, false))
