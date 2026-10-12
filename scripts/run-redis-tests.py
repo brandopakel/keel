@@ -26,10 +26,12 @@ tagged external:skip are skipped by the harness itself. Redis is started as
 that workflow starts it (debug, module and protected configs enabled); Keel
 with its append-only file on.
 
-A unit's outcome is ok (the harness finished), exception (the harness
-stopped on an error it could not count), timeout (this script stopped it),
-or crash (the server was gone when the unit ended). Tests the harness never
-reached are counted as not run.
+A unit's outcome is ok (the harness finished), unconfigurable (the unit's
+start_server sets a configuration with CONFIG SET and the server refused
+it, so no test ran), exception (the harness stopped on another error it
+could not count), timeout (this script stopped it), or crash (the server was
+gone when the unit ended). Tests the harness never reached are counted as
+not run.
 """
 import argparse
 import csv
@@ -77,6 +79,8 @@ IGNORE = re.compile(r'^\[(ignore|skip)\]: (.*)$')
 EXCEPTION = re.compile(r'^\[exception\]: (.*)$')
 TIMEOUT = re.compile(r'^\[TIMEOUT\]')
 DONE = re.compile(r'^\[\d+/\d+ done\]: (\S+) \((\d+) seconds\)$')
+# An exception raised by the harness applying a unit's configuration.
+CONFIG_SET = re.compile(r'CONFIG SET|config set', re.I)
 
 
 def parse(text):
@@ -214,7 +218,11 @@ def run_unit(server_kind, binary, redis_src, unit, out, timeout):
     if not server.alive():
         result['outcome'] = 'crash'
     elif result['outcome'] == 'ok' and (parsed['exception'] or parsed['harness_timeout'] or not parsed['done']):
-        result['outcome'] = 'exception' if parsed['exception'] else 'timeout' if parsed['harness_timeout'] else 'incomplete'
+        if parsed['exception'] and CONFIG_SET.search(parsed['exception']):
+            result['outcome'] = 'unconfigurable'
+        else:
+            result['outcome'] = 'exception' if parsed['exception'] else 'timeout' if parsed['harness_timeout'] \
+                else 'incomplete'
     server.stop()
     result['not_run'] = max(0, result['declared'] - len(parsed['passed']) - len(parsed['failed']) - len(parsed['ignored']))
     result['log'] = str(log_path.relative_to(out))
@@ -270,7 +278,8 @@ def report(args):
                         'not_run': sum(u['not_run'] for u in done),
                         'units_crashed': sum(u['outcome'] == 'crash' for u in done),
                         'units_timed_out': sum(u['outcome'] == 'timeout' for u in done),
-                        'units_exception': sum(u['outcome'] == 'exception' for u in done)}
+                        'units_exception': sum(u['outcome'] == 'exception' for u in done),
+                        'units_unconfigurable': sum(u['outcome'] == 'unconfigurable' for u in done)}
     result = {'skipped_units': SKIPPED, 'totals': totals, 'units': rows}
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -299,7 +308,8 @@ def markdown(result):
     out = [f"Redis's own tests: Keel passes **{k['passed']}** of the **{r['passed']}** Redis passes in external mode "
            f"({parity}), over {k['units']} units; {k['failed']} fail, {k['not_run']} are not reached, "
            f"{k['units_crashed']} units crash the server, {k['units_timed_out']} time out, "
-           f"{k['units_exception']} stop on an exception. Redis itself: {r['passed']} passed, {r['failed']} failed.", '',
+           f"{k['units_exception']} stop on an exception, {k['units_unconfigurable']} cannot be configured "
+           f"(CONFIG SET refused). Redis itself: {r['passed']} passed, {r['failed']} failed.", '',
            '| Unit | Redis passed | Redis failed | Keel passed | Keel failed | Not run | Keel outcome | Seconds |',
            '| --- | ---: | ---: | ---: | ---: | ---: | --- | ---: |']
     for row in result['units']:

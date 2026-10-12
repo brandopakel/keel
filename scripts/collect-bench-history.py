@@ -125,7 +125,8 @@ CONFIG_DIRECTIVES = ['run_id', 'time', 'branch', 'name', 'alias', 'family', 'kin
                      'keel_value', 'redis_value', 'note', 'used_by', 'test_files']
 REDIS_TEST_RUNS = ['artifact_id', 'run_id', 'time', 'event', 'branch', 'pr', 'conclusion', 'units', 'redis_passed',
                    'redis_failed', 'keel_passed', 'keel_failed', 'keel_ignored', 'keel_not_run',
-                   'keel_units_crashed', 'keel_units_timed_out', 'keel_units_exception', 'parity', 'url']
+                   'keel_units_crashed', 'keel_units_timed_out', 'keel_units_exception', 'keel_units_unconfigurable',
+                   'parity', 'url']
 REDIS_TEST_UNITS = ['artifact_id', 'run_id', 'time', 'branch', 'unit', 'redis_passed', 'redis_failed',
                     'redis_outcome', 'keel_passed', 'keel_failed', 'keel_ignored', 'keel_not_run', 'keel_outcome',
                     'keel_seconds']
@@ -405,6 +406,7 @@ def redis_test_records(artifact_id, run, pr, files):
              'redis_failed': r['failed'], 'keel_passed': k['passed'], 'keel_failed': k['failed'],
              'keel_ignored': k['ignored'], 'keel_not_run': k['not_run'], 'keel_units_crashed': k['units_crashed'],
              'keel_units_timed_out': k['units_timed_out'], 'keel_units_exception': k['units_exception'],
+             'keel_units_unconfigurable': k.get('units_unconfigurable', 0),
              'parity': num(k['passed'] / r['passed'], 4) if r['passed'] else ''}]
     units, failing = [], []
     for row in report['units']:

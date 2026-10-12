@@ -68,6 +68,9 @@ class Parsing(unittest.TestCase):
         self.assertFalse(parsed['done'])
         parsed = rt.parse('[ok]: a (1 ms)\n[\x1b[0;31mTIMEOUT\x1b[0m]: clients state report follows.\n')
         self.assertTrue(parsed['harness_timeout'])
+        unconfigurable = rt.parse("[\x1b[0;31mexception\x1b[0m]: Executing test client: ERR CONFIG SET failed "
+                                  "(possibly related to argument 'appendonly') - can't set immutable config.\n")
+        self.assertTrue(rt.CONFIG_SET.search(unconfigurable['exception']))
 
     def test_declared_tests(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -113,7 +116,7 @@ class Report(unittest.TestCase):
             result = json.loads((root / 'report/redis-tests.json').read_text())
             self.assertEqual(result['totals']['keel'], {'units': 3, 'passed': 130, 'failed': 60, 'ignored': 0,
                                                         'not_run': 4, 'units_crashed': 1, 'units_timed_out': 1,
-                                                        'units_exception': 0})
+                                                        'units_exception': 0, 'units_unconfigurable': 0})
             self.assertEqual(result['totals']['redis']['passed'], 154)
             self.assertEqual([u['unit'] for u in result['units']], ['unit/expire', 'unit/scan', 'unit/type/string'])
             self.assertIsNone(result['units'][0]['redis'], 'a unit one side has no result for')
