@@ -107,6 +107,11 @@ def adapt_harness(redis_src):
 HARNESS_FLAGS = ['--verbose', '--tags', '-slow', '--singledb', '--ignore-encoding', '--ignore-digest', '--durable',
                  '--dont-clean']
 ANSI = re.compile(r'\x1b\[[0-9;]*m')
+# What the harness prints without ending the line, so that the next test's
+# marker follows it on the same line: waitForBgsave and waitForBgrewriteaof
+# (tests/support/util.tcl:108 and :122) print it whenever a save or rewrite
+# is still running, which makes a test that follows uncounted only sometimes.
+UNTERMINATED = re.compile(r'^(?:Waiting for background (?:save|AOF rewrite) to finish\.\.\. )+')
 OK = re.compile(r'^\[ok\]: (.*) \((\d+) ms\)$')
 ERR = re.compile(r'^\[err\]: (.*?) in (tests/\S+\.tcl)$')
 IGNORE = re.compile(r'^\[(ignore|skip)\]: (.*)$')
@@ -131,7 +136,7 @@ def parse(text):
     exception, harness_timeout, done = '', False, False
     current = None
     for raw in text.splitlines():
-        line = ANSI.sub('', raw).rstrip()
+        line = UNTERMINATED.sub('', ANSI.sub('', raw).rstrip())
         if m := OK.match(line):
             passed.append({'name': m[1], 'ms': int(m[2])})
             current = None

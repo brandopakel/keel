@@ -72,6 +72,20 @@ class Parsing(unittest.TestCase):
                                   "(possibly related to argument 'appendonly') - can't set immutable config.\n")
         self.assertTrue(rt.CONFIG_SET.search(unconfigurable['exception']))
 
+    def test_marker_after_a_wait(self):
+        # waitForBgsave and waitForBgrewriteaof end their message with no
+        # newline, so the next marker shares its line (unit/other, BGSAVE).
+        parsed = rt.parse('[\x1b[0;32mok\x1b[0m]: SAVE (2 ms)\n'
+                          '\n'
+                          'Waiting for background save to finish... \n'
+                          'Waiting for background save to finish... [\x1b[0;32mok\x1b[0m]: BGSAVE (432 ms)\n'
+                          'Waiting for background AOF rewrite to finish... '
+                          '[\x1b[0;31merr\x1b[0m]: EXPIRES after a reload in tests/unit/other.tcl\n'
+                          "Expected '1' to be equal to '0'\n")
+        self.assertEqual([p['name'] for p in parsed['passed']], ['SAVE', 'BGSAVE'])
+        failed, = parsed['failed']
+        self.assertEqual((failed['name'], failed['detail']), ('EXPIRES after a reload', ["Expected '1' to be equal to '0'"]))
+
     def test_declared_tests(self):
         with tempfile.TemporaryDirectory() as tmp:
             unit = Path(tmp) / 'tests/unit/type'
