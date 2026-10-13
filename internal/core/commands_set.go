@@ -5,27 +5,11 @@ import (
 	"math"
 
 	"github.com/brandopakel/keel/internal/constant"
-	"github.com/brandopakel/keel/internal/data_structure"
+	"github.com/brandopakel/keel/internal/resp"
 )
 
-// Set commands.
-//
-// Redis has no empty set: removing the last member removes the key, so every
-// command that takes members out goes through setSettle, which drops an emptied
-// set and otherwise re-measures it for the memory budget.
-
-func (e *Engine) setFor(key string) (*data_structure.Set, bool) {
-	return e.setStore.Get(key)
-}
-
-// setSettle records that a set was changed in place.
-func (e *Engine) setSettle(key string, s *data_structure.Set) {
-	if s.Len() == 0 {
-		e.setStore.Delete(key)
-		return
-	}
-	e.setStore.Resize(key)
-}
+// Set commands: the command language over the typed operations of sets.go.
+// SMEMBERS, SPOP and SRANDMEMBER keep their walks and lookup arrays.
 
 var (
 	errIntegerOutOfRange = errors.New("ERR value is not an integer or out of range")
@@ -41,46 +25,29 @@ var (
 const maxRandomMemberCount = 1 << 24
 
 func (e *Engine) cmdSADD(args []string) []byte {
+	e.recordsItself()
 	if len(args) < 2 {
 		return e.encode(wrongArguments("SADD"), false)
 	}
-	key := args[0]
-	s, ok := e.setFor(key)
-	if !ok {
-		s = data_structure.NewSet()
-		e.setStore.Put(key, s)
-	}
-	added := s.Add(args[1:]...)
-	// Members change the set's size without going through Put, so the keyspace
-	// has to re-measure it or the memory budget keeps believing the old figure.
-	e.setStore.Resize(key)
-	return e.encode(added, false)
+	r := e.reply()
+	return r.Int(e.opSAdd(args[0], args[1:])).Bytes()
 }
 
 func (e *Engine) cmdSREM(args []string) []byte {
+	e.recordsItself()
 	if len(args) < 2 {
 		return e.encode(wrongArguments("SREM"), false)
 	}
-	key := args[0]
-	s, ok := e.setFor(key)
-	if !ok {
-		// Nothing to remove from, and nothing is created to say so.
-		return constant.RespZero
-	}
-	removed := s.Remove(args[1:]...)
-	e.setSettle(key, s)
-	return e.encode(removed, false)
+	r := e.reply()
+	return r.Int(e.opSRem(args[0], args[1:])).Bytes()
 }
 
 func (e *Engine) cmdSCARD(args []string) []byte {
 	if len(args) != 1 {
 		return e.encode(wrongArguments("SCARD"), false)
 	}
-	s, ok := e.setFor(args[0])
-	if !ok {
-		return constant.RespZero
-	}
-	return e.encode(s.Len(), false)
+	r := e.reply()
+	return r.Int(e.opSCard(args[0])).Bytes()
 }
 
 // cmdSMEMBERS answers every member, as a set.
@@ -99,28 +66,35 @@ func (e *Engine) cmdSISMEMBER(args []string) []byte {
 	if len(args) != 2 {
 		return e.encode(wrongArguments("SISMEMBER"), false)
 	}
-	s, ok := e.setFor(args[0])
-	if !ok || !s.Contains(args[1]) {
-		return constant.RespZero
+	// The reply is a canned constant either way, so no Reply is built for
+	// it: on this hot read that measured as 4% (as GET's one value did).
+	if e.opSIsMember(args[0], args[1]) {
+		return constant.RespOne
 	}
-	return constant.RespOne
+	return constant.RespZero
 }
 
-// cmdSMISMEMBER answers one integer per member asked about, in the order asked.
+// cmdSMISMEMBER answers one integer per member asked about, in the order
+// asked, sized and admitted once.
 func (e *Engine) cmdSMISMEMBER(args []string) []byte {
 	if len(args) < 2 {
 		return e.encode(wrongArguments("SMISMEMBER"), false)
 	}
-	s, ok := e.setFor(args[0])
-	out := make([]interface{}, 0, len(args)-1)
-	for _, member := range args[1:] {
-		if ok && s.Contains(member) {
-			out = append(out, int64(1))
+	members := args[1:]
+	r := e.reply()
+	if !r.Reserve(resp.DecimalDigits(len(members)) + 3 + 4*len(members)) {
+		return r.Bytes()
+	}
+	r.Array(len(members))
+	set, ok := e.setFor(args[0])
+	for _, member := range members {
+		if ok && set.Contains(member) {
+			r.Int(1)
 		} else {
-			out = append(out, int64(0))
+			r.Int(0)
 		}
 	}
-	return e.encode(out, false)
+	return r.Bytes()
 }
 
 // randomCount reads SRANDMEMBER's optional count, reporting whether one was
@@ -145,6 +119,13 @@ func (e *Engine) randomCount(args []string) (count int64, given bool, err error)
 // SRANDMEMBER's with a count is an array. The count is read before the key is
 // looked up, and more than one is Redis's syntax error.
 func (e *Engine) cmdSPOP(args []string) []byte {
+	// SPOP records the SREM of what it popped, and nothing when it popped
+	// nothing (a missing key, a count of 0), as Redis counts no change for it
+	// (t_set.c, spopWithCountCommand, lines 849-857, and spopCommand, lines
+	// 1080-1081, return before server.dirty). Logged as it arrived, it
+	// stopped every protocol 2 replica, whose stream is the log and whose
+	// apply path takes no SPOP.
+	e.recordsItself()
 	if len(args) < 1 {
 		return e.encode(wrongArguments("SPOP"), false)
 	}
@@ -163,8 +144,6 @@ func (e *Engine) cmdSPOP(args []string) []byte {
 
 	s, ok := e.setFor(key)
 	if !ok {
-		// Nothing popped, nothing recorded; see below.
-		e.aof.skip = true
 		if given {
 			return e.emptySetReply()
 		}
@@ -208,14 +187,6 @@ func (e *Engine) cmdSPOP(args []string) []byte {
 		walk(func(value string) bool { record = append(record, value); return true })
 		s.Remove(record[2:]...)
 		e.aofRecord(record...)
-	} else {
-		// A SPOP that pops nothing - a missing key, above, or a count of 0 -
-		// changed nothing, and records nothing, as Redis counts no change for
-		// it (t_set.c, spopWithCountCommand, lines 849-857, and spopCommand,
-		// lines 1080-1081, return before server.dirty). Logged as it arrived,
-		// it stopped every protocol 2 replica, whose stream is the log and
-		// whose apply path takes no SPOP.
-		e.aof.skip = true
 	}
 	e.setSettle(key, s)
 	return out

@@ -141,7 +141,9 @@ lines.
    `resp.SingleBulk` sizes, admits and allocates it as `Bulk` would, and GET
    answers with it, because building a Reply for its one value measured as
    6 to 9% of GET on GitHub's x86 runners (a paired row a laptop showed at
-   1.02).
+   1.02). Likewise a hot read whose reply is always a canned constant (`:0`,
+   `:1`, a null) may return the constant itself (SISMEMBER does: a Reply
+   built for it measured as 4% locally).
 
    `resp.Reply` frames the reply in the command's protocol and admits it
    before it allocates. `Status("OK")`, `Int(0)`, `Int(1)`, `Null()`,
