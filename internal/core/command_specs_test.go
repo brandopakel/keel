@@ -238,23 +238,37 @@ var keyRuleExceptions = map[string]string{
 
 // keyRuleOfSpecs is the key rule keys amount to: the first argument, the
 // first two (one spec for both, as LCS has, or one each, as a move has),
-// every argument, every step-th from the first, as many as the first counts,
-// or a count and that many key value pairs; false for key specs no rule
-// describes. Keys found from the first argument by range are read directly,
-// and PFMERGE's two specs - the destination, then every source - together
-// name every argument.
+// every argument, every step-th from the first, as many as the first counts
+// (alone or after a destination), or a count and that many key value pairs;
+// false for key specs no rule describes. Keys found from the first argument
+// by range are read directly, and PFMERGE's two specs - the destination,
+// then every source - together name every argument.
 func keyRuleOfSpecs(keys []keySpec) (rule keyRule, stride int, ok bool) {
-	// A count in the first argument, then that many keys (LMPOP's numkeys)
-	// or that many key value pairs (MSETEX's).
-	if len(keys) == 1 && keys[0].begin.kind == "index" && keys[0].begin.pos == 1 && keys[0].find.kind == "keynum" {
-		f := keys[0].find
-		switch {
-		case f.keynumIdx == 0 && f.firstKey == 1 && f.step == 1:
-			return keyCounted, 0, true
-		case f.keynumIdx == 0 && f.firstKey == 1 && f.step == 2:
-			return keyCountedPairs, 0, true
+	// A destination an option names (GEORADIUS's STORE and STOREDIST) is
+	// written whatever it holds, so the type check holds no key it finds to
+	// a type, and the rule is the other keys'.
+	named := keys[:0:0]
+	for _, k := range keys {
+		if k.begin.kind != "keyword" {
+			named = append(named, k)
 		}
-		return 0, 0, false
+	}
+	keys = named
+	// A count, then that many keys (LMPOP's, ZUNION's numkeys), alone or
+	// after a destination (ZUNIONSTORE's), or that many key value pairs
+	// (MSETEX's).
+	counted := func(k keySpec, pos, step int) bool {
+		return k.begin.kind == "index" && k.begin.pos == pos && k.find.kind == "keynum" &&
+			k.find.keynumIdx == 0 && k.find.firstKey == 1 && k.find.step == step
+	}
+	switch {
+	case len(keys) == 1 && counted(keys[0], 1, 1):
+		return keyCounted, 0, true
+	case len(keys) == 1 && counted(keys[0], 1, 2):
+		return keyCountedPairs, 0, true
+	case len(keys) == 2 && keys[0].begin.kind == "index" && keys[0].begin.pos == 1 && keys[0].find.kind == "range" &&
+		keys[0].find.lastKey == 0 && counted(keys[1], 2, 1):
+		return keyDestCounted, 0, true
 	}
 	for _, k := range keys {
 		if k.begin.kind != "index" || k.find.kind != "range" {
