@@ -215,6 +215,9 @@ func (e *Engine) opCopy(src, dst string, replace bool) (bool, error) {
 		return false, errSameObject
 	}
 	owner, held := e.space.OwnerOf(src)
+	// The source is read with lookupKeyRead, a keyspace hit or a miss; the
+	// destination is looked up to write, and counts nothing.
+	e.noteLookup(held)
 	if !held {
 		return false, nil
 	}
