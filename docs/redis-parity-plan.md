@@ -35,7 +35,7 @@ TimeSeries come in CI.
 
 | Area | Keel has | Missing |
 | --- | --- | --- |
-| string | 12/26 (22 since step 4.3c of the embedding plan) | ~~`APPEND`, `GETRANGE`, `SETRANGE`, `STRLEN`, `GETDEL`, `GETEX`, `GETSET`, `SUBSTR`, `INCRBYFLOAT`, `MSETNX`~~ (step 4.3c), and 8.x's `DELEX`, `DIGEST`, `INCREX`, `MSETEX` |
+| string | 12/26 (26 since steps 4.3c and 4.3d of the embedding plan) | ~~`APPEND`, `GETRANGE`, `SETRANGE`, `STRLEN`, `GETDEL`, `GETEX`, `GETSET`, `SUBSTR`, `INCRBYFLOAT`, `MSETNX`~~ (step 4.3c), and 8.x's ~~`DELEX`, `DIGEST`, `INCREX`, `MSETEX`~~ (step 4.3d, with `SET`'s `IFEQ`, `IFNE`, `IFDEQ` and `IFDNE`) |
 | list | 9/24 (18 since the lists' missing commands in phase 4 of the embedding plan) | ~~`LPOS`, `LINSERT`, `LREM`, `LMOVE`, `LMOVEM`, `RPOPLPUSH`, `LPUSHX`, `RPUSHX`, `LMPOP`~~ (phase 4, lists), and the blocking forms |
 | hash | 11/29 | `HSTRLEN`, `HRANDFIELD`, `HINCRBYFLOAT`, `HMSET`, `HSCAN`, `HGETDEL`, `HGETEX`, `HSETEX`, `HIMPORT`, field expiry (`HEXPIRE` family, 8 commands) |
 | set | 8/19 | `SINTER`, `SUNION`, `SDIFF` with `STORE` and `CARD` forms, `SMOVE`, `SSCAN` |
@@ -478,6 +478,15 @@ when its newline comes in the read that crosses 64 KiB, and refused when the
 client pauses before sending it. Keel refuses every line longer than 64 KiB,
 newline or not. No client can depend on a limit that depends on how its bytes
 were split.
+
+**Improvement: one reply to `SET ... GET IFDEQ` with a malformed digest.**
+Redis 8.10's `setGenericCommand` (`src/t_string.c`) answers `GET` with the
+old value (lines 99-101) and only then checks an `IFDEQ` or `IFDNE` digest's
+length (lines 136-137), so `SET k v GET IFDEQ short` on a key holding a
+string sends two replies, the value and `ERR must be exactly 16 hexadecimal
+characters`, and the client reads the error as the answer to its next
+command (seen with Redis 8.10.2, October 12, 2026). Keel answers the error
+alone and writes nothing. No client can depend on a command answered twice.
 
 A separate, already-stated semantic difference, not an improvement: Keel's
 `maxmemory` bounds the keyspace (the README's integration contract). Redis's

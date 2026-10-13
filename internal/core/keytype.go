@@ -25,6 +25,7 @@ var commandKeyspace = map[string]string{
 	"LCS":    "string",
 	"APPEND": "string", "STRLEN": "string", "GETRANGE": "string", "SUBSTR": "string", "SETRANGE": "string",
 	"GETDEL": "string", "GETEX": "string", "GETSET": "string", "MSETNX": "string", "INCRBYFLOAT": "string",
+	"DIGEST": "string", "MSETEX": "string", "INCREX": "string",
 
 	// EXISTS, TYPE, KEYS, DEL, UNLINK and FLUSHDB are deliberately absent: they answer
 	// about a name whatever type holds it, so constraining them to a keyspace
@@ -103,11 +104,12 @@ func commandKeys(cmd *Command) []string { return keysBy(cmd, keyRuleOf(cmd.Cmd))
 type keyRule uint8
 
 const (
-	keyFirst    keyRule = iota // the first argument, as nearly every command has it
-	keyFirstTwo                // LCS's two keys, and a move's source and destination
-	keyStride                  // every n-th argument, from the first: strideKeyCommands
-	keyEvery                   // every argument: multiKeyCommands
-	keyCounted                 // as many as the first argument counts, after it: LMPOP's
+	keyFirst        keyRule = iota // the first argument, as nearly every command has it
+	keyFirstTwo                    // LCS's two keys, and a move's source and destination
+	keyStride                      // every n-th argument, from the first: strideKeyCommands
+	keyEvery                       // every argument: multiKeyCommands
+	keyCounted                     // as many as the first argument counts, after it: LMPOP's
+	keyCountedPairs                // MSETEX's: a count, then that many key value pairs
 )
 
 // keyRuleOf is name's rule. Dispatch works it out once per command, in the
@@ -118,6 +120,8 @@ func keyRuleOf(name string) keyRule {
 		return keyFirstTwo
 	case name == "LMPOP":
 		return keyCounted
+	case name == "MSETEX":
+		return keyCountedPairs
 	case strideKeyCommands[name] != 0:
 		return keyStride
 	case multiKeyCommands[name]:
@@ -151,6 +155,8 @@ func keysBy(cmd *Command, rule keyRule) []string {
 			return nil
 		}
 		return cmd.Args[1 : 1+n]
+	case keyCountedPairs:
+		return msetexKeys(cmd.Args)
 	}
 	return cmd.Args[:1]
 }
@@ -252,6 +258,7 @@ var argumentsBeforeType = map[string]func(e *Engine, args []string) error{
 	"SUBSTR":   func(e *Engine, args []string) error { _, _, err := e.rangeIndexes(args); return err },
 	"SETRANGE": func(e *Engine, args []string) error { _, err := e.setRangeOffset(args); return err },
 	"GETEX":    func(_ *Engine, args []string) error { _, _, _, err := getExOptions(args[1:]); return err },
+	"INCREX":   func(e *Engine, args []string) error { _, err := e.increxArguments(args[1:]); return err },
 	"GEODIST": func(e *Engine, args []string) error {
 		_, err := geodistUnit(args)
 		return err
@@ -328,7 +335,7 @@ func writtenKeys(cmd *Command) []string {
 		// source recorded as dirty costs one redundant re-emit and a source
 		// missed would be a bug, so all of them count.
 		return cmd.Args
-	case "KEEL.RESTORE", "MEMKV.RESTORE", "EXPIRE", "PEXPIRE", "EXPIREAT", "PEXPIREAT", "PERSIST":
+	case "KEEL.RESTORE", "MEMKV.RESTORE", "EXPIRE", "PEXPIRE", "EXPIREAT", "PEXPIREAT", "PERSIST", "DELEX":
 		return cmd.Args[:1]
 	}
 	if _, known := commandKeyspace[cmd.Cmd]; known {
@@ -349,8 +356,9 @@ func writtenKeys(cmd *Command) []string {
 //
 // MSETNX is exempt for SETNX's reason: Redis's finds a key of any type,
 // answers 0 and stores nothing, where the check would answer WRONGTYPE.
+// MSETEX replaces a key of any type, as MSET does, and its NX finds one.
 var replacingWrites = map[string]bool{"SET": true, "SETEX": true, "PSETEX": true, "MSET": true, "SETNX": true,
-	"MSETNX": true}
+	"MSETNX": true, "MSETEX": true}
 
 // filterCommands check the type of the key they name themselves, at the point
 // RedisBloom's do, and are exempt from the check below as well: a reservation
