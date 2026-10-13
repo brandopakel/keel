@@ -2243,6 +2243,38 @@ SET EX (3 to 0); the log's bytes are the same.
   now answers through `resp.SingleBulk`, a Reply's first-bulk path without
   the Reply.
 
+**4.3c: the string commands Keel lacked.** `APPEND`, `STRLEN`, `GETRANGE`
+and `SUBSTR`, `SETRANGE`, `GETDEL`, `GETEX`, `GETSET`, `MSETNX` and
+`INCRBYFLOAT`, as Redis 8.10.1's `t_string.c` defines each, added by the
+recipe's second half (`docs/phase4-family-recipe.md`): a typed operation
+each, a command language reading its arguments in Redis's order, corpus
+cases for every reply and error, and steps in the differential and
+error-parity harnesses, which hold them to Redis 8.10.1 in CI.
+
+- **Records**: each write records what replays to the state it left, as
+  Redis propagates it: `GETSET` as `SET`, `GETDEL` as `DEL`, `GETEX` as
+  `PEXPIREAT`, `DEL` (an absolute expiry already past) or `PERSIST`,
+  `INCRBYFLOAT` as `SET ... KEEPTTL`, `MSETNX` as `MSET`. `APPEND` and
+  `SETRANGE` record themselves, as Redis does, rather than the whole value.
+  A log holding them is not read by a build before this one.
+- **Admission before the write**: a reply that may be long (`GETDEL`'s,
+  `GETSET`'s, `GETEX`'s, `INCRBYFLOAT`'s) is admitted before the write, as
+  `SET ... GET`'s is, so a reply the output limit refuses leaves the key.
+- **INCRBYFLOAT's long double.** Redis adds in C's `long double` and prints
+  with `%.17Lf`; on Linux x86-64, where CI compares Keel with Redis, that is
+  the x87 80-bit format, a 64-bit mantissa, so `10.50` plus `0.1` answers
+  `10.6`, as Redis's documentation shows, not the `10.59999999999999964` a
+  float64 gives. Keel emulates it with a 64-bit `big.Float`
+  (`long_double.go`) and reads numbers with `strtold`'s grammar and range
+  errors (`util.c`, `string2ld`). A Redis built where `long double` is a
+  64-bit double (macOS on Apple silicon) answers differently, which is why
+  the local comparison against Homebrew's Redis differs only there.
+- **Known cost**: `APPEND` copies the value on every call (a Go string is
+  immutable), where Redis grows its buffer in place, so appending to a value
+  of n bytes costs O(n). Building a large value by many small appends is
+  quadratic; a buffer kept with spare capacity is follow-on work if a
+  workload needs it.
+
 ## Risks, in order
 
 1. Moving AOF, rewrite and replication state while MULTI/EXEC changes the same

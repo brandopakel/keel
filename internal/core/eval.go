@@ -27,6 +27,10 @@ var commandTable = map[string]func(*Engine, []string) []byte{
 	"INCRBY": (*Engine).cmdINCRBY, "DECR": (*Engine).cmdDECR, "DECRBY": (*Engine).cmdDECRBY,
 	"MGET": (*Engine).cmdMGET, "MSET": (*Engine).cmdMSET, "SETEX": (*Engine).cmdSETEX,
 	"PSETEX": (*Engine).cmdPSETEX, "LCS": (*Engine).cmdLCS,
+	"APPEND": (*Engine).cmdAPPEND, "STRLEN": (*Engine).cmdSTRLEN, "GETRANGE": (*Engine).cmdGETRANGE,
+	"SUBSTR": (*Engine).cmdSUBSTR, "SETRANGE": (*Engine).cmdSETRANGE, "GETDEL": (*Engine).cmdGETDEL,
+	"GETEX": (*Engine).cmdGETEX, "GETSET": (*Engine).cmdGETSET, "MSETNX": (*Engine).cmdMSETNX,
+	"INCRBYFLOAT": (*Engine).cmdINCRBYFLOAT,
 
 	// Keys and expiry
 	"DEL": (*Engine).cmdDEL, "UNLINK": (*Engine).cmdUNLINK, "EXISTS": (*Engine).cmdEXISTS,
