@@ -219,3 +219,64 @@ func TestListMemUsageHoldsAfterShrinking(t *testing.T) {
 	assert.Greater(t, ratio, 0.90)
 	assert.Less(t, ratio, 1.10)
 }
+
+// TestListInsertMovesTheRestTowardsTheTail: Insert places a value at any
+// position from the head to past the tail, across the ring's wrap, and keeps
+// the byte count MemUsage reads.
+func TestListInsertMovesTheRestTowardsTheTail(t *testing.T) {
+	l := NewList()
+	l.PushBack("b", "c")
+	l.PushFront("a") // the head wraps to the end of the buffer
+	l.Insert(0, "start")
+	l.Insert(4, "end")
+	l.Insert(2, "mid")
+	assert.Equal(t, []string{"start", "a", "mid", "b", "c", "end"}, l.All())
+	l.Insert(-1, "x")
+	l.Insert(7, "x")
+	assert.Equal(t, 6, l.Len(), "a position outside the list inserts nothing")
+	want := uint64(0)
+	for _, v := range l.All() {
+		want += uint64(len(v))
+	}
+	assert.Equal(t, want, l.elemBytes)
+}
+
+// TestListRemoveIsLREM: Remove deletes the first count matches from the head,
+// the last count from the tail, or all of them, keeps the rest in order, and
+// clears the slots it vacates.
+func TestListRemoveIsLREM(t *testing.T) {
+	build := func() *List {
+		l := NewList()
+		l.PushBack("x", "a", "x", "b", "x", "c", "x")
+		return l
+	}
+	for _, tc := range []struct {
+		count    int
+		fromTail bool
+		removed  int
+		left     []string
+	}{
+		{0, false, 4, []string{"a", "b", "c"}},
+		{2, false, 2, []string{"a", "b", "x", "c", "x"}},
+		{2, true, 2, []string{"x", "a", "x", "b", "c"}},
+		{9, true, 4, []string{"a", "b", "c"}},
+		{1, true, 1, []string{"x", "a", "x", "b", "x", "c"}},
+	} {
+		l := build()
+		assert.Equal(t, tc.removed, l.Remove("x", tc.count, tc.fromTail), "%+v", tc)
+		assert.Equal(t, tc.left, l.All(), "%+v", tc)
+		for i := l.Len(); i < len(l.buf); i++ {
+			assert.Equal(t, "", l.buf[(l.head+i)%len(l.buf)], "slot %d is cleared", i)
+		}
+		want := uint64(0)
+		for _, v := range l.All() {
+			want += uint64(len(v))
+		}
+		assert.Equal(t, want, l.elemBytes, "%+v", tc)
+	}
+	l := build()
+	assert.Equal(t, 0, l.Remove("missing", 0, false))
+	assert.Equal(t, 7, l.Len())
+	empty := NewList()
+	assert.Equal(t, 0, empty.Remove("x", 0, true))
+}
