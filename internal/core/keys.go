@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"time"
 
 	"github.com/brandopakel/keel/internal/data_structure"
@@ -10,21 +11,22 @@ import (
 // family recipe is docs/phase4-family-recipe.md).
 //
 // These answer about a name whatever type holds it - DEL, EXISTS, TYPE, the
-// expiry commands, DBSIZE, FLUSHDB - so they run with no type check in their
-// scope, and look the name up across every keyspace (Space.OwnerOf), which
-// reaps a key whose expiry has passed. The reads among them - EXISTS, TYPE,
-// TTL and PTTL - count each key they look up as a keyspace hit or a miss, as
-// Redis's lookupKeyRead does. Each write stages the records develop
-// logged for it, byte for byte: DEL with every key given, PERSIST whether or
-// not there was an expiry to remove. Those two log a write that changed
-// nothing, which Redis does not (db.c, delGenericCommand, line 1437, counts
-// a change only for a key it deleted; expire.c, persistCommand, lines
-// 914-919, only for an expiry it removed); the family's missing-commands
-// step drops them, as the recipe's rule says.
+// expiry commands, DBSIZE, FLUSHDB, TOUCH, RENAME - so they run with no type
+// check in their scope, and look the name up across every keyspace
+// (Space.OwnerOf), which reaps a key whose expiry has passed. The reads among
+// them - EXISTS, TYPE, TTL and PTTL, EXPIRETIME and PEXPIRETIME, TOUCH, and
+// COPY's source - count each key they look up as a keyspace hit or a miss,
+// as Redis's lookupKeyRead does. A write is recorded only when it changed
+// something, as Redis propagates a command only when it counted a change
+// (server.dirty).
+
+var errNoSuchKey = errors.New("ERR no such key")
 
 // opDel deletes each of keys from whichever keyspace holds it, as DEL and
 // UNLINK do, and answers how many it deleted. A key named twice is deleted
-// once.
+// once. It is recorded as DEL with every key given, as Redis propagates the
+// command, and not at all when it deleted nothing (db.c, delGenericCommand,
+// counts a change only for a key it deleted).
 func (e *Engine) opDel(keys []string) int64 {
 	deleted := int64(0)
 	for _, key := range keys {
@@ -32,7 +34,9 @@ func (e *Engine) opDel(keys []string) int64 {
 			deleted++
 		}
 	}
-	e.aofRecordArgs("DEL", keys)
+	if deleted > 0 {
+		e.aofRecordArgs("DEL", keys)
+	}
 	return deleted
 }
 
@@ -109,13 +113,71 @@ func (e *Engine) opExpireAt(key string, at int64, c expireCondition) bool {
 	return true
 }
 
-// opPersist removes key's expiry and reports whether it had one. It is
-// recorded as PERSIST either way, as develop logs it (see above).
+// opPersist removes key's expiry and reports whether it had one, recorded
+// as PERSIST only then (expire.c, persistCommand, lines 914-919).
 func (e *Engine) opPersist(key string) bool {
 	owner, ok := e.space.OwnerOf(key)
 	removed := ok && owner.ClearExpiry(key)
-	e.aofRecord("PERSIST", key)
+	if removed {
+		e.aofRecord("PERSIST", key)
+	}
 	return removed
+}
+
+// opExpireTime is the instant key falls due, in Unix milliseconds, as
+// EXPIRETIME and PEXPIRETIME answer it: -2 for a key that is not there, -1
+// for one with no expiry.
+func (e *Engine) opExpireTime(key string) int64 {
+	owner, ok := e.space.OwnerOf(key)
+	e.noteLookup(ok)
+	if !ok {
+		return -2
+	}
+	at, has := owner.GetExpiry(key)
+	if !has {
+		return -1
+	}
+	return int64(at)
+}
+
+// opTouch records a use of each of keys, as a read does, and counts the keys
+// that exist, a key named twice counted twice: TOUCH.
+func (e *Engine) opTouch(keys []string) int64 {
+	touched := int64(0)
+	for _, key := range keys {
+		owner, held := e.space.OwnerOf(key)
+		e.noteLookup(held)
+		if held && owner.Touch(key) {
+			touched++
+		}
+	}
+	return touched
+}
+
+// opRename moves the value from holds to the name to, with its expiry, as
+// RENAME does, replacing whatever to held, of any type; with nx it leaves a
+// to that exists, and reports false. A from that is not there is refused.
+// Renaming a key to itself changes nothing. The value is moved, not copied,
+// so a rename costs the same whatever the value's size. It is recorded as
+// RENAME, which replays to the same state (a log holding it is not read by a
+// build before this one), and not at all when it changed nothing.
+func (e *Engine) opRename(from, to string, nx bool) (bool, error) {
+	owner, held := e.space.OwnerOf(from)
+	if !held {
+		return false, errNoSuchKey
+	}
+	if from == to {
+		return !nx, nil
+	}
+	if _, exists := e.space.OwnerOf(to); exists {
+		if nx {
+			return false, nil
+		}
+		e.space.DeleteAnywhere(to)
+	}
+	owner.Rename(from, to)
+	e.aofRecord("RENAME", from, to)
+	return true, nil
 }
 
 // opDBSize counts the keys of every keyspace.

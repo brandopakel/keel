@@ -40,6 +40,13 @@ type Keyspace interface {
 	// ScoreOf reports a key's current score and whether it is still present.
 	ScoreOf(key string) (uint64, bool)
 	Delete(key string) bool
+	// Touch records a use of the key, as a read does, and reports whether it
+	// is present: TOUCH.
+	Touch(key string) bool
+	// Rename moves the value from holds, and its expiry, to the name to, and
+	// reports whether from held a value: RENAME. The caller first deletes
+	// whatever holds to, in any keyspace.
+	Rename(from, to string) bool
 }
 
 // Candidate is one key considered for eviction. Lower scores go first.

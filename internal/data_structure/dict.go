@@ -260,6 +260,25 @@ func (d *Dict) SampleKeys(dst []Candidate, n int) []Candidate {
 
 func (d *Dict) Delete(key string) bool { return d.Del(key) }
 
+// Touch records a use of key, as Get does, and reports whether it is there.
+func (d *Dict) Touch(key string) bool { return d.Get(key) != nil }
+
+// Rename moves the string from holds to to, with its expiry.
+func (d *Dict) Rename(from, to string) bool {
+	obj := d.Get(from)
+	if obj == nil {
+		return false
+	}
+	value := obj.Value
+	at, expires := d.GetExpiry(from)
+	d.Del(from)
+	d.Put(to, d.NewObj(value))
+	if expires {
+		d.SetExpiryAt(to, at)
+	}
+	return true
+}
+
 // UpdateValue accounts an in-place value change while preserving its expiry.
 func (d *Dict) UpdateValue(key string, value string) {
 	obj, ok := d.dictStore.getPtr(key)
