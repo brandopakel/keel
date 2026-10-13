@@ -62,7 +62,7 @@ func (e *Engine) Do(ctx context.Context, cmd *Command, w io.ReadWriter) error {
 		return err
 	}
 	e.mu.Lock()
-	if err := e.callRefusal(cmd); err != nil {
+	if err := e.callRefusal(cmd.Cmd); err != nil {
 		e.mu.Unlock()
 		return err
 	}
@@ -85,12 +85,12 @@ func (e *Engine) Do(ctx context.Context, cmd *Command, w io.ReadWriter) error {
 	return e.waitPublished(ctx, end, result)
 }
 
-// callRefusal is why cmd may not run on e, or nil: e is closed, or nothing
+// callRefusal is why the command name may not run on e, or nil: e is closed, or nothing
 // flushes its log for it, or its log has failed - every call, where the
 // failure latches, and while it is retried, write commands and PING, as
 // Redis's processCommand refuses them (server.c, writeCommandsDeniedByDiskError).
 // The caller holds e's lock.
-func (e *Engine) callRefusal(cmd *Command) error {
+func (e *Engine) callRefusal(name string) error {
 	switch {
 	case e.closed:
 		return ErrClosed
@@ -100,7 +100,7 @@ func (e *Engine) callRefusal(cmd *Command) error {
 	if failure := e.persistenceFailure(); failure != nil {
 		return failure
 	}
-	if failure := e.retriedFailure(); failure != nil && (writeCommands[cmd.Cmd] || cmd.Cmd == "PING") {
+	if failure := e.retriedFailure(); failure != nil && (writeCommands[name] || name == "PING") {
 		return failure
 	}
 	return nil

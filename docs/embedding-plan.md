@@ -2420,6 +2420,40 @@ Redis.
     `MISCONF Errors writing to the AOF file: <cause>`.
   - **The legacy migration's crash window is fixed first,** in a PR of its
     own ahead of phase 3's parts, because it loses data on develop.
+- **Phase 5's choices** (October 13, 2026), for the public package's first
+  part (strings, keys and expiry, `Do`), following the standing rule for
+  command semantics and, for the Go surface itself, the owner's rule of the
+  same day: the API is Keel's own, to be the best embedded cache API it can
+  be - typed, context-aware, iterator-based, no RESP - over Redis's
+  semantics.
+  - **A method is a typed call.** It runs its command's typed operation in
+    that command's scope (`core`'s `call`: the lock, Do's refusals, a
+    replica's refusal, the type check from the command's descriptor, the
+    log's staging, eviction held off, Do's durability wait), so it is logged,
+    counted, refused and type-checked exactly as the command, and never goes
+    through RESP. Each is named for the command it logs as: `Expire` is
+    PEXPIRE, `TTL` is PTTL, millisecond precision throughout.
+  - **`Close() error`, without a context,** as `io.Closer` and `sql.DB` have
+    it: what Close waits for is the final sync, which a cancelled Close would
+    leave undone, so a context could only make it lie. The plan's sketch had
+    `Close(ctx)`.
+  - **Errors keep Redis's text and match categories.** An engine error is
+    returned with its own wire text and `errors.Is` matches it against
+    `ErrWrongType`, `ErrNotInteger`, `ErrOverflow`, `ErrOutOfMemory` or
+    `ErrReadOnly`; `ErrPersistence`, `ErrClosed` and `ErrLocked` are the
+    engine's own sentinels, with phase 3's texts. `ErrNotFound` stands where
+    Redis answers nil.
+  - **SET's conditions are methods, its expiry options.** `Set` returns only
+    an error; `SetNX` and `SetXX` report whether they stored. `WithTTL`,
+    `WithExpireAt` and `WithKeepTTL` are SET's PX, PXAT and KEEPTTL, refused
+    as SET refuses them (a TTL under a millisecond, an expiry with KEEPTTL).
+  - **TTLs are durations.** `TTL` answers `NoTTL` for a key that does not
+    expire and `ErrNotFound` for one that holds nothing, where PTTL answers -1
+    and -2; `ExpireTime` answers the zero time and `ErrNotFound`.
+  - **`Fsync` and `Eviction` are the package's own enumerations,** zero
+    values `FsyncEverySec` and `EvictLRU`, Redis's defaults; `FsyncNo` is
+    Redis's `appendfsync no`.
+
 - **Phase 4's choices** (October 12, 2026), where the code needed more than
   the plan said:
   - **The corpora pin develop's replies**, so a pull request that changes a
