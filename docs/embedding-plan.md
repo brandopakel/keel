@@ -1999,7 +1999,7 @@ PRs each, in this order:
    Keel lacks (docs/redis-parity-plan.md), and a recipe for the families that
    follow.
 
-Then keys and TTL (step 4.4), then hashes (step 4.5), each family converted and then completed.
+Then keys and TTL (step 4.4), hashes (step 4.5) and sets (step 4.6), each family converted and then completed; lists are converted alongside, by another hand.
 
 #### Step 4.0: golden corpora
 
@@ -2546,6 +2546,25 @@ increment before the key's type, as Redis does; `HGETDEL` and
 `HSCAN` need a hash that can be sampled and walked by a cursor across
 calls, and field expiry (`HEXPIRE` and its family, `HGETEX`, `HSETEX`) a
 deadline per field; they follow.
+
+#### Step 4.6: sets
+
+The fourth family, by the recipe.
+
+- **Typed operations** (`sets.go`): `opSAdd`, `opSRem`, `opSCard` and
+  `opSIsMember`; `setFor` and `setSettle` move there. Each write records
+  what develop logged, byte for byte: `SADD` and `SREM` with their members
+  (`aofRecordKeyArgs`), whether or not they changed anything (the family's
+  missing-commands step drops the no-ops, as for keys and hashes); `SPOP`
+  now declares that it records itself, the `SREM` of what it popped and
+  nothing otherwise, as #186 made it.
+- **The command language** (`commands_set.go`): `SISMEMBER` returns the
+  canned `:0` or `:1` itself rather than through a Reply (a Reply built for
+  it measured 1.039 locally, 1.014 without); `SMISMEMBER` sizes and admits
+  its array once and looks the set up once; `SMEMBERS`, `SPOP` and
+  `SRANDMEMBER` keep their walks and lookup arrays.
+- **Measured locally**, against the hashes step: SADD 0.846, with the log
+  0.910, with a replica 0.937 (allocations 1 to 0), SISMEMBER 1.014.
 
 ## Risks, in order
 
