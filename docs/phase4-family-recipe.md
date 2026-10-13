@@ -25,6 +25,15 @@ example.
   the spec of each command). Where Keel keeps something better than an
   accidental Redis flaw, document it as a departure citing Redis's file and
   line, and list it in the PR under "Improvements over Redis".
+- **A write that changes nothing is not logged**, as Redis decides with
+  `server.dirty`: Redis propagates a command only when it counted a change
+  (for example `t_list.c`, `popGenericCommand`, which returns before
+  `dirty++` for a missing key and for a count of 0, lines 838 and 841-845,
+  and `ltrimCommand` for a missing key, line 947). A family's conversion PR
+  stays byte-identical and records the no-ops develop records; its
+  missing-commands PR drops them, recaptures the corpus, cites the Redis
+  `dirty++` sites, and notes that an older log holding such a record still
+  replays, as a no-op.
 - **A change to a reply recaptures the corpus in the same PR.** The corpus
   pins develop's replies, so a PR that changes one on purpose - a new
   command, a new error, a new INFO field, a new line of a HELP - fails it
@@ -68,12 +77,15 @@ lines.
      again; refuse only what the operation alone can know.
    - **Stage the record of every write**, with `e.aofRecord(parts...)`,
      `e.aofRecordInt(name, key, n)` (an integer last part, written in
-     decimal) or `e.aofRecordArgs(name, args)` (a name and a whole argument
-     list). Staging allocates nothing. Stage exactly the records the corpus
+     decimal), `e.aofRecordArgs(name, args)` (a name and a whole argument
+     list) or `e.aofRecordKeyArgs(name, key, args)` (a name, a key and an
+     argument list: LPUSH's, HSET's, SADD's). Staging allocates nothing. Stage exactly the records the corpus
      shows (`~` lines), in the same order: for a command logged as it
      arrived, that is its name and arguments; a replaced key's `DEL` comes
      first (`dropOtherType`). A write that declines (NX, XX), or that finds
-     nothing to change, stages nothing. Never rely on the command being
+     nothing to change, stages nothing - unless develop logs it, in which
+     case the conversion stages it too and the family's missing-commands PR
+     drops it (the rule above). Never rely on the command being
      logged as it arrived: a Go caller has no command.
    - Keep what the handler did to the stores, in the same order: the reads
      that reap an expired key, the `Resize` after a change, dropping an
@@ -174,7 +186,9 @@ After the family's conversion has merged, in a PR of its own
 2. **Write the operation and its command language**, as above. Its record is
    what replays to the same state: Redis's propagation is the guide (GETDEL
    is logged as DEL, INCRBYFLOAT as SET with KEEPTTL, GETEX's expiry as
-   PEXPIREAT or PERSIST).
+   PEXPIREAT or PERSIST), and a write Redis does not count (no
+   `server.dirty++` on its path) records nothing. This PR is also where the
+   family's existing no-op records are dropped (the rule above).
 3. **Register it** wherever the dispatch reads, until step 4.2b's descriptor
    table: `commandTable` (eval.go), `commandArity` (command_check.go, Redis's
    arity), `commandKeyspace` and, if needed, the key rules (keytype.go),
