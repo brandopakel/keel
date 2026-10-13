@@ -453,11 +453,12 @@ counts its hit or miss in its typed operation after parsing
 of another type, once those arguments have passed; `stats-parity.py` has a
 case with a bad argument for each. Strings are converted: `GETRANGE`,
 `SUBSTR` and `GETEX` count this way; so, of sets, does `SRANDMEMBER` with
-a count. **The remaining gap:** the families not
-yet converted (lists, sorted sets, geo) still count through the type
-check, before their arguments are parsed, so a read of theirs with a
-malformed argument counts a hit or a miss that Redis's does not; each
-family's conversion closes its part. `MGET` asks the other stores about a key the
+a count, and of sorted sets and geo `ZCOUNT`, `ZRANGE`, `ZRANGEBYSCORE`,
+`ZREVRANGEBYSCORE`, `ZRANK` and `GEODIST`. **The remaining gap:** the
+families not yet converted (lists) still count through the type check,
+before their arguments are parsed, so a read of theirs with a malformed
+argument counts a hit or a miss that Redis's does not; each family's
+conversion closes its part. `MGET` asks the other stores about a key the
 strings do not hold only if they hold any key at all.
 
 `scripts/stats-parity.py` checks all of this against Redis. It runs each case
