@@ -374,7 +374,7 @@ var keyspaceReads = map[string]bool{
 	"GET": true, "LCS": true, "STRLEN": true, "GETRANGE": true, "SUBSTR": true, "GETEX": true, "GETDEL": true,
 	"GETSET": true,
 	"HGET":   true, "HMGET": true, "HEXISTS": true, "HLEN": true, "HKEYS": true, "HVALS": true, "HGETALL": true,
-	"LLEN": true, "LINDEX": true, "LRANGE": true,
+	"LLEN": true, "LINDEX": true,
 	"SCARD": true, "SMEMBERS": true, "SISMEMBER": true, "SMISMEMBER": true, "SRANDMEMBER": true, "SRAND": true,
 	"ZCOUNT": true, "ZRANGEBYSCORE": true, "ZREVRANGEBYSCORE": true, "ZRANGE": true, "ZRANK": true, "ZSCORE": true,
 	"ZCARD":   true,
@@ -382,6 +382,15 @@ var keyspaceReads = map[string]bool{
 	"PFCOUNT": true, "PFMERGE": true,
 	"CMS.QUERY": true, "MORRIS.QUERY": true,
 }
+
+// readsAfterArguments are the reads whose Redis handler reads arguments
+// before it looks its key up, and returns on a malformed one without
+// counting anything: lrangeCommand reads its start and stop first. Their
+// typed operation counts the lookup, once the command language has read the
+// arguments; the type check counts it only on its way to refusing a key of
+// another type, once the arguments it reads first (argumentsBeforeType) have
+// passed, since Redis's lookup finds that key before checkType refuses it.
+var readsAfterArguments = map[string]bool{"LRANGE": true}
 
 // checkKeyTypes reports an error if any key the command names is already held
 // by a different kind of store: the command's own refusal of its arguments,
@@ -415,6 +424,9 @@ func (e *Engine) checkKeyTypes(cmd *Command, entry commandEntry) error {
 				if err := arguments(e, cmd.Args); err != nil {
 					return err
 				}
+			}
+			if readsAfterArguments[cmd.Cmd] {
+				e.noteLookup(true)
 			}
 			return e.typeError(cmd.Cmd, owner)
 		}
