@@ -149,6 +149,9 @@ def operation(rng):
             ['APPEND', other, value], ['STRLEN', other], ['GETRANGE', other, 0, -1],
             ['SETRANGE', other, 1, value], ['GETDEL', other], ['GETEX', other, 'EX', 100000],
             ['GETSET', other, value], ['MSETNX', key, value, other, value], ['INCRBYFLOAT', other, '1.5'],
+            ['DIGEST', other], ['DELEX', other], ['DELEX', other, 'IFEQ', value], ['SET', other, value, 'IFNE', value],
+            ['MSETEX', 2, key, value, other, value], ['MSETEX', 1, other, value, 'NX'], ['INCREX', other],
+            ['INCREX', other, 'BYINT', 'x'],
         ])
     if kind == 'string':
         return rng.choice([
@@ -163,6 +166,17 @@ def operation(rng):
             ['GETEX', key, 'PXAT', 4102444800000], ['GETEX', key, 'EXAT', 1000], ['GETSET', key, value],
             ['MSETNX', key, value, 'string:other', value],
             ['INCRBYFLOAT', key, rng.choice(['0.1', '-1.5', '2.5e1', '10', '-0', '3.0000000000000000001', 'x', 'inf'])],
+            ['DIGEST', key], ['DELEX', key], ['DELEX', key, 'IFEQ', value], ['DELEX', key, 'IFNE', value],
+            ['DELEX', key, 'IFDEQ', '0123456789abcdef'], ['DELEX', key, 'IFDNE', 'FEDCBA9876543210'],
+            ['DELEX', key, 'IFDEQ', 'short'], ['SET', key, value, 'IFEQ', rng.choice([value, b'007', b''])],
+            ['SET', key, value, 'IFNE', value, 'GET'], ['SET', key, value, 'IFDNE', '0000000000000000', 'EX', 100000],
+            ['SET', key, value, 'IFDEQ', 'short'],
+            ['MSETEX', 2, key, value, 'string:other', value, rng.choice(['NX', 'XX'])],
+            ['MSETEX', 1, key, value, 'PX', 100000000], ['MSETEX', 1, key, value, 'KEEPTTL'],
+            ['INCREX', key], ['INCREX', key, 'BYINT', rng.randrange(-5, 6), 'UBOUND', 50, 'SATURATE'],
+            ['INCREX', key, 'BYFLOAT', rng.choice(['0.1', '-2.25', '10']), 'LBOUND', '-100', 'UBOUND', '100'],
+            ['INCREX', key, 'EX', 100000, 'ENX'], ['INCREX', key, 'PERSIST'],
+            ['INCREX', key, 'BYINT', 9223372036854775807, 'SATURATE'],
         ])
     if kind == 'hash':
         return rng.choice([
@@ -425,6 +439,8 @@ def operation3(rng, modules):
             ['APPEND', key, value], ['GETRANGE', key, 0, rng.randrange(-4, 8)], ['SETRANGE', key, 3, value],
             ['GETEX', key, 'PX', 100000000], ['GETDEL', key], ['GETSET', key, value],
             ['INCRBYFLOAT', key, rng.choice(['10.5', '0.1', '-5.0e3', '1e400'])],
+            ['DIGEST', key], ['INCREX', key, 'BYFLOAT', rng.choice(['10.5', '0.1', '-5.0e3'])],
+            ['DELEX', key, 'IFNE', value], ['SET', key, value, 'IFEQ', value], ['MSETEX', 1, key, value, 'EX', 100000],
         ])
     if kind == 'key':
         key = rng.choice(['string', 'hash', 'list', 'set', 'zset']) + ':' + str(rng.randrange(32))

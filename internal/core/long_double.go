@@ -156,6 +156,19 @@ func addLongDouble(a, b *big.Float) (*big.Float, bool) {
 	return sum, true
 }
 
+// subLongDouble is a - b in a long double, and whether the difference is
+// finite.
+func subLongDouble(a, b *big.Float) (*big.Float, bool) {
+	if a.IsInf() || b.IsInf() {
+		return nil, false
+	}
+	diff := new(big.Float).SetPrec(longDoublePrec).SetMode(big.ToNearestEven).Sub(a, b)
+	if diff.Sign() != 0 && diff.MantExp(nil) > longDoubleMaxExp {
+		return nil, false
+	}
+	return diff, true
+}
+
 // formatLongDoubleHuman writes f as Redis's ld2string does in its human mode:
 // %.17Lf, then the trailing zeros after the point removed, and the point if
 // nothing follows it, and -0 as 0.
