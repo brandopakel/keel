@@ -1,6 +1,9 @@
 package core
 
 import (
+	"math/big"
+	"strings"
+
 	"github.com/brandopakel/keel/internal/constant"
 	"github.com/brandopakel/keel/internal/resp"
 )
@@ -138,4 +141,105 @@ func (e *Engine) cmdHINCRBY(args []string) []byte {
 		return e.encode(errNotAnInteger, false)
 	}
 	return e.counterReply(e.opHIncrBy(args[0], args[1], delta))
+}
+
+// cmdHMSET is HSET answering OK, the older spelling; it is recorded as the
+// HSET it performs.
+func (e *Engine) cmdHMSET(args []string) []byte {
+	e.recordsItself()
+	if len(args) < 3 || len(args)%2 != 1 {
+		return e.encode(wrongArguments("HMSET"), false)
+	}
+	e.opHSet(args[0], args[1:])
+	r := e.reply()
+	return r.Status("OK").Bytes()
+}
+
+func (e *Engine) cmdHSTRLEN(args []string) []byte {
+	if len(args) != 2 {
+		return e.encode(wrongArguments("HSTRLEN"), false)
+	}
+	r := e.reply()
+	return r.Int(e.opHStrlen(args[0], args[1])).Bytes()
+}
+
+// hincrByFloatIncrement reads HINCRBYFLOAT's increment as Redis's
+// hincrbyfloatCommand does, before it looks at the key: a long double, and
+// neither NaN nor infinite.
+func hincrByFloatIncrement(text string) (*big.Float, error) {
+	incr, ok := parseLongDouble(text)
+	if !ok {
+		return nil, errNotAFloat
+	}
+	if incr.IsInf() {
+		return nil, errNaNOrInfinity
+	}
+	return incr, nil
+}
+
+// cmdHINCRBYFLOAT adds to a field in Redis's long double; see
+// opHIncrByFloat. The sum's reply is admitted before it is stored.
+func (e *Engine) cmdHINCRBYFLOAT(args []string) []byte {
+	e.recordsItself()
+	if len(args) != 3 {
+		return e.encode(wrongArguments("HINCRBYFLOAT"), false)
+	}
+	incr, err := hincrByFloatIncrement(args[2])
+	if err != nil {
+		return e.encode(err, false)
+	}
+	r := e.reply()
+	value, err := e.hashFloatSum(args[0], args[1], incr)
+	if err != nil {
+		return r.Error(err).Bytes()
+	}
+	if r.Bulk(value).Refused() {
+		return r.Bytes()
+	}
+	e.storeHashField(args[0], args[1], value)
+	return r.Bytes()
+}
+
+// cmdHGETDEL implements HGETDEL key FIELDS numfields field [field ...]: the
+// values of the fields, null for one not there, and the fields deleted. The
+// reply is built and admitted before anything is deleted.
+func (e *Engine) cmdHGETDEL(args []string) []byte {
+	e.recordsItself()
+	if len(args) < 4 {
+		return e.encode(wrongArguments("HGETDEL"), false)
+	}
+	if !strings.EqualFold(args[1], "FIELDS") {
+		return e.encode(errHGetDelFields, false)
+	}
+	n, valid := e.counterInteger(args[2])
+	if !valid || n < 1 {
+		return e.encode(errHGetDelCount, false)
+	}
+	fields := args[3:]
+	if n != int64(len(fields)) {
+		return e.encode(errHGetDelCountsMatch, false)
+	}
+	values, found := e.hashFieldsGotten(args[0], fields)
+	r := e.reply()
+	size := resp.DecimalDigits(len(fields)) + 3
+	for i := range fields {
+		if found[i] {
+			size, _ = resp.AddBulkSize(size, len(values[i]))
+		} else {
+			size += r.Framing.NullSize()
+		}
+	}
+	if !r.Reserve(size) {
+		return r.Bytes()
+	}
+	r.Array(len(fields))
+	for i := range fields {
+		if found[i] {
+			r.Bulk(values[i])
+		} else {
+			r.Null()
+		}
+	}
+	e.deleteGottenFields(args[0], fields, found)
+	return r.Bytes()
 }

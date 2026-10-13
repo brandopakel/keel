@@ -37,7 +37,7 @@ TimeSeries come in CI.
 | --- | --- | --- |
 | string | 12/26 (26 since steps 4.3c and 4.3d of the embedding plan) | ~~`APPEND`, `GETRANGE`, `SETRANGE`, `STRLEN`, `GETDEL`, `GETEX`, `GETSET`, `SUBSTR`, `INCRBYFLOAT`, `MSETNX`~~ (step 4.3c), and 8.x's ~~`DELEX`, `DIGEST`, `INCREX`, `MSETEX`~~ (step 4.3d, with `SET`'s `IFEQ`, `IFNE`, `IFDEQ` and `IFDNE`) |
 | list | 9/24 | `LPOS`, `LINSERT`, `LREM`, `LMOVE`, `LMOVEM`, `RPOPLPUSH`, `LPUSHX`, `RPUSHX`, `LMPOP`, and the blocking forms |
-| hash | 11/29 | `HSTRLEN`, `HRANDFIELD`, `HINCRBYFLOAT`, `HMSET`, `HSCAN`, `HGETDEL`, `HGETEX`, `HSETEX`, `HIMPORT`, field expiry (`HEXPIRE` family, 8 commands) |
+| hash | 11/29 (15 since step 4.5 of the embedding plan) | ~~`HSTRLEN`~~, `HRANDFIELD`, ~~`HINCRBYFLOAT`, `HMSET`~~, `HSCAN`, ~~`HGETDEL`~~ (step 4.5), `HGETEX`, `HSETEX`, `HIMPORT`, field expiry (`HEXPIRE` family, 8 commands) |
 | set | 8/19 | `SINTER`, `SUNION`, `SDIFF` with `STORE` and `CARD` forms, `SMOVE`, `SSCAN` |
 | sorted-set | 12/35 | `ZUNION`, `ZINTER`, `ZDIFF` with `STORE` forms, the lex ranges, `ZREMRANGEBY*`, `ZREVRANGE`, `ZREVRANK`, `ZMSCORE`, `ZRANDMEMBER`, `ZRANGESTORE`, `ZMPOP`, `ZSCAN`, and the blocking forms |
 | generic | 13/29 (20 since step 4.4 of the embedding plan) | ~~`RENAME`, `RENAMENX`, `COPY`, `TOUCH`~~, `OBJECT`, ~~`RANDOMKEY`, `EXPIRETIME`, `PEXPIRETIME`~~ (step 4.4), `SORT`, `SORT_RO`, `DUMP`, `RESTORE`, `MOVE`, `MIGRATE`, `WAIT`, `WAITAOF` |
