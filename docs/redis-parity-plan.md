@@ -175,20 +175,21 @@ workflow's `config.md`; every run's counts go to `census/config-runs.csv` on
 The **Redis tests** workflow (`.github/workflows/redis-tests.yml`, weekly,
 on dispatch and on a pull request that changes it) runs Redis 8.10.1's own
 test suite against Keel and against Redis, unit by unit. Its first baseline
-(runs 38335449455, 38337899874 and 38343833581, October 13, 2026, the same
-unit by unit) found Keel passing **206 of the 3,194 tests Redis passes
-(6.4%)**, with 1,241 failing and 1,663 never reached. Most failures are
-commands Keel lacks: 1,008 of the 1,241, led by `XADD`, `FUNCTION`, the
-array commands, `INCREX`, `FLUSHALL` and `COMMAND`. Most of the tests never
-reached sit in 17 units whose setup runs a `CONFIG SET` Keel refuses. Redis
-passes 1,780 tests in those units, and Keel reaches 333 of them before the
-refusal. Every run goes to `census/redis-tests.csv` on `bench-history`.
+(October 13, 2026: runs 38335449455, 38337899874 and 38343833581 on its pull
+request, and 38352790820, the first on `develop`, the same unit by unit)
+found Keel passing **206 of the 3,194 tests Redis passes (6.4%)**, with
+1,241 failing and 1,663 never reached. Most failures are commands Keel
+lacks: 1,008 of the 1,241, led by `XADD`, `FUNCTION`, the array commands,
+`INCREX`, `FLUSHALL` and `COMMAND`. Most of the tests never reached sit in
+17 units whose setup runs a `CONFIG SET` Keel refuses. Redis passes 1,780
+tests in those units, and Keel reaches 333 of them before the refusal. Every
+run goes to `census/redis-tests.csv` on `bench-history`.
 
 **What the tests rank.** Each failing test is counted once, under the first
 thing Keel lacked in its error. A test may need more than that, so each
 count is an upper bound on what that step alone unlocks, not a forecast.
-The counts are from run 38343833581, by Redis's command groups
-(`src/commands/*.json`).
+The counts are from run 38352790820 on `develop` (38343833581 gives the
+same), by Redis's command groups (`src/commands/*.json`).
 
 | Step | Tests behind it | Detail |
 | --- | --- | --- |
