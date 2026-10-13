@@ -91,11 +91,18 @@ lines.
 
    ```go
    r := e.reply()
-   if value, ok := e.opGet(args[0]); ok {
-       return r.Bulk(value).Bytes()
+   n, err := e.opIncr(args[0])
+   if err != nil {
+       return r.Error(err).Bytes()
    }
-   return r.Null().Bytes()
+   return r.Int(n).Bytes()
    ```
+
+   A reply that is one bulk string and nothing else may skip the Reply:
+   `resp.SingleBulk` sizes, admits and allocates it as `Bulk` would, and GET
+   answers with it, because building a Reply for its one value measured as
+   6 to 9% of GET on GitHub's x86 runners (a paired row a laptop showed at
+   1.02).
 
    `resp.Reply` frames the reply in the command's protocol and admits it
    before it allocates. `Status("OK")`, `Int(0)`, `Int(1)`, `Null()`,

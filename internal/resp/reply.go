@@ -55,6 +55,23 @@ type Reply struct {
 	refused  bool
 }
 
+// SingleBulk is the reply that is one bulk string and nothing else, GET's:
+// what Bulk writes as a reply's first value - sized, admitted within what is
+// left of the output limit after used, reserved from budget, and allocated
+// once - without a Reply to build and read back. A refusal is answered by
+// reference. GET answers with it because building a Reply for its one value
+// measured as 6 to 9% of GET on GitHub's x86 runners.
+func SingleBulk(used int, budget *Budget, s string) []byte {
+	size, fits := AddBulkSize(0, len(s))
+	if !fits || size > MaxReplyBytes-used {
+		return ReplyTooLarge
+	}
+	if budget != nil && !budget.ReserveReply(size) {
+		return AllocationPressure
+	}
+	return AppendBulkString(make([]byte, 0, size), s)
+}
+
 // Reset readies r for a command answered in f's protocol. The buffer of the
 // command before belongs to the transport now, and is forgotten.
 func (r *Reply) Reset(f Framing) {
