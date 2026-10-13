@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"math/rand/v2"
 	"time"
 
 	"github.com/brandopakel/keel/internal/data_structure"
@@ -20,7 +21,11 @@ import (
 // something, as Redis propagates a command only when it counted a change
 // (server.dirty).
 
-var errNoSuchKey = errors.New("ERR no such key")
+var (
+	errNoSuchKey  = errors.New("ERR no such key")
+	errSameObject = errors.New("ERR source and destination objects are the same")
+	errDBIndex    = errors.New("ERR DB index is out of range")
+)
 
 // opDel deletes each of keys from whichever keyspace holds it, as DEL and
 // UNLINK do, and answers how many it deleted. A key named twice is deleted
@@ -197,4 +202,72 @@ func (e *Engine) opFlushDB() {
 			ks.Delete(key)
 		}
 	})
+}
+
+// opCopy copies the value src holds, with its expiry, to dst, as COPY does,
+// and reports whether it did: a src that is not there copies nothing, and a
+// dst that exists is left unless replace, in which case whatever type held
+// it gives it up. The value is copied whole, through its dump, as Redis
+// duplicates it. It is recorded as COPY with REPLACE, which replays to the
+// same state whatever the log has done to dst since.
+func (e *Engine) opCopy(src, dst string, replace bool) (bool, error) {
+	if src == dst {
+		return false, errSameObject
+	}
+	owner, held := e.space.OwnerOf(src)
+	if !held {
+		return false, nil
+	}
+	if _, exists := e.space.OwnerOf(dst); exists && !replace {
+		return false, nil
+	}
+	payload, ok := e.dumpKey(src)
+	if !ok {
+		return false, nil
+	}
+	at, expires := owner.GetExpiry(src)
+	if err := e.restoreKey(dst, payload); err != nil {
+		return false, err
+	}
+	if expires {
+		owner.SetExpiryAt(dst, at)
+	}
+	e.aofRecord("COPY", src, dst, "REPLACE")
+	return true, nil
+}
+
+// opRandomKey is a key chosen at random from every keyspace, each key as
+// likely as any other, and false for none. A key whose expiry has passed is
+// reaped and another chosen, as Redis's dbRandomKey does, up to a bound.
+func (e *Engine) opRandomKey() (string, bool) {
+	var sample [1]data_structure.Candidate
+	for tries := 0; tries < 100; tries++ {
+		total := e.space.TotalKeys()
+		if total == 0 {
+			return "", false
+		}
+		pick := rand.IntN(total)
+		var chosen data_structure.Keyspace
+		e.space.EachKeyspace(func(ks data_structure.Keyspace) {
+			if chosen != nil {
+				return
+			}
+			if pick < ks.Len() {
+				chosen = ks
+				return
+			}
+			pick -= ks.Len()
+		})
+		if chosen == nil {
+			continue
+		}
+		found := chosen.SampleKeys(sample[:0], 1)
+		if len(found) == 0 {
+			continue
+		}
+		if chosen.Has(found[0].Key) {
+			return found[0].Key, true
+		}
+	}
+	return "", false
 }

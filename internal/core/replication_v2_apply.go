@@ -237,7 +237,7 @@ func (u replicationUnit) apply(e *Engine) error {
 func replicationOperation(name string) bool {
 	switch name {
 	case "FLUSHDB", "DEL", "SET", "MSET", "INCR", "INCRBY", "DECR", "DECRBY", "PEXPIREAT", "PERSIST",
-		"APPEND", "SETRANGE", "RENAME",
+		"APPEND", "SETRANGE", "RENAME", "COPY",
 		"HSET", "HSETNX", "HDEL", "HINCRBY", "LPUSH", "RPUSH", "LPOP", "RPOP", "LTRIM", "LSET",
 		"SADD", "SREM", "ZADD", "ZREM", "GEOADD", "KEEL.RESTORE":
 		return true
