@@ -1,3 +1,68 @@
+# v0.2.0-alpha.1 (draft, unreleased)
+
+> Draft: this section describes the release being prepared. Its validation
+> evidence is added when the tag is cut.
+
+This release makes Keel an embeddable Go library as well as a server.
+`github.com/brandopakel/keel` opens an instance in-process: the engine the
+server runs, with Redis's data types and command semantics, an estimated
+memory bound with eviction, and an optional append-only log. There is no
+network, no RESP and no second process; methods take a context and Go
+values.
+
+```go
+db, err := keel.Open(ctx, keel.Options{
+    MaxMemory:   256 << 20,
+    Persistence: &keel.Persistence{Path: "cache.aof", Fsync: keel.FsyncEverySec},
+})
+defer db.Close()
+
+err = db.Set(ctx, "greeting", "hello", keel.WithTTL(time.Minute))
+name, err := db.GetOrSet(ctx, "user:1", loadUser, keel.WithTTL(10*time.Minute))
+```
+
+**What the package is.** Each method runs the typed operation of the Redis
+command it is named after, in that command's scope: the same type checks,
+refusals, counting and log records as the server's command, which runs the
+same operation. A log written by an embedded instance replays on the server,
+and the other way around. Calls are safe for concurrent use, and a call
+returns once what it wrote is as durable as the fsync policy makes a
+server's reply. Errors keep Redis's text and match `ErrNotFound`,
+`ErrWrongType`, `ErrNotInteger`, `ErrOverflow`, `ErrOutOfMemory`,
+`ErrReadOnly`, `ErrPersistence`, `ErrClosed` and `ErrLocked` with
+`errors.Is`. It covers strings, keys and expiry; `Atomic`, Redis's
+`MULTI`/`EXEC`, logged as one block with no rollback; `Scan`, an iterator
+that never holds the lock while the loop runs; and the Keel-native
+`GetOrSet`, `CompareAndSwap`, `DeleteIf` and `Stats`. See
+[public-api.md](public-api.md), and `examples/embedded` for a cache and a
+rate limiter that run as they are.
+
+**What is experimental.** The whole package, until v1: a minor release may
+change it, with migration notes, and an `apidiff` check holds every pull
+request to that. Within it, `Do`, which runs any command in the command
+language and answers in Go values, may change or go as the typed methods
+arrive. The log is the stronger promise: every v0 release reads every
+earlier v0 log.
+
+**What is not covered yet.** Typed methods for hashes, lists, sets, sorted
+sets, geo and the probabilistic structures (HyperLogLog, Bloom and cuckoo
+filters, count-min sketch, Morris counters) arrive as each family's typed
+operations reach the engine; until then `Do` runs those commands. `Dump` and
+`Restore`, keyspace notifications and a rate-limit helper come later.
+Replication stays server-only: an embedded instance is a primary with no
+replicas.
+
+The server gains, since alpha.4, `MULTI`/`EXEC`, RESP3 with `HELLO 3`,
+`CONFIG GET`, more of Redis's `INFO`, Redis 8's string commands and the key
+commands Keel lacked; it refuses writes with `MISCONF` while its log fails
+under `everysec` and `no`, where it stopped before. See
+[CHANGELOG.md](../CHANGELOG.md) for the list.
+
+Persistence written by alpha.4 is read by this version. Back up persistence
+files before upgrading.
+
+---
+
 # v0.1.0-alpha.4
 
 This increment brings the development work merged since alpha.3 to a published

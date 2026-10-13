@@ -77,6 +77,11 @@ until then `Do` runs them.
 - **`[]byte` forms copy.** `SetBytes` copies its value before it returns,
   and `GetBytes` answers a copy the caller owns.
 
+`examples/embedded` holds programs that run as they are and are tested in
+CI: a cache in front of a slow source (`GetOrSet`, and a log that keeps it
+warm across restarts) and a fixed-window rate limiter (`INCR` and `EXPIRE NX`
+in one `Atomic`). An analytics example joins them with the sketches' methods.
+
 ## Transactions
 
 ```go
