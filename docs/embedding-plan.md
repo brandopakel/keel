@@ -2343,6 +2343,35 @@ error-parity harnesses, which hold them to Redis 8.10.1 in CI.
   quadratic; a buffer kept with spare capacity is follow-on work if a
   workload needs it.
 
+**4.3d: the string commands Redis 8 added.** `DIGEST`, `DELEX`, `MSETEX`
+(8.4), `INCREX` (8.8), and `SET`'s `IFEQ`, `IFNE`, `IFDEQ` and `IFDNE`
+conditions (8.4), as Redis 8.10.1's `t_string.c` and `db.c` define them.
+
+- **The digest** is XXH3's 64-bit hash, in 16 hexadecimal digits. Keel's
+  runtime dependencies stay murmur3 alone, so XXH3 is translated in-tree
+  (`internal/xxh3`) from the scalar code of xxHash 0.8.3's `xxhash.h`, the
+  version Redis vendors, with its BSD 2-Clause notice in the file and in
+  `THIRD_PARTY_NOTICES.md`. It matches xxHash's published test vectors (one
+  length in each of the algorithm's ranges, and the long inputs ending at a
+  stripe, a block or partway through one) and, locally, Redis 8.10.2's
+  `DIGEST` at 38 lengths from 0 to 100,000 bytes; CI's differential holds it
+  to Redis 8.10.1's.
+- **Records**: `DELEX` as `DEL`, `MSETEX` as a `SET` and `PEXPIREAT` per key
+  (a key of another type's `DEL` first), `INCREX` as Redis propagates it, a
+  `SET` of the final value, plain under `PERSIST`, followed by `PEXPIREAT`
+  under a new expiry, and with `KEEPTTL` otherwise; an expiry already past
+  is the `DEL` it amounts to. `SET` with a condition records what `SET`
+  records. Every record is a command older builds replay.
+- **Admission**: `INCREX`'s reply, two integers or two long doubles, is
+  admitted before it writes, as `INCRBYFLOAT`'s is.
+- **Improvement over Redis**: `SET key value GET IFDEQ digest` (or `IFDNE`)
+  with a digest that is not 16 characters long, on a key holding a string,
+  is answered twice by Redis, the old value and then `ERR must be exactly 16
+  hexadecimal characters`: `setGenericCommand` answers `GET` (t_string.c
+  lines 99-101) before it checks the digest (lines 136-137). A client then
+  reads the error as the reply to its next command. Keel answers the error
+  alone and writes nothing.
+
 #### Lists, the first collection family
 
 **The conversion.** Lists follow the strings' recipe
