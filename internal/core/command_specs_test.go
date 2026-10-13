@@ -233,6 +233,7 @@ var keyRuleExceptions = map[string]string{
 	"UNLINK": "DEL by another name",
 	"EXISTS": "answers about a name whatever type holds it",
 	"MGET":   "answers nil for a key of another type, Redis's rule",
+	"TOUCH":  "answers about a name whatever type holds it, as EXISTS does",
 }
 
 // keyRuleOfSpecs is the key rule keys amount to: the first argument, the
@@ -270,7 +271,7 @@ func keyRuleOfSpecs(keys []keySpec) (rule keyRule, stride int, ok bool) {
 			return keyEvery, 0, true
 		}
 		// A move's source and its destination, each a key of its own
-		// (LMOVE, RPOPLPUSH, LMOVEM).
+		// (LMOVE, RPOPLPUSH, LMOVEM), and RENAME's, RENAMENX's and COPY's.
 		if first.find.lastKey == 0 && second.begin.pos == 2 && second.find.lastKey == 0 {
 			return keyFirstTwo, 0, true
 		}
