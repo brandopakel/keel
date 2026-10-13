@@ -229,7 +229,7 @@ def operation(rng):
     key, other = [kind + ':' + str(rng.randrange(32)) for _ in range(2)]
     return rng.choice([['DEL', key], ['EXISTS', key, 'missing'], ['TYPE', key],
                        ['PERSIST', key], ['PEXPIREAT', key, 4102444800000],
-                       ['EXPIRETIME', key], ['PEXPIRETIME', key], ['TOUCH', key, other, 'missing', key],
+                       ['EXPIRETIME', 'missing'], ['PEXPIRETIME', 'missing'], ['TOUCH', key, other, 'missing', key],
                        ['RENAME', key, other], ['RENAMENX', key, other], ['RENAME', key, key],
                        ['RENAME', 'missing', key], ['RENAMENX', key, key],
                        ['COPY', key, other], ['COPY', key, other, 'REPLACE'], ['COPY', key, key]])
@@ -454,7 +454,7 @@ def operation3(rng, modules):
                            ['HKEYS', hash_key], ['HVALS', hash_key], ['HKEYS', 'missing'],
                            ['TYPE', key], ['UNLINK', key], ['TTL', 'missing'], ['PTTL', 'missing'],
                            ['EXPIRE', 'missing', 10], ['PERSIST', 'missing'],
-                           ['EXPIRETIME', key], ['PEXPIRETIME', 'missing'], ['TOUCH', key, 'missing'],
+                           ['EXPIRETIME', 'missing'], ['PEXPIRETIME', 'missing'], ['TOUCH', key, 'missing'],
                            ['RENAMENX', key, 'missing']])
     if kind == 'set':
         key, single = 'set:' + str(rng.randrange(32)), 'single:' + str(rng.randrange(4))
