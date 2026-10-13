@@ -485,19 +485,23 @@ def operation3(rng, modules):
         # hash differently, so a false positive would differ between them.
         return rng.choice([['BF.ADD', key, item], ['BF.MADD', key, item, other], ['BF.EXISTS', key, item],
                            ['BF.MEXISTS', key, item, other], ['BF.EXISTS', 'bf:missing', item],
-                           ['BF.RESERVE', key, 0.01, 100]])
+                           ['BF.RESERVE', key, 0.01, 100], ['BF.INSERT', key, 'NOCREATE', 'ITEMS', item, other],
+                           ['BF.CARD', key], ['BF.CARD', 'bf:missing']])
     if kind == 'cuckoo':
         key = 'cf:' + str(rng.randrange(4))
         return rng.choice([['CF.ADD', key, item], ['CF.ADDNX', key, item], ['CF.EXISTS', key, item],
                            ['CF.MEXISTS', key, item, other], ['CF.DEL', key, item], ['CF.COUNT', key, item],
-                           ['CF.EXISTS', 'cf:missing', item]])
+                           ['CF.EXISTS', 'cf:missing', item], ['CF.INSERTNX', key, 'NOCREATE', 'ITEMS', item, other],
+                           ['CF.COMPACT', key], ['CF.COMPACT', 'cf:missing']])
     key = 'cms:' + str(rng.randrange(4))
     # A sketch sized by probability is only queried: how each sizes it from
     # the same error and probability is not the reply being compared.
     sized = 'cms:p' + str(rng.randrange(2))
     return rng.choice([['CMS.INCRBY', key, item, rng.randrange(1, 5), other, 1], ['CMS.QUERY', key, item, other],
                        ['CMS.INCRBY', 'cms:missing', item, 1], ['CMS.INITBYDIM', key, 10, 5],
-                       ['CMS.INITBYPROB', sized, 0.001, 0.01], ['CMS.QUERY', sized, item]])
+                       ['CMS.INITBYPROB', sized, 0.001, 0.01], ['CMS.QUERY', sized, item], ['CMS.INFO', key],
+                       ['CMS.MERGE', key, 2, 'cms:' + str(rng.randrange(4)), 'cms:' + str(rng.randrange(4)),
+                        'WEIGHTS', rng.randrange(1, 3), 1]])
 
 
 def transaction3(rng, modules):

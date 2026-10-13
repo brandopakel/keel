@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare Keel's BF.* and CF.* replies with RedisBloom's, byte for byte.
+"""Compare Keel's BF.*, CF.* and CMS.* replies with RedisBloom's, byte for byte.
 
 Keel's Bloom and cuckoo filter commands answer as RedisBloom does: the same
 reply types, the same error text, and the same edge cases. This runs the same
@@ -140,7 +140,7 @@ def normalize(tree, mask=frozenset(), mask_values=False):
                 if items[i][0] in ('simple', 'bulk') and items[i][1].decode(errors='replace') in mask:
                     items[i + 1] = ('masked', items[i + 1][0])
         if mask_values:
-            items = [('masked', item[0]) if item[0] in ('int', 'double') else item for item in items]
+            items = [('masked', item[0]) if item[0] in ('int', 'double', 'bool') else item for item in items]
         return (kind, items)
     return tree
 
@@ -398,6 +398,115 @@ def corpus():
     arity('CF.INFO')
     arity('CF.INFO', 'cf:held', 'x')
 
+    # BF.INSERT: options read by their first letters, in turn, until ITEMS.
+    for options in [[], ['CAPACITY', 1000], ['ERROR', 0.001], ['EXPANSION', 4], ['EXPANSION', 0], ['NONSCALING'],
+                    ['cap', 50, 'err', 0.1, 'exp', 3], ['CAPACITY', 1000, 'ERROR', 0.0001, 'NONSCALING'],
+                    ['ERROR', 0.01, 'ERROR', 0.02], ['Capacity', 200, 'Expansion', 5]]:
+        key = k('bf:insert')
+        add('BF.INSERT', key, *options, 'ITEMS', 'a', 'b', 'a')
+        add('BF.INFO', key, mask=LAYOUT)
+        add('BF.CARD', key)
+    add('BF.INSERT', 'bf:held', 'NOCREATE', 'ITEMS', 'a', 'zz')
+    add('BF.INSERT', k('bf:insert'), 'NOCREATE', 'ITEMS', 'a')
+    for options in [['CAPACITY', 'x'], ['CAPACITY', 0], ['CAPACITY', 1073741825], ['CAPACITY', '007'], ['ERROR', 0],
+                    ['ERROR', 1], ['ERROR', 'x'], ['ERROR', 'nan'], ['EXPANSION', -1], ['EXPANSION', 32769],
+                    ['EXPANSION', 'x'], ['FOO'], ['ITEMS', 'a', 'ITEMS']]:
+        add('BF.INSERT', k('bf:insert'), *options, 'ITEMS', 'a')
+    for key in ['str', 'hash', 'cf:held']:
+        add('BF.INSERT', key, 'ITEMS', 'a')
+        add('BF.INSERT', key, 'CAPACITY', 'x', 'ITEMS', 'a')
+        add('BF.CARD', key)
+    add('BF.CARD', 'bf:missing')
+    add('BF.CARD', 'bf:held')
+    full = k('bf:insert')
+    add('BF.INSERT', full, 'CAPACITY', 2, 'NONSCALING', 'ITEMS', *[f'f{n}' for n in range(4)])
+    add('DEL', full)
+    for args in [['k'], ['k', 'ITEMS'], ['k', 'CAPACITY'], ['k', 'CAPACITY', 10]]:
+        arity('BF.INSERT', *args)
+    add('BF.INSERT', k('bf:insert'), 'a', 'b')
+    for args in [[], ['k', 'x']]:
+        arity('BF.CARD', *args)
+
+    # CF.INSERT and CF.INSERTNX: CAPACITY and NOCREATE by their first letters,
+    # until ITEMS; a key that holds none is created with RedisBloom's default
+    # geometry there and Keel's here, so CF.INFO masks it.
+    for command in ['CF.INSERT', 'CF.INSERTNX']:
+        # A capacity of 4 is RedisBloom's smallest, two buckets of two, where
+        # an item's two buckets can be one and count it twice; 64 is clear.
+        for options in [[], ['CAPACITY', 1000], ['cap', 64], ['nocreate']]:
+            key = k('cf:insert')
+            add(command, key, *options, 'ITEMS', 'a', 'b', 'a')
+            add('CF.INFO', key, mask=DEFAULT_GEOMETRY)
+        add(command, 'cf:held', 'NOCREATE', 'ITEMS', 'a', 'zz', 'a')
+        for options in [['CAPACITY', 'x'], ['CAPACITY', 3], ['CAPACITY', 1073741825], ['CAPACITY', -1], ['FOO']]:
+            add(command, k('cf:insert'), *options, 'ITEMS', 'a')
+        for key in ['str', 'hash', 'bf:held']:
+            add(command, key, 'ITEMS', 'a')
+            add(command, key, 'NOCREATE', 'ITEMS', 'a')
+        for args in [['k'], ['k', 'ITEMS'], ['k', 'CAPACITY']]:
+            arity(command, *args)
+        add(command, k('cf:insert'), 'a', 'b')
+    for command in ['CF.INSERT', 'CF.INSERTNX']:
+        key = k('cf:tiny')
+        add('CF.RESERVE', key, 8, *NATIVE)
+        # Past capacity each answers its items' outcomes, in places that
+        # differ, since the two hash differently: the types are compared.
+        add(command, key, 'ITEMS', *[f'fill:{n}' for n in range(24)], mask_values=True)
+        add('DEL', key)
+
+    # CF.COMPACT: a filter of one table has nothing to move, and compaction
+    # resets its count of deletions.
+    key = k('cf:compact')
+    add('CF.RESERVE', key, 1000, *NATIVE)
+    for item in ['a', 'b', 'c']:
+        add('CF.ADD', key, item)
+    add('CF.DEL', key, 'a')
+    add('CF.INFO', key, mask=LAYOUT)
+    add('CF.COMPACT', key)
+    add('CF.INFO', key, mask=LAYOUT)
+    for key in ['cf:missing', 'str', 'bf:held']:
+        add('CF.COMPACT', key)
+    for args in [[], ['k', 'x']]:
+        arity('CF.COMPACT', *args)
+
+    # The Count-Min sketches: dimensions and rates as RedisBloom reads them,
+    # the taken key first; increments up to 63 bits, saturating; INFO; MERGE
+    # with its weights, read in turn with the sources.
+    add('CMS.INITBYDIM', 'cms:a', 100, 5)
+    add('CMS.INITBYDIM', 'cms:b', 100, 5)
+    add('CMS.INITBYDIM', 'cms:small', 10, 5)
+    for args in [['cms:a', 100, 5], ['cms:a', 'x', 5], ['str', 1, 1], ['str', 'x', 1], ['cms:w', 0, 5], ['cms:w', -1, 5],
+                 ['cms:w', '007', 5], ['cms:w', '+5', 5], ['cms:w', 5, 0], ['cms:w', 4000000000, 4000000000]]:
+        add('CMS.INITBYDIM', *args)
+    for args in [['cms:p1', 0.001, 0.01], ['cms:p2', 0.1, 0.3], ['cms:p3', 0.05, 0.125], ['cms:p4', '1e-2', 0.5],
+                 ['cms:a', 'x', 0.5], ['cms:p5', 0, 0.5], ['cms:p6', 0.5, 1], ['cms:p7', 'nan', 0.5], ['cms:p8', ' 0.5', 0.5]]:
+        add('CMS.INITBYPROB', *args)
+    for key in ['cms:p1', 'cms:p2', 'cms:p3', 'cms:p4']:
+        add('CMS.INFO', key)
+    for pairs in [['a', 3, 'b', 1], ['a', '007'], ['a', '+1'], ['a', -1], ['a', 'x'], ['a', 1, 'b', 'x'],
+                  ['big', 4294967296], ['max', 4294967295], ['huge', 9223372036854775807]]:
+        add('CMS.INCRBY', 'cms:a', *pairs)
+    add('CMS.INCRBY', 'cms:b', 'a', 5)
+    add('CMS.QUERY', 'cms:a', 'a', 'b', 'big', 'max', 'nope')
+    for key in ['cms:a', 'cms:missing', 'str', 'bf:held']:
+        add('CMS.INFO', key)
+        add('CMS.INCRBY', key, 'a', 1)
+        add('CMS.QUERY', key, 'a')
+    add('CMS.INITBYDIM', 'cms:dest', 100, 5)
+    for args in [[2, 'cms:b', 'cms:dest'], [2, 'cms:b', 'cms:b', 'WEIGHTS', 2, 3], [2, 'cms:dest', 'cms:b', 'weights', 1, -1],
+                 ['x', 'cms:b'], [0, 'cms:b'], [-1, 'cms:b'], [2, 'cms:b'], [1, 'cms:b', 'cms:a'], [1, 'cms:b', 'WEIGHTS'],
+                 [1, 'cms:b', 'WEIGHTS', 1, 2], [2, 'cms:b', 'WEIGHTS', 1, 2], [1, 'cms:b', 'WEIGHTS', 'x'],
+                 [2, 'cms:missing', 'cms:b', 'WEIGHTS', 1, 'x'], [2, 'cms:b', 'cms:missing', 'WEIGHTS', 1, 'x'],
+                 [1, 'cms:missing'], [1, 'str'], [1, 'cms:small'], [1, 'cms:b', 'WEIGHTS', -1],
+                 [1, 'cms:a'], [2, 'cms:a', 'cms:a']]:
+        add('CMS.MERGE', 'cms:dest', *args)
+        add('CMS.QUERY', 'cms:dest', 'a', 'b')
+        add('CMS.INFO', 'cms:dest')
+    for key in ['cms:missing', 'str']:
+        add('CMS.MERGE', key, 1, 'cms:b')
+    for command, args in [('CMS.INFO', []), ('CMS.INFO', ['k', 'x']), ('CMS.MERGE', ['k', 1]), ('CMS.MERGE', ['k'])]:
+        arity(command, *args)
+
     # A command with the wrong number of arguments is refused for that before
     # its key is looked at.
     for command in [['BF.RESERVE', 'str', 0.01], ['BF.RESERVE', 'cf:held', 0.01, 100, 'a', 'b', 'c', 'd'],
@@ -473,8 +582,10 @@ class Random:
             item, other = rng.choice(items), rng.choice(items)
             choices = [step('BF.EXISTS', key, item), step('BF.MEXISTS', key, item, other),
                        step('BF.INFO', key, mask=LAYOUT), step('BF.INFO', key, rng.choice(['ITEMS', 'capacity', 'Filters', 'expansion']))]
+            choices.append(step('BF.CARD', key))
             if key != 'bf:missing':
-                choices += [step('BF.ADD', key, item), step('BF.MADD', key, item, other), step('BF.RESERVE', key, 0.01, 100)]
+                choices += [step('BF.ADD', key, item), step('BF.MADD', key, item, other), step('BF.RESERVE', key, 0.01, 100),
+                            step('BF.INSERT', key, 'NOCREATE', 'ITEMS', item, other)]
             return rng.choice(choices)
         key = rng.choice(list(self.cuckoo) + ['cf:missing', 'str', 'bf:r0'])
         items = self.cuckoo.get(key, ITEMS)
@@ -484,9 +595,10 @@ class Random:
         choices = [step('CF.EXISTS', key, item), step('CF.MEXISTS', key, item, other),
                    step('CF.COUNT', key, item), step('CF.DEL', key, item), step('CF.INFO', key, mask=mask)]
         if key != 'cf:missing':
-            choices += [step('CF.ADDNX', key, item), step('CF.RESERVE', key, 1000)]
+            choices += [step('CF.ADDNX', key, item), step('CF.RESERVE', key, 1000),
+                        step('CF.INSERTNX', key, 'NOCREATE', 'ITEMS', item), step('CF.COMPACT', key)]
             if count < 3:
-                choices.append(step('CF.ADD', key, item))
+                choices += [step('CF.ADD', key, item), step('CF.INSERT', key, 'NOCREATE', 'ITEMS', item)]
         chosen = rng.choice(choices)
         self.track(chosen['command'])
         return chosen
@@ -496,6 +608,8 @@ class Random:
         if key not in self.cuckoo:
             return
         item = command[2] if len(command) > 2 else None
+        if name in ('CF.INSERT', 'CF.INSERTNX'):
+            name, item = name.replace('INSERT', 'ADD'), command[4]
         count = self.copies.get((key, item), 0)
         if name == 'CF.ADD' or (name == 'CF.ADDNX' and count == 0):
             self.copies[(key, item)] = count + 1
