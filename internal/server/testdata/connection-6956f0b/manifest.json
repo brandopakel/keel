@@ -1,5 +1,5 @@
 {
-  "source_revision": "c00eb77",
+  "source_revision": "6956f0b",
   "captured": "2026-10-13",
   "note": "The connection commands' RESP2 and RESP3 replies at source_revision; see connection_golden_test.go.",
   "files": {

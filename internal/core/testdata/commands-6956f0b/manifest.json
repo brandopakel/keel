@@ -1,19 +1,19 @@
 {
-  "source_revision": "c00eb77",
+  "source_revision": "6956f0b",
   "captured": "2026-10-13",
   "note": "Every command's RESP2 and RESP3 replies and log records at source_revision; see command_golden_test.go.",
   "files": {
     "bloom.txt": {
-      "sha256": "840be97747c81d012bb66cfd875bbaa9e6a894f995c834ab91ed4a4b7e1efac7",
-      "cases": 3,
-      "commands": 85,
-      "records": 19
+      "sha256": "a560b5b222cfd0bf011f993e9d015d1aa520d92acf65ca5e7ae1c8bbea4d71b3",
+      "cases": 4,
+      "commands": 115,
+      "records": 27
     },
     "cuckoo.txt": {
-      "sha256": "d034c86c3c7c8981768a6af7f680f65006d1a49d073f12a0b5ac0bccc3936c7e",
-      "cases": 2,
-      "commands": 93,
-      "records": 28
+      "sha256": "24a6e7d916ea46c2038a1a785b63ce615d62637af083c49971adf4620e84fb69",
+      "cases": 3,
+      "commands": 122,
+      "records": 38
     },
     "dump.txt": {
       "sha256": "107ecb5b71fa22974d6289e7e6716cbc96eb7b3e1df822f0f130beb2dcbc9332",
@@ -34,10 +34,10 @@
       "records": 21
     },
     "hll.txt": {
-      "sha256": "6b4e2ea85ecaa49460d99a592e57aab6a511cce1dff6b5fabf341b263f2b211a",
+      "sha256": "8fd8a017e957826879cce4bcd5cf730ad0b8976e2ed6a2b314e9f397aea2db23",
       "cases": 1,
       "commands": 33,
-      "records": 13
+      "records": 11
     },
     "keys.txt": {
       "sha256": "04c1ab9e3da43d2da64e52feb265736265db141a2ad30852d3fe8119f81f6499",
@@ -52,9 +52,9 @@
       "records": 67
     },
     "refusals.txt": {
-      "sha256": "05e7c8ede181140f818a2f8723d29c0d31d1d7928cfa3c199bc30a58e45d5c64",
+      "sha256": "40f85a447e9cb129fbf4274b67824eec4eb967751b8d252eadea25a5641becd2",
       "cases": 2,
-      "commands": 232,
+      "commands": 240,
       "records": 0
     },
     "replication.txt": {
@@ -76,10 +76,10 @@
       "records": 16
     },
     "sketches.txt": {
-      "sha256": "596cb8b05d15957059cf48997c82137ae0acd855ee524a774cba1e40c1f25e94",
-      "cases": 2,
-      "commands": 81,
-      "records": 13
+      "sha256": "dd07b90c685241aa6051fadabbbb1852d5abe3034670b539af825a5d8269dd7c",
+      "cases": 3,
+      "commands": 119,
+      "records": 26
     },
     "strings.txt": {
       "sha256": "2c2686280ca1e01edf9b6ad36c5bcd381b0e2c92af76356502d42b3611254d90",
