@@ -155,9 +155,13 @@ func (r listRange) visit(yield func(string) bool) { r.l.VisitRange(r.start, r.st
 
 // opLRange is the elements of the list key holds from start to stop, both
 // inclusive, counting from the tail when negative, and empty when the range
-// falls outside the list; false when key holds no list: LRANGE.
+// falls outside the list; false when key holds no list: LRANGE. Its lookup
+// is a keyspace hit or a miss, counted here, after the command language has
+// read start and stop, as Redis's lrangeCommand reads them before it looks
+// (readsAfterArguments).
 func (e *Engine) opLRange(key string, start, stop int) (listRange, bool) {
 	l, ok := e.listFor(key)
+	e.noteLookup(ok)
 	return listRange{l: l, start: start, stop: stop}, ok
 }
 
