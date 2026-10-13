@@ -65,6 +65,12 @@ CASES = [[c] for c in [
     ['GETDEL', 'hash'], ['GETSET', 'str', 'x'], ['GETSET', 'missing', 'x'], ['APPEND', 'str', 'x'],
     ['APPEND', 'missing', 'x'], ['SETRANGE', 'str', '0', 'x'], ['INCRBYFLOAT', 'num', '1.5'],
     ['INCRBYFLOAT', 'missing', '1.5'], ['MSETNX', 'str', '1', 'n2', '2'], ['MSETNX', 'n3', '1', 'n4', '2'],
+    ['DIGEST', 'str'], ['DIGEST', 'missing'], ['DIGEST', 'hash'], ['DELEX', 'str'], ['DELEX', 'missing'],
+    ['DELEX', 'str', 'IFEQ', 'abc'], ['DELEX', 'str', 'IFNE', 'abc'], ['DELEX', 'missing', 'IFEQ', 'x'],
+    ['DELEX', 'hash', 'IFEQ', 'x'], ['SET', 'str', 'x', 'IFEQ', 'abc'], ['SET', 'str', 'x', 'IFEQ', 'nomatch'],
+    ['SET', 'missing', 'x', 'IFEQ', 'y'], ['SET', 'missing', 'x', 'IFNE', 'y'], ['SET', 'str', 'x', 'GET', 'IFEQ', 'abc'],
+    ['SET', 'hash', 'x', 'IFEQ', 'y'], ['MSETEX', '1', 'str', 'y', 'EX', '100'], ['MSETEX', '2', 'str', 'y', 'n5', 'z', 'NX'],
+    ['INCREX', 'num'], ['INCREX', 'missing', 'BYFLOAT', '1.5'], ['INCREX', 'hash'],
     # The keyspace.
     ['DEL', 'str', 'missing'], ['UNLINK', 'str'], ['EXISTS', 'str', 'missing', 'str'], ['TYPE', 'str'],
     ['TYPE', 'missing'], ['KEYS', '*'], ['SCAN', '0'], ['TTL', 'str'], ['TTL', 'missing'], ['PTTL', 'str'],
