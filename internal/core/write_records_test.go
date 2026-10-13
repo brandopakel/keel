@@ -184,3 +184,48 @@ func TestReplicaAppliesTheStringCommandsRecords(t *testing.T) {
 	require.True(t, e.replicaReady)
 	require.Equal(t, want, stringStateOn(e, keys...))
 }
+
+// TestReplicaAppliesTheRedis8StringCommandsRecords: a protocol 2 replica
+// applies the records of the string commands Redis 8 added - SET's
+// conditions as SET, DELEX as DEL, MSETEX as a DEL of a replaced key and SET
+// and PEXPIREAT per key, INCREX as SET with KEEPTTL, SET then PEXPIREAT, a
+// plain SET under PERSIST, or the DEL an expiry already past amounts to -
+// and ends with the primary's strings and expiries.
+func TestReplicaAppliesTheRedis8StringCommandsRecords(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setupReplicationV2On(t, e)
+	frames := snapshotV2On(t, e)
+	base, epoch := frames[0].To, frames[0].Epoch
+	for _, cmd := range [][]string{
+		{"SET", "k", "v"}, {"SET", "k", "w", "IFEQ", "v"}, {"SET", "k", "x", "IFNE", "nomatch", "EX", "100000"},
+		{"SET", "k", "y", "IFDEQ", stringDigest("x"), "KEEPTTL"}, {"SET", "d", "v"}, {"DELEX", "d", "IFEQ", "v"},
+		{"SET", "d2", "v"}, {"DELEX", "d2"}, {"HSET", "h", "f", "v"},
+		{"MSETEX", "3", "h", "1", "m", "2", "k", "3", "PX", "100000000"}, {"MSETEX", "1", "m", "4", "KEEPTTL"},
+		{"INCREX", "n", "BYINT", "5"}, {"INCREX", "n", "EX", "100000"}, {"INCREX", "n", "ENX", "EX", "5"},
+		{"INCREX", "n", "PERSIST"}, {"INCREX", "fl", "BYFLOAT", "10.5"}, {"INCREX", "fl", "BYFLOAT", "0.1", "UBOUND", "11"},
+		{"INCREX", "sat", "BYINT", "50", "UBOUND", "10", "SATURATE"}, {"SET", "gone", "1"}, {"INCREX", "gone", "EXAT", "1"},
+	} {
+		reply := rawReplyOn(t, e, cmd[0], cmd[1:]...)
+		require.NotEqual(t, byte('-'), reply[0], "%v: %q", cmd, reply)
+	}
+	delta := pullV2On(t, e, epoch, base, "", 0)
+	keys := []string{"k", "d", "d2", "h", "m", "n", "fl", "sat", "gone"}
+	want := stringStateOn(e, keys...)
+	require.Contains(t, want["k"], "3 expires true")
+	require.Contains(t, want["m"], "4 expires true")
+	require.Equal(t, "8 expires false 0", want["n"])
+	require.Equal(t, "10.6 expires false 0", want["fl"])
+	require.Equal(t, "10 expires false 0", want["sat"])
+	require.Equal(t, "(none)", want["gone"])
+	becomeReplicaV2On(t, e)
+	for _, frame := range frames {
+		require.NoError(t, e.ApplyReplication(frame))
+	}
+	require.NoError(t, e.ApplyReplication(delta))
+	require.True(t, e.replicaReady)
+	require.Equal(t, want, stringStateOn(e, keys...))
+	_, hashLeft := e.space.OwnerOf("h")
+	require.True(t, hashLeft, "h holds the string MSETEX stored")
+	require.Equal(t, "string", runOn(t, e, "TYPE", "h"))
+}
