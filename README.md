@@ -72,6 +72,34 @@ its options are not checked.
   and `keel` is `present` or `missing`. It is replaced only by a newer census
   of `develop`.
 
+The same workflow runs the argument census (`scripts/argument-census.py`).
+It sends every argument form Redis's own command specifications document
+(`src/commands/*.json` in the Redis source) to Keel and to Redis, for every
+command Keel has, and compares the replies. A form is the base form, or the
+base form with one documented option, alternative or repetition added.
+
+- `argument-runs.csv`: one line per census:
+  - `commands` and `forms`: how many commands and subcommands Keel has, and
+    how many forms they document.
+  - `accepted`: forms Keel answers as Redis does.
+  - `refused`: forms Keel answers with an error where Redis answers a value.
+  - `wrong_reply`: forms both answer, differently.
+  - `redis8_forms` and `redis8_accepted`: the forms Redis 8 added, and how
+    many of them Keel accepts.
+  - `no_reply` and `control`: failures of the method itself, which fail the
+    run. A control failure is a form Redis itself refuses.
+- `argument-areas.csv`: the same counts per command group of each census.
+- `arguments.csv`: every form of the newest census of `develop`:
+  - `command`, and `form`: the option exercised, or `base`.
+  - `since`: the Redis version that added the option.
+  - `sent`: the command as sent, with the password shown as `<password>`.
+  - `class` and `detail`.
+  - `keel` and `redis`: both replies, in a short protocol notation (`+OK`,
+    `:1`, `$abc`, `*[...]`, `-ERR ...`).
+
+  It is replaced only by a newer census of `develop`. A census from before
+  the argument census (October 12, 2026) has no lines in these files.
+
 ## telemetry/
 
 The Live telemetry workflow (`.github/workflows/telemetry.yml`), which runs
