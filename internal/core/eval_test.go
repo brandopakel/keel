@@ -122,6 +122,9 @@ func TestEveryRegisteredCommandIsTypeCheckedOrDeliberatelyNot(t *testing.T) {
 		"DELEX": true, // DEL of a key of any type, and its own refusal of one with a condition
 		"TOUCH": true, "RENAME": true, "RENAMENX": true, "EXPIRETIME": true, "PEXPIRETIME": true,
 		"COPY": true, "RANDOMKEY": true,
+		"ZRANGESTORE": true, "ZMPOP": true, // several keys, each type checked where Redis checks it
+		"ZUNION": true, "ZINTER": true, "ZDIFF": true, "ZUNIONSTORE": true, "ZINTERSTORE": true,
+		"ZDIFFSTORE": true, "ZINTERCARD": true, "GEOSEARCHSTORE": true,
 		"FLUSHDB": true, "DBSIZE": true, "MEMORY": true, "INFO": true, "CONFIG": true, "LATENCY": true, "SLOWLOG": true, "BGREWRITEAOF": true, "SCAN": true,
 		"KEEL.DUMP": true, "KEEL.RESTORE": true, "MEMKV.DUMP": true, "MEMKV.RESTORE": true,
 		"TTL": true, "PTTL": true, "EXPIRE": true, "PEXPIRE": true, "EXPIREAT": true, "PEXPIREAT": true, "PERSIST": true, "MORRIS.INFO": true,

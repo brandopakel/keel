@@ -14,6 +14,17 @@ const maxGeoPoints = MaxReplyBytes / 48
 type geoWalk func(func(data_structure.GeoPoint) bool)
 
 func (e *Engine) geoSearchReply(z *data_structure.ZSet, radius data_structure.GeoHashRadius, s *geoSearch) []byte {
+	walk, refusal := e.geoSearchWalk(z, radius, s)
+	if refusal != nil {
+		return refusal
+	}
+	return e.geoPointsReply(walk, s)
+}
+
+// geoSearchWalk is the search's result as a walk: every point found, in the
+// order found, or with an order the nearest or farthest COUNT of them, in
+// that order; a refusal when the selection would be too large to keep.
+func (e *Engine) geoSearchWalk(z *data_structure.ZSet, radius data_structure.GeoHashRadius, s *geoSearch) (geoWalk, []byte) {
 	var walk geoWalk = func(yield func(data_structure.GeoPoint) bool) {
 		count := 0
 		z.VisitGeoNeighbors(radius, &s.shape, func(p data_structure.GeoPoint) bool {
@@ -34,12 +45,12 @@ func (e *Engine) geoSearchReply(z *data_structure.ZSet, radius data_structure.Ge
 				return limit <= maxGeoPoints && (requested <= 0 || limit < requested)
 			})
 			if limit > maxGeoPoints {
-				return replyTooLarge
+				return nil, replyTooLarge
 			}
 		}
 		limit = min(limit, z.Len())
 		if !e.reserveCommandMemory(limit*48 + 4096) {
-			return allocationPressure
+			return nil, allocationPressure
 		}
 		points := make([]data_structure.GeoPoint, 0, limit)
 		better := func(a, b data_structure.GeoPoint) bool {
@@ -88,6 +99,12 @@ func (e *Engine) geoSearchReply(z *data_structure.ZSet, radius data_structure.Ge
 			}
 		}
 	}
+	return walk, nil
+}
+
+// geoPointsReply answers the points walk yields, as GEOSEARCH and the
+// GEORADIUS family do.
+func (e *Engine) geoPointsReply(walk geoWalk, s *geoSearch) []byte {
 	// The closures handed to walk escape, so they capture the framing, not
 	// the engine, and leave the engine's escape analysis as it was.
 	f := e.framing

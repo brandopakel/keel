@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/brandopakel/keel/internal/constant"
+	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 func scoreBound(text string) (value float64, exclusive bool, err error) {
@@ -55,52 +56,131 @@ func (e *Engine) cmdZCOUNT(args []string) []byte {
 	return reply.Int(int64(z.CountByScore(r.min, r.max, r.minEx, r.maxEx))).Bytes()
 }
 
-func (e *Engine) cmdZRANGEBYSCORE(args []string) []byte {
-	return e.scoreRange("ZRANGEBYSCORE", args, false)
-}
-func (e *Engine) cmdZREVRANGEBYSCORE(args []string) []byte {
-	return e.scoreRange("ZREVRANGEBYSCORE", args, true)
+// zrangeKind is how a range is given: by rank, by score, or by member.
+type zrangeKind uint8
+
+const (
+	zrangeAuto zrangeKind = iota
+	zrangeRank
+	zrangeScore
+	zrangeLex
+)
+
+// zrangeDirection is a range's direction: chosen by REV (auto), or fixed by
+// the command's name.
+type zrangeDirection uint8
+
+const (
+	zrangeDirectionAuto zrangeDirection = iota
+	zrangeForward
+	zrangeReverse
+)
+
+// zrangeArguments is how a range was asked for.
+type zrangeArguments struct {
+	kind                zrangeKind
+	reverse, withScores bool
+	// offset and count are LIMIT's, count -1 when it was not given.
+	offset, count int
+	start, stop   int
+	scores        scoreInterval
+	lex           data_structure.LexRange
 }
 
-// parseScoreRange reads ZRANGEBYSCORE's and ZREVRANGEBYSCORE's arguments in
-// Redis's order, the options before the range.
-func (e *Engine) parseScoreRange(args []string, reverse bool) (r scoreInterval, withScores bool, offset, count int, err error) {
-	count = -1
+var (
+	errLexRange        = errors.New("ERR min or max not valid string range item")
+	errLimitWithRank   = errors.New("ERR syntax error, LIMIT is only supported in combination with either BYSCORE or BYLEX")
+	errWithScoresBylex = errors.New("ERR syntax error, WITHSCORES not supported in combination with BYLEX")
+)
+
+// parseLexInterval reads a range of members lowest first, refused in Redis's
+// words for either end.
+func parseLexInterval(lower, upper string) (data_structure.LexRange, error) {
+	min, ok1 := data_structure.ParseLexBound(lower)
+	max, ok2 := data_structure.ParseLexBound(upper)
+	if !ok1 || !ok2 {
+		return data_structure.LexRange{}, errLexRange
+	}
+	return data_structure.LexRange{Min: min, Max: max}, nil
+}
+
+// parseZRangeArguments reads key min max [options] the way Redis's
+// zrangeGenericCommand does for every range command (t_zset.c, 3930-4021):
+// the options first - WITHSCORES (not for a store), LIMIT offset count, and
+// REV, BYSCORE and BYLEX where the command's name leaves them open - then
+// whether they agree, then the range itself, given from the first end walked.
+func (e *Engine) parseZRangeArguments(args []string, store bool, kind zrangeKind, dir zrangeDirection) (z zrangeArguments, err error) {
+	z.count = -1
 	for i := 3; i < len(args); i++ {
 		switch opt := strings.ToUpper(args[i]); {
-		case opt == "WITHSCORES":
-			withScores = true
+		case !store && opt == "WITHSCORES":
+			z.withScores = true
 		case opt == "LIMIT" && i+2 < len(args):
-			if offset, count, err = e.integerRange(args[i+1], args[i+2]); err != nil {
-				return r, false, 0, 0, err
+			if z.offset, z.count, err = e.integerRange(args[i+1], args[i+2]); err != nil {
+				return z, err
 			}
 			i += 2
+		case dir == zrangeDirectionAuto && opt == "REV":
+			dir = zrangeReverse
+		case kind == zrangeAuto && opt == "BYLEX":
+			kind = zrangeLex
+		case kind == zrangeAuto && opt == "BYSCORE":
+			kind = zrangeScore
 		default:
-			return r, false, 0, 0, errSyntax
+			return z, errSyntax
 		}
 	}
+	if kind == zrangeAuto {
+		kind = zrangeRank
+	}
+	z.kind, z.reverse = kind, dir == zrangeReverse
+	if z.count != -1 && kind == zrangeRank {
+		return z, errLimitWithRank
+	}
+	if z.withScores && kind == zrangeLex {
+		return z, errWithScoresBylex
+	}
 	lower, upper := args[1], args[2]
-	if reverse {
+	if z.reverse && kind != zrangeRank {
 		lower, upper = upper, lower
 	}
-	r, err = parseScoreInterval(lower, upper)
-	return r, withScores, offset, count, err
+	switch kind {
+	case zrangeScore:
+		z.scores, err = parseScoreInterval(lower, upper)
+	case zrangeLex:
+		z.lex, err = parseLexInterval(lower, upper)
+	default:
+		z.start, z.stop, err = e.integerRange(lower, upper)
+	}
+	return z, err
 }
 
-func (e *Engine) scoreRange(name string, args []string, reverse bool) []byte {
+// zrangeWalk walks z's range of zs, member by member with its score.
+func zrangeWalk(zs *data_structure.ZSet, z zrangeArguments) func(func(string, float64) bool) {
+	return func(yield func(string, float64) bool) {
+		switch z.kind {
+		case zrangeScore:
+			r := z.scores
+			zs.VisitRangeByScore(r.min, r.max, r.minEx, r.maxEx, z.offset, z.count, z.reverse, yield)
+		case zrangeLex:
+			zs.VisitRangeByLex(z.lex, z.offset, z.count, z.reverse, yield)
+		default:
+			zs.VisitRangeByRank(z.start, z.stop, z.reverse, yield)
+		}
+	}
+}
+
+// zrangeCommand answers a range command: ZRANGE, ZRANGEBYSCORE,
+// ZREVRANGEBYSCORE, ZREVRANGE, ZRANGEBYLEX and ZREVRANGEBYLEX.
+func (e *Engine) zrangeCommand(name string, args []string, kind zrangeKind, dir zrangeDirection) []byte {
 	if len(args) < 3 {
 		return e.encode(wrongArguments(name), false)
 	}
-	r, withScores, offset, count, err := e.parseScoreRange(args, reverse)
+	z, err := e.parseZRangeArguments(args, false, kind, dir)
 	if err != nil {
 		return e.encode(err, false)
 	}
-	return e.scoreRangeReply(args[0], r, offset, count, reverse, withScores)
-}
-
-// scoreRangeReply answers the members of key whose scores are within r.
-func (e *Engine) scoreRangeReply(key string, r scoreInterval, offset, count int, reverse, withScores bool) []byte {
-	z, ok := e.zsetFor(key)
+	zs, ok := e.zsetFor(args[0])
 	// A keyspace hit or a miss, counted after the range and options were
 	// read, as Redis's zrangeGenericCommand reads them before it looks the
 	// key up.
@@ -108,13 +188,42 @@ func (e *Engine) scoreRangeReply(key string, r scoreInterval, offset, count int,
 	if !ok {
 		return constant.RespEmptyArray
 	}
-	walk := func(yield func(string, float64) bool) {
-		z.VisitRangeByScore(r.min, r.max, r.minEx, r.maxEx, offset, count, reverse, yield)
-	}
-	if withScores && e.replyRESP3 {
+	walk := zrangeWalk(zs, z)
+	if z.withScores && e.replyRESP3 {
 		return e.scoredReply3(walk, true)
 	}
-	return e.scoredReply(walk, withScores)
+	return e.scoredReply(walk, z.withScores)
+}
+
+func (e *Engine) cmdZRANGE(args []string) []byte {
+	return e.zrangeCommand("ZRANGE", args, zrangeAuto, zrangeDirectionAuto)
+}
+func (e *Engine) cmdZRANGEBYSCORE(args []string) []byte {
+	return e.zrangeCommand("ZRANGEBYSCORE", args, zrangeScore, zrangeForward)
+}
+func (e *Engine) cmdZREVRANGEBYSCORE(args []string) []byte {
+	return e.zrangeCommand("ZREVRANGEBYSCORE", args, zrangeScore, zrangeReverse)
+}
+func (e *Engine) cmdZREVRANGE(args []string) []byte {
+	return e.zrangeCommand("ZREVRANGE", args, zrangeRank, zrangeReverse)
+}
+func (e *Engine) cmdZRANGEBYLEX(args []string) []byte {
+	return e.zrangeCommand("ZRANGEBYLEX", args, zrangeLex, zrangeForward)
+}
+func (e *Engine) cmdZREVRANGEBYLEX(args []string) []byte {
+	return e.zrangeCommand("ZREVRANGEBYLEX", args, zrangeLex, zrangeReverse)
+}
+
+// zrangeArgumentChecks are the range commands' refusals of their arguments,
+// which Redis reads before the key, for argumentsBeforeType.
+func zrangeArgumentCheck(kind zrangeKind, dir zrangeDirection, store bool) func(*Engine, []string) error {
+	return func(e *Engine, args []string) error {
+		if store {
+			args = args[1:]
+		}
+		_, err := e.parseZRangeArguments(args, store, kind, dir)
+		return err
+	}
 }
 
 func (e *Engine) cmdZINCRBY(args []string) []byte {

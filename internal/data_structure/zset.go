@@ -26,6 +26,13 @@ const (
 	ZAddNX = 1 << iota
 	// ZAddXX rescores existing members only; a new member is not added.
 	ZAddXX
+	// ZAddGT and ZAddLT rescore a member only to a greater or a lesser score;
+	// a new member is added as usual.
+	ZAddGT
+	ZAddLT
+	// ZAddIncr adds the score to a member's current one, a new member's being
+	// 0, as ZADD's INCR and ZINCRBY do.
+	ZAddIncr
 )
 
 // ZAddResult says what Add did with a member.
@@ -39,6 +46,10 @@ const (
 	ZAddAdded
 	// ZAddUpdated means the member was present and its score changed.
 	ZAddUpdated
+	// ZAddUnchanged means AddScore found the member present and the score it
+	// would take the one it has: processed, as Redis counts it for INCR's
+	// reply, but not changed. Add answers ZAddNop instead.
+	ZAddUnchanged
 )
 
 func CreateZSet() *ZSet {
@@ -75,6 +86,49 @@ func (zs *ZSet) Add(score float64, member string, flags int) ZAddResult {
 	zs.memberBytes += uint64(len(member))
 	zs.indexWritten(member, score)
 	return ZAddAdded
+}
+
+// AddScore is Add with ZADD's GT, LT and INCR as well, as Redis's zsetAdd
+// applies them: NX leaves a present member alone; INCR adds the score to the
+// member's current one; GT and LT then keep the current score unless the new
+// one is greater or lesser; a score that does not change is not an update.
+// It answers what happened and the member's score afterwards. A sum that is
+// not a number is refused (nan) and changes nothing.
+func (zs *ZSet) AddScore(score float64, member string, flags int) (result ZAddResult, newScore float64, nan bool) {
+	if math.IsNaN(score) {
+		return ZAddNop, 0, true
+	}
+	current, present := zs.dict[member]
+	if present {
+		if flags&ZAddNX != 0 {
+			return ZAddNop, current, false
+		}
+		if flags&ZAddIncr != 0 {
+			score += current
+			if math.IsNaN(score) {
+				return ZAddNop, current, true
+			}
+		}
+		if (flags&ZAddLT != 0 && score >= current) || (flags&ZAddGT != 0 && score <= current) {
+			return ZAddNop, current, false
+		}
+		if score == current {
+			return ZAddUnchanged, current, false
+		}
+		zs.advanceIndexCursor(member)
+		zs.sl.updateScore(current, member, score)
+		zs.dict[member] = score
+		zs.indexWritten(member, score)
+		return ZAddUpdated, score, false
+	}
+	if flags&ZAddXX != 0 {
+		return ZAddNop, 0, false
+	}
+	zs.sl.insert(score, member)
+	zs.dict[member] = score
+	zs.memberBytes += uint64(len(member))
+	zs.indexWritten(member, score)
+	return ZAddAdded, score, false
 }
 
 // Remove takes member out and reports whether it was there.
