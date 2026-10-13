@@ -121,8 +121,9 @@ const (
 	keyFirstTwo                    // LCS's two keys, a move's source and destination, and RENAME's, RENAMENX's and COPY's
 	keyStride                      // every n-th argument, from the first: strideKeyCommands
 	keyEvery                       // every argument: multiKeyCommands
-	keyCounted                     // as many as the first argument counts, after it: LMPOP's
+	keyCounted                     // as many as the first argument counts, after it: LMPOP's, ZUNION's, ZMPOP's
 	keyCountedPairs                // MSETEX's: a count, then that many key value pairs
+	keyDestCounted                 // the STORE forms': a destination, then a count and that many keys
 )
 
 // keyRuleOf is name's rule. Dispatch works it out once per command, in the
@@ -130,10 +131,13 @@ const (
 func keyRuleOf(name string) keyRule {
 	switch {
 	case name == "LCS" || name == "LMOVE" || name == "RPOPLPUSH" || name == "LMOVEM",
-		name == "RENAME" || name == "RENAMENX" || name == "COPY":
+		name == "RENAME" || name == "RENAMENX" || name == "COPY",
+		name == "ZRANGESTORE" || name == "GEOSEARCHSTORE":
 		return keyFirstTwo
-	case name == "LMPOP":
+	case name == "LMPOP", name == "ZUNION", name == "ZINTER", name == "ZDIFF", name == "ZINTERCARD", name == "ZMPOP":
 		return keyCounted
+	case name == "ZUNIONSTORE", name == "ZINTERSTORE", name == "ZDIFFSTORE":
+		return keyDestCounted
 	case name == "MSETEX":
 		return keyCountedPairs
 	case strideKeyCommands[name] != 0:
@@ -162,15 +166,11 @@ func keysBy(cmd *Command, rule keyRule) []string {
 	case keyEvery:
 		return cmd.Args
 	case keyCounted:
-		// numkeys, then the keys it counts: none when it counts none, or more
-		// than follow it, which the command refuses.
-		n, valid := canonicalInteger(cmd.Args[0])
-		if !valid || n < 1 || n >= int64(len(cmd.Args)) {
-			return nil
-		}
-		return cmd.Args[1 : 1+n]
+		return countedKeys(cmd.Args)
 	case keyCountedPairs:
 		return msetexKeys(cmd.Args)
+	case keyDestCounted:
+		return append([]string{cmd.Args[0]}, countedKeys(cmd.Args[1:])...)
 	}
 	return cmd.Args[:1]
 }
@@ -382,7 +382,7 @@ func writtenKeys(cmd *Command) []string {
 	case "ZMPOP":
 		// Which of its keys it pops is known only once it has run, so all of
 		// them count, as PFMERGE's sources do.
-		return zmpopKeys(cmd.Args)
+		return countedKeys(cmd.Args)
 	}
 	if _, known := commandKeyspace[cmd.Cmd]; known {
 		return commandKeys(cmd)
@@ -531,11 +531,15 @@ func (e *Engine) checkKeyTypes(cmd *Command, entry commandEntry) error {
 	return nil
 }
 
-// zmpopKeys are the keys ZMPOP names: numkeys of them after numkeys, or none
-// when numkeys is not a count of the arguments that follow.
-func zmpopKeys(args []string) []string {
+// countedKeys are the keys a count in the first argument names after it,
+// as LMPOP's, ZUNION's and ZMPOP's numkeys does: none when it counts none,
+// or more than follow it, which the command refuses.
+func countedKeys(args []string) []string {
+	if len(args) == 0 {
+		return nil
+	}
 	n, valid := canonicalInteger(args[0])
-	if !valid || n < 1 || n >= int64(len(args)-1) {
+	if !valid || n < 1 || n > int64(len(args)-1) {
 		return nil
 	}
 	return args[1 : 1+n]
