@@ -425,7 +425,11 @@ and RedisBloom's `RedisModule_OpenKey` modes:
     `GETSET`;
   - `EXISTS` (per argument, repeats included), `TYPE`, `TTL`, `PTTL`;
   - the hash, list, set and sorted-set reads, and `GEODIST`, `GEOHASH`,
-    `GEOPOS`, `GEOSEARCH`;
+    `GEOPOS`, `GEOSEARCH` and the `GEORADIUS` family;
+  - the sources of `ZRANGESTORE`, `GEOSEARCHSTORE`, `ZUNION`, `ZINTER`,
+    `ZDIFF`, their `STORE` forms and `ZINTERCARD`, each looked up before
+    the options are read, and stopping at the first key of another type, as
+    Redis's `zunionInterDiffGenericCommand` does;
   - `PFCOUNT`, and `PFMERGE` with its destination;
   - `SET`'s `GET` option;
   - RedisBloom's reads (`BF.EXISTS`, `BF.MEXISTS`, `BF.INFO`, `CF.EXISTS`,
@@ -454,7 +458,9 @@ of another type, once those arguments have passed; `stats-parity.py` has a
 case with a bad argument for each. Strings are converted: `GETRANGE`,
 `SUBSTR` and `GETEX` count this way; so, of sets, does `SRANDMEMBER` with
 a count, and of sorted sets and geo `ZCOUNT`, `ZRANGE`, `ZRANGEBYSCORE`,
-`ZREVRANGEBYSCORE`, `ZRANK` and `GEODIST`. **The remaining gap:** the
+`ZREVRANGEBYSCORE`, `ZREVRANGE`, `ZRANGEBYLEX`, `ZREVRANGEBYLEX`, `ZRANK`,
+`ZREVRANK`, `ZLEXCOUNT`, `ZRANDMEMBER`, `ZRANGESTORE`'s source and
+`GEODIST`. **The remaining gap:** the
 families not yet converted (lists) still count through the type check,
 before their arguments are parsed, so a read of theirs with a malformed
 argument counts a hit or a miss that Redis's does not; each family's
