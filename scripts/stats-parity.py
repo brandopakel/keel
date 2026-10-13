@@ -74,6 +74,10 @@ CASES = [[c] for c in [
     # The keyspace.
     ['DEL', 'str', 'missing'], ['UNLINK', 'str'], ['EXISTS', 'str', 'missing', 'str'], ['TYPE', 'str'],
     ['TYPE', 'missing'], ['KEYS', '*'], ['SCAN', '0'], ['TTL', 'str'], ['TTL', 'missing'], ['PTTL', 'str'],
+    ['EXPIRETIME', 'str'], ['EXPIRETIME', 'missing'], ['PEXPIRETIME', 'hash'], ['TOUCH', 'str', 'missing', 'hash', 'str'],
+    ['RENAME', 'str', 'renamed'], ['RENAME', 'missing', 'x'], ['RENAMENX', 'str', 'num'], ['COPY', 'str', 'copied'],
+    ['COPY', 'missing', 'copied'], ['COPY', 'str', 'str'], ['COPY', 'hash', 'num', 'REPLACE'], ['RANDOMKEY'],
+    ['DEL', 'missing'], ['PERSIST', 'missing'],
     ['EXPIRE', 'str', '100'], ['EXPIRE', 'missing', '100'], ['PEXPIRE', 'str', '100000'],
     ['EXPIREAT', 'str', '9999999999'], ['PEXPIREAT', 'str', '9999999999000'], ['PERSIST', 'str'], ['DBSIZE'],
     ['MEMORY', 'USAGE', 'str'], ['MEMORY', 'USAGE', 'missing'], ['CONFIG', 'GET', 'maxmemory'], ['ECHO', 'x'],
