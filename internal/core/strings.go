@@ -349,6 +349,9 @@ func (e *Engine) opStrlen(key string) int64 {
 // selects nothing.
 func (e *Engine) opGetRange(key string, start, end int64) string {
 	obj := e.dictStore.Get(key)
+	// A keyspace hit or a miss, counted here, after the indexes were read,
+	// as Redis's getrangeCommand reads them before it looks the key up.
+	e.noteLookup(obj != nil)
 	if obj == nil {
 		return ""
 	}

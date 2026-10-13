@@ -147,6 +147,9 @@ func (e *Engine) cmdGETEX(args []string) []byte {
 	}
 	r := e.reply()
 	obj := e.dictStore.Get(args[0])
+	// A keyspace hit or a miss, counted after the options were read, as
+	// Redis's getexCommand reads them before it looks the key up.
+	e.noteLookup(obj != nil)
 	if obj == nil {
 		return r.Null().Bytes()
 	}
