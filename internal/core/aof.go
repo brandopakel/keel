@@ -101,10 +101,7 @@ type aofState struct {
 	syncOffset  uint64
 	dirty       bool
 	failed      error
-	// skip says the running command is not logged as it arrived: it
-	// changed nothing (an NX that declined), or it records itself
-	// (recordsItself), its staged records being all the log takes.
-	skip bool
+	skip        bool
 
 	// baseSize is the file's size after the last rewrite, and written what has
 	// been appended since. Their ratio is what the automatic rewrite triggers
@@ -127,14 +124,10 @@ type aofState struct {
 // An explicit list is the one that can be read against eval.go and checked.
 var writeCommands = map[string]bool{
 	"SET": true, "SETNX": true, "MSET": true, "DEL": true, "UNLINK": true, "FLUSHDB": true,
-	"APPEND": true, "SETRANGE": true, "GETDEL": true, "GETEX": true, "GETSET": true, "MSETNX": true,
-	"INCRBYFLOAT": true,
-	"SETEX":       true, "PSETEX": true,
+	"SETEX": true, "PSETEX": true,
 	"EXPIRE": true, "PEXPIREAT": true, "PEXPIRE": true, "EXPIREAT": true, "PERSIST": true, "INCR": true, "INCRBY": true, "DECR": true, "DECRBY": true,
 	"HSET": true, "HSETNX": true, "HDEL": true, "HINCRBY": true,
 	"LPUSH": true, "RPUSH": true, "LPOP": true, "RPOP": true, "LTRIM": true, "LSET": true,
-	"LPUSHX": true, "RPUSHX": true, "LINSERT": true, "LREM": true, "LMOVE": true, "RPOPLPUSH": true,
-	"LMOVEM": true, "LMPOP": true,
 	"SADD": true, "SREM": true, "SPOP": true,
 	"ZADD": true, "ZREM": true, "ZINCRBY": true, "ZPOPMIN": true, "ZPOPMAX": true,
 	"GEOADD":     true,
@@ -343,15 +336,11 @@ func (e *Engine) aofCommit(cmd *Command, reply []byte) {
 	}
 
 	switch {
+	case e.aof.skip:
 	case len(e.aof.staged) > 0:
 		// Staged because the command as it arrived would not replay to the
-		// same state, or because the command records itself, so the staged
-		// records are what goes in the log.
+		// same state, so the replacement is what goes in the log.
 		e.appendStaged()
-	case e.aof.skip:
-		// The command changed nothing, or it records itself and staged
-		// nothing because it changed nothing: either way it is not logged as
-		// it arrived.
 	case !writeCommands[cmd.Cmd]:
 		// A read. Nothing of the command itself is recorded, but it may still
 		// have reaped an expired key, already recorded by the removal hook.

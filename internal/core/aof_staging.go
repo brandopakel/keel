@@ -48,32 +48,6 @@ func (e *Engine) aofRecord(parts ...string) {
 	}
 }
 
-// aofRecordArgs stages the record name followed by args, as MSET's whole
-// argument list follows its name, with no slice made to join them.
-func (e *Engine) aofRecordArgs(name string, args []string) {
-	if e.aof.file == nil || e.aof.replaying {
-		return
-	}
-	e.aof.staged = append(e.aof.staged, stagedPart{n: int64(1 + len(args)), kind: stagedHeader}, stagedPart{s: name})
-	for _, a := range args {
-		e.aof.staged = append(e.aof.staged, stagedPart{s: a})
-	}
-}
-
-// aofRecordKeyArgs stages the record name key followed by args, as LPUSH's,
-// HSET's and SADD's values follow their key, with no slice made to join
-// them.
-func (e *Engine) aofRecordKeyArgs(name, key string, args []string) {
-	if e.aof.file == nil || e.aof.replaying {
-		return
-	}
-	e.aof.staged = append(e.aof.staged, stagedPart{n: int64(2 + len(args)), kind: stagedHeader},
-		stagedPart{s: name}, stagedPart{s: key})
-	for _, a := range args {
-		e.aof.staged = append(e.aof.staged, stagedPart{s: a})
-	}
-}
-
 // aofRecordInt stages the record name key n, whose last part is an integer:
 // PEXPIREAT's instant, INCRBY's increment.
 func (e *Engine) aofRecordInt(name, key string, n int64) {
@@ -84,25 +58,11 @@ func (e *Engine) aofRecordInt(name, key string, n int64) {
 		stagedPart{s: name}, stagedPart{s: key}, stagedPart{n: n, kind: stagedInt})
 }
 
-// recordsItself marks the running command as one whose typed operation
-// stages every record it makes, as every command converted to typed
-// operations is (strings.go): it is never logged as it arrived, and when
-// its operation staged nothing, it changed nothing. aofBegin clears the mark
-// for the next command.
-func (e *Engine) recordsItself() { e.aof.skip = true }
-
 // clearStaged empties the staging area, keeping its storage and dropping its
 // references, so that no value a command staged outlives the command.
-//
-// Only the string of each part is cleared, which is what holds a value: a
-// clear of the whole area measured as a quarter of what staging a record
-// costs.
 func (e *Engine) clearStaged() {
-	staged := e.aof.staged
-	for i := range staged {
-		staged[i].s = ""
-	}
-	e.aof.staged = staged[:0]
+	clear(e.aof.staged)
+	e.aof.staged = e.aof.staged[:0]
 }
 
 // appendStaged writes every staged record to the log, in the order staged.
@@ -144,12 +104,8 @@ func (e *Engine) appendAOFParts(parts []stagedPart) {
 	e.aof.commandChanged = true
 	size := 1 + decimalDigits(len(parts)) + 2
 	fits := true
-	for i := range parts {
-		p := &parts[i]
-		length := len(p.s)
-		if p.kind == stagedInt {
-			length = partSize(*p)
-		}
+	for _, p := range parts {
+		length := partSize(p)
 		overhead := 1 + decimalDigits(length) + 4
 		if length > maxAOFTranscriptBytes-size-overhead {
 			fits = false
@@ -159,20 +115,18 @@ func (e *Engine) appendAOFParts(parts []stagedPart) {
 	}
 	if fits && size <= maxAOFTranscriptBytes-len(e.aof.buf) {
 		e.growAOFBuffer(size)
-		buf := appendArrayHeader(e.aof.buf, len(parts))
-		for i := range parts {
-			p := &parts[i]
+		e.aof.buf = appendArrayHeader(e.aof.buf, len(parts))
+		for _, p := range parts {
 			if p.kind == stagedInt {
-				buf = append(buf, '$')
-				buf = strconv.AppendInt(buf, int64(partSize(*p)), 10)
-				buf = append(buf, '\r', '\n')
-				buf = strconv.AppendInt(buf, p.n, 10)
-				buf = append(buf, '\r', '\n')
+				e.aof.buf = append(e.aof.buf, '$')
+				e.aof.buf = strconv.AppendInt(e.aof.buf, int64(partSize(p)), 10)
+				e.aof.buf = append(e.aof.buf, '\r', '\n')
+				e.aof.buf = strconv.AppendInt(e.aof.buf, p.n, 10)
+				e.aof.buf = append(e.aof.buf, '\r', '\n')
 				continue
 			}
-			buf = appendBulkString(buf, p.s)
+			e.aof.buf = appendBulkString(e.aof.buf, p.s)
 		}
-		e.aof.buf = buf
 		return
 	}
 	// A record too large for what is left of the buffer is drained in

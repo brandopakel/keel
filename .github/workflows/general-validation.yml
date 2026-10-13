@@ -160,6 +160,13 @@ jobs:
           make -C /tmp/redis-8.10.1 -j"$(nproc)" build redisbloom
           /tmp/redis-8.10.1/src/redis-server --version
           ls -l /tmp/redis-8.10.1/modules/redisbloom/redisbloom.so
+      - name: Command specs against Redis 8.10.1's src/commands
+        # The generated descriptors (internal/core/command_specs.go) are what
+        # Redis declares for every command Keel has, read from the same
+        # tarball, and the generator writes that file.
+        run: |
+          python3 scripts/generate-command-specs.py --redis-src /tmp/redis-8.10.1 --check
+          KEEL_REDIS_SRC=/tmp/redis-8.10.1 go test ./internal/core -run '^TestRedisCommandSpecsMatchRedisSource$' -count=1 -v
       - name: Error replies byte for byte against Redis 8.10.1 and RedisBloom
         run: |
           python3 scripts/error-parity.py --bin /tmp/keel-general --redis /tmp/redis-8.10.1/src/redis-server \
@@ -281,6 +288,14 @@ jobs:
           common = ['python3','bench/run-general.py','--candidate','/tmp/keel-candidate','--memtier','/tmp/memtier_benchmark-2.5.1/memtier_benchmark','--server-cpus',server,'--client-cpus',clients,'--load-threads','2']
           policy = os.environ['LOG_POLICY']
           compare = common+['--baseline','/tmp/keel-baseline','--reps',os.environ['REPETITIONS'],'--seconds',os.environ['MEASURE_SECONDS'],'--policy',policy]
+          # With the log on, shutdown ends with an fsync of everything the run
+          # wrote: about 5 GB after cache-write-1m, which a hosted disk can take
+          # longer than Keel's 5 s default grace to sync, failing the leg on
+          # either arm (runs 38333321384 and 38337597958). This job measures
+          # throughput, not shutdown, so both arms get the same 30 s grace the
+          # transcript job uses.
+          if policy != 'off':
+              compare += ['--shutdown-seconds','30']
           suites = ['standard'] + (['memory'] if os.environ['INCLUDE_MEMORY'] == 'true' and policy == 'off' else [])
           for suite in suites:
               selected = ['--cases',os.environ['SELECTED_CASES']] if suite == 'standard' and os.environ['SELECTED_CASES'] else []

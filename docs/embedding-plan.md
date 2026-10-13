@@ -2073,14 +2073,11 @@ and recaptured at `1f59ae4` (see "When a reply changes" below):
 
 **When a reply changes.** The corpora pin develop's replies, so a change
 that alters one on purpose fails them until it recaptures, and it
-recaptures in the same pull request. It commits the change; then, in a
-commit of tests and fixtures alone, it sets the two revision constants
-(`commandGoldenRevision`, `connectionGoldenRevision`) to that commit, runs
-`scripts/capture-command-goldens.py` (which refuses a tree whose source
-differs from the revision the constants name, so the fixture describes the
-change and nothing else), and puts the fixture's diff in its body as the
-change's wire-visible effect, reviewed as such. A rebase makes a new commit
-of the change, so the corpus is recaptured after one. A change that adds a command, a subcommand or an error
+recaptures in the same pull request: it sets the two revision constants
+(`commandGoldenRevision`, `connectionGoldenRevision`) to the develop
+revision it is based on, runs `scripts/capture-command-goldens.py`, and
+puts the fixture's diff in its body as the change's wire-visible effect,
+reviewed as such. A change that adds a command, a subcommand or an error
 text adds the case that sends it, as the coverage tests require. The first
 was #158 (INFO part c1): it added `RESETSTAT` to `CONFIG HELP`, which a trial
 merge of the corpus onto develop failed on at `server/info-config` step 6,
@@ -2178,177 +2175,48 @@ public package can speak the protocol without each other.
   command's path uses `Reply`, which is why this step's measurement is the
   move's alone.
 
-#### Step 4.3: strings, the template family
+#### Step 4.2: the operation table
 
-Strings are the first family converted, and the template for the others
-(`docs/phase4-family-recipe.md`). Two PRs: the staging the typed operations
-need (4.3a), and the conversion (4.3b); the string commands Keel lacks
-follow in a third.
+Step 4.2 replaces `commandTable`, `commandArity`, `commandKeyspace`,
+`writeCommands`, the key rules and the subcommand lists with one table of
+descriptors - name, handler, arity, flags, key specs, ACL categories, group
+and subcommands - from which `COMMAND` is answered (COUNT, INFO, LIST, DOCS,
+GETKEYS, the tier 1 server commands client libraries call at connect, in a
+follow-on). It comes in two parts, because the dispatch tables are in the
+files the INFO work holds until it merges.
 
-**4.3a: staging that costs nothing.** A command whose arrival would not
-replay to the state it left stages the records that would. Each record was
-kept as the variadic slice its caller built, which escaped to the heap on
-every SET, log or no log, and an expiry's instant was made into a string for
-it. The staging area now holds the parts flat, after a header per record,
-in storage the engine keeps and clears after every command, so a caller's
-parts stay on its stack (`aof_staging.go`); a part may be an integer,
-written in decimal as the record is encoded (`aofRecordInt`). The field
-keeps its slice header, so no field of `Engine` moves. Allocations per
-operation fall for SET (2 to 1, and 1 to 0 with the log or a replica) and
-SET EX (3 to 0); the log's bytes are the same.
+**Part a: the specs.** What Redis declares of each command Keel has is
+read from Redis 8.10.1's own declarations, `src/commands/<name>.json`, by
+`scripts/generate-command-specs.py`, which writes
+`internal/core/command_specs.go`: for each of the 104 commands and
+subcommands Redis declares among Keel's, its arity, group, command flags,
+ACL categories and key specs (`begin_search` and `find_keys` as they are).
+Only facts are copied - names, numbers and flags - and none of the text the
+specs carry, which is Redis's under its license where the numbers are not
+anyone's; the source is the release tarball CI already downloads, pinned by
+checksum, and nothing of it is checked in. The commands Redis has no spec
+for - Keel's own (`KEEL.*`, `MEMKV.*`, `MORRIS.*`, `SRAND`) and RedisBloom's
+(`BF.*`, `CF.*`, `CMS.*`), which the module declares in its source - are
+declared by hand in `command_specs_keel.go`, in the same form. Two tests
+hold the specs:
 
-**4.3b: typed operations and the command language.**
+- `TestRedisCommandSpecsMatchRedisSource` reads the JSON itself, where
+  `KEEL_REDIS_SRC` names the unpacked tree, and compares every entry with
+  the generated table, and checks that every command Keel has that Redis
+  declares is in it; the differential job runs it, and the generator's
+  `--check`, from the tarball it builds Redis from.
+- `TestCommandSpecsAgreeWithTheTables` reads the specs against the tables
+  they will replace, on every run: each command has one spec, with the
+  tables' arity; `WRITE` is the log's `writeCommands`, exactly; and the key
+  specs amount to the key rule the type check applies (the first argument,
+  the first two, every argument, every second), apart from `DEL`, `UNLINK`,
+  `EXISTS` and `MGET`, which name every argument and constrain none to a
+  type, as keytype.go says.
 
-- **Typed operations** (`strings.go`): `opGet`, `setTarget` and `opSet`,
-  `opMSet`, `opIncr`, `opDecr`, `opIncrBy`, `opDecrBy`, `opLCS`. Go types
-  in, typed results and the existing error sentinels out (their text is the
-  wire error, so the command language answers them as they are, and phase
-  5 matches them with `errors.Is`). Each stages the record of every write it
-  makes - `SET` and its `PEXPIREAT`, the `DEL` of a key of another type it
-  replaces, `MSET` whole, `INCR key`, `INCRBY key n` - and stages nothing
-  when a write declines (`NX`, `XX`). Each converted handler declares that
-  it records itself (`recordsItself`), and `aofCommit` takes staged records
-  ahead of anything else, so a converted command is never logged as it
-  arrived, on any path, whoever called it. Every record is the bytes the as-arrived log
-  held, because a client's integers are canonical (`canonicalInteger`
-  refuses `+1`, `007` and `-0`).
-- **What an operation assumes.** It runs in a command's scope (the lock,
-  `aofBegin` and `aofCommit`, eviction held off) after the checks that scope
-  makes from the command's descriptor: its count, a replica's refusal, and
-  the type of the keys it names. So `opGet` does not ask what holds a key
-  GET's descriptor constrains; an operation refuses only what it alone can
-  know: SET's `GET` finding another type, a value that is not an integer, an
-  overflow. Phase 5's methods run the same scope and checks around the same
-  operations.
-- **The command language** (`commands_dict.go`, `commands_keyspace.go`,
-  `commands_lcs.go`) reads arguments in Redis's order, calls the operation,
-  and answers through `e.reply()`, a `resp.Reply` framed in the command's
-  protocol with the engine's admission (what EXEC has used of the output
-  limit, and the transport's budget). SET's lookup is split from its write
-  (`setTarget`, then `opSet`) so that `SET ... GET` admits the old value's
-  reply before it writes, as it did, with one lookup. MGET stays on
-  `encodeLookupArray`, and LCS on the encoders it used, without reply
-  admission, which it never had: the collection replies move into `Reply`
-  with the collection families.
-- **Measured**: allocations per operation fall or stay on every string
-  row, and the corpora, the persistence and replication goldens and
-  `resp3_test` replay unchanged. Locally, in a paired comparison against
-  step 4.1, SET read 0.895, SET EX 0.841, INCR 0.962, MGET-10 0.996, GET
-  1.018, and SET and INCR with the log 0.951 and 1.031 (staging and then
-  encoding INCR's record costs a few nanoseconds more than logging the
-  command as it arrived). An admission interface call had put GET at 1.062,
-  which is why admission is concrete (step 4.1). On GitHub's x86 runners
-  GET still read 1.063 and 1.091 (runs 38333742145 and 38333744556): a
-  Reply built and read back for one value costs a few nanoseconds there. GET
-  now answers through `resp.SingleBulk`, a Reply's first-bulk path without
-  the Reply.
-
-**4.3c: the string commands Keel lacked.** `APPEND`, `STRLEN`, `GETRANGE`
-and `SUBSTR`, `SETRANGE`, `GETDEL`, `GETEX`, `GETSET`, `MSETNX` and
-`INCRBYFLOAT`, as Redis 8.10.1's `t_string.c` defines each, added by the
-recipe's second half (`docs/phase4-family-recipe.md`): a typed operation
-each, a command language reading its arguments in Redis's order, corpus
-cases for every reply and error, and steps in the differential and
-error-parity harnesses, which hold them to Redis 8.10.1 in CI.
-
-- **Records**: each write records what replays to the state it left, as
-  Redis propagates it: `GETSET` as `SET`, `GETDEL` as `DEL`, `GETEX` as
-  `PEXPIREAT`, `DEL` (an absolute expiry already past) or `PERSIST`,
-  `INCRBYFLOAT` as `SET ... KEEPTTL`, `MSETNX` as `MSET`. `APPEND` and
-  `SETRANGE` record themselves, as Redis does, rather than the whole value.
-  A log holding them is not read by a build before this one.
-- **Admission before the write**: a reply that may be long (`GETDEL`'s,
-  `GETSET`'s, `GETEX`'s, `INCRBYFLOAT`'s) is admitted before the write, as
-  `SET ... GET`'s is, so a reply the output limit refuses leaves the key.
-- **INCRBYFLOAT's long double.** Redis adds in C's `long double` and prints
-  with `%.17Lf`; on Linux x86-64, where CI compares Keel with Redis, that is
-  the x87 80-bit format, a 64-bit mantissa, so `10.50` plus `0.1` answers
-  `10.6`, as Redis's documentation shows, not the `10.59999999999999964` a
-  float64 gives. Keel emulates it with a 64-bit `big.Float`
-  (`long_double.go`) and reads numbers with `strtold`'s grammar and range
-  errors (`util.c`, `string2ld`). A Redis built where `long double` is a
-  64-bit double (macOS on Apple silicon) answers differently, which is why
-  the local comparison against Homebrew's Redis differs only there.
-- **Known cost**: `APPEND` copies the value on every call (a Go string is
-  immutable), where Redis grows its buffer in place, so appending to a value
-  of n bytes costs O(n). Building a large value by many small appends is
-  quadratic; a buffer kept with spare capacity is follow-on work if a
-  workload needs it.
-
-#### Lists, the first collection family
-
-**The conversion.** Lists follow the strings' recipe
-(`docs/phase4-family-recipe.md`): `lists.go` holds `opPush`, `opPop`,
-`opLLen`, `opLIndex`, `opLSet`, `opLRange` and `opLTrim`, and
-`commands_list.go` is their command language.
-
-- **Records**: every write stages its own record, the bytes the as-arrived
-  log held: LPUSH and RPUSH through `aofRecordKeyArgs`, a counted pop through
-  `aofRecordInt`, LSET's index and LTRIM's range in decimal (`strconv`, off
-  the measured rows). The no-op records develop logs - a pop of a missing key
-  or of a count of zero, a trim of a missing key - are staged byte for byte,
-  and the lists' missing-commands PR drops them under the recipe's rule.
-- **Split lookups**: where Redis answers a missing key before it reads the
-  index (LINDEX, LSET), the handler reads the index first and asks whether
-  the key exists only when the index is invalid, one lookup on either path.
-  LPOP and RPOP look the list up, answer and admit the elements, and only
-  then pop them (`opPop` takes the list it was given), so a reply the output
-  limit refuses leaves the list as it was.
-- **Replies**: one element is answered with `resp.SingleBulk`, as GET's is;
-  LRANGE and a counted pop stay on `encodeWalkReply`, and `opLRange` answers
-  a view of the list rather than a copy.
-- **Keyspace reads** count where Redis looks (#160's rule, refined here):
-  LLEN and LINDEX look their key up first, so the type check counts them;
-  LRANGE reads start and stop first and counts nothing for a malformed one,
-  so `opLRange` counts its lookup after them (`readsAfterArguments`), and the
-  type check counts a key of another type only once those have passed.
-- **Measured**: allocations per operation fall from 7 to 2 on LPUSH-RPOP,
-  with and without the log and a replica (the push's length is no longer
-  boxed for `encode`, and a single pop is no longer walked through a
-  closure), and stay at 6 on LRANGE-100. Paired runs of 12 rounds read a
-  median of 0.999 and 0.999 against the strings' conversion (0e371dd, runs
-  38337585288 and 38337587784) and 1.005 and 1.003 against the string
-  commands (ddbad86, runs 38339052646 and 38339054811); LPUSH-RPOP 0.81 to
-  0.82, with the log 0.88 to 0.90, with a replica 0.90 to 0.91; LRANGE-100
-  0.99 to 1.01. The rows over 1.04 run no code the conversion changed (ZADD
-  against 0e371dd, HGET and INCR against ddbad86): the dispatch's handlers in
-  `eval.go` and `keytype.go` are the base's instruction for instruction
-  (`go tool objdump` of both test binaries), 256 bytes earlier, since the
-  handlers left `commands_list.go`, and everything after `lists.go` is 5,120
-  bytes later.
-
-**The missing commands.** `LPUSHX`, `RPUSHX`, `LINSERT`, `LREM`, `LPOS`
-(with `RANK`, `COUNT` and `MAXLEN`), `LMOVE`, `RPOPLPUSH`, `LMOVEM` (new in
-Redis 8.10, with `COUNT` or `EXACTLY` and `OBO` or `BULK`) and `LMPOP` (with
-`COUNT`), the non-blocking forms, as Redis 8.10.1's `t_list.c` defines
-each, added by the recipe's second half: a typed operation each, a command
-language that reads the arguments in Redis's order with Redis's error words,
-corpus cases for every reply and error, and steps in the differential and
-error-parity harnesses. The blocking forms stay in tier 2 of the parity plan.
-
-- **Records** follow Redis's propagation: `LPUSHX`, `RPUSHX`, `LINSERT`,
-  `LREM`, `LMOVE`, `RPOPLPUSH` and `LMOVEM` record themselves, and `LMPOP`
-  records the `LPOP` or `RPOP` with the count it took, as
-  `mpopGenericCommand` rewrites it. A log holding them is not read by a build
-  before this one, and the replica applies each (`replicationOperation`).
-- **No write that changes nothing is logged**, as Redis's `server.dirty`
-  decides: `LINSERT` without its pivot, `LREM` that removes nothing, a move
-  from a missing source, and now the no-op records develop logged - `LPOP`
-  and `RPOP` of a missing key or of a count of zero (`t_list.c` lines 836
-  and 840-844) and `LTRIM` of a missing key or of a range covering the whole
-  list (lines 946 and 994). An older log holding those records still
-  replays, as the no-ops they are.
-- **Keys checked where Redis checks them.** `LMOVE`, `RPOPLPUSH`, `LMOVEM`
-  and `LMPOP` check their keys' types themselves (`selfTypedCommands`): a
-  move from a missing source answers nil whatever the destination holds,
-  and `LMPOP` refuses a key of another type only when it reaches it. Their
-  keys are still named for the log's and the rewrite's bookkeeping, `LMPOP`'s
-  by a rule of their own (`keyCounted`: as many as `numkeys` counts).
-- **Admission before the write**: the element a move takes, `LMOVEM`'s
-  block and `LMPOP`'s key and elements are admitted before anything moves,
-  so a reply the output limit refuses leaves the lists as they were.
-- **The ring** gains `Insert` and `Remove`, O(n) as Redis's quicklist
-  operations are once the pivot or the matches have been found.
+**Part b: the table.** After the INFO work merges, the handlers join the
+specs in one table and the dispatch tables go; the index `commands` is
+built from it, as it is from `commandArity` and `commandTable` now. The
+corpora hold the replies and records, and the paired job the cost.
 
 ## Risks, in order
 
@@ -2413,27 +2281,6 @@ Redis.
     `MISCONF Errors writing to the AOF file: <cause>`.
   - **The legacy migration's crash window is fixed first,** in a PR of its
     own ahead of phase 3's parts, because it loses data on develop.
-- **Phase 4's choices** (October 12, 2026), where the code needed more than
-  the plan said:
-  - **The corpora pin develop's replies**, so a pull request that changes a
-    reply on purpose recaptures them in the same PR, with the fixture's diff
-    as its wire-visible effect (step 4.0, "When a reply changes"). The INFO
-    work after #158 (#160, #162 to #165) does so.
-  - **Type checks belong to the scope, not the operation.** The plan has
-    typed operations own the semantics and the typed errors; the check that
-    a key holds the type a command constrains it to stays where it is, in
-    the scope that runs a command from its descriptor, before the operation,
-    and phase 5's typed methods run the same scope. An operation that
-    checked again would cost every miss a second lookup.
-  - **Every write records itself.** A converted command's operation stages
-    all of its records, so the log holds what the operation did whether a
-    client or a Go caller asked; staging was made allocation-free first
-    (step 4.3a) so that this costs nothing.
-  - **Reply admission is concrete.** `resp.Reply` checks what is used of
-    the output limit and the transport's budget with static calls, the
-    budget having moved into `resp` (`core.CommandAllocationBudget` is an
-    alias), rather than asking an interface the engine implements, which
-    measured as 3% of GET.
 - **`ClientBuffers` moves in step 2.7, not phase 6** (October 6, 2026). Once
   the server holds its engine, the hook is a field and a setter on it, as the
   allocation budget already is; as a package variable, it has every engine in
