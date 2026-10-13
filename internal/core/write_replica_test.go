@@ -40,6 +40,9 @@ var replicaRefusedWrites = [][]string{
 	// The key commands (step 4.4).
 	{"RENAME", "k", "renamed"}, {"RENAMENX", "k", "renamed"}, {"COPY", "k", "copied"},
 	{"COPY", "k", "n", "REPLACE"},
+	// Hashes (step 4.5).
+	{"HSET", "h", "f", "x"}, {"HSET", "h", "g", "y"}, {"HSET", "missing", "f", "x"}, {"HSETNX", "h", "g", "y"},
+	{"HDEL", "h", "f"}, {"HINCRBY", "h", "c", "1"},
 }
 
 // replicaSeed is the state the replica has from its primary: a key of each
