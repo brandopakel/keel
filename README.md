@@ -40,7 +40,7 @@ populate the variable; avoid putting secrets in process arguments or shell histo
 
 | Area | Supported behavior |
 | --- | --- |
-| Strings | `GET`, `SET`, `SETNX`, `SETEX`, `PSETEX`, `MGET`, `MSET`, `INCR`, `INCRBY`, `DECR`, `DECRBY`, `LCS` |
+| Strings | `GET`, `SET`, `SETNX`, `SETEX`, `PSETEX`, `MGET`, `MSET`, `MSETNX`, `INCR`, `INCRBY`, `INCRBYFLOAT`, `DECR`, `DECRBY`, `APPEND`, `STRLEN`, `GETRANGE` (and `SUBSTR`), `SETRANGE`, `GETDEL`, `GETEX`, `GETSET`, `LCS` |
 | SET options | `NX`, `XX`, `GET`, `KEEPTTL`, `EX`, `PX`, `EXAT`, `PXAT`; conditional failures return null, or the old value with `GET` |
 | Expiry, every type | `TTL`, `PTTL`, `EXPIRE`, `PEXPIRE`, `EXPIREAT`, `PEXPIREAT`, `PERSIST`; expiry setters accept `NX`, `XX`, `GT`, `LT` |
 | Keys | `DEL`, `UNLINK` (same as `DEL`), `EXISTS`, `TYPE`, `KEYS`, `SCAN` with `MATCH`/`COUNT`/`TYPE`, `DBSIZE`, `FLUSHDB` (`SYNC` and `ASYNC` both flush before the reply) |
@@ -64,8 +64,13 @@ Important boundaries:
   client-side caching. redis-py 8, node-redis 6, go-redis 9 and ioredis 6
   negotiate RESP3 with default settings; see [client defaults](docs/client-library-compatibility.md#default-configurations).
 - `SET`, `SETEX`, `PSETEX` and `MSET` replace a key of any type, as Redis does;
-  `SET NX`/`SETNX` treat a key of any type as existing, and `SET ... GET` answers
-  `WRONGTYPE` for a non-string. Other commands refuse a key of another type.
+  `SET NX`/`SETNX` and `MSETNX` treat a key of any type as existing, and
+  `SET ... GET` answers `WRONGTYPE` for a non-string. Other commands refuse a
+  key of another type.
+- `INCRBYFLOAT` adds and answers as Redis does on Linux x86-64, in an 80-bit
+  long double (`10.50` plus `0.1` is `10.6`); a Redis built where long double
+  is a 64-bit double, such as macOS on Apple silicon, answers some sums with
+  more digits.
 - `ZRANGE` does not support `BYLEX`. ZADD `GT`/`LT`/`INCR` are not implemented.
   Options outside the documented subset return errors.
 - Errors are Redis 8.10.1's, byte for byte, wherever Keel has the command:

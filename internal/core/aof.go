@@ -127,7 +127,9 @@ type aofState struct {
 // An explicit list is the one that can be read against eval.go and checked.
 var writeCommands = map[string]bool{
 	"SET": true, "SETNX": true, "MSET": true, "DEL": true, "UNLINK": true, "FLUSHDB": true,
-	"SETEX": true, "PSETEX": true,
+	"APPEND": true, "SETRANGE": true, "GETDEL": true, "GETEX": true, "GETSET": true, "MSETNX": true,
+	"INCRBYFLOAT": true,
+	"SETEX":       true, "PSETEX": true,
 	"EXPIRE": true, "PEXPIREAT": true, "PEXPIRE": true, "EXPIREAT": true, "PERSIST": true, "INCR": true, "INCRBY": true, "DECR": true, "DECRBY": true,
 	"HSET": true, "HSETNX": true, "HDEL": true, "HINCRBY": true,
 	"LPUSH": true, "RPUSH": true, "LPOP": true, "RPOP": true, "LTRIM": true, "LSET": true,
