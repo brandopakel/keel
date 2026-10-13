@@ -1,0 +1,40 @@
+diff --git a/internal/core/command_specs_test.go b/internal/core/command_specs_test.go
+index 57119c4..aa69713 100644
+--- a/internal/core/command_specs_test.go
++++ b/internal/core/command_specs_test.go
+@@ -159,11 +159,19 @@ var keyRuleExceptions = map[string]string{
+ }
+ 
+ // keyRuleOfSpecs is the key rule keys amount to: the first argument, the
+-// first two, every argument, or every step-th from the first; false for key
+-// specs no rule describes. Keys found from the first argument by range are
+-// read directly, and PFMERGE's two specs - the destination, then every
+-// source - together name every argument.
++// first two (one spec for both, as LCS has, or one each, as a move has),
++// every argument, every step-th from the first, or as many as the first
++// counts; false for key specs no rule describes. Keys found from the first
++// argument by range are read directly, and PFMERGE's two specs - the
++// destination, then every source - together name every argument.
+ func keyRuleOfSpecs(keys []keySpec) (rule keyRule, stride int, ok bool) {
++	// LMPOP's keys are as many as its first argument counts, after it.
++	if len(keys) == 1 && keys[0].begin.kind == "index" && keys[0].begin.pos == 1 && keys[0].find.kind == "keynum" {
++		if f := keys[0].find; f.keynumIdx == 0 && f.firstKey == 1 && f.step == 1 {
++			return keyCounted, 0, true
++		}
++		return 0, 0, false
++	}
+ 	for _, k := range keys {
+ 		if k.begin.kind != "index" || k.find.kind != "range" {
+ 			return 0, 0, false
+@@ -178,6 +186,11 @@ func keyRuleOfSpecs(keys []keySpec) (rule keyRule, stride int, ok bool) {
+ 		if first.find.lastKey == 0 && second.begin.pos == 2 && second.find.lastKey == -1 && second.find.step == 1 {
+ 			return keyEvery, 0, true
+ 		}
++		// A move's source and its destination, each a key of its own
++		// (LMOVE, RPOPLPUSH, LMOVEM).
++		if first.find.lastKey == 0 && second.begin.pos == 2 && second.find.lastKey == 0 {
++			return keyFirstTwo, 0, true
++		}
+ 		return 0, 0, false
+ 	}
+ 	if len(keys) != 1 {
