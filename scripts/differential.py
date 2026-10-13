@@ -217,6 +217,8 @@ def operation(rng):
         ])
     if kind == 'zset':
         score = rng.randrange(-20, 21)
+        # A second key, a sorted set or a set, for the algebra and the stores.
+        other = rng.choice(['zset', 'zset', 'set']) + ':' + str(rng.randrange(32))
         return rng.choice([
             ['ZADD', key, score, member], ['ZADD', key, 'NX', score, member],
             ['ZADD', key, 'XX', 'CH', score, member], ['ZREM', key, member],
@@ -226,6 +228,17 @@ def operation(rng):
             ['ZREVRANGEBYSCORE', key, '+inf', '-inf', 'LIMIT', 0, 3],
             ['ZINCRBY', key, rng.randrange(-3,4), member], ['ZPOPMIN', key, rng.randrange(4)],
             ['ZPOPMAX', key, rng.randrange(4)],
+            ['ZADD', key, rng.choice(['GT', 'LT']), score, member], ['ZADD', key, 'INCR', score, member],
+            ['ZADD', key, 'XX', 'INCR', score, member], ['ZREVRANGE', key, 0, -1, 'WITHSCORES'], ['ZREVRANK', key, member],
+            ['ZMSCORE', key, member, 'missing'], ['ZRANGEBYLEX', key, '-', '+'], ['ZREVRANGEBYLEX', key, '+', '-', 'LIMIT', 0, 3],
+            ['ZLEXCOUNT', key, '[member:1', '(member:9'], ['ZREMRANGEBYRANK', key, 0, rng.randrange(-2, 3)],
+            ['ZREMRANGEBYSCORE', key, '(5', 10], ['ZREMRANGEBYLEX', key, '[member:3', '[member:5'],
+            ['ZRANGESTORE', other, key, 0, -1], ['ZRANGESTORE', other, key, '(0', '+inf', 'BYSCORE', 'LIMIT', 0, 2],
+            ['ZMPOP', 2, key, other, rng.choice(['MIN', 'MAX']), 'COUNT', rng.randrange(1, 4)],
+            ['ZUNION', 2, key, other, 'WITHSCORES'], ['ZINTER', 2, key, other, 'AGGREGATE', 'MAX', 'WITHSCORES'],
+            ['ZDIFF', 2, key, other, 'WITHSCORES'], ['ZUNIONSTORE', other, 2, key, other, 'WEIGHTS', 2, 1],
+            ['ZINTERSTORE', other, 2, key, other], ['ZDIFFSTORE', other, 2, key, other], ['ZINTERCARD', 2, key, other],
+            ['ZRANDMEMBER', 'missing', 2], ['ZRANDMEMBER', key, 0],
         ])
     kind = rng.choice(['string','hash','list','set','zset'])
     key, other = [kind + ':' + str(rng.randrange(32)) for _ in range(2)]
@@ -493,6 +506,12 @@ def operation3(rng, modules):
             ['GEOPOS', 'missing', member], ['GEOSEARCH', key, 'FROMMEMBER', member, 'BYRADIUS', 800, 'km', 'ASC', *flags],
             ['GEOSEARCH', key, 'FROMLONLAT', lon, lat, 'BYBOX', 1500, 1500, 'km', 'DESC', 'COUNT', 3, *flags],
             ['ZREM', key, member], ['ZCARD', key],
+            ['GEORADIUS', key, lon, lat, 800, 'km', 'ASC', *flags], ['GEORADIUSBYMEMBER', key, member, 800, 'km', 'DESC', 'COUNT', 2, *flags],
+            ['GEORADIUS_RO', key, lon, lat, 900, unit, 'COUNT', 4], ['GEORADIUSBYMEMBER_RO', key, member, 1200, 'km'],
+            # STORE with geohash scores only: a stored distance's last digits
+            # are the platform's sin and cos.
+            ['GEORADIUS', key, lon, lat, 800, 'km', 'STORE', 'geo:stored'], ['GEOSEARCHSTORE', 'geo:stored', key,
+             'FROMMEMBER', member, 'BYRADIUS', 900, 'km', 'ASC', 'COUNT', 3], ['ZRANGE', 'geo:stored', 0, -1, 'WITHSCORES'],
         ])
     if kind == 'hll':
         key, other = ['hll:' + str(rng.randrange(4)) for _ in range(2)]
