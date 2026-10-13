@@ -39,8 +39,11 @@ type Reply struct {
 	buf []byte
 	// canned is a shared constant written while it was the whole reply,
 	// held by reference.
-	canned  []byte
-	refused bool
+	canned []byte
+	// admitted is the size admission has allowed the reply to reach, so
+	// that a reply reserved once and then filled is asked for once.
+	admitted int
+	refused  bool
 }
 
 // Admission bounds a reply before it is built.
@@ -54,7 +57,7 @@ type Admission interface {
 // command before belongs to the transport now, and is forgotten.
 func (r *Reply) Reset(f Framing) {
 	r.Framing = f
-	r.buf, r.canned, r.refused = nil, nil, false
+	r.buf, r.canned, r.admitted, r.refused = nil, nil, 0, false
 }
 
 // Bytes is the reply as built: the refusal, if one replaced it. The slice is
@@ -82,19 +85,21 @@ func (r *Reply) own(extra int) {
 	r.canned = nil
 }
 
-// admit asks for the reply to grow to size bytes in all, and makes room. A
-// refusal replaces what has been written; anything written after it is
-// dropped.
+// admit asks for the reply to grow to size bytes in all, and makes room. It
+// asks only past what was admitted already: a reply Reserve sized is filled
+// without asking again, so the budget is charged for it once. A refusal
+// replaces what has been written; anything written after it is dropped.
 func (r *Reply) admit(size int) bool {
 	if r.refused {
 		return false
 	}
-	if r.Admission != nil {
+	if size > r.admitted && r.Admission != nil {
 		if refusal := r.Admission.AdmitReply(size); refusal != nil {
 			r.refuse(refusal)
 			return false
 		}
 	}
+	r.admitted = max(r.admitted, size)
 	r.own(size - r.Len())
 	if cap(r.buf) < size {
 		grown := make([]byte, len(r.buf), size)

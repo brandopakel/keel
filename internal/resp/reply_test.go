@@ -145,6 +145,7 @@ func TestReplyAdmitsBeforeItAllocates(t *testing.T) {
 	require.Equal(t, "-ERR no room\r\n", string(r.Bytes()), "nothing after a refusal is written")
 	require.False(t, r.Reserve(1))
 
+	a.asked = nil
 	r.Reset(Framing{})
 	require.False(t, r.Refused())
 	require.Empty(t, r.Bytes())
@@ -152,6 +153,9 @@ func TestReplyAdmitsBeforeItAllocates(t *testing.T) {
 	require.GreaterOrEqual(t, cap(r.Bytes()), 64)
 	r.Array(2).Bulk("a").Bulk("b")
 	require.Equal(t, "*2\r\n$1\r\na\r\n$1\r\nb\r\n", string(r.Bytes()))
+	require.Equal(t, []int{64}, a.asked, "a reply reserved once is admitted once, however it is filled")
+	r.Bulk(strings.Repeat("v", 40))
+	require.Equal(t, []int{64, 18 + 47}, a.asked, "growing past the reservation asks again, for the whole")
 	require.False(t, r.Reserve(101))
 	require.True(t, r.Refused())
 	require.Equal(t, "-ERR no room\r\n", string(r.Bytes()))

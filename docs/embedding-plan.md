@@ -2140,7 +2140,9 @@ the public package can speak the protocol without each other.
   before building it. A refusal replaces the reply and ends it. Its
   contract keeps three things the server's reply path has today:
   - a bulk string is sized exactly, admitted, and allocated once, as
-    `encodeBoundedString` allocates one;
+    `encodeBoundedString` allocates one; admission is asked only when the
+    reply grows past what it has admitted, so a reply `Reserve` sized and a
+    command then fills is charged to the budget once;
   - the transport takes `Bytes` by reference, as it takes a handler's slice,
     and keeps a batch-of-one reply until its write phase, so a `Reply` never
     reuses a buffer: `Reset` forgets the last command's, and the next
