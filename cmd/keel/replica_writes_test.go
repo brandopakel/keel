@@ -38,6 +38,8 @@ var replicaWrites = [][]string{
 	{"HDEL", "h", "f"}, {"HINCRBY", "h", "c", "1"},
 	// The hash commands (step 4.5).
 	{"HMSET", "h", "f", "x"}, {"HINCRBYFLOAT", "h", "c", "1.5"}, {"HGETDEL", "h", "FIELDS", "1", "f"},
+	// Sets (step 4.6).
+	{"SADD", "s", "c"}, {"SADD", "missing", "c"}, {"SREM", "s", "a"}, {"SPOP", "s"}, {"SPOP", "s", "2"},
 }
 
 var replicaWritesSeed = [][]string{
