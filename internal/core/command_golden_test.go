@@ -57,7 +57,7 @@ import (
 // command_golden_coverage_test.go checks that the corpus names every command
 // and reaches every error text the handlers hold.
 const (
-	commandGoldenRevision = "5ae6dbf"
+	commandGoldenRevision = "3fba36c"
 	commandGoldenDir      = "testdata/commands-" + commandGoldenRevision
 )
 
@@ -422,7 +422,7 @@ func TestCommandGoldenCapture(t *testing.T) {
 	manifest := commandGoldenManifest{
 		SourceRevision: commandGoldenRevision,
 		Captured:       time.Now().UTC().Format("2006-01-02"),
-		Note:           "Every command's RESP2 and RESP3 replies and log records on develop, before phase 4 of the embedding plan; see command_golden_test.go.",
+		Note:           "Every command's RESP2 and RESP3 replies and log records at source_revision; see command_golden_test.go.",
 		Files:          map[string]commandGoldenManifestEntry{},
 	}
 	order, byFamily := goldenFamilies()
