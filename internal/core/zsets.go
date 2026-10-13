@@ -80,11 +80,20 @@ func (e *Engine) zaddApply(key string, req zaddRequest, changedPairs *[]string) 
 		e.zsetStore.Put(key, zs)
 	}
 	var err error
+	// Without GT, LT or INCR, Add answers as AddScore would, a member left at
+	// its score being no change either way, and costs less.
+	plain := req.flags&(data_structure.ZAddGT|data_structure.ZAddLT|data_structure.ZAddIncr) == 0
 	for i, score := range req.scores {
-		outcome, newScore, nan := zs.AddScore(score, req.members[i], req.flags)
-		if nan {
-			err = errZIncrNaN
-			break
+		var outcome data_structure.ZAddResult
+		newScore := score
+		if plain {
+			outcome = zs.Add(score, req.members[i], req.flags)
+		} else {
+			var nan bool
+			if outcome, newScore, nan = zs.AddScore(score, req.members[i], req.flags); nan {
+				err = errZIncrNaN
+				break
+			}
 		}
 		switch outcome {
 		case data_structure.ZAddAdded:
