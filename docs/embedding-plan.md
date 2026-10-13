@@ -2003,7 +2003,7 @@ PRs each, in this order:
    Keel lacks (docs/redis-parity-plan.md), and a recipe for the families that
    follow.
 
-Then keys and TTL (step 4.4), hashes (step 4.5) and sets (step 4.6), each family converted and then completed; lists are converted alongside, by another hand.
+Then keys and TTL (step 4.4), hashes (step 4.5), sets (step 4.6) and sorted sets with geo (step 4.7), each family converted and then completed; lists are converted alongside, by another hand.
 
 #### Step 4.0: golden corpora
 
@@ -2598,6 +2598,39 @@ The fourth family, by the recipe.
   `SRANDMEMBER` keep their walks and lookup arrays.
 - **Measured locally**, against the hashes step: SADD 0.846, with the log
   0.910, with a replica 0.937 (allocations 1 to 0), SISMEMBER 1.014.
+
+#### Step 4.7: sorted sets and geo
+
+The fifth family, by the recipe; geo is a sorted set of geohash scores, so
+the two convert together.
+
+- **Typed operations** (`zsets.go`): `opZAdd`, `opGeoAdd`, `opZRem`,
+  `opZScore`, `opZCard` and `opZIncrBy`; `zsetFor`, `zsetSettle` and
+  `zaddApply` move there. A `zaddRequest` carries the flags, scores and
+  members, and the client's text, which the record repeats (the recipe's
+  record-form rule); a Go caller, which has none, gets a ZADD formatted
+  from the values, the form Redis propagates GEOADD in. Each write records
+  what develop logged, byte for byte: `ZADD` and `GEOADD` as sent, `ZREM`
+  with its members, `ZINCRBY` as the `ZADD` of the score it made, whether or
+  not they changed anything; `ZPOPMIN` and `ZPOPMAX` now declare that they
+  record themselves, the `ZREM` of what they popped and nothing otherwise.
+  The family's missing-commands step drops the no-op `ZADD` and `ZREM`
+  records and moves `GEOADD`'s record to the `ZADD` of its scores, as
+  Redis's geoaddCommand rewrites it (geo.c, lines 490-503).
+- **Counting.** `ZCOUNT`, `ZRANGE`, `ZRANGEBYSCORE`, `ZREVRANGEBYSCORE`,
+  `ZRANK` and `GEODIST` parse their arguments before Redis looks their key
+  up, so they count after parsing (`readsAfterArguments`), and a malformed
+  range, option or unit counts nothing; `ZSCORE`, `ZCARD`, `GEOHASH`,
+  `GEOPOS` and `GEOSEARCH` look up first and keep counting in the type
+  check. `stats-parity.py` has a bad-argument case for each moved read, on
+  a sorted set, a missing key and a key of another type.
+- **The command language** (`commands_sorted_set.go`,
+  `commands_zrange_score.go`, `commands_geo.go`): the integer replies go
+  through the Reply sink; `ZSCORE` and `ZINCRBY` keep their double replies
+  and the range reads their walks.
+- **Measured locally**, against the sets step: ZADD 0.851 (allocations 1 to
+  0), ZSCORE 1.013, ZRANGE-100-WITHSCORES 1.020, controls GET 1.000 and SADD
+  1.006.
 
 ## Risks, in order
 

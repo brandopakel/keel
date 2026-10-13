@@ -10,26 +10,8 @@ import (
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
-// Sorted set commands.
-//
-// Redis has no empty sorted set: removing the last member removes the key, and
-// a ZADD that adds nothing to a key that did not exist leaves no key behind.
-// Every command that changes a set in place goes through zsetSettle, which
-// applies that rule and re-measures the set for the memory budget.
-
-func (e *Engine) zsetFor(key string) (*data_structure.ZSet, bool) {
-	return e.zsetStore.Get(key)
-}
-
-// zsetSettle records that a sorted set was changed in place: it is dropped when
-// empty and re-measured otherwise.
-func (e *Engine) zsetSettle(key string, zs *data_structure.ZSet) {
-	if zs.Len() == 0 {
-		e.zsetStore.Delete(key)
-		return
-	}
-	e.zsetStore.Resize(key)
-}
+// Sorted set commands: the command language over the typed operations of
+// zsets.go. The range reads keep their walks and scored replies.
 
 var (
 	errNotAFloat = errors.New("ERR value is not a valid float")
@@ -156,33 +138,6 @@ func shortestDouble(v float64) string {
 	return b.String()
 }
 
-// zaddApply adds every score/member pair to the set at key under flags, and
-// reports how many members were new and how many were new or rescored.
-//
-// The set is created on demand, except under XX, where nothing new may be added
-// and so a key that does not exist stays that way.
-func (e *Engine) zaddApply(key string, scores []float64, members []string, flags int) (added, changed int) {
-	zs, ok := e.zsetFor(key)
-	if !ok {
-		if flags&data_structure.ZAddXX != 0 {
-			return 0, 0
-		}
-		zs = data_structure.CreateZSet()
-		e.zsetStore.Put(key, zs)
-	}
-	for i, score := range scores {
-		switch zs.Add(score, members[i], flags) {
-		case data_structure.ZAddAdded:
-			added++
-			changed++
-		case data_structure.ZAddUpdated:
-			changed++
-		}
-	}
-	e.zsetSettle(key, zs)
-	return added, changed
-}
-
 // zaddShape reads ZADD's options in Redis's order, then whether what follows
 // them comes in score/member pairs, then whether the options agree, and
 // returns the pairs. The scores are read by the caller, after this.
@@ -214,6 +169,7 @@ func zaddArguments(args []string) error {
 // rescored. Every score is checked before any is applied, so a bad one leaves
 // the set exactly as it was.
 func (e *Engine) cmdZADD(args []string) []byte {
+	e.recordsItself()
 	if len(args) < 3 {
 		return e.encode(wrongArguments("ZADD"), false)
 	}
@@ -221,21 +177,22 @@ func (e *Engine) cmdZADD(args []string) []byte {
 	if err != nil {
 		return e.encode(err, false)
 	}
-	scores := make([]float64, 0, len(pairs)/2)
-	members := make([]string, 0, len(pairs)/2)
+	req := zaddRequest{flags: flags, scores: make([]float64, 0, len(pairs)/2),
+		members: make([]string, 0, len(pairs)/2), text: args}
 	for i := 0; i < len(pairs); i += 2 {
 		score, err := parseZScore(pairs[i])
 		if err != nil {
 			return e.encode(err, false)
 		}
-		scores = append(scores, score)
-		members = append(members, pairs[i+1])
+		req.scores = append(req.scores, score)
+		req.members = append(req.members, pairs[i+1])
 	}
-	added, changed := e.zaddApply(args[0], scores, members, flags)
+	added, changed := e.opZAdd(args[0], req)
+	r := e.reply()
 	if ch {
-		return e.encode(changed, false)
+		return r.Int(changed).Bytes()
 	}
-	return e.encode(added, false)
+	return r.Int(added).Bytes()
 }
 
 // zrankArguments reads ZRANK's optional WITHSCORE as Redis does: more
@@ -270,6 +227,9 @@ func (e *Engine) cmdZRANK(args []string) []byte {
 		missing = e.nullArrayReply()
 	}
 	zs, ok := e.zsetFor(args[0])
+	// A keyspace hit or a miss, counted after WITHSCORE was read, as Redis's
+	// zrankGenericCommand reads it before it looks the key up.
+	e.noteLookup(ok)
 	if !ok {
 		return missing
 	}
@@ -285,22 +245,12 @@ func (e *Engine) cmdZRANK(args []string) []byte {
 }
 
 func (e *Engine) cmdZREM(args []string) []byte {
+	e.recordsItself()
 	if len(args) < 2 {
 		return e.encode(wrongArguments("ZREM"), false)
 	}
-	key := args[0]
-	zs, ok := e.zsetFor(key)
-	if !ok {
-		return constant.RespZero
-	}
-	removed := 0
-	for _, member := range args[1:] {
-		if zs.Remove(member) {
-			removed++
-		}
-	}
-	e.zsetSettle(key, zs)
-	return e.encode(removed, false)
+	r := e.reply()
+	return r.Int(e.opZRem(args[0], args[1:])).Bytes()
 }
 
 // cmdZSCORE answers a member's score - a double in RESP3, a bulk string in
@@ -309,11 +259,7 @@ func (e *Engine) cmdZSCORE(args []string) []byte {
 	if len(args) != 2 {
 		return e.encode(wrongArguments("ZSCORE"), false)
 	}
-	zs, ok := e.zsetFor(args[0])
-	if !ok {
-		return e.nullReply()
-	}
-	score, ok := zs.Score(args[1])
+	score, ok := e.opZScore(args[0], args[1])
 	if !ok {
 		return e.nullReply()
 	}
@@ -324,11 +270,8 @@ func (e *Engine) cmdZCARD(args []string) []byte {
 	if len(args) != 1 {
 		return e.encode(wrongArguments("ZCARD"), false)
 	}
-	zs, ok := e.zsetFor(args[0])
-	if !ok {
-		return constant.RespZero
-	}
-	return e.encode(zs.Len(), false)
+	r := e.reply()
+	return r.Int(e.opZCard(args[0])).Bytes()
 }
 
 // zrangeArguments is how ZRANGE was asked for its range.
@@ -393,6 +336,10 @@ func (e *Engine) cmdZRANGE(args []string) []byte {
 		return e.scoreRangeReply(args[0], z.scores, z.offset, z.count, z.reverse, z.withScores)
 	}
 	zs, ok := e.zsetFor(args[0])
+	// A keyspace hit or a miss, counted after the range and options were
+	// read, as Redis's zrangeGenericCommand reads them before it looks the
+	// key up.
+	e.noteLookup(ok)
 	if !ok {
 		return constant.RespEmptyArray
 	}
