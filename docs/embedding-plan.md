@@ -2137,12 +2137,13 @@ public package can speak the protocol without each other.
 - **`Reply`** is the sink the command language writes into from step 4.3:
   a buffer framed in the connection's protocol, with the shapes a reply has
   (`Status`, `Error`, `Int`, `Bulk`, `Null`, `NullArray`, `Bool`, `Double`,
-  `Verbatim`, `Array`, `Set`, `Map`, `Pair`, `Raw`), its admission - a
-  `Ceiling` (the output limit, or what EXEC has left of it) and the
-  transport's `Budget` - checked before it grows to a size, and `Reserve`
-  for a reply a command has sized before building it. A refusal replaces the
-  reply and ends it: `ReplyTooLarge` past the ceiling, `AllocationPressure`
-  past what the budget holds, the bytes the engine's `admitReply` answers.
+  `Verbatim`, `Array`, `Set`, `Map`, `Pair`, `Raw`), its admission - what
+  is `Used` of the output limit already (EXEC's earlier replies; zero, the
+  whole limit is the reply's) and the transport's `Budget` - checked before
+  it grows to a size, and `Reserve` for a reply a command has sized before
+  building it. A refusal replaces the reply and ends it: `ReplyTooLarge`
+  past what is left of the limit, `AllocationPressure` past what the budget
+  holds, the bytes the engine's `admitReply` answers.
   Its contract keeps three things the server's reply path has today:
   - a bulk string is sized exactly, admitted, and allocated once, as
     `encodeBoundedString` allocates one; admission is asked only when the
@@ -2160,7 +2161,7 @@ public package can speak the protocol without each other.
   Admission is concrete, not an interface the engine implements, because
   the interface call it took first measured as 3% of GET, locally, in a
   paired comparison of step 4.3's conversion with and without it: the
-  ceiling and a budget pointer are fields, checked by static calls, and
+  limit used and a budget pointer are fields, checked by static calls, and
   the engine fills them in for each command. Until step 4.3 nothing on a
   command's path uses `Reply`, which is why this step's measurement is the
   move's alone.

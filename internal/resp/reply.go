@@ -18,10 +18,12 @@ import "github.com/brandopakel/keel/internal/constant"
 //     built, a bulk string or a sized array, is sized exactly, admitted, and
 //     allocated once, as encodeBoundedString and the collection replies
 //     allocate today. Admission is asked only past what was admitted
-//     already, and refuses with ReplyTooLarge past the ceiling and with
+//     already, and refuses with ReplyTooLarge past what is left of the
+//     output limit and with
 //     AllocationPressure when the budget cannot hold the reply; a refusal
 //     replaces the reply, and nothing more is written. Admission is concrete,
-//     the ceiling and a budget pointer checked by static calls, because an
+//     what is used of the limit and a budget pointer, checked by static
+//     calls, because an
 //     interface call on every reply measured as 3% of GET.
 //   - Zero copy, and a buffer per command. Bytes returns the buffer itself,
 //     which the transport keeps as the reply of a batch of one until it is
@@ -34,9 +36,10 @@ import "github.com/brandopakel/keel/internal/constant"
 //     that answers one of them allocates nothing.
 type Reply struct {
 	Framing
-	// Ceiling is the most the reply may come to: the output limit, or what
-	// EXEC's replies so far have left of it. Zero is MaxReplyBytes.
-	Ceiling int
+	// Used is how much of the output limit the replies before this one have
+	// used already, EXEC's earlier commands': the reply may come to
+	// MaxReplyBytes less Used. Zero, the whole limit is the reply's.
+	Used int
 	// Budget is the transport's allocation budget, which the reply's memory
 	// is reserved from; nil reserves nothing.
 	Budget *Budget
@@ -112,11 +115,7 @@ func (r *Reply) admit(size int) bool {
 // otherwise the refusal to send in its place: past the ceiling, or past what
 // the budget can hold.
 func (r *Reply) admission(size int) []byte {
-	ceiling := r.Ceiling
-	if ceiling == 0 {
-		ceiling = MaxReplyBytes
-	}
-	if size > ceiling {
+	if size > MaxReplyBytes-r.Used {
 		return ReplyTooLarge
 	}
 	if r.Budget != nil && !r.Budget.ReserveReply(size) {

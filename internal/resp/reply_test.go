@@ -120,9 +120,10 @@ func TestReplyAdmitsBeforeItAllocates(t *testing.T) {
 	require.Equal(t, 3*4096, budget.ReplyReserved, "reserved from the budget before the copy: three pages")
 	require.False(t, r.Refused())
 
-	// Past the ceiling: the output limit's refusal replaces what was written.
+	// Past what is left of the output limit: its refusal replaces what was
+	// written.
 	r.Reset(Framing{})
-	r.Ceiling = 100
+	r.Used = MaxReplyBytes - 100
 	r.Int(2).Bulk(strings.Repeat("v", 200))
 	require.True(t, r.Refused())
 	require.Equal(t, string(ReplyTooLarge), string(r.Bytes()), "the refusal replaces what was written")
@@ -130,12 +131,18 @@ func TestReplyAdmitsBeforeItAllocates(t *testing.T) {
 	r.Status("OK").Int(2).Null().Array(1).Raw([]byte("x")).Bulk("y").Double("1")
 	require.Equal(t, string(ReplyTooLarge), string(r.Bytes()), "nothing after a refusal is written")
 	require.False(t, r.Reserve(1))
+	// Nothing left of the limit, as inside an EXEC whose replies fill it:
+	// every reply that is not canned is refused.
+	r.Reset(Framing{})
+	r.Used = MaxReplyBytes
+	require.True(t, r.Bulk("x").Refused())
+	require.Equal(t, string(ReplyTooLarge), string(r.Bytes()))
 
 	// Past what the budget holds: the budget's refusal.
 	small := &Budget{Limit: 4096}
 	small.Begin(0)
 	r.Reset(Framing{})
-	r.Budget = small
+	r.Budget, r.Used = small, 0
 	r.Bulk("x")
 	require.True(t, r.Refused())
 	require.Equal(t, string(AllocationPressure), string(r.Bytes()))
@@ -145,7 +152,7 @@ func TestReplyAdmitsBeforeItAllocates(t *testing.T) {
 	// past the reservation asks again, for the whole.
 	budget.Begin(0)
 	r.Reset(Framing{})
-	r.Budget, r.Ceiling = budget, 0
+	r.Budget, r.Used = budget, 0
 	require.True(t, r.Reserve(64))
 	require.GreaterOrEqual(t, cap(r.Bytes()), 64)
 	r.Array(2).Bulk("a").Bulk("b")
