@@ -181,6 +181,13 @@ MODULE_CASES = [[c] for c in [
     ['CF.EXISTS', 'cf', 'a'], ['CF.EXISTS', 'missing', 'a'], ['CF.MEXISTS', 'cf', 'a', 'z'], ['CF.DEL', 'cf', 'a'],
     ['CF.COUNT', 'cf', 'a'], ['CF.INFO', 'cf'], ['CMS.INCRBY', 'cms', 'a', '1'], ['CMS.QUERY', 'cms', 'a'],
     ['CMS.QUERY', 'missing', 'a'],
+    # The RedisBloom commands Keel added: BF.CARD, CMS.INFO and CMS.MERGE's
+    # sources open their keys to read; the rest open theirs to write.
+    ['BF.CARD', 'bf'], ['BF.CARD', 'missing'], ['BF.CARD', 'str'], ['BF.INSERT', 'bf', 'ITEMS', 'q'],
+    ['BF.INSERT', 'missing', 'NOCREATE', 'ITEMS', 'q'], ['CF.INSERT', 'cf', 'ITEMS', 'q'], ['CF.INSERTNX', 'cf', 'ITEMS', 'q'],
+    ['CF.COMPACT', 'cf'], ['CF.COMPACT', 'missing'], ['CMS.INFO', 'cms'], ['CMS.INFO', 'missing'], ['CMS.INFO', 'str'],
+    ['CMS.MERGE', 'cms', '1', 'cms'], ['CMS.MERGE', 'cms', '2', 'cms', 'missing'], ['CMS.MERGE', 'missing', '1', 'cms'],
+    ['CMS.MERGE', 'cms', '1', 'str'], ['CMS.MERGE', 'cms', 'x', 'cms'],
 ]]
 
 
