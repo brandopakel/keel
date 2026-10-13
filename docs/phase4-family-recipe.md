@@ -199,7 +199,11 @@ After the family's conversion has merged, in a PR of its own
    arity), `commandKeyspace` and, if needed, the key rules (keytype.go),
    `writeCommands` (aof.go) for a write (a replica then refuses it with
    READONLY), and `argumentsBeforeType` if Redis reads an argument before the
-   key. Then run `scripts/generate-command-specs.py
+   key. A new record name goes on `replication_v2_apply.go`'s allowlist
+   (`replicationOperation`): protocol 2's replication stream is the log's
+   records, and a replica stops at a name it does not take.
+   `TestEveryRecordNameReplicates` enforces it, for every record name the
+   corpus and the persistence and replication goldens hold. Then run `scripts/generate-command-specs.py
    --redis-src <redis-8.10.1>` so `command_specs.go` declares it, and check
    `TestCommandSpecsAgreeWithTheTables`.
 4. **Pin it**: cases in the corpus for every reply shape and error, in both
