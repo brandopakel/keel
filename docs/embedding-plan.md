@@ -2486,9 +2486,9 @@ whatever type holds it.
   checks only that nothing else moved; the corpora and the persistence and
   replication goldens replay unchanged.
 
-**Completing the family.** `EXPIRETIME`, `PEXPIRETIME`, `TOUCH`, `RENAME` and
-`RENAMENX`, as Redis 8.10.1's `expire.c` and `db.c` define them, and the
-no-op records dropped:
+**Completing the family.** `EXPIRETIME`, `PEXPIRETIME`, `TOUCH`, `RENAME`,
+`RENAMENX`, `COPY` and `RANDOMKEY`, as Redis 8.10.1's `expire.c` and `db.c`
+define them, and the no-op records dropped:
 
 - **`RENAME` moves the value**, the same object, with its expiry, whatever
   its type (`Keyspace.Rename` on the string dictionary and on `Keyed`), so it
@@ -2496,7 +2496,12 @@ no-op records dropped:
   name another type holds is deleted first. It is recorded as itself, which
   a replica takes (`replicationOperation`) and which a build before this one
   does not read. `TOUCH` records a use of each key (`Keyspace.Touch`), as a
-  read does. `COPY`, `RANDOMKEY`, `OBJECT`, `SORT`, `DUMP` and `RESTORE`,
+  read does. `COPY` copies the value whole through its dump (Redis
+  duplicates it, O(N) too) with its expiry, and is recorded as `COPY ...
+  REPLACE`; Keel has one database, so `DB` other than 0 is refused as Redis
+  refuses a database it does not have. `RANDOMKEY` picks each key as likely
+  as any other across the keyspaces, reaping an expired one and choosing
+  again, as `dbRandomKey` does. `OBJECT`, `SORT`, `DUMP` and `RESTORE`,
   `MOVE`, `MIGRATE`, `WAIT` and `WAITAOF` follow.
 - **No-op records dropped**, by the recipe's rule: a `DEL` that deleted
   nothing and a `PERSIST` that removed no expiry record nothing, as Redis's
