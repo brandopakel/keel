@@ -8,13 +8,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func retainedStagingBytes(records [][]string) int {
+// retainedStagingBytes is how many bytes of payload the staging area still
+// references: the strings its parts hold, to the end of its storage.
+func retainedStagingBytes(parts []stagedPart) int {
 	bytes := 0
-	for _, parts := range records[:cap(records)] {
-		bytes += cap(parts) * 16
-		for _, part := range parts {
-			bytes += len(part)
-		}
+	for _, part := range parts[:cap(parts)] {
+		bytes += len(part.s)
 	}
 	return bytes
 }
