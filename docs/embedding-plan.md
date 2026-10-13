@@ -2453,6 +2453,19 @@ Redis.
   - **`Fsync` and `Eviction` are the package's own enumerations,** zero
     values `FsyncEverySec` and `EvictLRU`, Redis's defaults; `FsyncNo` is
     Redis's `appendfsync no`.
+  - **Keel-native methods** (the coordinator's decisions on the proposals,
+    the same day): `GetOrSet`, cache-aside with one load per key for
+    concurrent misses (GET, then SET NX; a failed load stores nothing and
+    answers every waiter; a cancelled waiter stops waiting without
+    cancelling the shared load, which runs with an uncancelled context);
+    `CompareAndSwap` and `DeleteIf`, Redis 8's SET IFEQ and DELEX IFEQ; and
+    `Stats`, a typed snapshot of the counters INFO renders, read from the
+    same fields, counted as no command. Each is logged as the command it
+    performs, and its doc comment says it is Keel-native and what it is
+    built on. With Scan and Dump: `Scan` as an iterator, `MGet` to a map,
+    `MSet` from a map, and `[]byte` forms. After the alpha: notifications
+    and a rate-limit helper; not planned: a generic `Value[T]` codec, which
+    callers can wrap themselves.
 
 - **Phase 4's choices** (October 12, 2026), where the code needed more than
   the plan said:

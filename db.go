@@ -3,6 +3,7 @@ package keel
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"github.com/brandopakel/keel/internal/core"
 )
@@ -14,6 +15,10 @@ type DB struct {
 	// compared; this keeps it from being comparable from the first release,
 	// so that adding such state is never a break.
 	_ [0]func()
+
+	// flights are GetOrSet's loads in progress, by key.
+	mu      sync.Mutex
+	flights map[string]*flight
 }
 
 // Options configure an instance. The zero value is an instance in memory

@@ -106,3 +106,45 @@ func ExampleDB_Do() {
 	// Ada
 	// true
 }
+
+func ExampleDB_GetOrSet() {
+	ctx := context.Background()
+	db, _ := keel.Open(ctx, keel.Options{})
+	defer db.Close()
+
+	load := func(ctx context.Context) (string, error) {
+		// A database query, an HTTP call: whatever the cache stands in front of.
+		return "Ada Lovelace", nil
+	}
+	name, _ := db.GetOrSet(ctx, "user:1:name", load, keel.WithTTL(10*time.Minute))
+	fmt.Println(name)
+	// Output: Ada Lovelace
+}
+
+func ExampleDB_CompareAndSwap() {
+	ctx := context.Background()
+	db, _ := keel.Open(ctx, keel.Options{})
+	defer db.Close()
+
+	db.Set(ctx, "config:version", "1")
+	swapped, _ := db.CompareAndSwap(ctx, "config:version", "1", "2")
+	fmt.Println(swapped)
+	swapped, _ = db.CompareAndSwap(ctx, "config:version", "1", "3")
+	fmt.Println(swapped)
+	// Output:
+	// true
+	// false
+}
+
+func ExampleDB_Stats() {
+	ctx := context.Background()
+	db, _ := keel.Open(ctx, keel.Options{})
+	defer db.Close()
+
+	db.Set(ctx, "k", "v")
+	db.Get(ctx, "k")
+	db.Get(ctx, "missing")
+	s, _ := db.Stats(ctx)
+	fmt.Println(s.Keys, s.KeyspaceHits, s.KeyspaceMisses)
+	// Output: 1 1 1
+}

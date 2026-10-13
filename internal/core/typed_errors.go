@@ -43,7 +43,7 @@ func CategoryOf(err error) ErrorCategory {
 	switch {
 	case err == nil:
 		return CategoryNone
-	case errors.Is(err, errWrongType), errors.Is(err, errNotHLL), errors.Is(err, errLCSType):
+	case errors.Is(err, errWrongType), errors.Is(err, errNotHLL), errors.Is(err, errLCSType), errors.Is(err, errDelexType):
 		return CategoryWrongType
 	case errors.Is(err, errNotAnInteger):
 		return CategoryNotInteger
@@ -69,7 +69,7 @@ func CategoryOf(err error) ErrorCategory {
 // whole text.
 func CategoryOfReply(text string) ErrorCategory {
 	switch {
-	case strings.HasPrefix(text, "WRONGTYPE "), text == errLCSType.Error():
+	case strings.HasPrefix(text, "WRONGTYPE "), text == errLCSType.Error(), text == errDelexType.Error():
 		return CategoryWrongType
 	case strings.HasPrefix(text, "OOM "):
 		return CategoryOutOfMemory
