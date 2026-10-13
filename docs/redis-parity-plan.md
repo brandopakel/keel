@@ -85,6 +85,34 @@ Module commands have no specification in `src/commands` and are covered by
 `bench-history` branch, and every form of the newest run of `develop`, with
 both replies, to `census/arguments.csv`.
 
+The **reply census** (`scripts/reply-census.py`, same workflow) checks the
+shape of what Keel answers: the same forms, and each command's base form with
+missing keys, with a key of another type and with an argument too many, each
+in RESP2 and in RESP3, with the reply's protocol types compared to Redis's,
+and each RESP3 reply checked against the `reply_schema` Redis keeps for the
+command and validates its own replies with. The first CI run, against Redis
+8.10.1 (run 38305863905, October 12, 2026; a local run against 8.10.2
+agreed), found Keel's replies with Redis's shape in **886 of 906 cases**, the
+other 20 being the refused forms above; none differed. Two of Keel's RESP3
+replies violate the schema:
+
+- `MEMORY STATS` answers Keel's own fields (`keyspace.bytes`, `keys.count`,
+  `string.bytes` and so on). Redis's schema (`src/commands/memory-stats.json`,
+  `additionalProperties: false`) lists Redis's allocator fields and allows no
+  others; `memoryCommand` in `src/object.c:1808` builds them. A client reading
+  Redis's fields finds none. This is a wrong reply, not a shape one, and
+  joins tier 1's server commands.
+- `GEOHASH geo BOGUS` answers `[null]`, exactly as Redis does
+  (`geohashCommand`, `src/geo.c:893`, `addReplyNull` for a missing member).
+  Redis's own schema (`src/commands/geohash.json`) says every item is a
+  string, so Redis violates it too: a flaw in the schema, not in either
+  server, kept here so the count is understood.
+
+Every run's counts go to `census/reply-runs.csv` and `census/reply-areas.csv`
+on `bench-history`, and every case of the newest run of `develop`, with both
+replies and where in the Redis source the reply is built, to
+`census/replies.csv`.
+
 ## How priorities are set
 
 Each item below is ranked by what applications need. The **framework

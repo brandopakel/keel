@@ -33,7 +33,10 @@ Five kinds of run are collected:
   has it accepts, refuses or answers differently), census/argument-areas.csv
   (the same per area) and census/arguments.csv (every form of the newest
   census of develop, with both replies; rewritten like latest.csv). A run from
-  before the argument census has no lines there.
+  before the argument census has no lines there. Its replies.json
+  (scripts/reply-census.py) goes the same way to census/reply-runs.csv (how
+  many cases have Redis's reply shape in RESP2 and RESP3, and the reply schema
+  violations), census/reply-areas.csv and the snapshot census/replies.csv.
 - telemetry: the Live telemetry workflow's load/compat.json and
   load/timeline.json, with provenance.txt for the host. telemetry/runs.csv gets
   one line per run, with how many metric names redis_exporter reported for Keel
@@ -98,6 +101,14 @@ ARGUMENT_AREAS = ['artifact_id', 'run_id', 'time', 'branch', 'area', 'commands',
                   'wrong_reply', 'redis8_forms', 'redis8_accepted']
 ARGUMENT_FORMS = ['run_id', 'time', 'branch', 'command', 'area', 'form', 'since', 'sent', 'class', 'detail', 'keel',
                   'redis']
+REPLY_RUNS = ['artifact_id', 'run_id', 'time', 'event', 'branch', 'pr', 'conclusion', 'redis_version', 'commands',
+              'cases', 'same', 'differs', 'refused', 'no_reply', 'resp3_cases', 'resp3_same', 'keel_schema_violations',
+              'redis_schema_violations', 'url']
+REPLY_AREAS = ['artifact_id', 'run_id', 'time', 'branch', 'area', 'commands', 'cases', 'same', 'differs', 'refused',
+               'resp3_cases', 'resp3_same', 'keel_schema_violations']
+REPLY_CASES = ['run_id', 'time', 'branch', 'command', 'area', 'case', 'form', 'protocol', 'sent', 'result',
+               'keel_shape', 'redis_shape', 'keel', 'redis', 'keel_schema', 'redis_schema', 'redis_function',
+               'redis_at']
 TELEMETRY_RUNS = ['artifact_id', 'run_id', 'time', 'event', 'branch', 'pr', 'conclusion', 'host',
                   'keel_metric_names', 'redis_metric_names', 'shared_metric_names', 'url']
 TELEMETRY_PHASES = ['artifact_id', 'run_id', 'time', 'branch', 'host', 'phase', 'keel_ops', 'redis_ops']
@@ -118,10 +129,10 @@ KINDS = {
     'matched-everysec': {'artifact': 'matched-keyspace-adoption-everysec',
                          'members': re.compile(r'^(lscpu\.txt|(baseline|candidate)-source\.txt|[\w.-]+/summary\.json)$'),
                          'files': {'runs': MATCHED_RUNS, 'cases': MATCHED_CASES}},
-    'census': {'artifact': 'command-census', 'members': re.compile(r'^(census|arguments)\.json$'),
+    'census': {'artifact': 'command-census', 'members': re.compile(r'^(census|arguments|replies)\.json$'),
                'files': {'runs': CENSUS_RUNS, 'areas': CENSUS_AREAS, 'argument-runs': ARGUMENT_RUNS,
-                         'argument-areas': ARGUMENT_AREAS},
-               'snapshots': {'latest': CENSUS_LATEST, 'arguments': ARGUMENT_FORMS}},
+                         'argument-areas': ARGUMENT_AREAS, 'reply-runs': REPLY_RUNS, 'reply-areas': REPLY_AREAS},
+               'snapshots': {'latest': CENSUS_LATEST, 'arguments': ARGUMENT_FORMS, 'replies': REPLY_CASES}},
     'telemetry': {'artifact': 'telemetry',
                   'members': re.compile(r'^(provenance\.txt|load/compat\.json|load/timeline\.json)$'),
                   'files': {'runs': TELEMETRY_RUNS, 'phases': TELEMETRY_PHASES}},
@@ -269,7 +280,8 @@ def matched_records(artifact_id, run, pr, files):
 
 def census_records(artifact_id, run, pr, files):
     """runs.csv, areas.csv and latest.csv lines for one census, and the
-    argument census's lines when its arguments.json is in the artifact."""
+    argument and reply censuses' lines when their arguments.json and
+    replies.json are in the artifact."""
     census = json.loads(files['census.json'])
     total = census['summary']['total']
     runs = [{'artifact_id': artifact_id, **run_fields(run, pr), 'redis_version': census.get('redis_version', ''),
@@ -285,6 +297,8 @@ def census_records(artifact_id, run, pr, files):
     records = {'runs': runs, 'areas': areas, 'latest': latest}
     if 'arguments.json' in files:
         records.update(argument_records(artifact_id, run, pr, json.loads(files['arguments.json'])))
+    if 'replies.json' in files:
+        records.update(reply_records(artifact_id, run, pr, json.loads(files['replies.json'])))
     return records
 
 
@@ -306,6 +320,31 @@ def argument_records(artifact_id, run, pr, arguments):
               'redis': f['redis']}
              for f in arguments['forms'] if f['class'] != 'not probed']
     return {'argument-runs': runs, 'argument-areas': areas, 'arguments': forms}
+
+
+REPLY_COUNTS = ['commands', 'cases', 'same', 'differs', 'refused', 'resp3_cases', 'resp3_same',
+                'keel_schema_violations']
+
+
+def reply_records(artifact_id, run, pr, replies):
+    """reply-runs.csv, reply-areas.csv and replies.csv lines for one reply
+    census."""
+    total = replies['summary']['total']
+    runs = [{'artifact_id': artifact_id, **run_fields(run, pr), 'redis_version': replies.get('redis_version', ''),
+             **{k: total.get(k, '') for k in REPLY_COUNTS + ['no_reply', 'redis_schema_violations']}}]
+    areas = [{'artifact_id': artifact_id, 'run_id': run['id'], 'time': run['created_at'],
+              'branch': run['head_branch'], 'area': area, **{k: counts.get(k, '') for k in REPLY_COUNTS}}
+             for area, counts in replies['summary']['areas'].items()]
+    commands = replies.get('commands', {})
+    cases = [{'run_id': run['id'], 'time': run['created_at'], 'branch': run['head_branch'],
+              'command': c['command'], 'area': c['area'], 'case': c['case'], 'form': c['label'] or 'base',
+              'protocol': c['protocol'], 'sent': ' '.join(c['argv']), 'result': c['result'],
+              'keel_shape': c['keel_shape'], 'redis_shape': c['redis_shape'], 'keel': c['keel'], 'redis': c['redis'],
+              'keel_schema': c['keel_schema'], 'redis_schema': c['redis_schema'],
+              'redis_function': commands.get(c['command'], {}).get('function', ''),
+              'redis_at': commands.get(c['command'], {}).get('at', '')}
+             for c in replies['cases']]
+    return {'reply-runs': runs, 'reply-areas': areas, 'replies': cases}
 
 
 def telemetry_records(artifact_id, run, pr, files):
