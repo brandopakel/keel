@@ -104,7 +104,7 @@ type subcommand struct {
 var (
 	clientSubcommands = []subcommand{{"id", 2}, {"setname", 3}, {"getname", 2}, {"setinfo", 4}, {"info", 2}, {"help", 2}}
 	memorySubcommands = []subcommand{{"stats", 2}, {"usage", -3}, {"help", 2}}
-	configSubcommands = []subcommand{{"get", -3}, {"set", -4}, {"rewrite", 2}, {"help", 2}}
+	configSubcommands = []subcommand{{"get", -3}, {"set", -4}, {"resetstat", 2}, {"rewrite", 2}, {"help", 2}}
 	containerCommands = map[string][]subcommand{"CLIENT": clientSubcommands, "MEMORY": memorySubcommands,
 		"CONFIG": configSubcommands}
 )

@@ -175,10 +175,13 @@ func IsTransactionCommand(name string) bool {
 // cannot be delivered, so the connection has to be closed, which is what any
 // reply over the output limit already costs.
 func (e *Engine) Transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn Connection) (*Transaction, error) {
+	if !IsTransactionCommand(cmd.Cmd) && tx == nil {
+		return nil, e.EvalAndResponse(cmd, w)
+	}
+	// Everything written from here on is the transaction's own reply, and its
+	// errors are counted as they are written (countedWriter).
+	out := countedWriter{e, w}
 	if !IsTransactionCommand(cmd.Cmd) {
-		if tx == nil {
-			return nil, e.EvalAndResponse(cmd, w)
-		}
 		if cmd.Cmd == "WATCH" {
 			// WATCH is not implemented, and outside a transaction it is an
 			// unknown command. Inside one Redis refuses it without aborting
@@ -187,11 +190,15 @@ func (e *Engine) Transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn C
 			reply := e.encode(errWatchInMulti, false)
 			if len(cmd.Args) == 0 {
 				reply = tx.refuse(wrongArguments("WATCH"))
+			} else {
+				// Redis runs WATCH inside a transaction rather than queue it,
+				// and it is its refusal that answers.
+				defer func() { e.totals.commands++ }()
 			}
-			_, err := w.Write(reply)
+			_, err := out.Write(reply)
 			return tx, err
 		}
-		_, err := w.Write(tx.queue(e, cmd, conn))
+		_, err := out.Write(tx.queue(e, cmd, conn))
 		return tx, err
 	}
 	if err := CommandError(cmd); err != nil {
@@ -200,12 +207,16 @@ func (e *Engine) Transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn C
 		// inside a transaction that aborts it, and a malformed EXEC answers
 		// EXECABORT, discarding the transaction if there is one.
 		if cmd.Cmd == "EXEC" {
-			_, err := w.Write(Refusal(cmd, err))
+			_, err := out.Write(Refusal(cmd, err))
 			return nil, err
 		}
-		_, err := w.Write(tx.refuse(err))
+		_, err := out.Write(tx.refuse(err))
 		return tx, err
 	}
+	// MULTI, EXEC and DISCARD run, so they count, their refusals of a
+	// connection in the wrong state included, as Redis finds those inside
+	// the command. What EXEC runs counts as it runs, and EXEC after it.
+	defer func() { e.totals.commands++ }()
 	var reply []byte
 	switch {
 	case cmd.Cmd == "MULTI" && tx != nil:
@@ -220,10 +231,26 @@ func (e *Engine) Transact(tx *Transaction, cmd *Command, w io.ReadWriter, conn C
 	case cmd.Cmd == "DISCARD":
 		tx, reply = nil, constant.RespOk
 	default:
-		return nil, tx.exec(e, w, conn)
+		return nil, tx.exec(e, out, conn)
 	}
-	_, err := w.Write(reply)
+	_, err := out.Write(reply)
 	return tx, err
+}
+
+// countedWriter counts each error written through it toward
+// total_error_replies and errorstats. A transaction writes each of its own
+// replies in one call; EXEC's reply is an array, whose errors were counted as
+// the commands that answered them ran.
+type countedWriter struct {
+	e *Engine
+	w io.Writer
+}
+
+func (c countedWriter) Write(p []byte) (int, error) {
+	if len(p) > 0 && p[0] == '-' {
+		c.e.noteError(p)
+	}
+	return c.w.Write(p)
 }
 
 // refuse answers a command refused while queueing, which aborts the transaction.
@@ -363,6 +390,7 @@ func (tx *Transaction) exec(e *Engine, w io.Writer, conn Connection) error {
 			// An empty element would shift every reply after it, and the
 			// client would read each as the answer to the command before.
 			err = errNoReply
+			e.noteError(Encode(err, false))
 		}
 		if err != nil {
 			reply = Encode(err, false)

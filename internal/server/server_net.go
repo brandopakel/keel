@@ -123,6 +123,7 @@ func handleConn(conn net.Conn, variant NetVariant, e *core.Engine) {
 					break
 				}
 				if perr != nil {
+					e.NoteErrorReply(core.Encode(perr, false))
 					responseErrorRw(perr, out)
 					w.Flush()
 					bad = true

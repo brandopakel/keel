@@ -147,7 +147,11 @@ func (e *Engine) EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	entry := commands[cmd.Cmd]
 	if entry.run == nil {
 		// Unknown, or one only the transport answers, with none here to.
-		return unknownCommand(cmd)
+		// Whoever answers it answers with this error, which counts as an
+		// error reply here rather than in every caller.
+		err := unknownCommand(cmd)
+		e.noteError(Encode(err, false))
+		return err
 	}
 	var refused error
 	if !entry.counted(len(cmd.Args)) {
@@ -160,7 +164,9 @@ func (e *Engine) EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 		e.runningName = cmd.sentName()
 	}
 	if refused != nil {
-		_, err := c.Write(e.encode(refused, false))
+		res := e.encode(refused, false)
+		e.noteError(res)
+		_, err := c.Write(res)
 		return err
 	}
 	// Anything a command wants written to the log instead of itself is staged
@@ -182,6 +188,10 @@ func (e *Engine) EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	// before execution, so a refused command has not half-run.
 	if err := e.checkKeyTypes(cmd, entry); err != nil {
 		res := e.encode(err, false)
+		// Redis finds the wrong type inside the command, so this counts as a
+		// command that ran and failed.
+		e.totals.commands++
+		e.noteError(res)
 		e.aofCommit(cmd, res)
 		_, werr := c.Write(res)
 		e.aofEnd()
@@ -191,6 +201,12 @@ func (e *Engine) EvalAndResponse(cmd *Command, c io.ReadWriter) error {
 	suspended := e.space.SuspendEviction
 	e.space.SuspendEviction = true
 	res := entry.run(e, cmd.Args)
+	// Counted once it has run, as Redis's call() counts it, so INFO does not
+	// count itself and a CONFIG RESETSTAT counts as the first command after.
+	e.totals.commands++
+	if len(res) > 0 && res[0] == '-' {
+		e.noteError(res)
+	}
 	// With eviction suspended, removals so far are lazy expiry. They precede
 	// this command: recording them after INCR/HSET would delete the recreated key.
 	// Recorded before the reply is written. FlushAOF runs between execution and
