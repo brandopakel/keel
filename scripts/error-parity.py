@@ -300,6 +300,10 @@ GENERIC = [
     ['INCREX', 'num', 'LBOUND', 'x'], ['INCREX', 'num', 'BYFLOAT', '1', 'UBOUND', 'x'], ['INCREX', 'num', 'LBOUND', '2', 'UBOUND', '1'],
     ['INCREX', 'num', 'ENX'], ['INCREX', 'num', 'PERSIST', 'ENX'], ['INCREX', 'num', 'EX', '0'], ['INCREX', 'num', 'FOO'],
     ['INCREX', 'num', 'BYINT', '1', 'BYINT', '2'], ['INCREX', 'min', 'BYINT', '1', 'LBOUND', '9223372036854775807', 'SATURATE'],
+    ['HSTRLEN', 'str', 'f'], ['HMSET', 'hash', 'f'], ['HMSET', 'str', 'f', 'v'], ['HINCRBYFLOAT', 'hash', 'f', 'x'],
+    ['HINCRBYFLOAT', 'hash', 'f', 'inf'], ['HINCRBYFLOAT', 'str', 'f', '1'], ['HINCRBYFLOAT', 'str', 'f', 'x'],
+    ['HGETDEL', 'hash', 'FIELD', '1', 'f'], ['HGETDEL', 'hash', 'FIELDS', '0', 'f'], ['HGETDEL', 'hash', 'FIELDS', 'x', 'f'],
+    ['HGETDEL', 'hash', 'FIELDS', '2', 'f'], ['HGETDEL', 'str', 'FIELDS', '1', 'f'],
     # Keys and expiry
     ['RENAME', 'nokey', 'x'], ['RENAMENX', 'nokey', 'x'], ['RENAME', 'nokey', 'nokey'], ['RENAMENX', 'nokey', 'nokey'],
     ['COPY', 'str', 'str'], ['COPY', 'str', 'x', 'BAD'], ['COPY', 'str', 'x', 'DB', 'x'], ['COPY', 'str', 'x', 'DB'],
