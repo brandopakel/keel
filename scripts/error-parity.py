@@ -290,6 +290,7 @@ GENERIC = [
     ['INCREX', 'num', 'ENX'], ['INCREX', 'num', 'PERSIST', 'ENX'], ['INCREX', 'num', 'EX', '0'], ['INCREX', 'num', 'FOO'],
     ['INCREX', 'num', 'BYINT', '1', 'BYINT', '2'], ['INCREX', 'min', 'BYINT', '1', 'LBOUND', '9223372036854775807', 'SATURATE'],
     # Keys and expiry
+    ['RENAME', 'nokey', 'x'], ['RENAMENX', 'nokey', 'x'], ['RENAME', 'nokey', 'nokey'], ['RENAMENX', 'nokey', 'nokey'],
     ['EXPIRE', 'str', 'x'], ['EXPIRE', 'str', '10', 'BAD'], ['EXPIRE', 'str', '10', 'NX', 'XX'], ['EXPIRE', 'str', '10', 'GT', 'LT'],
     ['EXPIRE', 'str', '10', 'NX', 'GT'], ['EXPIRE', 'str', '9223372036854775807'], ['PEXPIRE', 'str', '9223372036854775807'],
     ['EXPIREAT', 'str', '9223372036854775807'], ['PEXPIREAT', 'str', 'x'], ['EXPIRE', 'str', '10', 'xx', 'nx'],

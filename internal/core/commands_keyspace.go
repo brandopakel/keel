@@ -184,3 +184,67 @@ func (e *Engine) cmdFLUSHDB(args []string) []byte {
 	r := e.reply()
 	return r.Status("OK").Bytes()
 }
+
+// cmdEXPIRETIME and cmdPEXPIRETIME answer the instant a key falls due, in
+// Unix seconds or milliseconds, -2 for a key that is not there and -1 for
+// one with no expiry; the seconds are rounded to the nearest, as Redis's
+// ttlGenericCommand rounds them.
+func (e *Engine) cmdEXPIRETIME(args []string) []byte {
+	if len(args) != 1 {
+		return e.encode(wrongArguments("EXPIRETIME"), false)
+	}
+	r := e.reply()
+	at := e.opExpireTime(args[0])
+	if at < 0 {
+		return r.Int(at).Bytes()
+	}
+	return r.Int((at + 500) / 1000).Bytes()
+}
+
+func (e *Engine) cmdPEXPIRETIME(args []string) []byte {
+	if len(args) != 1 {
+		return e.encode(wrongArguments("PEXPIRETIME"), false)
+	}
+	r := e.reply()
+	return r.Int(e.opExpireTime(args[0])).Bytes()
+}
+
+// cmdTOUCH records a use of each key, as a read does, and counts those that
+// exist; see opTouch.
+func (e *Engine) cmdTOUCH(args []string) []byte {
+	if len(args) == 0 {
+		return e.encode(wrongArguments("TOUCH"), false)
+	}
+	r := e.reply()
+	return r.Int(e.opTouch(args)).Bytes()
+}
+
+// cmdRENAME and cmdRENAMENX rename a key of any type; see opRename. RENAME
+// answers OK, RENAMENX 1, or 0 when the new name exists or is the old one.
+func (e *Engine) cmdRENAME(args []string) []byte {
+	e.recordsItself()
+	if len(args) != 2 {
+		return e.encode(wrongArguments("RENAME"), false)
+	}
+	r := e.reply()
+	if _, err := e.opRename(args[0], args[1], false); err != nil {
+		return r.Error(err).Bytes()
+	}
+	return r.Status("OK").Bytes()
+}
+
+func (e *Engine) cmdRENAMENX(args []string) []byte {
+	e.recordsItself()
+	if len(args) != 2 {
+		return e.encode(wrongArguments("RENAMENX"), false)
+	}
+	r := e.reply()
+	renamed, err := e.opRename(args[0], args[1], true)
+	switch {
+	case err != nil:
+		return r.Error(err).Bytes()
+	case renamed:
+		return r.Int(1).Bytes()
+	}
+	return r.Int(0).Bytes()
+}

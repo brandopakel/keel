@@ -133,6 +133,29 @@ func (k *Keyed[T]) Resize(key string) {
 	k.space.EnforceLimits()
 }
 
+// Touch records a use of key, as Get does, and reports whether it is there.
+func (k *Keyed[T]) Touch(key string) bool {
+	_, ok := k.Get(key)
+	return ok
+}
+
+// Rename moves the value from holds to to, with its expiry. The value is the
+// same object, not a copy, so this costs what a delete and a put cost,
+// whatever the value's size.
+func (k *Keyed[T]) Rename(from, to string) bool {
+	value, ok := k.Get(from)
+	if !ok {
+		return false
+	}
+	at, expires := k.GetExpiry(from)
+	k.Delete(from)
+	k.Put(to, value)
+	if expires {
+		k.SetExpiryAt(to, at)
+	}
+	return true
+}
+
 // Keyed is a Keyspace, so eviction can weigh its keys against every other kind.
 
 func (k *Keyed[T]) KeyspaceName() string { return k.name }

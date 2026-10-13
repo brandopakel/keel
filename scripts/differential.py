@@ -225,9 +225,13 @@ def operation(rng):
             ['ZINCRBY', key, rng.randrange(-3,4), member], ['ZPOPMIN', key, rng.randrange(4)],
             ['ZPOPMAX', key, rng.randrange(4)],
         ])
-    key = rng.choice(['string','hash','list','set','zset']) + ':' + str(rng.randrange(32))
+    kind = rng.choice(['string','hash','list','set','zset'])
+    key, other = [kind + ':' + str(rng.randrange(32)) for _ in range(2)]
     return rng.choice([['DEL', key], ['EXISTS', key, 'missing'], ['TYPE', key],
-                       ['PERSIST', key], ['PEXPIREAT', key, 4102444800000]])
+                       ['PERSIST', key], ['PEXPIREAT', key, 4102444800000],
+                       ['EXPIRETIME', key], ['PEXPIRETIME', key], ['TOUCH', key, other, 'missing', key],
+                       ['RENAME', key, other], ['RENAMENX', key, other], ['RENAME', key, key],
+                       ['RENAME', 'missing', key], ['RENAMENX', key, key]])
 
 
 def scan_all(client, *options):
@@ -448,7 +452,9 @@ def operation3(rng, modules):
         return rng.choice([['DBSIZE'], ['KEYS', 'string:1*'], ['EXISTS', key, key, 'missing'],
                            ['HKEYS', hash_key], ['HVALS', hash_key], ['HKEYS', 'missing'],
                            ['TYPE', key], ['UNLINK', key], ['TTL', 'missing'], ['PTTL', 'missing'],
-                           ['EXPIRE', 'missing', 10], ['PERSIST', 'missing']])
+                           ['EXPIRE', 'missing', 10], ['PERSIST', 'missing'],
+                           ['EXPIRETIME', key], ['PEXPIRETIME', 'missing'], ['TOUCH', key, 'missing'],
+                           ['RENAMENX', key, 'missing']])
     if kind == 'set':
         key, single = 'set:' + str(rng.randrange(32)), 'single:' + str(rng.randrange(4))
         # SPOP and SRANDMEMBER pick at random, so they are sent only where the

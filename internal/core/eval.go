@@ -34,6 +34,8 @@ var commandTable = map[string]func(*Engine, []string) []byte{
 	"MSETEX": (*Engine).cmdMSETEX, "INCREX": (*Engine).cmdINCREX,
 
 	// Keys and expiry
+	"EXPIRETIME": (*Engine).cmdEXPIRETIME, "PEXPIRETIME": (*Engine).cmdPEXPIRETIME, "TOUCH": (*Engine).cmdTOUCH,
+	"RENAME": (*Engine).cmdRENAME, "RENAMENX": (*Engine).cmdRENAMENX,
 	"DEL": (*Engine).cmdDEL, "UNLINK": (*Engine).cmdUNLINK, "EXISTS": (*Engine).cmdEXISTS,
 	"TYPE": (*Engine).cmdTYPE, "KEYS": (*Engine).cmdKEYS, "SCAN": (*Engine).cmdSCAN, "TTL": (*Engine).cmdTTL,
 	"PTTL": (*Engine).cmdPTTL, "EXPIRE": (*Engine).cmdEXPIRE, "PEXPIREAT": (*Engine).cmdPEXPIREAT,
