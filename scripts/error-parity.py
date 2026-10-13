@@ -397,12 +397,13 @@ KEEL_ONLY_ARITY = {'MORRIS.INITBYDIM': 4, 'MORRIS.INITBYPROB': 4, 'MORRIS.INCRBY
 
 MODULE_ARITY = {'BF.RESERVE': -4, 'BF.ADD': 3, 'BF.MADD': -3, 'BF.EXISTS': 3, 'BF.MEXISTS': -3, 'BF.INFO': -2,
                 'CF.RESERVE': -3, 'CF.ADD': 3, 'CF.ADDNX': 3, 'CF.EXISTS': 3, 'CF.MEXISTS': -3, 'CF.DEL': 3,
-                'CF.COUNT': 3, 'CF.INFO': 2, 'CMS.INITBYDIM': 4, 'CMS.INITBYPROB': 4, 'CMS.INCRBY': -4, 'CMS.QUERY': -3}
+                'CF.COUNT': 3, 'CF.INFO': 2, 'CMS.INITBYDIM': 4, 'CMS.INITBYPROB': 4, 'CMS.INCRBY': -4, 'CMS.QUERY': -3,
+                'BF.INSERT': -4, 'BF.CARD': 2, 'CF.INSERT': -4, 'CF.INSERTNX': -4, 'CMS.INFO': 2, 'CMS.MERGE': -4}
 # Counts RedisBloom checks in the command itself, past the arity Redis checks
 # for it: an upper bound, or an argument count that has to be odd or even.
 MODULE_HANDLER_ARITY = [['BF.RESERVE', 'bf', '0.01', '100', 'EXPANSION', '2', 'NONSCALING', 'x'],
                         ['BF.INFO', 'bf', 'CAPACITY', 'x'], ['CF.RESERVE', 'cf', '100', 'BUCKETSIZE'],
-                        ['CMS.INCRBY', 'cms', 'a', '1', 'b']]
+                        ['CMS.INCRBY', 'cms', 'a', '1', 'b'], ['CF.COMPACT'], ['CF.COMPACT', 'cf', 'x']]
 MODULE_SETUP = [['BF.RESERVE', 'bf', '0.01', '100'], ['CF.RESERVE', 'cf', '100'], ['CMS.INITBYDIM', 'cms', '10', '5']]
 
 

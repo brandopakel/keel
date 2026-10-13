@@ -19,6 +19,9 @@ var sketchWrites = [][]string{
 	{"CMS.INCRBY", "cms", "x", "1"},
 	{"MORRIS.INITBYDIM", "nosuch", "10", "5"}, {"MORRIS.INITBYPROB", "nosuch", "0.01", "0.01"},
 	{"MORRIS.INCRBY", "mor", "x", "1"},
+	{"BF.INSERT", "bf", "ITEMS", "x"}, {"BF.INSERT", "nosuch", "ITEMS", "x"},
+	{"CF.INSERT", "cf", "ITEMS", "x"}, {"CF.INSERTNX", "cf", "ITEMS", "x"}, {"CF.COMPACT", "cf"},
+	{"CMS.MERGE", "cms", "1", "cms"},
 }
 
 // TestReplicaRefusesEverySketchWrite: a replica refuses each sketch write
