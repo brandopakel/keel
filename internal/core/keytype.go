@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"math"
+	"strings"
 
 	"github.com/brandopakel/keel/internal/data_structure"
 )
@@ -49,11 +50,23 @@ var commandKeyspace = map[string]string{
 	"ZRANGE": "zset", "ZCARD": "zset",
 	"ZCOUNT": "zset", "ZRANGEBYSCORE": "zset", "ZREVRANGEBYSCORE": "zset",
 	"ZINCRBY": "zset", "ZPOPMIN": "zset", "ZPOPMAX": "zset",
+	"ZREVRANGE": "zset", "ZRANGEBYLEX": "zset", "ZREVRANGEBYLEX": "zset", "ZREVRANK": "zset",
+	"ZMSCORE": "zset", "ZLEXCOUNT": "zset", "ZREMRANGEBYRANK": "zset", "ZREMRANGEBYSCORE": "zset",
+	"ZREMRANGEBYLEX": "zset", "ZRANDMEMBER": "zset",
+
+	// ZRANGESTORE, ZMPOP and the algebra (ZUNION, ZINTER, ZDIFF, their STORE
+	// forms, ZINTERCARD) are absent: they name more than one key, and check
+	// the type of each themselves, where Redis does (zsetSource, cmdZMPOP,
+	// zsetOpArguments) - a destination is replaced whatever it holds, ZMPOP
+	// stops at the first key that exists, and the algebra takes sets too.
 
 	// Geospatial keys are sorted sets, as they are in Redis: the geohash is the
 	// score, which is what makes GEOSEARCH a range query over a skip list.
 	"GEOADD": "zset", "GEODIST": "zset", "GEOHASH": "zset",
 	"GEOSEARCH": "zset", "GEOPOS": "zset",
+	"GEORADIUS": "zset", "GEORADIUS_RO": "zset", "GEORADIUSBYMEMBER": "zset", "GEORADIUSBYMEMBER_RO": "zset",
+	// GEOSEARCHSTORE is absent, as ZRANGESTORE is: its destination is
+	// replaced whatever it holds, and it checks its source itself.
 
 	"BF.RESERVE": "bloom", "BF.INFO": "bloom", "BF.ADD": "bloom", "BF.MADD": "bloom",
 	"BF.EXISTS": "bloom", "BF.MEXISTS": "bloom",
@@ -205,16 +218,30 @@ var argumentsBeforeType = map[string]func(e *Engine, args []string) error{
 		_, err := parseZScore(args[1])
 		return err
 	},
-	"ZRANGE": func(e *Engine, args []string) error {
-		_, err := e.parseZRange(args)
+	"ZRANGE":           zrangeArgumentCheck(zrangeAuto, zrangeDirectionAuto, false),
+	"ZRANGEBYSCORE":    zrangeArgumentCheck(zrangeScore, zrangeForward, false),
+	"ZREVRANGEBYSCORE": zrangeArgumentCheck(zrangeScore, zrangeReverse, false),
+	"ZREVRANGE":        zrangeArgumentCheck(zrangeRank, zrangeReverse, false),
+	"ZRANGEBYLEX":      zrangeArgumentCheck(zrangeLex, zrangeForward, false),
+	"ZREVRANGEBYLEX":   zrangeArgumentCheck(zrangeLex, zrangeReverse, false),
+	"ZLEXCOUNT": func(e *Engine, args []string) error {
+		_, err := parseLexInterval(args[1], args[2])
 		return err
 	},
-	"ZRANGEBYSCORE": func(e *Engine, args []string) error {
-		_, _, _, _, err := e.parseScoreRange(args, false)
+	"ZREMRANGEBYRANK": func(e *Engine, args []string) error {
+		_, err := e.zremrangeArguments(args, zrangeRank)
 		return err
 	},
-	"ZREVRANGEBYSCORE": func(e *Engine, args []string) error {
-		_, _, _, _, err := e.parseScoreRange(args, true)
+	"ZREMRANGEBYSCORE": func(e *Engine, args []string) error {
+		_, err := e.zremrangeArguments(args, zrangeScore)
+		return err
+	},
+	"ZREMRANGEBYLEX": func(e *Engine, args []string) error {
+		_, err := e.zremrangeArguments(args, zrangeLex)
+		return err
+	},
+	"ZRANDMEMBER": func(e *Engine, args []string) error {
+		_, _, _, err := e.zrandmemberArguments(args)
 		return err
 	},
 	"ZCOUNT": func(e *Engine, args []string) error {
@@ -230,7 +257,11 @@ var argumentsBeforeType = map[string]func(e *Engine, args []string) error{
 		return err
 	},
 	"ZRANK": func(e *Engine, args []string) error {
-		_, err := zrankArguments(args)
+		_, err := zrankArguments("ZRANK", args)
+		return err
+	},
+	"ZREVRANK": func(e *Engine, args []string) error {
+		_, err := zrankArguments("ZREVRANK", args)
 		return err
 	},
 	"GEOADD": func(_ *Engine, args []string) error { return geoaddArguments(args) },
@@ -323,8 +354,17 @@ func writtenKeys(cmd *Command) []string {
 		// source recorded as dirty costs one redundant re-emit and a source
 		// missed would be a bug, so all of them count.
 		return cmd.Args
-	case "KEEL.RESTORE", "MEMKV.RESTORE", "EXPIRE", "PEXPIRE", "EXPIREAT", "PEXPIREAT", "PERSIST", "DELEX":
+	case "KEEL.RESTORE", "MEMKV.RESTORE", "EXPIRE", "PEXPIRE", "EXPIREAT", "PEXPIREAT", "PERSIST", "DELEX",
+		"ZRANGESTORE", "ZUNIONSTORE", "ZINTERSTORE", "ZDIFFSTORE", "GEOSEARCHSTORE":
+		// These write their first key and only read the others.
 		return cmd.Args[:1]
+	case "GEORADIUS", "GEORADIUSBYMEMBER":
+		// The key searched, and the key STORE or STOREDIST writes.
+		return georadiusKeys(cmd)
+	case "ZMPOP":
+		// Which of its keys it pops is known only once it has run, so all of
+		// them count, as PFMERGE's sources do.
+		return zmpopKeys(cmd.Args)
 	}
 	if _, known := commandKeyspace[cmd.Cmd]; known {
 		return commandKeys(cmd)
@@ -389,8 +429,9 @@ var keyspaceReads = map[string]bool{
 	"HGET": true, "HMGET": true, "HEXISTS": true, "HSTRLEN": true, "HLEN": true, "HKEYS": true, "HVALS": true, "HGETALL": true,
 	"LLEN": true, "LINDEX": true,
 	"SCARD": true, "SMEMBERS": true, "SISMEMBER": true, "SMISMEMBER": true,
-	"ZSCORE": true, "ZCARD": true,
+	"ZSCORE": true, "ZCARD": true, "ZMSCORE": true,
 	"GEOHASH": true, "GEOSEARCH": true, "GEOPOS": true,
+	"GEORADIUS": true, "GEORADIUS_RO": true, "GEORADIUSBYMEMBER": true, "GEORADIUSBYMEMBER_RO": true,
 	"PFCOUNT": true, "PFMERGE": true,
 	"CMS.QUERY": true, "MORRIS.QUERY": true,
 }
@@ -410,7 +451,9 @@ var keyspaceReads = map[string]bool{
 var readsAfterArguments = map[string]bool{"GETRANGE": true, "SUBSTR": true, "GETEX": true, "LRANGE": true,
 	"SRANDMEMBER": true, "SRAND": true,
 	"ZCOUNT": true, "ZRANGEBYSCORE": true, "ZREVRANGEBYSCORE": true, "ZRANGE": true, "ZRANK": true,
-	"GEODIST": true}
+	"ZREVRANGE": true, "ZRANGEBYLEX": true, "ZREVRANGEBYLEX": true, "ZREVRANK": true, "ZLEXCOUNT": true,
+	"ZRANDMEMBER": true,
+	"GEODIST":     true}
 
 // checkKeyTypes reports an error if any key the command names is already held
 // by a different kind of store: the command's own refusal of its arguments,
@@ -458,4 +501,31 @@ func (e *Engine) checkKeyTypes(cmd *Command, entry commandEntry) error {
 		}
 	}
 	return nil
+}
+
+// zmpopKeys are the keys ZMPOP names: numkeys of them after numkeys, or none
+// when numkeys is not a count of the arguments that follow.
+func zmpopKeys(args []string) []string {
+	n, valid := canonicalInteger(args[0])
+	if !valid || n < 1 || n >= int64(len(args)-1) {
+		return nil
+	}
+	return args[1 : 1+n]
+}
+
+// georadiusKeys are the keys GEORADIUS and GEORADIUSBYMEMBER name: the key
+// searched, and the one the last STORE or STOREDIST names.
+func georadiusKeys(cmd *Command) []string {
+	keys := cmd.Args[:1]
+	base := 5
+	if cmd.Cmd == "GEORADIUSBYMEMBER" {
+		base = 4
+	}
+	for i := base; i+1 < len(cmd.Args); i++ {
+		if strings.EqualFold(cmd.Args[i], "STORE") || strings.EqualFold(cmd.Args[i], "STOREDIST") {
+			keys = []string{cmd.Args[0], cmd.Args[i+1]}
+			i++
+		}
+	}
+	return keys
 }
