@@ -44,6 +44,14 @@ var replicaWrites = [][]string{
 	{"ZADD", "z", "3", "c"}, {"ZADD", "z", "XX", "CH", "5", "a"}, {"ZADD", "missing", "1", "a"},
 	{"ZREM", "z", "a"}, {"ZINCRBY", "z", "1", "a"}, {"ZPOPMIN", "z"}, {"ZPOPMAX", "z", "2"},
 	{"GEOADD", "g", "13.361389", "38.115556", "palermo"}, {"GEOADD", "z", "XX", "15", "37", "a"},
+	// The sorted-set and geo commands (step 4.7).
+	{"ZADD", "z", "GT", "9", "a"}, {"ZADD", "z", "INCR", "1", "a"}, {"ZREMRANGEBYRANK", "z", "0", "0"},
+	{"ZREMRANGEBYSCORE", "z", "-inf", "+inf"}, {"ZREMRANGEBYLEX", "z", "-", "+"},
+	{"ZRANGESTORE", "stored", "z", "0", "-1"}, {"ZMPOP", "1", "z", "MIN"}, {"ZUNIONSTORE", "stored", "1", "z"},
+	{"ZINTERSTORE", "stored", "1", "z"}, {"ZDIFFSTORE", "stored", "1", "z"},
+	{"GEORADIUS", "g", "15", "37", "200", "km"}, {"GEORADIUS", "g", "15", "37", "200", "km", "STORE", "stored"},
+	{"GEORADIUSBYMEMBER", "g", "m", "200", "km"},
+	{"GEOSEARCHSTORE", "stored", "g", "FROMLONLAT", "15", "37", "BYRADIUS", "200", "km"},
 }
 
 var replicaWritesSeed = [][]string{
