@@ -180,6 +180,8 @@ def operation(rng):
         ])
     if kind == 'hash':
         return rng.choice([
+            ['HSTRLEN', key, field], ['HMSET', key, field, value], ['HINCRBYFLOAT', key, field, rng.choice(['0.1', '-2.5', '10', 'x'])],
+            ['HGETDEL', key, 'FIELDS', 2, field, 'missing'], ['HSETNX', key, field, value],
             ['HSET', key, field, value], ['HSETNX', key, field, value], ['HGET', key, field],
             ['HMGET', key, field, 'missing'], ['HDEL', key, field], ['HEXISTS', key, field],
             ['HLEN', key], ['HGETALL', key], ['HINCRBY', key, field, rng.randrange(-4,5)],

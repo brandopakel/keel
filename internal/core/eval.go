@@ -57,6 +57,8 @@ var commandTable = map[string]func(*Engine, []string) []byte{
 	"HMGET": (*Engine).cmdHMGET, "HDEL": (*Engine).cmdHDEL, "HEXISTS": (*Engine).cmdHEXISTS,
 	"HLEN": (*Engine).cmdHLEN, "HKEYS": (*Engine).cmdHKEYS, "HVALS": (*Engine).cmdHVALS,
 	"HGETALL": (*Engine).cmdHGETALL, "HINCRBY": (*Engine).cmdHINCRBY,
+	"HMSET": (*Engine).cmdHMSET, "HSTRLEN": (*Engine).cmdHSTRLEN, "HINCRBYFLOAT": (*Engine).cmdHINCRBYFLOAT,
+	"HGETDEL": (*Engine).cmdHGETDEL,
 
 	// Lists
 	"LPUSH": (*Engine).cmdLPUSH, "RPUSH": (*Engine).cmdRPUSH, "LPOP": (*Engine).cmdLPOP,

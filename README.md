@@ -44,7 +44,7 @@ populate the variable; avoid putting secrets in process arguments or shell histo
 | SET options | `NX`, `XX`, `IFEQ`, `IFNE`, `IFDEQ`, `IFDNE`, `GET`, `KEEPTTL`, `EX`, `PX`, `EXAT`, `PXAT`; conditional failures return null, or the old value with `GET` |
 | Expiry, every type | `TTL`, `PTTL`, `EXPIRETIME`, `PEXPIRETIME`, `EXPIRE`, `PEXPIRE`, `EXPIREAT`, `PEXPIREAT`, `PERSIST`; expiry setters accept `NX`, `XX`, `GT`, `LT` |
 | Keys | `DEL`, `UNLINK` (same as `DEL`), `EXISTS`, `TYPE`, `TOUCH`, `RENAME`, `RENAMENX`, `COPY` (`DB 0` only), `RANDOMKEY`, `KEYS`, `SCAN` with `MATCH`/`COUNT`/`TYPE`, `DBSIZE`, `FLUSHDB` (`SYNC` and `ASYNC` both flush before the reply) |
-| Hashes | `HSET`, `HSETNX`, `HGET`, `HMGET`, `HDEL`, `HEXISTS`, `HLEN`, `HKEYS`, `HVALS`, `HGETALL`, `HINCRBY` |
+| Hashes | `HSET`, `HMSET`, `HSETNX`, `HGET`, `HMGET`, `HGETDEL`, `HDEL`, `HEXISTS`, `HLEN`, `HSTRLEN`, `HKEYS`, `HVALS`, `HGETALL`, `HINCRBY`, `HINCRBYFLOAT` |
 | Lists | `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LLEN`, `LINDEX`, `LSET`, `LRANGE`, `LTRIM`; pops accept an optional count |
 | Sets | `SADD`, `SREM`, `SCARD`, `SMEMBERS`, `SISMEMBER`, `SMISMEMBER`, `SPOP`, `SRANDMEMBER` |
 | Sorted sets | `ZADD` with `NX`/`XX`/`CH`, `ZRANK` with `WITHSCORE`, `ZREM`, `ZSCORE`, `ZCARD`, `ZCOUNT`, `ZINCRBY`, `ZPOPMIN`/`ZPOPMAX`; `ZRANGEBYSCORE`/`ZREVRANGEBYSCORE`; `ZRANGE` by rank or `BYSCORE`, with `REV`, `LIMIT` and `WITHSCORES` |
