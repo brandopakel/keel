@@ -260,7 +260,7 @@ In order of distance, not size.
   commands, RESP3 push messages and client tracking, ACL roles, and cluster routing
   are absent. Unreleased development adds `MULTI`/`EXEC`/`DISCARD`. `ZRANGE` lacks
   `BYLEX`; `ZADD` lacks `GT`, `LT`, and `INCR`.
-  `LREM`, `LINSERT`, `GEOSEARCHSTORE`, the `GEORADIUS` family, `CMS.INFO` and `CMS.MERGE`
+  `GEOSEARCHSTORE`, the `GEORADIUS` family, `CMS.INFO` and `CMS.MERGE`
   are also missing. So are RedisBloom's `BF.INSERT`, `BF.CARD`, `CF.INSERT`,
   `CF.INSERTNX`, `CF.COMPACT`, the `SCANDUMP`/`LOADCHUNK` pairs and the `DEBUG` forms.
   The `BF.*` and `CF.*` commands Keel has answer as RedisBloom 8.10.1's do in both
