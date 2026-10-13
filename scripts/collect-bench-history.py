@@ -46,7 +46,8 @@ Five kinds of run are collected:
   tests each server passed and failed and Keel's share of Redis's passes;
   census/redis-tests-units.csv one line per unit of each run; and
   census/redis-tests-failing.csv every test Keel failed in the newest run of
-  develop, rewritten like latest.csv.
+  develop, rewritten like latest.csv. A run whose report is not complete is
+  recorded in redis-tests.csv, marked so, and adds nothing else.
 - telemetry: the Live telemetry workflow's load/compat.json and
   load/timeline.json, with provenance.txt for the host. telemetry/runs.csv gets
   one line per run, with how many metric names redis_exporter reported for Keel
@@ -123,7 +124,8 @@ CONFIG_RUNS = ['artifact_id', 'run_id', 'time', 'event', 'branch', 'pr', 'conclu
                'has', 'mapped', 'lacks', 'lacks_used', 'lacks_tested', 'documented', 'same_value', 'url']
 CONFIG_DIRECTIVES = ['run_id', 'time', 'branch', 'name', 'alias', 'family', 'kind', 'flags', 'documented', 'class',
                      'keel_value', 'redis_value', 'note', 'used_by', 'test_files']
-REDIS_TEST_RUNS = ['artifact_id', 'run_id', 'time', 'event', 'branch', 'pr', 'conclusion', 'units', 'redis_passed',
+REDIS_TEST_RUNS = ['artifact_id', 'run_id', 'time', 'event', 'branch', 'pr', 'conclusion', 'complete',
+                   'incomplete_groups', 'units', 'redis_passed',
                    'redis_failed', 'keel_passed', 'keel_failed', 'keel_ignored', 'keel_not_run',
                    'keel_units_crashed', 'keel_units_timed_out', 'keel_units_exception', 'keel_units_unconfigurable',
                    'parity', 'url']
@@ -399,15 +401,28 @@ def config_records(artifact_id, run, pr, config):
 
 def redis_test_records(artifact_id, run, pr, files):
     """redis-tests.csv, redis-tests-units.csv and redis-tests-failing.csv
-    lines for one run of Redis's test suite."""
+    lines for one run of Redis's test suite.
+
+    A report that is not complete (a group of either server did not report
+    or did not finish; reports from before the field existed count as not
+    complete) is quarantined: its run is recorded, marked complete=no with
+    the groups missing, but it adds no unit lines and never replaces the
+    failing-tests snapshot, which would otherwise lose the failures of the
+    groups that were never measured. A complete run with no failures does
+    replace the snapshot, with an empty one."""
     report = json.loads(files['redis-tests.json'])
+    complete = report.get('complete') is True
     k, r = report['totals']['keel'], report['totals']['redis']
-    runs = [{'artifact_id': artifact_id, **run_fields(run, pr), 'units': k['units'], 'redis_passed': r['passed'],
+    runs = [{'artifact_id': artifact_id, **run_fields(run, pr), 'complete': 'yes' if complete else 'no',
+             'incomplete_groups': '; '.join(report.get('incomplete_groups') or ([] if complete else ['not recorded'])),
+             'units': k['units'], 'redis_passed': r['passed'],
              'redis_failed': r['failed'], 'keel_passed': k['passed'], 'keel_failed': k['failed'],
              'keel_ignored': k['ignored'], 'keel_not_run': k['not_run'], 'keel_units_crashed': k['units_crashed'],
              'keel_units_timed_out': k['units_timed_out'], 'keel_units_exception': k['units_exception'],
              'keel_units_unconfigurable': k.get('units_unconfigurable', 0),
              'parity': num(k['passed'] / r['passed'], 4) if r['passed'] else ''}]
+    if not complete:
+        return {'redis-tests': runs}
     units, failing = [], []
     for row in report['units']:
         keel, redis = row.get('keel') or {}, row.get('redis') or {}
@@ -417,10 +432,11 @@ def redis_test_records(artifact_id, run, pr, files):
                       'keel_passed': keel.get('passed', ''), 'keel_failed': keel.get('failed', ''),
                       'keel_ignored': keel.get('ignored', ''), 'keel_not_run': keel.get('not_run', ''),
                       'keel_outcome': keel.get('outcome', ''), 'keel_seconds': keel.get('seconds', '')})
-        for name in keel.get('failing', []):
-            failing.append({'run_id': run['id'], 'time': run['created_at'], 'branch': run['head_branch'],
-                            'unit': row['unit'], 'test': name, 'detail': keel.get('details', {}).get(name, '')[:200]})
-    return {'redis-tests': runs, 'redis-tests-units': units, 'redis-tests-failing': failing}
+        failing.extend({'run_id': run['id'], 'time': run['created_at'], 'branch': run['head_branch'],
+                        'unit': row['unit'], 'test': name, 'detail': keel.get('details', {}).get(name, '')[:200]}
+                       for name in keel.get('failing', []))
+    return {'redis-tests': runs, 'redis-tests-units': units, 'redis-tests-failing': failing,
+            SNAPSHOT_ORIGIN: {'branch': run['head_branch'], 'time': run['created_at']}}
 
 
 def telemetry_records(artifact_id, run, pr, files):
@@ -437,6 +453,10 @@ def telemetry_records(artifact_id, run, pr, files):
               for t in timeline]
     return {'runs': runs, 'phases': phases}
 
+
+# A records key naming the run a kind's snapshots come from, for a snapshot
+# that may be empty (a complete Redis-tests run with no failing test).
+SNAPSHOT_ORIGIN = '_snapshot_origin'
 
 RECORDS = {'command-path': command_path_records, 'matched': matched_records,
            'matched-everysec': matched_records, 'census': census_records, 'telemetry': telemetry_records,
@@ -499,18 +519,24 @@ class Store:
         return {line['artifact_id'] for line in self.lines[self.runs_file]}
 
     def add(self, records):
+        origin = records.get(SNAPSHOT_ORIGIN)
         for name, lines in records.items():
+            if name == SNAPSHOT_ORIGIN:
+                continue
             if name in self.snapshots:
-                self.offer_snapshot(name, lines)
+                self.offer_snapshot(name, lines, origin)
             else:
                 self.lines[name] += [{k: str(v) for k, v in line.items()} for line in lines]
 
-    def offer_snapshot(self, name, lines):
+    def offer_snapshot(self, name, lines, origin=None):
         """Keep these lines as the snapshot if they come from develop and are
-        newer than the one held. A run collected late cannot replace a newer one."""
-        if not lines or lines[0]['branch'] != 'develop' or lines[0]['time'] <= self.snapshot_time[name]:
+        newer than the one held. A run collected late cannot replace a newer one.
+        Empty lines replace the snapshot only when the records name the run
+        they come from (origin); otherwise they are no snapshot at all."""
+        first = lines[0] if lines else origin
+        if not first or first['branch'] != 'develop' or first['time'] <= self.snapshot_time[name]:
             return
-        self.snapshot_time[name] = lines[0]['time']
+        self.snapshot_time[name] = first['time']
         self.snapshot[name] = [{k: str(v) for k, v in line.items()} for line in lines]
 
     def save(self):

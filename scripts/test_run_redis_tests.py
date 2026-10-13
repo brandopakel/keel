@@ -161,6 +161,38 @@ class Report(unittest.TestCase):
             self.assertIn('Keel passes **130** of the **154** Redis passes in external mode (84.4%)', text)
             self.assertIn('| unit/scan | 10 | 0 | 0 | 0 | 0 | crash | 3.5 |', text)
             self.assertIn('unit/shutdown (stops and restarts the server)', text)
+            # Three of the fourteen groups reported, none of them marked
+            # complete: the run is incomplete, and says which groups.
+            self.assertFalse(result['complete'])
+            self.assertEqual(len(result['incomplete_groups']), 2 * len(rt.GROUPS))
+            self.assertIn('keel group 1', result['incomplete_groups'])
+            self.assertIn('**Incomplete run:**', text)
+
+    def write_groups(self, root, skip=(), unfinished=()):
+        for server in ('keel', 'redis'):
+            for group in rt.GROUPS:
+                if (server, group) in skip:
+                    continue
+                directory = root / 'groups' / f'redis-tests-{server}-{group}' / server / f'group-{group}'
+                directory.mkdir(parents=True)
+                units = [unit_result(f'unit/g{group}', server, 5, 0)]
+                (directory / 'group.json').write_text(json.dumps(
+                    {'server': server, 'group': group, 'units': units, 'complete': (server, group) not in unfinished,
+                     'harness_adaptation': 'adapted'}))
+
+    def test_complete_only_when_every_group_reported_and_finished(self):
+        cases = [((), (), True, []),
+                 ((('redis', 4),), (), False, ['redis group 4']),
+                 ((), (('keel', 6),), False, ['keel group 6'])]
+        for skip, unfinished, complete, missing in cases:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                self.write_groups(root, skip, unfinished)
+                rt.main(['report', '--out', str(root / 'report'), '--results', str(root / 'groups')])
+                result = json.loads((root / 'report/redis-tests.json').read_text())
+                self.assertEqual((result['complete'], result['incomplete_groups']), (complete, missing), (skip, unfinished))
+                text = (root / 'report/redis-tests.md').read_text()
+                self.assertEqual('**Incomplete run:**' in text, not complete)
 
 
 if __name__ == '__main__':

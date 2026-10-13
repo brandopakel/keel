@@ -101,6 +101,7 @@ CONFIG = {
 # The Redis tests workflow's redis-tests.json, trimmed.
 REDIS_TESTS = {
     'skipped_units': {'unit/shutdown': 'stops and restarts the server'},
+    'complete': True, 'incomplete_groups': [],
     'totals': {'keel': {'units': 2, 'passed': 100, 'failed': 44, 'ignored': 3, 'not_run': 0, 'units_crashed': 0,
                         'units_timed_out': 1, 'units_exception': 0},
                'redis': {'units': 2, 'passed': 150, 'failed': 1, 'ignored': 3, 'not_run': 0, 'units_crashed': 0,
@@ -449,6 +450,41 @@ class NewKinds(unittest.TestCase):
         self.assertEqual(records['redis-tests-failing'],
                          [{'run_id': 37658260465, 'time': '2026-10-07T17:20:12Z', 'branch': 'develop',
                            'unit': 'unit/type/string', 'test': 'GETEX EX option', 'detail': "ERR unknown command 'getex'"}])
+
+    def test_an_incomplete_redis_tests_report_is_quarantined(self):
+        report = dict(REDIS_TESTS, complete=False, incomplete_groups=['keel group 4'])
+        records = cbh.redis_test_records(3, self.run, '', {'redis-tests.json': json.dumps(report)})
+        self.assertEqual(sorted(records), ['redis-tests'], 'no unit lines and no snapshot')
+        run, = records['redis-tests']
+        self.assertEqual((run['complete'], run['incomplete_groups'], run['keel_passed']), ('no', 'keel group 4', 100))
+        # A report from before the field existed counts as incomplete.
+        old = {k: v for k, v in REDIS_TESTS.items() if k not in ('complete', 'incomplete_groups')}
+        run, = cbh.redis_test_records(3, self.run, '', {'redis-tests.json': json.dumps(old)})['redis-tests']
+        self.assertEqual((run['complete'], run['incomplete_groups']), ('no', 'not recorded'))
+
+    def test_the_failing_snapshot_survives_an_incomplete_run_and_empties_on_a_clean_one(self):
+        gh = FakeGitHub()
+        gh.add('redis-tests', 7, 70, {'redis-tests.json': json.dumps(REDIS_TESTS)}, created='2026-10-13T01:00:00Z',
+               branch='develop')
+        partial = dict(REDIS_TESTS, complete=False, incomplete_groups=['redis group 2'])
+        partial['units'] = [dict(REDIS_TESTS['units'][1], keel=dict(REDIS_TESTS['units'][1]['keel'], failing=[]))]
+        gh.add('redis-tests', 8, 80, {'redis-tests.json': json.dumps(partial)}, created='2026-10-13T02:00:00Z',
+               branch='develop')
+        with tempfile.TemporaryDirectory() as tmp:
+            cbh.collect(gh, tmp, ['redis-tests'])
+            failing = read(Path(tmp) / 'census/redis-tests-failing.csv')
+            self.assertEqual([(f['run_id'], f['test']) for f in failing], [('70', 'GETEX EX option')],
+                             'the later, incomplete run does not replace the snapshot')
+            self.assertEqual([r['complete'] for r in read(Path(tmp) / 'census/redis-tests.csv')], ['yes', 'no'])
+            self.assertEqual(len(read(Path(tmp) / 'census/redis-tests-units.csv')), 2, 'units of the complete run only')
+            clean = dict(REDIS_TESTS)
+            clean['units'] = [dict(u, keel=dict(u['keel'], failing=[], details={})) if u['keel'] else u
+                              for u in REDIS_TESTS['units']]
+            gh.add('redis-tests', 9, 90, {'redis-tests.json': json.dumps(clean)}, created='2026-10-13T03:00:00Z',
+                   branch='develop')
+            cbh.collect(gh, tmp, ['redis-tests'])
+            self.assertEqual(read(Path(tmp) / 'census/redis-tests-failing.csv'), [],
+                             'a complete run with no failures empties the snapshot')
 
     def test_redis_tests_files_live_under_census(self):
         gh = FakeGitHub()

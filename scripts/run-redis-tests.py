@@ -298,12 +298,23 @@ def report(args):
     """Join every group.json under the result directories into one report."""
     sides = {'keel': {}, 'redis': {}}
     adaptations = set()
+    # A run is complete only when every configured group of both servers
+    # wrote its result and finished its units. A job that fails before its
+    # first unit writes nothing, and one stopped by its time limit writes
+    # complete: false.
+    expected = {(server, group) for server in ('keel', 'redis') for group in GROUPS}
+    observed, incomplete = set(), set()
     for root in args.results:
         for path in Path(root).rglob('group.json'):
             group = json.loads(path.read_text())
+            key = (group['server'], group['group'])
+            observed.add(key)
+            if not group.get('complete', False):
+                incomplete.add(key)
             adaptations.add(group.get('harness_adaptation', 'unrecorded'))
             for result in group['units']:
                 sides[group['server']][result['unit']] = summarise_unit(result)
+    incomplete |= expected - observed
     units = sorted(set(sides['keel']) | set(sides['redis']))
     rows = []
     for unit in units:
@@ -311,7 +322,7 @@ def report(args):
         rows.append({'unit': unit, 'keel': k, 'redis': r})
     totals = {}
     for side in ('keel', 'redis'):
-        done = [u for u in sides[side].values()]
+        done = list(sides[side].values())
         totals[side] = {'units': len(done), 'passed': sum(u['passed'] for u in done),
                         'failed': sum(u['failed'] for u in done), 'ignored': sum(u['ignored'] for u in done),
                         'not_run': sum(u['not_run'] for u in done),
@@ -319,7 +330,9 @@ def report(args):
                         'units_timed_out': sum(u['outcome'] == 'timeout' for u in done),
                         'units_exception': sum(u['outcome'] == 'exception' for u in done),
                         'units_unconfigurable': sum(u['outcome'] == 'unconfigurable' for u in done)}
-    result = {'skipped_units': SKIPPED, 'harness_adaptation': sorted(adaptations), 'totals': totals, 'units': rows}
+    result = {'skipped_units': SKIPPED, 'harness_adaptation': sorted(adaptations), 'totals': totals, 'units': rows,
+              'complete': not incomplete,
+              'incomplete_groups': [f'{server} group {group}' for server, group in sorted(incomplete)]}
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     (out / 'redis-tests.json').write_text(json.dumps(result, indent=1) + '\n')
@@ -348,7 +361,12 @@ def markdown(result):
            f"({parity}), over {k['units']} units; {k['failed']} fail, {k['not_run']} are not reached, "
            f"{k['units_crashed']} units crash the server, {k['units_timed_out']} time out, "
            f"{k['units_exception']} stop on an exception, {k['units_unconfigurable']} cannot be configured "
-           f"(CONFIG SET refused). Redis itself: {r['passed']} passed, {r['failed']} failed.", '',
+           f"(CONFIG SET refused). Redis itself: {r['passed']} passed, {r['failed']} failed.", '']
+    if not result.get('complete', False):
+        missing = ', '.join(result.get('incomplete_groups') or []) or 'not recorded'
+        out += [f'**Incomplete run:** these groups did not report or did not finish: {missing}. '
+                'The totals cover only what ran.', '']
+    out += [
            '| Unit | Redis passed | Redis failed | Keel passed | Keel failed | Not run | Keel outcome | Seconds |',
            '| --- | ---: | ---: | ---: | ---: | ---: | --- | ---: |']
     for row in result['units']:

@@ -104,6 +104,10 @@ jobs:
           path: /tmp/bin
       - name: Run the units
         shell: bash
+        env:
+          # Through the environment, never pasted into the script: on dispatch
+          # the input is free text.
+          UNIT_TIMEOUT: ${{ inputs.timeout || '900' }}
         run: |
           chmod +x /tmp/bin/keel /tmp/bin/redis-server /tmp/bin/redis-cli
           # The harness runs src/redis-cli from the source tree in a few tests.
@@ -112,7 +116,7 @@ jobs:
           python3 -I scripts/run-redis-tests.py run --server ${{ matrix.server }} --bin "$bin" \
             --redis-src /tmp/redis-8.10.1 --group ${{ matrix.group }} \
             --out dist/redis-tests/${{ matrix.server }}/group-${{ matrix.group }} \
-            --timeout ${{ inputs.timeout || 900 }}
+            --timeout "$UNIT_TIMEOUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
