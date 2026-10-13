@@ -114,6 +114,33 @@ class Adaptation(unittest.TestCase):
                 rt.adapt_harness(tmp)
 
 
+# A block error under --durable: a CONFIG SET in a start_server block, outside
+# any test, as the harness prints it (it drops the error's first ten bytes).
+BLOCK_ERROR = (
+    'Testing unit/type/hash\n'
+    "[\x1b[0;31merr\x1b[0m]: n option or number of arguments for CONFIG SET - 'hash-max-listpack-value'\n"
+    "ERR Unknown option or number of arguments for CONFIG SET - 'hash-max-listpack-value'\n"
+    '    while executing\n'
+    '[1/1 \x1b[0;33mdone\x1b[0m]: unit/type/hash (0 seconds)\n'
+    '*** [err]: n option or number of arguments for CONFIG SET - \'hash-max-listpack-value\'\n'
+)
+
+
+class Outcomes(unittest.TestCase):
+    def test_block_errors_are_counted_and_classified(self):
+        parsed = rt.parse(BLOCK_ERROR)
+        self.assertEqual((parsed['passed'], parsed['failed'], parsed['done']), ([], [], True))
+        error, = parsed['block_errors']
+        self.assertEqual(error['detail'][0], "ERR Unknown option or number of arguments for CONFIG SET - 'hash-max-listpack-value'")
+        self.assertEqual(rt.outcome('ok', parsed, True), 'unconfigurable')
+        other = rt.parse(BLOCK_ERROR.replace("CONFIG SET - 'hash-max-listpack-value'", "command 'subscribe'"))
+        self.assertEqual(rt.outcome('ok', other, True), 'exception')
+        self.assertEqual(rt.outcome('ok', rt.parse(HARNESS), True), 'ok', 'failed tests alone are ok')
+        self.assertEqual(rt.outcome('ok', rt.parse(HARNESS), False), 'crash')
+        self.assertEqual(rt.outcome('timeout', rt.parse(HARNESS), True), 'timeout')
+        self.assertEqual(rt.outcome('ok', rt.parse('[ok]: a (1 ms)\n'), True), 'incomplete')
+
+
 class Groups(unittest.TestCase):
     def test_every_unit_once(self):
         units = [u for group in rt.GROUPS.values() for u in group]

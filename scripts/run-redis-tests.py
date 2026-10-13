@@ -120,9 +120,14 @@ CONFIG_SET = re.compile(r'CONFIG SET|config set', re.I)
 def parse(text):
     """What the harness printed for one unit: the tests that passed, failed
     (each with the lines that followed its marker, the assertion among
-    them) and were ignored, and whether it stopped on an exception or its
-    own timeout."""
-    passed, failed, ignored = [], [], []
+    them) and were ignored, the errors raised outside any test, and whether
+    it stopped on an exception or its own timeout.
+
+    With --durable, an error in a start_server block outside a test (a
+    CONFIG SET the block's setup needs, say) is printed as `[err]: <message>`
+    without the `in tests/...tcl` of a failed test, and ends that block: its
+    remaining tests never run. Those are block errors."""
+    passed, failed, ignored, block_errors = [], [], [], []
     exception, harness_timeout, done = '', False, False
     current = None
     for raw in text.splitlines():
@@ -133,6 +138,9 @@ def parse(text):
         elif m := ERR.match(line):
             current = {'name': m[1], 'file': m[2], 'detail': []}
             failed.append(current)
+        elif line.startswith('[err]: '):
+            current = {'name': line[len('[err]: '):], 'detail': []}
+            block_errors.append(current)
         elif m := IGNORE.match(line):
             ignored.append(m[2])
             current = None
@@ -151,8 +159,26 @@ def parse(text):
             current['detail'].append(line)
     if exception and current and current['name'] == '':
         exception = (exception + '\n' + '\n'.join(current['detail'])).strip()
-    return {'passed': passed, 'failed': failed, 'ignored': ignored, 'exception': exception,
-            'harness_timeout': harness_timeout, 'done': done}
+    return {'passed': passed, 'failed': failed, 'ignored': ignored, 'block_errors': block_errors,
+            'exception': exception, 'harness_timeout': harness_timeout, 'done': done}
+
+
+def outcome(initial, parsed, alive):
+    """A unit's outcome from what the harness printed: crash when the server
+    is gone, unconfigurable when a CONFIG SET outside any test ended the unit
+    or a block of it, exception for any other error that did, timeout or
+    incomplete when the harness did not finish, and ok otherwise."""
+    if not alive:
+        return 'crash'
+    if initial != 'ok':
+        return initial
+    errors = ([parsed['exception']] if parsed['exception'] else []) + [
+        ' '.join([e['name'], *e['detail']]) for e in parsed['block_errors']]
+    if errors:
+        return 'unconfigurable' if any(CONFIG_SET.search(e) for e in errors) else 'exception'
+    if parsed['harness_timeout']:
+        return 'timeout'
+    return 'ok' if parsed['done'] else 'incomplete'
 
 
 def count_tests(redis_src, unit):
@@ -249,14 +275,7 @@ def run_unit(server_kind, binary, redis_src, unit, out, timeout):
     text = log_path.read_text(errors='replace')
     parsed = parse(text)
     result.update(parsed)
-    if not server.alive():
-        result['outcome'] = 'crash'
-    elif result['outcome'] == 'ok' and (parsed['exception'] or parsed['harness_timeout'] or not parsed['done']):
-        if parsed['exception'] and CONFIG_SET.search(parsed['exception']):
-            result['outcome'] = 'unconfigurable'
-        else:
-            result['outcome'] = 'exception' if parsed['exception'] else 'timeout' if parsed['harness_timeout'] \
-                else 'incomplete'
+    result['outcome'] = outcome(result['outcome'], parsed, server.alive())
     server.stop()
     result['not_run'] = max(0, result['declared'] - len(parsed['passed']) - len(parsed['failed']) - len(parsed['ignored']))
     result['log'] = str(log_path.relative_to(out))
@@ -291,7 +310,9 @@ def summarise_unit(result):
             'ignored': len(result['ignored']), 'not_run': result.get('not_run', 0), 'seconds': result['seconds'],
             'failing': [f['name'] for f in result['failed']],
             'details': {f['name']: ' '.join(f['detail'])[:300] for f in result['failed']},
-            'exception': result.get('exception', '')[:300]}
+            'exception': (result.get('exception') or ' '.join(
+                ' '.join([e['name'], *e['detail']]) for e in result.get('block_errors', [])))[:300],
+            'block_errors': len(result.get('block_errors', []))}
 
 
 def report(args):
