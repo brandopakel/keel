@@ -1997,7 +1997,7 @@ PRs each, in this order:
    Keel lacks (docs/redis-parity-plan.md), and a recipe for the families that
    follow.
 
-Then keys and TTL, then hashes, each family converted and then completed.
+Then keys and TTL (step 4.4), then hashes, each family converted and then completed.
 
 #### Step 4.0: golden corpora
 
@@ -2420,6 +2420,35 @@ conditions (8.4), as Redis 8.10.1's `t_string.c` and `db.c` define them.
   (`go tool objdump` of both test binaries), 256 bytes earlier, since the
   handlers left `commands_list.go`, and everything after `lists.go` is 5,120
   bytes later.
+
+#### Step 4.4: keys and expiry
+
+The second family, by the recipe: the commands that answer about a name
+whatever type holds it.
+
+- **Typed operations** (`keys.go`): `opDel`, `opExists`, `opType`, `opTTL`,
+  `opExpireAt` (with `expireCondition`, EXPIRE's NX, XX, GT and LT),
+  `opPersist`, `opDBSize` and `opFlushDB`. They run with no type check in
+  their scope and look a name up across every keyspace, which reaps a key
+  whose expiry has passed. The reads (EXISTS, TYPE, TTL, PTTL) count each
+  key they look up as a keyspace hit or a miss, in the operation, as #160
+  counted them in the handlers. Each records what develop logged: `DEL` with every
+  key given (and `UNLINK` as `DEL`), an expiry as `PEXPIREAT` or the `DEL` an
+  instant already past amounts to, `PERSIST`, and the plain `FLUSHDB`.
+- **No-op records kept, for now.** develop logs `DEL` of keys none of which
+  exist and `PERSIST` of a key with no expiry, which Redis does not
+  propagate (`db.c`, `delGenericCommand`; `expire.c`, `persistCommand`,
+  lines 914-919, count a change only when there was one). The conversion
+  keeps them, byte for byte; the family's missing-commands step drops them
+  and recaptures, as the recipe's rule says, and an older log holding one
+  still replays, as a no-op.
+- **The command language** (`commands_dict.go`, `commands_keyspace.go`)
+  reads the arguments as before and answers through `e.reply()`. `KEYS` and
+  `SCAN` keep their walks and collection replies, which move into `Reply`
+  with a measurement when a family needs them to.
+- **Measured**: no row of the paired job runs these commands, so the job
+  checks only that nothing else moved; the corpora and the persistence and
+  replication goldens replay unchanged.
 
 ## Risks, in order
 
