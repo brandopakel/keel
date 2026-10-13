@@ -2000,12 +2000,13 @@ through flushes, rewrites and transactions, and the replication goldens
 (`testdata/replication-9736d8d`) the stream's; both hold replies only as a
 hash of one session's. Phase 4 needs each command's own answer and records,
 command by command, in both protocols, so that a difference names the command
-and the byte. Step 4.0 adds two corpora, captured from develop at `72ed0cd`:
+and the byte. Step 4.0 adds two corpora, captured from develop at `72ed0cd`
+and recaptured at `1f59ae4` (see "When a reply changes" below):
 
 - **The command corpus** (`internal/core/command_golden_test.go`, the cases in
   `command_golden_corpus_test.go`, the fixture in
-  `internal/core/testdata/commands-72ed0cd/`): 65 sessions in 16 families,
-  1,829 commands, 432 log records. Each session runs on an engine of its own
+  `internal/core/testdata/commands-1f59ae4/`): 65 sessions in 16 families,
+  1,832 commands, 432 log records. Each session runs on an engine of its own
   with the log open under fsync no, once as a RESP2 connection and once as a
   RESP3 one; the fixture holds both replies beside each command, and the
   records the command appended, which have to be the same bytes either way. It
@@ -2020,7 +2021,7 @@ and the byte. Step 4.0 adds two corpora, captured from develop at `72ed0cd`:
   (Redis's MISCONF), an exhausted allocation budget, a reply over the ceiling,
   a memory bound's OOM, and dump images restored under both names.
 - **The connection corpus** (`internal/server/connection_golden_test.go`, the
-  fixture in `internal/server/testdata/connection-72ed0cd/`): 8 sessions and
+  fixture in `internal/server/testdata/connection-1f59ae4/`): 8 sessions and
   154 commands through the server's own run of a connection's commands
   (`executeRun`): AUTH, HELLO, QUIT and CLIENT, the refusals before a
   connection has logged in, and those commands queued inside MULTI; each run
@@ -2057,7 +2058,7 @@ and the byte. Step 4.0 adds two corpora, captured from develop at `72ed0cd`:
   `TestConnectionGoldenRepliesAreUnchanged` replay every case and name the
   first step whose reply or records differ;
   `TestCommandGoldensCoverEveryCommand` reads the corpus against
-  `commandArity` and `writeCommands`; and the two
+  `commandArity`, `writeCommands` and the MEMORY and CONFIG subcommands; and the two
   `...CoverEveryErrorText` tests read every error text the package's source
   can answer with (`golden.ErrorTexts`: literals with an error class,
   literals an encoded error is built from, and capitalised error literals in
@@ -2069,6 +2070,24 @@ and the byte. Step 4.0 adds two corpora, captured from develop at `72ed0cd`:
   and the reply for a value Encode has no form for, which is a bug. An
   excused text the fixture comes to answer, or the source drops, fails the
   test, so the list cannot rot.
+
+**When a reply changes.** The corpora pin develop's replies, so a change
+that alters one on purpose fails them until it recaptures, and it
+recaptures in the same pull request: it sets the two revision constants
+(`commandGoldenRevision`, `connectionGoldenRevision`) to the develop
+revision it is based on, runs `scripts/capture-command-goldens.py`, and
+puts the fixture's diff in its body as the change's wire-visible effect,
+reviewed as such. A change that adds a command, a subcommand or an error
+text adds the case that sends it, as the coverage tests require. The first
+was #158 (INFO part c1): it added `RESETSTAT` to `CONFIG HELP`, which a trial
+merge of the corpus onto develop failed on at `server/info-config` step 6,
+and the corpus was recaptured at `1f59ae4`. Every replay of the 72ed0cd
+fixture on 1f59ae4 matched apart from that reply, and the recapture added
+the three `CONFIG RESETSTAT` steps the subcommand coverage now requires.
+The rest of the INFO work (#160, #162 to #165) changes replies the corpus
+pins - INFO's fields, `CONFIG HELP`, `SLOWLOG` and `LATENCY`, and their
+errors - so each of those PRs recaptures in the same way, as will every
+family converted after them.
 
 What the corpora do not hold: the transport's framing of a reply (the arena,
 the zero-copy capture of a large reply, the io threads), which the paired

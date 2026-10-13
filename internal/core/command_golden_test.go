@@ -57,7 +57,7 @@ import (
 // command_golden_coverage_test.go checks that the corpus names every command
 // and reaches every error text the handlers hold.
 const (
-	commandGoldenRevision = "72ed0cd"
+	commandGoldenRevision = "1f59ae4"
 	commandGoldenDir      = "testdata/commands-" + commandGoldenRevision
 )
 

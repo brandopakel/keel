@@ -29,6 +29,10 @@ func goldenCorpusCommands(t *testing.T) map[string]bool {
 			}
 			name := strings.ToUpper(s.Args[0])
 			recorded[name] = recorded[name] || len(s.Records) > 0
+			if subcommandsOf(name) != nil && len(s.Args) > 1 {
+				sub := name + "|" + strings.ToUpper(s.Args[1])
+				recorded[sub] = recorded[sub] || len(s.Records) > 0
+			}
 		}
 	}
 	return recorded
@@ -52,6 +56,18 @@ func TestCommandGoldensCoverEveryCommand(t *testing.T) {
 	}
 	for name := range writeCommands {
 		require.True(t, recorded[name], "%s is a write command and no step of the corpus has it recorded", name)
+	}
+	// Every subcommand of a container the engine answers: MEMORY's and
+	// CONFIG's. CLIENT's are the connection corpus's.
+	for name := range commandArity {
+		if connectionCommands[name] {
+			continue
+		}
+		for _, sub := range subcommandsOf(name) {
+			full := name + "|" + strings.ToUpper(sub.name)
+			_, sent := recorded[full]
+			require.True(t, sent, "%s is not sent by the command corpus", full)
+		}
 	}
 }
 
