@@ -229,3 +229,41 @@ func TestReplicaAppliesTheRedis8StringCommandsRecords(t *testing.T) {
 	require.True(t, hashLeft, "h holds the string MSETEX stored")
 	require.Equal(t, "string", runOn(t, e, "TYPE", "h"))
 }
+
+// TestReplicaAppliesTheKeyCommandsRecords: a protocol 2 replica applies
+// RENAME, recorded as itself (RENAMENX too), across types and with an
+// expiry, and is handed no record of a DEL or PERSIST that changed nothing.
+func TestReplicaAppliesTheKeyCommandsRecords(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setupReplicationV2On(t, e)
+	frames := snapshotV2On(t, e)
+	base, epoch := frames[0].To, frames[0].Epoch
+	for _, cmd := range [][]string{
+		{"SET", "a", "1"}, {"RENAME", "a", "b"}, {"HSET", "h", "f", "v"}, {"EXPIREAT", "h", "4102444800"},
+		{"RENAME", "h", "h2"}, {"RENAMENX", "h2", "h3"}, {"SET", "s", "str"}, {"RPUSH", "l", "x"},
+		{"RENAME", "s", "l"}, {"DEL", "missing"}, {"PERSIST", "b"}, {"PERSIST", "missing"},
+	} {
+		reply := rawReplyOn(t, e, cmd[0], cmd[1:]...)
+		require.NotEqual(t, byte('-'), reply[0], "%v: %q", cmd, reply)
+	}
+	delta := pullV2On(t, e, epoch, base, "", 0)
+	require.NotContains(t, string(delta.Body), "PERSIST", "a PERSIST that removed nothing is not recorded")
+	require.NotContains(t, string(delta.Body), "missing", "a DEL that deleted nothing is not recorded")
+	state := func() []interface{} {
+		return []interface{}{
+			runOn(t, e, "GET", "b"), runOn(t, e, "TYPE", "a"), runOn(t, e, "HGET", "h3", "f"),
+			runOn(t, e, "PEXPIRETIME", "h3"), runOn(t, e, "TYPE", "h2"), runOn(t, e, "GET", "l"),
+			runOn(t, e, "DBSIZE"),
+		}
+	}
+	want := state()
+	require.Equal(t, []interface{}{"1", "none", "v", int64(4102444800000), "none", "str", int64(3)}, want)
+	becomeReplicaV2On(t, e)
+	for _, frame := range frames {
+		require.NoError(t, e.ApplyReplication(frame))
+	}
+	require.NoError(t, e.ApplyReplication(delta))
+	require.True(t, e.replicaReady)
+	require.Equal(t, want, state())
+}
