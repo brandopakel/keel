@@ -25,6 +25,11 @@ example.
   the spec of each command). Where Keel keeps something better than an
   accidental Redis flaw, document it as a departure citing Redis's file and
   line, and list it in the PR under "Improvements over Redis".
+- **Parity is a floor, not a ceiling.** Match Redis where clients depend on
+  it, keep and report every improvement (above), and where a capability
+  Redis lacks would serve users better, propose or build it under a Keel
+  name - a `KEEL.*` command or the Go API - never under a Redis command's
+  name with different behaviour.
 - **A write that changes nothing is not logged**, as Redis decides with
   `server.dirty`: Redis propagates a command only when it counted a change
   (for example `t_list.c`, `popGenericCommand`, which returns before
