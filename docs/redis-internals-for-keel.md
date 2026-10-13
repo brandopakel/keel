@@ -1,6 +1,7 @@
 # How Redis 8.10.1 does what Keel's phase 4 reproduces
 
-Status: October 12, 2026. A reading of the Redis 8.10.1 source, kept as the
+Status: October 12, 2026, corrected October 13 after every citation was
+checked against the source. A reading of the Redis 8.10.1 source, kept as the
 reference for phase 4 (`docs/embedding-plan.md`: the op-descriptor table,
 typed operations, the `Reply` sink) and for tier 2 of the parity plan
 (`docs/redis-parity-plan.md`: blocking commands, Pub/Sub, push messages).
@@ -8,7 +9,7 @@ typed operations, the `Reply` sink) and for tier 2 of the parity plan
 Every claim cites `file:line` in the Redis 8.10.1 source tree, the tarball
 with sha256 `60166c95ab7aedaa9dfe516de685be0a4dd87be95ded59ba429df14c13f1b663`
 that every parity workflow builds (`src/` is implied unless a path says
-otherwise). The Redis source is not in this repository; the line numbers are
+otherwise). A bare `:line` is in the file of the citation before it. The Redis source is not in this repository; the line numbers are
 for that release and move with the next one. Where the source leaves a
 question open that only a running `redis-server` settles, the question is
 listed at the end for the REA toolkit (`github.com/morluto/rea`) to be
@@ -43,10 +44,16 @@ histogram (`:3098`), the legacy `(first,last,step)` key spec (`:3099`),
 `subcommands_dict` (`:3103`) and `parent` (`:3105`).
 
 Keel's op-descriptor table is generated from the same JSON. The fields phase
-4 needs from it are exactly the ones `processCommand` reads: arity, the
-flags `WRITE`, `READONLY`, `DENYOOM`, `NO_AUTH`, `NO_MULTI`, `STALE`,
-`LOADING`, `ADMIN`, `NOSCRIPT`, `BLOCKING`, `SKIP_MONITOR`, `SKIP_SLOWLOG`,
-`MAY_REPLICATE`, `TOUCHES_ARBITRARY_KEYS`, and the key specs.
+4 needs from it are the ones Redis reads around running a command: arity,
+the key specs, and the flags. `processCommand`
+(`server.c:4455-4836`) reads `WRITE`, `READONLY`, `DENYOOM`, `NO_AUTH`,
+`NO_MULTI`, `STALE`, `LOADING`, `MAY_REPLICATE`, `ALLOW_BUSY`, `INTERNAL`,
+`PROTECTED`, `MOVABLE_KEYS` and `NO_ASYNC_LOADING`. The others are
+read elsewhere: `ADMIN` and `SKIP_MONITOR` in `call` (`:4120`),
+`SKIP_SLOWLOG` in `slowlogPushCurrentCommand` (`:3816`),
+`TOUCHES_ARBITRARY_KEYS` in `propagatePendingCommands` (`:3868`), `ADMIN`
+and `BLOCKING` for the ACL categories (`:3460-3467`), and `NOSCRIPT` by
+scripts (`script.c:652`).
 
 ## Looking a command up
 
@@ -56,7 +63,7 @@ compares without regard to case, `commandTableDictType`, `server.c:678-681`)
 and, when the command has subcommands and `argc > 1`, looks
 `argv[1]` up in `subcommands_dict` (`:3645`); a container called with one
 word returns the container itself, whose `proc` is `NULL` (`:3639`).
-`lookupCommandBySds` (`:3653-3675`) splits a `container|sub` name on `|` for
+`lookupCommandBySds` (`:3677-3679`, through `lookupCommandBySdsLogic`, `:3653-3675`) splits a `container|sub` name on `|` for
 ACLs, `COMMAND INFO` and the like. `lookupCommandOrOriginal` (`:3701-3706`)
 also checks the table of names before `rename-command`. `mustObeyClient`
 (`:3709-3711`) is true for the AOF loader and the master link: those two
@@ -65,8 +72,8 @@ clients' commands are never rejected.
 ## processCommand: the checks, in order
 
 `processCommand` (`server.c:4455-4836`) runs once per command (or again, for
-a command re-executed after a block, with the first checks skipped:
-`:4468`, `:4489`). In order:
+a command re-executed after a block, with the first checks skipped: the
+flag is set at `:4467` and tested at `:4470` and `:4488`). In order:
 
 1. **Lookup** (`:4493-4498`): the previous command's struct is reused when
    `isCommandReusable` says the name is the same, otherwise `lookupCommand`.
@@ -89,7 +96,7 @@ a command re-executed after a block, with the first checks skipped:
    inside a transaction`.
 10. **ACL** (`:4577-4585`; `ACLCheckAllPerm`, `acl.c:1944`): `NOPERM`, with
     an ACL log entry.
-11. **Cluster redirection** (`:4591-4610`): `MOVED`/`ASK`, which also marks
+11. **Cluster redirection** (`server.c:4591-4610`): `MOVED`/`ASK`, which also marks
     the transaction dirty (`flagTransaction`, `:4603`).
 12. **Client eviction** by `maxmemory-clients` (`:4630`).
 13. **Memory** (`:4642-4666`): with `maxmemory` set, `performEvictions`
@@ -116,15 +123,19 @@ a command re-executed after a block, with the first checks skipped:
 23. **`MULTI` queueing** (`:4819-4828`): inside `MULTI`, every command but
     `EXEC`, `DISCARD`, `MULTI`, `WATCH`, `QUIT` and `RESET` is queued
     (`queueMultiCommand`, `multi.c:35-75`) and answered `+QUEUED`.
-24. **`call`** (`:4830-4831`), then `handleClientsBlockedOnKeys` if any key
+24. **`call`** (`server.c:4830-4831`), then `handleClientsBlockedOnKeys` if any key
     became ready (`:4832-4833`).
 
 Every refusal goes through `rejectCommand` / `rejectCommandSds` /
 `rejectCommandFormat` (`:4277-4311`): the transaction is marked dirty
-(`flagTransaction`, `multi.c:86-89`), `rejected_calls` is counted (`:4280`),
+(`flagTransaction`, `multi.c:86-89`), `rejected_calls` is counted (`server.c:4280`),
 and when the refused command is `EXEC` itself the reply is
 `EXECABORT Transaction discarded because of: ...` (`execCommandAbort`,
-`multi.c:115-125`). `rejectCommandFormat` maps CR/LF to spaces (`:4309`).
+`multi.c:115-125`). `rejectCommandFormat` maps CR/LF to spaces (`server.c:4309`).
+The one exception is cluster redirection (step 11, `:4599-4608`), which does
+not go through them: it discards the transaction for `EXEC` (so no
+`EXECABORT`) or flags it otherwise, sends `MOVED`/`ASK` with
+`clusterRedirectClient`, and counts `rejected_calls` itself.
 
 Keel's order (`docs/error-replies.md`) matches steps 1, 4, 5, 8, 9, 16 and
 23; steps 10, 11, 13 (as `OOM`), 14, 15, 18 and 19 are the ones tier 1 and
@@ -146,7 +157,7 @@ later add, and the documented departure is step 13 (see "Improvements").
 - the handler runs at `:4058`;
 - the duration (`:4068-4074`) feeds the latency monitor (`:4102-4108`,
   `fast-command` for `CMD_FAST`), the slow log (`:4112-4113`;
-  `slowlogPushCurrentCommand`, `:3814-3830`, skipping `CMD_SKIP_SLOWLOG` and
+  `slowlogPushCurrentCommand`, `:3814-3833`, skipping `CMD_SKIP_SLOWLOG` and
   using the original argv when the command rewrote itself), the per-command
   `calls` and `microseconds` and the latency histogram (`:4129-4134`), and
   `failed_calls` when the handler answered an error (`:4080-4086`);
@@ -180,20 +191,26 @@ master link and the AOF loader's fake client get nothing (`:319-331`); a
 client with no pending reply is put in the pending-write queue (`:339-340`).
 `_addReplyToBufferOrList` (`:514-549`) counts the bytes against the current
 command (`:528`), diverts a push produced while another command runs into
-`pending_push_messages` (`:539-544`), and fills the client's static 16 KiB
-buffer (`PROTO_REPLY_CHUNK_BYTES`, `server.h:191`) before the reply list
-(`:546-548`), whose blocks are 16 KiB or the payload's size
-(`_addReplyPayloadToList`, `:397-440`). A large bulk string is not copied:
+`pending_push_messages` (`:539-544`), and fills the client's buffer (`PROTO_REPLY_CHUNK_BYTES`, 16 KiB at
+first, `server.h:191`; the cron resizes it, `server.c:972-1014`) before the
+reply list
+(`networking.c:546-548`), whose blocks are 16 KiB or the payload's size
+(`_addReplyPayloadToList`, `networking.c:397-453`). A large bulk string need not be copied:
 `_addBulkStrRefToBufferOrList` (`:573-598`) queues a reference to the object
-and formats the `$len\r\n` prefix at write time (`:561-569`).
+and formats the `$len\r\n` prefix at write time (`:561-569`), where
+`isCopyAvoidPreferred` (`:1297-1321`) allows it: copy avoidance enabled, a
+normal client, not a push, a RAW string that is not shared; then any length
+with 7 or more I/O threads, at least 16 KiB with none, and at least 64 KiB
+with fewer than 7 (`server.h:201-203`).
 
 **Deferred lengths.** A handler that does not know the length of an
-aggregate in advance calls `addReplyDeferredLen` (`:928-952`), which plants
+aggregate in advance calls `addReplyDeferredLen` (`networking.c:928-952`), which plants
 a `NULL` node in the reply list (`:950`), and `setDeferredReply`
 (`:954-1016`) later writes the header into the previous block if it has
 room (`:974-989`), otherwise ahead of the next block's data (`:991-1001`),
 otherwise in a block of its own (`:1003-1014`); `setDeferredAggregateLen`
-(`:1019`) chooses the prefix by protocol. Keel sizes most replies before
+(`:1019`) takes the prefix as an argument, and `setDeferredMapLen` and
+`setDeferredSetLen` (`:1053-1062`) choose it by protocol. Keel sizes most replies before
 building them (`docs/reply-admission.md`); where it cannot, this is the
 model.
 
@@ -210,9 +227,9 @@ for every reply against Redis and against `reply_schema`.
 
 **Writing.** `handleClientsWithPendingWrites` (`:2958`), from `beforeSleep`
 (`server.c:1963`, `:2104`), hands clients to I/O threads when there are any
-(`:2982-2988`) or writes inline. `writeToClient` (`:2847-2939`) writes at
-most `NET_MAX_WRITES_PER_EVENT` (64 KiB, `server.h:125`) per event for a
-normal client unless the server is over `maxmemory` (`:2887-2890`), frees a
+(`networking.c:2982-2988`) or writes inline. `writeToClient` (`:2847-2946`) stops after
+`NET_MAX_WRITES_PER_EVENT` (64 KiB, `server.h:125`) per event, once a write takes it past that, for a
+normal client unless the server is over `maxmemory` (`networking.c:2887-2890`), frees a
 client on a write error (`:2896-2902`), uninstalls the write handler when
 the buffers drain (`:2917-2920`) and then closes a `CLOSE_AFTER_REPLY`
 client (`:2923-2926`).
@@ -221,7 +238,8 @@ client (`:2923-2926`).
 applies the class's hard limit and the soft limit held for its seconds, and
 also closes an unauthenticated client holding more than 1 KiB of reply
 (`:5382-5383`); `closeClientOnOutputBufferLimitReached` (`:5440-5466`)
-frees the client asynchronously and counts
+frees the client, asynchronously when called with `async` and at once from
+the cron (`:5450-5456`), and counts
 `client_output_buffer_limit_disconnections`. Keel caps one reply at 64 MiB
 instead (`docs/info-compatibility.md`), a documented difference.
 
@@ -243,9 +261,13 @@ reaches the log until `propagatePendingCommands` (`:3851-3891`), called from
 `postExecutionUnitOperations` at nesting zero (`:3915`): when more than one
 operation accumulated during one execution unit, they are framed in
 `MULTI` and `EXEC` (`:3861`, `:3876`, `:3887`), unless the command touches
-arbitrary keys (`:3866-3871`). A command whose handler expired a key or
-evicted one therefore logs `MULTI`, the deletion, itself, `EXEC`.
-`propagateNow` (`:3744-3759`) feeds the AOF (`:3753-3754`) and the replicas
+arbitrary keys (`:3866-3871`). A command whose handler expired a key
+therefore logs `MULTI`, the deletion, itself, `EXEC`. An eviction is never
+framed with the command: it runs in `processCommand` before `call` (step
+13), and each evicted key is an execution unit of its own
+(`evict.c:684-690`; `also_propagate` is asserted empty on entry, `:564`),
+so its `DEL` or `UNLINK` is logged alone, ahead of the command.
+`propagateNow` (`server.c:3744-3759`) feeds the AOF (`:3753-3754`) and the replicas
 (`:3755-3757`).
 
 **The log line.** `feedAppendOnlyFile` (`aof.c:1661-1700`) prepends a
@@ -256,12 +278,13 @@ into `server.aof_buf` (`:1693-1697`).
 
 **Writing and syncing.** `flushAppendOnlyFile` (`:1399`), from `beforeSleep`
 (`server.c:1962`, `:2057`) and the cron, writes the buffer with `aofWrite`
-(`:1470`). Under `everysec`, while a background fsync is still running the
+(`aof.c:1470`). Under `everysec`, while a background fsync is still running the
 write itself is postponed, up to two seconds (`:1438-1457`), after which it
 proceeds and `aof_delayed_fsync` is counted (`:1455`). A short write is
-handled at `:1489` onward and ends in the `MISCONF` state read by
-`processCommand` step 14. `rewriteAppendOnlyFileBackground`
-(`:3197-3256`) flushes (`:3217`), opens a new incremental file (`:3218`) and
+handled at `:1489` onward. Under `everysec` and `no` it ends in the
+`MISCONF` state read by `processCommand` step 14; under `always` Redis logs
+that it can't recover and exits (`:1531-1538`).
+`rewriteAppendOnlyFileBackground` (`:3197-3270`) flushes (`:3217`), opens a new incremental file (`:3218`) and
 forks a child (`:3239`) that writes a temporary base file (`:3245-3246`).
 
 **Expires are logged absolute.** `EXPIRE`, `PEXPIRE` and `EXPIREAT` rewrite
@@ -281,31 +304,38 @@ byte.
 (`:2946`), so one command, however long, sees no key expire half way.
 `expireIfNeeded` (`:2999-3068`) returns `KEY_VALID` for the master link
 (`:3039`), `KEY_EXPIRED` without deleting on a replica (`:3040`), while
-nested inside a command that touches arbitrary keys (`:3045`), when the
-caller asked not to delete (`:3050`) or during a pause (`:3056`), and
+nested inside a command that touches arbitrary keys only with the hidden
+`lazyexpire-nested-arbitrary-keys` turned off (`:3045`; it is on by
+default, `config.c:3337`, and such keys are then deleted), when the
+caller asked not to delete (`db.c:3050`) or during a pause (`:3056`), and
 otherwise deletes (`:3059-3066`). The deletion (`deleteKeyAndPropagate`,
-`:2839-2878`) is lazy or not by `lazyfree-lazy-expire` (`:2842`), fires the
+`:2839-2887`) is lazy or not by `lazyfree-lazy-expire` (`:2842`), fires the
 `expired` keyspace event (`:2876`), touches watchers and tracking
 (`keyModified`, `:1190-1196`) and propagates `DEL` or `UNLINK`
 (`propagateDeletion`, `:2918-2935`, with replication forced on). So a
-replica never deletes an expired key on its own: it waits for the primary's
-`DEL`.
+read-only replica never deletes an expired key on its own: it waits for the
+primary's `DEL`. A writable replica does delete one that a write looks up
+(`EXPIRE_FORCE_DELETE_EXPIRED`, `:292-295`, which skips the replica's
+`KEY_EXPIRED` at `:3040`), and its cron expires the keys its own clients
+gave a TTL (`expireSlaveKeys`, `server.c:1317`).
 
 **Active.** `activeExpireCycle` (`expire.c:287`) runs slow from
 `databasesCron` (`server.c:1310-1315`, from `serverCron`, `:1685`) and fast
 from `beforeSleep` (`server.c:2009`). The parameters scale with
-`active-expire-effort` (`:291-300`): 20 keys per loop, a 1000 µs fast
+`active-expire-effort` (`expire.c:291-300`): 20 keys per loop, a 1000 µs fast
 cycle, 25% of the CPU for the slow cycle, 10% acceptable stale keys
-(`:96-99`). A fast cycle runs only if the last slow one hit its time limit
-or the stale estimate is high (`:318-330`). The slow cycle's time limit is
+(`:96-99`). A fast cycle runs only if the previous cycle, fast or slow,
+hit its time limit or the stale estimate is high, and never within twice
+its duration of the last fast one (`:318-330`). The slow cycle's time limit is
 `25% × 1 s / hz` (`:347`); per database it samples up to 20 keys with
 expires (`:412-413`), repeats while more than 10% of a sample were expired
-(`:447`), and stops at the time limit (`:484-485`); the stale percentage is
-`total_expired / total_sampled` (`:502`). Each expired key goes through
+(`:447`), and stops at the time limit (`:484-485`); each cycle's stale share
+is `total_expired / total_sampled` (`:502`), folded into the reported
+estimate as a 5% running average (`:505-506`). Each expired key goes through
 `activeExpireCycleTryExpire` (`:40-54`): delete and propagate, count it
 in `expired_keys_active` (`stat_expiredkeys_active`, `:48`; INFO prints it
 beside `expired_keys` at `server.c:6762-6763`), and propagate at once
-(`postExecutionUnitOperations`, `:52`), so the log holds one `DEL` per key
+(`postExecutionUnitOperations`, `expire.c:52`), so the log holds one `DEL` per key
 rather than a transaction.
 
 Keel samples `-active-expire-samples` keys per cron tick with no CPU cap
@@ -314,7 +344,7 @@ census maps `active-expire-effort` to that flag under another meaning.
 
 ## Eviction
 
-`performEvictions` (`evict.c:532-700`) returns `EVICT_OK` at once when
+`performEvictions` (`evict.c:532-764`) returns `EVICT_OK` at once when
 memory is under the limit (`:544-547`) and `EVICT_FAIL` under `noeviction`
 (`:549-552`); otherwise, under a time limit (`:554`), it frees until
 `mem_tofree` is reached (`:567`). For the LRU, LFU and TTL policies it
@@ -329,7 +359,10 @@ times that (`:605-611`); with no keys at all it gives up (`:614`), and
 the pool's last (`:621-647`); the random policies take a random key from a
 random dict (`:652-677`). The victim is deleted and propagated as `DEL` or
 `UNLINK` (`deleteEvictedKeyAndPropagate`, `:686`; `db.c:2895-2897`), and
-every 16 keys the replicas' buffers are flushed (`:695-700`). What counts
+every 16 keys the replicas' buffers are flushed (`evict.c:695-700`). When
+it gives up with nothing it could evict, it first waits for pending lazy
+frees, within the same time limit, and returns `EVICT_OK` if memory falls
+under the limit meanwhile (`:731-748`). What counts
 toward `maxmemory` is `zmalloc_used_memory()` less the replica output
 buffers and the AOF buffer (`freeMemoryGetNotCountedMemory`, `:318`;
 `getMaxmemoryState`, `:384`).
@@ -353,9 +386,11 @@ frames them in `MULTI`/`EXEC` because more than one accumulated.
 
 `WATCH` (`watchForKey`, `:302-333`) links the client into
 `db->watched_keys` and records whether the key was already expired
-(`:329`); `touchWatchedKey` (`:387-417`), from `keyModified`, marks every
-watcher dirty (`:417`) except, for a key that was expired at `WATCH` time and
-is only now being deleted, the watcher that saw it expired (`:403-414`).
+(`:329`); `touchWatchedKey` (`:387-426`), from `keyModified`, marks every
+watcher dirty (`:417`) except where a watcher saw the key expired at `WATCH`
+time (`:403-414`): if the key is now gone, that watcher is skipped and stays
+clean (`:412`); if it still exists, the walk stops there (`break`, `:414`),
+leaving that watcher and every later watcher of the key clean.
 `isWatchedKeyExpired` (`:365-378`) is what `EXEC` checks. Keel's
 `docs/transactions.md` states why `WATCH` is still an unknown command; tier
 1 adds it, and `keyModified` is the hook: every write, expiry and eviction
@@ -389,7 +424,7 @@ as their non-blocking forms.
 For Keel this says: a queue of waiting clients per key in arrival order; a
 "ready keys" set filled by writes and drained after each command, not inside
 the write; re-running the command rather than a second code path for the
-wake-up; timeouts from the cron; and the log recording the pop, never the
+wake-up; timeouts checked before each sleep, as `blockedBeforeSleep` does; and the log recording the pop, never the
 wait. The parity plan's tier 2 description matches.
 
 ## Pub/Sub and push (tier 2)
@@ -401,7 +436,7 @@ both protocols except the header: `addReplyPubsubMessage` (`:93-104`) sends
 `*3` in RESP2 and `>3` in RESP3, with `CLIENT_PUSHING` set around it so the
 reply gate lets it through (`:95`, `:103`); pattern messages are four
 elements (`:109-`), subscribe and unsubscribe confirmations three
-(`:124-150`). `PUBLISH` (`pubsubPublishMessageInternal`, `:469-530`) walks
+(`:124-155`). `PUBLISH` (`pubsubPublishMessageInternal`, `:469-530`) walks
 the channel's client dict (`:479-495`), then every pattern (`:503-528`),
 and returns the receiver count. A push produced while another command is
 executing on the same connection is held in `pending_push_messages` and
@@ -413,7 +448,7 @@ appended after that command's reply (`networking.c:539-544`;
 Read commands remember their keys per tracking client (`call`,
 `server.c:4208-4219`; `trackingRememberKeys`, `tracking.c:203`); a write
 invalidates through `keyModified` (`db.c:1194`), and `sendTrackingMessage`
-(`tracking.c:259-319`) sends a RESP3 push `invalidate` with the key
+(`tracking.c:259-332`) sends a RESP3 push `invalidate` with the key
 (`:296-298`, `:313-318`), or in RESP2 a Pub/Sub message on the
 `__redis__:invalidate` channel to the redirect client (`:299-302`), and a
 `tracking-redir-broken` push when that client is gone (`:267-279`). Pending
@@ -457,7 +492,7 @@ list it under "Improvements over Redis"). None is adopted by this document.
 6. **`LCS` is bounded by `proto-max-bulk-len` in bytes of table.** The
    table is `(alen+1)·(blen+1)` 32-bit cells (`t_string.c:1489-1496`), refused
    only above `proto-max-bulk-len` (512 MiB by default): two 11,000-byte
-   strings cost 484 MiB. Keel's `-lcs-max-cells` (134 million cells, 512
+   strings cost about 462 MiB (484 MB). Keel's `-lcs-max-cells` (134 million cells, 512
    MiB) is the same bound under its own name; a lower default is the
    candidate.
 7. **A failed `AUTH` inside `EXEC` leaves a hole in the reply array.**
