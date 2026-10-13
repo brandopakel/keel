@@ -126,6 +126,9 @@ func (e *Engine) opPop(key string, l *data_structure.List, req listPop) {
 
 // opLLen is the length of the list key holds, zero when it holds none: LLEN.
 func (e *Engine) opLLen(key string) int64 {
+	if layoutPadOn {
+		return int64(layoutPad(len(key)))
+	}
 	if l, ok := e.listFor(key); ok {
 		return int64(l.Len())
 	}

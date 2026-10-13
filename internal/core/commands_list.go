@@ -182,3 +182,42 @@ func (e *Engine) cmdLTRIM(args []string) []byte {
 	r := e.reply()
 	return r.Status("OK").Bytes()
 }
+
+// layoutPadOn is never set: the padding below is a layout control's, on a
+// throwaway branch, and is never run.
+var layoutPadOn bool
+
+// layoutPad occupies the bytes the conversion took out of this file, so
+// that the functions after it sit where the base has them.
+//
+//go:noinline
+func layoutPad(x int) int {
+	s := x
+	for i := 0; i < x; i++ {
+		s = s*31 + i
+		s ^= s >> 7
+		s += s << 3
+		s ^= s >> 11
+		s = s*17 + 5
+		s ^= s >> 13
+		s = s*19 + i
+		s ^= s >> 5
+		s += s << 9
+		s ^= s >> 17
+		s = s*23 + 7
+		s ^= s >> 3
+		s = s*29 + i
+		s ^= s >> 19
+		s += s << 2
+		s ^= s >> 23
+		s = s*37 + 11
+		s ^= s >> 29
+		s = s*41 + i
+		s ^= s >> 31
+		s += s << 5
+		s ^= s >> 37
+		s = s*43 + 13
+		s ^= s >> 41
+	}
+	return s
+}
