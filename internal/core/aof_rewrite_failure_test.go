@@ -474,11 +474,21 @@ func TestAutomaticRewriteBacksOffAsRedisDoes(t *testing.T) {
 		driveRewriteOn(t, e)
 	}
 
+	before := time.Now()
 	failOne()
+	after := time.Now()
 	require.Equal(t, "1", persistenceField(t, e, "aof_rewrites_consecutive_failures"))
+	// The failure puts the next attempt at the next 100 ms tick. That is
+	// checked against when it was scheduled, not by racing the clock: on a
+	// loaded runner the write below can come after the tick has passed.
+	retryAt := e.nextAutoRewrite
+	require.False(t, retryAt.Before(before.Add(rewriteRetryTick)), "the retry waits for the next 100 ms tick")
+	require.False(t, retryAt.After(after.Add(rewriteRetryTick)), "and no longer")
+	e.nextAutoRewrite = time.Now().Add(time.Hour)
 	write()
 	require.False(t, e.RewriteActive(), "no attempt before the next 100 ms tick")
-	time.Sleep(rewriteRetryTick + 10*time.Millisecond)
+	e.nextAutoRewrite = retryAt
+	time.Sleep(time.Until(retryAt) + 10*time.Millisecond)
 	failOne()
 	e.nextAutoRewrite = time.Time{} // the tick, without sleeping through it again
 	failOne()
