@@ -2365,6 +2365,11 @@ error-parity harnesses, which hold them to Redis 8.10.1 in CI.
 - **Replies**: one element is answered with `resp.SingleBulk`, as GET's is;
   LRANGE and a counted pop stay on `encodeWalkReply`, and `opLRange` answers
   a view of the list rather than a copy.
+- **Keyspace reads** count where Redis looks (#160's rule, refined here):
+  LLEN and LINDEX look their key up first, so the type check counts them;
+  LRANGE reads start and stop first and counts nothing for a malformed one,
+  so `opLRange` counts its lookup after them (`readsAfterArguments`), and the
+  type check counts a key of another type only once those have passed.
 - **Measured**: allocations per operation fall from 7 to 2 on LPUSH-RPOP,
   with and without the log and a replica (the push's length is no longer
   boxed for `encode`, and a single pop is no longer walked through a

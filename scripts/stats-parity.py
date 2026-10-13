@@ -74,6 +74,14 @@ CASES = [[c] for c in [
     ['LPUSH', 'list', 'x'], ['RPUSH', 'list', 'x'], ['LPOP', 'list'], ['RPOP', 'missing'], ['LTRIM', 'list', '0', '1'],
     ['LLEN', 'list'], ['LINDEX', 'list', '0'], ['LSET', 'list', '0', 'x'], ['LRANGE', 'list', '0', '-1'],
     ['LRANGE', 'missing', '0', '-1'],
+    # A list read that reads its arguments before its key counts nothing for a
+    # malformed one (lrangeCommand), and one that looks first counts either way
+    # (lindexCommand); a pop looks to write, and counts nothing.
+    ['LRANGE', 'list', 'x', '1'], ['LRANGE', 'missing', '0', 'x'], ['LRANGE', 'str', 'x', '1'],
+    ['LRANGE', 'str', '0', '-1'], ['LINDEX', 'list', 'x'], ['LINDEX', 'missing', 'x'], ['LINDEX', 'str', '0'],
+    ['LLEN', 'missing'], ['LLEN', 'str'], ['LPOP', 'missing', '2'], ['LPOP', 'str'], ['LPOP', 'list', 'x'],
+    ['RPOP', 'list', '0'], ['LTRIM', 'missing', '0', '1'], ['LTRIM', 'str', 'x', '1'], ['LSET', 'missing', '0', 'x'],
+    ['RPUSH', 'str', 'x'],
     # Sets.
     ['SADD', 'set', 'c'], ['SREM', 'set', 'a'], ['SCARD', 'set'], ['SMEMBERS', 'set'], ['SISMEMBER', 'set', 'a'],
     ['SISMEMBER', 'missing', 'a'], ['SMISMEMBER', 'set', 'a', 'z'], ['SPOP', 'set'], ['SRANDMEMBER', 'set'],
