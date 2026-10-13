@@ -182,7 +182,7 @@ func (e *Engine) setCommand(name string, args []string) []byte {
 	e.aofRecord("SET", key, value)
 	if expiry {
 		e.dictStore.SetExpiryAt(key, uint64(at))
-		e.aofRecord("PEXPIREAT", key, strconv.FormatInt(at, 10))
+		e.aofRecordInt("PEXPIREAT", key, at)
 	}
 	return reply
 }
@@ -363,7 +363,7 @@ func (e *Engine) expireCommand(name string, args []string, scale int64, absolute
 		return constant.RespOne
 	}
 	owner.SetExpiryAt(args[0], uint64(at))
-	e.aofRecord("PEXPIREAT", args[0], strconv.FormatInt(at, 10))
+	e.aofRecordInt("PEXPIREAT", args[0], at)
 	return constant.RespOne
 }
 
