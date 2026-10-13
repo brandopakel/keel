@@ -30,6 +30,9 @@ var replicaWrites = [][]string{
 	{"DEL", "k"}, {"DEL", "missing"}, {"UNLINK", "k"}, {"EXPIRE", "k", "100"}, {"EXPIRE", "k", "100", "NX"},
 	{"PEXPIRE", "k", "100000"}, {"EXPIREAT", "k", "9999999999"}, {"PEXPIREAT", "k", "9999999999000"},
 	{"EXPIRE", "k", "-1"}, {"PERSIST", "k"}, {"FLUSHDB"}, {"FLUSHDB", "ASYNC"},
+	// The key commands (step 4.4).
+	{"RENAME", "k", "renamed"}, {"RENAMENX", "k", "renamed"}, {"COPY", "k", "copied"},
+	{"COPY", "k", "n", "REPLACE"},
 }
 
 var replicaWritesSeed = [][]string{
