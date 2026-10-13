@@ -56,13 +56,16 @@ def check_owner(client, pid, port):
     """Refuse a server on port that is not process pid, as INFO server says.
 
     A server that cannot bind its port leaves whatever holds it to answer for
-    it, and a readiness check that only pings is answered. Builds before
-    INFO's process_id (#140) cannot say who they are, and are taken as they
+    it, and a readiness check that only pings is answered. Every Keel release
+    answers INFO server, so one that refuses it is refused too: it cannot be
+    told apart from a foreign server. Builds before INFO's process_id (#140)
+    answer without one, cannot say who they are, and are taken as they
     answer."""
     try:
         answered = info(client, 'server').get('process_id')
-    except RuntimeError:
-        return
+    except RuntimeError as exc:
+        raise RuntimeError(f'port {port} answered PING but refused INFO server ({exc}), so it cannot be '
+                           f'told from another process; the server started is {pid}') from exc
     if answered is not None and answered.strip() != str(pid):
         raise RuntimeError(f'port {port} is answered by process {answered.strip()}, '
                            f'not the server started as {pid}')

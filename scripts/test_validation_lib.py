@@ -41,7 +41,9 @@ FAKE_SERVER = textwrap.dedent('''\
                 n = int(stream.readline()[1:])
                 parts.append(stream.read(n + 2)[:-2])
             name = parts[0].upper()
-            if name == b'INFO':
+            if name == b'INFO' and '-fake-info-error' in sys.argv:
+                conn.sendall(b'-ERR unknown section\\r\\n')
+            elif name == b'INFO':
                 body = b'# Server\\r\\nprocess_id:%d\\r\\n' % os.getpid()
                 conn.sendall(b'$%d\\r\\n%s\\r\\n' % (len(body), body))
             elif name == b'PING':
@@ -127,6 +129,12 @@ class ReadinessTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, rf'port {holder.port} is answered by process \d+'):
                 second.start()
             self.assertIsNone(second.process, 'the refused server is stopped')
+
+    def test_a_server_that_refuses_info_is_refused(self):
+        server = Server(self.binary, self.root / 'mute', extra=['-fake-info-error'], startup_timeout=10)
+        with self.assertRaisesRegex(RuntimeError, r'answered PING but refused INFO server'):
+            server.start()
+        self.assertIsNone(server.process, 'the refused server is stopped')
 
 
 if __name__ == '__main__':
