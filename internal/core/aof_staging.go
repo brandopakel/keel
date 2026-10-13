@@ -60,6 +60,20 @@ func (e *Engine) aofRecordArgs(name string, args []string) {
 	}
 }
 
+// aofRecordKeyArgs stages the record name key followed by args, as LPUSH's,
+// HSET's and SADD's values follow their key, with no slice made to join
+// them.
+func (e *Engine) aofRecordKeyArgs(name, key string, args []string) {
+	if e.aof.file == nil || e.aof.replaying {
+		return
+	}
+	e.aof.staged = append(e.aof.staged, stagedPart{n: int64(2 + len(args)), kind: stagedHeader},
+		stagedPart{s: name}, stagedPart{s: key})
+	for _, a := range args {
+		e.aof.staged = append(e.aof.staged, stagedPart{s: a})
+	}
+}
+
 // aofRecordInt stages the record name key n, whose last part is an integer:
 // PEXPIREAT's instant, INCRBY's increment.
 func (e *Engine) aofRecordInt(name, key string, n int64) {
