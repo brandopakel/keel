@@ -133,6 +133,8 @@ var writeCommands = map[string]bool{
 	"EXPIRE": true, "PEXPIREAT": true, "PEXPIRE": true, "EXPIREAT": true, "PERSIST": true, "INCR": true, "INCRBY": true, "DECR": true, "DECRBY": true,
 	"HSET": true, "HSETNX": true, "HDEL": true, "HINCRBY": true,
 	"LPUSH": true, "RPUSH": true, "LPOP": true, "RPOP": true, "LTRIM": true, "LSET": true,
+	"LPUSHX": true, "RPUSHX": true, "LINSERT": true, "LREM": true, "LMOVE": true, "RPOPLPUSH": true,
+	"LMOVEM": true, "LMPOP": true,
 	"SADD": true, "SREM": true, "SPOP": true,
 	"ZADD": true, "ZREM": true, "ZINCRBY": true, "ZPOPMIN": true, "ZPOPMAX": true,
 	"GEOADD":     true,

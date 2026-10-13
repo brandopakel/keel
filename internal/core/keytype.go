@@ -38,6 +38,9 @@ var commandKeyspace = map[string]string{
 
 	"LPUSH": "list", "RPUSH": "list", "LPOP": "list", "RPOP": "list",
 	"LTRIM": "list", "LLEN": "list", "LINDEX": "list", "LSET": "list", "LRANGE": "list",
+	"LPUSHX": "list", "RPUSHX": "list", "LINSERT": "list", "LREM": "list", "LPOS": "list",
+	// These four check their keys' types themselves (selfTypedCommands).
+	"LMOVE": "list", "RPOPLPUSH": "list", "LMOVEM": "list", "LMPOP": "list",
 
 	"SADD": "set", "SREM": "set", "SCARD": "set", "SMEMBERS": "set",
 	"SISMEMBER": "set", "SMISMEMBER": "set", "SRANDMEMBER": "set", "SRAND": "set",
@@ -100,17 +103,20 @@ type keyRule uint8
 
 const (
 	keyFirst    keyRule = iota // the first argument, as nearly every command has it
-	keyFirstTwo                // LCS's two keys
+	keyFirstTwo                // LCS's two keys, and a move's source and destination
 	keyStride                  // every n-th argument, from the first: strideKeyCommands
 	keyEvery                   // every argument: multiKeyCommands
+	keyCounted                 // as many as the first argument counts, after it: LMPOP's
 )
 
 // keyRuleOf is name's rule. Dispatch works it out once per command, in the
 // index, so the type check reads it rather than looking the name up again.
 func keyRuleOf(name string) keyRule {
 	switch {
-	case name == "LCS":
+	case name == "LCS" || name == "LMOVE" || name == "RPOPLPUSH" || name == "LMOVEM":
 		return keyFirstTwo
+	case name == "LMPOP":
+		return keyCounted
 	case strideKeyCommands[name] != 0:
 		return keyStride
 	case multiKeyCommands[name]:
@@ -136,6 +142,14 @@ func keysBy(cmd *Command, rule keyRule) []string {
 		return keys
 	case keyEvery:
 		return cmd.Args
+	case keyCounted:
+		// numkeys, then the keys it counts: none when it counts none, or more
+		// than follow it, which the command refuses.
+		n, valid := canonicalInteger(cmd.Args[0])
+		if !valid || n < 1 || n >= int64(len(cmd.Args)) {
+			return nil
+		}
+		return cmd.Args[1 : 1+n]
 	}
 	return cmd.Args[:1]
 }
@@ -186,6 +200,9 @@ var argumentsBeforeType = map[string]func(e *Engine, args []string) error{
 	"LPOP":   func(e *Engine, args []string) error { return e.listPopArguments("LPOP", args) },
 	"RPOP":   func(e *Engine, args []string) error { return e.listPopArguments("RPOP", args) },
 	"LRANGE": (*Engine).rangeArgument, "LTRIM": (*Engine).rangeArgument,
+	"LINSERT": func(_ *Engine, args []string) error { _, err := linsertWhere(args[1]); return err },
+	"LREM":    func(e *Engine, args []string) error { _, err := e.signedLong(args[1]); return err },
+	"LPOS":    func(e *Engine, args []string) error { _, err := e.lposArguments(args[2:]); return err },
 	"SPOP": func(e *Engine, args []string) error {
 		if len(args) > 2 {
 			return errSyntax
@@ -346,13 +363,22 @@ var filterCommands = map[string]bool{
 	"CF.DEL": true, "CF.COUNT": true, "CF.INFO": true,
 }
 
+// selfTypedCommands check the types of the keys they name themselves, where
+// Redis checks them, and are exempt from the check below as well: Redis's
+// LMOVE, RPOPLPUSH and LMOVEM answer nil for a source that holds nothing
+// whatever the destination holds, and check the destination only once there
+// is something to move, and LMPOP refuses a key of another type only when it
+// reaches it, after any key before it that holds a list. They stay in the
+// table above for the keys they write. See moveSource and lmpopSource.
+var selfTypedCommands = map[string]bool{"LMOVE": true, "RPOPLPUSH": true, "LMOVEM": true, "LMPOP": true}
+
 // typedKeyspace is the type checkKeyTypes holds name's keys to, or "" for a
 // command it passes over: one the type table does not constrain, a write that
-// replaces whatever the name held, or a filter command, which checks its key
-// itself.
+// replaces whatever the name held, or a filter or a command of
+// selfTypedCommands, which checks its keys itself.
 func typedKeyspace(name string) string {
 	space, checked := commandKeyspace[name]
-	if !checked || replacingWrites[name] || filterCommands[name] {
+	if !checked || replacingWrites[name] || filterCommands[name] || selfTypedCommands[name] {
 		return ""
 	}
 	return space
@@ -385,12 +411,13 @@ var keyspaceReads = map[string]bool{
 
 // readsAfterArguments are the reads whose Redis handler reads arguments
 // before it looks its key up, and returns on a malformed one without
-// counting anything: lrangeCommand reads its start and stop first. Their
+// counting anything: lrangeCommand reads its start and stop first, and
+// lposCommand its options. Their
 // typed operation counts the lookup, once the command language has read the
 // arguments; the type check counts it only on its way to refusing a key of
 // another type, once the arguments it reads first (argumentsBeforeType) have
 // passed, since Redis's lookup finds that key before checkType refuses it.
-var readsAfterArguments = map[string]bool{"LRANGE": true}
+var readsAfterArguments = map[string]bool{"LRANGE": true, "LPOS": true}
 
 // checkKeyTypes reports an error if any key the command names is already held
 // by a different kind of store: the command's own refusal of its arguments,

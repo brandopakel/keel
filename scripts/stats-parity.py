@@ -75,6 +75,16 @@ CASES = [[c] for c in [
     ['LLEN', 'missing'], ['LLEN', 'str'], ['LPOP', 'missing', '2'], ['LPOP', 'str'], ['LPOP', 'list', 'x'],
     ['RPOP', 'list', '0'], ['LTRIM', 'missing', '0', '1'], ['LTRIM', 'str', 'x', '1'], ['LSET', 'missing', '0', 'x'],
     ['RPUSH', 'str', 'x'],
+    # The list commands Keel added: LPOS reads its options before its key;
+    # the rest look up to write, and count nothing.
+    ['LPOS', 'list', 'a'], ['LPOS', 'missing', 'a'], ['LPOS', 'list', 'a', 'RANK', '0'], ['LPOS', 'missing', 'a', 'COUNT', 'x'],
+    ['LPOS', 'str', 'a'], ['LPOS', 'str', 'a', 'RANK', '0'], ['LPOS', 'list', 'b', 'COUNT', '0'],
+    ['LPUSHX', 'list', 'x'], ['RPUSHX', 'missing', 'x'], ['LINSERT', 'list', 'BEFORE', 'a', 'x'],
+    ['LINSERT', 'missing', 'BEFORE', 'a', 'x'], ['LREM', 'list', '0', 'a'], ['LREM', 'missing', '0', 'a'],
+    ['LMOVE', 'list', 'dst', 'LEFT', 'RIGHT'], ['LMOVE', 'missing', 'str', 'LEFT', 'RIGHT'], ['RPOPLPUSH', 'list', 'dst'],
+    ['LMOVEM', 'list', 'dst', 'LEFT', 'RIGHT', 'COUNT', '2', 'BULK'], ['LMOVEM', 'missing', 'dst', 'LEFT', 'RIGHT'],
+    ['LMPOP', '2', 'missing', 'list', 'LEFT', 'COUNT', '2'], ['LMPOP', '2', 'missing', 'str', 'LEFT'],
+    ['LMPOP', '1', 'missing', 'RIGHT'],
     # Sets.
     ['SADD', 'set', 'c'], ['SREM', 'set', 'a'], ['SCARD', 'set'], ['SMEMBERS', 'set'], ['SISMEMBER', 'set', 'a'],
     ['SISMEMBER', 'missing', 'a'], ['SMISMEMBER', 'set', 'a', 'z'], ['SPOP', 'set'], ['SRANDMEMBER', 'set'],
