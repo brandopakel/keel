@@ -82,9 +82,14 @@ func (e *Engine) cmdSET(args []string) []byte {
 	if len(args) < 2 {
 		return e.encode(wrongArguments("SET"), false)
 	}
-	req, get, cond, err := e.setArguments("SET", args[2:], true)
-	if err != nil {
-		return e.encode(err, false)
+	var req setRequest
+	var get bool
+	var cond valueCondition
+	if len(args) > 2 {
+		var err error
+		if req, get, cond, err = e.setArguments("SET", args[2:], true); err != nil {
+			return e.encode(err, false)
+		}
 	}
 	key, value := args[0], args[1]
 	t := e.setTarget(key)
@@ -105,6 +110,7 @@ func (e *Engine) cmdSET(args []string) []byte {
 		// answers a SET ... GET IFDEQ with a digest of the wrong length
 		// twice (t_string.c, setGenericCommand, lines 99-101 and 136-137);
 		// the error is answered alone here.
+		var err error
 		if write, err = e.setConditionHolds(t, cond); err != nil {
 			return r.Error(err).Bytes()
 		}
