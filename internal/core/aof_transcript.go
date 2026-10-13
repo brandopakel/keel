@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 )
 
@@ -90,14 +91,23 @@ func (e *Engine) writeAOFBuffer(drain bool) error {
 
 // cutShortWrite cuts the n bytes a short write left at the end of e's log
 // back off it, as Redis truncates a short write (aof.c 1515-1526), and says
-// whether it did. The size to cut back to is the file's own, less n, rather
-// than any count kept of it: the log is opened for appending and only e
-// writes it, so that is exactly where the write began, and a count that had
-// drifted from the file could only make the cut remove what was there before.
+// whether it did: cutShortWriteOf, on e's log.
 func (e *Engine) cutShortWrite(n int) bool {
-	info, err := e.aof.file.Stat()
+	return cutShortWriteOf(e.aof.file, n, e.aofTruncate)
+}
+
+// cutShortWriteOf cuts the n bytes a short write left at the end of the log
+// f back off it, with truncate, and says whether it did. The size to cut back
+// to is the file's own, less n, rather than any count kept of it: the log is
+// opened for appending and only its engine writes it, one write at a time, so
+// that is exactly where the write began, and a count that had drifted from
+// the file could only make the cut remove what was there before. It is called
+// by whoever made the write, right after it, as Redis truncates right after
+// its write: the loop for its own, the append worker for a batch.
+func cutShortWriteOf(f *os.File, n int, truncate func(*os.File, int64) error) bool {
+	info, err := f.Stat()
 	if err == nil && info.Size() >= int64(n) {
-		err = e.aofTruncate(e.aof.file, info.Size()-int64(n))
+		err = truncate(f, info.Size()-int64(n))
 	} else if err == nil {
 		err = fmt.Errorf("the log is %d bytes, fewer than the %d just written", info.Size(), n)
 	}
