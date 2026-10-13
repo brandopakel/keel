@@ -62,6 +62,7 @@ var packageVars = map[string]string{
 	"errIncrexENX": sentinel, "errIncrexValueInfinite": sentinel, "errIncrexDeltaInfinite": sentinel,
 	"errIncrexDeltaOverflow": sentinel,
 	"errCountNegative":       sentinel, "errNotAnInteger": sentinel, "errNoSuchKey": sentinel, "errIndexOutOfRange": sentinel,
+	"errSameObject": sentinel, "errDBIndex": sentinel,
 	"errFilterExists": sentinel, "errFilterNotFound": sentinel, "errReadOnlyReplica": sentinel,
 	"ErrRequestAllocation": sentinel, "ErrIncompleteFrame": sentinel, "ErrProtocol": sentinel,
 	"errDiscardNoMulti": sentinel, "errExecNoMulti": sentinel, "errNestedMulti": sentinel,
