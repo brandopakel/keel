@@ -51,6 +51,15 @@ TimeSeries come in CI.
 | array (8.x) | 0/18 | all |
 | vector sets (8.x) | 0/13 | all |
 
+**The hash gaps after step 4.5.** `HRANDFIELD` and `HSCAN` need a hash that
+can be sampled without copying its fields and walked by a cursor that holds
+across calls (`data_structure.Hash` is a Go map, walked only within one
+call); field expiry - `HEXPIRE`, `HPEXPIRE`, `HEXPIREAT`, `HPEXPIREAT`,
+`HTTL`, `HPTTL`, `HEXPIRETIME`, `HPEXPIRETIME`, `HPERSIST`, and `HGETEX`
+and `HSETEX`, which set it - needs a deadline per field, with its lazy and
+active expiry and its records. They come after the families are converted,
+in that order; `HIMPORT` (8.x) with them.
+
 The name census checks names, not options. The **argument census**
 (`scripts/argument-census.py`, in the same workflow) checks the options: for
 every command Keel has, every argument form Redis's own specifications
