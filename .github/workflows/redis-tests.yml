@@ -1,0 +1,152 @@
+# Redis tests: Redis 8.10.1's own test suite as a parity oracle.
+#
+# Downloads the pinned Redis 8.10.1 source, builds redis-server and redis-cli
+# from it and Keel from this commit, and runs Redis's tests (tests/unit and
+# tests/unit/type) against Keel with ./runtest --host --port, as Redis's own
+# external-server workflow runs them, and against Redis itself as the control.
+# scripts/run-redis-tests.py runs each unit against a fresh server with a
+# timeout of its own, so a crash or a hang in one unit costs that unit alone,
+# and keeps every line the harness prints, each test's assertion message
+# included. The units are split into groups, one job per group and server.
+#
+# The harness's external-mode setup runs FLUSHALL, FUNCTION FLUSH, SCRIPT
+# FLUSH and CONFIG RESETSTAT before every block of tests; unadapted, a server
+# without FLUSHALL fails every unit before its first test (the first baseline,
+# run 38305868896, did exactly that). The driver adapts that setup in the
+# runner's copy of the Redis tree for both servers alike (see
+# scripts/run-redis-tests.py), and records that it did.
+#
+# The report job joins the groups: redis-tests.json, .csv and .md in the
+# redis-tests artifact, which the Benchmark history workflow copies to
+# census/redis-tests.csv on the bench-history branch for Grafana. The step
+# summary has the table.
+#
+# It is information, not a gate: it runs on dispatch, weekly, and on a pull
+# request that changes it, and is not a required check. Many tests fail
+# against Keel; that is what it measures.
+name: Redis tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      timeout:
+        description: seconds per unit
+        default: '900'
+  schedule:
+    - cron: '23 4 * * 1'
+  pull_request:
+    branches: [develop]
+    paths: ['.github/workflows/redis-tests.yml', 'scripts/run-redis-tests.py', 'scripts/test_run_redis_tests.py']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: redis-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REDIS_TARBALL_SHA256: 60166c95ab7aedaa9dfe516de685be0a4dd87be95ded59ba429df14c13f1b663
+
+jobs:
+  build:
+    name: Build Keel and Redis 8.10.1
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false }
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with: { go-version-file: go.mod }
+      - name: Driver tests
+        run: python3 -m unittest discover -s scripts -p 'test_run_redis_tests.py' -v
+      - name: Build Keel
+        run: go build -trimpath -o /tmp/bin/keel ./cmd/keel
+      - name: Build Redis 8.10.1
+        run: |
+          curl -fL --retry 3 https://download.redis.io/releases/redis-8.10.1.tar.gz -o /tmp/redis-8.10.1.tar.gz
+          echo "$REDIS_TARBALL_SHA256  /tmp/redis-8.10.1.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/redis-8.10.1.tar.gz -C /tmp
+          make -C /tmp/redis-8.10.1/src -j"$(nproc)" BUILD_TLS=no > /tmp/redis-build.log 2>&1 || { tail -60 /tmp/redis-build.log; exit 1; }
+          cp /tmp/redis-8.10.1/src/redis-server /tmp/redis-8.10.1/src/redis-cli /tmp/bin/
+          { echo "keel $(git rev-parse HEAD)"; /tmp/bin/redis-server --version; go version; } | tee /tmp/bin/provenance.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: redis-tests-binaries
+          path: /tmp/bin
+          retention-days: 1
+
+  tests:
+    name: ${{ matrix.server }} group ${{ matrix.group }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        server: [keel, redis]
+        group: [1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false }
+      - name: Tcl
+        run: sudo apt-get install -y tcl8.6 tclx > /dev/null
+      - name: Redis 8.10.1 source
+        # The test suite is Tcl and runs from the source tree; nothing is
+        # built here.
+        run: |
+          curl -fL --retry 3 https://download.redis.io/releases/redis-8.10.1.tar.gz -o /tmp/redis-8.10.1.tar.gz
+          echo "$REDIS_TARBALL_SHA256  /tmp/redis-8.10.1.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/redis-8.10.1.tar.gz -C /tmp
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: redis-tests-binaries
+          path: /tmp/bin
+      - name: Run the units
+        shell: bash
+        env:
+          # Through the environment, never pasted into the script: on dispatch
+          # the input is free text.
+          UNIT_TIMEOUT: ${{ inputs.timeout || '900' }}
+        run: |
+          chmod +x /tmp/bin/keel /tmp/bin/redis-server /tmp/bin/redis-cli
+          # The harness runs src/redis-cli from the source tree in a few tests.
+          cp /tmp/bin/redis-cli /tmp/bin/redis-server /tmp/redis-8.10.1/src/
+          bin=/tmp/bin/${{ matrix.server == 'keel' && 'keel' || 'redis-server' }}
+          python3 -I scripts/run-redis-tests.py run --server ${{ matrix.server }} --bin "$bin" \
+            --redis-src /tmp/redis-8.10.1 --group ${{ matrix.group }} \
+            --out dist/redis-tests/${{ matrix.server }}/group-${{ matrix.group }} \
+            --timeout "$UNIT_TIMEOUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: redis-tests-${{ matrix.server }}-${{ matrix.group }}
+          path: dist/redis-tests
+          retention-days: 30
+
+  report:
+    name: Report
+    needs: tests
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with: { persist-credentials: false }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: redis-tests-*
+          path: dist/groups
+      - name: Report
+        shell: bash
+        run: |
+          mkdir -p dist/report
+          cp dist/groups/redis-tests-binaries/provenance.txt dist/report/ 2>/dev/null || true
+          python3 -I scripts/run-redis-tests.py report --out dist/report --results dist/groups \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: redis-tests
+          path: dist/report
+          retention-days: 30

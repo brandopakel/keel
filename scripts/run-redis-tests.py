@@ -1,0 +1,431 @@
+#!/usr/bin/env python3
+"""Run Redis's own test suite against Keel, unit by unit, and against Redis
+as the control, and report what passed.
+
+Redis's tests (tests/unit/*.tcl and tests/unit/type/*.tcl in its source)
+run against an external server with ./runtest --host --port. This script
+runs them one unit at a time, each against a fresh server started for it,
+with a timeout of its own, so that a server that crashes or hangs in one
+unit costs that unit alone. Every line the harness prints, every test's own
+assertion message included, is kept in the unit's log.
+
+    run    --server keel|redis --bin PATH --redis-src DIR --group N --out DIR
+           runs one group of units (GROUPS below) and writes a JSON result
+           and a log per unit, and group.json;
+    report --out DIR --results DIR...
+           joins the group results of both servers into redis-tests.json,
+           redis-tests.csv and redis-tests.md.
+
+The harness runs as Redis's own external-server workflow runs it
+(.github/workflows/external.yml in the Redis source: --verbose --tags -slow)
+with, for both servers alike, --singledb (Keel has one database),
+--ignore-encoding and --ignore-digest (OBJECT ENCODING and DEBUG DIGEST are
+Redis internals), --durable (an error reply that is not an assertion counts
+as that test failing, instead of ending the unit) and --dont-clean. Tests
+tagged external:skip are skipped by the harness itself. Redis is started as
+that workflow starts it (debug, module and protected configs enabled); Keel
+with its append-only file on.
+
+The harness's external-mode setup (run_external_server_test in
+tests/support/server.tcl) runs FLUSHALL, FUNCTION FLUSH, SCRIPT FLUSH and
+CONFIG RESETSTAT before every start_server block, and a server that lacks
+one of them ends every unit before its first test. Unless --strict is given,
+the runner's copy of that file is adapted before the run, for both servers
+alike: FLUSHALL falls back to FLUSHDB (the same thing on a server with one
+database) and the other three are tried and their failure ignored. For Redis
+this changes nothing; the adaptation is recorded in every result.
+
+A unit's outcome is ok (the harness finished), unconfigurable (a CONFIG SET
+outside any test, in the setup of the unit or of one of its start_server
+blocks, was refused, so the tests after it never ran), exception (another
+error outside any test did that), timeout (this script or the harness's own
+timeout stopped it), incomplete (the harness stopped without finishing), or
+crash (the server was gone when the unit ended). Tests the harness never
+reached are counted as not run.
+"""
+import argparse
+import csv
+import json
+import os
+from pathlib import Path
+import re
+import signal
+import socket
+import subprocess
+import sys
+import time
+
+# Units that cannot run against an external server at all, with the reason.
+SKIPPED = {
+    'unit/shutdown': 'stops and restarts the server',
+    'unit/tls': 'needs a TLS build and certificates',
+    'unit/oom-score-adj': "reads the server process's oom_score_adj",
+    'unit/violations': 'needs --large-memory',
+}
+
+# The units, in groups sized by their test counts; a group is one CI job.
+GROUPS = {
+    1: ['unit/type/string', 'unit/type/incr', 'unit/type/increx', 'unit/keyspace', 'unit/scan', 'unit/quit',
+        'unit/printver', 'unit/protocol', 'unit/replybufsize', 'unit/querybuf'],
+    2: ['unit/type/hash', 'unit/type/hash-field-expire', 'unit/type/hash-templates', 'unit/type/set', 'unit/expire',
+        'unit/bitops', 'unit/bitfield'],
+    3: ['unit/type/list', 'unit/type/list-2', 'unit/type/list-3', 'unit/type/list-4', 'unit/type/zset', 'unit/sort',
+        'unit/geo', 'unit/hyperloglog'],
+    4: ['unit/type/stream', 'unit/type/stream-cgroups', 'unit/type/array'],
+    5: ['unit/scripting', 'unit/functions', 'unit/acl', 'unit/acl-v2', 'unit/auth'],
+    6: ['unit/multi', 'unit/other', 'unit/info', 'unit/info-command', 'unit/info-keysizes', 'unit/introspection',
+        'unit/introspection-2', 'unit/slowlog', 'unit/latency-monitor', 'unit/networking', 'unit/limits',
+        'unit/dump', 'unit/memefficiency', 'unit/lazyfree', 'unit/maxmemory', 'unit/obuf-limits',
+        'unit/client-eviction', 'unit/aofrw', 'unit/gcra', 'unit/hotkeys'],
+    7: ['unit/pubsub', 'unit/pubsubshard', 'unit/tracking', 'unit/pause', 'unit/wait'],
+}
+
+# The external-mode setup as Redis 8.10.1 has it, and as it is adapted.
+SETUP = ('    r flushall\n'
+         '    r function flush\n'
+         '    r script flush\n'
+         '    r config resetstat\n')
+ADAPTED_SETUP = ('    if {[catch {r flushall}]} { r flushdb }\n'
+                 '    catch {r function flush}\n'
+                 '    catch {r script flush}\n'
+                 '    catch {r config resetstat}\n')
+
+
+def adapt_harness(redis_src):
+    """Adapt the external-mode setup in a disposable copy of the Redis tree;
+    returns what was done. Refuses a file whose setup is not exactly the
+    expected one, rather than adapting something else."""
+    path = Path(redis_src) / 'tests' / 'support' / 'server.tcl'
+    text = path.read_text()
+    if ADAPTED_SETUP in text:
+        return 'already adapted'
+    if text.count(SETUP) != 1:
+        raise SystemExit(f'{path}: the external-mode setup is not the expected four lines; refusing to adapt it')
+    path.write_text(text.replace(SETUP, ADAPTED_SETUP))
+    return 'adapted: FLUSHALL falls back to FLUSHDB; FUNCTION FLUSH, SCRIPT FLUSH, CONFIG RESETSTAT failures ignored'
+
+
+HARNESS_FLAGS = ['--verbose', '--tags', '-slow', '--singledb', '--ignore-encoding', '--ignore-digest', '--durable',
+                 '--dont-clean']
+ANSI = re.compile(r'\x1b\[[0-9;]*m')
+# What the harness prints without ending the line, so that the next test's
+# marker follows it on the same line: waitForBgsave and waitForBgrewriteaof
+# (tests/support/util.tcl:108 and :122) print it whenever a save or rewrite
+# is still running, which makes a test that follows uncounted only sometimes.
+UNTERMINATED = re.compile(r'^(?:Waiting for background (?:save|AOF rewrite) to finish\.\.\. )+')
+OK = re.compile(r'^\[ok\]: (.*) \((\d+) ms\)$')
+ERR = re.compile(r'^\[err\]: (.*?) in (tests/\S+\.tcl)$')
+IGNORE = re.compile(r'^\[(ignore|skip)\]: (.*)$')
+EXCEPTION = re.compile(r'^\[exception\]: (.*)$')
+TIMEOUT = re.compile(r'^\[TIMEOUT\]')
+DONE = re.compile(r'^\[\d+/\d+ done\]: (\S+) \((\d+) seconds\)$')
+# An exception raised by the harness applying a unit's configuration.
+CONFIG_SET = re.compile(r'CONFIG SET|config set', re.I)
+
+
+def parse(text):
+    """What the harness printed for one unit: the tests that passed, failed
+    (each with the lines that followed its marker, the assertion among
+    them) and were ignored, the errors raised outside any test, and whether
+    it stopped on an exception or its own timeout.
+
+    With --durable, an error in a start_server block outside a test (a
+    CONFIG SET the block's setup needs, say) is printed as `[err]: <message>`
+    without the `in tests/...tcl` of a failed test, and ends that block: its
+    remaining tests never run. Those are block errors."""
+    passed, failed, ignored, block_errors = [], [], [], []
+    exception, harness_timeout, done = '', False, False
+    current = None
+    for raw in text.splitlines():
+        line = UNTERMINATED.sub('', ANSI.sub('', raw).rstrip())
+        if m := OK.match(line):
+            passed.append({'name': m[1], 'ms': int(m[2])})
+            current = None
+        elif m := ERR.match(line):
+            current = {'name': m[1], 'file': m[2], 'detail': []}
+            failed.append(current)
+        elif line.startswith('[err]: '):
+            current = {'name': line[len('[err]: '):], 'detail': []}
+            block_errors.append(current)
+        elif m := IGNORE.match(line):
+            ignored.append(m[2])
+            current = None
+        elif m := EXCEPTION.match(line):
+            exception = m[1]
+            current = {'name': '', 'detail': []}  # the lines after it explain
+        elif TIMEOUT.match(line):
+            harness_timeout = True
+            current = None
+        elif DONE.match(line):
+            done = True
+            current = None
+        elif line.startswith('*** [err]'):
+            current = None  # the summary repeats the failures
+        elif current is not None and line and len(current['detail']) < 40:
+            current['detail'].append(line)
+    if exception and current and current['name'] == '':
+        exception = (exception + '\n' + '\n'.join(current['detail'])).strip()
+    return {'passed': passed, 'failed': failed, 'ignored': ignored, 'block_errors': block_errors,
+            'exception': exception, 'harness_timeout': harness_timeout, 'done': done}
+
+
+def outcome(initial, parsed, alive):
+    """A unit's outcome from what the harness printed: crash when the server
+    is gone, unconfigurable when a CONFIG SET outside any test ended the unit
+    or a block of it, exception for any other error that did, timeout or
+    incomplete when the harness did not finish, and ok otherwise."""
+    if not alive:
+        return 'crash'
+    if initial != 'ok':
+        return initial
+    errors = ([parsed['exception']] if parsed['exception'] else []) + [
+        ' '.join([e['name'], *e['detail']]) for e in parsed['block_errors']]
+    if errors:
+        return 'unconfigurable' if any(CONFIG_SET.search(e) for e in errors) else 'exception'
+    if parsed['harness_timeout']:
+        return 'timeout'
+    return 'ok' if parsed['done'] else 'incomplete'
+
+
+def count_tests(redis_src, unit):
+    """How many tests a unit file declares, so that those never reached can
+    be counted."""
+    path = Path(redis_src) / 'tests' / f'{unit}.tcl'
+    try:
+        return len(re.findall(r'^\s*test\s+[{"]', path.read_text(errors='replace'), re.M))
+    except OSError:
+        return 0
+
+
+def free_port():
+    with socket.socket() as reservation:
+        reservation.bind(('127.0.0.1', 0))
+        return reservation.getsockname()[1]
+
+
+class Server:
+    """A Keel or a Redis started for one unit, in its own directory."""
+
+    def __init__(self, kind, binary, directory):
+        self.kind, self.binary, self.directory = kind, Path(binary).resolve(), Path(directory).resolve()
+        self.directory.mkdir(parents=True, exist_ok=True)
+        self.port = free_port()
+        self.log = (self.directory / 'server.log').open('wb')
+        if kind == 'keel':
+            command = [str(self.binary), '-host', '127.0.0.1', '-port', str(self.port), '-appendonly',
+                       '-appendfilename', str(self.directory / 'store.aof')]
+        else:
+            command = [str(self.binary), '--port', str(self.port), '--bind', '127.0.0.1', '--save', '',
+                       '--appendonly', 'yes', '--dir', str(self.directory), '--enable-protected-configs', 'yes',
+                       '--enable-debug-command', 'yes', '--enable-module-command', 'yes']
+        self.process = subprocess.Popen(command, cwd=self.directory, stdout=self.log, stderr=self.log)
+        self.wait_ready()
+
+    def wait_ready(self):
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            if self.process.poll() is not None:
+                raise RuntimeError(f'{self.kind} exited during startup; see {self.directory}/server.log')
+            try:
+                with socket.create_connection(('127.0.0.1', self.port), timeout=1) as s:
+                    s.sendall(b'*1\r\n$4\r\nPING\r\n')
+                    if s.recv(16).startswith(b'+PONG'):
+                        return
+            except OSError:
+                pass
+            time.sleep(.05)
+        raise TimeoutError(f'{self.kind} not ready on {self.port}')
+
+    def alive(self):
+        return self.process.poll() is None
+
+    def stop(self):
+        if self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait()
+        self.log.close()
+
+
+def run_unit(server_kind, binary, redis_src, unit, out, timeout):
+    """One unit against a fresh server. Returns its result and writes its
+    log and the server's."""
+    directory = Path(out) / unit.replace('/', '-')
+    directory.mkdir(parents=True, exist_ok=True)
+    result = {'unit': unit, 'server': server_kind, 'outcome': 'ok', 'seconds': 0, 'declared': count_tests(redis_src, unit)}
+    try:
+        server = Server(server_kind, binary, directory / 'server')
+    except (RuntimeError, TimeoutError) as e:
+        result.update(outcome='crash', detail=str(e), passed=[], failed=[], ignored=[], exception='',
+                      harness_timeout=False, done=False)
+        return result
+    log_path = directory / 'harness.log'
+    started = time.monotonic()
+    command = ['tclsh', 'tests/test_helper.tcl', '--host', '127.0.0.1', '--port', str(server.port), '--single', unit,
+               '--timeout', str(min(timeout, 600)), *HARNESS_FLAGS]
+    with log_path.open('wb') as log:
+        process = subprocess.Popen(command, cwd=redis_src, stdout=log, stderr=subprocess.STDOUT,
+                                   start_new_session=True)
+        try:
+            exit_code = process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
+            exit_code = None
+            result['outcome'] = 'timeout'
+    result['seconds'] = round(time.monotonic() - started, 1)
+    result['exit_code'] = exit_code
+    text = log_path.read_text(errors='replace')
+    parsed = parse(text)
+    result.update(parsed)
+    result['outcome'] = outcome(result['outcome'], parsed, server.alive())
+    server.stop()
+    result['not_run'] = max(0, result['declared'] - len(parsed['passed']) - len(parsed['failed']) - len(parsed['ignored']))
+    result['log'] = str(log_path.relative_to(out))
+    (directory / 'result.json').write_text(json.dumps(result, indent=1) + '\n')
+    return result
+
+
+def run(args):
+    """Run the group's units in turn, rewriting group.json after each so
+    that a job stopped by its own time limit still reports the units it
+    finished."""
+    units = GROUPS[args.group]
+    results = []
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    adaptation = 'none (--strict)' if args.strict else adapt_harness(args.redis_src)
+    print(f'harness setup: {adaptation}', flush=True)
+    for unit in units:
+        print(f'== {unit} against {args.server}', flush=True)
+        result = run_unit(args.server, args.bin, args.redis_src, unit, args.out, args.timeout)
+        results.append(result)
+        print(f"   {result['outcome']}: {len(result['passed'])} passed, {len(result['failed'])} failed, "
+              f"{len(result['ignored'])} ignored, {result['not_run']} not run, {result['seconds']} s", flush=True)
+        (out / 'group.json').write_text(json.dumps({'server': args.server, 'group': args.group, 'units': results,
+                                                    'complete': len(results) == len(units),
+                                                    'harness_adaptation': adaptation}, indent=1) + '\n')
+    return 0
+
+
+def summarise_unit(result):
+    return {'outcome': result['outcome'], 'passed': len(result['passed']), 'failed': len(result['failed']),
+            'ignored': len(result['ignored']), 'not_run': result.get('not_run', 0), 'seconds': result['seconds'],
+            'failing': [f['name'] for f in result['failed']],
+            'details': {f['name']: ' '.join(f['detail'])[:300] for f in result['failed']},
+            'exception': (result.get('exception') or ' '.join(
+                ' '.join([e['name'], *e['detail']]) for e in result.get('block_errors', [])))[:300],
+            'block_errors': len(result.get('block_errors', []))}
+
+
+def report(args):
+    """Join every group.json under the result directories into one report."""
+    sides = {'keel': {}, 'redis': {}}
+    adaptations = set()
+    # A run is complete only when every configured group of both servers
+    # wrote its result and finished its units. A job that fails before its
+    # first unit writes nothing, and one stopped by its time limit writes
+    # complete: false.
+    expected = {(server, group) for server in ('keel', 'redis') for group in GROUPS}
+    observed, incomplete = set(), set()
+    for root in args.results:
+        for path in Path(root).rglob('group.json'):
+            group = json.loads(path.read_text())
+            key = (group['server'], group['group'])
+            observed.add(key)
+            if not group.get('complete', False):
+                incomplete.add(key)
+            adaptations.add(group.get('harness_adaptation', 'unrecorded'))
+            for result in group['units']:
+                sides[group['server']][result['unit']] = summarise_unit(result)
+    incomplete |= expected - observed
+    units = sorted(set(sides['keel']) | set(sides['redis']))
+    rows = []
+    for unit in units:
+        k, r = sides['keel'].get(unit), sides['redis'].get(unit)
+        rows.append({'unit': unit, 'keel': k, 'redis': r})
+    totals = {}
+    for side in ('keel', 'redis'):
+        done = list(sides[side].values())
+        totals[side] = {'units': len(done), 'passed': sum(u['passed'] for u in done),
+                        'failed': sum(u['failed'] for u in done), 'ignored': sum(u['ignored'] for u in done),
+                        'not_run': sum(u['not_run'] for u in done),
+                        'units_crashed': sum(u['outcome'] == 'crash' for u in done),
+                        'units_timed_out': sum(u['outcome'] == 'timeout' for u in done),
+                        'units_exception': sum(u['outcome'] == 'exception' for u in done),
+                        'units_unconfigurable': sum(u['outcome'] == 'unconfigurable' for u in done)}
+    result = {'skipped_units': SKIPPED, 'harness_adaptation': sorted(adaptations), 'totals': totals, 'units': rows,
+              'complete': not incomplete,
+              'incomplete_groups': [f'{server} group {group}' for server, group in sorted(incomplete)]}
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / 'redis-tests.json').write_text(json.dumps(result, indent=1) + '\n')
+    with (out / 'redis-tests.csv').open('w', newline='') as f:
+        writer = csv.writer(f, lineterminator='\n')
+        writer.writerow(['unit', 'redis_passed', 'redis_failed', 'redis_ignored', 'redis_outcome', 'keel_passed',
+                         'keel_failed', 'keel_ignored', 'keel_not_run', 'keel_outcome', 'keel_seconds',
+                         'keel_failing'])
+        for row in rows:
+            k, r = row['keel'] or {}, row['redis'] or {}
+            writer.writerow([row['unit'], r.get('passed', ''), r.get('failed', ''), r.get('ignored', ''),
+                             r.get('outcome', ''), k.get('passed', ''), k.get('failed', ''), k.get('ignored', ''),
+                             k.get('not_run', ''), k.get('outcome', ''), k.get('seconds', ''),
+                             '; '.join(k.get('failing', []))])
+    text = markdown(result)
+    (out / 'redis-tests.md').write_text(text)
+    print(text)
+    return 0
+
+
+def markdown(result):
+    t = result['totals']
+    k, r = t['keel'], t['redis']
+    parity = f"{100 * k['passed'] / r['passed']:.1f}%" if r['passed'] else 'n/a'
+    out = [f"Redis's own tests: Keel passes **{k['passed']}** of the **{r['passed']}** Redis passes in external mode "
+           f"({parity}), over {k['units']} units; {k['failed']} fail, {k['not_run']} are not reached, "
+           f"{k['units_crashed']} units crash the server, {k['units_timed_out']} time out, "
+           f"{k['units_exception']} stop on an exception, {k['units_unconfigurable']} cannot be configured "
+           f"(CONFIG SET refused). Redis itself: {r['passed']} passed, {r['failed']} failed.", '']
+    if not result.get('complete', False):
+        missing = ', '.join(result.get('incomplete_groups') or []) or 'not recorded'
+        out += [f'**Incomplete run:** these groups did not report or did not finish: {missing}. '
+                'The totals cover only what ran.', '']
+    out += [
+           '| Unit | Redis passed | Redis failed | Keel passed | Keel failed | Not run | Keel outcome | Seconds |',
+           '| --- | ---: | ---: | ---: | ---: | ---: | --- | ---: |']
+    for row in result['units']:
+        kk, rr = row['keel'] or {}, row['redis'] or {}
+        out.append(f"| {row['unit']} | {rr.get('passed', '-')} | {rr.get('failed', '-')} | {kk.get('passed', '-')} | "
+                   f"{kk.get('failed', '-')} | {kk.get('not_run', '-')} | {kk.get('outcome', '-')} | "
+                   f"{kk.get('seconds', '-')} |")
+    out += ['', 'Units not run: ' + ', '.join(f'{u} ({why})' for u, why in result['skipped_units'].items()) + '.',
+            'Harness setup: ' + '; '.join(result.get('harness_adaptation') or ['unrecorded']) + '.', '']
+    return '\n'.join(out) + '\n'
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest='command', required=True)
+    r = sub.add_parser('run')
+    r.add_argument('--server', choices=['keel', 'redis'], required=True)
+    r.add_argument('--bin', required=True, help='the server binary')
+    r.add_argument('--redis-src', required=True, help='the unpacked Redis source tree, with tests/')
+    r.add_argument('--group', type=int, choices=sorted(GROUPS), required=True)
+    r.add_argument('--out', required=True)
+    r.add_argument('--timeout', type=int, default=1200, help='seconds per unit (default 1200)')
+    r.add_argument('--strict', action='store_true',
+                   help="run the harness's external-mode setup unadapted (see above)")
+    r.set_defaults(func=run)
+    p = sub.add_parser('report')
+    p.add_argument('--out', required=True)
+    p.add_argument('--results', nargs='+', required=True, help='directories holding group.json files')
+    p.set_defaults(func=report)
+    args = ap.parse_args(argv)
+    return args.func(args)
+
+
+if __name__ == '__main__':
+    sys.exit(main())

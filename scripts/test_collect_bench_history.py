@@ -98,6 +98,25 @@ CONFIG = {
                  'redis_value': None, 'note': '', 'used_by': [], 'test_files': 0, 'family': 'replication'}],
 }
 
+# The Redis tests workflow's redis-tests.json, trimmed.
+REDIS_TESTS = {
+    'skipped_units': {'unit/shutdown': 'stops and restarts the server'},
+    'complete': True, 'incomplete_groups': [],
+    'totals': {'keel': {'units': 2, 'passed': 100, 'failed': 44, 'ignored': 3, 'not_run': 0, 'units_crashed': 0,
+                        'units_timed_out': 1, 'units_exception': 0},
+               'redis': {'units': 2, 'passed': 150, 'failed': 1, 'ignored': 3, 'not_run': 0, 'units_crashed': 0,
+                         'units_timed_out': 0, 'units_exception': 0}},
+    'units': [{'unit': 'unit/scan', 'keel': None,
+               'redis': {'outcome': 'ok', 'passed': 6, 'failed': 1, 'ignored': 0, 'not_run': 0, 'seconds': 2.0,
+                         'failing': ['x'], 'details': {}, 'exception': ''}},
+              {'unit': 'unit/type/string', 'keel': {'outcome': 'timeout', 'passed': 100, 'failed': 44, 'ignored': 3,
+                                                     'not_run': 0, 'seconds': 900.0, 'failing': ['GETEX EX option'],
+                                                     'details': {'GETEX EX option': "ERR unknown command 'getex'"},
+                                                     'exception': ''},
+               'redis': {'outcome': 'ok', 'passed': 144, 'failed': 0, 'ignored': 3, 'not_run': 0, 'seconds': 5.0,
+                         'failing': [], 'details': {}, 'exception': ''}}],
+}
+
 # The Live telemetry artifact's files, from run 37587041339.
 TELEMETRY = {
     'provenance.txt': 'keel 2aeb1c8\nrunner Linux 6.17.0-1022-azure x86_64 cpus 4 AMD EPYC 9V74 80-Core Processor\n',
@@ -420,6 +439,65 @@ class NewKinds(unittest.TestCase):
         self.assertEqual((directive['name'], directive['class'], directive['keel_value'], directive['used_by'],
                           directive['test_files']), ('maxmemory', 'has', '0', 'redis_exporter (config_maxmemory)', 19))
         self.assertTrue(cbh.KINDS['census']['members'].match('config.json'))
+
+    def test_redis_tests(self):
+        records = cbh.redis_test_records(3, self.run, '', {'redis-tests.json': json.dumps(REDIS_TESTS)})
+        run, = records['redis-tests']
+        self.assertEqual((run['units'], run['redis_passed'], run['keel_passed'], run['keel_failed'],
+                          run['keel_units_timed_out'], run['parity']), (2, 150, 100, 44, 1, 0.6667))
+        self.assertEqual([(u['unit'], u['keel_passed'], u['keel_outcome'], u['redis_passed']) for u in
+                          records['redis-tests-units']], [('unit/scan', '', '', 6), ('unit/type/string', 100, 'timeout', 144)])
+        self.assertEqual(records['redis-tests-failing'],
+                         [{'run_id': 37658260465, 'time': '2026-10-07T17:20:12Z', 'branch': 'develop',
+                           'unit': 'unit/type/string', 'test': 'GETEX EX option', 'detail': "ERR unknown command 'getex'"}])
+
+    def test_an_incomplete_redis_tests_report_is_quarantined(self):
+        report = dict(REDIS_TESTS, complete=False, incomplete_groups=['keel group 4'])
+        records = cbh.redis_test_records(3, self.run, '', {'redis-tests.json': json.dumps(report)})
+        self.assertEqual(sorted(records), ['redis-tests'], 'no unit lines and no snapshot')
+        run, = records['redis-tests']
+        self.assertEqual((run['complete'], run['incomplete_groups'], run['keel_passed']), ('no', 'keel group 4', 100))
+        # A report from before the field existed counts as incomplete.
+        old = {k: v for k, v in REDIS_TESTS.items() if k not in ('complete', 'incomplete_groups')}
+        run, = cbh.redis_test_records(3, self.run, '', {'redis-tests.json': json.dumps(old)})['redis-tests']
+        self.assertEqual((run['complete'], run['incomplete_groups']), ('no', 'not recorded'))
+
+    def test_the_failing_snapshot_survives_an_incomplete_run_and_empties_on_a_clean_one(self):
+        gh = FakeGitHub()
+        gh.add('redis-tests', 7, 70, {'redis-tests.json': json.dumps(REDIS_TESTS)}, created='2026-10-13T01:00:00Z',
+               branch='develop')
+        partial = dict(REDIS_TESTS, complete=False, incomplete_groups=['redis group 2'])
+        partial['units'] = [dict(REDIS_TESTS['units'][1], keel=dict(REDIS_TESTS['units'][1]['keel'], failing=[]))]
+        gh.add('redis-tests', 8, 80, {'redis-tests.json': json.dumps(partial)}, created='2026-10-13T02:00:00Z',
+               branch='develop')
+        with tempfile.TemporaryDirectory() as tmp:
+            cbh.collect(gh, tmp, ['redis-tests'])
+            failing = read(Path(tmp) / 'census/redis-tests-failing.csv')
+            self.assertEqual([(f['run_id'], f['test']) for f in failing], [('70', 'GETEX EX option')],
+                             'the later, incomplete run does not replace the snapshot')
+            self.assertEqual([r['complete'] for r in read(Path(tmp) / 'census/redis-tests.csv')], ['yes', 'no'])
+            self.assertEqual(len(read(Path(tmp) / 'census/redis-tests-units.csv')), 2, 'units of the complete run only')
+            clean = dict(REDIS_TESTS)
+            clean['units'] = [dict(u, keel=dict(u['keel'], failing=[], details={})) if u['keel'] else u
+                              for u in REDIS_TESTS['units']]
+            gh.add('redis-tests', 9, 90, {'redis-tests.json': json.dumps(clean)}, created='2026-10-13T03:00:00Z',
+                   branch='develop')
+            cbh.collect(gh, tmp, ['redis-tests'])
+            self.assertEqual(read(Path(tmp) / 'census/redis-tests-failing.csv'), [],
+                             'a complete run with no failures empties the snapshot')
+
+    def test_redis_tests_files_live_under_census(self):
+        gh = FakeGitHub()
+        gh.add('redis-tests', 7, 70, {'redis-tests.json': json.dumps(REDIS_TESTS)}, created='2026-10-13T01:00:00Z',
+               branch='develop')
+        with tempfile.TemporaryDirectory() as tmp:
+            counts, errors = cbh.collect(gh, tmp, ['redis-tests'])
+            self.assertEqual((counts, errors), ({'redis-tests collected': 1}, []))
+            self.assertEqual(sorted(p.name for p in (Path(tmp) / 'census').iterdir()),
+                             ['redis-tests-failing.csv', 'redis-tests-units.csv', 'redis-tests.csv'])
+            self.assertEqual(read(Path(tmp) / 'census/redis-tests.csv')[0]['keel_passed'], '100')
+            counts, _ = cbh.collect(gh, tmp, ['redis-tests'])
+            self.assertEqual(counts, {}, 'recorded once')
 
     def test_telemetry(self):
         records = cbh.telemetry_records(2, self.run, 134, TELEMETRY)
