@@ -70,6 +70,7 @@ func formatDistance(v float64) string { return strconv.FormatFloat(v, 'f', 4, 64
 // Every position is checked before any is stored, so one bad pair in a batch
 // leaves the key as it was.
 func (e *Engine) cmdGEOADD(args []string) []byte {
+	e.recordsItself()
 	if len(args) < 4 {
 		return e.encode(wrongArguments("GEOADD"), false)
 	}
@@ -77,21 +78,22 @@ func (e *Engine) cmdGEOADD(args []string) []byte {
 	if err != nil {
 		return e.encode(err, false)
 	}
-	scores := make([]float64, 0, len(triples)/3)
-	members := make([]string, 0, len(triples)/3)
+	req := zaddRequest{flags: flags, scores: make([]float64, 0, len(triples)/3),
+		members: make([]string, 0, len(triples)/3), text: args}
 	for i := 0; i < len(triples); i += 3 {
 		score, err := geoaddScore(triples[i], triples[i+1])
 		if err != nil {
 			return e.encode(err, false)
 		}
-		scores = append(scores, score)
-		members = append(members, triples[i+2])
+		req.scores = append(req.scores, score)
+		req.members = append(req.members, triples[i+2])
 	}
-	added, changed := e.zaddApply(args[0], scores, members, flags)
+	added, changed := e.opGeoAdd(args[0], req)
+	r := e.reply()
 	if ch {
-		return e.encode(changed, false)
+		return r.Int(changed).Bytes()
 	}
-	return e.encode(added, false)
+	return r.Int(added).Bytes()
 }
 
 // geoaddShape reads GEOADD's options in Redis's order, then whether what
@@ -170,6 +172,9 @@ func (e *Engine) cmdGEODIST(args []string) []byte {
 		return e.encode(err, false)
 	}
 	zs, ok := e.zsetFor(args[0])
+	// A keyspace hit or a miss, counted after the unit was read, as Redis's
+	// geodistCommand reads it before it looks the key up.
+	e.noteLookup(ok)
 	if !ok {
 		return e.nullReply()
 	}
