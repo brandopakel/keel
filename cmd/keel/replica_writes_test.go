@@ -18,6 +18,10 @@ var replicaWrites = [][]string{
 	{"SETEX", "k", "100", "v"}, {"PSETEX", "k", "100000", "v"}, {"SETNX", "missing", "v"},
 	{"MSET", "k", "1", "missing", "2"}, {"INCR", "n"}, {"INCR", "missing"}, {"DECR", "n"},
 	{"INCRBY", "n", "5"}, {"DECRBY", "n", "5"},
+	// The string commands (step 4.3c).
+	{"APPEND", "k", "x"}, {"SETRANGE", "k", "0", "x"}, {"GETDEL", "k"}, {"GETEX", "k"},
+	{"GETEX", "k", "EX", "100"}, {"GETEX", "k", "PERSIST"}, {"GETSET", "k", "v"},
+	{"MSETNX", "missing", "1", "other", "2"}, {"INCRBYFLOAT", "n", "1.5"},
 }
 
 var replicaWritesSeed = [][]string{
