@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/brandopakel/keel/internal/constant"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
@@ -17,10 +16,13 @@ var (
 	errNotAFloat = errors.New("ERR value is not a valid float")
 	errNXWithXX  = errors.New("ERR XX and NX options at the same time are not compatible")
 	errSyntax    = errors.New("ERR syntax error")
+	errGTLTNX    = errors.New("ERR GT, LT, and/or NX options at the same time are not compatible")
+	errIncrPairs = errors.New("ERR INCR option supports a single increment-element pair")
 )
 
-// zaddOptions reads the flags that may precede the score/member pairs of ZADD
-// and GEOADD, and returns where the pairs begin.
+// zaddOptions reads the flags that may precede ZADD's score/member pairs -
+// NX, XX, CH, INCR, GT and LT, in any order and case - and returns where the
+// pairs begin.
 func zaddOptions(args []string) (flags int, ch bool, next int) {
 	for next < len(args) {
 		switch strings.ToUpper(args[next]) {
@@ -30,6 +32,12 @@ func zaddOptions(args []string) (flags int, ch bool, next int) {
 			flags |= data_structure.ZAddXX
 		case "CH":
 			ch = true
+		case "INCR":
+			flags |= data_structure.ZAddIncr
+		case "GT":
+			flags |= data_structure.ZAddGT
+		case "LT":
+			flags |= data_structure.ZAddLT
 		default:
 			return flags, ch, next
 		}
@@ -140,15 +148,24 @@ func shortestDouble(v float64) string {
 
 // zaddShape reads ZADD's options in Redis's order, then whether what follows
 // them comes in score/member pairs, then whether the options agree, and
-// returns the pairs. The scores are read by the caller, after this.
+// returns the pairs (t_zset.c, zaddGenericCommand). The scores are read by
+// the caller, after this.
 func zaddShape(args []string) (flags int, ch bool, pairs []string, err error) {
 	flags, ch, next := zaddOptions(args[1:])
 	pairs = args[1+next:]
 	if len(pairs) == 0 || len(pairs)%2 != 0 {
 		return 0, false, nil, errSyntax
 	}
-	if flags&data_structure.ZAddNX != 0 && flags&data_structure.ZAddXX != 0 {
+	nx, xx := flags&data_structure.ZAddNX != 0, flags&data_structure.ZAddXX != 0
+	gt, lt := flags&data_structure.ZAddGT != 0, flags&data_structure.ZAddLT != 0
+	if nx && xx {
 		return 0, false, nil, errNXWithXX
+	}
+	if (gt && nx) || (lt && nx) || (gt && lt) {
+		return 0, false, nil, errGTLTNX
+	}
+	if flags&data_structure.ZAddIncr != 0 && len(pairs) > 2 {
+		return 0, false, nil, errIncrPairs
 	}
 	return flags, ch, pairs, nil
 }
@@ -163,11 +180,13 @@ func zaddArguments(args []string) error {
 	return err
 }
 
-// cmdZADD implements ZADD key [NX|XX] [CH] score member [score member ...].
+// cmdZADD implements ZADD key [NX|XX] [GT|LT] [CH] [INCR] score member
+// [score member ...].
 //
 // The reply is the number of members added, or with CH the number added or
-// rescored. Every score is checked before any is applied, so a bad one leaves
-// the set exactly as it was.
+// rescored; with INCR, the member's new score, or nil when an option ruled it
+// out. Every score is checked before any is applied, so a bad one leaves the
+// set exactly as it was.
 func (e *Engine) cmdZADD(args []string) []byte {
 	e.recordsItself()
 	if len(args) < 3 {
@@ -187,20 +206,29 @@ func (e *Engine) cmdZADD(args []string) []byte {
 		req.scores = append(req.scores, score)
 		req.members = append(req.members, pairs[i+1])
 	}
-	added, changed := e.opZAdd(args[0], req)
+	res, err := e.opZAdd(args[0], req)
+	if err != nil {
+		return e.encode(err, false)
+	}
+	if flags&data_structure.ZAddIncr != 0 {
+		if !res.processed {
+			return e.nullReply()
+		}
+		return e.encode(ReplyDouble(formatZScore(res.score)), false)
+	}
 	r := e.reply()
 	if ch {
-		return r.Int(changed).Bytes()
+		return r.Int(res.changed).Bytes()
 	}
-	return r.Int(added).Bytes()
+	return r.Int(res.added).Bytes()
 }
 
-// zrankArguments reads ZRANK's optional WITHSCORE as Redis does: more
-// arguments than that are the wrong number, and any other word there a syntax
-// error, both before the key is looked at.
-func zrankArguments(args []string) (withScore bool, err error) {
+// zrankArguments reads ZRANK's and ZREVRANK's optional WITHSCORE as Redis
+// does: more arguments than that are the wrong number, and any other word
+// there a syntax error, both before the key is looked at.
+func zrankArguments(name string, args []string) (withScore bool, err error) {
 	if len(args) > 3 {
-		return false, wrongArguments("ZRANK")
+		return false, wrongArguments(name)
 	}
 	if len(args) == 3 {
 		if !strings.EqualFold(args[2], "WITHSCORE") {
@@ -213,12 +241,15 @@ func zrankArguments(args []string) (withScore bool, err error) {
 
 // cmdZRANK answers a member's 0-based position from the lowest score, or nil
 // for a member or key that is not there; with WITHSCORE, the position and the
-// score, or a null array.
-func (e *Engine) cmdZRANK(args []string) []byte {
+// score, or a null array. ZREVRANK counts from the highest.
+func (e *Engine) cmdZRANK(args []string) []byte    { return e.zrank("ZRANK", args, false) }
+func (e *Engine) cmdZREVRANK(args []string) []byte { return e.zrank("ZREVRANK", args, true) }
+
+func (e *Engine) zrank(name string, args []string, reverse bool) []byte {
 	if len(args) < 2 {
-		return e.encode(wrongArguments("ZRANK"), false)
+		return e.encode(wrongArguments(name), false)
 	}
-	withScore, err := zrankArguments(args)
+	withScore, err := zrankArguments(name, args)
 	if err != nil {
 		return e.encode(err, false)
 	}
@@ -233,7 +264,7 @@ func (e *Engine) cmdZRANK(args []string) []byte {
 	if !ok {
 		return missing
 	}
-	rank, ok := zs.Rank(args[1], false)
+	rank, ok := zs.Rank(args[1], reverse)
 	if !ok {
 		return missing
 	}
@@ -272,80 +303,4 @@ func (e *Engine) cmdZCARD(args []string) []byte {
 	}
 	r := e.reply()
 	return r.Int(e.opZCard(args[0])).Bytes()
-}
-
-// zrangeArguments is how ZRANGE was asked for its range.
-type zrangeArguments struct {
-	byScore, reverse, withScores bool
-	// offset and count are LIMIT's, count -1 when it was not given.
-	offset, count int
-	start, stop   int
-	scores        scoreInterval
-}
-
-// parseZRange reads ZRANGE key start stop [BYSCORE] [REV] [LIMIT offset count]
-// [WITHSCORES] in Redis's order: every option first, then whether they
-// agree, then the range itself, as ranks or, with BYSCORE, as scores given
-// from the first end walked. BYLEX is not offered, and is refused with the
-// syntax error of any other word this server does not know there.
-func (e *Engine) parseZRange(args []string) (z zrangeArguments, err error) {
-	z.count = -1
-	for i := 3; i < len(args); i++ {
-		switch opt := strings.ToUpper(args[i]); {
-		case opt == "WITHSCORES":
-			z.withScores = true
-		case opt == "LIMIT" && i+2 < len(args):
-			if z.offset, z.count, err = e.integerRange(args[i+1], args[i+2]); err != nil {
-				return z, err
-			}
-			i += 2
-		case opt == "REV" && !z.reverse:
-			z.reverse = true
-		case opt == "BYSCORE" && !z.byScore:
-			z.byScore = true
-		default:
-			return z, errSyntax
-		}
-	}
-	if z.count != -1 && !z.byScore {
-		return z, errors.New("ERR syntax error, LIMIT is only supported in combination with either BYSCORE or BYLEX")
-	}
-	if z.byScore {
-		lower, upper := args[1], args[2]
-		if z.reverse {
-			lower, upper = upper, lower
-		}
-		z.scores, err = parseScoreInterval(lower, upper)
-		return z, err
-	}
-	z.start, z.stop, err = e.integerRange(args[1], args[2])
-	return z, err
-}
-
-// cmdZRANGE answers a range of ranks, or of scores with BYSCORE, in either
-// direction, with or without scores.
-func (e *Engine) cmdZRANGE(args []string) []byte {
-	if len(args) < 3 {
-		return e.encode(wrongArguments("ZRANGE"), false)
-	}
-	z, err := e.parseZRange(args)
-	if err != nil {
-		return e.encode(err, false)
-	}
-	if z.byScore {
-		return e.scoreRangeReply(args[0], z.scores, z.offset, z.count, z.reverse, z.withScores)
-	}
-	zs, ok := e.zsetFor(args[0])
-	// A keyspace hit or a miss, counted after the range and options were
-	// read, as Redis's zrangeGenericCommand reads them before it looks the
-	// key up.
-	e.noteLookup(ok)
-	if !ok {
-		return constant.RespEmptyArray
-	}
-	walk := func(yield func(string, float64) bool) { zs.VisitRangeByRank(z.start, z.stop, z.reverse, yield) }
-	if z.withScores && e.replyRESP3 {
-		return e.scoredReply3(walk, true)
-	}
-	return e.scoredReply(walk, z.withScores)
 }

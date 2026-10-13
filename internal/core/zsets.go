@@ -2,7 +2,7 @@ package core
 
 import (
 	"errors"
-	"math"
+	"strconv"
 
 	"github.com/brandopakel/keel/internal/data_structure"
 )
@@ -39,92 +39,115 @@ func (e *Engine) zsetSettle(key string, zs *data_structure.ZSet) {
 	e.zsetStore.Resize(key)
 }
 
-// zaddRequest is what a ZADD or a GEOADD asks for: its flags (NX, XX), the
-// scores and members, and text, the client's arguments after the command's
-// name, which the record repeats; nil for a Go caller.
+// zaddRequest is what a ZADD or a GEOADD asks for: its flags (NX, XX, GT, LT,
+// INCR), the scores and members, and text, the client's arguments after the
+// command's name, which a ZADD's record repeats; nil for a Go caller. A
+// GEOADD's record is the ZADD Redis rewrites it to, its options as the
+// client gave them (options) and its geohash scores.
 type zaddRequest struct {
 	flags   int
 	scores  []float64
 	members []string
 	text    []string
+	options []string
 }
 
-// zaddApply adds every score/member pair to the set at key under flags, and
-// reports how many members were new and how many were new or rescored.
+// zaddResult is what a ZADD did: how many members it added, how many it
+// added or rescored, and for INCR the score it made and whether it made one
+// (an NX, XX, GT or LT that ruled the member out did not).
+type zaddResult struct {
+	added, changed int64
+	score          float64
+	processed      bool
+}
+
+// zaddApply adds every score/member pair to the set at key under flags, as
+// Redis's zaddGenericCommand does. The set is created on demand, except under
+// XX, where nothing new may be added and so a key that does not exist stays
+// that way. An INCR whose sum is not a number is refused, after the pairs
+// before it.
 //
-// The set is created on demand, except under XX, where nothing new may be added
-// and so a key that does not exist stays that way.
-func (e *Engine) zaddApply(key string, scores []float64, members []string, flags int) (added, changed int) {
+// changedPairs, when not nil, collects the score and member of each member
+// added or rescored, at the score it now has: a Go caller's record.
+func (e *Engine) zaddApply(key string, req zaddRequest, changedPairs *[]string) (zaddResult, error) {
+	var res zaddResult
 	zs, ok := e.zsetFor(key)
 	if !ok {
-		if flags&data_structure.ZAddXX != 0 {
-			return 0, 0
+		if req.flags&data_structure.ZAddXX != 0 {
+			return res, nil
 		}
 		zs = data_structure.CreateZSet()
 		e.zsetStore.Put(key, zs)
 	}
-	for i, score := range scores {
-		switch zs.Add(score, members[i], flags) {
+	var err error
+	for i, score := range req.scores {
+		outcome, newScore, nan := zs.AddScore(score, req.members[i], req.flags)
+		if nan {
+			err = errZIncrNaN
+			break
+		}
+		switch outcome {
 		case data_structure.ZAddAdded:
-			added++
-			changed++
+			res.added++
+			res.changed++
 		case data_structure.ZAddUpdated:
-			changed++
+			res.changed++
+		}
+		if outcome != data_structure.ZAddNop {
+			res.processed, res.score = true, newScore
+		}
+		if changedPairs != nil && (outcome == data_structure.ZAddAdded || outcome == data_structure.ZAddUpdated) {
+			*changedPairs = append(*changedPairs, formatZScore(newScore), req.members[i])
 		}
 	}
 	e.zsetSettle(key, zs)
-	return added, changed
+	return res, err
 }
 
-// opZAdd adds the request's pairs to the sorted set key holds, as ZADD does,
-// and answers how many members were new and how many were new or rescored.
-// It is recorded as the ZADD the client sent, or one formatted from the
-// values for a Go caller.
-func (e *Engine) opZAdd(key string, req zaddRequest) (added, changed int64) {
-	a, c := e.zaddApply(key, req.scores, req.members, req.flags)
-	if req.text != nil {
-		e.aofRecordArgs("ZADD", req.text)
-	} else {
-		e.aofRecordArgs("ZADD", zaddText(key, req))
+// opZAdd adds the request's pairs to the sorted set key holds, as ZADD does.
+// It is recorded only when it added or rescored a member, as Redis counts
+// server.dirty (t_zset.c, zaddGenericCommand, line 2075): as the ZADD the
+// client sent, or for a Go caller as a ZADD of what changed at the scores it
+// now has.
+func (e *Engine) opZAdd(key string, req zaddRequest) (zaddResult, error) {
+	var pairs *[]string
+	if req.text == nil {
+		pairs = new([]string)
 	}
-	return int64(a), int64(c)
-}
-
-// zaddText is a Go caller's ZADD as a client would send it.
-func zaddText(key string, req zaddRequest) []string {
-	text := make([]string, 0, 2+2*len(req.members))
-	text = append(text, key)
-	switch {
-	case req.flags&data_structure.ZAddNX != 0:
-		text = append(text, "NX")
-	case req.flags&data_structure.ZAddXX != 0:
-		text = append(text, "XX")
+	res, err := e.zaddApply(key, req, pairs)
+	if res.changed > 0 {
+		if req.text != nil {
+			e.aofRecordArgs("ZADD", req.text)
+		} else {
+			e.aofRecordKeyArgs("ZADD", key, *pairs)
+		}
 	}
-	for i, member := range req.members {
-		text = append(text, formatZScore(req.scores[i]), member)
-	}
-	return text
+	return res, err
 }
 
 // opGeoAdd adds the request's geohash scores and members to the sorted set
-// key holds, as GEOADD does. It is recorded as the GEOADD the client sent
-// (see above); a Go caller's is recorded as the ZADD of the scores, as Redis
-// propagates GEOADD.
-func (e *Engine) opGeoAdd(key string, req zaddRequest) (added, changed int64) {
-	a, c := e.zaddApply(key, req.scores, req.members, req.flags)
-	if req.text != nil {
-		e.aofRecordArgs("GEOADD", req.text)
-	} else {
-		e.aofRecordArgs("ZADD", zaddText(key, req))
+// key holds, as GEOADD does. It is recorded, when it added or moved a member,
+// as the ZADD Redis rewrites GEOADD to (geo.c, geoaddCommand, lines
+// 490-503): the options as given, then each score as the 52-bit integer it
+// is, and the member.
+func (e *Engine) opGeoAdd(key string, req zaddRequest) (zaddResult, error) {
+	res, err := e.zaddApply(key, req, nil)
+	if res.changed > 0 {
+		record := make([]string, 0, len(req.options)+2*len(req.members))
+		record = append(record, req.options...)
+		for i, member := range req.members {
+			record = append(record, strconv.FormatInt(int64(req.scores[i]), 10), member)
+		}
+		e.aofRecordKeyArgs("ZADD", key, record)
 	}
-	return int64(a), int64(c)
+	return res, err
 }
 
 // opZRem removes each of members from the sorted set key holds, removing the
-// key with its last member, and answers how many it removed. It is recorded
-// as ZREM whatever it removed, as develop logs it (see above).
+// key with its last member, and answers how many it removed. It is recorded,
+// as ZREM with its members as given, only when it removed one (t_zset.c,
+// zremCommand, line 2148).
 func (e *Engine) opZRem(key string, members []string) int64 {
-	e.aofRecordKeyArgs("ZREM", key, members)
 	zs, ok := e.zsetFor(key)
 	if !ok {
 		return 0
@@ -136,6 +159,9 @@ func (e *Engine) opZRem(key string, members []string) int64 {
 		}
 	}
 	e.zsetSettle(key, zs)
+	if removed > 0 {
+		e.aofRecordKeyArgs("ZREM", key, members)
+	}
 	return removed
 }
 
@@ -159,19 +185,65 @@ func (e *Engine) opZCard(key string) int64 {
 
 // opZIncrBy adds increment to member's score in the sorted set key holds, a
 // missing member or key being 0, and answers the score it made. A sum that is
-// not a number is refused. It is recorded as the ZADD of that score, as
-// develop logs it, readable by every older build.
+// not a number is refused. It is recorded, when it changed the score, as the
+// ZADD of the score it made, as develop logs it, readable by every older
+// build; an increment that leaves the score as it was is not, as Redis
+// counts it (zaddGenericCommand, line 2075).
 func (e *Engine) opZIncrBy(key string, increment float64, member string) (float64, error) {
-	score := increment
-	if zs, ok := e.zsetFor(key); ok {
-		if old, present := zs.Score(member); present {
-			score += old
+	res, err := e.zaddApply(key, zaddRequest{flags: data_structure.ZAddIncr,
+		scores: []float64{increment}, members: []string{member}}, nil)
+	if err != nil {
+		return 0, err
+	}
+	if res.changed > 0 {
+		e.aofRecord("ZADD", key, formatZScore(res.score), member)
+	}
+	return res.score, nil
+}
+
+// opZRemRange removes the members of the sorted set key holds that z's range
+// takes in, removing the key with its last member, and answers how many it
+// removed. It is recorded, as the command the client sent (name and text),
+// only when it removed one (t_zset.c, zremrangeGenericCommand, line 2280); a
+// Go caller, with no text, is recorded as the ZREM of what it removed.
+func (e *Engine) opZRemRange(key string, z zrangeArguments, name string, text []string) int64 {
+	zs, ok := e.zsetFor(key)
+	if !ok {
+		return 0
+	}
+	var doomed []string
+	zrangeWalk(zs, z)(func(member string, _ float64) bool {
+		doomed = append(doomed, member)
+		return true
+	})
+	for _, member := range doomed {
+		zs.Remove(member)
+	}
+	e.zsetSettle(key, zs)
+	if len(doomed) > 0 {
+		if text != nil {
+			e.aofRecordArgs(name, text)
+		} else {
+			e.aofRecordKeyArgs("ZREM", key, doomed)
 		}
 	}
-	if math.IsNaN(score) {
-		return 0, errZIncrNaN
+	return int64(len(doomed))
+}
+
+// opZStore makes dst the sorted set of members at scores, replacing whatever
+// dst held, of any type, as Redis's ZRANGESTORE and ZUNIONSTORE do; with no
+// members it deletes dst. It reports whether dst changed - stored, or
+// deleted where it existed - which is when Redis counts the command as a
+// change (t_zset.c, 3150-3162 and 3360-3371). The caller records the command.
+func (e *Engine) opZStore(dst string, members []string, scores []float64) bool {
+	existed := e.space.DeleteAnywhere(dst)
+	if len(members) == 0 {
+		return existed
 	}
-	e.zaddApply(key, []float64{score}, []string{member}, 0)
-	e.aofRecord("ZADD", key, formatZScore(score), member)
-	return score, nil
+	zs := data_structure.CreateZSet()
+	for i, member := range members {
+		zs.Add(scores[i], member, 0)
+	}
+	e.zsetStore.Put(dst, zs)
+	return true
 }

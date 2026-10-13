@@ -220,15 +220,20 @@ func GeohashDecode(longRange, latRange GeoHashRange, hash GeoHashBits) (GeoHashA
 	longScale := longRange.Max - longRange.Min
 	cells := float64(uint64(1) << hash.Step)
 
+	// Each product is rounded before it is added (the explicit float64
+	// conversions), so that no platform fuses the two into one instruction:
+	// Go fuses them on arm64 and not on amd64, and a decoded position then
+	// differed in its last digits between the two (the origin's did), and
+	// from Redis's on x86. See geohashGetLatDistance.
 	return GeoHashArea{
 		Hash: hash,
 		Latitude: GeoHashRange{
-			Min: latRange.Min + (float64(ilat)/cells)*latScale,
-			Max: latRange.Min + (float64(ilat+1)/cells)*latScale,
+			Min: latRange.Min + float64((float64(ilat)/cells)*latScale),
+			Max: latRange.Min + float64((float64(ilat+1)/cells)*latScale),
 		},
 		Longitude: GeoHashRange{
-			Min: longRange.Min + (float64(ilong)/cells)*longScale,
-			Max: longRange.Min + (float64(ilong+1)/cells)*longScale,
+			Min: longRange.Min + float64((float64(ilong)/cells)*longScale),
+			Max: longRange.Min + float64((float64(ilong+1)/cells)*longScale),
 		},
 	}, true
 }
@@ -525,22 +530,31 @@ func GeohashAlign52Bits(hash GeoHashBits) uint64 {
 // geohashGetLatDistance is the distance between two latitudes on the same
 // meridian. With no longitude difference the haversine formula collapses to the
 // angle itself, since asin(sin(x)) is x for latitudes.
+//
+// The distances here round every product before it is added to or taken
+// from anything (the explicit float64 conversions), so that no platform
+// fuses a multiply and an add into one instruction: Go fuses them on arm64
+// and not on amd64, and Redis's C fuses neither across deg_rad, so a fused
+// subtraction of a position from itself came out 8e-11 metres rather than 0
+// and STOREDIST stored distances that differed in their last digits from
+// Redis's and from another Keel's. A replica replaying GEOSEARCHSTORE ...
+// STOREDIST has to store the primary's doubles.
 func geohashGetLatDistance(lat1, lat2 float64) float64 {
-	return earthRadiusInMeters * math.Abs(degToRad(lat2)-degToRad(lat1))
+	return earthRadiusInMeters * math.Abs(float64(degToRad(lat2))-float64(degToRad(lat1)))
 }
 
 // GeohashGetDistance is the great-circle distance in metres between two
 // positions, by the haversine formula.
 func GeohashGetDistance(lon1, lat1, lon2, lat2 float64) float64 {
-	lon1r, lon2r := degToRad(lon1), degToRad(lon2)
+	lon1r, lon2r := float64(degToRad(lon1)), float64(degToRad(lon2))
 	v := math.Sin((lon2r - lon1r) / 2)
 	// Same meridian: skip the expensive part.
 	if v == 0 {
 		return geohashGetLatDistance(lat1, lat2)
 	}
-	lat1r, lat2r := degToRad(lat1), degToRad(lat2)
+	lat1r, lat2r := float64(degToRad(lat1)), float64(degToRad(lat2))
 	u := math.Sin((lat2r - lat1r) / 2)
-	a := u*u + math.Cos(lat1r)*math.Cos(lat2r)*v*v
+	a := float64(u*u) + float64(math.Cos(lat1r)*math.Cos(lat2r)*v*v)
 	return 2.0 * earthRadiusInMeters * math.Asin(math.Sqrt(a))
 }
 

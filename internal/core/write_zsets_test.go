@@ -12,11 +12,11 @@ import (
 // the paired command-path job measures (docs/phase4-family-recipe.md,
 // step 5).
 
-// TestZAddOfAGoCallerIsRecordedAsZAdd: a ZADD or a GEOADD with no client
-// text, as a Go caller makes them, is recorded as the ZADD a client would
-// send for the same flags, scores and members - GEOADD's as the ZADD of its
-// geohash scores, the form Redis propagates GEOADD in (geo.c, lines
-// 490-503) - and a client's is recorded as the text it sent.
+// TestZAddOfAGoCallerIsRecordedAsZAdd: a ZADD with no client text, as a Go
+// caller makes it, is recorded as the ZADD of the members it changed at the
+// scores they now have, and nothing when it changed none; a GEOADD as the
+// ZADD of its geohash scores, the form Redis propagates GEOADD in (geo.c,
+// lines 490-503); and a client's ZADD as the text it sent.
 func TestZAddOfAGoCallerIsRecordedAsZAdd(t *testing.T) {
 	t.Parallel()
 	palermo, err := geoaddScore("13.361389", "38.115556")
@@ -24,19 +24,30 @@ func TestZAddOfAGoCallerIsRecordedAsZAdd(t *testing.T) {
 
 	e := stagingEngine(t)
 	e.aofBegin("ZADD")
-	added, changed := e.opZAdd("z", zaddRequest{flags: data_structure.ZAddNX,
+	res, err := e.opZAdd("z", zaddRequest{flags: data_structure.ZAddNX,
 		scores: []float64{1.5, 2}, members: []string{"a", "b"}})
-	require.Equal(t, [2]int64{2, 2}, [2]int64{added, changed})
-	added, _ = e.opGeoAdd("g", zaddRequest{scores: []float64{palermo}, members: []string{"palermo"}})
-	require.EqualValues(t, 1, added)
-	e.opZAdd("z", zaddRequest{scores: []float64{3}, members: []string{"c"},
+	require.NoError(t, err)
+	require.Equal(t, [2]int64{2, 2}, [2]int64{res.added, res.changed})
+	// A Go caller's ZADD that changes nothing records nothing, and one that
+	// changes some members records those at the scores they now have.
+	_, err = e.opZAdd("z", zaddRequest{flags: data_structure.ZAddNX, scores: []float64{9}, members: []string{"a"}})
+	require.NoError(t, err)
+	_, err = e.opZAdd("z", zaddRequest{flags: data_structure.ZAddIncr, scores: []float64{0.5}, members: []string{"a"}})
+	require.NoError(t, err)
+	res, err = e.opGeoAdd("g", zaddRequest{scores: []float64{palermo}, members: []string{"palermo"},
+		text: []string{"g", "13.361389", "38.115556", "palermo"}})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, res.added)
+	_, err = e.opZAdd("z", zaddRequest{scores: []float64{3}, members: []string{"c"},
 		text: []string{"z", "ch", "3", "c"}})
+	require.NoError(t, err)
 	e.appendStaged()
 	require.NoError(t, e.FlushAOF())
 
 	want := stagingEngine(t)
 	want.aofBegin("ZADD")
-	want.appendAOFCommand("ZADD", "z", "NX", "1.5", "a", "2", "b")
+	want.appendAOFCommand("ZADD", "z", "1.5", "a", "2", "b")
+	want.appendAOFCommand("ZADD", "z", "2", "a")
 	want.appendAOFCommand("ZADD", "g", "3479099956230698", "palermo")
 	want.appendAOFCommand("ZADD", "z", "ch", "3", "c")
 	require.NoError(t, want.FlushAOF())
