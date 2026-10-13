@@ -22,7 +22,9 @@ import (
 var commandKeyspace = map[string]string{
 	"SET": "string", "SETNX": "string", "GET": "string", "INCR": "string", "INCRBY": "string", "DECR": "string", "DECRBY": "string", "MSET": "string",
 	"SETEX": "string", "PSETEX": "string",
-	"LCS": "string",
+	"LCS":    "string",
+	"APPEND": "string", "STRLEN": "string", "GETRANGE": "string", "SUBSTR": "string", "SETRANGE": "string",
+	"GETDEL": "string", "GETEX": "string", "GETSET": "string", "MSETNX": "string", "INCRBYFLOAT": "string",
 
 	// EXISTS, TYPE, KEYS, DEL, UNLINK and FLUSHDB are deliberately absent: they answer
 	// about a name whatever type holds it, so constraining them to a keyspace
@@ -82,7 +84,7 @@ var multiKeyCommands = map[string]bool{
 // values as though they were names, and refuse a perfectly good write the first
 // time somebody stored a string whose contents happened to match a set's name.
 var strideKeyCommands = map[string]int{
-	"MSET": 2,
+	"MSET": 2, "MSETNX": 2,
 }
 
 // commandKeys returns the arguments of cmd that name keys.
@@ -225,6 +227,13 @@ var argumentsBeforeType = map[string]func(e *Engine, args []string) error{
 		return err
 	},
 	"GEOADD": func(_ *Engine, args []string) error { return geoaddArguments(args) },
+	// GETRANGE, SUBSTR and SETRANGE read their integers before the key, and
+	// GETEX its options, though not its expiry's value, which Redis reads
+	// only once it has found the key.
+	"GETRANGE": func(e *Engine, args []string) error { _, _, err := e.rangeIndexes(args); return err },
+	"SUBSTR":   func(e *Engine, args []string) error { _, _, err := e.rangeIndexes(args); return err },
+	"SETRANGE": func(e *Engine, args []string) error { _, err := e.setRangeOffset(args); return err },
+	"GETEX":    func(_ *Engine, args []string) error { _, _, _, err := getExOptions(args[1:]); return err },
 	"GEODIST": func(e *Engine, args []string) error {
 		_, err := geodistUnit(args)
 		return err
@@ -319,7 +328,11 @@ func writtenKeys(cmd *Command) []string {
 // nowhere else - and it came from the check being applied to every command
 // alike, not from anything a string write needs. SET's GET option still answers
 // WRONGTYPE for a key it cannot read as a string; cmdSET checks that itself.
-var replacingWrites = map[string]bool{"SET": true, "SETEX": true, "PSETEX": true, "MSET": true, "SETNX": true}
+//
+// MSETNX is exempt for SETNX's reason: Redis's finds a key of any type,
+// answers 0 and stores nothing, where the check would answer WRONGTYPE.
+var replacingWrites = map[string]bool{"SET": true, "SETEX": true, "PSETEX": true, "MSET": true, "SETNX": true,
+	"MSETNX": true}
 
 // filterCommands check the type of the key they name themselves, at the point
 // RedisBloom's do, and are exempt from the check below as well: a reservation

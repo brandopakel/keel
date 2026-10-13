@@ -35,7 +35,7 @@ TimeSeries come in CI.
 
 | Area | Keel has | Missing |
 | --- | --- | --- |
-| string | 12/26 | `APPEND`, `GETRANGE`, `SETRANGE`, `STRLEN`, `GETDEL`, `GETEX`, `GETSET`, `SUBSTR`, `INCRBYFLOAT`, `MSETNX`, and 8.x's `DELEX`, `DIGEST`, `INCREX`, `MSETEX` |
+| string | 12/26 (22 since step 4.3c of the embedding plan) | ~~`APPEND`, `GETRANGE`, `SETRANGE`, `STRLEN`, `GETDEL`, `GETEX`, `GETSET`, `SUBSTR`, `INCRBYFLOAT`, `MSETNX`~~ (step 4.3c), and 8.x's `DELEX`, `DIGEST`, `INCREX`, `MSETEX` |
 | list | 9/24 | `LPOS`, `LINSERT`, `LREM`, `LMOVE`, `LMOVEM`, `RPOPLPUSH`, `LPUSHX`, `RPUSHX`, `LMPOP`, and the blocking forms |
 | hash | 11/29 | `HSTRLEN`, `HRANDFIELD`, `HINCRBYFLOAT`, `HMSET`, `HSCAN`, `HGETDEL`, `HGETEX`, `HSETEX`, `HIMPORT`, field expiry (`HEXPIRE` family, 8 commands) |
 | set | 8/19 | `SINTER`, `SUNION`, `SDIFF` with `STORE` and `CARD` forms, `SMOVE`, `SSCAN` |
