@@ -100,6 +100,65 @@ base form with one documented option, alternative or repetition added.
   It is replaced only by a newer census of `develop`. A census from before
   the argument census (October 12, 2026) has no lines in these files.
 
+The reply census (`scripts/reply-census.py`) checks the shape of what Keel
+answers. A case is one documented argument form, or the base form with
+missing keys, with a key of another type, or with one argument too many. Each
+case is sent in RESP2 and again in RESP3. A reply's shape is its protocol
+types with the values removed (`*[$ :]`, `%{$::}`, `_`). Each RESP3 reply is
+also checked against the `reply_schema` Redis keeps for the command.
+
+- `reply-runs.csv`: one line per census:
+  - `commands` and `cases`: commands and subcommands Keel has, and the cases
+    sent, each protocol counted once.
+  - `same`: cases where Keel's reply has Redis's shape.
+  - `differs`: cases where it does not.
+  - `refused`: forms Keel refuses. The argument census counts these, so they
+    are not shape failures.
+  - `no_reply`: a failure of the method itself.
+  - `resp3_cases` and `resp3_same`: the RESP3 half of the cases.
+  - `keel_schema_violations` and `redis_schema_violations`: RESP3 replies
+    that break Redis's own reply schema. Redis's count is the control: a
+    violation there is a flaw in Redis's schema.
+- `reply-areas.csv`: the same counts per command group of each census.
+- `replies.csv`: every case of the newest census of `develop`:
+  - `case` (`form`, `missing key`, `wrong type` or `extra argument`),
+    `form` and `protocol` (`2` or `3`).
+  - `sent` and `result`.
+  - `keel_shape` and `redis_shape`.
+  - `keel` and `redis`: both replies.
+  - `keel_schema` and `redis_schema`: `ok`, `error`, `no schema`, or the
+    violation found. They are empty on RESP2 lines, which are not checked.
+  - `redis_function` and `redis_at`: the Redis function that answers the
+    command, and its `file:line` in the 8.10.1 source.
+
+  It is replaced only by a newer census of `develop`.
+
+The configuration census (`scripts/config-census.py`) compares Redis's
+configuration table (`src/config.c`) with Keel. For each directive it checks
+`redis.conf`, and asks both servers `CONFIG GET` for it.
+
+- `config-runs.csv`: one line per census:
+  - `configs`: Redis's directives in this build.
+  - `has`: directives Keel reports through `CONFIG GET` under Redis's name.
+  - `mapped`: directives a Keel flag covers under another meaning.
+  - `lacks`: directives Keel lacks. Of those, `lacks_used` are read or set
+    by a client, exporter or operator the census checks, and `lacks_tested`
+    are set by Redis's own test suite.
+  - `documented`: directives `redis.conf` shows.
+  - `same_value`: directives Keel has, with Redis's value.
+- `config.csv`: every directive of the newest census of `develop`:
+  - `name`, `alias`, `family`, `kind` and `flags`, the last two from
+    `src/config.c`.
+  - `documented`: `active`, `example` or `no` in `redis.conf`.
+  - `class`: `has`, `mapped` or `lacks`.
+  - `keel_value` and `redis_value`: each server's `CONFIG GET` answer,
+    empty if it has none.
+  - `note`: for a mapped directive, the Keel flag and how it differs.
+  - `used_by`: who uses the directive, with the evidence.
+  - `test_files`: how many files of Redis's test suite set it.
+
+  It is replaced only by a newer census of `develop`.
+
 ## telemetry/
 
 The Live telemetry workflow (`.github/workflows/telemetry.yml`), which runs
