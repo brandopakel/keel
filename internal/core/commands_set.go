@@ -145,6 +145,11 @@ func (e *Engine) randomCount(args []string) (count int64, given bool, err error)
 // SRANDMEMBER's with a count is an array. The count is read before the key is
 // looked up, and more than one is Redis's syntax error.
 func (e *Engine) cmdSPOP(args []string) []byte {
+	// SPOP records the SREM of what it popped, and nothing when it popped
+	// nothing (a missing key, a count of 0), as Redis's spopCommand counts no
+	// change then: logged as it arrived, a SPOP stopped every protocol 2
+	// replica, whose apply path takes no SPOP (TestEveryRecordNameReplicates).
+	e.recordsItself()
 	if len(args) < 1 {
 		return e.encode(wrongArguments("SPOP"), false)
 	}
