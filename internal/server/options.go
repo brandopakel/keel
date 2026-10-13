@@ -20,10 +20,16 @@ type Options struct {
 	// Port is the TCP port to listen on. Zero is 8081.
 	Port int
 
-	// MaxClients is the most connections the server holds at once. It is also
-	// the listen backlog, and bounds how many descriptors one turn of the
-	// event loop can be handed. Zero is 20,000.
+	// MaxClients is the most connections the server holds at once. It bounds
+	// how many descriptors one turn of the event loop can be handed. Zero is
+	// 20,000.
 	MaxClients int
+
+	// TCPBacklog is the listen backlog: how many connections the kernel
+	// queues for the server to accept, Redis's tcp-backlog. Zero is 511,
+	// Redis's default. The kernel caps it at its somaxconn, and on Linux the
+	// server warns at startup, as Redis does, when that cap is lower.
+	TCPBacklog int
 
 	// IOThreads is how many threads read, parse and write sockets, counting
 	// the event loop's own thread as one of them. Zero is 1, which keeps
@@ -68,6 +74,7 @@ const (
 	defaultHost         = "127.0.0.1"
 	defaultPort         = 8081
 	defaultMaxClients   = 20000
+	defaultTCPBacklog   = 511
 	defaultIOThreads    = 1
 	defaultCronInterval = 100 * time.Millisecond
 )
@@ -84,6 +91,9 @@ func (o Options) WithDefaults() Options {
 	}
 	if o.MaxClients <= 0 {
 		o.MaxClients = defaultMaxClients
+	}
+	if o.TCPBacklog <= 0 {
+		o.TCPBacklog = defaultTCPBacklog
 	}
 	if o.IOThreads <= 0 {
 		o.IOThreads = defaultIOThreads

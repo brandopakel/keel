@@ -46,6 +46,7 @@ var (
 	host               string
 	port               int
 	maxClients         int
+	tcpBacklog         int
 	requirePass        string
 	concurrentAppend   bool
 	primaryPassword    string
@@ -122,6 +123,8 @@ func parseFlags() {
 		"threads that read, parse and write sockets, including the event loop's own; "+
 			"command execution stays on one thread whatever this is")
 	flag.IntVar(&maxClients, "maxclients", 20000, "maximum connected clients")
+	flag.IntVar(&tcpBacklog, "tcp-backlog", 511,
+		"TCP listen backlog, Redis's tcp-backlog; the kernel caps it at its somaxconn")
 	flag.StringVar(&passwordEnv, "requirepass-env", "", "environment variable containing the required AUTH password")
 	flag.Parse()
 	if shutdownTimeout <= 0 {
@@ -237,6 +240,7 @@ func serverOptions() server.Options {
 		Host:             host,
 		Port:             port,
 		MaxClients:       maxClients,
+		TCPBacklog:       tcpBacklog,
 		IOThreads:        ioThreads,
 		CronInterval:     time.Duration(cronIntervalMs) * time.Millisecond,
 		RequirePass:      requirePass,

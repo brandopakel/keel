@@ -97,13 +97,11 @@ func (e *Engine) configParameters() []configParameter {
 		params = append(params, configParameter{"dir", dir})
 	}
 	if s := e.serverInfo; s != nil {
-		maxclients := strconv.Itoa(s.MaxClients)
 		params = append(params,
 			configParameter{"port", strconv.Itoa(s.Port)},
 			configParameter{"bind", s.Host},
-			configParameter{"maxclients", maxclients},
-			// Keel listens with a backlog of maxclients.
-			configParameter{"tcp-backlog", maxclients},
+			configParameter{"maxclients", strconv.Itoa(s.MaxClients)},
+			configParameter{"tcp-backlog", strconv.Itoa(s.TCPBacklog)},
 			configParameter{"io-threads", strconv.Itoa(s.IOThreads)},
 			configParameter{"hz", strconv.Itoa(s.Hz)},
 			// Redis gives the password to a client that has logged in, which

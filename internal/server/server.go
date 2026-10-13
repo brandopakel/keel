@@ -793,7 +793,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 	defer e.SetClientBuffers(nil)
 	e.SetStatsReset(resetConnectionStats)
 	defer e.SetStatsReset(nil)
-	e.SetServerInfo(&core.ServerInfo{Port: o.Port, MaxClients: o.MaxClients, IOThreads: o.IOThreads,
+	e.SetServerInfo(&core.ServerInfo{Port: o.Port, MaxClients: o.MaxClients, TCPBacklog: o.TCPBacklog, IOThreads: o.IOThreads,
 		Host: o.Host, RequirePass: o.RequirePass,
 		Hz: max(1, int(time.Second/o.CronInterval)), Multiplexer: io_multiplexing.API})
 	defer e.SetServerInfo(nil)
@@ -828,7 +828,8 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 	pool.requestBudget = &requestBudget
 	defer pool.stop()
 
-	serverFD, err := listenTCP(o.Host, o.Port, o.MaxClients)
+	warnTCPBacklog(o.TCPBacklog)
+	serverFD, err := listenTCP(o.Host, o.Port, o.TCPBacklog)
 	if err != nil {
 		log.Println(err)
 		return err
