@@ -371,9 +371,8 @@ func typedKeyspace(name string) string {
 // SRAND, MORRIS.QUERY, MORRIS.INFO and KEEL.DUMP have no Redis counterpart of
 // their own name; they count as SRANDMEMBER, CMS.QUERY, CMS.INFO and DUMP do.
 var keyspaceReads = map[string]bool{
-	"GET": true, "LCS": true, "STRLEN": true, "GETRANGE": true, "SUBSTR": true, "GETEX": true, "GETDEL": true,
-	"GETSET": true,
-	"HGET":   true, "HMGET": true, "HEXISTS": true, "HLEN": true, "HKEYS": true, "HVALS": true, "HGETALL": true,
+	"GET": true, "LCS": true, "STRLEN": true, "GETDEL": true, "GETSET": true,
+	"HGET": true, "HMGET": true, "HEXISTS": true, "HLEN": true, "HKEYS": true, "HVALS": true, "HGETALL": true,
 	"LLEN": true, "LINDEX": true, "LRANGE": true,
 	"SCARD": true, "SMEMBERS": true, "SISMEMBER": true, "SMISMEMBER": true, "SRANDMEMBER": true, "SRAND": true,
 	"ZCOUNT": true, "ZRANGEBYSCORE": true, "ZREVRANGEBYSCORE": true, "ZRANGE": true, "ZRANK": true, "ZSCORE": true,
@@ -382,6 +381,17 @@ var keyspaceReads = map[string]bool{
 	"PFCOUNT": true, "PFMERGE": true,
 	"CMS.QUERY": true, "MORRIS.QUERY": true,
 }
+
+// readsAfterArguments are the reads whose Redis handler parses arguments
+// before it looks its key up with lookupKeyRead, so that a malformed
+// argument counts no keyspace hit or miss: getrangeCommand reads its indexes
+// first, getexCommand its options. They count their lookup in their typed
+// operation, after parsing, rather than through keyspaceReads; the type
+// check counts only the hit of a key of another type, once the arguments
+// Redis reads first have passed. Each family moves its reads here as it is
+// converted (docs/phase4-family-recipe.md); the families not yet converted
+// still count through keyspaceReads (docs/info-compatibility.md).
+var readsAfterArguments = map[string]bool{"GETRANGE": true, "SUBSTR": true, "GETEX": true}
 
 // checkKeyTypes reports an error if any key the command names is already held
 // by a different kind of store: the command's own refusal of its arguments,
@@ -415,6 +425,9 @@ func (e *Engine) checkKeyTypes(cmd *Command, entry commandEntry) error {
 				if err := arguments(e, cmd.Args); err != nil {
 					return err
 				}
+			}
+			if entry.readsLate {
+				e.noteLookup(true)
 			}
 			return e.typeError(cmd.Cmd, owner)
 		}

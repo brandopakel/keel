@@ -25,6 +25,15 @@ example.
   the spec of each command). Where Keel keeps something better than an
   accidental Redis flaw, document it as a departure citing Redis's file and
   line, and list it in the PR under "Improvements over Redis".
+- **A read counts its keyspace hit or miss where Redis's does.** A read
+  that looks its key up first counts in the type check (`keyspaceReads`).
+  A read whose Redis handler parses arguments before `lookupKeyRead`
+  (`getrangeCommand`, `lrangeCommand`: check each handler in the 8.10.1
+  source) counts in its typed operation, after parsing, and goes in
+  `readsAfterArguments` instead, so that a malformed argument counts
+  nothing; the type check then counts only the hit of a key of another
+  type. Add a `stats-parity.py` case with a bad argument for each such
+  read, and one with a key of another type.
 - **A write that changes nothing is not logged**, as Redis decides with
   `server.dirty`: Redis propagates a command only when it counted a change
   (for example `t_list.c`, `popGenericCommand`, which returns before
