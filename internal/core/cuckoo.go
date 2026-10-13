@@ -158,3 +158,90 @@ func (e *Engine) opCFInfo(key string) (cfInfo, error) {
 	return cfInfo{size: cf.MemUsage(), buckets: uint64(cf.NumBuckets()), inserted: uint64(cf.Size()),
 		deleted: uint64(cf.Deleted())}, nil
 }
+
+// cfInsertRequest is a CF.INSERT's or CF.INSERTNX's filter capacity, should
+// it create one, and its items.
+type cfInsertRequest struct {
+	capacity uint64
+	noCreate bool
+	// nx adds an item only if it appears absent: CF.INSERTNX.
+	nx    bool
+	items []string
+	// text is the arguments after the key as the client wrote them, which the
+	// record repeats; nil for a Go caller.
+	text []string
+}
+
+// cfInsertResult is what one item of a CF.INSERT or CF.INSERTNX came to.
+type cfInsertResult uint8
+
+const (
+	cfInserted cfInsertResult = iota
+	// cfExists is an item CF.INSERTNX found present already.
+	cfExists
+	// cfNoSpace is an item a full filter could not take.
+	cfNoSpace
+)
+
+// opCFInsert adds each of req's items to the filter key holds, creating one
+// of req's capacity for a key that holds none, and hands each what it came
+// to: CF.INSERT, and CF.INSERTNX with nx. A full filter answers the items it
+// cannot take and goes on, as RedisBloom's cfInsertCommon does. A key that
+// holds none with NOCREATE is errFilterNotFound, and one of another type
+// errWrongType. RedisBloom replicates every one that reaches its items, so
+// every one is recorded.
+func (e *Engine) opCFInsert(key string, req cfInsertRequest, each func(cfInsertResult)) error {
+	switch e.filterKeyStatus(key, e.cfStore) {
+	case filterOtherType:
+		return errWrongType
+	case filterMissing:
+		if req.noCreate {
+			return errFilterNotFound
+		}
+		if req.capacity > maxStructureBytes/4 {
+			return errTooLargeForOneKey
+		}
+		if err := e.affordable(data_structure.CuckooBytesFor(req.capacity)); err != nil {
+			return err
+		}
+		e.cfStore.Put(key, data_structure.CreateCuckooFilter(req.capacity))
+	}
+	cf, _ := e.cfStore.Get(key)
+	for _, item := range req.items {
+		switch {
+		case req.nx && cf.Lookup(item):
+			each(cfExists)
+		case cf.Insert(item):
+			each(cfInserted)
+		default:
+			each(cfNoSpace)
+		}
+	}
+	name, text := "CF.INSERT", req.text
+	if req.nx {
+		name = "CF.INSERTNX"
+	}
+	if text == nil {
+		text = []string{"CAPACITY", strconv.FormatUint(req.capacity, 10)}
+		if req.noCreate {
+			text = append(text, "NOCREATE")
+		}
+		text = append(append(text, "ITEMS"), req.items...)
+	}
+	e.aofRecordKeyArgs(name, key, text)
+	return nil
+}
+
+// opCFCompact compacts the filter key holds, as RedisBloom's CF.COMPACT does:
+// a filter of one table has no later table to empty, and compaction resets
+// its count of deletions. A key that holds no cuckoo filter is
+// errCFCompactNotFound. RedisBloom replicates it, so it is recorded.
+func (e *Engine) opCFCompact(key string) error {
+	if e.filterKeyStatus(key, e.cfStore) != filterHeld {
+		return errCFCompactNotFound
+	}
+	cf, _ := e.cfStore.Get(key)
+	cf.Compact()
+	e.aofRecord("CF.COMPACT", key)
+	return nil
+}

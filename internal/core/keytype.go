@@ -57,10 +57,10 @@ var commandKeyspace = map[string]string{
 	"GEOSEARCH": "zset", "GEOPOS": "zset",
 
 	"BF.RESERVE": "bloom", "BF.INFO": "bloom", "BF.ADD": "bloom", "BF.MADD": "bloom",
-	"BF.EXISTS": "bloom", "BF.MEXISTS": "bloom",
+	"BF.EXISTS": "bloom", "BF.MEXISTS": "bloom", "BF.INSERT": "bloom", "BF.CARD": "bloom",
 
 	"CMS.INITBYDIM": "cms", "CMS.INITBYPROB": "cms", "CMS.INCRBY": "cms",
-	"CMS.QUERY": "cms",
+	"CMS.QUERY": "cms", "CMS.INFO": "cms", "CMS.MERGE": "cms",
 
 	"MORRIS.INITBYDIM": "morris", "MORRIS.INITBYPROB": "morris",
 	"MORRIS.INCRBY": "morris", "MORRIS.QUERY": "morris",
@@ -69,7 +69,8 @@ var commandKeyspace = map[string]string{
 
 	"CF.RESERVE": "cuckoo", "CF.ADD": "cuckoo", "CF.ADDNX": "cuckoo",
 	"CF.EXISTS": "cuckoo", "CF.MEXISTS": "cuckoo", "CF.DEL": "cuckoo",
-	"CF.COUNT": "cuckoo", "CF.INFO": "cuckoo",
+	"CF.COUNT": "cuckoo", "CF.INFO": "cuckoo", "CF.INSERT": "cuckoo", "CF.INSERTNX": "cuckoo",
+	"CF.COMPACT": "cuckoo",
 }
 
 // multiKeyCommands take a key in every argument rather than only the first.
@@ -361,6 +362,7 @@ var filterCommands = map[string]bool{
 	"BF.RESERVE": true, "BF.ADD": true, "BF.MADD": true, "BF.EXISTS": true, "BF.MEXISTS": true, "BF.INFO": true,
 	"CF.RESERVE": true, "CF.ADD": true, "CF.ADDNX": true, "CF.EXISTS": true, "CF.MEXISTS": true,
 	"CF.DEL": true, "CF.COUNT": true, "CF.INFO": true,
+	"BF.INSERT": true, "BF.CARD": true, "CF.INSERT": true, "CF.INSERTNX": true, "CF.COMPACT": true,
 }
 
 // selfTypedCommands check the types of the keys they name themselves, where
@@ -368,9 +370,13 @@ var filterCommands = map[string]bool{
 // LMOVE, RPOPLPUSH and LMOVEM answer nil for a source that holds nothing
 // whatever the destination holds, and check the destination only once there
 // is something to move, and LMPOP refuses a key of another type only when it
-// reaches it, after any key before it that holds a list. They stay in the
-// table above for the keys they write. See moveSource and lmpopSource.
-var selfTypedCommands = map[string]bool{"LMOVE": true, "RPOPLPUSH": true, "LMOVEM": true, "LMPOP": true}
+// reaches it, after any key before it that holds a list. RedisBloom's
+// CMS.INITBYDIM and CMS.INITBYPROB find a key of any type taken, and say so
+// in their own words, before they read the dimensions. They stay in the
+// table above for the keys they write. See moveSource, lmpopSource and
+// cmdCMSINITBYDIM.
+var selfTypedCommands = map[string]bool{"LMOVE": true, "RPOPLPUSH": true, "LMOVEM": true, "LMPOP": true,
+	"CMS.INITBYDIM": true, "CMS.INITBYPROB": true}
 
 // typedKeyspace is the type checkKeyTypes holds name's keys to, or "" for a
 // command it passes over: one the type table does not constrain, a write that
@@ -406,7 +412,7 @@ var keyspaceReads = map[string]bool{
 	"ZCARD":   true,
 	"GEODIST": true, "GEOHASH": true, "GEOSEARCH": true, "GEOPOS": true,
 	"PFCOUNT": true, "PFMERGE": true,
-	"CMS.QUERY": true, "MORRIS.QUERY": true,
+	"CMS.QUERY": true, "CMS.INFO": true, "MORRIS.QUERY": true,
 }
 
 // readsAfterArguments are the reads whose Redis handler reads arguments

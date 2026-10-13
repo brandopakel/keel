@@ -17,12 +17,13 @@ func TestCMSINITBYDIM(t *testing.T) {
 	assert.Contains(t, runOn(t, e, "CMS.INITBYDIM", "d", "x", "5"), "invalid width")
 	assert.Contains(t, runOn(t, e, "CMS.INITBYDIM", "d", "100", "0"), "invalid depth")
 	assert.Contains(t, runOn(t, e, "CMS.INITBYDIM", "d", "100", "-1"), "invalid depth")
-	assert.Contains(t, runOn(t, e, "CMS.INITBYDIM", "d", "4000000000", "4000000000"), "more than this server will allocate for one key")
+	assert.Contains(t, runOn(t, e, "CMS.INITBYDIM", "d", "4000000000", "4000000000"), "invalid init arguments",
+		"RedisBloom's refusal of dimensions whose product passes 63 bits comes first")
 	assert.Contains(t, runOn(t, e, "CMS.INITBYPROB", "d", "0.00000001", "0.001"), "more than this server will allocate for one key",
 		"a probability sizing is checked the same way")
 	assert.Contains(t, runOn(t, e, "CMS.INITBYDIM", "d", "2147483648", "2147483648"), "more than this server will allocate for one key",
 		"a product whose byte count would wrap to zero is caught on its cell count")
-	assert.Contains(t, runOn(t, e, "CMS.INITBYDIM", "d", "4294967295", "4294967295"), "more than this server will allocate for one key")
+	assert.Contains(t, runOn(t, e, "CMS.INITBYDIM", "d", "4294967295", "4294967295"), "invalid init arguments")
 	assert.Contains(t, runOn(t, e, "CMS.INITBYDIM", "d", "100"), "wrong number of arguments")
 	assert.EqualValues(t, 0, runOn(t, e, "EXISTS", "d"), "a refused init creates nothing")
 }
@@ -58,7 +59,8 @@ func TestCMSINCRBYAndQUERY(t *testing.T) {
 	assert.Equal(t, []interface{}{int64(15), int64(3), int64(0)}, runOn(t, e, "CMS.QUERY", "c", "a", "b", "never"))
 
 	assert.Contains(t, runOn(t, e, "CMS.INCRBY", "c", "a", "x"), "Cannot parse number")
-	assert.Contains(t, runOn(t, e, "CMS.INCRBY", "c", "a", "-1"), "Cannot parse number")
+	assert.Contains(t, runOn(t, e, "CMS.INCRBY", "c", "a", "-1"), "Number cannot be negative")
+	assert.Contains(t, runOn(t, e, "CMS.INCRBY", "c", "a", "007"), "Cannot parse number", "string2ll's integers")
 	assert.Contains(t, runOn(t, e, "CMS.INCRBY", "c", "a", "1", "b", "x"), "Cannot parse number")
 	assert.Equal(t, []interface{}{int64(15)}, runOn(t, e, "CMS.QUERY", "c", "a"), "a refused batch changed nothing")
 

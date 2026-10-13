@@ -42,7 +42,7 @@ TimeSeries come in CI.
 | sorted-set | 12/35 | `ZUNION`, `ZINTER`, `ZDIFF` with `STORE` forms, the lex ranges, `ZREMRANGEBY*`, `ZREVRANGE`, `ZREVRANK`, `ZMSCORE`, `ZRANDMEMBER`, `ZRANGESTORE`, `ZMPOP`, `ZSCAN`, and the blocking forms |
 | generic | 13/29 | `RENAME`, `RENAMENX`, `COPY`, `TOUCH`, `OBJECT`, `RANDOMKEY`, `EXPIRETIME`, `PEXPIRETIME`, `SORT`, `SORT_RO`, `DUMP`, `RESTORE`, `MOVE`, `MIGRATE`, `WAIT`, `WAITAOF` |
 | server | 5/32 | `CONFIG`, `COMMAND`, `TIME`, `ROLE`, `FLUSHALL`, `SWAPDB`, `SLOWLOG`, `LATENCY`, `MONITOR`, `ACL`, `DEBUG`, `SAVE`, `BGSAVE`, `LASTSAVE`, `REPLICAOF`, `FAILOVER`, `SHUTDOWN`, `MODULE`, `SYNC`, `PSYNC`, `REPLCONF`, and others |
-| geo, hyperloglog, connection, transactions | 19/28 | the `GEORADIUS` family, `GEOSEARCHSTORE`, `PFDEBUG`, `PFSELFTEST`, `RESET`, `WATCH` |
+| geo, hyperloglog, connection, transactions | 19/28 | the `GEORADIUS` family, `GEOSEARCHSTORE`, `PFDEBUG` and `PFSELFTEST` (not planned: they read Redis's own HyperLogLog encoding, which Keel's sketches do not share), `RESET`, `WATCH` |
 | bitmap | 0/7 | all |
 | pubsub | 0/9 | all |
 | scripting | 0/8 | all: `EVAL`, `EVALSHA`, `SCRIPT`, `FUNCTION`, `FCALL` |
@@ -254,8 +254,13 @@ schedule them.
    - RDB: `SAVE`, `BGSAVE`, and `DUMP`/`RESTORE` in Redis's serialization
      format, so that data moves between Redis and Keel.
 5. **Redis 8's other bundled data types, separately sized.**
-   - **Already part-done:** probabilistic. Keel has most of Bloom, Cuckoo and
-     Count-Min; TopK and t-digest are missing.
+   - **Already part-done:** probabilistic. Keel has Bloom, Cuckoo and
+     Count-Min, `BF.INSERT`, `BF.CARD`, `CF.INSERT`, `CF.INSERTNX`,
+     `CF.COMPACT`, `CMS.INFO` and `CMS.MERGE` since the sketches' missing
+     commands in phase 4 of the embedding plan, but for the `SCANDUMP`/`LOADCHUNK`
+     pairs (not planned: their chunks are RedisBloom's bit layout and hashing,
+     which Keel's filters do not share, so a chunk of one would not load into
+     the other) and the `DEBUG` forms; TopK and t-digest are missing.
    - **JSON, about 3 to 4 weeks.**
    - **TimeSeries, about 3 weeks.**
    - **Vector sets and arrays:** 8.x additions.
