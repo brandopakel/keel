@@ -24,6 +24,10 @@ import (
 type commandTotals struct {
 	commands uint64
 	errors   uint64
+	// hits and misses are keyspace_hits and keyspace_misses: each key a
+	// command looks up to read, as Redis's lookupKeyRead counts it (see
+	// keyspaceReads).
+	hits, misses uint64
 	// errorPrefixes counts error replies by their first word, the prefix
 	// Redis keeps them under; at most maxErrorPrefixes of them, as Redis
 	// keeps. A reply under one more replaces them all with
@@ -79,6 +83,17 @@ func (m *instantaneousMetric) rate() int64 {
 		sum += s
 	}
 	return sum / int64(len(m.samples))
+}
+
+// noteLookup counts a key a command looked up to read: a hit if it is held,
+// whatever its type, and a miss if it is not, an expired key included, as
+// Redis's lookupKeyRead counts them.
+func (e *Engine) noteLookup(held bool) {
+	if held {
+		e.totals.hits++
+	} else {
+		e.totals.misses++
+	}
 }
 
 // NoteCommand counts a command the transport ran itself, such as AUTH, HELLO

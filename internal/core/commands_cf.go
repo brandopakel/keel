@@ -154,7 +154,7 @@ func (e *Engine) cfFor(key string) *data_structure.CuckooFilter {
 // cfForRead is the filter a read asks about: RedisBloom's CF.EXISTS,
 // CF.MEXISTS and CF.COUNT answer no, and 0, for a key that holds anything else.
 func (e *Engine) cfForRead(key string) (*data_structure.CuckooFilter, bool) {
-	if e.filterKeyStatus(key, e.cfStore) != filterHeld {
+	if e.filterKeyRead(key, e.cfStore) != filterHeld {
 		return nil, false
 	}
 	return e.cfStore.Get(key)
@@ -256,7 +256,7 @@ func (e *Engine) cmdCFINFO(args []string) []byte {
 		return e.encode(wrongArguments("CF.INFO"), false)
 	}
 	key := args[0]
-	switch e.filterKeyStatus(key, e.cfStore) {
+	switch e.filterKeyRead(key, e.cfStore) {
 	case filterMissing:
 		return e.encode(errFilterNotFound, false)
 	case filterOtherType:

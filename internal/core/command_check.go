@@ -139,6 +139,9 @@ type commandEntry struct {
 	keys        keyRule
 	container   bool
 	namesItself bool
+	// reads is whether the type check counts the keys it looks up as
+	// keyspace hits and misses: keyspaceReads.
+	reads bool
 }
 
 // counted reports whether a command of entry's, given args arguments, needs
@@ -159,7 +162,7 @@ func indexCommands() {
 	for name, arity := range commandArity {
 		commands[name] = commandEntry{run: commandTable[name], arity: arity,
 			typed: typedKeyspace(name), keys: keyRuleOf(name),
-			container: subcommandsOf(name) != nil, namesItself: name == "GEOSEARCH"}
+			container: subcommandsOf(name) != nil, namesItself: name == "GEOSEARCH", reads: keyspaceReads[name]}
 	}
 }
 

@@ -29,7 +29,9 @@ func (e *Engine) cmdEXISTS(args []string) []byte {
 	// EXISTS k k is 2. It reads oddly and it is what clients expect.
 	found := 0
 	for _, key := range args {
-		if _, held := e.space.OwnerOf(key); held {
+		_, held := e.space.OwnerOf(key)
+		e.noteLookup(held)
+		if held {
 			found++
 		}
 	}
@@ -49,6 +51,7 @@ func (e *Engine) cmdTYPE(args []string) []byte {
 	}
 
 	owner, held := e.space.OwnerOf(args[0])
+	e.noteLookup(held)
 	if !held {
 		// Redis answers +none rather than an error or a nil, and clients test
 		// for exactly that string.
@@ -114,12 +117,41 @@ func (e *Engine) cmdMGET(args []string) []byte {
 		return e.encode(wrongArguments("MGET"), false)
 	}
 
+	// A key another type holds is a keyspace hit, as Redis counts it, though
+	// it reads as nil. The other stores are asked about a key the strings do
+	// not hold only if any of them holds a key at all, which is worked out at
+	// the first such key: MGET of strings that are all there costs what it
+	// did, and so do a cache's misses.
+	//
+	// encodeLookupArray asks about each key twice, once to size the reply and
+	// once to write it, and each is counted the first time.
+	others, counted := -1, 0
 	return e.encodeLookupArray(len(args), func(i int) (string, bool) {
 		obj := e.dictStore.Get(args[i])
+		first := i >= counted
+		if first {
+			counted = i + 1
+		}
 		if obj == nil {
+			if first {
+				if others < 0 {
+					others = 0
+					if e.space.TotalKeys() > e.dictStore.Len() {
+						others = 1
+					}
+				}
+				held := false
+				if others == 1 {
+					_, held = e.space.OwnerOf(args[i])
+				}
+				e.noteLookup(held)
+			}
 			// nil encodes as a null bulk string, which is the element Redis
 			// puts here for both a missing key and a key of the wrong type.
 			return "", false
+		}
+		if first {
+			e.noteLookup(true)
 		}
 		return obj.Value, true
 	}, shapeArray)
