@@ -209,6 +209,9 @@ func (e *Engine) cmdSRANDMEMBER(args []string) []byte {
 	}
 
 	s, ok := e.setFor(args[0])
+	// A keyspace hit or a miss, counted after the count was read, as Redis's
+	// srandmemberWithCountCommand reads it before it looks the key up.
+	e.noteLookup(ok)
 	if !ok {
 		if given {
 			return constant.RespEmptyArray
