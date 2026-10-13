@@ -4,7 +4,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brandopakel/keel/internal/constant"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
@@ -24,18 +23,10 @@ func (e *Engine) cmdEXISTS(args []string) []byte {
 	if len(args) == 0 {
 		return e.encode(wrongArguments("EXISTS"), false)
 	}
-
 	// Repeats count repeatedly, which is Redis's behaviour from 3.0 on:
 	// EXISTS k k is 2. It reads oddly and it is what clients expect.
-	found := 0
-	for _, key := range args {
-		_, held := e.space.OwnerOf(key)
-		e.noteLookup(held)
-		if held {
-			found++
-		}
-	}
-	return e.encode(found, false)
+	r := e.reply()
+	return r.Int(e.opExists(args)).Bytes()
 }
 
 // cmdTYPE reports which keyspace holds a name.
@@ -50,14 +41,10 @@ func (e *Engine) cmdTYPE(args []string) []byte {
 		return e.encode(wrongArguments("TYPE"), false)
 	}
 
-	owner, held := e.space.OwnerOf(args[0])
-	e.noteLookup(held)
-	if !held {
-		// Redis answers +none rather than an error or a nil, and clients test
-		// for exactly that string.
-		return e.encode("none", true)
-	}
-	return e.encode(owner.KeyspaceName(), true)
+	// Redis answers +none for a missing key rather than an error or a nil,
+	// and clients test for exactly that string.
+	r := e.reply()
+	return r.Status(e.opType(args[0])).Bytes()
 }
 
 // cmdKEYS lists every key matching a glob pattern.
@@ -189,21 +176,11 @@ func (e *Engine) cmdMSET(args []string) []byte {
 // all ASYNC changes in Redis too: only when their memory is freed. What is
 // logged is the plain FLUSHDB, which every release replays.
 func (e *Engine) cmdFLUSHDB(args []string) []byte {
+	e.recordsItself()
 	if len(args) > 1 || len(args) == 1 && !strings.EqualFold(args[0], "SYNC") && !strings.EqualFold(args[0], "ASYNC") {
 		return e.encode(errSyntax, false)
 	}
-	if len(args) == 1 {
-		e.aofRecord("FLUSHDB")
-	}
-
-	e.space.EachKeyspace(func(ks data_structure.Keyspace) {
-		for _, key := range ks.Keys() {
-			e.noteRewriteDirty(key)
-			e.noteReplicationDirty(key)
-			ks.Delete(key)
-		}
-	})
-	// As Redis's emptyData zeroes a database's avg_ttl.
-	e.avgTTL = 0
-	return constant.RespOk
+	e.opFlushDB()
+	r := e.reply()
+	return r.Status("OK").Bytes()
 }
