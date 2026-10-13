@@ -259,3 +259,140 @@ func (e *Engine) cmdBFINFO(args []string) []byte {
 	}
 	return e.encode(errBFInvalidInfoName, false)
 }
+
+// The Bloom filter commands Keel lacked, as RedisBloom 8.10.1 defines them
+// (rebloom.c, BFInsert_RedisCommand and BFCard_RedisCommand).
+
+var (
+	// BF.INSERT's refusals of its options, which RedisBloom words apart from
+	// BF.RESERVE's, with no ERR.
+	errBFInsertRate      = errors.New("Bad error rate")
+	errBFInsertExpansion = errors.New("Bad expansion")
+	errBFInsertCapacity  = errors.New("Bad capacity")
+	// errModuleUnknownArg is RedisBloom's word for an option it does not
+	// know, in BF.INSERT and CF.INSERT.
+	errModuleUnknownArg = errors.New("Unknown argument received")
+)
+
+// lowerAt is the i-th byte of s in lower case, and 0 past its end, as C
+// reads a string's terminator there.
+func lowerAt(s string, i int) byte {
+	if i >= len(s) {
+		return 0
+	}
+	c := s[i]
+	if 'A' <= c && c <= 'Z' {
+		c += 'a' - 'A'
+	}
+	return c
+}
+
+// parseBFInsert reads BF.INSERT key [CAPACITY c] [ERROR e] [EXPANSION x]
+// [NOCREATE] [NONSCALING] ITEMS item [item ...] as RedisBloom does: each
+// option by its first letter - and ERROR and EXPANSION by their second, and
+// NOCREATE and NONSCALING by their third - in turn, until ITEMS; an option
+// with no value after it, or no item after ITEMS, is the wrong number of
+// arguments. An expansion of 0 is a filter that does not grow.
+func parseBFInsert(args []string) (bfInsertRequest, error) {
+	req := bfInsertRequest{r: bfReservation{errorRate: data_structure.BfDefaultErrRate,
+		capacity: data_structure.BfDefaultInitCapacity, expansion: data_structure.BfDefaultExpansion}}
+	nonScaling := false
+	itemsAt := -1
+	for pos := 1; pos < len(args) && itemsAt < 0; {
+		arg := args[pos]
+		switch lowerAt(arg, 0) {
+		case 'i':
+			pos++
+			itemsAt = pos
+		case 'e':
+			if pos++; pos == len(args) {
+				return req, wrongArguments("BF.INSERT")
+			}
+			if lowerAt(arg, 1) == 'r' {
+				rate, ok := redisDouble(args[pos])
+				if !ok || !(rate > 0 && rate < 1) {
+					return req, errBFInsertRate
+				}
+				req.r.errorRate = rate
+			} else {
+				expansion, ok := redisInteger(args[pos])
+				if !ok || expansion < 0 || expansion > bfMaxExpansion {
+					return req, errBFInsertExpansion
+				}
+				req.r.expansion = uint64(expansion)
+			}
+			pos++
+		case 'c':
+			if pos++; pos == len(args) {
+				return req, wrongArguments("BF.INSERT")
+			}
+			capacity, ok := redisInteger(args[pos])
+			if !ok || capacity < 1 || capacity > bfMaxCapacity {
+				return req, errBFInsertCapacity
+			}
+			req.r.capacity = uint64(capacity)
+			pos++
+		case 'n':
+			if lowerAt(arg, 2) == 'c' {
+				req.noCreate = true
+			} else {
+				nonScaling = true
+			}
+			pos++
+		default:
+			return req, errModuleUnknownArg
+		}
+	}
+	if itemsAt < 0 || itemsAt == len(args) {
+		return req, wrongArguments("BF.INSERT")
+	}
+	if nonScaling {
+		req.r.expansion = 0
+	}
+	req.items = args[itemsAt:]
+	return req, nil
+}
+
+// cmdBFINSERT implements BF.INSERT: BF.MADD with the filter it creates
+// described, or forbidden; see opBFInsert.
+func (e *Engine) cmdBFINSERT(args []string) []byte {
+	e.recordsItself()
+	if len(args) < 3 {
+		return e.encode(wrongArguments("BF.INSERT"), false)
+	}
+	req, err := parseBFInsert(args)
+	if err != nil {
+		return e.encode(err, false)
+	}
+	req.text = args[1:]
+	r := e.reply()
+	answers := make([]bfAnswer, 0, len(req.items))
+	if err := e.opBFInsert(args[0], req, func(added bool, err error) {
+		answers = append(answers, bfAnswer{added, err})
+	}); err != nil {
+		return r.Error(err).Bytes()
+	}
+	r.Array(len(answers))
+	for _, a := range answers {
+		if a.err != nil {
+			r.Error(a.err)
+		} else {
+			r.Bool(a.added)
+		}
+	}
+	return r.Bytes()
+}
+
+// cmdBFCARD implements BF.CARD key: how many items the filter has taken; see
+// opBFCard.
+func (e *Engine) cmdBFCARD(args []string) []byte {
+	if len(args) != 1 {
+		return e.encode(wrongArguments("BF.CARD"), false)
+	}
+	r := e.reply()
+	n, err := e.opBFCard(args[0])
+	if err != nil {
+		return r.Error(err).Bytes()
+	}
+	return r.Int(n).Bytes()
+}

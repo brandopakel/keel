@@ -34,7 +34,7 @@ func TestSerialiseRoundTripsExactly(t *testing.T) {
 	t.Run("count-min sketch", func(t *testing.T) {
 		c := CreateCMS(200, 5)
 		for i := 0; i < 500; i++ {
-			c.IncrBy("item:"+strconv.Itoa(i), uint32(i+1))
+			c.IncrBy("item:"+strconv.Itoa(i), uint64(i+1))
 		}
 		back, err := UnmarshalCMS(c.Marshal())
 		assert.NoError(t, err)
