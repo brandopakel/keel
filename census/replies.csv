@@ -1,0 +1,911 @@
+run_id,time,branch,command,area,case,form,protocol,sent,result,keel_shape,redis_shape,keel,redis,keel_schema,redis_schema,redis_function,redis_at
+38332001995,2026-10-13T01:24:43Z,develop,auth,connection,form,base,2,AUTH <password>,same,+,+,+OK,+OK,,,authCommand,acl.c:3308
+38332001995,2026-10-13T01:24:43Z,develop,auth,connection,form,base,3,AUTH <password>,same,+,+,+OK,+OK,ok,ok,authCommand,acl.c:3308
+38332001995,2026-10-13T01:24:43Z,develop,auth,connection,form,username,2,AUTH default <password>,same,+,+,+OK,+OK,,,authCommand,acl.c:3308
+38332001995,2026-10-13T01:24:43Z,develop,auth,connection,form,username,3,AUTH default <password>,same,+,+,+OK,+OK,ok,ok,authCommand,acl.c:3308
+38332001995,2026-10-13T01:24:43Z,develop,auth,connection,extra argument,extra argument,2,AUTH <password> BOGUS,same,-,-,-WRONGPASS invalid username-password pair or user is disabled.,-WRONGPASS invalid username-password pair or user is disabled.,,,authCommand,acl.c:3308
+38332001995,2026-10-13T01:24:43Z,develop,auth,connection,extra argument,extra argument,3,AUTH <password> BOGUS,same,-,-,-WRONGPASS invalid username-password pair or user is disabled.,-WRONGPASS invalid username-password pair or user is disabled.,error,error,authCommand,acl.c:3308
+38332001995,2026-10-13T01:24:43Z,develop,bgrewriteaof,server,form,base,2,BGREWRITEAOF,same,+,+,+Background append only file rewriting started,+Background append only file rewriting started,,,bgrewriteaofCommand,aof.c:3272
+38332001995,2026-10-13T01:24:43Z,develop,bgrewriteaof,server,form,base,3,BGREWRITEAOF,same,+,+,+Background append only file rewriting started,+Background append only file rewriting started,ok,ok,bgrewriteaofCommand,aof.c:3272
+38332001995,2026-10-13T01:24:43Z,develop,bgrewriteaof,server,extra argument,extra argument,2,BGREWRITEAOF BOGUS,same,-,-,-ERR wrong number of arguments for 'bgrewriteaof' command,-ERR wrong number of arguments for 'bgrewriteaof' command,,,bgrewriteaofCommand,aof.c:3272
+38332001995,2026-10-13T01:24:43Z,develop,bgrewriteaof,server,extra argument,extra argument,3,BGREWRITEAOF BOGUS,same,-,-,-ERR wrong number of arguments for 'bgrewriteaof' command,-ERR wrong number of arguments for 'bgrewriteaof' command,error,error,bgrewriteaofCommand,aof.c:3272
+38332001995,2026-10-13T01:24:43Z,develop,client|getname,connection,form,base,2,CLIENT GETNAME,same,$-1,$-1,$-1,$-1,,,clientCommand,networking.c:4382
+38332001995,2026-10-13T01:24:43Z,develop,client|getname,connection,form,base,3,CLIENT GETNAME,same,_,_,_,_,ok,ok,clientCommand,networking.c:4382
+38332001995,2026-10-13T01:24:43Z,develop,client|getname,connection,extra argument,extra argument,2,CLIENT GETNAME BOGUS,same,-,-,-ERR wrong number of arguments for 'client|getname' command,-ERR wrong number of arguments for 'client|getname' command,,,clientCommand,networking.c:4382
+38332001995,2026-10-13T01:24:43Z,develop,client|getname,connection,extra argument,extra argument,3,CLIENT GETNAME BOGUS,same,-,-,-ERR wrong number of arguments for 'client|getname' command,-ERR wrong number of arguments for 'client|getname' command,error,error,clientCommand,networking.c:4382
+38332001995,2026-10-13T01:24:43Z,develop,client|help,connection,form,base,2,CLIENT HELP,same,*[+ + + + + + + + + + + + + + +],*[+ + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + +],*[+CLIENT <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +GETNAME +    Return the name of the current connection. +ID +    Return the ID of the current connection. +INFO +    Return information about the current client connection. +SETNAME <name> +    Assign the name <name> to the curre...,*[+CLIENT <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +CACHING (YES|NO) +    Enable/disable tracking of the keys for next command in OPTIN/OPTOUT modes. +GETREDIR +    Return the client ID we are redirecting to when tracking is enabled. +GETNAME +    Return the name of the current co...,,,clientCommand,networking.c:4382
+38332001995,2026-10-13T01:24:43Z,develop,client|help,connection,form,base,3,CLIENT HELP,same,*[+ + + + + + + + + + + + + + +],*[+ + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + +],*[+CLIENT <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +GETNAME +    Return the name of the current connection. +ID +    Return the ID of the current connection. +INFO +    Return information about the current client connection. +SETNAME <name> +    Assign the name <name> to the curre...,*[+CLIENT <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +CACHING (YES|NO) +    Enable/disable tracking of the keys for next command in OPTIN/OPTOUT modes. +GETREDIR +    Return the client ID we are redirecting to when tracking is enabled. +GETNAME +    Return the name of the current co...,ok,ok,clientCommand,networking.c:4382
+38332001995,2026-10-13T01:24:43Z,develop,client|help,connection,extra argument,extra argument,2,CLIENT HELP BOGUS,same,-,-,-ERR wrong number of arguments for 'client|help' command,-ERR wrong number of arguments for 'client|help' command,,,clientCommand,networking.c:4382
+38332001995,2026-10-13T01:24:43Z,develop,client|help,connection,extra argument,extra argument,3,CLIENT HELP BOGUS,same,-,-,-ERR wrong number of arguments for 'client|help' command,-ERR wrong number of arguments for 'client|help' command,error,error,clientCommand,networking.c:4382
+38332001995,2026-10-13T01:24:43Z,develop,client|id,connection,form,base,2,CLIENT ID,same,:,:,:434,:439,,,clientCommand,networking.c:4382
+38332001995,2026-10-13T01:24:43Z,develop,client|id,connection,form,base,3,CLIENT ID,same,:,:,:435,:440,ok,ok,clientCommand,networking.c:4382
+38332001995,2026-10-13T01:24:43Z,develop,client|id,connection,extra argument,extra argument,2,CLIENT ID BOGUS,same,-,-,-ERR wrong number of arguments for 'client|id' command,-ERR wrong number of arguments for 'client|id' command,,,clientCommand,networking.c:4382
+38332001995,2026-10-13T01:24:43Z,develop,client|id,connection,extra argument,extra argument,3,CLIENT ID BOGUS,same,-,-,-ERR wrong number of arguments for 'client|id' command,-ERR wrong number of arguments for 'client|id' command,error,error,clientCommand,networking.c:4382
+38332001995,2026-10-13T01:24:43Z,develop,client|info,connection,form,base,2,CLIENT INFO,same,$,$,$id=438 fd=11 name= db=0 resp=2 lib-name= lib-ver=\n,$id=443 addr=127.0.0.1:34288 laddr=127.0.0.1:59589 fd=12 name= age=0 idle=0 flags=N db=0 sub=0 psub=0 ssub=0 multi=-1 watch=0 qbuf=26 qbuf-free=20448 argv-mem=10 multi-mem=0 rbs=16384 rbp=16384 obl=0 oll=0 omem=0 omem-shared=0 omem-unshared=0 tot-mem=38170 events=r cmd=client|info user=default re...,,,clientCommand,networking.c:4382
+38332001995,2026-10-13T01:24:43Z,develop,client|info,connection,form,base,3,CLIENT INFO,same,=txt,=txt,=txt:id=439 fd=11 name= db=0 resp=3 lib-name= lib-ver=\n,=txt:id=444 addr=127.0.0.1:34294 laddr=127.0.0.1:59589 fd=12 name= age=0 idle=0 flags=N db=0 sub=0 psub=0 ssub=0 multi=-1 watch=0 qbuf=26 qbuf-free=20448 argv-mem=10 multi-mem=0 rbs=16384 rbp=16384 obl=0 oll=0 omem=0 omem-shared=0 omem-unshared=0 tot-mem=38170 events=r cmd=client|info user=defaul...,ok,ok,clientCommand,networking.c:4382
+38332001995,2026-10-13T01:24:43Z,develop,client|info,connection,extra argument,extra argument,2,CLIENT INFO BOGUS,same,-,-,-ERR wrong number of arguments for 'client|info' command,-ERR wrong number of arguments for 'client|info' command,,,clientCommand,networking.c:4382
+38332001995,2026-10-13T01:24:43Z,develop,client|info,connection,extra argument,extra argument,3,CLIENT INFO BOGUS,same,-,-,-ERR wrong number of arguments for 'client|info' command,-ERR wrong number of arguments for 'client|info' command,error,error,clientCommand,networking.c:4382
+38332001995,2026-10-13T01:24:43Z,develop,client|setinfo,connection,form,base,2,CLIENT SETINFO lib-name lib,same,+,+,+OK,+OK,,,clientSetinfoCommand,networking.c:4330
+38332001995,2026-10-13T01:24:43Z,develop,client|setinfo,connection,form,base,3,CLIENT SETINFO lib-name lib,same,+,+,+OK,+OK,ok,ok,clientSetinfoCommand,networking.c:4330
+38332001995,2026-10-13T01:24:43Z,develop,client|setinfo,connection,form,lib-ver,2,CLIENT SETINFO lib-ver 1.0,same,+,+,+OK,+OK,,,clientSetinfoCommand,networking.c:4330
+38332001995,2026-10-13T01:24:43Z,develop,client|setinfo,connection,form,lib-ver,3,CLIENT SETINFO lib-ver 1.0,same,+,+,+OK,+OK,ok,ok,clientSetinfoCommand,networking.c:4330
+38332001995,2026-10-13T01:24:43Z,develop,client|setinfo,connection,extra argument,extra argument,2,CLIENT SETINFO lib-name lib BOGUS,same,-,-,-ERR wrong number of arguments for 'client|setinfo' command,-ERR wrong number of arguments for 'client|setinfo' command,,,clientSetinfoCommand,networking.c:4330
+38332001995,2026-10-13T01:24:43Z,develop,client|setinfo,connection,extra argument,extra argument,3,CLIENT SETINFO lib-name lib BOGUS,same,-,-,-ERR wrong number of arguments for 'client|setinfo' command,-ERR wrong number of arguments for 'client|setinfo' command,error,error,clientSetinfoCommand,networking.c:4330
+38332001995,2026-10-13T01:24:43Z,develop,client|setname,connection,form,base,2,CLIENT SETNAME c1,same,+,+,+OK,+OK,,,clientCommand,networking.c:4382
+38332001995,2026-10-13T01:24:43Z,develop,client|setname,connection,form,base,3,CLIENT SETNAME c1,same,+,+,+OK,+OK,ok,ok,clientCommand,networking.c:4382
+38332001995,2026-10-13T01:24:43Z,develop,client|setname,connection,extra argument,extra argument,2,CLIENT SETNAME c1 BOGUS,same,-,-,-ERR wrong number of arguments for 'client|setname' command,-ERR wrong number of arguments for 'client|setname' command,,,clientCommand,networking.c:4382
+38332001995,2026-10-13T01:24:43Z,develop,client|setname,connection,extra argument,extra argument,3,CLIENT SETNAME c1 BOGUS,same,-,-,-ERR wrong number of arguments for 'client|setname' command,-ERR wrong number of arguments for 'client|setname' command,error,error,clientCommand,networking.c:4382
+38332001995,2026-10-13T01:24:43Z,develop,config|get,server,form,base,2,CONFIG GET maxmemory,same,*[$ $],*[$ $],*[$maxmemory $0],*[$maxmemory $0],,,configGetCommand,config.c:978
+38332001995,2026-10-13T01:24:43Z,develop,config|get,server,form,base,3,CONFIG GET maxmemory,same,%{$:$},%{$:$},%{$maxmemory: $0},%{$maxmemory: $0},ok,ok,configGetCommand,config.c:978
+38332001995,2026-10-13T01:24:43Z,develop,config|get,server,form,parameter*2,2,CONFIG GET maxmemory maxclients,same,*[$ $ $ $],*[$ $ $ $],*[$maxmemory $0 $maxclients $20000],*[$maxclients $10000 $maxmemory $0],,,configGetCommand,config.c:978
+38332001995,2026-10-13T01:24:43Z,develop,config|get,server,form,parameter*2,3,CONFIG GET maxmemory maxclients,same,%{$:$ $:$},%{$:$ $:$},%{$maxmemory: $0 $maxclients: $20000},%{$maxclients: $10000 $maxmemory: $0},ok,ok,configGetCommand,config.c:978
+38332001995,2026-10-13T01:24:43Z,develop,config|get,server,extra argument,extra argument,2,CONFIG GET maxmemory BOGUS,same,*[$ $],*[$ $],*[$maxmemory $0],*[$maxmemory $0],,,configGetCommand,config.c:978
+38332001995,2026-10-13T01:24:43Z,develop,config|get,server,extra argument,extra argument,3,CONFIG GET maxmemory BOGUS,same,%{$:$},%{$:$},%{$maxmemory: $0},%{$maxmemory: $0},ok,ok,configGetCommand,config.c:978
+38332001995,2026-10-13T01:24:43Z,develop,config|help,server,form,base,2,CONFIG HELP,same,*[+ + + + + + + + + + +],*[+ + + + + + + + + + +],*[+CONFIG <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +GET <pattern> +    Return parameters matching the glob-like <pattern> and their values. +SET <directive> <value> +    Set the configuration <directive> to <value>. +RESETSTAT +    Reset statistics reported by the INFO command. +R...,*[+CONFIG <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +GET <pattern> +    Return parameters matching the glob-like <pattern> and their values. +SET <directive> <value> +    Set the configuration <directive> to <value>. +RESETSTAT +    Reset statistics reported by the INFO command. +R...,,,configHelpCommand,config.c:3933
+38332001995,2026-10-13T01:24:43Z,develop,config|help,server,form,base,3,CONFIG HELP,same,*[+ + + + + + + + + + +],*[+ + + + + + + + + + +],*[+CONFIG <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +GET <pattern> +    Return parameters matching the glob-like <pattern> and their values. +SET <directive> <value> +    Set the configuration <directive> to <value>. +RESETSTAT +    Reset statistics reported by the INFO command. +R...,*[+CONFIG <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +GET <pattern> +    Return parameters matching the glob-like <pattern> and their values. +SET <directive> <value> +    Set the configuration <directive> to <value>. +RESETSTAT +    Reset statistics reported by the INFO command. +R...,ok,ok,configHelpCommand,config.c:3933
+38332001995,2026-10-13T01:24:43Z,develop,config|help,server,extra argument,extra argument,2,CONFIG HELP BOGUS,same,-,-,-ERR wrong number of arguments for 'config|help' command,-ERR wrong number of arguments for 'config|help' command,,,configHelpCommand,config.c:3933
+38332001995,2026-10-13T01:24:43Z,develop,config|help,server,extra argument,extra argument,3,CONFIG HELP BOGUS,same,-,-,-ERR wrong number of arguments for 'config|help' command,-ERR wrong number of arguments for 'config|help' command,error,error,configHelpCommand,config.c:3933
+38332001995,2026-10-13T01:24:43Z,develop,config|resetstat,server,form,base,2,CONFIG RESETSTAT,same,+,+,+OK,+OK,,,configResetStatCommand,config.c:3953
+38332001995,2026-10-13T01:24:43Z,develop,config|resetstat,server,form,base,3,CONFIG RESETSTAT,same,+,+,+OK,+OK,ok,ok,configResetStatCommand,config.c:3953
+38332001995,2026-10-13T01:24:43Z,develop,config|resetstat,server,extra argument,extra argument,2,CONFIG RESETSTAT BOGUS,same,-,-,-ERR wrong number of arguments for 'config|resetstat' command,-ERR wrong number of arguments for 'config|resetstat' command,,,configResetStatCommand,config.c:3953
+38332001995,2026-10-13T01:24:43Z,develop,config|resetstat,server,extra argument,extra argument,3,CONFIG RESETSTAT BOGUS,same,-,-,-ERR wrong number of arguments for 'config|resetstat' command,-ERR wrong number of arguments for 'config|resetstat' command,error,error,configResetStatCommand,config.c:3953
+38332001995,2026-10-13T01:24:43Z,develop,config|rewrite,server,form,base,2,CONFIG REWRITE,same,-,-,-ERR The server is running without a config file,-ERR The server is running without a config file,,,configRewriteCommand,config.c:3965
+38332001995,2026-10-13T01:24:43Z,develop,config|rewrite,server,form,base,3,CONFIG REWRITE,same,-,-,-ERR The server is running without a config file,-ERR The server is running without a config file,error,error,configRewriteCommand,config.c:3965
+38332001995,2026-10-13T01:24:43Z,develop,config|rewrite,server,extra argument,extra argument,2,CONFIG REWRITE BOGUS,same,-,-,-ERR wrong number of arguments for 'config|rewrite' command,-ERR wrong number of arguments for 'config|rewrite' command,,,configRewriteCommand,config.c:3965
+38332001995,2026-10-13T01:24:43Z,develop,config|rewrite,server,extra argument,extra argument,3,CONFIG REWRITE BOGUS,same,-,-,-ERR wrong number of arguments for 'config|rewrite' command,-ERR wrong number of arguments for 'config|rewrite' command,error,error,configRewriteCommand,config.c:3965
+38332001995,2026-10-13T01:24:43Z,develop,config|set,server,form,base,2,CONFIG SET maxmemory-samples 5,refused,-,+,-ERR CONFIG SET failed (possibly related to argument 'maxmemory-samples') - can't set immutable config,+OK,,,configSetCommand,config.c:830
+38332001995,2026-10-13T01:24:43Z,develop,config|set,server,form,base,3,CONFIG SET maxmemory-samples 5,refused,-,+,-ERR CONFIG SET failed (possibly related to argument 'maxmemory-samples') - can't set immutable config,+OK,error,ok,configSetCommand,config.c:830
+38332001995,2026-10-13T01:24:43Z,develop,config|set,server,form,data*2,2,CONFIG SET maxmemory-samples 5 lfu-log-factor 10,refused,-,+,-ERR CONFIG SET failed (possibly related to argument 'maxmemory-samples') - can't set immutable config,+OK,,,configSetCommand,config.c:830
+38332001995,2026-10-13T01:24:43Z,develop,config|set,server,form,data*2,3,CONFIG SET maxmemory-samples 5 lfu-log-factor 10,refused,-,+,-ERR CONFIG SET failed (possibly related to argument 'maxmemory-samples') - can't set immutable config,+OK,error,ok,configSetCommand,config.c:830
+38332001995,2026-10-13T01:24:43Z,develop,config|set,server,extra argument,extra argument,2,CONFIG SET maxmemory-samples 5 BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,,,configSetCommand,config.c:830
+38332001995,2026-10-13T01:24:43Z,develop,config|set,server,extra argument,extra argument,3,CONFIG SET maxmemory-samples 5 BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,error,error,configSetCommand,config.c:830
+38332001995,2026-10-13T01:24:43Z,develop,dbsize,server,form,base,2,DBSIZE,same,:,:,:24,:24,,,dbsizeCommand,db.c:2179
+38332001995,2026-10-13T01:24:43Z,develop,dbsize,server,form,base,3,DBSIZE,same,:,:,:24,:24,ok,ok,dbsizeCommand,db.c:2179
+38332001995,2026-10-13T01:24:43Z,develop,dbsize,server,extra argument,extra argument,2,DBSIZE BOGUS,same,-,-,-ERR wrong number of arguments for 'dbsize' command,-ERR wrong number of arguments for 'dbsize' command,,,dbsizeCommand,db.c:2179
+38332001995,2026-10-13T01:24:43Z,develop,dbsize,server,extra argument,extra argument,3,DBSIZE BOGUS,same,-,-,-ERR wrong number of arguments for 'dbsize' command,-ERR wrong number of arguments for 'dbsize' command,error,error,dbsizeCommand,db.c:2179
+38332001995,2026-10-13T01:24:43Z,develop,decr,string,form,base,2,DECR num,same,:,:,:9,:9,,,decrCommand,t_string.c:945
+38332001995,2026-10-13T01:24:43Z,develop,decr,string,form,base,3,DECR num,same,:,:,:9,:9,ok,ok,decrCommand,t_string.c:945
+38332001995,2026-10-13T01:24:43Z,develop,decr,string,missing key,missing key,2,DECR nokey,same,:,:,:-1,:-1,,,decrCommand,t_string.c:945
+38332001995,2026-10-13T01:24:43Z,develop,decr,string,missing key,missing key,3,DECR nokey,same,:,:,:-1,:-1,ok,ok,decrCommand,t_string.c:945
+38332001995,2026-10-13T01:24:43Z,develop,decr,string,wrong type,wrong type,2,DECR list,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,decrCommand,t_string.c:945
+38332001995,2026-10-13T01:24:43Z,develop,decr,string,wrong type,wrong type,3,DECR list,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,decrCommand,t_string.c:945
+38332001995,2026-10-13T01:24:43Z,develop,decr,string,extra argument,extra argument,2,DECR num BOGUS,same,-,-,-ERR wrong number of arguments for 'decr' command,-ERR wrong number of arguments for 'decr' command,,,decrCommand,t_string.c:945
+38332001995,2026-10-13T01:24:43Z,develop,decr,string,extra argument,extra argument,3,DECR num BOGUS,same,-,-,-ERR wrong number of arguments for 'decr' command,-ERR wrong number of arguments for 'decr' command,error,error,decrCommand,t_string.c:945
+38332001995,2026-10-13T01:24:43Z,develop,decrby,string,form,base,2,DECRBY num 1,same,:,:,:9,:9,,,decrbyCommand,t_string.c:956
+38332001995,2026-10-13T01:24:43Z,develop,decrby,string,form,base,3,DECRBY num 1,same,:,:,:9,:9,ok,ok,decrbyCommand,t_string.c:956
+38332001995,2026-10-13T01:24:43Z,develop,decrby,string,missing key,missing key,2,DECRBY nokey 1,same,:,:,:-1,:-1,,,decrbyCommand,t_string.c:956
+38332001995,2026-10-13T01:24:43Z,develop,decrby,string,missing key,missing key,3,DECRBY nokey 1,same,:,:,:-1,:-1,ok,ok,decrbyCommand,t_string.c:956
+38332001995,2026-10-13T01:24:43Z,develop,decrby,string,wrong type,wrong type,2,DECRBY list 1,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,decrbyCommand,t_string.c:956
+38332001995,2026-10-13T01:24:43Z,develop,decrby,string,wrong type,wrong type,3,DECRBY list 1,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,decrbyCommand,t_string.c:956
+38332001995,2026-10-13T01:24:43Z,develop,decrby,string,extra argument,extra argument,2,DECRBY num 1 BOGUS,same,-,-,-ERR wrong number of arguments for 'decrby' command,-ERR wrong number of arguments for 'decrby' command,,,decrbyCommand,t_string.c:956
+38332001995,2026-10-13T01:24:43Z,develop,decrby,string,extra argument,extra argument,3,DECRBY num 1 BOGUS,same,-,-,-ERR wrong number of arguments for 'decrby' command,-ERR wrong number of arguments for 'decrby' command,error,error,decrbyCommand,t_string.c:956
+38332001995,2026-10-13T01:24:43Z,develop,del,generic,form,base,2,DEL str,same,:,:,:1,:1,,,delCommand,db.c:1456
+38332001995,2026-10-13T01:24:43Z,develop,del,generic,form,base,3,DEL str,same,:,:,:1,:1,ok,ok,delCommand,db.c:1456
+38332001995,2026-10-13T01:24:43Z,develop,del,generic,form,key*2,2,DEL str str2,same,:,:,:2,:2,,,delCommand,db.c:1456
+38332001995,2026-10-13T01:24:43Z,develop,del,generic,form,key*2,3,DEL str str2,same,:,:,:2,:2,ok,ok,delCommand,db.c:1456
+38332001995,2026-10-13T01:24:43Z,develop,del,generic,missing key,missing key,2,DEL nokey,same,:,:,:0,:0,,,delCommand,db.c:1456
+38332001995,2026-10-13T01:24:43Z,develop,del,generic,missing key,missing key,3,DEL nokey,same,:,:,:0,:0,ok,ok,delCommand,db.c:1456
+38332001995,2026-10-13T01:24:43Z,develop,del,generic,wrong type,wrong type,2,DEL list,same,:,:,:1,:1,,,delCommand,db.c:1456
+38332001995,2026-10-13T01:24:43Z,develop,del,generic,wrong type,wrong type,3,DEL list,same,:,:,:1,:1,ok,ok,delCommand,db.c:1456
+38332001995,2026-10-13T01:24:43Z,develop,del,generic,extra argument,extra argument,2,DEL str BOGUS,same,:,:,:1,:1,,,delCommand,db.c:1456
+38332001995,2026-10-13T01:24:43Z,develop,del,generic,extra argument,extra argument,3,DEL str BOGUS,same,:,:,:1,:1,ok,ok,delCommand,db.c:1456
+38332001995,2026-10-13T01:24:43Z,develop,discard,transactions,form,base,2,DISCARD,same,+,+,+OK,+OK,,,discardCommand,multi.c:101
+38332001995,2026-10-13T01:24:43Z,develop,discard,transactions,form,base,3,DISCARD,same,+,+,+OK,+OK,ok,ok,discardCommand,multi.c:101
+38332001995,2026-10-13T01:24:43Z,develop,discard,transactions,extra argument,extra argument,2,DISCARD BOGUS,same,-,-,-ERR wrong number of arguments for 'discard' command,-ERR wrong number of arguments for 'discard' command,,,discardCommand,multi.c:101
+38332001995,2026-10-13T01:24:43Z,develop,discard,transactions,extra argument,extra argument,3,DISCARD BOGUS,same,-,-,-ERR wrong number of arguments for 'discard' command,-ERR wrong number of arguments for 'discard' command,error,error,discardCommand,multi.c:101
+38332001995,2026-10-13T01:24:43Z,develop,echo,connection,form,base,2,ECHO hi,same,$,$,$hi,$hi,,,echoCommand,server.c:5305
+38332001995,2026-10-13T01:24:43Z,develop,echo,connection,form,base,3,ECHO hi,same,$,$,$hi,$hi,ok,ok,echoCommand,server.c:5305
+38332001995,2026-10-13T01:24:43Z,develop,echo,connection,extra argument,extra argument,2,ECHO hi BOGUS,same,-,-,-ERR wrong number of arguments for 'echo' command,-ERR wrong number of arguments for 'echo' command,,,echoCommand,server.c:5305
+38332001995,2026-10-13T01:24:43Z,develop,echo,connection,extra argument,extra argument,3,ECHO hi BOGUS,same,-,-,-ERR wrong number of arguments for 'echo' command,-ERR wrong number of arguments for 'echo' command,error,error,echoCommand,server.c:5305
+38332001995,2026-10-13T01:24:43Z,develop,exec,transactions,form,base,2,EXEC,same,*[+],*[+],*[+PONG],*[+PONG],,,execCommand,multi.c:127
+38332001995,2026-10-13T01:24:43Z,develop,exec,transactions,form,base,3,EXEC,same,*[+],*[+],*[+PONG],*[+PONG],ok,ok,execCommand,multi.c:127
+38332001995,2026-10-13T01:24:43Z,develop,exec,transactions,extra argument,extra argument,2,EXEC BOGUS,same,-,-,-EXECABORT Transaction discarded because of: wrong number of arguments for 'exec' command,-EXECABORT Transaction discarded because of: wrong number of arguments for 'exec' command,,,execCommand,multi.c:127
+38332001995,2026-10-13T01:24:43Z,develop,exec,transactions,extra argument,extra argument,3,EXEC BOGUS,same,-,-,-EXECABORT Transaction discarded because of: wrong number of arguments for 'exec' command,-EXECABORT Transaction discarded because of: wrong number of arguments for 'exec' command,error,error,execCommand,multi.c:127
+38332001995,2026-10-13T01:24:43Z,develop,exists,generic,form,base,2,EXISTS str,same,:,:,:1,:1,,,existsCommand,db.c:1561
+38332001995,2026-10-13T01:24:43Z,develop,exists,generic,form,base,3,EXISTS str,same,:,:,:1,:1,ok,ok,existsCommand,db.c:1561
+38332001995,2026-10-13T01:24:43Z,develop,exists,generic,form,key*2,2,EXISTS str str2,same,:,:,:2,:2,,,existsCommand,db.c:1561
+38332001995,2026-10-13T01:24:43Z,develop,exists,generic,form,key*2,3,EXISTS str str2,same,:,:,:2,:2,ok,ok,existsCommand,db.c:1561
+38332001995,2026-10-13T01:24:43Z,develop,exists,generic,missing key,missing key,2,EXISTS nokey,same,:,:,:0,:0,,,existsCommand,db.c:1561
+38332001995,2026-10-13T01:24:43Z,develop,exists,generic,missing key,missing key,3,EXISTS nokey,same,:,:,:0,:0,ok,ok,existsCommand,db.c:1561
+38332001995,2026-10-13T01:24:43Z,develop,exists,generic,wrong type,wrong type,2,EXISTS list,same,:,:,:1,:1,,,existsCommand,db.c:1561
+38332001995,2026-10-13T01:24:43Z,develop,exists,generic,wrong type,wrong type,3,EXISTS list,same,:,:,:1,:1,ok,ok,existsCommand,db.c:1561
+38332001995,2026-10-13T01:24:43Z,develop,exists,generic,extra argument,extra argument,2,EXISTS str BOGUS,same,:,:,:1,:1,,,existsCommand,db.c:1561
+38332001995,2026-10-13T01:24:43Z,develop,exists,generic,extra argument,extra argument,3,EXISTS str BOGUS,same,:,:,:1,:1,ok,ok,existsCommand,db.c:1561
+38332001995,2026-10-13T01:24:43Z,develop,expire,generic,form,base,2,EXPIRE str 100,same,:,:,:1,:1,,,expireCommand,expire.c:846
+38332001995,2026-10-13T01:24:43Z,develop,expire,generic,form,base,3,EXPIRE str 100,same,:,:,:1,:1,ok,ok,expireCommand,expire.c:846
+38332001995,2026-10-13T01:24:43Z,develop,expire,generic,form,NX,2,EXPIRE str 100 NX,same,:,:,:1,:1,,,expireCommand,expire.c:846
+38332001995,2026-10-13T01:24:43Z,develop,expire,generic,form,NX,3,EXPIRE str 100 NX,same,:,:,:1,:1,ok,ok,expireCommand,expire.c:846
+38332001995,2026-10-13T01:24:43Z,develop,expire,generic,form,XX,2,EXPIRE str 100 XX,same,:,:,:0,:0,,,expireCommand,expire.c:846
+38332001995,2026-10-13T01:24:43Z,develop,expire,generic,form,XX,3,EXPIRE str 100 XX,same,:,:,:0,:0,ok,ok,expireCommand,expire.c:846
+38332001995,2026-10-13T01:24:43Z,develop,expire,generic,form,GT,2,EXPIRE str 100 GT,same,:,:,:0,:0,,,expireCommand,expire.c:846
+38332001995,2026-10-13T01:24:43Z,develop,expire,generic,form,GT,3,EXPIRE str 100 GT,same,:,:,:0,:0,ok,ok,expireCommand,expire.c:846
+38332001995,2026-10-13T01:24:43Z,develop,expire,generic,form,LT,2,EXPIRE str 100 LT,same,:,:,:1,:1,,,expireCommand,expire.c:846
+38332001995,2026-10-13T01:24:43Z,develop,expire,generic,form,LT,3,EXPIRE str 100 LT,same,:,:,:1,:1,ok,ok,expireCommand,expire.c:846
+38332001995,2026-10-13T01:24:43Z,develop,expire,generic,missing key,missing key,2,EXPIRE nokey 100,same,:,:,:0,:0,,,expireCommand,expire.c:846
+38332001995,2026-10-13T01:24:43Z,develop,expire,generic,missing key,missing key,3,EXPIRE nokey 100,same,:,:,:0,:0,ok,ok,expireCommand,expire.c:846
+38332001995,2026-10-13T01:24:43Z,develop,expire,generic,wrong type,wrong type,2,EXPIRE list 100,same,:,:,:1,:1,,,expireCommand,expire.c:846
+38332001995,2026-10-13T01:24:43Z,develop,expire,generic,wrong type,wrong type,3,EXPIRE list 100,same,:,:,:1,:1,ok,ok,expireCommand,expire.c:846
+38332001995,2026-10-13T01:24:43Z,develop,expire,generic,extra argument,extra argument,2,EXPIRE str 100 BOGUS,same,-,-,-ERR Unsupported option BOGUS,-ERR Unsupported option BOGUS,,,expireCommand,expire.c:846
+38332001995,2026-10-13T01:24:43Z,develop,expire,generic,extra argument,extra argument,3,EXPIRE str 100 BOGUS,same,-,-,-ERR Unsupported option BOGUS,-ERR Unsupported option BOGUS,error,error,expireCommand,expire.c:846
+38332001995,2026-10-13T01:24:43Z,develop,expireat,generic,form,base,2,EXPIREAT str 4102444800,same,:,:,:1,:1,,,expireatCommand,expire.c:851
+38332001995,2026-10-13T01:24:43Z,develop,expireat,generic,form,base,3,EXPIREAT str 4102444800,same,:,:,:1,:1,ok,ok,expireatCommand,expire.c:851
+38332001995,2026-10-13T01:24:43Z,develop,expireat,generic,form,NX,2,EXPIREAT str 4102444800 NX,same,:,:,:1,:1,,,expireatCommand,expire.c:851
+38332001995,2026-10-13T01:24:43Z,develop,expireat,generic,form,NX,3,EXPIREAT str 4102444800 NX,same,:,:,:1,:1,ok,ok,expireatCommand,expire.c:851
+38332001995,2026-10-13T01:24:43Z,develop,expireat,generic,form,XX,2,EXPIREAT str 4102444800 XX,same,:,:,:0,:0,,,expireatCommand,expire.c:851
+38332001995,2026-10-13T01:24:43Z,develop,expireat,generic,form,XX,3,EXPIREAT str 4102444800 XX,same,:,:,:0,:0,ok,ok,expireatCommand,expire.c:851
+38332001995,2026-10-13T01:24:43Z,develop,expireat,generic,form,GT,2,EXPIREAT str 4102444800 GT,same,:,:,:0,:0,,,expireatCommand,expire.c:851
+38332001995,2026-10-13T01:24:43Z,develop,expireat,generic,form,GT,3,EXPIREAT str 4102444800 GT,same,:,:,:0,:0,ok,ok,expireatCommand,expire.c:851
+38332001995,2026-10-13T01:24:43Z,develop,expireat,generic,form,LT,2,EXPIREAT str 4102444800 LT,same,:,:,:1,:1,,,expireatCommand,expire.c:851
+38332001995,2026-10-13T01:24:43Z,develop,expireat,generic,form,LT,3,EXPIREAT str 4102444800 LT,same,:,:,:1,:1,ok,ok,expireatCommand,expire.c:851
+38332001995,2026-10-13T01:24:43Z,develop,expireat,generic,missing key,missing key,2,EXPIREAT nokey 4102444800,same,:,:,:0,:0,,,expireatCommand,expire.c:851
+38332001995,2026-10-13T01:24:43Z,develop,expireat,generic,missing key,missing key,3,EXPIREAT nokey 4102444800,same,:,:,:0,:0,ok,ok,expireatCommand,expire.c:851
+38332001995,2026-10-13T01:24:43Z,develop,expireat,generic,wrong type,wrong type,2,EXPIREAT list 4102444800,same,:,:,:1,:1,,,expireatCommand,expire.c:851
+38332001995,2026-10-13T01:24:43Z,develop,expireat,generic,wrong type,wrong type,3,EXPIREAT list 4102444800,same,:,:,:1,:1,ok,ok,expireatCommand,expire.c:851
+38332001995,2026-10-13T01:24:43Z,develop,expireat,generic,extra argument,extra argument,2,EXPIREAT str 4102444800 BOGUS,same,-,-,-ERR Unsupported option BOGUS,-ERR Unsupported option BOGUS,,,expireatCommand,expire.c:851
+38332001995,2026-10-13T01:24:43Z,develop,expireat,generic,extra argument,extra argument,3,EXPIREAT str 4102444800 BOGUS,same,-,-,-ERR Unsupported option BOGUS,-ERR Unsupported option BOGUS,error,error,expireatCommand,expire.c:851
+38332001995,2026-10-13T01:24:43Z,develop,flushdb,server,form,base,2,FLUSHDB,same,+,+,+OK,+OK,,,flushdbCommand,db.c:1426
+38332001995,2026-10-13T01:24:43Z,develop,flushdb,server,form,base,3,FLUSHDB,same,+,+,+OK,+OK,ok,ok,flushdbCommand,db.c:1426
+38332001995,2026-10-13T01:24:43Z,develop,flushdb,server,form,ASYNC,2,FLUSHDB ASYNC,same,+,+,+OK,+OK,,,flushdbCommand,db.c:1426
+38332001995,2026-10-13T01:24:43Z,develop,flushdb,server,form,ASYNC,3,FLUSHDB ASYNC,same,+,+,+OK,+OK,ok,ok,flushdbCommand,db.c:1426
+38332001995,2026-10-13T01:24:43Z,develop,flushdb,server,form,SYNC,2,FLUSHDB SYNC,same,+,+,+OK,+OK,,,flushdbCommand,db.c:1426
+38332001995,2026-10-13T01:24:43Z,develop,flushdb,server,form,SYNC,3,FLUSHDB SYNC,same,+,+,+OK,+OK,ok,ok,flushdbCommand,db.c:1426
+38332001995,2026-10-13T01:24:43Z,develop,flushdb,server,extra argument,extra argument,2,FLUSHDB BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,,,flushdbCommand,db.c:1426
+38332001995,2026-10-13T01:24:43Z,develop,flushdb,server,extra argument,extra argument,3,FLUSHDB BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,error,error,flushdbCommand,db.c:1426
+38332001995,2026-10-13T01:24:43Z,develop,geoadd,geo,form,base,2,GEOADD geo 13.361389 38.115556 Palermo,same,:,:,:0,:0,,,geoaddCommand,geo.c:446
+38332001995,2026-10-13T01:24:43Z,develop,geoadd,geo,form,base,3,GEOADD geo 13.361389 38.115556 Palermo,same,:,:,:0,:0,ok,ok,geoaddCommand,geo.c:446
+38332001995,2026-10-13T01:24:43Z,develop,geoadd,geo,form,NX,2,GEOADD geo NX 13.361389 38.115556 Palermo,same,:,:,:0,:0,,,geoaddCommand,geo.c:446
+38332001995,2026-10-13T01:24:43Z,develop,geoadd,geo,form,NX,3,GEOADD geo NX 13.361389 38.115556 Palermo,same,:,:,:0,:0,ok,ok,geoaddCommand,geo.c:446
+38332001995,2026-10-13T01:24:43Z,develop,geoadd,geo,form,XX,2,GEOADD geo XX 13.361389 38.115556 Palermo,same,:,:,:0,:0,,,geoaddCommand,geo.c:446
+38332001995,2026-10-13T01:24:43Z,develop,geoadd,geo,form,XX,3,GEOADD geo XX 13.361389 38.115556 Palermo,same,:,:,:0,:0,ok,ok,geoaddCommand,geo.c:446
+38332001995,2026-10-13T01:24:43Z,develop,geoadd,geo,form,CH,2,GEOADD geo CH 13.361389 38.115556 Palermo,same,:,:,:0,:0,,,geoaddCommand,geo.c:446
+38332001995,2026-10-13T01:24:43Z,develop,geoadd,geo,form,CH,3,GEOADD geo CH 13.361389 38.115556 Palermo,same,:,:,:0,:0,ok,ok,geoaddCommand,geo.c:446
+38332001995,2026-10-13T01:24:43Z,develop,geoadd,geo,form,data*2,2,GEOADD geo 13.361389 38.115556 Palermo 15.087269 37.502669 Catania,same,:,:,:0,:0,,,geoaddCommand,geo.c:446
+38332001995,2026-10-13T01:24:43Z,develop,geoadd,geo,form,data*2,3,GEOADD geo 13.361389 38.115556 Palermo 15.087269 37.502669 Catania,same,:,:,:0,:0,ok,ok,geoaddCommand,geo.c:446
+38332001995,2026-10-13T01:24:43Z,develop,geoadd,geo,missing key,missing key,2,GEOADD nokey 13.361389 38.115556 Palermo,same,:,:,:1,:1,,,geoaddCommand,geo.c:446
+38332001995,2026-10-13T01:24:43Z,develop,geoadd,geo,missing key,missing key,3,GEOADD nokey 13.361389 38.115556 Palermo,same,:,:,:1,:1,ok,ok,geoaddCommand,geo.c:446
+38332001995,2026-10-13T01:24:43Z,develop,geoadd,geo,wrong type,wrong type,2,GEOADD str 13.361389 38.115556 Palermo,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,geoaddCommand,geo.c:446
+38332001995,2026-10-13T01:24:43Z,develop,geoadd,geo,wrong type,wrong type,3,GEOADD str 13.361389 38.115556 Palermo,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,geoaddCommand,geo.c:446
+38332001995,2026-10-13T01:24:43Z,develop,geoadd,geo,extra argument,extra argument,2,GEOADD geo 13.361389 38.115556 Palermo BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,,,geoaddCommand,geo.c:446
+38332001995,2026-10-13T01:24:43Z,develop,geoadd,geo,extra argument,extra argument,3,GEOADD geo 13.361389 38.115556 Palermo BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,error,error,geoaddCommand,geo.c:446
+38332001995,2026-10-13T01:24:43Z,develop,geodist,geo,form,base,2,GEODIST geo Palermo Catania,same,$,$,$166274.1516,$166274.1516,,,geodistCommand,geo.c:974
+38332001995,2026-10-13T01:24:43Z,develop,geodist,geo,form,base,3,GEODIST geo Palermo Catania,same,$,$,$166274.1516,$166274.1516,ok,ok,geodistCommand,geo.c:974
+38332001995,2026-10-13T01:24:43Z,develop,geodist,geo,form,m,2,GEODIST geo Palermo Catania m,same,$,$,$166274.1516,$166274.1516,,,geodistCommand,geo.c:974
+38332001995,2026-10-13T01:24:43Z,develop,geodist,geo,form,m,3,GEODIST geo Palermo Catania m,same,$,$,$166274.1516,$166274.1516,ok,ok,geodistCommand,geo.c:974
+38332001995,2026-10-13T01:24:43Z,develop,geodist,geo,form,km,2,GEODIST geo Palermo Catania km,same,$,$,$166.2742,$166.2742,,,geodistCommand,geo.c:974
+38332001995,2026-10-13T01:24:43Z,develop,geodist,geo,form,km,3,GEODIST geo Palermo Catania km,same,$,$,$166.2742,$166.2742,ok,ok,geodistCommand,geo.c:974
+38332001995,2026-10-13T01:24:43Z,develop,geodist,geo,form,ft,2,GEODIST geo Palermo Catania ft,same,$,$,$545518.8700,$545518.8700,,,geodistCommand,geo.c:974
+38332001995,2026-10-13T01:24:43Z,develop,geodist,geo,form,ft,3,GEODIST geo Palermo Catania ft,same,$,$,$545518.8700,$545518.8700,ok,ok,geodistCommand,geo.c:974
+38332001995,2026-10-13T01:24:43Z,develop,geodist,geo,form,mi,2,GEODIST geo Palermo Catania mi,same,$,$,$103.3182,$103.3182,,,geodistCommand,geo.c:974
+38332001995,2026-10-13T01:24:43Z,develop,geodist,geo,form,mi,3,GEODIST geo Palermo Catania mi,same,$,$,$103.3182,$103.3182,ok,ok,geodistCommand,geo.c:974
+38332001995,2026-10-13T01:24:43Z,develop,geodist,geo,missing key,missing key,2,GEODIST nokey Palermo Catania,same,$-1,$-1,$-1,$-1,,,geodistCommand,geo.c:974
+38332001995,2026-10-13T01:24:43Z,develop,geodist,geo,missing key,missing key,3,GEODIST nokey Palermo Catania,same,_,_,_,_,ok,ok,geodistCommand,geo.c:974
+38332001995,2026-10-13T01:24:43Z,develop,geodist,geo,wrong type,wrong type,2,GEODIST str Palermo Catania,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,geodistCommand,geo.c:974
+38332001995,2026-10-13T01:24:43Z,develop,geodist,geo,wrong type,wrong type,3,GEODIST str Palermo Catania,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,geodistCommand,geo.c:974
+38332001995,2026-10-13T01:24:43Z,develop,geodist,geo,extra argument,extra argument,2,GEODIST geo Palermo Catania BOGUS,same,-,-,"-ERR unsupported unit provided. please use M, KM, FT, MI","-ERR unsupported unit provided. please use M, KM, FT, MI",,,geodistCommand,geo.c:974
+38332001995,2026-10-13T01:24:43Z,develop,geodist,geo,extra argument,extra argument,3,GEODIST geo Palermo Catania BOGUS,same,-,-,"-ERR unsupported unit provided. please use M, KM, FT, MI","-ERR unsupported unit provided. please use M, KM, FT, MI",error,error,geodistCommand,geo.c:974
+38332001995,2026-10-13T01:24:43Z,develop,geohash,geo,form,base,2,GEOHASH geo,same,*[],*[],*[],*[],,,geohashCommand,geo.c:879
+38332001995,2026-10-13T01:24:43Z,develop,geohash,geo,form,base,3,GEOHASH geo,same,*[],*[],*[],*[],ok,ok,geohashCommand,geo.c:879
+38332001995,2026-10-13T01:24:43Z,develop,geohash,geo,form,member,2,GEOHASH geo Palermo,same,*[$],*[$],*[$sqc8b49rny0],*[$sqc8b49rny0],,,geohashCommand,geo.c:879
+38332001995,2026-10-13T01:24:43Z,develop,geohash,geo,form,member,3,GEOHASH geo Palermo,same,*[$],*[$],*[$sqc8b49rny0],*[$sqc8b49rny0],ok,ok,geohashCommand,geo.c:879
+38332001995,2026-10-13T01:24:43Z,develop,geohash,geo,form,member member*2,2,GEOHASH geo Palermo Catania,same,*[$ $],*[$ $],*[$sqc8b49rny0 $sqdtr74hyu0],*[$sqc8b49rny0 $sqdtr74hyu0],,,geohashCommand,geo.c:879
+38332001995,2026-10-13T01:24:43Z,develop,geohash,geo,form,member member*2,3,GEOHASH geo Palermo Catania,same,*[$ $],*[$ $],*[$sqc8b49rny0 $sqdtr74hyu0],*[$sqc8b49rny0 $sqdtr74hyu0],ok,ok,geohashCommand,geo.c:879
+38332001995,2026-10-13T01:24:43Z,develop,geohash,geo,missing key,missing key,2,GEOHASH nokey,same,*[],*[],*[],*[],,,geohashCommand,geo.c:879
+38332001995,2026-10-13T01:24:43Z,develop,geohash,geo,missing key,missing key,3,GEOHASH nokey,same,*[],*[],*[],*[],ok,ok,geohashCommand,geo.c:879
+38332001995,2026-10-13T01:24:43Z,develop,geohash,geo,wrong type,wrong type,2,GEOHASH str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,geohashCommand,geo.c:879
+38332001995,2026-10-13T01:24:43Z,develop,geohash,geo,wrong type,wrong type,3,GEOHASH str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,geohashCommand,geo.c:879
+38332001995,2026-10-13T01:24:43Z,develop,geohash,geo,extra argument,extra argument,2,GEOHASH geo BOGUS,same,*[$-1],*[$-1],*[$-1],*[$-1],,,geohashCommand,geo.c:879
+38332001995,2026-10-13T01:24:43Z,develop,geohash,geo,extra argument,extra argument,3,GEOHASH geo BOGUS,same,*[_],*[_],*[_],*[_],violation: /0: null is not string,violation: /0: null is not string,geohashCommand,geo.c:879
+38332001995,2026-10-13T01:24:43Z,develop,geopos,geo,form,base,2,GEOPOS geo,same,*[],*[],*[],*[],,,geoposCommand,geo.c:941
+38332001995,2026-10-13T01:24:43Z,develop,geopos,geo,form,base,3,GEOPOS geo,same,*[],*[],*[],*[],ok,ok,geoposCommand,geo.c:941
+38332001995,2026-10-13T01:24:43Z,develop,geopos,geo,form,member,2,GEOPOS geo Palermo,same,*[*[$ $]],*[*[$ $]],*[*[$13.361389338970184 $38.1155563954963]],*[*[$13.361389338970184 $38.1155563954963]],,,geoposCommand,geo.c:941
+38332001995,2026-10-13T01:24:43Z,develop,geopos,geo,form,member,3,GEOPOS geo Palermo,same,"*[*[, ,]]","*[*[, ,]]","*[*[,13.361389338970184 ,38.1155563954963]]","*[*[,13.361389338970184 ,38.1155563954963]]",ok,ok,geoposCommand,geo.c:941
+38332001995,2026-10-13T01:24:43Z,develop,geopos,geo,form,member member*2,2,GEOPOS geo Palermo Catania,same,*[*[$ $] *[$ $]],*[*[$ $] *[$ $]],*[*[$13.361389338970184 $38.1155563954963] *[$15.087267458438873 $37.50266842333162]],*[*[$13.361389338970184 $38.1155563954963] *[$15.087267458438873 $37.50266842333162]],,,geoposCommand,geo.c:941
+38332001995,2026-10-13T01:24:43Z,develop,geopos,geo,form,member member*2,3,GEOPOS geo Palermo Catania,same,"*[*[, ,] *[, ,]]","*[*[, ,] *[, ,]]","*[*[,13.361389338970184 ,38.1155563954963] *[,15.087267458438873 ,37.50266842333162]]","*[*[,13.361389338970184 ,38.1155563954963] *[,15.087267458438873 ,37.50266842333162]]",ok,ok,geoposCommand,geo.c:941
+38332001995,2026-10-13T01:24:43Z,develop,geopos,geo,missing key,missing key,2,GEOPOS nokey,same,*[],*[],*[],*[],,,geoposCommand,geo.c:941
+38332001995,2026-10-13T01:24:43Z,develop,geopos,geo,missing key,missing key,3,GEOPOS nokey,same,*[],*[],*[],*[],ok,ok,geoposCommand,geo.c:941
+38332001995,2026-10-13T01:24:43Z,develop,geopos,geo,wrong type,wrong type,2,GEOPOS str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,geoposCommand,geo.c:941
+38332001995,2026-10-13T01:24:43Z,develop,geopos,geo,wrong type,wrong type,3,GEOPOS str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,geoposCommand,geo.c:941
+38332001995,2026-10-13T01:24:43Z,develop,geopos,geo,extra argument,extra argument,2,GEOPOS geo BOGUS,same,*[*-1],*[*-1],*[*-1],*[*-1],,,geoposCommand,geo.c:941
+38332001995,2026-10-13T01:24:43Z,develop,geopos,geo,extra argument,extra argument,3,GEOPOS geo BOGUS,same,*[_],*[_],*[_],*[_],ok,ok,geoposCommand,geo.c:941
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,base,2,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m,same,*[$ $],*[$ $],*[$Palermo $Catania],*[$Palermo $Catania],,,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,base,3,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m,same,*[$ $],*[$ $],*[$Palermo $Catania],*[$Palermo $Catania],ok,ok,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,FROMLONLAT,2,GEOSEARCH geo FROMLONLAT 13.361389 38.115556 BYRADIUS 200000 m,same,*[$ $],*[$ $],*[$Palermo $Catania],*[$Palermo $Catania],,,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,FROMLONLAT,3,GEOSEARCH geo FROMLONLAT 13.361389 38.115556 BYRADIUS 200000 m,same,*[$ $],*[$ $],*[$Palermo $Catania],*[$Palermo $Catania],ok,ok,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,BYRADIUS km,2,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 km,same,*[$ $],*[$ $],*[$Palermo $Catania],*[$Palermo $Catania],,,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,BYRADIUS km,3,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 km,same,*[$ $],*[$ $],*[$Palermo $Catania],*[$Palermo $Catania],ok,ok,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,BYRADIUS ft,2,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 ft,same,*[$],*[$],*[$Palermo],*[$Palermo],,,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,BYRADIUS ft,3,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 ft,same,*[$],*[$],*[$Palermo],*[$Palermo],ok,ok,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,BYRADIUS mi,2,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 mi,same,*[$ $],*[$ $],*[$Palermo $Catania],*[$Palermo $Catania],,,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,BYRADIUS mi,3,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 mi,same,*[$ $],*[$ $],*[$Palermo $Catania],*[$Palermo $Catania],ok,ok,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,BYBOX,2,GEOSEARCH geo FROMMEMBER Palermo BYBOX 400000 400000 m,same,*[$ $],*[$ $],*[$Palermo $Catania],*[$Palermo $Catania],,,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,BYBOX,3,GEOSEARCH geo FROMMEMBER Palermo BYBOX 400000 400000 m,same,*[$ $],*[$ $],*[$Palermo $Catania],*[$Palermo $Catania],ok,ok,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,BYBOX km,2,GEOSEARCH geo FROMMEMBER Palermo BYBOX 400000 400000 km,same,*[$ $],*[$ $],*[$Palermo $Catania],*[$Palermo $Catania],,,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,BYBOX km,3,GEOSEARCH geo FROMMEMBER Palermo BYBOX 400000 400000 km,same,*[$ $],*[$ $],*[$Palermo $Catania],*[$Palermo $Catania],ok,ok,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,BYBOX ft,2,GEOSEARCH geo FROMMEMBER Palermo BYBOX 400000 400000 ft,same,*[$],*[$],*[$Palermo],*[$Palermo],,,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,BYBOX ft,3,GEOSEARCH geo FROMMEMBER Palermo BYBOX 400000 400000 ft,same,*[$],*[$],*[$Palermo],*[$Palermo],ok,ok,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,BYBOX mi,2,GEOSEARCH geo FROMMEMBER Palermo BYBOX 400000 400000 mi,same,*[$ $],*[$ $],*[$Palermo $Catania],*[$Palermo $Catania],,,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,BYBOX mi,3,GEOSEARCH geo FROMMEMBER Palermo BYBOX 400000 400000 mi,same,*[$ $],*[$ $],*[$Palermo $Catania],*[$Palermo $Catania],ok,ok,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,ASC,2,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m ASC,same,*[$ $],*[$ $],*[$Palermo $Catania],*[$Palermo $Catania],,,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,ASC,3,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m ASC,same,*[$ $],*[$ $],*[$Palermo $Catania],*[$Palermo $Catania],ok,ok,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,DESC,2,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m DESC,same,*[$ $],*[$ $],*[$Catania $Palermo],*[$Catania $Palermo],,,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,DESC,3,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m DESC,same,*[$ $],*[$ $],*[$Catania $Palermo],*[$Catania $Palermo],ok,ok,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,COUNT,2,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m COUNT 1,same,*[$],*[$],*[$Palermo],*[$Palermo],,,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,COUNT,3,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m COUNT 1,same,*[$],*[$],*[$Palermo],*[$Palermo],ok,ok,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,COUNT ANY,2,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m COUNT 1 ANY,same,*[$],*[$],*[$Palermo],*[$Palermo],,,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,COUNT ANY,3,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m COUNT 1 ANY,same,*[$],*[$],*[$Palermo],*[$Palermo],ok,ok,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,WITHCOORD,2,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m WITHCOORD,same,*[*[$ *[$ $]] *[$ *[$ $]]],*[*[$ *[$ $]] *[$ *[$ $]]],*[*[$Palermo *[$13.361389338970184 $38.1155563954963]] *[$Catania *[$15.087267458438873 $37.50266842333162]]],*[*[$Palermo *[$13.361389338970184 $38.1155563954963]] *[$Catania *[$15.087267458438873 $37.50266842333162]]],,,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,WITHCOORD,3,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m WITHCOORD,same,"*[*[$ *[, ,]] *[$ *[, ,]]]","*[*[$ *[, ,]] *[$ *[, ,]]]","*[*[$Palermo *[,13.361389338970184 ,38.1155563954963]] *[$Catania *[,15.087267458438873 ,37.50266842333162]]]","*[*[$Palermo *[,13.361389338970184 ,38.1155563954963]] *[$Catania *[,15.087267458438873 ,37.50266842333162]]]",ok,ok,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,WITHDIST,2,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m WITHDIST,same,*[*[$ $] *[$ $]],*[*[$ $] *[$ $]],*[*[$Palermo $0.0000] *[$Catania $166274.1516]],*[*[$Palermo $0.0000] *[$Catania $166274.1516]],,,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,WITHDIST,3,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m WITHDIST,same,*[*[$ $] *[$ $]],*[*[$ $] *[$ $]],*[*[$Palermo $0.0000] *[$Catania $166274.1516]],*[*[$Palermo $0.0000] *[$Catania $166274.1516]],ok,ok,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,WITHHASH,2,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m WITHHASH,same,*[*[$ :] *[$ :]],*[*[$ :] *[$ :]],*[*[$Palermo :3479099956230698] *[$Catania :3479447370796909]],*[*[$Palermo :3479099956230698] *[$Catania :3479447370796909]],,,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,form,WITHHASH,3,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m WITHHASH,same,*[*[$ :] *[$ :]],*[*[$ :] *[$ :]],*[*[$Palermo :3479099956230698] *[$Catania :3479447370796909]],*[*[$Palermo :3479099956230698] *[$Catania :3479447370796909]],ok,ok,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,missing key,missing key,2,GEOSEARCH nokey FROMMEMBER Palermo BYRADIUS 200000 m,same,*[],*[],*[],*[],,,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,missing key,missing key,3,GEOSEARCH nokey FROMMEMBER Palermo BYRADIUS 200000 m,same,*[],*[],*[],*[],ok,ok,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,wrong type,wrong type,2,GEOSEARCH str FROMMEMBER Palermo BYRADIUS 200000 m,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,wrong type,wrong type,3,GEOSEARCH str FROMMEMBER Palermo BYRADIUS 200000 m,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,extra argument,extra argument,2,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,,,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,geosearch,geo,extra argument,extra argument,3,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,error,error,geosearchCommand,geo.c:867
+38332001995,2026-10-13T01:24:43Z,develop,get,string,form,base,2,GET str,same,$,$,$abc,$abc,,,getCommand,t_string.c:475
+38332001995,2026-10-13T01:24:43Z,develop,get,string,form,base,3,GET str,same,$,$,$abc,$abc,ok,ok,getCommand,t_string.c:475
+38332001995,2026-10-13T01:24:43Z,develop,get,string,missing key,missing key,2,GET nokey,same,$-1,$-1,$-1,$-1,,,getCommand,t_string.c:475
+38332001995,2026-10-13T01:24:43Z,develop,get,string,missing key,missing key,3,GET nokey,same,_,_,_,_,ok,ok,getCommand,t_string.c:475
+38332001995,2026-10-13T01:24:43Z,develop,get,string,wrong type,wrong type,2,GET list,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,getCommand,t_string.c:475
+38332001995,2026-10-13T01:24:43Z,develop,get,string,wrong type,wrong type,3,GET list,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,getCommand,t_string.c:475
+38332001995,2026-10-13T01:24:43Z,develop,get,string,extra argument,extra argument,2,GET str BOGUS,same,-,-,-ERR wrong number of arguments for 'get' command,-ERR wrong number of arguments for 'get' command,,,getCommand,t_string.c:475
+38332001995,2026-10-13T01:24:43Z,develop,get,string,extra argument,extra argument,3,GET str BOGUS,same,-,-,-ERR wrong number of arguments for 'get' command,-ERR wrong number of arguments for 'get' command,error,error,getCommand,t_string.c:475
+38332001995,2026-10-13T01:24:43Z,develop,hdel,hash,form,base,2,HDEL hash f,same,:,:,:1,:1,,,hdelCommand,t_hash.c:5224
+38332001995,2026-10-13T01:24:43Z,develop,hdel,hash,form,base,3,HDEL hash f,same,:,:,:1,:1,ok,ok,hdelCommand,t_hash.c:5224
+38332001995,2026-10-13T01:24:43Z,develop,hdel,hash,form,field*2,2,HDEL hash f n,same,:,:,:2,:2,,,hdelCommand,t_hash.c:5224
+38332001995,2026-10-13T01:24:43Z,develop,hdel,hash,form,field*2,3,HDEL hash f n,same,:,:,:2,:2,ok,ok,hdelCommand,t_hash.c:5224
+38332001995,2026-10-13T01:24:43Z,develop,hdel,hash,missing key,missing key,2,HDEL nokey f,same,:,:,:0,:0,,,hdelCommand,t_hash.c:5224
+38332001995,2026-10-13T01:24:43Z,develop,hdel,hash,missing key,missing key,3,HDEL nokey f,same,:,:,:0,:0,ok,ok,hdelCommand,t_hash.c:5224
+38332001995,2026-10-13T01:24:43Z,develop,hdel,hash,wrong type,wrong type,2,HDEL str f,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,hdelCommand,t_hash.c:5224
+38332001995,2026-10-13T01:24:43Z,develop,hdel,hash,wrong type,wrong type,3,HDEL str f,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,hdelCommand,t_hash.c:5224
+38332001995,2026-10-13T01:24:43Z,develop,hdel,hash,extra argument,extra argument,2,HDEL hash f BOGUS,same,:,:,:1,:1,,,hdelCommand,t_hash.c:5224
+38332001995,2026-10-13T01:24:43Z,develop,hdel,hash,extra argument,extra argument,3,HDEL hash f BOGUS,same,:,:,:1,:1,ok,ok,hdelCommand,t_hash.c:5224
+38332001995,2026-10-13T01:24:43Z,develop,hello,connection,form,base,2,HELLO,same,*[$ $ $ $ $ : $ : $ $ $ $ $ *[]],*[$ $ $ $ $ : $ : $ $ $ $ $ *[*[$ $ $ : $ $ $ *[]]]],*[$server $keel $version $7.0.0 $proto :2 $id :680 $mode $standalone $role $master $modules *[]],*[$server $redis $version $8.10.1 $proto :2 $id :685 $mode $standalone $role $master $modules *[*[$name $vectorset $ver :1 $path $ $args *[]]]],,,helloCommand,networking.c:4944
+38332001995,2026-10-13T01:24:43Z,develop,hello,connection,form,base,3,HELLO,same,%{$:$ $:$ $:: $:: $:$ $:$ $:*[]},%{$:$ $:$ $:: $:: $:$ $:$ $:*[%{$:$ $:: $:$ $:*[]}]},%{$server: $keel $version: $7.0.0 $proto: :3 $id: :681 $mode: $standalone $role: $master $modules: *[]},%{$server: $redis $version: $8.10.1 $proto: :3 $id: :686 $mode: $standalone $role: $master $modules: *[%{$name: $vectorset $ver: :1 $path: $ $args: *[]}]},ok,ok,helloCommand,networking.c:4944
+38332001995,2026-10-13T01:24:43Z,develop,hello,connection,form,protover,2,HELLO 3,same,%{$:$ $:$ $:: $:: $:$ $:$ $:*[]},%{$:$ $:$ $:: $:: $:$ $:$ $:*[%{$:$ $:: $:$ $:*[]}]},%{$server: $keel $version: $7.0.0 $proto: :3 $id: :682 $mode: $standalone $role: $master $modules: *[]},%{$server: $redis $version: $8.10.1 $proto: :3 $id: :687 $mode: $standalone $role: $master $modules: *[%{$name: $vectorset $ver: :1 $path: $ $args: *[]}]},,,helloCommand,networking.c:4944
+38332001995,2026-10-13T01:24:43Z,develop,hello,connection,form,protover,3,HELLO 3,same,%{$:$ $:$ $:: $:: $:$ $:$ $:*[]},%{$:$ $:$ $:: $:: $:$ $:$ $:*[%{$:$ $:: $:$ $:*[]}]},%{$server: $keel $version: $7.0.0 $proto: :3 $id: :683 $mode: $standalone $role: $master $modules: *[]},%{$server: $redis $version: $8.10.1 $proto: :3 $id: :688 $mode: $standalone $role: $master $modules: *[%{$name: $vectorset $ver: :1 $path: $ $args: *[]}]},ok,ok,helloCommand,networking.c:4944
+38332001995,2026-10-13T01:24:43Z,develop,hello,connection,form,protover AUTH,2,HELLO 3 AUTH default <password>,same,%{$:$ $:$ $:: $:: $:$ $:$ $:*[]},%{$:$ $:$ $:: $:: $:$ $:$ $:*[%{$:$ $:: $:$ $:*[]}]},%{$server: $keel $version: $7.0.0 $proto: :3 $id: :684 $mode: $standalone $role: $master $modules: *[]},%{$server: $redis $version: $8.10.1 $proto: :3 $id: :689 $mode: $standalone $role: $master $modules: *[%{$name: $vectorset $ver: :1 $path: $ $args: *[]}]},,,helloCommand,networking.c:4944
+38332001995,2026-10-13T01:24:43Z,develop,hello,connection,form,protover AUTH,3,HELLO 3 AUTH default <password>,same,%{$:$ $:$ $:: $:: $:$ $:$ $:*[]},%{$:$ $:$ $:: $:: $:$ $:$ $:*[%{$:$ $:: $:$ $:*[]}]},%{$server: $keel $version: $7.0.0 $proto: :3 $id: :685 $mode: $standalone $role: $master $modules: *[]},%{$server: $redis $version: $8.10.1 $proto: :3 $id: :690 $mode: $standalone $role: $master $modules: *[%{$name: $vectorset $ver: :1 $path: $ $args: *[]}]},ok,ok,helloCommand,networking.c:4944
+38332001995,2026-10-13T01:24:43Z,develop,hello,connection,form,protover SETNAME,2,HELLO 3 SETNAME c1,same,%{$:$ $:$ $:: $:: $:$ $:$ $:*[]},%{$:$ $:$ $:: $:: $:$ $:$ $:*[%{$:$ $:: $:$ $:*[]}]},%{$server: $keel $version: $7.0.0 $proto: :3 $id: :686 $mode: $standalone $role: $master $modules: *[]},%{$server: $redis $version: $8.10.1 $proto: :3 $id: :691 $mode: $standalone $role: $master $modules: *[%{$name: $vectorset $ver: :1 $path: $ $args: *[]}]},,,helloCommand,networking.c:4944
+38332001995,2026-10-13T01:24:43Z,develop,hello,connection,form,protover SETNAME,3,HELLO 3 SETNAME c1,same,%{$:$ $:$ $:: $:: $:$ $:$ $:*[]},%{$:$ $:$ $:: $:: $:$ $:$ $:*[%{$:$ $:: $:$ $:*[]}]},%{$server: $keel $version: $7.0.0 $proto: :3 $id: :687 $mode: $standalone $role: $master $modules: *[]},%{$server: $redis $version: $8.10.1 $proto: :3 $id: :692 $mode: $standalone $role: $master $modules: *[%{$name: $vectorset $ver: :1 $path: $ $args: *[]}]},ok,ok,helloCommand,networking.c:4944
+38332001995,2026-10-13T01:24:43Z,develop,hello,connection,extra argument,extra argument,2,HELLO BOGUS,same,-,-,-ERR Protocol version is not an integer or out of range,-ERR Protocol version is not an integer or out of range,,,helloCommand,networking.c:4944
+38332001995,2026-10-13T01:24:43Z,develop,hello,connection,extra argument,extra argument,3,HELLO BOGUS,same,-,-,-ERR Protocol version is not an integer or out of range,-ERR Protocol version is not an integer or out of range,error,error,helloCommand,networking.c:4944
+38332001995,2026-10-13T01:24:43Z,develop,hexists,hash,form,base,2,HEXISTS hash f,same,:,:,:1,:1,,,hexistsCommand,t_hash.c:5465
+38332001995,2026-10-13T01:24:43Z,develop,hexists,hash,form,base,3,HEXISTS hash f,same,:,:,:1,:1,ok,ok,hexistsCommand,t_hash.c:5465
+38332001995,2026-10-13T01:24:43Z,develop,hexists,hash,missing key,missing key,2,HEXISTS nokey f,same,:,:,:0,:0,,,hexistsCommand,t_hash.c:5465
+38332001995,2026-10-13T01:24:43Z,develop,hexists,hash,missing key,missing key,3,HEXISTS nokey f,same,:,:,:0,:0,ok,ok,hexistsCommand,t_hash.c:5465
+38332001995,2026-10-13T01:24:43Z,develop,hexists,hash,wrong type,wrong type,2,HEXISTS str f,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,hexistsCommand,t_hash.c:5465
+38332001995,2026-10-13T01:24:43Z,develop,hexists,hash,wrong type,wrong type,3,HEXISTS str f,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,hexistsCommand,t_hash.c:5465
+38332001995,2026-10-13T01:24:43Z,develop,hexists,hash,extra argument,extra argument,2,HEXISTS hash f BOGUS,same,-,-,-ERR wrong number of arguments for 'hexists' command,-ERR wrong number of arguments for 'hexists' command,,,hexistsCommand,t_hash.c:5465
+38332001995,2026-10-13T01:24:43Z,develop,hexists,hash,extra argument,extra argument,3,HEXISTS hash f BOGUS,same,-,-,-ERR wrong number of arguments for 'hexists' command,-ERR wrong number of arguments for 'hexists' command,error,error,hexistsCommand,t_hash.c:5465
+38332001995,2026-10-13T01:24:43Z,develop,hget,hash,form,base,2,HGET hash f,same,$,$,$v,$v,,,hgetCommand,t_hash.c:4895
+38332001995,2026-10-13T01:24:43Z,develop,hget,hash,form,base,3,HGET hash f,same,$,$,$v,$v,ok,ok,hgetCommand,t_hash.c:4895
+38332001995,2026-10-13T01:24:43Z,develop,hget,hash,missing key,missing key,2,HGET nokey f,same,$-1,$-1,$-1,$-1,,,hgetCommand,t_hash.c:4895
+38332001995,2026-10-13T01:24:43Z,develop,hget,hash,missing key,missing key,3,HGET nokey f,same,_,_,_,_,ok,ok,hgetCommand,t_hash.c:4895
+38332001995,2026-10-13T01:24:43Z,develop,hget,hash,wrong type,wrong type,2,HGET str f,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,hgetCommand,t_hash.c:4895
+38332001995,2026-10-13T01:24:43Z,develop,hget,hash,wrong type,wrong type,3,HGET str f,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,hgetCommand,t_hash.c:4895
+38332001995,2026-10-13T01:24:43Z,develop,hget,hash,extra argument,extra argument,2,HGET hash f BOGUS,same,-,-,-ERR wrong number of arguments for 'hget' command,-ERR wrong number of arguments for 'hget' command,,,hgetCommand,t_hash.c:4895
+38332001995,2026-10-13T01:24:43Z,develop,hget,hash,extra argument,extra argument,3,HGET hash f BOGUS,same,-,-,-ERR wrong number of arguments for 'hget' command,-ERR wrong number of arguments for 'hget' command,error,error,hgetCommand,t_hash.c:4895
+38332001995,2026-10-13T01:24:43Z,develop,hgetall,hash,form,base,2,HGETALL hash,same,*[$ $ $ $],*[$ $ $ $],*[$f $v $n $5],*[$f $v $n $5],,,hgetallCommand,t_hash.c:5461
+38332001995,2026-10-13T01:24:43Z,develop,hgetall,hash,form,base,3,HGETALL hash,same,%{$:$ $:$},%{$:$ $:$},%{$f: $v $n: $5},%{$f: $v $n: $5},ok,ok,hgetallCommand,t_hash.c:5461
+38332001995,2026-10-13T01:24:43Z,develop,hgetall,hash,missing key,missing key,2,HGETALL nokey,same,*[],*[],*[],*[],,,hgetallCommand,t_hash.c:5461
+38332001995,2026-10-13T01:24:43Z,develop,hgetall,hash,missing key,missing key,3,HGETALL nokey,same,%{},%{},%{},%{},ok,ok,hgetallCommand,t_hash.c:5461
+38332001995,2026-10-13T01:24:43Z,develop,hgetall,hash,wrong type,wrong type,2,HGETALL str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,hgetallCommand,t_hash.c:5461
+38332001995,2026-10-13T01:24:43Z,develop,hgetall,hash,wrong type,wrong type,3,HGETALL str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,hgetallCommand,t_hash.c:5461
+38332001995,2026-10-13T01:24:43Z,develop,hgetall,hash,extra argument,extra argument,2,HGETALL hash BOGUS,same,-,-,-ERR wrong number of arguments for 'hgetall' command,-ERR wrong number of arguments for 'hgetall' command,,,hgetallCommand,t_hash.c:5461
+38332001995,2026-10-13T01:24:43Z,develop,hgetall,hash,extra argument,extra argument,3,HGETALL hash BOGUS,same,-,-,-ERR wrong number of arguments for 'hgetall' command,-ERR wrong number of arguments for 'hgetall' command,error,error,hgetallCommand,t_hash.c:5461
+38332001995,2026-10-13T01:24:43Z,develop,hincrby,hash,form,base,2,HINCRBY hash n 1,same,:,:,:6,:6,,,hincrbyCommand,t_hash.c:4741
+38332001995,2026-10-13T01:24:43Z,develop,hincrby,hash,form,base,3,HINCRBY hash n 1,same,:,:,:6,:6,ok,ok,hincrbyCommand,t_hash.c:4741
+38332001995,2026-10-13T01:24:43Z,develop,hincrby,hash,missing key,missing key,2,HINCRBY nokey n 1,same,:,:,:1,:1,,,hincrbyCommand,t_hash.c:4741
+38332001995,2026-10-13T01:24:43Z,develop,hincrby,hash,missing key,missing key,3,HINCRBY nokey n 1,same,:,:,:1,:1,ok,ok,hincrbyCommand,t_hash.c:4741
+38332001995,2026-10-13T01:24:43Z,develop,hincrby,hash,wrong type,wrong type,2,HINCRBY str n 1,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,hincrbyCommand,t_hash.c:4741
+38332001995,2026-10-13T01:24:43Z,develop,hincrby,hash,wrong type,wrong type,3,HINCRBY str n 1,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,hincrbyCommand,t_hash.c:4741
+38332001995,2026-10-13T01:24:43Z,develop,hincrby,hash,extra argument,extra argument,2,HINCRBY hash n 1 BOGUS,same,-,-,-ERR wrong number of arguments for 'hincrby' command,-ERR wrong number of arguments for 'hincrby' command,,,hincrbyCommand,t_hash.c:4741
+38332001995,2026-10-13T01:24:43Z,develop,hincrby,hash,extra argument,extra argument,3,HINCRBY hash n 1 BOGUS,same,-,-,-ERR wrong number of arguments for 'hincrby' command,-ERR wrong number of arguments for 'hincrby' command,error,error,hincrbyCommand,t_hash.c:4741
+38332001995,2026-10-13T01:24:43Z,develop,hkeys,hash,form,base,2,HKEYS hash,same,*[$ $],*[$ $],*[$f $n],*[$f $n],,,hkeysCommand,t_hash.c:5453
+38332001995,2026-10-13T01:24:43Z,develop,hkeys,hash,form,base,3,HKEYS hash,same,*[$ $],*[$ $],*[$f $n],*[$f $n],ok,ok,hkeysCommand,t_hash.c:5453
+38332001995,2026-10-13T01:24:43Z,develop,hkeys,hash,missing key,missing key,2,HKEYS nokey,same,*[],*[],*[],*[],,,hkeysCommand,t_hash.c:5453
+38332001995,2026-10-13T01:24:43Z,develop,hkeys,hash,missing key,missing key,3,HKEYS nokey,same,*[],*[],*[],*[],ok,ok,hkeysCommand,t_hash.c:5453
+38332001995,2026-10-13T01:24:43Z,develop,hkeys,hash,wrong type,wrong type,2,HKEYS str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,hkeysCommand,t_hash.c:5453
+38332001995,2026-10-13T01:24:43Z,develop,hkeys,hash,wrong type,wrong type,3,HKEYS str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,hkeysCommand,t_hash.c:5453
+38332001995,2026-10-13T01:24:43Z,develop,hkeys,hash,extra argument,extra argument,2,HKEYS hash BOGUS,same,-,-,-ERR wrong number of arguments for 'hkeys' command,-ERR wrong number of arguments for 'hkeys' command,,,hkeysCommand,t_hash.c:5453
+38332001995,2026-10-13T01:24:43Z,develop,hkeys,hash,extra argument,extra argument,3,HKEYS hash BOGUS,same,-,-,-ERR wrong number of arguments for 'hkeys' command,-ERR wrong number of arguments for 'hkeys' command,error,error,hkeysCommand,t_hash.c:5453
+38332001995,2026-10-13T01:24:43Z,develop,hlen,hash,form,base,2,HLEN hash,same,:,:,:2,:2,,,hlenCommand,t_hash.c:5294
+38332001995,2026-10-13T01:24:43Z,develop,hlen,hash,form,base,3,HLEN hash,same,:,:,:2,:2,ok,ok,hlenCommand,t_hash.c:5294
+38332001995,2026-10-13T01:24:43Z,develop,hlen,hash,missing key,missing key,2,HLEN nokey,same,:,:,:0,:0,,,hlenCommand,t_hash.c:5294
+38332001995,2026-10-13T01:24:43Z,develop,hlen,hash,missing key,missing key,3,HLEN nokey,same,:,:,:0,:0,ok,ok,hlenCommand,t_hash.c:5294
+38332001995,2026-10-13T01:24:43Z,develop,hlen,hash,wrong type,wrong type,2,HLEN str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,hlenCommand,t_hash.c:5294
+38332001995,2026-10-13T01:24:43Z,develop,hlen,hash,wrong type,wrong type,3,HLEN str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,hlenCommand,t_hash.c:5294
+38332001995,2026-10-13T01:24:43Z,develop,hlen,hash,extra argument,extra argument,2,HLEN hash BOGUS,same,-,-,-ERR wrong number of arguments for 'hlen' command,-ERR wrong number of arguments for 'hlen' command,,,hlenCommand,t_hash.c:5294
+38332001995,2026-10-13T01:24:43Z,develop,hlen,hash,extra argument,extra argument,3,HLEN hash BOGUS,same,-,-,-ERR wrong number of arguments for 'hlen' command,-ERR wrong number of arguments for 'hlen' command,error,error,hlenCommand,t_hash.c:5294
+38332001995,2026-10-13T01:24:43Z,develop,hmget,hash,form,base,2,HMGET hash f,same,*[$],*[$],*[$v],*[$v],,,hmgetCommand,t_hash.c:4904
+38332001995,2026-10-13T01:24:43Z,develop,hmget,hash,form,base,3,HMGET hash f,same,*[$],*[$],*[$v],*[$v],ok,ok,hmgetCommand,t_hash.c:4904
+38332001995,2026-10-13T01:24:43Z,develop,hmget,hash,form,field*2,2,HMGET hash f n,same,*[$ $],*[$ $],*[$v $5],*[$v $5],,,hmgetCommand,t_hash.c:4904
+38332001995,2026-10-13T01:24:43Z,develop,hmget,hash,form,field*2,3,HMGET hash f n,same,*[$ $],*[$ $],*[$v $5],*[$v $5],ok,ok,hmgetCommand,t_hash.c:4904
+38332001995,2026-10-13T01:24:43Z,develop,hmget,hash,missing key,missing key,2,HMGET nokey f,same,*[$-1],*[$-1],*[$-1],*[$-1],,,hmgetCommand,t_hash.c:4904
+38332001995,2026-10-13T01:24:43Z,develop,hmget,hash,missing key,missing key,3,HMGET nokey f,same,*[_],*[_],*[_],*[_],ok,ok,hmgetCommand,t_hash.c:4904
+38332001995,2026-10-13T01:24:43Z,develop,hmget,hash,wrong type,wrong type,2,HMGET str f,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,hmgetCommand,t_hash.c:4904
+38332001995,2026-10-13T01:24:43Z,develop,hmget,hash,wrong type,wrong type,3,HMGET str f,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,hmgetCommand,t_hash.c:4904
+38332001995,2026-10-13T01:24:43Z,develop,hmget,hash,extra argument,extra argument,2,HMGET hash f BOGUS,same,*[$ $-1],*[$ $-1],*[$v $-1],*[$v $-1],,,hmgetCommand,t_hash.c:4904
+38332001995,2026-10-13T01:24:43Z,develop,hmget,hash,extra argument,extra argument,3,HMGET hash f BOGUS,same,*[$ _],*[$ _],*[$v _],*[$v _],ok,ok,hmgetCommand,t_hash.c:4904
+38332001995,2026-10-13T01:24:43Z,develop,hset,hash,form,base,2,HSET hash f v,same,:,:,:0,:0,,,hsetCommand,t_hash.c:3986
+38332001995,2026-10-13T01:24:43Z,develop,hset,hash,form,base,3,HSET hash f v,same,:,:,:0,:0,ok,ok,hsetCommand,t_hash.c:3986
+38332001995,2026-10-13T01:24:43Z,develop,hset,hash,form,data*2,2,HSET hash f v n w,same,:,:,:0,:0,,,hsetCommand,t_hash.c:3986
+38332001995,2026-10-13T01:24:43Z,develop,hset,hash,form,data*2,3,HSET hash f v n w,same,:,:,:0,:0,ok,ok,hsetCommand,t_hash.c:3986
+38332001995,2026-10-13T01:24:43Z,develop,hset,hash,missing key,missing key,2,HSET nokey f v,same,:,:,:1,:1,,,hsetCommand,t_hash.c:3986
+38332001995,2026-10-13T01:24:43Z,develop,hset,hash,missing key,missing key,3,HSET nokey f v,same,:,:,:1,:1,ok,ok,hsetCommand,t_hash.c:3986
+38332001995,2026-10-13T01:24:43Z,develop,hset,hash,wrong type,wrong type,2,HSET str f v,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,hsetCommand,t_hash.c:3986
+38332001995,2026-10-13T01:24:43Z,develop,hset,hash,wrong type,wrong type,3,HSET str f v,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,hsetCommand,t_hash.c:3986
+38332001995,2026-10-13T01:24:43Z,develop,hset,hash,extra argument,extra argument,2,HSET hash f v BOGUS,same,-,-,-ERR wrong number of arguments for 'hset' command,-ERR wrong number of arguments for 'hset' command,,,hsetCommand,t_hash.c:3986
+38332001995,2026-10-13T01:24:43Z,develop,hset,hash,extra argument,extra argument,3,HSET hash f v BOGUS,same,-,-,-ERR wrong number of arguments for 'hset' command,-ERR wrong number of arguments for 'hset' command,error,error,hsetCommand,t_hash.c:3986
+38332001995,2026-10-13T01:24:43Z,develop,hsetnx,hash,form,base,2,HSETNX hash f v,same,:,:,:0,:0,,,hsetnxCommand,t_hash.c:3897
+38332001995,2026-10-13T01:24:43Z,develop,hsetnx,hash,form,base,3,HSETNX hash f v,same,:,:,:0,:0,ok,ok,hsetnxCommand,t_hash.c:3897
+38332001995,2026-10-13T01:24:43Z,develop,hsetnx,hash,missing key,missing key,2,HSETNX nokey f v,same,:,:,:1,:1,,,hsetnxCommand,t_hash.c:3897
+38332001995,2026-10-13T01:24:43Z,develop,hsetnx,hash,missing key,missing key,3,HSETNX nokey f v,same,:,:,:1,:1,ok,ok,hsetnxCommand,t_hash.c:3897
+38332001995,2026-10-13T01:24:43Z,develop,hsetnx,hash,wrong type,wrong type,2,HSETNX str f v,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,hsetnxCommand,t_hash.c:3897
+38332001995,2026-10-13T01:24:43Z,develop,hsetnx,hash,wrong type,wrong type,3,HSETNX str f v,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,hsetnxCommand,t_hash.c:3897
+38332001995,2026-10-13T01:24:43Z,develop,hsetnx,hash,extra argument,extra argument,2,HSETNX hash f v BOGUS,same,-,-,-ERR wrong number of arguments for 'hsetnx' command,-ERR wrong number of arguments for 'hsetnx' command,,,hsetnxCommand,t_hash.c:3897
+38332001995,2026-10-13T01:24:43Z,develop,hsetnx,hash,extra argument,extra argument,3,HSETNX hash f v BOGUS,same,-,-,-ERR wrong number of arguments for 'hsetnx' command,-ERR wrong number of arguments for 'hsetnx' command,error,error,hsetnxCommand,t_hash.c:3897
+38332001995,2026-10-13T01:24:43Z,develop,hvals,hash,form,base,2,HVALS hash,same,*[$ $],*[$ $],*[$v $5],*[$v $5],,,hvalsCommand,t_hash.c:5457
+38332001995,2026-10-13T01:24:43Z,develop,hvals,hash,form,base,3,HVALS hash,same,*[$ $],*[$ $],*[$v $5],*[$v $5],ok,ok,hvalsCommand,t_hash.c:5457
+38332001995,2026-10-13T01:24:43Z,develop,hvals,hash,missing key,missing key,2,HVALS nokey,same,*[],*[],*[],*[],,,hvalsCommand,t_hash.c:5457
+38332001995,2026-10-13T01:24:43Z,develop,hvals,hash,missing key,missing key,3,HVALS nokey,same,*[],*[],*[],*[],ok,ok,hvalsCommand,t_hash.c:5457
+38332001995,2026-10-13T01:24:43Z,develop,hvals,hash,wrong type,wrong type,2,HVALS str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,hvalsCommand,t_hash.c:5457
+38332001995,2026-10-13T01:24:43Z,develop,hvals,hash,wrong type,wrong type,3,HVALS str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,hvalsCommand,t_hash.c:5457
+38332001995,2026-10-13T01:24:43Z,develop,hvals,hash,extra argument,extra argument,2,HVALS hash BOGUS,same,-,-,-ERR wrong number of arguments for 'hvals' command,-ERR wrong number of arguments for 'hvals' command,,,hvalsCommand,t_hash.c:5457
+38332001995,2026-10-13T01:24:43Z,develop,hvals,hash,extra argument,extra argument,3,HVALS hash BOGUS,same,-,-,-ERR wrong number of arguments for 'hvals' command,-ERR wrong number of arguments for 'hvals' command,error,error,hvalsCommand,t_hash.c:5457
+38332001995,2026-10-13T01:24:43Z,develop,incr,string,form,base,2,INCR num,same,:,:,:11,:11,,,incrCommand,t_string.c:941
+38332001995,2026-10-13T01:24:43Z,develop,incr,string,form,base,3,INCR num,same,:,:,:11,:11,ok,ok,incrCommand,t_string.c:941
+38332001995,2026-10-13T01:24:43Z,develop,incr,string,missing key,missing key,2,INCR nokey,same,:,:,:1,:1,,,incrCommand,t_string.c:941
+38332001995,2026-10-13T01:24:43Z,develop,incr,string,missing key,missing key,3,INCR nokey,same,:,:,:1,:1,ok,ok,incrCommand,t_string.c:941
+38332001995,2026-10-13T01:24:43Z,develop,incr,string,wrong type,wrong type,2,INCR list,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,incrCommand,t_string.c:941
+38332001995,2026-10-13T01:24:43Z,develop,incr,string,wrong type,wrong type,3,INCR list,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,incrCommand,t_string.c:941
+38332001995,2026-10-13T01:24:43Z,develop,incr,string,extra argument,extra argument,2,INCR num BOGUS,same,-,-,-ERR wrong number of arguments for 'incr' command,-ERR wrong number of arguments for 'incr' command,,,incrCommand,t_string.c:941
+38332001995,2026-10-13T01:24:43Z,develop,incr,string,extra argument,extra argument,3,INCR num BOGUS,same,-,-,-ERR wrong number of arguments for 'incr' command,-ERR wrong number of arguments for 'incr' command,error,error,incrCommand,t_string.c:941
+38332001995,2026-10-13T01:24:43Z,develop,incrby,string,form,base,2,INCRBY num 1,same,:,:,:11,:11,,,incrbyCommand,t_string.c:949
+38332001995,2026-10-13T01:24:43Z,develop,incrby,string,form,base,3,INCRBY num 1,same,:,:,:11,:11,ok,ok,incrbyCommand,t_string.c:949
+38332001995,2026-10-13T01:24:43Z,develop,incrby,string,missing key,missing key,2,INCRBY nokey 1,same,:,:,:1,:1,,,incrbyCommand,t_string.c:949
+38332001995,2026-10-13T01:24:43Z,develop,incrby,string,missing key,missing key,3,INCRBY nokey 1,same,:,:,:1,:1,ok,ok,incrbyCommand,t_string.c:949
+38332001995,2026-10-13T01:24:43Z,develop,incrby,string,wrong type,wrong type,2,INCRBY list 1,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,incrbyCommand,t_string.c:949
+38332001995,2026-10-13T01:24:43Z,develop,incrby,string,wrong type,wrong type,3,INCRBY list 1,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,incrbyCommand,t_string.c:949
+38332001995,2026-10-13T01:24:43Z,develop,incrby,string,extra argument,extra argument,2,INCRBY num 1 BOGUS,same,-,-,-ERR wrong number of arguments for 'incrby' command,-ERR wrong number of arguments for 'incrby' command,,,incrbyCommand,t_string.c:949
+38332001995,2026-10-13T01:24:43Z,develop,incrby,string,extra argument,extra argument,3,INCRBY num 1 BOGUS,same,-,-,-ERR wrong number of arguments for 'incrby' command,-ERR wrong number of arguments for 'incrby' command,error,error,incrbyCommand,t_string.c:949
+38332001995,2026-10-13T01:24:43Z,develop,info,server,form,base,2,INFO,same,$,$,$# Server\r\nkeel_version:v0.0.0-20261013012440-ee2e724ee3f1\r\nredis_version:7.0.0\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmultiplexing_api:epoll\r\nprocess_id:24233\r\nprocess_supervised:no\r\nrun_id:bda8eeef7bffb6a3a6ac7c12a1a94e94be313bc3\r\ntcp_port:6...,$# Server\r\nredis_version:8.10.1\r\nredis_git_sha1:00000000\r\nredis_git_dirty:1\r\nredis_build_id:c37bd00526660ff8\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmonotonic_clock:POSIX clock_gettime\r\nmultiplexing_api:epoll\r\natomicvar_api:c11-builtin\r\ngcc_v...,,,infoCommand,server.c:7146
+38332001995,2026-10-13T01:24:43Z,develop,info,server,form,base,3,INFO,same,=txt,=txt,=txt:# Server\r\nkeel_version:v0.0.0-20261013012440-ee2e724ee3f1\r\nredis_version:7.0.0\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmultiplexing_api:epoll\r\nprocess_id:24233\r\nprocess_supervised:no\r\nrun_id:bda8eeef7bffb6a3a6ac7c12a1a94e94be313bc3\r\ntcp_po...,=txt:# Server\r\nredis_version:8.10.1\r\nredis_git_sha1:00000000\r\nredis_git_dirty:1\r\nredis_build_id:c37bd00526660ff8\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmonotonic_clock:POSIX clock_gettime\r\nmultiplexing_api:epoll\r\natomicvar_api:c11-builtin\r\ng...,ok,ok,infoCommand,server.c:7146
+38332001995,2026-10-13T01:24:43Z,develop,info,server,form,section,2,INFO server,same,$,$,$# Server\r\nkeel_version:v0.0.0-20261013012440-ee2e724ee3f1\r\nredis_version:7.0.0\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmultiplexing_api:epoll\r\nprocess_id:24233\r\nprocess_supervised:no\r\nrun_id:bda8eeef7bffb6a3a6ac7c12a1a94e94be313bc3\r\ntcp_port:6...,$# Server\r\nredis_version:8.10.1\r\nredis_git_sha1:00000000\r\nredis_git_dirty:1\r\nredis_build_id:c37bd00526660ff8\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmonotonic_clock:POSIX clock_gettime\r\nmultiplexing_api:epoll\r\natomicvar_api:c11-builtin\r\ngcc_v...,,,infoCommand,server.c:7146
+38332001995,2026-10-13T01:24:43Z,develop,info,server,form,section,3,INFO server,same,=txt,=txt,=txt:# Server\r\nkeel_version:v0.0.0-20261013012440-ee2e724ee3f1\r\nredis_version:7.0.0\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmultiplexing_api:epoll\r\nprocess_id:24233\r\nprocess_supervised:no\r\nrun_id:bda8eeef7bffb6a3a6ac7c12a1a94e94be313bc3\r\ntcp_po...,=txt:# Server\r\nredis_version:8.10.1\r\nredis_git_sha1:00000000\r\nredis_git_dirty:1\r\nredis_build_id:c37bd00526660ff8\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmonotonic_clock:POSIX clock_gettime\r\nmultiplexing_api:epoll\r\natomicvar_api:c11-builtin\r\ng...,ok,ok,infoCommand,server.c:7146
+38332001995,2026-10-13T01:24:43Z,develop,info,server,form,section section*2,2,INFO server clients,same,$,$,$# Server\r\nkeel_version:v0.0.0-20261013012440-ee2e724ee3f1\r\nredis_version:7.0.0\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmultiplexing_api:epoll\r\nprocess_id:24233\r\nprocess_supervised:no\r\nrun_id:bda8eeef7bffb6a3a6ac7c12a1a94e94be313bc3\r\ntcp_port:6...,$# Server\r\nredis_version:8.10.1\r\nredis_git_sha1:00000000\r\nredis_git_dirty:1\r\nredis_build_id:c37bd00526660ff8\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmonotonic_clock:POSIX clock_gettime\r\nmultiplexing_api:epoll\r\natomicvar_api:c11-builtin\r\ngcc_v...,,,infoCommand,server.c:7146
+38332001995,2026-10-13T01:24:43Z,develop,info,server,form,section section*2,3,INFO server clients,same,=txt,=txt,=txt:# Server\r\nkeel_version:v0.0.0-20261013012440-ee2e724ee3f1\r\nredis_version:7.0.0\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmultiplexing_api:epoll\r\nprocess_id:24233\r\nprocess_supervised:no\r\nrun_id:bda8eeef7bffb6a3a6ac7c12a1a94e94be313bc3\r\ntcp_po...,=txt:# Server\r\nredis_version:8.10.1\r\nredis_git_sha1:00000000\r\nredis_git_dirty:1\r\nredis_build_id:c37bd00526660ff8\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmonotonic_clock:POSIX clock_gettime\r\nmultiplexing_api:epoll\r\natomicvar_api:c11-builtin\r\ng...,ok,ok,infoCommand,server.c:7146
+38332001995,2026-10-13T01:24:43Z,develop,info,server,extra argument,extra argument,2,INFO BOGUS,same,$,$,$,$,,,infoCommand,server.c:7146
+38332001995,2026-10-13T01:24:43Z,develop,info,server,extra argument,extra argument,3,INFO BOGUS,same,=txt,=txt,=txt:,=txt:,ok,ok,infoCommand,server.c:7146
+38332001995,2026-10-13T01:24:43Z,develop,keys,generic,form,base,2,KEYS *,same,*[$ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $],*[$ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $],*[$str $str2 $str3 $num $num2 $num3 $zset $zset2 $zset3 $geo $geo2 $geo3 $set $set2 $set3 $hash $hash2 $hash3 $list $list2 $list3 $hll $hll2 $hll3],*[$str2 $zset $str $zset2 $num2 $hll $geo $str3 $num $list $num3 $zset3 $hash3 $list3 $set3 $list2 $hash2 $set $geo3 $geo2 $set2 $hash $hll3 $hll2],,,keysCommand,db.c:1605
+38332001995,2026-10-13T01:24:43Z,develop,keys,generic,form,base,3,KEYS *,same,*[$ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $],*[$ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $ $],*[$str $str2 $str3 $num $num2 $num3 $zset $zset2 $zset3 $geo $geo2 $geo3 $set $set2 $set3 $hash $hash2 $hash3 $list $list2 $list3 $hll $hll2 $hll3],*[$str2 $zset $str $zset2 $num2 $hll $geo $str3 $num $list $num3 $zset3 $hash3 $list3 $set3 $list2 $hash2 $set $geo3 $geo2 $set2 $hash $hll3 $hll2],ok,ok,keysCommand,db.c:1605
+38332001995,2026-10-13T01:24:43Z,develop,keys,generic,extra argument,extra argument,2,KEYS * BOGUS,same,-,-,-ERR wrong number of arguments for 'keys' command,-ERR wrong number of arguments for 'keys' command,,,keysCommand,db.c:1605
+38332001995,2026-10-13T01:24:43Z,develop,keys,generic,extra argument,extra argument,3,KEYS * BOGUS,same,-,-,-ERR wrong number of arguments for 'keys' command,-ERR wrong number of arguments for 'keys' command,error,error,keysCommand,db.c:1605
+38332001995,2026-10-13T01:24:43Z,develop,lcs,string,form,base,2,LCS str str2,same,$,$,$ab,$ab,,,lcsCommand,t_string.c:1420
+38332001995,2026-10-13T01:24:43Z,develop,lcs,string,form,base,3,LCS str str2,same,$,$,$ab,$ab,ok,ok,lcsCommand,t_string.c:1420
+38332001995,2026-10-13T01:24:43Z,develop,lcs,string,form,LEN,2,LCS str str2 LEN,same,:,:,:2,:2,,,lcsCommand,t_string.c:1420
+38332001995,2026-10-13T01:24:43Z,develop,lcs,string,form,LEN,3,LCS str str2 LEN,same,:,:,:2,:2,ok,ok,lcsCommand,t_string.c:1420
+38332001995,2026-10-13T01:24:43Z,develop,lcs,string,form,IDX,2,LCS str str2 IDX,same,*[$ *[*[*[: :] *[: :]]] $ :],*[$ *[*[*[: :] *[: :]]] $ :],*[$matches *[*[*[:0 :1] *[:0 :1]]] $len :2],*[$matches *[*[*[:0 :1] *[:0 :1]]] $len :2],,,lcsCommand,t_string.c:1420
+38332001995,2026-10-13T01:24:43Z,develop,lcs,string,form,IDX,3,LCS str str2 IDX,same,%{$:*[*[*[: :] *[: :]]] $::},%{$:*[*[*[: :] *[: :]]] $::},%{$matches: *[*[*[:0 :1] *[:0 :1]]] $len: :2},%{$matches: *[*[*[:0 :1] *[:0 :1]]] $len: :2},ok,ok,lcsCommand,t_string.c:1420
+38332001995,2026-10-13T01:24:43Z,develop,lcs,string,form,MINMATCHLEN,2,LCS str str2 MINMATCHLEN 1,same,$,$,$ab,$ab,,,lcsCommand,t_string.c:1420
+38332001995,2026-10-13T01:24:43Z,develop,lcs,string,form,MINMATCHLEN,3,LCS str str2 MINMATCHLEN 1,same,$,$,$ab,$ab,ok,ok,lcsCommand,t_string.c:1420
+38332001995,2026-10-13T01:24:43Z,develop,lcs,string,form,WITHMATCHLEN,2,LCS str str2 WITHMATCHLEN,same,$,$,$ab,$ab,,,lcsCommand,t_string.c:1420
+38332001995,2026-10-13T01:24:43Z,develop,lcs,string,form,WITHMATCHLEN,3,LCS str str2 WITHMATCHLEN,same,$,$,$ab,$ab,ok,ok,lcsCommand,t_string.c:1420
+38332001995,2026-10-13T01:24:43Z,develop,lcs,string,missing key,missing key,2,LCS nokey nokey2,same,$,$,$,$,,,lcsCommand,t_string.c:1420
+38332001995,2026-10-13T01:24:43Z,develop,lcs,string,missing key,missing key,3,LCS nokey nokey2,same,$,$,$,$,ok,ok,lcsCommand,t_string.c:1420
+38332001995,2026-10-13T01:24:43Z,develop,lcs,string,wrong type,wrong type,2,LCS list str2,same,-,-,-ERR The specified keys must contain string values,-ERR The specified keys must contain string values,,,lcsCommand,t_string.c:1420
+38332001995,2026-10-13T01:24:43Z,develop,lcs,string,wrong type,wrong type,3,LCS list str2,same,-,-,-ERR The specified keys must contain string values,-ERR The specified keys must contain string values,error,error,lcsCommand,t_string.c:1420
+38332001995,2026-10-13T01:24:43Z,develop,lcs,string,extra argument,extra argument,2,LCS str str2 BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,,,lcsCommand,t_string.c:1420
+38332001995,2026-10-13T01:24:43Z,develop,lcs,string,extra argument,extra argument,3,LCS str str2 BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,error,error,lcsCommand,t_string.c:1420
+38332001995,2026-10-13T01:24:43Z,develop,lindex,list,form,base,2,LINDEX list 0,same,$,$,$a,$a,,,lindexCommand,t_list.c:621
+38332001995,2026-10-13T01:24:43Z,develop,lindex,list,form,base,3,LINDEX list 0,same,$,$,$a,$a,ok,ok,lindexCommand,t_list.c:621
+38332001995,2026-10-13T01:24:43Z,develop,lindex,list,missing key,missing key,2,LINDEX nokey 0,same,$-1,$-1,$-1,$-1,,,lindexCommand,t_list.c:621
+38332001995,2026-10-13T01:24:43Z,develop,lindex,list,missing key,missing key,3,LINDEX nokey 0,same,_,_,_,_,ok,ok,lindexCommand,t_list.c:621
+38332001995,2026-10-13T01:24:43Z,develop,lindex,list,wrong type,wrong type,2,LINDEX str 0,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,lindexCommand,t_list.c:621
+38332001995,2026-10-13T01:24:43Z,develop,lindex,list,wrong type,wrong type,3,LINDEX str 0,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,lindexCommand,t_list.c:621
+38332001995,2026-10-13T01:24:43Z,develop,lindex,list,extra argument,extra argument,2,LINDEX list 0 BOGUS,same,-,-,-ERR wrong number of arguments for 'lindex' command,-ERR wrong number of arguments for 'lindex' command,,,lindexCommand,t_list.c:621
+38332001995,2026-10-13T01:24:43Z,develop,lindex,list,extra argument,extra argument,3,LINDEX list 0 BOGUS,same,-,-,-ERR wrong number of arguments for 'lindex' command,-ERR wrong number of arguments for 'lindex' command,error,error,lindexCommand,t_list.c:621
+38332001995,2026-10-13T01:24:43Z,develop,llen,list,form,base,2,LLEN list,same,:,:,:3,:3,,,llenCommand,t_list.c:614
+38332001995,2026-10-13T01:24:43Z,develop,llen,list,form,base,3,LLEN list,same,:,:,:3,:3,ok,ok,llenCommand,t_list.c:614
+38332001995,2026-10-13T01:24:43Z,develop,llen,list,missing key,missing key,2,LLEN nokey,same,:,:,:0,:0,,,llenCommand,t_list.c:614
+38332001995,2026-10-13T01:24:43Z,develop,llen,list,missing key,missing key,3,LLEN nokey,same,:,:,:0,:0,ok,ok,llenCommand,t_list.c:614
+38332001995,2026-10-13T01:24:43Z,develop,llen,list,wrong type,wrong type,2,LLEN str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,llenCommand,t_list.c:614
+38332001995,2026-10-13T01:24:43Z,develop,llen,list,wrong type,wrong type,3,LLEN str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,llenCommand,t_list.c:614
+38332001995,2026-10-13T01:24:43Z,develop,llen,list,extra argument,extra argument,2,LLEN list BOGUS,same,-,-,-ERR wrong number of arguments for 'llen' command,-ERR wrong number of arguments for 'llen' command,,,llenCommand,t_list.c:614
+38332001995,2026-10-13T01:24:43Z,develop,llen,list,extra argument,extra argument,3,LLEN list BOGUS,same,-,-,-ERR wrong number of arguments for 'llen' command,-ERR wrong number of arguments for 'llen' command,error,error,llenCommand,t_list.c:614
+38332001995,2026-10-13T01:24:43Z,develop,lpop,list,form,base,2,LPOP list,same,$,$,$a,$a,,,lpopCommand,t_list.c:914
+38332001995,2026-10-13T01:24:43Z,develop,lpop,list,form,base,3,LPOP list,same,$,$,$a,$a,ok,ok,lpopCommand,t_list.c:914
+38332001995,2026-10-13T01:24:43Z,develop,lpop,list,form,count,2,LPOP list 1,same,*[$],*[$],*[$a],*[$a],,,lpopCommand,t_list.c:914
+38332001995,2026-10-13T01:24:43Z,develop,lpop,list,form,count,3,LPOP list 1,same,*[$],*[$],*[$a],*[$a],ok,ok,lpopCommand,t_list.c:914
+38332001995,2026-10-13T01:24:43Z,develop,lpop,list,missing key,missing key,2,LPOP nokey,same,$-1,$-1,$-1,$-1,,,lpopCommand,t_list.c:914
+38332001995,2026-10-13T01:24:43Z,develop,lpop,list,missing key,missing key,3,LPOP nokey,same,_,_,_,_,ok,ok,lpopCommand,t_list.c:914
+38332001995,2026-10-13T01:24:43Z,develop,lpop,list,wrong type,wrong type,2,LPOP str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,lpopCommand,t_list.c:914
+38332001995,2026-10-13T01:24:43Z,develop,lpop,list,wrong type,wrong type,3,LPOP str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,lpopCommand,t_list.c:914
+38332001995,2026-10-13T01:24:43Z,develop,lpop,list,extra argument,extra argument,2,LPOP list BOGUS,same,-,-,"-ERR value is out of range, must be positive","-ERR value is out of range, must be positive",,,lpopCommand,t_list.c:914
+38332001995,2026-10-13T01:24:43Z,develop,lpop,list,extra argument,extra argument,3,LPOP list BOGUS,same,-,-,"-ERR value is out of range, must be positive","-ERR value is out of range, must be positive",error,error,lpopCommand,t_list.c:914
+38332001995,2026-10-13T01:24:43Z,develop,lpush,list,form,base,2,LPUSH list a,same,:,:,:4,:4,,,lpushCommand,t_list.c:529
+38332001995,2026-10-13T01:24:43Z,develop,lpush,list,form,base,3,LPUSH list a,same,:,:,:4,:4,ok,ok,lpushCommand,t_list.c:529
+38332001995,2026-10-13T01:24:43Z,develop,lpush,list,form,element*2,2,LPUSH list a b,same,:,:,:5,:5,,,lpushCommand,t_list.c:529
+38332001995,2026-10-13T01:24:43Z,develop,lpush,list,form,element*2,3,LPUSH list a b,same,:,:,:5,:5,ok,ok,lpushCommand,t_list.c:529
+38332001995,2026-10-13T01:24:43Z,develop,lpush,list,missing key,missing key,2,LPUSH nokey a,same,:,:,:1,:1,,,lpushCommand,t_list.c:529
+38332001995,2026-10-13T01:24:43Z,develop,lpush,list,missing key,missing key,3,LPUSH nokey a,same,:,:,:1,:1,ok,ok,lpushCommand,t_list.c:529
+38332001995,2026-10-13T01:24:43Z,develop,lpush,list,wrong type,wrong type,2,LPUSH str a,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,lpushCommand,t_list.c:529
+38332001995,2026-10-13T01:24:43Z,develop,lpush,list,wrong type,wrong type,3,LPUSH str a,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,lpushCommand,t_list.c:529
+38332001995,2026-10-13T01:24:43Z,develop,lpush,list,extra argument,extra argument,2,LPUSH list a BOGUS,same,:,:,:5,:5,,,lpushCommand,t_list.c:529
+38332001995,2026-10-13T01:24:43Z,develop,lpush,list,extra argument,extra argument,3,LPUSH list a BOGUS,same,:,:,:5,:5,ok,ok,lpushCommand,t_list.c:529
+38332001995,2026-10-13T01:24:43Z,develop,lrange,list,form,base,2,LRANGE list 0 -1,same,*[$ $ $],*[$ $ $],*[$a $b $c],*[$a $b $c],,,lrangeCommand,t_list.c:924
+38332001995,2026-10-13T01:24:43Z,develop,lrange,list,form,base,3,LRANGE list 0 -1,same,*[$ $ $],*[$ $ $],*[$a $b $c],*[$a $b $c],ok,ok,lrangeCommand,t_list.c:924
+38332001995,2026-10-13T01:24:43Z,develop,lrange,list,missing key,missing key,2,LRANGE nokey 0 -1,same,*[],*[],*[],*[],,,lrangeCommand,t_list.c:924
+38332001995,2026-10-13T01:24:43Z,develop,lrange,list,missing key,missing key,3,LRANGE nokey 0 -1,same,*[],*[],*[],*[],ok,ok,lrangeCommand,t_list.c:924
+38332001995,2026-10-13T01:24:43Z,develop,lrange,list,wrong type,wrong type,2,LRANGE str 0 -1,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,lrangeCommand,t_list.c:924
+38332001995,2026-10-13T01:24:43Z,develop,lrange,list,wrong type,wrong type,3,LRANGE str 0 -1,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,lrangeCommand,t_list.c:924
+38332001995,2026-10-13T01:24:43Z,develop,lrange,list,extra argument,extra argument,2,LRANGE list 0 -1 BOGUS,same,-,-,-ERR wrong number of arguments for 'lrange' command,-ERR wrong number of arguments for 'lrange' command,,,lrangeCommand,t_list.c:924
+38332001995,2026-10-13T01:24:43Z,develop,lrange,list,extra argument,extra argument,3,LRANGE list 0 -1 BOGUS,same,-,-,-ERR wrong number of arguments for 'lrange' command,-ERR wrong number of arguments for 'lrange' command,error,error,lrangeCommand,t_list.c:924
+38332001995,2026-10-13T01:24:43Z,develop,lset,list,form,base,2,LSET list 0 x,same,+,+,+OK,+OK,,,lsetCommand,t_list.c:651
+38332001995,2026-10-13T01:24:43Z,develop,lset,list,form,base,3,LSET list 0 x,same,+,+,+OK,+OK,ok,ok,lsetCommand,t_list.c:651
+38332001995,2026-10-13T01:24:43Z,develop,lset,list,missing key,missing key,2,LSET nokey 0 x,same,-,-,-ERR no such key,-ERR no such key,,,lsetCommand,t_list.c:651
+38332001995,2026-10-13T01:24:43Z,develop,lset,list,missing key,missing key,3,LSET nokey 0 x,same,-,-,-ERR no such key,-ERR no such key,error,error,lsetCommand,t_list.c:651
+38332001995,2026-10-13T01:24:43Z,develop,lset,list,wrong type,wrong type,2,LSET str 0 x,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,lsetCommand,t_list.c:651
+38332001995,2026-10-13T01:24:43Z,develop,lset,list,wrong type,wrong type,3,LSET str 0 x,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,lsetCommand,t_list.c:651
+38332001995,2026-10-13T01:24:43Z,develop,lset,list,extra argument,extra argument,2,LSET list 0 x BOGUS,same,-,-,-ERR wrong number of arguments for 'lset' command,-ERR wrong number of arguments for 'lset' command,,,lsetCommand,t_list.c:651
+38332001995,2026-10-13T01:24:43Z,develop,lset,list,extra argument,extra argument,3,LSET list 0 x BOGUS,same,-,-,-ERR wrong number of arguments for 'lset' command,-ERR wrong number of arguments for 'lset' command,error,error,lsetCommand,t_list.c:651
+38332001995,2026-10-13T01:24:43Z,develop,ltrim,list,form,base,2,LTRIM list 0 -1,same,+,+,+OK,+OK,,,ltrimCommand,t_list.c:938
+38332001995,2026-10-13T01:24:43Z,develop,ltrim,list,form,base,3,LTRIM list 0 -1,same,+,+,+OK,+OK,ok,ok,ltrimCommand,t_list.c:938
+38332001995,2026-10-13T01:24:43Z,develop,ltrim,list,missing key,missing key,2,LTRIM nokey 0 -1,same,+,+,+OK,+OK,,,ltrimCommand,t_list.c:938
+38332001995,2026-10-13T01:24:43Z,develop,ltrim,list,missing key,missing key,3,LTRIM nokey 0 -1,same,+,+,+OK,+OK,ok,ok,ltrimCommand,t_list.c:938
+38332001995,2026-10-13T01:24:43Z,develop,ltrim,list,wrong type,wrong type,2,LTRIM str 0 -1,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,ltrimCommand,t_list.c:938
+38332001995,2026-10-13T01:24:43Z,develop,ltrim,list,wrong type,wrong type,3,LTRIM str 0 -1,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,ltrimCommand,t_list.c:938
+38332001995,2026-10-13T01:24:43Z,develop,ltrim,list,extra argument,extra argument,2,LTRIM list 0 -1 BOGUS,same,-,-,-ERR wrong number of arguments for 'ltrim' command,-ERR wrong number of arguments for 'ltrim' command,,,ltrimCommand,t_list.c:938
+38332001995,2026-10-13T01:24:43Z,develop,ltrim,list,extra argument,extra argument,3,LTRIM list 0 -1 BOGUS,same,-,-,-ERR wrong number of arguments for 'ltrim' command,-ERR wrong number of arguments for 'ltrim' command,error,error,ltrimCommand,t_list.c:938
+38332001995,2026-10-13T01:24:43Z,develop,memory|help,server,form,base,2,MEMORY HELP,same,*[+ + + + + + + +],*[+ + + + + + + + + + + + + +],"*[+MEMORY <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +STATS +    Return information about the memory usage of the server. +USAGE <key> [SAMPLES <count>] +    Return memory in bytes used by <key> and its value, as this server +    estimates it. SAMPLES is accepted, and the estimate i...",*[+MEMORY <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +DOCTOR +    Return memory problems reports. +MALLOC-STATS +    Return internal statistics report from the memory allocator. +PURGE +    Attempt to purge dirty pages for reclamation by the allocator. +STATS +    Return information...,,,memoryCommand,object.c:1808
+38332001995,2026-10-13T01:24:43Z,develop,memory|help,server,form,base,3,MEMORY HELP,same,*[+ + + + + + + +],*[+ + + + + + + + + + + + + +],"*[+MEMORY <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +STATS +    Return information about the memory usage of the server. +USAGE <key> [SAMPLES <count>] +    Return memory in bytes used by <key> and its value, as this server +    estimates it. SAMPLES is accepted, and the estimate i...",*[+MEMORY <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +DOCTOR +    Return memory problems reports. +MALLOC-STATS +    Return internal statistics report from the memory allocator. +PURGE +    Attempt to purge dirty pages for reclamation by the allocator. +STATS +    Return information...,ok,ok,memoryCommand,object.c:1808
+38332001995,2026-10-13T01:24:43Z,develop,memory|help,server,extra argument,extra argument,2,MEMORY HELP BOGUS,same,-,-,-ERR wrong number of arguments for 'memory|help' command,-ERR wrong number of arguments for 'memory|help' command,,,memoryCommand,object.c:1808
+38332001995,2026-10-13T01:24:43Z,develop,memory|help,server,extra argument,extra argument,3,MEMORY HELP BOGUS,same,-,-,-ERR wrong number of arguments for 'memory|help' command,-ERR wrong number of arguments for 'memory|help' command,error,error,memoryCommand,object.c:1808
+38332001995,2026-10-13T01:24:43Z,develop,memory|stats,server,form,base,2,MEMORY STATS,same,*[$ : $ : $ : $ : $ : $ : $ : $ : $ : $ : $ : $ : $ :],*[$ : $ : $ : $ : $ : $ : $ : $ : $ : $ : $ : $ : $ : $ : $ : $ *[$ : $ :] $ : $ : $ : $ : $ : $ : $ : $ $ $ $ $ : $ : $ : $ : $ $ $ : $ $ $ : $ $ $ : $ $ $ :],*[$keyspace.bytes :10103 $keys.count :24 $keys.expires :0 $string.bytes :493 $zset.bytes :6257 $set.bytes :1148 $hash.bytes :902 $list.bytes :752 $bloom.bytes :0 $cms.bytes :0 $morris.bytes :0 $hll.bytes :551 $cuckoo.bytes :0],*[$peak.allocated :2855968 $total.allocated :2070536 $startup.allocated :714648 $replication.backlog :0 $replica.fullsync.buffer :0 $clients.slaves :0 $clients.normal :2319 $clients.normal.shared :0 $clients.normal.unshared :0 $cluster.links :0 $aof.buffer :512 $lua.caches :0 $functions.caches :2...,,,memoryCommand,object.c:1808
+38332001995,2026-10-13T01:24:43Z,develop,memory|stats,server,form,base,3,MEMORY STATS,same,%{$:: $:: $:: $:: $:: $:: $:: $:: $:: $:: $:: $:: $::},"%{$:: $:: $:: $:: $:: $:: $:: $:: $:: $:: $:: $:: $:: $:: $:: $:%{$:: $::} $:: $:: $:: $:: $:: $:: $:: $:, $:, $:: $:: $:: $:: $:, $:: $:, $:: $:, $:: $:, $::}",%{$keyspace.bytes: :10103 $keys.count: :24 $keys.expires: :0 $string.bytes: :493 $zset.bytes: :6257 $set.bytes: :1148 $hash.bytes: :902 $list.bytes: :752 $bloom.bytes: :0 $cms.bytes: :0 $morris.bytes: :0 $hll.bytes: :551 $cuckoo.bytes: :0},%{$peak.allocated: :2855968 $total.allocated: :2095224 $startup.allocated: :714648 $replication.backlog: :0 $replica.fullsync.buffer: :0 $clients.slaves: :0 $clients.normal: :2319 $clients.normal.shared: :0 $clients.normal.unshared: :0 $cluster.links: :0 $aof.buffer: :512 $lua.caches: :0 $functio...,violation: /keyspace.bytes: not a listed field; /keys.expires: not a listed field; /string.bytes: not a listed field; /zset.bytes: not a listed field; /set.bytes: not a listed field; /hash.bytes: not a listed field; /list.bytes: not a listed field; /bloom.bytes: not a listed field; /cms.bytes: not a listed fie,ok,memoryCommand,object.c:1808
+38332001995,2026-10-13T01:24:43Z,develop,memory|stats,server,extra argument,extra argument,2,MEMORY STATS BOGUS,same,-,-,-ERR wrong number of arguments for 'memory|stats' command,-ERR wrong number of arguments for 'memory|stats' command,,,memoryCommand,object.c:1808
+38332001995,2026-10-13T01:24:43Z,develop,memory|stats,server,extra argument,extra argument,3,MEMORY STATS BOGUS,same,-,-,-ERR wrong number of arguments for 'memory|stats' command,-ERR wrong number of arguments for 'memory|stats' command,error,error,memoryCommand,object.c:1808
+38332001995,2026-10-13T01:24:43Z,develop,memory|usage,server,form,base,2,MEMORY USAGE str,same,:,:,:82,:32,,,memoryCommand,object.c:1808
+38332001995,2026-10-13T01:24:43Z,develop,memory|usage,server,form,base,3,MEMORY USAGE str,same,:,:,:82,:32,ok,ok,memoryCommand,object.c:1808
+38332001995,2026-10-13T01:24:43Z,develop,memory|usage,server,form,SAMPLES,2,MEMORY USAGE str SAMPLES 1,same,:,:,:82,:32,,,memoryCommand,object.c:1808
+38332001995,2026-10-13T01:24:43Z,develop,memory|usage,server,form,SAMPLES,3,MEMORY USAGE str SAMPLES 1,same,:,:,:82,:32,ok,ok,memoryCommand,object.c:1808
+38332001995,2026-10-13T01:24:43Z,develop,memory|usage,server,missing key,missing key,2,MEMORY USAGE nokey,same,$-1,$-1,$-1,$-1,,,memoryCommand,object.c:1808
+38332001995,2026-10-13T01:24:43Z,develop,memory|usage,server,missing key,missing key,3,MEMORY USAGE nokey,same,_,_,_,_,ok,ok,memoryCommand,object.c:1808
+38332001995,2026-10-13T01:24:43Z,develop,memory|usage,server,wrong type,wrong type,2,MEMORY USAGE list,same,:,:,:250,:39,,,memoryCommand,object.c:1808
+38332001995,2026-10-13T01:24:43Z,develop,memory|usage,server,wrong type,wrong type,3,MEMORY USAGE list,same,:,:,:250,:39,ok,ok,memoryCommand,object.c:1808
+38332001995,2026-10-13T01:24:43Z,develop,memory|usage,server,extra argument,extra argument,2,MEMORY USAGE str BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,,,memoryCommand,object.c:1808
+38332001995,2026-10-13T01:24:43Z,develop,memory|usage,server,extra argument,extra argument,3,MEMORY USAGE str BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,error,error,memoryCommand,object.c:1808
+38332001995,2026-10-13T01:24:43Z,develop,mget,string,form,base,2,MGET str,same,*[$],*[$],*[$abc],*[$abc],,,mgetCommand,t_string.c:717
+38332001995,2026-10-13T01:24:43Z,develop,mget,string,form,base,3,MGET str,same,*[$],*[$],*[$abc],*[$abc],ok,ok,mgetCommand,t_string.c:717
+38332001995,2026-10-13T01:24:43Z,develop,mget,string,form,key*2,2,MGET str str2,same,*[$ $],*[$ $],*[$abc $abd],*[$abc $abd],,,mgetCommand,t_string.c:717
+38332001995,2026-10-13T01:24:43Z,develop,mget,string,form,key*2,3,MGET str str2,same,*[$ $],*[$ $],*[$abc $abd],*[$abc $abd],ok,ok,mgetCommand,t_string.c:717
+38332001995,2026-10-13T01:24:43Z,develop,mget,string,missing key,missing key,2,MGET nokey,same,*[$-1],*[$-1],*[$-1],*[$-1],,,mgetCommand,t_string.c:717
+38332001995,2026-10-13T01:24:43Z,develop,mget,string,missing key,missing key,3,MGET nokey,same,*[_],*[_],*[_],*[_],ok,ok,mgetCommand,t_string.c:717
+38332001995,2026-10-13T01:24:43Z,develop,mget,string,wrong type,wrong type,2,MGET list,same,*[$-1],*[$-1],*[$-1],*[$-1],,,mgetCommand,t_string.c:717
+38332001995,2026-10-13T01:24:43Z,develop,mget,string,wrong type,wrong type,3,MGET list,same,*[_],*[_],*[_],*[_],ok,ok,mgetCommand,t_string.c:717
+38332001995,2026-10-13T01:24:43Z,develop,mget,string,extra argument,extra argument,2,MGET str BOGUS,same,*[$ $-1],*[$ $-1],*[$abc $-1],*[$abc $-1],,,mgetCommand,t_string.c:717
+38332001995,2026-10-13T01:24:43Z,develop,mget,string,extra argument,extra argument,3,MGET str BOGUS,same,*[$ _],*[$ _],*[$abc _],*[$abc _],ok,ok,mgetCommand,t_string.c:717
+38332001995,2026-10-13T01:24:43Z,develop,mset,string,form,base,2,MSET dest v,same,+,+,+OK,+OK,,,msetCommand,t_string.c:813
+38332001995,2026-10-13T01:24:43Z,develop,mset,string,form,base,3,MSET dest v,same,+,+,+OK,+OK,ok,ok,msetCommand,t_string.c:813
+38332001995,2026-10-13T01:24:43Z,develop,mset,string,form,data*2,2,MSET dest v dest2 w,same,+,+,+OK,+OK,,,msetCommand,t_string.c:813
+38332001995,2026-10-13T01:24:43Z,develop,mset,string,form,data*2,3,MSET dest v dest2 w,same,+,+,+OK,+OK,ok,ok,msetCommand,t_string.c:813
+38332001995,2026-10-13T01:24:43Z,develop,mset,string,extra argument,extra argument,2,MSET dest v BOGUS,same,-,-,-ERR wrong number of arguments for 'mset' command,-ERR wrong number of arguments for 'mset' command,,,msetCommand,t_string.c:813
+38332001995,2026-10-13T01:24:43Z,develop,mset,string,extra argument,extra argument,3,MSET dest v BOGUS,same,-,-,-ERR wrong number of arguments for 'mset' command,-ERR wrong number of arguments for 'mset' command,error,error,msetCommand,t_string.c:813
+38332001995,2026-10-13T01:24:43Z,develop,multi,transactions,form,base,2,MULTI,same,+,+,+OK,+OK,,,multiCommand,multi.c:91
+38332001995,2026-10-13T01:24:43Z,develop,multi,transactions,form,base,3,MULTI,same,+,+,+OK,+OK,ok,ok,multiCommand,multi.c:91
+38332001995,2026-10-13T01:24:43Z,develop,multi,transactions,extra argument,extra argument,2,MULTI BOGUS,same,-,-,-ERR wrong number of arguments for 'multi' command,-ERR wrong number of arguments for 'multi' command,,,multiCommand,multi.c:91
+38332001995,2026-10-13T01:24:43Z,develop,multi,transactions,extra argument,extra argument,3,MULTI BOGUS,same,-,-,-ERR wrong number of arguments for 'multi' command,-ERR wrong number of arguments for 'multi' command,error,error,multiCommand,multi.c:91
+38332001995,2026-10-13T01:24:43Z,develop,persist,generic,form,base,2,PERSIST str,same,:,:,:0,:0,,,persistCommand,expire.c:911
+38332001995,2026-10-13T01:24:43Z,develop,persist,generic,form,base,3,PERSIST str,same,:,:,:0,:0,ok,ok,persistCommand,expire.c:911
+38332001995,2026-10-13T01:24:43Z,develop,persist,generic,missing key,missing key,2,PERSIST nokey,same,:,:,:0,:0,,,persistCommand,expire.c:911
+38332001995,2026-10-13T01:24:43Z,develop,persist,generic,missing key,missing key,3,PERSIST nokey,same,:,:,:0,:0,ok,ok,persistCommand,expire.c:911
+38332001995,2026-10-13T01:24:43Z,develop,persist,generic,wrong type,wrong type,2,PERSIST list,same,:,:,:0,:0,,,persistCommand,expire.c:911
+38332001995,2026-10-13T01:24:43Z,develop,persist,generic,wrong type,wrong type,3,PERSIST list,same,:,:,:0,:0,ok,ok,persistCommand,expire.c:911
+38332001995,2026-10-13T01:24:43Z,develop,persist,generic,extra argument,extra argument,2,PERSIST str BOGUS,same,-,-,-ERR wrong number of arguments for 'persist' command,-ERR wrong number of arguments for 'persist' command,,,persistCommand,expire.c:911
+38332001995,2026-10-13T01:24:43Z,develop,persist,generic,extra argument,extra argument,3,PERSIST str BOGUS,same,-,-,-ERR wrong number of arguments for 'persist' command,-ERR wrong number of arguments for 'persist' command,error,error,persistCommand,expire.c:911
+38332001995,2026-10-13T01:24:43Z,develop,pexpire,generic,form,base,2,PEXPIRE str 100000,same,:,:,:1,:1,,,pexpireCommand,expire.c:856
+38332001995,2026-10-13T01:24:43Z,develop,pexpire,generic,form,base,3,PEXPIRE str 100000,same,:,:,:1,:1,ok,ok,pexpireCommand,expire.c:856
+38332001995,2026-10-13T01:24:43Z,develop,pexpire,generic,form,NX,2,PEXPIRE str 100000 NX,same,:,:,:1,:1,,,pexpireCommand,expire.c:856
+38332001995,2026-10-13T01:24:43Z,develop,pexpire,generic,form,NX,3,PEXPIRE str 100000 NX,same,:,:,:1,:1,ok,ok,pexpireCommand,expire.c:856
+38332001995,2026-10-13T01:24:43Z,develop,pexpire,generic,form,XX,2,PEXPIRE str 100000 XX,same,:,:,:0,:0,,,pexpireCommand,expire.c:856
+38332001995,2026-10-13T01:24:43Z,develop,pexpire,generic,form,XX,3,PEXPIRE str 100000 XX,same,:,:,:0,:0,ok,ok,pexpireCommand,expire.c:856
+38332001995,2026-10-13T01:24:43Z,develop,pexpire,generic,form,GT,2,PEXPIRE str 100000 GT,same,:,:,:0,:0,,,pexpireCommand,expire.c:856
+38332001995,2026-10-13T01:24:43Z,develop,pexpire,generic,form,GT,3,PEXPIRE str 100000 GT,same,:,:,:0,:0,ok,ok,pexpireCommand,expire.c:856
+38332001995,2026-10-13T01:24:43Z,develop,pexpire,generic,form,LT,2,PEXPIRE str 100000 LT,same,:,:,:1,:1,,,pexpireCommand,expire.c:856
+38332001995,2026-10-13T01:24:43Z,develop,pexpire,generic,form,LT,3,PEXPIRE str 100000 LT,same,:,:,:1,:1,ok,ok,pexpireCommand,expire.c:856
+38332001995,2026-10-13T01:24:43Z,develop,pexpire,generic,missing key,missing key,2,PEXPIRE nokey 100000,same,:,:,:0,:0,,,pexpireCommand,expire.c:856
+38332001995,2026-10-13T01:24:43Z,develop,pexpire,generic,missing key,missing key,3,PEXPIRE nokey 100000,same,:,:,:0,:0,ok,ok,pexpireCommand,expire.c:856
+38332001995,2026-10-13T01:24:43Z,develop,pexpire,generic,wrong type,wrong type,2,PEXPIRE list 100000,same,:,:,:1,:1,,,pexpireCommand,expire.c:856
+38332001995,2026-10-13T01:24:43Z,develop,pexpire,generic,wrong type,wrong type,3,PEXPIRE list 100000,same,:,:,:1,:1,ok,ok,pexpireCommand,expire.c:856
+38332001995,2026-10-13T01:24:43Z,develop,pexpire,generic,extra argument,extra argument,2,PEXPIRE str 100000 BOGUS,same,-,-,-ERR Unsupported option BOGUS,-ERR Unsupported option BOGUS,,,pexpireCommand,expire.c:856
+38332001995,2026-10-13T01:24:43Z,develop,pexpire,generic,extra argument,extra argument,3,PEXPIRE str 100000 BOGUS,same,-,-,-ERR Unsupported option BOGUS,-ERR Unsupported option BOGUS,error,error,pexpireCommand,expire.c:856
+38332001995,2026-10-13T01:24:43Z,develop,pexpireat,generic,form,base,2,PEXPIREAT str 4102444800000,same,:,:,:1,:1,,,pexpireatCommand,expire.c:861
+38332001995,2026-10-13T01:24:43Z,develop,pexpireat,generic,form,base,3,PEXPIREAT str 4102444800000,same,:,:,:1,:1,ok,ok,pexpireatCommand,expire.c:861
+38332001995,2026-10-13T01:24:43Z,develop,pexpireat,generic,form,NX,2,PEXPIREAT str 4102444800000 NX,same,:,:,:1,:1,,,pexpireatCommand,expire.c:861
+38332001995,2026-10-13T01:24:43Z,develop,pexpireat,generic,form,NX,3,PEXPIREAT str 4102444800000 NX,same,:,:,:1,:1,ok,ok,pexpireatCommand,expire.c:861
+38332001995,2026-10-13T01:24:43Z,develop,pexpireat,generic,form,XX,2,PEXPIREAT str 4102444800000 XX,same,:,:,:0,:0,,,pexpireatCommand,expire.c:861
+38332001995,2026-10-13T01:24:43Z,develop,pexpireat,generic,form,XX,3,PEXPIREAT str 4102444800000 XX,same,:,:,:0,:0,ok,ok,pexpireatCommand,expire.c:861
+38332001995,2026-10-13T01:24:43Z,develop,pexpireat,generic,form,GT,2,PEXPIREAT str 4102444800000 GT,same,:,:,:0,:0,,,pexpireatCommand,expire.c:861
+38332001995,2026-10-13T01:24:43Z,develop,pexpireat,generic,form,GT,3,PEXPIREAT str 4102444800000 GT,same,:,:,:0,:0,ok,ok,pexpireatCommand,expire.c:861
+38332001995,2026-10-13T01:24:43Z,develop,pexpireat,generic,form,LT,2,PEXPIREAT str 4102444800000 LT,same,:,:,:1,:1,,,pexpireatCommand,expire.c:861
+38332001995,2026-10-13T01:24:43Z,develop,pexpireat,generic,form,LT,3,PEXPIREAT str 4102444800000 LT,same,:,:,:1,:1,ok,ok,pexpireatCommand,expire.c:861
+38332001995,2026-10-13T01:24:43Z,develop,pexpireat,generic,missing key,missing key,2,PEXPIREAT nokey 4102444800000,same,:,:,:0,:0,,,pexpireatCommand,expire.c:861
+38332001995,2026-10-13T01:24:43Z,develop,pexpireat,generic,missing key,missing key,3,PEXPIREAT nokey 4102444800000,same,:,:,:0,:0,ok,ok,pexpireatCommand,expire.c:861
+38332001995,2026-10-13T01:24:43Z,develop,pexpireat,generic,wrong type,wrong type,2,PEXPIREAT list 4102444800000,same,:,:,:1,:1,,,pexpireatCommand,expire.c:861
+38332001995,2026-10-13T01:24:43Z,develop,pexpireat,generic,wrong type,wrong type,3,PEXPIREAT list 4102444800000,same,:,:,:1,:1,ok,ok,pexpireatCommand,expire.c:861
+38332001995,2026-10-13T01:24:43Z,develop,pexpireat,generic,extra argument,extra argument,2,PEXPIREAT str 4102444800000 BOGUS,same,-,-,-ERR Unsupported option BOGUS,-ERR Unsupported option BOGUS,,,pexpireatCommand,expire.c:861
+38332001995,2026-10-13T01:24:43Z,develop,pexpireat,generic,extra argument,extra argument,3,PEXPIREAT str 4102444800000 BOGUS,same,-,-,-ERR Unsupported option BOGUS,-ERR Unsupported option BOGUS,error,error,pexpireatCommand,expire.c:861
+38332001995,2026-10-13T01:24:43Z,develop,pfadd,hyperloglog,form,base,2,PFADD hll,same,:,:,:0,:0,,,pfaddCommand,hyperloglog.c:1642
+38332001995,2026-10-13T01:24:43Z,develop,pfadd,hyperloglog,form,base,3,PFADD hll,same,:,:,:0,:0,ok,ok,pfaddCommand,hyperloglog.c:1642
+38332001995,2026-10-13T01:24:43Z,develop,pfadd,hyperloglog,form,element,2,PFADD hll a,same,:,:,:0,:0,,,pfaddCommand,hyperloglog.c:1642
+38332001995,2026-10-13T01:24:43Z,develop,pfadd,hyperloglog,form,element,3,PFADD hll a,same,:,:,:0,:0,ok,ok,pfaddCommand,hyperloglog.c:1642
+38332001995,2026-10-13T01:24:43Z,develop,pfadd,hyperloglog,form,element element*2,2,PFADD hll a b,same,:,:,:0,:0,,,pfaddCommand,hyperloglog.c:1642
+38332001995,2026-10-13T01:24:43Z,develop,pfadd,hyperloglog,form,element element*2,3,PFADD hll a b,same,:,:,:0,:0,ok,ok,pfaddCommand,hyperloglog.c:1642
+38332001995,2026-10-13T01:24:43Z,develop,pfadd,hyperloglog,missing key,missing key,2,PFADD nokey,same,:,:,:1,:1,,,pfaddCommand,hyperloglog.c:1642
+38332001995,2026-10-13T01:24:43Z,develop,pfadd,hyperloglog,missing key,missing key,3,PFADD nokey,same,:,:,:1,:1,ok,ok,pfaddCommand,hyperloglog.c:1642
+38332001995,2026-10-13T01:24:43Z,develop,pfadd,hyperloglog,wrong type,wrong type,2,PFADD str,same,-,-,-WRONGTYPE Key is not a valid HyperLogLog string value.,-WRONGTYPE Key is not a valid HyperLogLog string value.,,,pfaddCommand,hyperloglog.c:1642
+38332001995,2026-10-13T01:24:43Z,develop,pfadd,hyperloglog,wrong type,wrong type,3,PFADD str,same,-,-,-WRONGTYPE Key is not a valid HyperLogLog string value.,-WRONGTYPE Key is not a valid HyperLogLog string value.,error,error,pfaddCommand,hyperloglog.c:1642
+38332001995,2026-10-13T01:24:43Z,develop,pfadd,hyperloglog,extra argument,extra argument,2,PFADD hll BOGUS,same,:,:,:1,:1,,,pfaddCommand,hyperloglog.c:1642
+38332001995,2026-10-13T01:24:43Z,develop,pfadd,hyperloglog,extra argument,extra argument,3,PFADD hll BOGUS,same,:,:,:1,:1,ok,ok,pfaddCommand,hyperloglog.c:1642
+38332001995,2026-10-13T01:24:43Z,develop,pfcount,hyperloglog,form,base,2,PFCOUNT hll,same,:,:,:3,:3,,,pfcountCommand,hyperloglog.c:1696
+38332001995,2026-10-13T01:24:43Z,develop,pfcount,hyperloglog,form,base,3,PFCOUNT hll,same,:,:,:3,:3,ok,ok,pfcountCommand,hyperloglog.c:1696
+38332001995,2026-10-13T01:24:43Z,develop,pfcount,hyperloglog,form,key*2,2,PFCOUNT hll hll2,same,:,:,:4,:4,,,pfcountCommand,hyperloglog.c:1696
+38332001995,2026-10-13T01:24:43Z,develop,pfcount,hyperloglog,form,key*2,3,PFCOUNT hll hll2,same,:,:,:4,:4,ok,ok,pfcountCommand,hyperloglog.c:1696
+38332001995,2026-10-13T01:24:43Z,develop,pfcount,hyperloglog,missing key,missing key,2,PFCOUNT nokey,same,:,:,:0,:0,,,pfcountCommand,hyperloglog.c:1696
+38332001995,2026-10-13T01:24:43Z,develop,pfcount,hyperloglog,missing key,missing key,3,PFCOUNT nokey,same,:,:,:0,:0,ok,ok,pfcountCommand,hyperloglog.c:1696
+38332001995,2026-10-13T01:24:43Z,develop,pfcount,hyperloglog,wrong type,wrong type,2,PFCOUNT str,same,-,-,-WRONGTYPE Key is not a valid HyperLogLog string value.,-WRONGTYPE Key is not a valid HyperLogLog string value.,,,pfcountCommand,hyperloglog.c:1696
+38332001995,2026-10-13T01:24:43Z,develop,pfcount,hyperloglog,wrong type,wrong type,3,PFCOUNT str,same,-,-,-WRONGTYPE Key is not a valid HyperLogLog string value.,-WRONGTYPE Key is not a valid HyperLogLog string value.,error,error,pfcountCommand,hyperloglog.c:1696
+38332001995,2026-10-13T01:24:43Z,develop,pfcount,hyperloglog,extra argument,extra argument,2,PFCOUNT hll BOGUS,same,:,:,:3,:3,,,pfcountCommand,hyperloglog.c:1696
+38332001995,2026-10-13T01:24:43Z,develop,pfcount,hyperloglog,extra argument,extra argument,3,PFCOUNT hll BOGUS,same,:,:,:3,:3,ok,ok,pfcountCommand,hyperloglog.c:1696
+38332001995,2026-10-13T01:24:43Z,develop,pfmerge,hyperloglog,form,base,2,PFMERGE hll,same,+,+,+OK,+OK,,,pfmergeCommand,hyperloglog.c:1791
+38332001995,2026-10-13T01:24:43Z,develop,pfmerge,hyperloglog,form,base,3,PFMERGE hll,same,+,+,+OK,+OK,ok,ok,pfmergeCommand,hyperloglog.c:1791
+38332001995,2026-10-13T01:24:43Z,develop,pfmerge,hyperloglog,form,sourcekey,2,PFMERGE hll hll2,same,+,+,+OK,+OK,,,pfmergeCommand,hyperloglog.c:1791
+38332001995,2026-10-13T01:24:43Z,develop,pfmerge,hyperloglog,form,sourcekey,3,PFMERGE hll hll2,same,+,+,+OK,+OK,ok,ok,pfmergeCommand,hyperloglog.c:1791
+38332001995,2026-10-13T01:24:43Z,develop,pfmerge,hyperloglog,form,sourcekey sourcekey*2,2,PFMERGE hll hll2 hll3,same,+,+,+OK,+OK,,,pfmergeCommand,hyperloglog.c:1791
+38332001995,2026-10-13T01:24:43Z,develop,pfmerge,hyperloglog,form,sourcekey sourcekey*2,3,PFMERGE hll hll2 hll3,same,+,+,+OK,+OK,ok,ok,pfmergeCommand,hyperloglog.c:1791
+38332001995,2026-10-13T01:24:43Z,develop,pfmerge,hyperloglog,missing key,missing key,2,PFMERGE nokey,same,+,+,+OK,+OK,,,pfmergeCommand,hyperloglog.c:1791
+38332001995,2026-10-13T01:24:43Z,develop,pfmerge,hyperloglog,missing key,missing key,3,PFMERGE nokey,same,+,+,+OK,+OK,ok,ok,pfmergeCommand,hyperloglog.c:1791
+38332001995,2026-10-13T01:24:43Z,develop,pfmerge,hyperloglog,wrong type,wrong type,2,PFMERGE str,same,-,-,-WRONGTYPE Key is not a valid HyperLogLog string value.,-WRONGTYPE Key is not a valid HyperLogLog string value.,,,pfmergeCommand,hyperloglog.c:1791
+38332001995,2026-10-13T01:24:43Z,develop,pfmerge,hyperloglog,wrong type,wrong type,3,PFMERGE str,same,-,-,-WRONGTYPE Key is not a valid HyperLogLog string value.,-WRONGTYPE Key is not a valid HyperLogLog string value.,error,error,pfmergeCommand,hyperloglog.c:1791
+38332001995,2026-10-13T01:24:43Z,develop,pfmerge,hyperloglog,extra argument,extra argument,2,PFMERGE hll BOGUS,same,+,+,+OK,+OK,,,pfmergeCommand,hyperloglog.c:1791
+38332001995,2026-10-13T01:24:43Z,develop,pfmerge,hyperloglog,extra argument,extra argument,3,PFMERGE hll BOGUS,same,+,+,+OK,+OK,ok,ok,pfmergeCommand,hyperloglog.c:1791
+38332001995,2026-10-13T01:24:43Z,develop,ping,connection,form,base,2,PING,same,+,+,+PONG,+PONG,,,pingCommand,server.c:5283
+38332001995,2026-10-13T01:24:43Z,develop,ping,connection,form,base,3,PING,same,+,+,+PONG,+PONG,ok,ok,pingCommand,server.c:5283
+38332001995,2026-10-13T01:24:43Z,develop,ping,connection,form,message,2,PING hi,same,$,$,$hi,$hi,,,pingCommand,server.c:5283
+38332001995,2026-10-13T01:24:43Z,develop,ping,connection,form,message,3,PING hi,same,$,$,$hi,$hi,ok,ok,pingCommand,server.c:5283
+38332001995,2026-10-13T01:24:43Z,develop,ping,connection,extra argument,extra argument,2,PING BOGUS,same,$,$,$BOGUS,$BOGUS,,,pingCommand,server.c:5283
+38332001995,2026-10-13T01:24:43Z,develop,ping,connection,extra argument,extra argument,3,PING BOGUS,same,$,$,$BOGUS,$BOGUS,ok,ok,pingCommand,server.c:5283
+38332001995,2026-10-13T01:24:43Z,develop,psetex,string,form,base,2,PSETEX dest 100000 v,same,+,+,+OK,+OK,,,psetexCommand,t_string.c:456
+38332001995,2026-10-13T01:24:43Z,develop,psetex,string,form,base,3,PSETEX dest 100000 v,same,+,+,+OK,+OK,ok,ok,psetexCommand,t_string.c:456
+38332001995,2026-10-13T01:24:43Z,develop,psetex,string,extra argument,extra argument,2,PSETEX dest 100000 v BOGUS,same,-,-,-ERR wrong number of arguments for 'psetex' command,-ERR wrong number of arguments for 'psetex' command,,,psetexCommand,t_string.c:456
+38332001995,2026-10-13T01:24:43Z,develop,psetex,string,extra argument,extra argument,3,PSETEX dest 100000 v BOGUS,same,-,-,-ERR wrong number of arguments for 'psetex' command,-ERR wrong number of arguments for 'psetex' command,error,error,psetexCommand,t_string.c:456
+38332001995,2026-10-13T01:24:43Z,develop,pttl,generic,form,base,2,PTTL str,same,:,:,:-1,:-1,,,pttlCommand,expire.c:896
+38332001995,2026-10-13T01:24:43Z,develop,pttl,generic,form,base,3,PTTL str,same,:,:,:-1,:-1,ok,ok,pttlCommand,expire.c:896
+38332001995,2026-10-13T01:24:43Z,develop,pttl,generic,missing key,missing key,2,PTTL nokey,same,:,:,:-2,:-2,,,pttlCommand,expire.c:896
+38332001995,2026-10-13T01:24:43Z,develop,pttl,generic,missing key,missing key,3,PTTL nokey,same,:,:,:-2,:-2,ok,ok,pttlCommand,expire.c:896
+38332001995,2026-10-13T01:24:43Z,develop,pttl,generic,wrong type,wrong type,2,PTTL list,same,:,:,:-1,:-1,,,pttlCommand,expire.c:896
+38332001995,2026-10-13T01:24:43Z,develop,pttl,generic,wrong type,wrong type,3,PTTL list,same,:,:,:-1,:-1,ok,ok,pttlCommand,expire.c:896
+38332001995,2026-10-13T01:24:43Z,develop,pttl,generic,extra argument,extra argument,2,PTTL str BOGUS,same,-,-,-ERR wrong number of arguments for 'pttl' command,-ERR wrong number of arguments for 'pttl' command,,,pttlCommand,expire.c:896
+38332001995,2026-10-13T01:24:43Z,develop,pttl,generic,extra argument,extra argument,3,PTTL str BOGUS,same,-,-,-ERR wrong number of arguments for 'pttl' command,-ERR wrong number of arguments for 'pttl' command,error,error,pttlCommand,expire.c:896
+38332001995,2026-10-13T01:24:43Z,develop,quit,connection,form,base,2,QUIT,same,+,+,+OK,+OK,,,quitCommand,networking.c:4377
+38332001995,2026-10-13T01:24:43Z,develop,quit,connection,form,base,3,QUIT,same,+,+,+OK,+OK,ok,ok,quitCommand,networking.c:4377
+38332001995,2026-10-13T01:24:43Z,develop,quit,connection,extra argument,extra argument,2,QUIT BOGUS,same,+,+,+OK,+OK,,,quitCommand,networking.c:4377
+38332001995,2026-10-13T01:24:43Z,develop,quit,connection,extra argument,extra argument,3,QUIT BOGUS,same,+,+,+OK,+OK,ok,ok,quitCommand,networking.c:4377
+38332001995,2026-10-13T01:24:43Z,develop,rpop,list,form,base,2,RPOP list,same,$,$,$c,$c,,,rpopCommand,t_list.c:919
+38332001995,2026-10-13T01:24:43Z,develop,rpop,list,form,base,3,RPOP list,same,$,$,$c,$c,ok,ok,rpopCommand,t_list.c:919
+38332001995,2026-10-13T01:24:43Z,develop,rpop,list,form,count,2,RPOP list 1,same,*[$],*[$],*[$c],*[$c],,,rpopCommand,t_list.c:919
+38332001995,2026-10-13T01:24:43Z,develop,rpop,list,form,count,3,RPOP list 1,same,*[$],*[$],*[$c],*[$c],ok,ok,rpopCommand,t_list.c:919
+38332001995,2026-10-13T01:24:43Z,develop,rpop,list,missing key,missing key,2,RPOP nokey,same,$-1,$-1,$-1,$-1,,,rpopCommand,t_list.c:919
+38332001995,2026-10-13T01:24:43Z,develop,rpop,list,missing key,missing key,3,RPOP nokey,same,_,_,_,_,ok,ok,rpopCommand,t_list.c:919
+38332001995,2026-10-13T01:24:43Z,develop,rpop,list,wrong type,wrong type,2,RPOP str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,rpopCommand,t_list.c:919
+38332001995,2026-10-13T01:24:43Z,develop,rpop,list,wrong type,wrong type,3,RPOP str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,rpopCommand,t_list.c:919
+38332001995,2026-10-13T01:24:43Z,develop,rpop,list,extra argument,extra argument,2,RPOP list BOGUS,same,-,-,"-ERR value is out of range, must be positive","-ERR value is out of range, must be positive",,,rpopCommand,t_list.c:919
+38332001995,2026-10-13T01:24:43Z,develop,rpop,list,extra argument,extra argument,3,RPOP list BOGUS,same,-,-,"-ERR value is out of range, must be positive","-ERR value is out of range, must be positive",error,error,rpopCommand,t_list.c:919
+38332001995,2026-10-13T01:24:43Z,develop,rpush,list,form,base,2,RPUSH list a,same,:,:,:4,:4,,,rpushCommand,t_list.c:534
+38332001995,2026-10-13T01:24:43Z,develop,rpush,list,form,base,3,RPUSH list a,same,:,:,:4,:4,ok,ok,rpushCommand,t_list.c:534
+38332001995,2026-10-13T01:24:43Z,develop,rpush,list,form,element*2,2,RPUSH list a b,same,:,:,:5,:5,,,rpushCommand,t_list.c:534
+38332001995,2026-10-13T01:24:43Z,develop,rpush,list,form,element*2,3,RPUSH list a b,same,:,:,:5,:5,ok,ok,rpushCommand,t_list.c:534
+38332001995,2026-10-13T01:24:43Z,develop,rpush,list,missing key,missing key,2,RPUSH nokey a,same,:,:,:1,:1,,,rpushCommand,t_list.c:534
+38332001995,2026-10-13T01:24:43Z,develop,rpush,list,missing key,missing key,3,RPUSH nokey a,same,:,:,:1,:1,ok,ok,rpushCommand,t_list.c:534
+38332001995,2026-10-13T01:24:43Z,develop,rpush,list,wrong type,wrong type,2,RPUSH str a,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,rpushCommand,t_list.c:534
+38332001995,2026-10-13T01:24:43Z,develop,rpush,list,wrong type,wrong type,3,RPUSH str a,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,rpushCommand,t_list.c:534
+38332001995,2026-10-13T01:24:43Z,develop,rpush,list,extra argument,extra argument,2,RPUSH list a BOGUS,same,:,:,:5,:5,,,rpushCommand,t_list.c:534
+38332001995,2026-10-13T01:24:43Z,develop,rpush,list,extra argument,extra argument,3,RPUSH list a BOGUS,same,:,:,:5,:5,ok,ok,rpushCommand,t_list.c:534
+38332001995,2026-10-13T01:24:43Z,develop,sadd,set,form,base,2,SADD set a,same,:,:,:0,:0,,,saddCommand,t_set.c:626
+38332001995,2026-10-13T01:24:43Z,develop,sadd,set,form,base,3,SADD set a,same,:,:,:0,:0,ok,ok,saddCommand,t_set.c:626
+38332001995,2026-10-13T01:24:43Z,develop,sadd,set,form,member*2,2,SADD set a b,same,:,:,:0,:0,,,saddCommand,t_set.c:626
+38332001995,2026-10-13T01:24:43Z,develop,sadd,set,form,member*2,3,SADD set a b,same,:,:,:0,:0,ok,ok,saddCommand,t_set.c:626
+38332001995,2026-10-13T01:24:43Z,develop,sadd,set,missing key,missing key,2,SADD nokey a,same,:,:,:1,:1,,,saddCommand,t_set.c:626
+38332001995,2026-10-13T01:24:43Z,develop,sadd,set,missing key,missing key,3,SADD nokey a,same,:,:,:1,:1,ok,ok,saddCommand,t_set.c:626
+38332001995,2026-10-13T01:24:43Z,develop,sadd,set,wrong type,wrong type,2,SADD str a,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,saddCommand,t_set.c:626
+38332001995,2026-10-13T01:24:43Z,develop,sadd,set,wrong type,wrong type,3,SADD str a,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,saddCommand,t_set.c:626
+38332001995,2026-10-13T01:24:43Z,develop,sadd,set,extra argument,extra argument,2,SADD set a BOGUS,same,:,:,:1,:1,,,saddCommand,t_set.c:626
+38332001995,2026-10-13T01:24:43Z,develop,sadd,set,extra argument,extra argument,3,SADD set a BOGUS,same,:,:,:1,:1,ok,ok,saddCommand,t_set.c:626
+38332001995,2026-10-13T01:24:43Z,develop,scan,generic,form,base,2,SCAN 0,same,*[$ *[$ $ $ $ $ $]],*[$ *[$ $ $ $ $ $ $ $ $ $]],*[$281474976710656 *[$str $str2 $str3 $num $num2 $num3]],*[$18 *[$hll $geo $str3 $num $set $set3 $num3 $hash $str2 $zset]],,,scanCommand,db.c:2173
+38332001995,2026-10-13T01:24:43Z,develop,scan,generic,form,base,3,SCAN 0,same,*[$ *[$ $ $ $ $ $]],*[$ *[$ $ $ $ $ $ $ $ $ $]],*[$281474976710656 *[$str $str2 $str3 $num $num2 $num3]],*[$18 *[$hll $geo $str3 $num $set $set3 $num3 $hash $str2 $zset]],ok,ok,scanCommand,db.c:2173
+38332001995,2026-10-13T01:24:43Z,develop,scan,generic,form,MATCH,2,SCAN 0 MATCH *,same,*[$ *[$ $ $ $ $ $]],*[$ *[$ $ $ $ $ $ $ $ $ $]],*[$281474976710656 *[$str $str2 $str3 $num $num2 $num3]],*[$18 *[$hll $geo $str3 $num $set $set3 $num3 $hash $str2 $zset]],,,scanCommand,db.c:2173
+38332001995,2026-10-13T01:24:43Z,develop,scan,generic,form,MATCH,3,SCAN 0 MATCH *,same,*[$ *[$ $ $ $ $ $]],*[$ *[$ $ $ $ $ $ $ $ $ $]],*[$281474976710656 *[$str $str2 $str3 $num $num2 $num3]],*[$18 *[$hll $geo $str3 $num $set $set3 $num3 $hash $str2 $zset]],ok,ok,scanCommand,db.c:2173
+38332001995,2026-10-13T01:24:43Z,develop,scan,generic,form,COUNT,2,SCAN 0 COUNT 10,same,*[$ *[$ $ $ $ $ $]],*[$ *[$ $ $ $ $ $ $ $ $ $]],*[$281474976710656 *[$str $str2 $str3 $num $num2 $num3]],*[$18 *[$hll $geo $str3 $num $set $set3 $num3 $hash $str2 $zset]],,,scanCommand,db.c:2173
+38332001995,2026-10-13T01:24:43Z,develop,scan,generic,form,COUNT,3,SCAN 0 COUNT 10,same,*[$ *[$ $ $ $ $ $]],*[$ *[$ $ $ $ $ $ $ $ $ $]],*[$281474976710656 *[$str $str2 $str3 $num $num2 $num3]],*[$18 *[$hll $geo $str3 $num $set $set3 $num3 $hash $str2 $zset]],ok,ok,scanCommand,db.c:2173
+38332001995,2026-10-13T01:24:43Z,develop,scan,generic,form,TYPE,2,SCAN 0 TYPE string,same,*[$ *[$ $ $ $ $ $]],*[$ *[$ $ $ $ $]],*[$281474976710656 *[$str $str2 $str3 $num $num2 $num3]],*[$18 *[$hll $str3 $num $num3 $str2]],,,scanCommand,db.c:2173
+38332001995,2026-10-13T01:24:43Z,develop,scan,generic,form,TYPE,3,SCAN 0 TYPE string,same,*[$ *[$ $ $ $ $ $]],*[$ *[$ $ $ $ $]],*[$281474976710656 *[$str $str2 $str3 $num $num2 $num3]],*[$18 *[$hll $str3 $num $num3 $str2]],ok,ok,scanCommand,db.c:2173
+38332001995,2026-10-13T01:24:43Z,develop,scan,generic,extra argument,extra argument,2,SCAN 0 BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,,,scanCommand,db.c:2173
+38332001995,2026-10-13T01:24:43Z,develop,scan,generic,extra argument,extra argument,3,SCAN 0 BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,error,error,scanCommand,db.c:2173
+38332001995,2026-10-13T01:24:43Z,develop,scard,set,form,base,2,SCARD set,same,:,:,:3,:3,,,scardCommand,t_set.c:821
+38332001995,2026-10-13T01:24:43Z,develop,scard,set,form,base,3,SCARD set,same,:,:,:3,:3,ok,ok,scardCommand,t_set.c:821
+38332001995,2026-10-13T01:24:43Z,develop,scard,set,missing key,missing key,2,SCARD nokey,same,:,:,:0,:0,,,scardCommand,t_set.c:821
+38332001995,2026-10-13T01:24:43Z,develop,scard,set,missing key,missing key,3,SCARD nokey,same,:,:,:0,:0,ok,ok,scardCommand,t_set.c:821
+38332001995,2026-10-13T01:24:43Z,develop,scard,set,wrong type,wrong type,2,SCARD str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,scardCommand,t_set.c:821
+38332001995,2026-10-13T01:24:43Z,develop,scard,set,wrong type,wrong type,3,SCARD str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,scardCommand,t_set.c:821
+38332001995,2026-10-13T01:24:43Z,develop,scard,set,extra argument,extra argument,2,SCARD set BOGUS,same,-,-,-ERR wrong number of arguments for 'scard' command,-ERR wrong number of arguments for 'scard' command,,,scardCommand,t_set.c:821
+38332001995,2026-10-13T01:24:43Z,develop,scard,set,extra argument,extra argument,3,SCARD set BOGUS,same,-,-,-ERR wrong number of arguments for 'scard' command,-ERR wrong number of arguments for 'scard' command,error,error,scardCommand,t_set.c:821
+38332001995,2026-10-13T01:24:43Z,develop,select,connection,form,base,2,SELECT 0,same,+,+,+OK,+OK,,,selectCommand,db.c:1571
+38332001995,2026-10-13T01:24:43Z,develop,select,connection,form,base,3,SELECT 0,same,+,+,+OK,+OK,ok,ok,selectCommand,db.c:1571
+38332001995,2026-10-13T01:24:43Z,develop,select,connection,extra argument,extra argument,2,SELECT 0 BOGUS,same,-,-,-ERR wrong number of arguments for 'select' command,-ERR wrong number of arguments for 'select' command,,,selectCommand,db.c:1571
+38332001995,2026-10-13T01:24:43Z,develop,select,connection,extra argument,extra argument,3,SELECT 0 BOGUS,same,-,-,-ERR wrong number of arguments for 'select' command,-ERR wrong number of arguments for 'select' command,error,error,selectCommand,db.c:1571
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,base,2,SET str v,same,+,+,+OK,+OK,,,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,base,3,SET str v,same,+,+,+OK,+OK,ok,ok,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,NX,2,SET str v NX,same,$-1,$-1,$-1,$-1,,,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,NX,3,SET str v NX,same,_,_,_,_,ok,ok,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,XX,2,SET str v XX,same,+,+,+OK,+OK,,,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,XX,3,SET str v XX,same,+,+,+OK,+OK,ok,ok,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,IFEQ,2,SET str v IFEQ s,refused,-,$-1,-ERR syntax error,$-1,,,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,IFEQ,3,SET str v IFEQ s,refused,-,_,-ERR syntax error,_,error,ok,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,IFNE,2,SET str v IFNE s,refused,-,+,-ERR syntax error,+OK,,,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,IFNE,3,SET str v IFNE s,refused,-,+,-ERR syntax error,+OK,error,ok,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,IFDEQ,2,SET str v IFDEQ 0123456789abcdef,refused,-,$-1,-ERR syntax error,$-1,,,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,IFDEQ,3,SET str v IFDEQ 0123456789abcdef,refused,-,_,-ERR syntax error,_,error,ok,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,IFDNE,2,SET str v IFDNE 0123456789abcdef,refused,-,+,-ERR syntax error,+OK,,,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,IFDNE,3,SET str v IFDNE 0123456789abcdef,refused,-,+,-ERR syntax error,+OK,error,ok,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,GET,2,SET str v GET,same,$,$,$abc,$abc,,,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,GET,3,SET str v GET,same,$,$,$abc,$abc,ok,ok,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,EX,2,SET str v EX 100,same,+,+,+OK,+OK,,,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,EX,3,SET str v EX 100,same,+,+,+OK,+OK,ok,ok,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,PX,2,SET str v PX 100000,same,+,+,+OK,+OK,,,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,PX,3,SET str v PX 100000,same,+,+,+OK,+OK,ok,ok,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,EXAT,2,SET str v EXAT 4102444800,same,+,+,+OK,+OK,,,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,EXAT,3,SET str v EXAT 4102444800,same,+,+,+OK,+OK,ok,ok,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,PXAT,2,SET str v PXAT 4102444800000,same,+,+,+OK,+OK,,,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,PXAT,3,SET str v PXAT 4102444800000,same,+,+,+OK,+OK,ok,ok,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,KEEPTTL,2,SET str v KEEPTTL,same,+,+,+OK,+OK,,,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,form,KEEPTTL,3,SET str v KEEPTTL,same,+,+,+OK,+OK,ok,ok,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,missing key,missing key,2,SET nokey v,same,+,+,+OK,+OK,,,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,missing key,missing key,3,SET nokey v,same,+,+,+OK,+OK,ok,ok,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,wrong type,wrong type,2,SET list v,same,+,+,+OK,+OK,,,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,wrong type,wrong type,3,SET list v,same,+,+,+OK,+OK,ok,ok,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,extra argument,extra argument,2,SET str v BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,,,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,set,string,extra argument,extra argument,3,SET str v BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,error,error,setCommand,t_string.c:435
+38332001995,2026-10-13T01:24:43Z,develop,setex,string,form,base,2,SETEX dest 100 v,same,+,+,+OK,+OK,,,setexCommand,t_string.c:451
+38332001995,2026-10-13T01:24:43Z,develop,setex,string,form,base,3,SETEX dest 100 v,same,+,+,+OK,+OK,ok,ok,setexCommand,t_string.c:451
+38332001995,2026-10-13T01:24:43Z,develop,setex,string,extra argument,extra argument,2,SETEX dest 100 v BOGUS,same,-,-,-ERR wrong number of arguments for 'setex' command,-ERR wrong number of arguments for 'setex' command,,,setexCommand,t_string.c:451
+38332001995,2026-10-13T01:24:43Z,develop,setex,string,extra argument,extra argument,3,SETEX dest 100 v BOGUS,same,-,-,-ERR wrong number of arguments for 'setex' command,-ERR wrong number of arguments for 'setex' command,error,error,setexCommand,t_string.c:451
+38332001995,2026-10-13T01:24:43Z,develop,setnx,string,form,base,2,SETNX dest v,same,:,:,:1,:1,,,setnxCommand,t_string.c:446
+38332001995,2026-10-13T01:24:43Z,develop,setnx,string,form,base,3,SETNX dest v,same,:,:,:1,:1,ok,ok,setnxCommand,t_string.c:446
+38332001995,2026-10-13T01:24:43Z,develop,setnx,string,extra argument,extra argument,2,SETNX dest v BOGUS,same,-,-,-ERR wrong number of arguments for 'setnx' command,-ERR wrong number of arguments for 'setnx' command,,,setnxCommand,t_string.c:446
+38332001995,2026-10-13T01:24:43Z,develop,setnx,string,extra argument,extra argument,3,SETNX dest v BOGUS,same,-,-,-ERR wrong number of arguments for 'setnx' command,-ERR wrong number of arguments for 'setnx' command,error,error,setnxCommand,t_string.c:446
+38332001995,2026-10-13T01:24:43Z,develop,sismember,set,form,base,2,SISMEMBER set a,same,:,:,:1,:1,,,sismemberCommand,t_set.c:783
+38332001995,2026-10-13T01:24:43Z,develop,sismember,set,form,base,3,SISMEMBER set a,same,:,:,:1,:1,ok,ok,sismemberCommand,t_set.c:783
+38332001995,2026-10-13T01:24:43Z,develop,sismember,set,missing key,missing key,2,SISMEMBER nokey a,same,:,:,:0,:0,,,sismemberCommand,t_set.c:783
+38332001995,2026-10-13T01:24:43Z,develop,sismember,set,missing key,missing key,3,SISMEMBER nokey a,same,:,:,:0,:0,ok,ok,sismemberCommand,t_set.c:783
+38332001995,2026-10-13T01:24:43Z,develop,sismember,set,wrong type,wrong type,2,SISMEMBER str a,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,sismemberCommand,t_set.c:783
+38332001995,2026-10-13T01:24:43Z,develop,sismember,set,wrong type,wrong type,3,SISMEMBER str a,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,sismemberCommand,t_set.c:783
+38332001995,2026-10-13T01:24:43Z,develop,sismember,set,extra argument,extra argument,2,SISMEMBER set a BOGUS,same,-,-,-ERR wrong number of arguments for 'sismember' command,-ERR wrong number of arguments for 'sismember' command,,,sismemberCommand,t_set.c:783
+38332001995,2026-10-13T01:24:43Z,develop,sismember,set,extra argument,extra argument,3,SISMEMBER set a BOGUS,same,-,-,-ERR wrong number of arguments for 'sismember' command,-ERR wrong number of arguments for 'sismember' command,error,error,sismemberCommand,t_set.c:783
+38332001995,2026-10-13T01:24:43Z,develop,smembers,set,form,base,2,SMEMBERS set,same,*[$ $ $],*[$ $ $],*[$a $b $c],*[$a $b $c],,,smembersCommand,t_set.c:1579
+38332001995,2026-10-13T01:24:43Z,develop,smembers,set,form,base,3,SMEMBERS set,same,~[$ $ $],~[$ $ $],~[$a $b $c],~[$a $b $c],ok,ok,smembersCommand,t_set.c:1579
+38332001995,2026-10-13T01:24:43Z,develop,smembers,set,missing key,missing key,2,SMEMBERS nokey,same,*[],*[],*[],*[],,,smembersCommand,t_set.c:1579
+38332001995,2026-10-13T01:24:43Z,develop,smembers,set,missing key,missing key,3,SMEMBERS nokey,same,~[],~[],~[],~[],ok,ok,smembersCommand,t_set.c:1579
+38332001995,2026-10-13T01:24:43Z,develop,smembers,set,wrong type,wrong type,2,SMEMBERS str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,smembersCommand,t_set.c:1579
+38332001995,2026-10-13T01:24:43Z,develop,smembers,set,wrong type,wrong type,3,SMEMBERS str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,smembersCommand,t_set.c:1579
+38332001995,2026-10-13T01:24:43Z,develop,smembers,set,extra argument,extra argument,2,SMEMBERS set BOGUS,same,-,-,-ERR wrong number of arguments for 'smembers' command,-ERR wrong number of arguments for 'smembers' command,,,smembersCommand,t_set.c:1579
+38332001995,2026-10-13T01:24:43Z,develop,smembers,set,extra argument,extra argument,3,SMEMBERS set BOGUS,same,-,-,-ERR wrong number of arguments for 'smembers' command,-ERR wrong number of arguments for 'smembers' command,error,error,smembersCommand,t_set.c:1579
+38332001995,2026-10-13T01:24:43Z,develop,smismember,set,form,base,2,SMISMEMBER set a,same,*[:],*[:],*[:1],*[:1],,,smismemberCommand,t_set.c:800
+38332001995,2026-10-13T01:24:43Z,develop,smismember,set,form,base,3,SMISMEMBER set a,same,*[:],*[:],*[:1],*[:1],ok,ok,smismemberCommand,t_set.c:800
+38332001995,2026-10-13T01:24:43Z,develop,smismember,set,form,member*2,2,SMISMEMBER set a b,same,*[: :],*[: :],*[:1 :1],*[:1 :1],,,smismemberCommand,t_set.c:800
+38332001995,2026-10-13T01:24:43Z,develop,smismember,set,form,member*2,3,SMISMEMBER set a b,same,*[: :],*[: :],*[:1 :1],*[:1 :1],ok,ok,smismemberCommand,t_set.c:800
+38332001995,2026-10-13T01:24:43Z,develop,smismember,set,missing key,missing key,2,SMISMEMBER nokey a,same,*[:],*[:],*[:0],*[:0],,,smismemberCommand,t_set.c:800
+38332001995,2026-10-13T01:24:43Z,develop,smismember,set,missing key,missing key,3,SMISMEMBER nokey a,same,*[:],*[:],*[:0],*[:0],ok,ok,smismemberCommand,t_set.c:800
+38332001995,2026-10-13T01:24:43Z,develop,smismember,set,wrong type,wrong type,2,SMISMEMBER str a,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,smismemberCommand,t_set.c:800
+38332001995,2026-10-13T01:24:43Z,develop,smismember,set,wrong type,wrong type,3,SMISMEMBER str a,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,smismemberCommand,t_set.c:800
+38332001995,2026-10-13T01:24:43Z,develop,smismember,set,extra argument,extra argument,2,SMISMEMBER set a BOGUS,same,*[: :],*[: :],*[:1 :0],*[:1 :0],,,smismemberCommand,t_set.c:800
+38332001995,2026-10-13T01:24:43Z,develop,smismember,set,extra argument,extra argument,3,SMISMEMBER set a BOGUS,same,*[: :],*[: :],*[:1 :0],*[:1 :0],ok,ok,smismemberCommand,t_set.c:800
+38332001995,2026-10-13T01:24:43Z,develop,spop,set,form,base,2,SPOP set,same,$,$,$b,$b,,,spopCommand,t_set.c:1065
+38332001995,2026-10-13T01:24:43Z,develop,spop,set,form,base,3,SPOP set,same,$,$,$c,$b,ok,ok,spopCommand,t_set.c:1065
+38332001995,2026-10-13T01:24:43Z,develop,spop,set,form,count,2,SPOP set 1,same,*[$],*[$],*[$a],*[$a],,,spopCommand,t_set.c:1065
+38332001995,2026-10-13T01:24:43Z,develop,spop,set,form,count,3,SPOP set 1,same,~[$],~[$],~[$c],~[$c],ok,ok,spopCommand,t_set.c:1065
+38332001995,2026-10-13T01:24:43Z,develop,spop,set,missing key,missing key,2,SPOP nokey,same,$-1,$-1,$-1,$-1,,,spopCommand,t_set.c:1065
+38332001995,2026-10-13T01:24:43Z,develop,spop,set,missing key,missing key,3,SPOP nokey,same,_,_,_,_,ok,ok,spopCommand,t_set.c:1065
+38332001995,2026-10-13T01:24:43Z,develop,spop,set,wrong type,wrong type,2,SPOP str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,spopCommand,t_set.c:1065
+38332001995,2026-10-13T01:24:43Z,develop,spop,set,wrong type,wrong type,3,SPOP str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,spopCommand,t_set.c:1065
+38332001995,2026-10-13T01:24:43Z,develop,spop,set,extra argument,extra argument,2,SPOP set BOGUS,same,-,-,"-ERR value is out of range, must be positive","-ERR value is out of range, must be positive",,,spopCommand,t_set.c:1065
+38332001995,2026-10-13T01:24:43Z,develop,spop,set,extra argument,extra argument,3,SPOP set BOGUS,same,-,-,"-ERR value is out of range, must be positive","-ERR value is out of range, must be positive",error,error,spopCommand,t_set.c:1065
+38332001995,2026-10-13T01:24:43Z,develop,srandmember,set,form,base,2,SRANDMEMBER set,same,$,$,$a,$a,,,srandmemberCommand,t_set.c:1335
+38332001995,2026-10-13T01:24:43Z,develop,srandmember,set,form,base,3,SRANDMEMBER set,same,$,$,$a,$b,ok,ok,srandmemberCommand,t_set.c:1335
+38332001995,2026-10-13T01:24:43Z,develop,srandmember,set,form,count,2,SRANDMEMBER set 1,same,*[$],*[$],*[$b],*[$a],,,srandmemberCommand,t_set.c:1335
+38332001995,2026-10-13T01:24:43Z,develop,srandmember,set,form,count,3,SRANDMEMBER set 1,same,*[$],*[$],*[$a],*[$b],ok,ok,srandmemberCommand,t_set.c:1335
+38332001995,2026-10-13T01:24:43Z,develop,srandmember,set,missing key,missing key,2,SRANDMEMBER nokey,same,$-1,$-1,$-1,$-1,,,srandmemberCommand,t_set.c:1335
+38332001995,2026-10-13T01:24:43Z,develop,srandmember,set,missing key,missing key,3,SRANDMEMBER nokey,same,_,_,_,_,ok,ok,srandmemberCommand,t_set.c:1335
+38332001995,2026-10-13T01:24:43Z,develop,srandmember,set,wrong type,wrong type,2,SRANDMEMBER str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,srandmemberCommand,t_set.c:1335
+38332001995,2026-10-13T01:24:43Z,develop,srandmember,set,wrong type,wrong type,3,SRANDMEMBER str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,srandmemberCommand,t_set.c:1335
+38332001995,2026-10-13T01:24:43Z,develop,srandmember,set,extra argument,extra argument,2,SRANDMEMBER set BOGUS,same,-,-,-ERR value is not an integer or out of range,-ERR value is not an integer or out of range,,,srandmemberCommand,t_set.c:1335
+38332001995,2026-10-13T01:24:43Z,develop,srandmember,set,extra argument,extra argument,3,SRANDMEMBER set BOGUS,same,-,-,-ERR value is not an integer or out of range,-ERR value is not an integer or out of range,error,error,srandmemberCommand,t_set.c:1335
+38332001995,2026-10-13T01:24:43Z,develop,srem,set,form,base,2,SREM set a,same,:,:,:1,:1,,,sremCommand,t_set.c:663
+38332001995,2026-10-13T01:24:43Z,develop,srem,set,form,base,3,SREM set a,same,:,:,:1,:1,ok,ok,sremCommand,t_set.c:663
+38332001995,2026-10-13T01:24:43Z,develop,srem,set,form,member*2,2,SREM set a b,same,:,:,:2,:2,,,sremCommand,t_set.c:663
+38332001995,2026-10-13T01:24:43Z,develop,srem,set,form,member*2,3,SREM set a b,same,:,:,:2,:2,ok,ok,sremCommand,t_set.c:663
+38332001995,2026-10-13T01:24:43Z,develop,srem,set,missing key,missing key,2,SREM nokey a,same,:,:,:0,:0,,,sremCommand,t_set.c:663
+38332001995,2026-10-13T01:24:43Z,develop,srem,set,missing key,missing key,3,SREM nokey a,same,:,:,:0,:0,ok,ok,sremCommand,t_set.c:663
+38332001995,2026-10-13T01:24:43Z,develop,srem,set,wrong type,wrong type,2,SREM str a,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,sremCommand,t_set.c:663
+38332001995,2026-10-13T01:24:43Z,develop,srem,set,wrong type,wrong type,3,SREM str a,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,sremCommand,t_set.c:663
+38332001995,2026-10-13T01:24:43Z,develop,srem,set,extra argument,extra argument,2,SREM set a BOGUS,same,:,:,:1,:1,,,sremCommand,t_set.c:663
+38332001995,2026-10-13T01:24:43Z,develop,srem,set,extra argument,extra argument,3,SREM set a BOGUS,same,:,:,:1,:1,ok,ok,sremCommand,t_set.c:663
+38332001995,2026-10-13T01:24:43Z,develop,ttl,generic,form,base,2,TTL str,same,:,:,:-1,:-1,,,ttlCommand,expire.c:891
+38332001995,2026-10-13T01:24:43Z,develop,ttl,generic,form,base,3,TTL str,same,:,:,:-1,:-1,ok,ok,ttlCommand,expire.c:891
+38332001995,2026-10-13T01:24:43Z,develop,ttl,generic,missing key,missing key,2,TTL nokey,same,:,:,:-2,:-2,,,ttlCommand,expire.c:891
+38332001995,2026-10-13T01:24:43Z,develop,ttl,generic,missing key,missing key,3,TTL nokey,same,:,:,:-2,:-2,ok,ok,ttlCommand,expire.c:891
+38332001995,2026-10-13T01:24:43Z,develop,ttl,generic,wrong type,wrong type,2,TTL list,same,:,:,:-1,:-1,,,ttlCommand,expire.c:891
+38332001995,2026-10-13T01:24:43Z,develop,ttl,generic,wrong type,wrong type,3,TTL list,same,:,:,:-1,:-1,ok,ok,ttlCommand,expire.c:891
+38332001995,2026-10-13T01:24:43Z,develop,ttl,generic,extra argument,extra argument,2,TTL str BOGUS,same,-,-,-ERR wrong number of arguments for 'ttl' command,-ERR wrong number of arguments for 'ttl' command,,,ttlCommand,expire.c:891
+38332001995,2026-10-13T01:24:43Z,develop,ttl,generic,extra argument,extra argument,3,TTL str BOGUS,same,-,-,-ERR wrong number of arguments for 'ttl' command,-ERR wrong number of arguments for 'ttl' command,error,error,ttlCommand,expire.c:891
+38332001995,2026-10-13T01:24:43Z,develop,type,generic,form,base,2,TYPE str,same,+,+,+string,+string,,,typeCommand,db.c:2187
+38332001995,2026-10-13T01:24:43Z,develop,type,generic,form,base,3,TYPE str,same,+,+,+string,+string,ok,ok,typeCommand,db.c:2187
+38332001995,2026-10-13T01:24:43Z,develop,type,generic,missing key,missing key,2,TYPE nokey,same,+,+,+none,+none,,,typeCommand,db.c:2187
+38332001995,2026-10-13T01:24:43Z,develop,type,generic,missing key,missing key,3,TYPE nokey,same,+,+,+none,+none,ok,ok,typeCommand,db.c:2187
+38332001995,2026-10-13T01:24:43Z,develop,type,generic,wrong type,wrong type,2,TYPE list,same,+,+,+list,+list,,,typeCommand,db.c:2187
+38332001995,2026-10-13T01:24:43Z,develop,type,generic,wrong type,wrong type,3,TYPE list,same,+,+,+list,+list,ok,ok,typeCommand,db.c:2187
+38332001995,2026-10-13T01:24:43Z,develop,type,generic,extra argument,extra argument,2,TYPE str BOGUS,same,-,-,-ERR wrong number of arguments for 'type' command,-ERR wrong number of arguments for 'type' command,,,typeCommand,db.c:2187
+38332001995,2026-10-13T01:24:43Z,develop,type,generic,extra argument,extra argument,3,TYPE str BOGUS,same,-,-,-ERR wrong number of arguments for 'type' command,-ERR wrong number of arguments for 'type' command,error,error,typeCommand,db.c:2187
+38332001995,2026-10-13T01:24:43Z,develop,unlink,generic,form,base,2,UNLINK str,same,:,:,:1,:1,,,unlinkCommand,db.c:1555
+38332001995,2026-10-13T01:24:43Z,develop,unlink,generic,form,base,3,UNLINK str,same,:,:,:1,:1,ok,ok,unlinkCommand,db.c:1555
+38332001995,2026-10-13T01:24:43Z,develop,unlink,generic,form,key*2,2,UNLINK str str2,same,:,:,:2,:2,,,unlinkCommand,db.c:1555
+38332001995,2026-10-13T01:24:43Z,develop,unlink,generic,form,key*2,3,UNLINK str str2,same,:,:,:2,:2,ok,ok,unlinkCommand,db.c:1555
+38332001995,2026-10-13T01:24:43Z,develop,unlink,generic,missing key,missing key,2,UNLINK nokey,same,:,:,:0,:0,,,unlinkCommand,db.c:1555
+38332001995,2026-10-13T01:24:43Z,develop,unlink,generic,missing key,missing key,3,UNLINK nokey,same,:,:,:0,:0,ok,ok,unlinkCommand,db.c:1555
+38332001995,2026-10-13T01:24:43Z,develop,unlink,generic,wrong type,wrong type,2,UNLINK list,same,:,:,:1,:1,,,unlinkCommand,db.c:1555
+38332001995,2026-10-13T01:24:43Z,develop,unlink,generic,wrong type,wrong type,3,UNLINK list,same,:,:,:1,:1,ok,ok,unlinkCommand,db.c:1555
+38332001995,2026-10-13T01:24:43Z,develop,unlink,generic,extra argument,extra argument,2,UNLINK str BOGUS,same,:,:,:1,:1,,,unlinkCommand,db.c:1555
+38332001995,2026-10-13T01:24:43Z,develop,unlink,generic,extra argument,extra argument,3,UNLINK str BOGUS,same,:,:,:1,:1,ok,ok,unlinkCommand,db.c:1555
+38332001995,2026-10-13T01:24:43Z,develop,unwatch,transactions,form,base,2,UNWATCH,same,+,+,+OK,+OK,,,unwatchCommand,multi.c:503
+38332001995,2026-10-13T01:24:43Z,develop,unwatch,transactions,form,base,3,UNWATCH,same,+,+,+OK,+OK,ok,ok,unwatchCommand,multi.c:503
+38332001995,2026-10-13T01:24:43Z,develop,unwatch,transactions,extra argument,extra argument,2,UNWATCH BOGUS,same,-,-,-ERR wrong number of arguments for 'unwatch' command,-ERR wrong number of arguments for 'unwatch' command,,,unwatchCommand,multi.c:503
+38332001995,2026-10-13T01:24:43Z,develop,unwatch,transactions,extra argument,extra argument,3,UNWATCH BOGUS,same,-,-,-ERR wrong number of arguments for 'unwatch' command,-ERR wrong number of arguments for 'unwatch' command,error,error,unwatchCommand,multi.c:503
+38332001995,2026-10-13T01:24:43Z,develop,zadd,sorted_set,form,base,2,ZADD zset 1.5 a,same,:,:,:0,:0,,,zaddCommand,t_zset.c:2099
+38332001995,2026-10-13T01:24:43Z,develop,zadd,sorted_set,form,base,3,ZADD zset 1.5 a,same,:,:,:0,:0,ok,ok,zaddCommand,t_zset.c:2099
+38332001995,2026-10-13T01:24:43Z,develop,zadd,sorted_set,form,NX,2,ZADD zset NX 1.5 a,same,:,:,:0,:0,,,zaddCommand,t_zset.c:2099
+38332001995,2026-10-13T01:24:43Z,develop,zadd,sorted_set,form,NX,3,ZADD zset NX 1.5 a,same,:,:,:0,:0,ok,ok,zaddCommand,t_zset.c:2099
+38332001995,2026-10-13T01:24:43Z,develop,zadd,sorted_set,form,XX,2,ZADD zset XX 1.5 a,same,:,:,:0,:0,,,zaddCommand,t_zset.c:2099
+38332001995,2026-10-13T01:24:43Z,develop,zadd,sorted_set,form,XX,3,ZADD zset XX 1.5 a,same,:,:,:0,:0,ok,ok,zaddCommand,t_zset.c:2099
+38332001995,2026-10-13T01:24:43Z,develop,zadd,sorted_set,form,GT,2,ZADD zset GT 1.5 a,refused,-,:,-ERR syntax error,:0,,,zaddCommand,t_zset.c:2099
+38332001995,2026-10-13T01:24:43Z,develop,zadd,sorted_set,form,GT,3,ZADD zset GT 1.5 a,refused,-,:,-ERR syntax error,:0,error,ok,zaddCommand,t_zset.c:2099
+38332001995,2026-10-13T01:24:43Z,develop,zadd,sorted_set,form,LT,2,ZADD zset LT 1.5 a,refused,-,:,-ERR syntax error,:0,,,zaddCommand,t_zset.c:2099
+38332001995,2026-10-13T01:24:43Z,develop,zadd,sorted_set,form,LT,3,ZADD zset LT 1.5 a,refused,-,:,-ERR syntax error,:0,error,ok,zaddCommand,t_zset.c:2099
+38332001995,2026-10-13T01:24:43Z,develop,zadd,sorted_set,form,CH,2,ZADD zset CH 1.5 a,same,:,:,:1,:1,,,zaddCommand,t_zset.c:2099
+38332001995,2026-10-13T01:24:43Z,develop,zadd,sorted_set,form,CH,3,ZADD zset CH 1.5 a,same,:,:,:1,:1,ok,ok,zaddCommand,t_zset.c:2099
+38332001995,2026-10-13T01:24:43Z,develop,zadd,sorted_set,form,INCR,2,ZADD zset INCR 1.5 a,refused,-,$,-ERR syntax error,$2.5,,,zaddCommand,t_zset.c:2099
+38332001995,2026-10-13T01:24:43Z,develop,zadd,sorted_set,form,INCR,3,ZADD zset INCR 1.5 a,refused,-,",",-ERR syntax error,",2.5",error,ok,zaddCommand,t_zset.c:2099
+38332001995,2026-10-13T01:24:43Z,develop,zadd,sorted_set,form,data*2,2,ZADD zset 1.5 a 2.5 b,same,:,:,:0,:0,,,zaddCommand,t_zset.c:2099
+38332001995,2026-10-13T01:24:43Z,develop,zadd,sorted_set,form,data*2,3,ZADD zset 1.5 a 2.5 b,same,:,:,:0,:0,ok,ok,zaddCommand,t_zset.c:2099
+38332001995,2026-10-13T01:24:43Z,develop,zadd,sorted_set,missing key,missing key,2,ZADD nokey 1.5 a,same,:,:,:1,:1,,,zaddCommand,t_zset.c:2099
+38332001995,2026-10-13T01:24:43Z,develop,zadd,sorted_set,missing key,missing key,3,ZADD nokey 1.5 a,same,:,:,:1,:1,ok,ok,zaddCommand,t_zset.c:2099
+38332001995,2026-10-13T01:24:43Z,develop,zadd,sorted_set,wrong type,wrong type,2,ZADD str 1.5 a,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,zaddCommand,t_zset.c:2099
+38332001995,2026-10-13T01:24:43Z,develop,zadd,sorted_set,wrong type,wrong type,3,ZADD str 1.5 a,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,zaddCommand,t_zset.c:2099
+38332001995,2026-10-13T01:24:43Z,develop,zadd,sorted_set,extra argument,extra argument,2,ZADD zset 1.5 a BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,,,zaddCommand,t_zset.c:2099
+38332001995,2026-10-13T01:24:43Z,develop,zadd,sorted_set,extra argument,extra argument,3,ZADD zset 1.5 a BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,error,error,zaddCommand,t_zset.c:2099
+38332001995,2026-10-13T01:24:43Z,develop,zcard,sorted_set,form,base,2,ZCARD zset,same,:,:,:3,:3,,,zcardCommand,t_zset.c:4082
+38332001995,2026-10-13T01:24:43Z,develop,zcard,sorted_set,form,base,3,ZCARD zset,same,:,:,:3,:3,ok,ok,zcardCommand,t_zset.c:4082
+38332001995,2026-10-13T01:24:43Z,develop,zcard,sorted_set,missing key,missing key,2,ZCARD nokey,same,:,:,:0,:0,,,zcardCommand,t_zset.c:4082
+38332001995,2026-10-13T01:24:43Z,develop,zcard,sorted_set,missing key,missing key,3,ZCARD nokey,same,:,:,:0,:0,ok,ok,zcardCommand,t_zset.c:4082
+38332001995,2026-10-13T01:24:43Z,develop,zcard,sorted_set,wrong type,wrong type,2,ZCARD str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,zcardCommand,t_zset.c:4082
+38332001995,2026-10-13T01:24:43Z,develop,zcard,sorted_set,wrong type,wrong type,3,ZCARD str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,zcardCommand,t_zset.c:4082
+38332001995,2026-10-13T01:24:43Z,develop,zcard,sorted_set,extra argument,extra argument,2,ZCARD zset BOGUS,same,-,-,-ERR wrong number of arguments for 'zcard' command,-ERR wrong number of arguments for 'zcard' command,,,zcardCommand,t_zset.c:4082
+38332001995,2026-10-13T01:24:43Z,develop,zcard,sorted_set,extra argument,extra argument,3,ZCARD zset BOGUS,same,-,-,-ERR wrong number of arguments for 'zcard' command,-ERR wrong number of arguments for 'zcard' command,error,error,zcardCommand,t_zset.c:4082
+38332001995,2026-10-13T01:24:43Z,develop,zcount,sorted_set,form,base,2,ZCOUNT zset -inf +inf,same,:,:,:3,:3,,,zcountCommand,t_zset.c:3646
+38332001995,2026-10-13T01:24:43Z,develop,zcount,sorted_set,form,base,3,ZCOUNT zset -inf +inf,same,:,:,:3,:3,ok,ok,zcountCommand,t_zset.c:3646
+38332001995,2026-10-13T01:24:43Z,develop,zcount,sorted_set,missing key,missing key,2,ZCOUNT nokey -inf +inf,same,:,:,:0,:0,,,zcountCommand,t_zset.c:3646
+38332001995,2026-10-13T01:24:43Z,develop,zcount,sorted_set,missing key,missing key,3,ZCOUNT nokey -inf +inf,same,:,:,:0,:0,ok,ok,zcountCommand,t_zset.c:3646
+38332001995,2026-10-13T01:24:43Z,develop,zcount,sorted_set,wrong type,wrong type,2,ZCOUNT str -inf +inf,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,zcountCommand,t_zset.c:3646
+38332001995,2026-10-13T01:24:43Z,develop,zcount,sorted_set,wrong type,wrong type,3,ZCOUNT str -inf +inf,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,zcountCommand,t_zset.c:3646
+38332001995,2026-10-13T01:24:43Z,develop,zcount,sorted_set,extra argument,extra argument,2,ZCOUNT zset -inf +inf BOGUS,same,-,-,-ERR wrong number of arguments for 'zcount' command,-ERR wrong number of arguments for 'zcount' command,,,zcountCommand,t_zset.c:3646
+38332001995,2026-10-13T01:24:43Z,develop,zcount,sorted_set,extra argument,extra argument,3,ZCOUNT zset -inf +inf BOGUS,same,-,-,-ERR wrong number of arguments for 'zcount' command,-ERR wrong number of arguments for 'zcount' command,error,error,zcountCommand,t_zset.c:3646
+38332001995,2026-10-13T01:24:43Z,develop,zincrby,sorted_set,form,base,2,ZINCRBY zset 1 a,same,$,$,$2,$2,,,zincrbyCommand,t_zset.c:2103
+38332001995,2026-10-13T01:24:43Z,develop,zincrby,sorted_set,form,base,3,ZINCRBY zset 1 a,same,",",",",",2",",2",ok,ok,zincrbyCommand,t_zset.c:2103
+38332001995,2026-10-13T01:24:43Z,develop,zincrby,sorted_set,missing key,missing key,2,ZINCRBY nokey 1 a,same,$,$,$1,$1,,,zincrbyCommand,t_zset.c:2103
+38332001995,2026-10-13T01:24:43Z,develop,zincrby,sorted_set,missing key,missing key,3,ZINCRBY nokey 1 a,same,",",",",",1",",1",ok,ok,zincrbyCommand,t_zset.c:2103
+38332001995,2026-10-13T01:24:43Z,develop,zincrby,sorted_set,wrong type,wrong type,2,ZINCRBY str 1 a,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,zincrbyCommand,t_zset.c:2103
+38332001995,2026-10-13T01:24:43Z,develop,zincrby,sorted_set,wrong type,wrong type,3,ZINCRBY str 1 a,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,zincrbyCommand,t_zset.c:2103
+38332001995,2026-10-13T01:24:43Z,develop,zincrby,sorted_set,extra argument,extra argument,2,ZINCRBY zset 1 a BOGUS,same,-,-,-ERR wrong number of arguments for 'zincrby' command,-ERR wrong number of arguments for 'zincrby' command,,,zincrbyCommand,t_zset.c:2103
+38332001995,2026-10-13T01:24:43Z,develop,zincrby,sorted_set,extra argument,extra argument,3,ZINCRBY zset 1 a BOGUS,same,-,-,-ERR wrong number of arguments for 'zincrby' command,-ERR wrong number of arguments for 'zincrby' command,error,error,zincrbyCommand,t_zset.c:2103
+38332001995,2026-10-13T01:24:43Z,develop,zpopmax,sorted_set,form,base,2,ZPOPMAX zset,same,*[$ $],*[$ $],*[$c $3],*[$c $3],,,zpopmaxCommand,t_zset.c:4398
+38332001995,2026-10-13T01:24:43Z,develop,zpopmax,sorted_set,form,base,3,ZPOPMAX zset,same,"*[$ ,]","*[$ ,]","*[$c ,3]","*[$c ,3]",ok,ok,zpopmaxCommand,t_zset.c:4398
+38332001995,2026-10-13T01:24:43Z,develop,zpopmax,sorted_set,form,count,2,ZPOPMAX zset 1,same,*[$ $],*[$ $],*[$c $3],*[$c $3],,,zpopmaxCommand,t_zset.c:4398
+38332001995,2026-10-13T01:24:43Z,develop,zpopmax,sorted_set,form,count,3,ZPOPMAX zset 1,same,"*[*[$ ,]]","*[*[$ ,]]","*[*[$c ,3]]","*[*[$c ,3]]",ok,ok,zpopmaxCommand,t_zset.c:4398
+38332001995,2026-10-13T01:24:43Z,develop,zpopmax,sorted_set,missing key,missing key,2,ZPOPMAX nokey,same,*[],*[],*[],*[],,,zpopmaxCommand,t_zset.c:4398
+38332001995,2026-10-13T01:24:43Z,develop,zpopmax,sorted_set,missing key,missing key,3,ZPOPMAX nokey,same,*[],*[],*[],*[],ok,ok,zpopmaxCommand,t_zset.c:4398
+38332001995,2026-10-13T01:24:43Z,develop,zpopmax,sorted_set,wrong type,wrong type,2,ZPOPMAX str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,zpopmaxCommand,t_zset.c:4398
+38332001995,2026-10-13T01:24:43Z,develop,zpopmax,sorted_set,wrong type,wrong type,3,ZPOPMAX str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,zpopmaxCommand,t_zset.c:4398
+38332001995,2026-10-13T01:24:43Z,develop,zpopmax,sorted_set,extra argument,extra argument,2,ZPOPMAX zset BOGUS,same,-,-,"-ERR value is out of range, must be positive","-ERR value is out of range, must be positive",,,zpopmaxCommand,t_zset.c:4398
+38332001995,2026-10-13T01:24:43Z,develop,zpopmax,sorted_set,extra argument,extra argument,3,ZPOPMAX zset BOGUS,same,-,-,"-ERR value is out of range, must be positive","-ERR value is out of range, must be positive",error,error,zpopmaxCommand,t_zset.c:4398
+38332001995,2026-10-13T01:24:43Z,develop,zpopmin,sorted_set,form,base,2,ZPOPMIN zset,same,*[$ $],*[$ $],*[$a $1],*[$a $1],,,zpopminCommand,t_zset.c:4393
+38332001995,2026-10-13T01:24:43Z,develop,zpopmin,sorted_set,form,base,3,ZPOPMIN zset,same,"*[$ ,]","*[$ ,]","*[$a ,1]","*[$a ,1]",ok,ok,zpopminCommand,t_zset.c:4393
+38332001995,2026-10-13T01:24:43Z,develop,zpopmin,sorted_set,form,count,2,ZPOPMIN zset 1,same,*[$ $],*[$ $],*[$a $1],*[$a $1],,,zpopminCommand,t_zset.c:4393
+38332001995,2026-10-13T01:24:43Z,develop,zpopmin,sorted_set,form,count,3,ZPOPMIN zset 1,same,"*[*[$ ,]]","*[*[$ ,]]","*[*[$a ,1]]","*[*[$a ,1]]",ok,ok,zpopminCommand,t_zset.c:4393
+38332001995,2026-10-13T01:24:43Z,develop,zpopmin,sorted_set,missing key,missing key,2,ZPOPMIN nokey,same,*[],*[],*[],*[],,,zpopminCommand,t_zset.c:4393
+38332001995,2026-10-13T01:24:43Z,develop,zpopmin,sorted_set,missing key,missing key,3,ZPOPMIN nokey,same,*[],*[],*[],*[],ok,ok,zpopminCommand,t_zset.c:4393
+38332001995,2026-10-13T01:24:43Z,develop,zpopmin,sorted_set,wrong type,wrong type,2,ZPOPMIN str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,zpopminCommand,t_zset.c:4393
+38332001995,2026-10-13T01:24:43Z,develop,zpopmin,sorted_set,wrong type,wrong type,3,ZPOPMIN str,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,zpopminCommand,t_zset.c:4393
+38332001995,2026-10-13T01:24:43Z,develop,zpopmin,sorted_set,extra argument,extra argument,2,ZPOPMIN zset BOGUS,same,-,-,"-ERR value is out of range, must be positive","-ERR value is out of range, must be positive",,,zpopminCommand,t_zset.c:4393
+38332001995,2026-10-13T01:24:43Z,develop,zpopmin,sorted_set,extra argument,extra argument,3,ZPOPMIN zset BOGUS,same,-,-,"-ERR value is out of range, must be positive","-ERR value is out of range, must be positive",error,error,zpopminCommand,t_zset.c:4393
+38332001995,2026-10-13T01:24:43Z,develop,zrange,sorted_set,form,base,2,ZRANGE zset 0 -1,same,*[$ $ $],*[$ $ $],*[$a $b $c],*[$a $b $c],,,zrangeCommand,t_zset.c:3514
+38332001995,2026-10-13T01:24:43Z,develop,zrange,sorted_set,form,base,3,ZRANGE zset 0 -1,same,*[$ $ $],*[$ $ $],*[$a $b $c],*[$a $b $c],ok,ok,zrangeCommand,t_zset.c:3514
+38332001995,2026-10-13T01:24:43Z,develop,zrange,sorted_set,form,BYSCORE,2,ZRANGE zset -inf +inf BYSCORE,same,*[$ $ $],*[$ $ $],*[$a $b $c],*[$a $b $c],,,zrangeCommand,t_zset.c:3514
+38332001995,2026-10-13T01:24:43Z,develop,zrange,sorted_set,form,BYSCORE,3,ZRANGE zset -inf +inf BYSCORE,same,*[$ $ $],*[$ $ $],*[$a $b $c],*[$a $b $c],ok,ok,zrangeCommand,t_zset.c:3514
+38332001995,2026-10-13T01:24:43Z,develop,zrange,sorted_set,form,BYLEX,2,ZRANGE zset - + BYLEX,refused,-,*[$ $ $],-ERR syntax error,*[$a $b $c],,,zrangeCommand,t_zset.c:3514
+38332001995,2026-10-13T01:24:43Z,develop,zrange,sorted_set,form,BYLEX,3,ZRANGE zset - + BYLEX,refused,-,*[$ $ $],-ERR syntax error,*[$a $b $c],error,ok,zrangeCommand,t_zset.c:3514
+38332001995,2026-10-13T01:24:43Z,develop,zrange,sorted_set,form,REV,2,ZRANGE zset 0 -1 REV,same,*[$ $ $],*[$ $ $],*[$c $b $a],*[$c $b $a],,,zrangeCommand,t_zset.c:3514
+38332001995,2026-10-13T01:24:43Z,develop,zrange,sorted_set,form,REV,3,ZRANGE zset 0 -1 REV,same,*[$ $ $],*[$ $ $],*[$c $b $a],*[$c $b $a],ok,ok,zrangeCommand,t_zset.c:3514
+38332001995,2026-10-13T01:24:43Z,develop,zrange,sorted_set,form,LIMIT,2,ZRANGE zset -inf +inf BYSCORE LIMIT 0 1,same,*[$],*[$],*[$a],*[$a],,,zrangeCommand,t_zset.c:3514
+38332001995,2026-10-13T01:24:43Z,develop,zrange,sorted_set,form,LIMIT,3,ZRANGE zset -inf +inf BYSCORE LIMIT 0 1,same,*[$],*[$],*[$a],*[$a],ok,ok,zrangeCommand,t_zset.c:3514
+38332001995,2026-10-13T01:24:43Z,develop,zrange,sorted_set,form,WITHSCORES,2,ZRANGE zset 0 -1 WITHSCORES,same,*[$ $ $ $ $ $],*[$ $ $ $ $ $],*[$a $1 $b $2 $c $3],*[$a $1 $b $2 $c $3],,,zrangeCommand,t_zset.c:3514
+38332001995,2026-10-13T01:24:43Z,develop,zrange,sorted_set,form,WITHSCORES,3,ZRANGE zset 0 -1 WITHSCORES,same,"*[*[$ ,] *[$ ,] *[$ ,]]","*[*[$ ,] *[$ ,] *[$ ,]]","*[*[$a ,1] *[$b ,2] *[$c ,3]]","*[*[$a ,1] *[$b ,2] *[$c ,3]]",ok,ok,zrangeCommand,t_zset.c:3514
+38332001995,2026-10-13T01:24:43Z,develop,zrange,sorted_set,missing key,missing key,2,ZRANGE nokey 0 -1,same,*[],*[],*[],*[],,,zrangeCommand,t_zset.c:3514
+38332001995,2026-10-13T01:24:43Z,develop,zrange,sorted_set,missing key,missing key,3,ZRANGE nokey 0 -1,same,*[],*[],*[],*[],ok,ok,zrangeCommand,t_zset.c:3514
+38332001995,2026-10-13T01:24:43Z,develop,zrange,sorted_set,wrong type,wrong type,2,ZRANGE str 0 -1,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,zrangeCommand,t_zset.c:3514
+38332001995,2026-10-13T01:24:43Z,develop,zrange,sorted_set,wrong type,wrong type,3,ZRANGE str 0 -1,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,zrangeCommand,t_zset.c:3514
+38332001995,2026-10-13T01:24:43Z,develop,zrange,sorted_set,extra argument,extra argument,2,ZRANGE zset 0 -1 BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,,,zrangeCommand,t_zset.c:3514
+38332001995,2026-10-13T01:24:43Z,develop,zrange,sorted_set,extra argument,extra argument,3,ZRANGE zset 0 -1 BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,error,error,zrangeCommand,t_zset.c:3514
+38332001995,2026-10-13T01:24:43Z,develop,zrangebyscore,sorted_set,form,base,2,ZRANGEBYSCORE zset -inf +inf,same,*[$ $ $],*[$ $ $],*[$a $b $c],*[$a $b $c],,,zrangebyscoreCommand,t_zset.c:3633
+38332001995,2026-10-13T01:24:43Z,develop,zrangebyscore,sorted_set,form,base,3,ZRANGEBYSCORE zset -inf +inf,same,*[$ $ $],*[$ $ $],*[$a $b $c],*[$a $b $c],ok,ok,zrangebyscoreCommand,t_zset.c:3633
+38332001995,2026-10-13T01:24:43Z,develop,zrangebyscore,sorted_set,form,WITHSCORES,2,ZRANGEBYSCORE zset -inf +inf WITHSCORES,same,*[$ $ $ $ $ $],*[$ $ $ $ $ $],*[$a $1 $b $2 $c $3],*[$a $1 $b $2 $c $3],,,zrangebyscoreCommand,t_zset.c:3633
+38332001995,2026-10-13T01:24:43Z,develop,zrangebyscore,sorted_set,form,WITHSCORES,3,ZRANGEBYSCORE zset -inf +inf WITHSCORES,same,"*[*[$ ,] *[$ ,] *[$ ,]]","*[*[$ ,] *[$ ,] *[$ ,]]","*[*[$a ,1] *[$b ,2] *[$c ,3]]","*[*[$a ,1] *[$b ,2] *[$c ,3]]",ok,ok,zrangebyscoreCommand,t_zset.c:3633
+38332001995,2026-10-13T01:24:43Z,develop,zrangebyscore,sorted_set,form,LIMIT,2,ZRANGEBYSCORE zset -inf +inf LIMIT 0 1,same,*[$],*[$],*[$a],*[$a],,,zrangebyscoreCommand,t_zset.c:3633
+38332001995,2026-10-13T01:24:43Z,develop,zrangebyscore,sorted_set,form,LIMIT,3,ZRANGEBYSCORE zset -inf +inf LIMIT 0 1,same,*[$],*[$],*[$a],*[$a],ok,ok,zrangebyscoreCommand,t_zset.c:3633
+38332001995,2026-10-13T01:24:43Z,develop,zrangebyscore,sorted_set,missing key,missing key,2,ZRANGEBYSCORE nokey -inf +inf,same,*[],*[],*[],*[],,,zrangebyscoreCommand,t_zset.c:3633
+38332001995,2026-10-13T01:24:43Z,develop,zrangebyscore,sorted_set,missing key,missing key,3,ZRANGEBYSCORE nokey -inf +inf,same,*[],*[],*[],*[],ok,ok,zrangebyscoreCommand,t_zset.c:3633
+38332001995,2026-10-13T01:24:43Z,develop,zrangebyscore,sorted_set,wrong type,wrong type,2,ZRANGEBYSCORE str -inf +inf,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,zrangebyscoreCommand,t_zset.c:3633
+38332001995,2026-10-13T01:24:43Z,develop,zrangebyscore,sorted_set,wrong type,wrong type,3,ZRANGEBYSCORE str -inf +inf,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,zrangebyscoreCommand,t_zset.c:3633
+38332001995,2026-10-13T01:24:43Z,develop,zrangebyscore,sorted_set,extra argument,extra argument,2,ZRANGEBYSCORE zset -inf +inf BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,,,zrangebyscoreCommand,t_zset.c:3633
+38332001995,2026-10-13T01:24:43Z,develop,zrangebyscore,sorted_set,extra argument,extra argument,3,ZRANGEBYSCORE zset -inf +inf BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,error,error,zrangebyscoreCommand,t_zset.c:3633
+38332001995,2026-10-13T01:24:43Z,develop,zrank,sorted_set,form,base,2,ZRANK zset a,same,:,:,:0,:0,,,zrankCommand,t_zset.c:4183
+38332001995,2026-10-13T01:24:43Z,develop,zrank,sorted_set,form,base,3,ZRANK zset a,same,:,:,:0,:0,ok,ok,zrankCommand,t_zset.c:4183
+38332001995,2026-10-13T01:24:43Z,develop,zrank,sorted_set,form,WITHSCORE,2,ZRANK zset a WITHSCORE,same,*[: $],*[: $],*[:0 $1],*[:0 $1],,,zrankCommand,t_zset.c:4183
+38332001995,2026-10-13T01:24:43Z,develop,zrank,sorted_set,form,WITHSCORE,3,ZRANK zset a WITHSCORE,same,"*[: ,]","*[: ,]","*[:0 ,1]","*[:0 ,1]",ok,ok,zrankCommand,t_zset.c:4183
+38332001995,2026-10-13T01:24:43Z,develop,zrank,sorted_set,missing key,missing key,2,ZRANK nokey a,same,$-1,$-1,$-1,$-1,,,zrankCommand,t_zset.c:4183
+38332001995,2026-10-13T01:24:43Z,develop,zrank,sorted_set,missing key,missing key,3,ZRANK nokey a,same,_,_,_,_,ok,ok,zrankCommand,t_zset.c:4183
+38332001995,2026-10-13T01:24:43Z,develop,zrank,sorted_set,wrong type,wrong type,2,ZRANK str a,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,zrankCommand,t_zset.c:4183
+38332001995,2026-10-13T01:24:43Z,develop,zrank,sorted_set,wrong type,wrong type,3,ZRANK str a,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,zrankCommand,t_zset.c:4183
+38332001995,2026-10-13T01:24:43Z,develop,zrank,sorted_set,extra argument,extra argument,2,ZRANK zset a BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,,,zrankCommand,t_zset.c:4183
+38332001995,2026-10-13T01:24:43Z,develop,zrank,sorted_set,extra argument,extra argument,3,ZRANK zset a BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,error,error,zrankCommand,t_zset.c:4183
+38332001995,2026-10-13T01:24:43Z,develop,zrem,sorted_set,form,base,2,ZREM zset a,same,:,:,:1,:1,,,zremCommand,t_zset.c:2107
+38332001995,2026-10-13T01:24:43Z,develop,zrem,sorted_set,form,base,3,ZREM zset a,same,:,:,:1,:1,ok,ok,zremCommand,t_zset.c:2107
+38332001995,2026-10-13T01:24:43Z,develop,zrem,sorted_set,form,member*2,2,ZREM zset a b,same,:,:,:2,:2,,,zremCommand,t_zset.c:2107
+38332001995,2026-10-13T01:24:43Z,develop,zrem,sorted_set,form,member*2,3,ZREM zset a b,same,:,:,:2,:2,ok,ok,zremCommand,t_zset.c:2107
+38332001995,2026-10-13T01:24:43Z,develop,zrem,sorted_set,missing key,missing key,2,ZREM nokey a,same,:,:,:0,:0,,,zremCommand,t_zset.c:2107
+38332001995,2026-10-13T01:24:43Z,develop,zrem,sorted_set,missing key,missing key,3,ZREM nokey a,same,:,:,:0,:0,ok,ok,zremCommand,t_zset.c:2107
+38332001995,2026-10-13T01:24:43Z,develop,zrem,sorted_set,wrong type,wrong type,2,ZREM str a,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,zremCommand,t_zset.c:2107
+38332001995,2026-10-13T01:24:43Z,develop,zrem,sorted_set,wrong type,wrong type,3,ZREM str a,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,zremCommand,t_zset.c:2107
+38332001995,2026-10-13T01:24:43Z,develop,zrem,sorted_set,extra argument,extra argument,2,ZREM zset a BOGUS,same,:,:,:1,:1,,,zremCommand,t_zset.c:2107
+38332001995,2026-10-13T01:24:43Z,develop,zrem,sorted_set,extra argument,extra argument,3,ZREM zset a BOGUS,same,:,:,:1,:1,ok,ok,zremCommand,t_zset.c:2107
+38332001995,2026-10-13T01:24:43Z,develop,zrevrangebyscore,sorted_set,form,base,2,ZREVRANGEBYSCORE zset +inf -inf,same,*[$ $ $],*[$ $ $],*[$c $b $a],*[$c $b $a],,,zrevrangebyscoreCommand,t_zset.c:3640
+38332001995,2026-10-13T01:24:43Z,develop,zrevrangebyscore,sorted_set,form,base,3,ZREVRANGEBYSCORE zset +inf -inf,same,*[$ $ $],*[$ $ $],*[$c $b $a],*[$c $b $a],ok,ok,zrevrangebyscoreCommand,t_zset.c:3640
+38332001995,2026-10-13T01:24:43Z,develop,zrevrangebyscore,sorted_set,form,WITHSCORES,2,ZREVRANGEBYSCORE zset +inf -inf WITHSCORES,same,*[$ $ $ $ $ $],*[$ $ $ $ $ $],*[$c $3 $b $2 $a $1],*[$c $3 $b $2 $a $1],,,zrevrangebyscoreCommand,t_zset.c:3640
+38332001995,2026-10-13T01:24:43Z,develop,zrevrangebyscore,sorted_set,form,WITHSCORES,3,ZREVRANGEBYSCORE zset +inf -inf WITHSCORES,same,"*[*[$ ,] *[$ ,] *[$ ,]]","*[*[$ ,] *[$ ,] *[$ ,]]","*[*[$c ,3] *[$b ,2] *[$a ,1]]","*[*[$c ,3] *[$b ,2] *[$a ,1]]",ok,ok,zrevrangebyscoreCommand,t_zset.c:3640
+38332001995,2026-10-13T01:24:43Z,develop,zrevrangebyscore,sorted_set,form,LIMIT,2,ZREVRANGEBYSCORE zset +inf -inf LIMIT 0 1,same,*[$],*[$],*[$c],*[$c],,,zrevrangebyscoreCommand,t_zset.c:3640
+38332001995,2026-10-13T01:24:43Z,develop,zrevrangebyscore,sorted_set,form,LIMIT,3,ZREVRANGEBYSCORE zset +inf -inf LIMIT 0 1,same,*[$],*[$],*[$c],*[$c],ok,ok,zrevrangebyscoreCommand,t_zset.c:3640
+38332001995,2026-10-13T01:24:43Z,develop,zrevrangebyscore,sorted_set,missing key,missing key,2,ZREVRANGEBYSCORE nokey +inf -inf,same,*[],*[],*[],*[],,,zrevrangebyscoreCommand,t_zset.c:3640
+38332001995,2026-10-13T01:24:43Z,develop,zrevrangebyscore,sorted_set,missing key,missing key,3,ZREVRANGEBYSCORE nokey +inf -inf,same,*[],*[],*[],*[],ok,ok,zrevrangebyscoreCommand,t_zset.c:3640
+38332001995,2026-10-13T01:24:43Z,develop,zrevrangebyscore,sorted_set,wrong type,wrong type,2,ZREVRANGEBYSCORE str +inf -inf,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,zrevrangebyscoreCommand,t_zset.c:3640
+38332001995,2026-10-13T01:24:43Z,develop,zrevrangebyscore,sorted_set,wrong type,wrong type,3,ZREVRANGEBYSCORE str +inf -inf,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,zrevrangebyscoreCommand,t_zset.c:3640
+38332001995,2026-10-13T01:24:43Z,develop,zrevrangebyscore,sorted_set,extra argument,extra argument,2,ZREVRANGEBYSCORE zset +inf -inf BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,,,zrevrangebyscoreCommand,t_zset.c:3640
+38332001995,2026-10-13T01:24:43Z,develop,zrevrangebyscore,sorted_set,extra argument,extra argument,3,ZREVRANGEBYSCORE zset +inf -inf BOGUS,same,-,-,-ERR syntax error,-ERR syntax error,error,error,zrevrangebyscoreCommand,t_zset.c:3640
+38332001995,2026-10-13T01:24:43Z,develop,zscore,sorted_set,form,base,2,ZSCORE zset a,same,$,$,$1,$1,,,zscoreCommand,t_zset.c:4092
+38332001995,2026-10-13T01:24:43Z,develop,zscore,sorted_set,form,base,3,ZSCORE zset a,same,",",",",",1",",1",ok,ok,zscoreCommand,t_zset.c:4092
+38332001995,2026-10-13T01:24:43Z,develop,zscore,sorted_set,missing key,missing key,2,ZSCORE nokey a,same,$-1,$-1,$-1,$-1,,,zscoreCommand,t_zset.c:4092
+38332001995,2026-10-13T01:24:43Z,develop,zscore,sorted_set,missing key,missing key,3,ZSCORE nokey a,same,_,_,_,_,ok,ok,zscoreCommand,t_zset.c:4092
+38332001995,2026-10-13T01:24:43Z,develop,zscore,sorted_set,wrong type,wrong type,2,ZSCORE str a,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,,,zscoreCommand,t_zset.c:4092
+38332001995,2026-10-13T01:24:43Z,develop,zscore,sorted_set,wrong type,wrong type,3,ZSCORE str a,same,-,-,-WRONGTYPE Operation against a key holding the wrong kind of value,-WRONGTYPE Operation against a key holding the wrong kind of value,error,error,zscoreCommand,t_zset.c:4092
+38332001995,2026-10-13T01:24:43Z,develop,zscore,sorted_set,extra argument,extra argument,2,ZSCORE zset a BOGUS,same,-,-,-ERR wrong number of arguments for 'zscore' command,-ERR wrong number of arguments for 'zscore' command,,,zscoreCommand,t_zset.c:4092
+38332001995,2026-10-13T01:24:43Z,develop,zscore,sorted_set,extra argument,extra argument,3,ZSCORE zset a BOGUS,same,-,-,-ERR wrong number of arguments for 'zscore' command,-ERR wrong number of arguments for 'zscore' command,error,error,zscoreCommand,t_zset.c:4092
