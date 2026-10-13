@@ -159,12 +159,13 @@ func (e *Engine) cmdBFADD(args []string) []byte {
 	if len(args) != 2 {
 		return e.encode(wrongArguments("BF.ADD"), false)
 	}
-	r := e.reply()
 	added, err := e.opBFAdd(args[0], args[1])
 	if err != nil {
-		return r.Error(err).Bytes()
+		return e.encode(err, false)
 	}
-	return r.Bool(added).Bytes()
+	// A yes or no is a shared constant, answered by reference with no Reply
+	// to build (as GET answers its one value).
+	return e.boolReply(added)
 }
 
 // cmdBFMADD implements BF.MADD key item [item ...]: one answer per item, as
