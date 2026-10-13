@@ -245,7 +245,8 @@ and RedisBloom's `RedisModule_OpenKey` modes:
   type, and a miss if not. An expired key is a miss, as Redis expires it on
   the lookup.
 - These commands count, per key named:
-  - `GET`, `MGET`, `LCS`;
+  - `GET`, `MGET`, `LCS`, `STRLEN`, `GETRANGE`, `SUBSTR`, `GETEX`, `GETDEL`,
+    `GETSET`;
   - `EXISTS` (per argument, repeats included), `TYPE`, `TTL`, `PTTL`;
   - the hash, list, set and sorted-set reads, and `GEODIST`, `GEOHASH`,
     `GEOPOS`, `GEOSEARCH`;
@@ -264,7 +265,22 @@ and RedisBloom's `RedisModule_OpenKey` modes:
 - The log's replay counts the keys it reads, as Redis's does (`PFMERGE`).
 
 The typed reads count in the type check, which already looks every key up,
-so counting costs an increment. `MGET` asks the other stores about a key the
+so counting costs an increment.
+
+**A read that parses first.** Some Redis reads parse arguments before
+`lookupKeyRead`, and a malformed argument returns before anything is
+counted: `getrangeCommand` reads its indexes first, `getexCommand` its
+options, `lrangeCommand` and `lindexCommand` their indexes, and the like.
+As each family is converted (phase 4 of the embedding plan), such a read
+counts its hit or miss in its typed operation after parsing
+(`readsAfterArguments`), and the type check counts only the hit of a key
+of another type, once those arguments have passed; `stats-parity.py` has a
+case with a bad argument for each. Strings are converted: `GETRANGE`,
+`SUBSTR` and `GETEX` count this way. **The remaining gap:** the families not
+yet converted (lists, sets, sorted sets, geo) still count through the type
+check, before their arguments are parsed, so a read of theirs with a
+malformed argument counts a hit or a miss that Redis's does not; each
+family's conversion closes its part. `MGET` asks the other stores about a key the
 strings do not hold only if they hold any key at all.
 
 `scripts/stats-parity.py` checks all of this against Redis. It runs each case

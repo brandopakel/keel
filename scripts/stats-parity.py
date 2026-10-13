@@ -49,6 +49,11 @@ CASES = [[c] for c in [
     ['MSET', 'a', '1', 'b', '2'], ['SETEX', 'k', '10', 'v'], ['PSETEX', 'k', '1000', 'v'], ['LCS', 'str', 'other'],
     ['LCS', 'str', 'missing'], ['STRLEN', 'str'], ['STRLEN', 'missing'], ['STRLEN', 'hash'],
     ['GETRANGE', 'str', '0', '1'], ['GETRANGE', 'missing', '0', '1'], ['SUBSTR', 'str', '0', '1'], ['GETEX', 'str'],
+    # A read whose handler parses arguments before it looks its key up
+    # counts nothing for a malformed argument, and a hit for another type.
+    ['GETRANGE', 'str', 'x', '1'], ['GETRANGE', 'missing', '0', 'y'], ['GETRANGE', 'hash', '0', '1'],
+    ['GETRANGE', 'hash', 'x', '1'], ['SUBSTR', 'str', '0', 'y'], ['SUBSTR', 'hash', '0', '1'], ['GETEX', 'str', 'BAD'],
+    ['GETEX', 'missing', 'EX'], ['GETEX', 'hash', 'BAD'], ['GETEX', 'hash', 'EX', '1'], ['GETEX', 'str', 'EX', 'x'],
     ['GETEX', 'missing'], ['GETEX', 'str', 'EX', '100'], ['GETEX', 'hash'], ['GETDEL', 'str'], ['GETDEL', 'missing'],
     ['GETDEL', 'hash'], ['GETSET', 'str', 'x'], ['GETSET', 'missing', 'x'], ['APPEND', 'str', 'x'],
     ['APPEND', 'missing', 'x'], ['SETRANGE', 'str', '0', 'x'], ['INCRBYFLOAT', 'num', '1.5'],
