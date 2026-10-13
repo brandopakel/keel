@@ -160,11 +160,35 @@ var keyRuleExceptions = map[string]string{
 }
 
 // keyRuleOfSpecs is the key rule keys amount to: the first argument, the
-// first two, every argument, every step-th from the first, or a count and
-// that many key value pairs; false for key specs no rule describes. Keys found from the first argument by range are
+// first two, every argument, every step-th from the first, a count and that
+// many key value pairs, or a count and that many keys, alone or after a
+// destination; false for key specs no rule describes. Keys found from the first argument by range are
 // read directly, and PFMERGE's two specs - the destination, then every
 // source - together name every argument.
 func keyRuleOfSpecs(keys []keySpec) (rule keyRule, stride int, ok bool) {
+	// A destination an option names (GEORADIUS's STORE and STOREDIST) is
+	// written whatever it holds, so the type check holds no key it finds to
+	// a type, and the rule is the other keys'.
+	named := keys[:0:0]
+	for _, k := range keys {
+		if k.begin.kind != "keyword" {
+			named = append(named, k)
+		}
+	}
+	keys = named
+	// A count, then that many keys (ZUNION's numkeys), alone or after a
+	// destination (ZUNIONSTORE's).
+	numbered := func(k keySpec, pos int) bool {
+		return k.begin.kind == "index" && k.begin.pos == pos && k.find.kind == "keynum" &&
+			k.find.keynumIdx == 0 && k.find.firstKey == 1 && k.find.step == 1
+	}
+	if len(keys) == 1 && numbered(keys[0], 1) {
+		return keyNumbered, 0, true
+	}
+	if len(keys) == 2 && keys[0].begin.kind == "index" && keys[0].begin.pos == 1 && keys[0].find.kind == "range" &&
+		keys[0].find.lastKey == 0 && numbered(keys[1], 2) {
+		return keyDestNumbered, 0, true
+	}
 	// A count in the first argument, then that many key value pairs:
 	// MSETEX's numkeys.
 	if len(keys) == 1 && keys[0].begin.kind == "index" && keys[0].begin.pos == 1 &&

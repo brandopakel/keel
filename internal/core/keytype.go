@@ -119,14 +119,21 @@ const (
 	keyStride                      // every n-th argument, from the first: strideKeyCommands
 	keyEvery                       // every argument: multiKeyCommands
 	keyCountedPairs                // MSETEX's: a count, then that many key value pairs
+	keyNumbered                    // ZUNION's, ZINTER's, ZDIFF's, ZINTERCARD's, ZMPOP's: a count, then that many keys
+	keyDestNumbered                // the STORE forms': a destination, then a count and that many keys
 )
 
 // keyRuleOf is name's rule. Dispatch works it out once per command, in the
 // index, so the type check reads it rather than looking the name up again.
 func keyRuleOf(name string) keyRule {
 	switch {
-	case name == "LCS", name == "RENAME", name == "RENAMENX", name == "COPY":
+	case name == "LCS", name == "RENAME", name == "RENAMENX", name == "COPY", name == "ZRANGESTORE",
+		name == "GEOSEARCHSTORE":
 		return keyFirstTwo
+	case name == "ZUNION", name == "ZINTER", name == "ZDIFF", name == "ZINTERCARD", name == "ZMPOP":
+		return keyNumbered
+	case name == "ZUNIONSTORE", name == "ZINTERSTORE", name == "ZDIFFSTORE":
+		return keyDestNumbered
 	case name == "MSETEX":
 		return keyCountedPairs
 	case strideKeyCommands[name] != 0:
@@ -156,6 +163,10 @@ func keysBy(cmd *Command, rule keyRule) []string {
 		return cmd.Args
 	case keyCountedPairs:
 		return msetexKeys(cmd.Args)
+	case keyNumbered:
+		return numberedKeys(cmd.Args)
+	case keyDestNumbered:
+		return append([]string{cmd.Args[0]}, numberedKeys(cmd.Args[1:])...)
 	}
 	return cmd.Args[:1]
 }
@@ -364,7 +375,7 @@ func writtenKeys(cmd *Command) []string {
 	case "ZMPOP":
 		// Which of its keys it pops is known only once it has run, so all of
 		// them count, as PFMERGE's sources do.
-		return zmpopKeys(cmd.Args)
+		return numberedKeys(cmd.Args)
 	}
 	if _, known := commandKeyspace[cmd.Cmd]; known {
 		return commandKeys(cmd)
@@ -503,11 +514,15 @@ func (e *Engine) checkKeyTypes(cmd *Command, entry commandEntry) error {
 	return nil
 }
 
-// zmpopKeys are the keys ZMPOP names: numkeys of them after numkeys, or none
-// when numkeys is not a count of the arguments that follow.
-func zmpopKeys(args []string) []string {
+// numberedKeys are the keys a count in the first argument names after it,
+// as ZUNION's and ZMPOP's numkeys does, or none when the count is not one of
+// the arguments that follow.
+func numberedKeys(args []string) []string {
+	if len(args) == 0 {
+		return nil
+	}
 	n, valid := canonicalInteger(args[0])
-	if !valid || n < 1 || n >= int64(len(args)-1) {
+	if !valid || n < 1 || n > int64(len(args)-1) {
 		return nil
 	}
 	return args[1 : 1+n]
