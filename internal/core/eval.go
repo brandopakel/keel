@@ -35,8 +35,9 @@ var commandTable = map[string]func(*Engine, []string) []byte{
 
 	// Keys and expiry
 	"EXPIRETIME": (*Engine).cmdEXPIRETIME, "PEXPIRETIME": (*Engine).cmdPEXPIRETIME, "TOUCH": (*Engine).cmdTOUCH,
-	"RENAME": (*Engine).cmdRENAME, "RENAMENX": (*Engine).cmdRENAMENX,
-	"DEL": (*Engine).cmdDEL, "UNLINK": (*Engine).cmdUNLINK, "EXISTS": (*Engine).cmdEXISTS,
+	"RENAME": (*Engine).cmdRENAME, "RENAMENX": (*Engine).cmdRENAMENX, "COPY": (*Engine).cmdCOPY,
+	"RANDOMKEY": (*Engine).cmdRANDOMKEY,
+	"DEL":       (*Engine).cmdDEL, "UNLINK": (*Engine).cmdUNLINK, "EXISTS": (*Engine).cmdEXISTS,
 	"TYPE": (*Engine).cmdTYPE, "KEYS": (*Engine).cmdKEYS, "SCAN": (*Engine).cmdSCAN, "TTL": (*Engine).cmdTTL,
 	"PTTL": (*Engine).cmdPTTL, "EXPIRE": (*Engine).cmdEXPIRE, "PEXPIREAT": (*Engine).cmdPEXPIREAT,
 	"PEXPIRE": (*Engine).cmdPEXPIRE, "EXPIREAT": (*Engine).cmdEXPIREAT, "PERSIST": (*Engine).cmdPERSIST,
