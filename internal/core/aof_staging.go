@@ -93,9 +93,16 @@ func (e *Engine) recordsItself() { e.aof.skip = true }
 
 // clearStaged empties the staging area, keeping its storage and dropping its
 // references, so that no value a command staged outlives the command.
+//
+// Only the string of each part is cleared, which is what holds a value: a
+// clear of the whole area measured as a quarter of what staging a record
+// costs.
 func (e *Engine) clearStaged() {
-	clear(e.aof.staged)
-	e.aof.staged = e.aof.staged[:0]
+	staged := e.aof.staged
+	for i := range staged {
+		staged[i].s = ""
+	}
+	e.aof.staged = staged[:0]
 }
 
 // appendStaged writes every staged record to the log, in the order staged.
@@ -137,8 +144,12 @@ func (e *Engine) appendAOFParts(parts []stagedPart) {
 	e.aof.commandChanged = true
 	size := 1 + decimalDigits(len(parts)) + 2
 	fits := true
-	for _, p := range parts {
-		length := partSize(p)
+	for i := range parts {
+		p := &parts[i]
+		length := len(p.s)
+		if p.kind == stagedInt {
+			length = partSize(*p)
+		}
 		overhead := 1 + decimalDigits(length) + 4
 		if length > maxAOFTranscriptBytes-size-overhead {
 			fits = false
@@ -148,18 +159,20 @@ func (e *Engine) appendAOFParts(parts []stagedPart) {
 	}
 	if fits && size <= maxAOFTranscriptBytes-len(e.aof.buf) {
 		e.growAOFBuffer(size)
-		e.aof.buf = appendArrayHeader(e.aof.buf, len(parts))
-		for _, p := range parts {
+		buf := appendArrayHeader(e.aof.buf, len(parts))
+		for i := range parts {
+			p := &parts[i]
 			if p.kind == stagedInt {
-				e.aof.buf = append(e.aof.buf, '$')
-				e.aof.buf = strconv.AppendInt(e.aof.buf, int64(partSize(p)), 10)
-				e.aof.buf = append(e.aof.buf, '\r', '\n')
-				e.aof.buf = strconv.AppendInt(e.aof.buf, p.n, 10)
-				e.aof.buf = append(e.aof.buf, '\r', '\n')
+				buf = append(buf, '$')
+				buf = strconv.AppendInt(buf, int64(partSize(*p)), 10)
+				buf = append(buf, '\r', '\n')
+				buf = strconv.AppendInt(buf, p.n, 10)
+				buf = append(buf, '\r', '\n')
 				continue
 			}
-			e.aof.buf = appendBulkString(e.aof.buf, p.s)
+			buf = appendBulkString(buf, p.s)
 		}
+		e.aof.buf = buf
 		return
 	}
 	// A record too large for what is left of the buffer is drained in
