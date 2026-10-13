@@ -40,7 +40,7 @@ TimeSeries come in CI.
 | hash | 11/29 | `HSTRLEN`, `HRANDFIELD`, `HINCRBYFLOAT`, `HMSET`, `HSCAN`, `HGETDEL`, `HGETEX`, `HSETEX`, `HIMPORT`, field expiry (`HEXPIRE` family, 8 commands) |
 | set | 8/19 | `SINTER`, `SUNION`, `SDIFF` with `STORE` and `CARD` forms, `SMOVE`, `SSCAN` |
 | sorted-set | 12/35 | `ZUNION`, `ZINTER`, `ZDIFF` with `STORE` forms, the lex ranges, `ZREMRANGEBY*`, `ZREVRANGE`, `ZREVRANK`, `ZMSCORE`, `ZRANDMEMBER`, `ZRANGESTORE`, `ZMPOP`, `ZSCAN`, and the blocking forms |
-| generic | 13/29 (18 since step 4.4 of the embedding plan) | ~~`RENAME`, `RENAMENX`~~, `COPY`, ~~`TOUCH`~~, `OBJECT`, `RANDOMKEY`, ~~`EXPIRETIME`, `PEXPIRETIME`~~ (step 4.4), `SORT`, `SORT_RO`, `DUMP`, `RESTORE`, `MOVE`, `MIGRATE`, `WAIT`, `WAITAOF` |
+| generic | 13/29 (20 since step 4.4 of the embedding plan) | ~~`RENAME`, `RENAMENX`, `COPY`, `TOUCH`~~, `OBJECT`, ~~`RANDOMKEY`, `EXPIRETIME`, `PEXPIRETIME`~~ (step 4.4), `SORT`, `SORT_RO`, `DUMP`, `RESTORE`, `MOVE`, `MIGRATE`, `WAIT`, `WAITAOF` |
 | server | 5/32 | `CONFIG`, `COMMAND`, `TIME`, `ROLE`, `FLUSHALL`, `SWAPDB`, `SLOWLOG`, `LATENCY`, `MONITOR`, `ACL`, `DEBUG`, `SAVE`, `BGSAVE`, `LASTSAVE`, `REPLICAOF`, `FAILOVER`, `SHUTDOWN`, `MODULE`, `SYNC`, `PSYNC`, `REPLCONF`, and others |
 | geo, hyperloglog, connection, transactions | 19/28 | the `GEORADIUS` family, `GEOSEARCHSTORE`, `PFDEBUG` and `PFSELFTEST` (not planned: they read Redis's own HyperLogLog encoding, which Keel's sketches do not share), `RESET`, `WATCH` |
 | bitmap | 0/7 | all |

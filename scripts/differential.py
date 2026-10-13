@@ -231,7 +231,8 @@ def operation(rng):
                        ['PERSIST', key], ['PEXPIREAT', key, 4102444800000],
                        ['EXPIRETIME', key], ['PEXPIRETIME', key], ['TOUCH', key, other, 'missing', key],
                        ['RENAME', key, other], ['RENAMENX', key, other], ['RENAME', key, key],
-                       ['RENAME', 'missing', key], ['RENAMENX', key, key]])
+                       ['RENAME', 'missing', key], ['RENAMENX', key, key],
+                       ['COPY', key, other], ['COPY', key, other, 'REPLACE'], ['COPY', key, key]])
 
 
 def scan_all(client, *options):
