@@ -2218,6 +2218,67 @@ specs in one table and the dispatch tables go; the index `commands` is
 built from it, as it is from `commandArity` and `commandTable` now. The
 corpora hold the replies and records, and the paired job the cost.
 
+#### Step 4.3: strings, the template family
+
+Strings are the first family converted, and the template for the others
+(`docs/phase4-family-recipe.md`). Two PRs: the staging the typed operations
+need (4.3a), and the conversion (4.3b); the string commands Keel lacks
+follow in a third.
+
+**4.3a: staging that costs nothing.** A command whose arrival would not
+replay to the state it left stages the records that would. Each record was
+kept as the variadic slice its caller built, which escaped to the heap on
+every SET, log or no log, and an expiry's instant was made into a string for
+it. The staging area now holds the parts flat, after a header per record,
+in storage the engine keeps and clears after every command, so a caller's
+parts stay on its stack (`aof_staging.go`); a part may be an integer,
+written in decimal as the record is encoded (`aofRecordInt`). The field
+keeps its slice header, so no field of `Engine` moves. Allocations per
+operation fall for SET (2 to 1, and 1 to 0 with the log or a replica) and
+SET EX (3 to 0); the log's bytes are the same.
+
+**4.3b: typed operations and the command language.**
+
+- **Typed operations** (`strings.go`): `opGet`, `setTarget` and `opSet`,
+  `opMSet`, `opIncr`, `opDecr`, `opIncrBy`, `opDecrBy`, `opLCS`. Go types
+  in, typed results and the existing error sentinels out (their text is the
+  wire error, so the command language answers them as they are, and phase
+  5 matches them with `errors.Is`). Each stages the record of every write it
+  makes - `SET` and its `PEXPIREAT`, the `DEL` of a key of another type it
+  replaces, `MSET` whole, `INCR key`, `INCRBY key n` - and stages nothing
+  when a write declines (`NX`, `XX`). Each converted handler declares that
+  it records itself (`recordsItself`), and `aofCommit` takes staged records
+  ahead of anything else, so a converted command is never logged as it
+  arrived, on any path, whoever called it. Every record is the bytes the as-arrived log
+  held, because a client's integers are canonical (`canonicalInteger`
+  refuses `+1`, `007` and `-0`).
+- **What an operation assumes.** It runs in a command's scope (the lock,
+  `aofBegin` and `aofCommit`, eviction held off) after the checks that scope
+  makes from the command's descriptor: its count, a replica's refusal, and
+  the type of the keys it names. So `opGet` does not ask what holds a key
+  GET's descriptor constrains; an operation refuses only what it alone can
+  know: SET's `GET` finding another type, a value that is not an integer, an
+  overflow. Phase 5's methods run the same scope and checks around the same
+  operations.
+- **The command language** (`commands_dict.go`, `commands_keyspace.go`,
+  `commands_lcs.go`) reads arguments in Redis's order, calls the operation,
+  and answers through `e.reply()`, a `resp.Reply` framed in the command's
+  protocol with the engine's admission (what EXEC has used of the output
+  limit, and the transport's budget). SET's lookup is split from its write
+  (`setTarget`, then `opSet`) so that `SET ... GET` admits the old value's
+  reply before it writes, as it did, with one lookup. MGET stays on
+  `encodeLookupArray`, and LCS on the encoders it used, without reply
+  admission, which it never had: the collection replies move into `Reply`
+  with the collection families.
+- **Measured**: allocations per operation fall or stay on every string
+  row, and the corpora, the persistence and replication goldens and
+  `resp3_test` replay unchanged. Locally, in a paired comparison against
+  step 4.1, SET read 0.895, SET EX 0.841, INCR 0.962, MGET-10 0.996, GET
+  1.018, and SET and INCR with the log 0.951 and 1.031 (staging and then
+  encoding INCR's record costs a few nanoseconds more than logging the
+  command as it arrived). An admission interface call had put GET at 1.062,
+  which is why admission is concrete (step 4.1).
+
 ## Risks, in order
 
 1. Moving AOF, rewrite and replication state while MULTI/EXEC changes the same
@@ -2281,6 +2342,27 @@ Redis.
     `MISCONF Errors writing to the AOF file: <cause>`.
   - **The legacy migration's crash window is fixed first,** in a PR of its
     own ahead of phase 3's parts, because it loses data on develop.
+- **Phase 4's choices** (October 12, 2026), where the code needed more than
+  the plan said:
+  - **The corpora pin develop's replies**, so a pull request that changes a
+    reply on purpose recaptures them in the same PR, with the fixture's diff
+    as its wire-visible effect (step 4.0, "When a reply changes"). The INFO
+    work after #158 (#160, #162 to #165) does so.
+  - **Type checks belong to the scope, not the operation.** The plan has
+    typed operations own the semantics and the typed errors; the check that
+    a key holds the type a command constrains it to stays where it is, in
+    the scope that runs a command from its descriptor, before the operation,
+    and phase 5's typed methods run the same scope. An operation that
+    checked again would cost every miss a second lookup.
+  - **Every write records itself.** A converted command's operation stages
+    all of its records, so the log holds what the operation did whether a
+    client or a Go caller asked; staging was made allocation-free first
+    (step 4.3a) so that this costs nothing.
+  - **Reply admission is concrete.** `resp.Reply` checks what is used of
+    the output limit and the transport's budget with static calls, the
+    budget having moved into `resp` (`core.CommandAllocationBudget` is an
+    alias), rather than asking an interface the engine implements, which
+    measured as 3% of GET.
 - **`ClientBuffers` moves in step 2.7, not phase 6** (October 6, 2026). Once
   the server holds its engine, the hook is a field and a setter on it, as the
   allocation budget already is; as a package variable, it has every engine in

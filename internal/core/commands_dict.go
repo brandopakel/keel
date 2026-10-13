@@ -1,11 +1,9 @@
 package core
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"math"
-	"strconv"
 	"strings"
 	"time"
 
@@ -27,37 +25,49 @@ func invalidExpireTime(name string) error {
 	return fmt.Errorf("ERR invalid expire time in '%s' command", strings.ToLower(name))
 }
 
+// The string commands' command language: each reads its arguments as Redis
+// reads them, calls its typed operation (strings.go), and answers through
+// the engine's reply sink. The operation records what it changed; the
+// command is never logged as it arrived.
+
 // SETEX/PSETEX share SET's validation and canonical SET/PEXPIREAT persistence.
 // Like SET, they replace a key whatever type held it.
 func (e *Engine) cmdSETEX(args []string) []byte  { return e.setWithTTL("SETEX", args, "EX") }
 func (e *Engine) cmdPSETEX(args []string) []byte { return e.setWithTTL("PSETEX", args, "PX") }
 
 // cmdSETNX is SET key value NX answering 1 or 0, the older spelling clients
-// still send: cachelib's and Flask-Caching's add() are built on it. It goes
-// through SET, so it is logged as the SET it performs and a log written here
-// replays on a build that predates the name.
+// still send: cachelib's and Flask-Caching's add() are built on it. It is
+// recorded as the SET it performs, so a log written here replays on a build
+// that predates the name.
 func (e *Engine) cmdSETNX(args []string) []byte {
+	e.recordsItself()
 	if len(args) != 2 {
 		return e.encode(wrongArguments("SETNX"), false)
 	}
-	switch reply := e.cmdSET([]string{args[0], args[1], "NX"}); {
-	case bytes.Equal(reply, constant.RespOk):
-		return constant.RespOne
-	case bytes.Equal(reply, e.nullReply()):
-		return constant.RespZero
-	default:
-		return reply
+	r := e.reply()
+	if e.opSet(e.setTarget(args[0]), args[0], args[1], setRequest{nx: true}) {
+		return r.Int(1).Bytes()
 	}
+	return r.Int(0).Bytes()
 }
 
 func (e *Engine) setWithTTL(name string, args []string, unit string) []byte {
+	e.recordsItself()
 	if len(args) != 3 {
 		return e.encode(wrongArguments(name), false)
 	}
-	return e.setCommand(name, []string{args[0], args[2], unit, args[1]})
+	at, err := e.expiryArgument(name, unit, args[1])
+	if err != nil {
+		return e.encode(err, false)
+	}
+	e.opSet(e.setTarget(args[0]), args[0], args[2], setRequest{expires: true, at: at})
+	r := e.reply()
+	return r.Status("OK").Bytes()
 }
 
-// cmdSET implements SET key value [EX seconds | PX milliseconds].
+// cmdSET implements SET key value [NX | XX] [GET] [EX seconds | PX
+// milliseconds | EXAT unix-time-seconds | PXAT unix-time-milliseconds |
+// KEEPTTL].
 //
 // The expiry keyword used to be skipped over entirely: whatever sat in args[2]
 // was ignored and args[3] was read as a number of seconds. So PX asked for
@@ -66,130 +76,109 @@ func (e *Engine) setWithTTL(name string, args []string, unit string) []byte {
 // all was accepted just as readily. Anything past EX and PX is refused rather
 // than guessed at, which is the difference between a command this server does
 // not implement and a command it appears to implement and does not.
-func (e *Engine) cmdSET(args []string) []byte { return e.setCommand("SET", args) }
-
-// setCommand is SET, and SETEX and PSETEX through it; name is the command
-// running, which an invalid expiry names. The options are read as Redis reads
-// them: NX and XX exclude each other, KEEPTTL and the four expiry options
-// exclude one another, though one expiry option may be given again, and its
-// last value counts. The expiry is checked only once every option has been
-// read, so a malformed option is refused ahead of a malformed expiry.
-func (e *Engine) setCommand(name string, args []string) []byte {
+func (e *Engine) cmdSET(args []string) []byte {
+	e.recordsItself()
 	if len(args) < 2 {
-		return e.encode(wrongArguments(name), false)
+		return e.encode(wrongArguments("SET"), false)
 	}
-	nx, xx, get, keep := false, false, false, false
-	unit, expire := "", ""
-	for i := 2; i < len(args); i++ {
-		switch opt := strings.ToUpper(args[i]); {
-		case opt == "NX" && !xx:
-			nx = true
-		case opt == "XX" && !nx:
-			xx = true
-		case opt == "GET":
-			get = true
-		case opt == "KEEPTTL" && unit == "":
-			keep = true
-		case (opt == "EX" || opt == "PX" || opt == "EXAT" || opt == "PXAT") && !keep &&
-			(unit == "" || unit == opt) && i+1 < len(args):
-			unit, expire = opt, args[i+1]
-			i++
-		default:
-			return e.encode(errSyntax, false)
-		}
-	}
-	var at int64
-	expiry := unit != ""
-	if expiry {
-		n, valid := e.counterInteger(expire)
-		if !valid {
-			return e.encode(errNotAnInteger, false)
-		}
-		if n <= 0 {
-			return e.encode(invalidExpireTime(name), false)
-		}
-		if unit == "EX" || unit == "EXAT" {
-			if n > math.MaxInt64/1000 {
-				return e.encode(invalidExpireTime(name), false)
-			}
-			n *= 1000
-		}
-		at = n
-		if unit == "EX" || unit == "PX" {
-			var ok bool
-			at, ok = expiryInstant(n)
-			if !ok {
-				return e.encode(invalidExpireTime(name), false)
-			}
-		}
+	req, get, err := e.setArguments("SET", args[2:])
+	if err != nil {
+		return e.encode(err, false)
 	}
 	key, value := args[0], args[1]
-	// A name another type holds is a key that exists, so NX leaves it and XX
-	// replaces it, and GET cannot read it as a string - Redis's rules, see
-	// replacingWrites.
-	//
-	// The string store is asked first, and the others only if it does not
-	// hold the key. That is what asking every store in order did, since the
-	// strings come first in it, with one lookup fewer for the commonest SET,
-	// an overwrite: Get reaps an expired string as Has would have, and touches
-	// a live one as the Get after it did.
-	obj := e.dictStore.Get(key)
-	var other data_structure.Keyspace
-	otherHeld := false
-	if obj == nil {
-		other, otherHeld = e.space.OwnerOf(key)
-		otherHeld = otherHeld && other.KeyspaceName() != e.dictStore.KeyspaceName()
-	}
+	t := e.setTarget(key)
+	r := e.reply()
 	if get {
 		// GET reads the old value as Redis's lookupKeyRead does, so it is a
 		// keyspace hit or a miss, a key of another type a hit.
-		e.noteLookup(obj != nil || otherHeld)
+		e.noteLookup(t.exists())
 	}
-	if otherHeld && get {
-		return e.encode(errWrongType, false)
-	}
-	reply := constant.RespOk
 	if get {
-		reply = e.nullReply()
-		if obj != nil {
-			reply = e.encodeBoundedString(obj.Value)
-			if len(reply) > 0 && reply[0] == '-' {
-				return reply
-			}
+		// GET reads the old value as a string, so a key of another type is
+		// refused, and its reply is admitted before anything is written: a
+		// reply that cannot be sent leaves the key as it was.
+		switch {
+		case t.other != nil:
+			return r.Error(errWrongType).Bytes()
+		case t.obj == nil:
+			r.Null()
+		case r.Bulk(t.obj.Value).Refused():
+			return r.Bytes()
 		}
 	}
-	exists := obj != nil || otherHeld
-	if (nx && exists) || (xx && !exists) {
-		e.aof.skip = true
-		if get {
-			return reply
+	stored := e.opSet(t, key, value, req)
+	switch {
+	case get:
+	case stored:
+		r.Status("OK")
+	default:
+		r.Null()
+	}
+	return r.Bytes()
+}
+
+// setArguments reads SET's options as Redis reads them: NX and XX exclude
+// each other, KEEPTTL and the four expiry options exclude one another, though
+// one expiry option may be given again, and its last value counts. The expiry
+// is checked only once every option has been read, so a malformed option is
+// refused ahead of a malformed expiry; name is the command running, which an
+// invalid expiry names.
+func (e *Engine) setArguments(name string, opts []string) (req setRequest, get bool, err error) {
+	unit, expire := "", ""
+	for i := 0; i < len(opts); i++ {
+		switch opt := strings.ToUpper(opts[i]); {
+		case opt == "NX" && !req.xx:
+			req.nx = true
+		case opt == "XX" && !req.nx:
+			req.xx = true
+		case opt == "GET":
+			get = true
+		case opt == "KEEPTTL" && unit == "":
+			req.keepTTL = true
+		case (opt == "EX" || opt == "PX" || opt == "EXAT" || opt == "PXAT") && !req.keepTTL &&
+			(unit == "" || unit == opt) && i+1 < len(opts):
+			unit, expire = opt, opts[i+1]
+			i++
+		default:
+			return req, false, errSyntax
 		}
-		return e.nullReply()
 	}
-	if keep && exists {
-		// KEEPTTL keeps the key's expiry, and the key is the name: a hash
-		// replaced by a string under KEEPTTL keeps the hash's deadline.
-		var old uint64
-		var has bool
-		if obj != nil {
-			old, has = e.dictStore.GetExpiry(key)
-		} else {
-			old, has = other.GetExpiry(key)
+	if unit != "" {
+		if req.at, err = e.expiryArgument(name, unit, expire); err != nil {
+			return req, false, err
 		}
-		if has {
-			at, expiry = int64(old), true
+		req.expires = true
+	}
+	return req, get, nil
+}
+
+// expiryArgument reads an expiry given in unit - EX or PX relative to now,
+// EXAT or PXAT absolute - as the instant it falls due, in Unix milliseconds.
+// It must be a positive integer, and its instant must fit in the signed 64
+// bits it is kept in; name is the command running, which Redis's refusal
+// names.
+func (e *Engine) expiryArgument(name, unit, text string) (int64, error) {
+	n, valid := e.counterInteger(text)
+	if !valid {
+		return 0, errNotAnInteger
+	}
+	if n <= 0 {
+		return 0, invalidExpireTime(name)
+	}
+	if unit == "EX" || unit == "EXAT" {
+		if n > math.MaxInt64/1000 {
+			return 0, invalidExpireTime(name)
 		}
+		n *= 1000
 	}
-	if otherHeld {
-		e.dropOtherType(other, key)
+	if unit == "EX" || unit == "PX" {
+		at, ok := expiryInstant(n)
+		if !ok {
+			return 0, invalidExpireTime(name)
+		}
+		return at, nil
 	}
-	e.dictStore.Put(key, e.dictStore.NewObj(value))
-	e.aofRecord("SET", key, value)
-	if expiry {
-		e.dictStore.SetExpiryAt(key, uint64(at))
-		e.aofRecordInt("PEXPIREAT", key, at)
-	}
-	return reply
+	return n, nil
 }
 
 // dropOtherType deletes a key another type holds, for a write that replaces
@@ -229,12 +218,11 @@ func (e *Engine) cmdGET(args []string) []byte {
 	if len(args) != 1 {
 		return e.encode(wrongArguments("GET"), false)
 	}
-	// Get reaps a key whose TTL has passed, so what comes back is live.
-	obj := e.dictStore.Get(args[0])
-	if obj == nil {
-		return e.nullReply()
+	r := e.reply()
+	if value, ok := e.opGet(args[0]); ok {
+		return r.Bulk(value).Bytes()
 	}
-	return e.encodeBoundedString(obj.Value)
+	return r.Null().Bytes()
 }
 
 // remainingTTL is how long a key has left, in milliseconds. The two negative
@@ -402,55 +390,57 @@ func (e *Engine) cmdPERSIST(args []string) []byte {
 	return constant.RespZero
 }
 
-// cmdINCR adds one to the integer a key holds, treating a missing key as zero.
-// The value is changed in place, so a TTL on the key survives, as it does in
-// Redis. A value that is not a canonical integer is refused, and so is one
-// that would overflow, rather than wrapping to a number nobody asked for.
-func (e *Engine) cmdINCR(args []string) []byte   { return e.increment("INCR", args, 1, false) }
-func (e *Engine) cmdDECR(args []string) []byte   { return e.increment("DECR", args, -1, false) }
-func (e *Engine) cmdINCRBY(args []string) []byte { return e.increment("INCRBY", args, 1, true) }
-func (e *Engine) cmdDECRBY(args []string) []byte { return e.increment("DECRBY", args, -1, true) }
-func (e *Engine) increment(name string, args []string, sign int64, explicit bool) []byte {
-	want := 1
-	if explicit {
-		want = 2
+// cmdINCR, cmdDECR, cmdINCRBY and cmdDECRBY add to the integer a key holds;
+// see opIncr. The increment is read before the key is looked at, as Redis
+// reads it, so INCRBY of a list with a word for an increment is refused for
+// the word.
+func (e *Engine) cmdINCR(args []string) []byte {
+	e.recordsItself()
+	if len(args) != 1 {
+		return e.encode(wrongArguments("INCR"), false)
 	}
-	if len(args) != want {
-		return e.encode(wrongArguments(name), false)
+	return e.counterReply(e.opIncr(args[0]))
+}
+
+func (e *Engine) cmdDECR(args []string) []byte {
+	e.recordsItself()
+	if len(args) != 1 {
+		return e.encode(wrongArguments("DECR"), false)
 	}
-	delta := sign
-	if explicit {
-		n, valid := e.counterInteger(args[1])
-		if !valid {
-			return e.encode(errNotAnInteger, false)
-		}
-		if sign == -1 && n == math.MinInt64 {
-			// Negating it would overflow before anything is added.
-			return e.encode(errDecrOverflow, false)
-		}
-		delta = n * sign
+	return e.counterReply(e.opDecr(args[0]))
+}
+
+func (e *Engine) cmdINCRBY(args []string) []byte {
+	e.recordsItself()
+	if len(args) != 2 {
+		return e.encode(wrongArguments("INCRBY"), false)
 	}
-	key := args[0]
-	obj := e.dictStore.Get(key)
-	current := int64(0)
-	if obj != nil {
-		var valid bool
-		current, valid = canonicalInteger(obj.Value)
-		if !valid {
-			return e.encode(errNotAnInteger, false)
-		}
+	by, valid := e.counterInteger(args[1])
+	if !valid {
+		return e.encode(errNotAnInteger, false)
 	}
-	if (delta > 0 && current > math.MaxInt64-delta) || (delta < 0 && current < math.MinInt64-delta) {
-		return e.encode(errIncrOverflow, false)
+	return e.counterReply(e.opIncrBy(args[0], by))
+}
+
+func (e *Engine) cmdDECRBY(args []string) []byte {
+	e.recordsItself()
+	if len(args) != 2 {
+		return e.encode(wrongArguments("DECRBY"), false)
 	}
-	current += delta
-	value := strconv.FormatInt(current, 10)
-	if obj == nil {
-		e.dictStore.Put(key, e.dictStore.NewObj(value))
-	} else {
-		e.dictStore.UpdateValue(key, value)
+	by, valid := e.counterInteger(args[1])
+	if !valid {
+		return e.encode(errNotAnInteger, false)
 	}
-	return e.encode(current, false)
+	return e.counterReply(e.opDecrBy(args[0], by))
+}
+
+// counterReply answers a counter's new value, or the refusal.
+func (e *Engine) counterReply(n int64, err error) []byte {
+	r := e.reply()
+	if err != nil {
+		return r.Error(err).Bytes()
+	}
+	return r.Int(n).Bytes()
 }
 
 // cmdDBSIZE counts the keys in every keyspace, not only the strings.

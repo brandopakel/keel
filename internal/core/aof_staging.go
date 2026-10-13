@@ -48,6 +48,18 @@ func (e *Engine) aofRecord(parts ...string) {
 	}
 }
 
+// aofRecordArgs stages the record name followed by args, as MSET's whole
+// argument list follows its name, with no slice made to join them.
+func (e *Engine) aofRecordArgs(name string, args []string) {
+	if e.aof.file == nil || e.aof.replaying {
+		return
+	}
+	e.aof.staged = append(e.aof.staged, stagedPart{n: int64(1 + len(args)), kind: stagedHeader}, stagedPart{s: name})
+	for _, a := range args {
+		e.aof.staged = append(e.aof.staged, stagedPart{s: a})
+	}
+}
+
 // aofRecordInt stages the record name key n, whose last part is an integer:
 // PEXPIREAT's instant, INCRBY's increment.
 func (e *Engine) aofRecordInt(name, key string, n int64) {
@@ -57,6 +69,13 @@ func (e *Engine) aofRecordInt(name, key string, n int64) {
 	e.aof.staged = append(e.aof.staged, stagedPart{n: 3, kind: stagedHeader},
 		stagedPart{s: name}, stagedPart{s: key}, stagedPart{n: n, kind: stagedInt})
 }
+
+// recordsItself marks the running command as one whose typed operation
+// stages every record it makes, as every command converted to typed
+// operations is (strings.go): it is never logged as it arrived, and when
+// its operation staged nothing, it changed nothing. aofBegin clears the mark
+// for the next command.
+func (e *Engine) recordsItself() { e.aof.skip = true }
 
 // clearStaged empties the staging area, keeping its storage and dropping its
 // references, so that no value a command staged outlives the command.
