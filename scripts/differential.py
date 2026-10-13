@@ -146,6 +146,9 @@ def operation(rng):
             ['SET', other, value, 'GET'], ['SET', other, value, 'KEEPTTL'],
             ['MSET', key, value, other, value], ['SETEX', other, 3600, value],
             ['PSETEX', other, 3600000, value], ['SETNX', other, value],
+            ['APPEND', other, value], ['STRLEN', other], ['GETRANGE', other, 0, -1],
+            ['SETRANGE', other, 1, value], ['GETDEL', other], ['GETEX', other, 'EX', 100000],
+            ['GETSET', other, value], ['MSETNX', key, value, other, value], ['INCRBYFLOAT', other, '1.5'],
         ])
     if kind == 'string':
         return rng.choice([
@@ -154,6 +157,12 @@ def operation(rng):
             ['DECRBY', key, rng.randrange(-4,5)], ['MGET', key, 'missing', 'hash:0'],
             ['MSET', key, value, 'string:other', value], ['INCR', key],
             ['SETEX', key, 3600, value], ['PSETEX', key, 3600000, value],
+            ['APPEND', key, value], ['STRLEN', key], ['GETRANGE', key, rng.randrange(-8, 8), rng.randrange(-8, 8)],
+            ['SUBSTR', key, 0, rng.randrange(-4, 64)], ['SETRANGE', key, rng.randrange(0, 80), value],
+            ['GETDEL', key], ['GETEX', key], ['GETEX', key, 'EX', 100000], ['GETEX', key, 'PERSIST'],
+            ['GETEX', key, 'PXAT', 4102444800000], ['GETEX', key, 'EXAT', 1000], ['GETSET', key, value],
+            ['MSETNX', key, value, 'string:other', value],
+            ['INCRBYFLOAT', key, rng.choice(['0.1', '-1.5', '2.5e1', '10', '-0', '3.0000000000000000001', 'x', 'inf'])],
         ])
     if kind == 'hash':
         return rng.choice([
@@ -395,6 +404,9 @@ def operation3(rng, modules):
             ['LCS', key, other, 'IDX', 'WITHMATCHLEN', 'MINMATCHLEN', rng.randrange(4)],
             ['EXPIRE', key, 100000], ['EXPIRE', key, 100000, 'NX'], ['PEXPIRE', key, 100000000, 'GT'],
             ['EXPIREAT', key, 4102444800, 'XX'], ['EXPIRE', key, -1],
+            ['APPEND', key, value], ['GETRANGE', key, 0, rng.randrange(-4, 8)], ['SETRANGE', key, 3, value],
+            ['GETEX', key, 'PX', 100000000], ['GETDEL', key], ['GETSET', key, value],
+            ['INCRBYFLOAT', key, rng.choice(['10.5', '0.1', '-5.0e3', '1e400'])],
         ])
     if kind == 'key':
         key = rng.choice(['string', 'hash', 'list', 'set', 'zset']) + ':' + str(rng.randrange(32))
