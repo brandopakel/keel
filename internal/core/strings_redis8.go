@@ -157,6 +157,8 @@ func (e *Engine) setConditionHolds(t stringTarget, c valueCondition) (bool, erro
 	if !t.exists() {
 		return c.kind == condNotEqual || c.kind == condDigestNotEqual, nil
 	}
+	// Redis reads the value it compares with lookupKeyRead, a keyspace hit.
+	e.noteLookup(true)
 	if t.obj == nil {
 		return false, errWrongType
 	}
@@ -178,6 +180,8 @@ func (e *Engine) opDelex(key string, condition, match string, conditional bool) 
 		return false, nil
 	}
 	owner, held := e.space.OwnerOf(key)
+	// A condition is read with lookupKeyRead, a keyspace hit or a miss.
+	e.noteLookup(held)
 	if !held {
 		return false, nil
 	}
