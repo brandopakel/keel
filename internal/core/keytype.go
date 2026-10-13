@@ -101,7 +101,7 @@ type keyRule uint8
 
 const (
 	keyFirst        keyRule = iota // the first argument, as nearly every command has it
-	keyFirstTwo                    // LCS's two keys
+	keyFirstTwo                    // LCS's two keys, and RENAME's, RENAMENX's and COPY's
 	keyStride                      // every n-th argument, from the first: strideKeyCommands
 	keyEvery                       // every argument: multiKeyCommands
 	keyCountedPairs                // MSETEX's: a count, then that many key value pairs
@@ -111,7 +111,7 @@ const (
 // index, so the type check reads it rather than looking the name up again.
 func keyRuleOf(name string) keyRule {
 	switch {
-	case name == "LCS":
+	case name == "LCS", name == "RENAME", name == "RENAMENX", name == "COPY":
 		return keyFirstTwo
 	case name == "MSETEX":
 		return keyCountedPairs
