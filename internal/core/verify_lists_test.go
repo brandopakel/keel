@@ -41,3 +41,30 @@ func TestListReadsCountWhereRedisLooks(t *testing.T) {
 		})
 	}
 }
+
+// listWrites are the list writes a replica must refuse, one of each and of
+// each form, with a list and a missing key to aim at.
+var listWrites = [][]string{
+	{"LPUSH", "list", "v"}, {"RPUSH", "list", "v", "w"}, {"LPUSH", "nosuch", "v"},
+	{"LPOP", "list"}, {"RPOP", "list"}, {"LPOP", "list", "2"}, {"RPOP", "nosuch", "0"},
+	{"LSET", "list", "0", "v"}, {"LTRIM", "list", "0", "0"}, {"LTRIM", "nosuch", "0", "-1"},
+}
+
+// TestReplicaRefusesEveryListWrite: a replica refuses each list write with
+// READONLY, on every form, the converted command language included, and the
+// list it would have written is untouched.
+func TestReplicaRefusesEveryListWrite(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	runOn(t, e, "RPUSH", "list", "a", "b")
+	reconfigure(t, e, func(o *Options) { o.ReplicaOf = "test-primary:6379" })
+	for _, cmd := range listWrites {
+		assert.Equal(t, "-READONLY You can't write against a read only replica.\r\n",
+			string(rawReplyOn(t, e, cmd[0], cmd[1:]...)), "%v", cmd)
+	}
+	l, ok := e.listStore.Peek("list")
+	assert.True(t, ok)
+	assert.Equal(t, []string{"a", "b"}, l.All(), "no write reached the list")
+	_, ok = e.listStore.Peek("nosuch")
+	assert.False(t, ok)
+}
