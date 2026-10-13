@@ -42,8 +42,8 @@ populate the variable; avoid putting secrets in process arguments or shell histo
 | --- | --- |
 | Strings | `GET`, `SET`, `SETNX`, `SETEX`, `PSETEX`, `MGET`, `MSET`, `MSETNX`, `INCR`, `INCRBY`, `INCRBYFLOAT`, `DECR`, `DECRBY`, `APPEND`, `STRLEN`, `GETRANGE` (and `SUBSTR`), `SETRANGE`, `GETDEL`, `GETEX`, `GETSET`, `LCS`, and Redis 8's `DIGEST`, `DELEX`, `MSETEX`, `INCREX` |
 | SET options | `NX`, `XX`, `IFEQ`, `IFNE`, `IFDEQ`, `IFDNE`, `GET`, `KEEPTTL`, `EX`, `PX`, `EXAT`, `PXAT`; conditional failures return null, or the old value with `GET` |
-| Expiry, every type | `TTL`, `PTTL`, `EXPIRE`, `PEXPIRE`, `EXPIREAT`, `PEXPIREAT`, `PERSIST`; expiry setters accept `NX`, `XX`, `GT`, `LT` |
-| Keys | `DEL`, `UNLINK` (same as `DEL`), `EXISTS`, `TYPE`, `KEYS`, `SCAN` with `MATCH`/`COUNT`/`TYPE`, `DBSIZE`, `FLUSHDB` (`SYNC` and `ASYNC` both flush before the reply) |
+| Expiry, every type | `TTL`, `PTTL`, `EXPIRETIME`, `PEXPIRETIME`, `EXPIRE`, `PEXPIRE`, `EXPIREAT`, `PEXPIREAT`, `PERSIST`; expiry setters accept `NX`, `XX`, `GT`, `LT` |
+| Keys | `DEL`, `UNLINK` (same as `DEL`), `EXISTS`, `TYPE`, `TOUCH`, `RENAME`, `RENAMENX`, `KEYS`, `SCAN` with `MATCH`/`COUNT`/`TYPE`, `DBSIZE`, `FLUSHDB` (`SYNC` and `ASYNC` both flush before the reply) |
 | Hashes | `HSET`, `HSETNX`, `HGET`, `HMGET`, `HDEL`, `HEXISTS`, `HLEN`, `HKEYS`, `HVALS`, `HGETALL`, `HINCRBY` |
 | Lists | `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LLEN`, `LINDEX`, `LSET`, `LRANGE`, `LTRIM`; pops accept an optional count |
 | Sets | `SADD`, `SREM`, `SCARD`, `SMEMBERS`, `SISMEMBER`, `SMISMEMBER`, `SPOP`, `SRANDMEMBER` |
