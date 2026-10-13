@@ -47,6 +47,10 @@ var replicaRefusedWrites = [][]string{
 	{"HMSET", "h", "f", "x"}, {"HINCRBYFLOAT", "h", "c", "1.5"}, {"HGETDEL", "h", "FIELDS", "1", "f"},
 	// Sets (step 4.6).
 	{"SADD", "s", "c"}, {"SADD", "missing", "c"}, {"SREM", "s", "a"}, {"SPOP", "s"}, {"SPOP", "s", "2"},
+	// Sorted sets and geo (step 4.7).
+	{"ZADD", "z", "3", "c"}, {"ZADD", "z", "XX", "CH", "5", "a"}, {"ZADD", "missing", "1", "a"},
+	{"ZREM", "z", "a"}, {"ZINCRBY", "z", "1", "a"}, {"ZPOPMIN", "z"}, {"ZPOPMAX", "z", "2"},
+	{"GEOADD", "g", "13.361389", "38.115556", "palermo"}, {"GEOADD", "z", "XX", "15", "37", "a"},
 }
 
 // replicaSeed is the state the replica has from its primary: a key of each
