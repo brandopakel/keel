@@ -330,6 +330,9 @@ func writtenKeys(cmd *Command) []string {
 		// DEL names any number of keys and constrains none of them to a type,
 		// so it is absent from the table below and handled here.
 		return cmd.Args
+	case "RENAME", "RENAMENX":
+		// Both names change: the old one goes, the new one is written.
+		return cmd.Args[:min(2, len(cmd.Args))]
 	case "PFMERGE":
 		// The destination is written and the sources are only read, but a
 		// source recorded as dirty costs one redundant re-emit and a source
