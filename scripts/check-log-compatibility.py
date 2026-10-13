@@ -155,8 +155,15 @@ def more_writes(c, round_):
         call(c, 'INCR', f'during:count:{round_}')
 
 
-def expiry(c, key, start, now):
+def expiry(c, key, start):
+    """When key expires: hours from start for an expiry within a day of it,
+    the second it falls due for any other, None for none. The clock is read
+    as PTTL answers, so the instant is within one call's latency of the
+    truth; read once for a whole snapshot, it fell short by however long the
+    snapshot had run, and an expiry on a second boundary, s:exat's, rounded
+    to the second before it once that passed half a second."""
     ttl = call(c, 'PTTL', key)
+    now = int(time.time() * 1000)
     if ttl == -1:
         return None
     at = now + ttl
@@ -167,7 +174,6 @@ def expiry(c, key, start, now):
 
 def snapshot(c, start):
     """The keyspace, key by key: type, expiry and value, in key order."""
-    now = int(time.time() * 1000)
     state = {}
     for key in sorted(call(c, 'KEYS', '*')):
         kind = call(c, 'TYPE', key).decode()
@@ -184,7 +190,7 @@ def snapshot(c, start):
             value = call(c, 'ZRANGE', key, 0, -1, 'WITHSCORES')
         else:
             value = call(c, 'KEEL.DUMP', key)
-        state[key.decode(errors='replace')] = [kind, expiry(c, key, start, now), sha256_of(value)]
+        state[key.decode(errors='replace')] = [kind, expiry(c, key, start), sha256_of(value)]
     return state
 
 
