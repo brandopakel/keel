@@ -113,6 +113,63 @@ on `bench-history`, and every case of the newest run of `develop`, with both
 replies and where in the Redis source the reply is built, to
 `census/replies.csv`.
 
+### Configuration
+
+The **configuration census** (`scripts/config-census.py`, same workflow)
+reads Redis's configuration table (`static_configs` in `src/config.c`) and
+`redis.conf`, asks Redis and Keel `CONFIG GET` for each directive, and
+checks Keel's flags. The first CI run, against Redis 8.10.1 (run
+38305867780, October 12, 2026; a local run against 8.10.2 agreed): of the
+**216 directives** this build of Redis has, Keel reports **20** under
+Redis's name through `CONFIG GET`, has a flag for **5** more under another
+meaning, and lacks **191**.
+
+| Family | Directives | Has | Mapped | Lacks |
+| --- | ---: | ---: | ---: | ---: |
+| clients and network | 23 | 5 | 1 | 17 |
+| cluster | 26 | 0 | 0 | 26 |
+| encodings | 22 | 0 | 0 | 22 |
+| logging and process | 19 | 0 | 0 | 19 |
+| memory and eviction | 26 | 5 | 2 | 19 |
+| monitoring | 9 | 0 | 0 | 9 |
+| other | 8 | 1 | 0 | 7 |
+| persistence | 27 | 7 | 0 | 20 |
+| replication | 27 | 1 | 2 | 24 |
+| scripting | 1 | 0 | 0 | 1 |
+| security | 6 | 1 | 0 | 5 |
+| tls | 22 | 0 | 0 | 22 |
+
+The 20 Keel has are those `CONFIG GET` reports (`docs/info-compatibility.md`).
+The 5 mapped: `lfu-decay-time` (`-lfu-decay-period`, by accesses rather than
+idle minutes), `active-expire-effort` (`-active-expire-samples`),
+`masterauth` (`-primary-password-env`), `shutdown-timeout` (a grace period
+for cleanup rather than for replicas) and `protected-mode` (no mode: Keel
+listens on loopback unless `-host` says otherwise).
+
+Which of the lacking ones matter is measured two ways. First, who reads or
+sets a directive, checked against the sources on October 12, 2026:
+`redis_exporter` reads `CONFIG GET *` and makes metrics of `maxmemory`,
+`maxclients`, `io-threads`, `databases` (all of which Keel has),
+`repl-backlog-size` and `client-output-buffer-limit` (which it lacks);
+Sidekiq and BullMQ warn unless `maxmemory-policy` is `noeviction`, read from
+`INFO`, which Keel reports; the Bitnami chart sets `appendonly yes` and
+`save ""` (Keel has both); the spotahome operator writes `port`, `save`,
+`slaveof`, `requirepass`, `masterauth` and `tcp-keepalive`; the official
+Docker image's docs show `--save` and `--loglevel`. So the lacking
+directives an operator meets first are **`loglevel`, `tcp-keepalive`,
+`repl-backlog-size` and `client-output-buffer-limit`**. Second, Redis's own
+test suite (the oracle below) sets 125 of the lacking directives in at least
+one test file; the most set are `rdb-key-save-delay` (17 files, a test-only
+delay), `hash-max-listpack-entries` (12, an encoding threshold Keel has no
+counterpart to), `aof-use-rdb-preamble` (11), `repl-diskless-sync-delay`
+(9) and `client-query-buffer-limit` (8). A test that sets a directive Keel
+lacks fails at `CONFIG SET`, whatever it then checks.
+
+The whole list, with Redis's defaults and Keel's values, is in the
+workflow's `config.md`; every run's counts go to `census/config-runs.csv` on
+`bench-history` and every directive of the newest run of `develop` to
+`census/config.csv`.
+
 ## How priorities are set
 
 Each item below is ranked by what applications need. The **framework
