@@ -2488,6 +2488,25 @@ whatever type holds it.
   checks only that nothing else moved; the corpora and the persistence and
   replication goldens replay unchanged.
 
+**Completing the family.** `EXPIRETIME`, `PEXPIRETIME`, `TOUCH`, `RENAME` and
+`RENAMENX`, as Redis 8.10.1's `expire.c` and `db.c` define them, and the
+no-op records dropped:
+
+- **`RENAME` moves the value**, the same object, with its expiry, whatever
+  its type (`Keyspace.Rename` on the string dictionary and on `Keyed`), so it
+  costs a delete and a put whatever the value's size, as Redis's does; a new
+  name another type holds is deleted first. It is recorded as itself, which
+  a replica takes (`replicationOperation`) and which a build before this one
+  does not read. `TOUCH` records a use of each key (`Keyspace.Touch`), as a
+  read does. `COPY`, `RANDOMKEY`, `OBJECT`, `SORT`, `DUMP` and `RESTORE`,
+  `MOVE`, `MIGRATE`, `WAIT` and `WAITAOF` follow.
+- **No-op records dropped**, by the recipe's rule: a `DEL` that deleted
+  nothing and a `PERSIST` that removed no expiry record nothing, as Redis's
+  `delGenericCommand` (`db.c`) and `persistCommand` (`expire.c`, lines
+  914-919) count no change for them. The corpus and the replication goldens
+  are recaptured (a replica's own log no longer holds those records); an
+  older log holding one still replays it, as a no-op.
+
 ## Risks, in order
 
 1. Moving AOF, rewrite and replication state while MULTI/EXEC changes the same
