@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brandopakel/keel/internal/constant"
 	"github.com/brandopakel/keel/internal/data_structure"
 	"github.com/brandopakel/keel/internal/resp"
 )
@@ -242,33 +241,18 @@ func (e *Engine) cmdGET(args []string) []byte {
 	return e.wire().Null()
 }
 
-// remainingTTL is how long a key has left, in milliseconds. The two negative
-// answers are Redis's: -2 for a key that is not there, -1 for one with no
-// expiry.
-func (e *Engine) remainingTTL(key string) int64 {
-	owner, ok := e.space.OwnerOf(key)
-	if !ok {
-		return -2
-	}
-	at, has := owner.GetExpiry(key)
-	if !has {
-		return -1
-	}
-	return max(0, int64(at)-time.Now().UnixMilli())
-}
-
 // cmdTTL answers a key's time to live in whole seconds, rounded to the nearest
-// as Redis rounds it.
+// as Redis rounds it; see opTTL.
 func (e *Engine) cmdTTL(args []string) []byte {
 	if len(args) != 1 {
 		return e.encode(wrongArguments("TTL"), false)
 	}
-	left := e.remainingTTL(args[0])
-	e.noteLookup(left != -2)
+	r := e.reply()
+	left := e.opTTL(args[0])
 	if left < 0 {
-		return e.encode(left, false)
+		return r.Int(left).Bytes()
 	}
-	return e.encode((left+500)/1000, false)
+	return r.Int((left + 500) / 1000).Bytes()
 }
 
 // cmdPTTL is TTL in milliseconds.
@@ -276,12 +260,11 @@ func (e *Engine) cmdPTTL(args []string) []byte {
 	if len(args) != 1 {
 		return e.encode(wrongArguments("PTTL"), false)
 	}
-	left := e.remainingTTL(args[0])
-	e.noteLookup(left != -2)
-	return e.encode(left, false)
+	r := e.reply()
+	return r.Int(e.opTTL(args[0])).Bytes()
 }
 
-// cmdDEL removes keys from whichever keyspace holds them.
+// cmdDEL removes keys from whichever keyspace holds them; see opDel.
 //
 // It used to look only in the string dictionary, so DEL on a set, a sorted set,
 // a filter or a sketch reported nothing deleted and deleted nothing - and where
@@ -289,21 +272,17 @@ func (e *Engine) cmdPTTL(args []string) []byte {
 // A delete that cannot delete is worse than a missing command, because it
 // answers.
 func (e *Engine) cmdDEL(args []string) []byte {
+	e.recordsItself()
 	if len(args) == 0 {
 		return e.encode(wrongArguments("DEL"), false)
 	}
-	deleted := 0
-	for _, key := range args {
-		if e.space.DeleteAnywhere(key) {
-			deleted++
-		}
-	}
-	return e.encode(deleted, false)
+	r := e.reply()
+	return r.Int(e.opDel(args)).Bytes()
 }
 
 // cmdUNLINK is DEL. Redis hands an unlinked value to a background thread to
 // free; here deleting costs the same either way, so the two are one command,
-// and UNLINK is logged as DEL - see persistedName.
+// and UNLINK is recorded as DEL.
 func (e *Engine) cmdUNLINK(args []string) []byte {
 	if len(args) == 0 {
 		return e.encode(wrongArguments("UNLINK"), false)
@@ -313,7 +292,7 @@ func (e *Engine) cmdUNLINK(args []string) []byte {
 
 // cmdEXPIRE implements EXPIRE key seconds. A time already passed - zero or
 // negative - deletes the key, as it does in Redis, and is logged as the DEL
-// it amounts to.
+// it amounts to; see opExpireAt.
 func (e *Engine) cmdEXPIRE(args []string) []byte {
 	return e.expireCommand("EXPIRE", args, 1000, false)
 }
@@ -331,28 +310,29 @@ func (e *Engine) cmdPEXPIREAT(args []string) []byte {
 // expireCommand reads its options before its time, as Redis does, and refuses
 // them in Redis's words.
 func (e *Engine) expireCommand(name string, args []string, scale int64, absolute bool) []byte {
+	e.recordsItself()
 	if len(args) < 2 {
 		return e.encode(wrongArguments(name), false)
 	}
-	nx, xx, gt, lt := false, false, false, false
+	var c expireCondition
 	for _, opt := range args[2:] {
 		switch strings.ToUpper(opt) {
 		case "NX":
-			nx = true
+			c.nx = true
 		case "XX":
-			xx = true
+			c.xx = true
 		case "GT":
-			gt = true
+			c.gt = true
 		case "LT":
-			lt = true
+			c.lt = true
 		default:
 			return e.encode(fmt.Errorf("ERR Unsupported option %s", EchoArgument(opt)), false)
 		}
 	}
-	if nx && (xx || gt || lt) {
+	if c.nx && (c.xx || c.gt || c.lt) {
 		return e.encode(errors.New("ERR NX and XX, GT or LT options at the same time are not compatible"), false)
 	}
-	if gt && lt {
+	if c.gt && c.lt {
 		return e.encode(errors.New("ERR GT and LT options at the same time are not compatible"), false)
 	}
 	n, valid := e.counterInteger(args[1])
@@ -370,35 +350,24 @@ func (e *Engine) expireCommand(name string, args []string, scale int64, absolute
 			return e.encode(invalidExpireTime(name), false)
 		}
 	}
-	owner, ok := e.space.OwnerOf(args[0])
-	if !ok {
-		e.aof.skip = true
-		return constant.RespZero
+	r := e.reply()
+	if e.opExpireAt(args[0], at, c) {
+		return r.Int(1).Bytes()
 	}
-	old, has := owner.GetExpiry(args[0])
-	if (nx && has) || (xx && !has) || (gt && (!has || at <= int64(old))) || (lt && has && at >= int64(old)) {
-		e.aof.skip = true
-		return constant.RespZero
-	}
-	if at <= time.Now().UnixMilli() && !e.aof.replaying && !e.replicaApplying {
-		owner.Delete(args[0])
-		e.aofRecord("DEL", args[0])
-		return constant.RespOne
-	}
-	owner.SetExpiryAt(args[0], uint64(at))
-	e.aofRecordInt("PEXPIREAT", args[0], at)
-	return constant.RespOne
+	return r.Int(0).Bytes()
 }
 
+// cmdPERSIST removes a key's expiry; see opPersist.
 func (e *Engine) cmdPERSIST(args []string) []byte {
+	e.recordsItself()
 	if len(args) != 1 {
 		return e.encode(wrongArguments("PERSIST"), false)
 	}
-	owner, ok := e.space.OwnerOf(args[0])
-	if ok && owner.ClearExpiry(args[0]) {
-		return constant.RespOne
+	r := e.reply()
+	if e.opPersist(args[0]) {
+		return r.Int(1).Bytes()
 	}
-	return constant.RespZero
+	return r.Int(0).Bytes()
 }
 
 // cmdINCR, cmdDECR, cmdINCRBY and cmdDECRBY add to the integer a key holds;
@@ -466,5 +435,6 @@ func (e *Engine) cmdDBSIZE(args []string) []byte {
 	if len(args) != 0 {
 		return e.encode(wrongArguments("DBSIZE"), false)
 	}
-	return e.encode(int64(e.space.TotalKeys()), false)
+	r := e.reply()
+	return r.Int(e.opDBSize()).Bytes()
 }
