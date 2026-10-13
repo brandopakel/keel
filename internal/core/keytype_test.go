@@ -188,7 +188,7 @@ func TestTypeRuleIsIndexedWithTheCommand(t *testing.T) {
 	for name, want := range map[string]keyRule{
 		"GET": keyFirst, "HSET": keyFirst, "LCS": keyFirstTwo, "MSET": keyStride,
 		"PFCOUNT": keyEvery, "PFMERGE": keyEvery, "LMOVE": keyFirstTwo, "RPOPLPUSH": keyFirstTwo,
-		"LMOVEM": keyFirstTwo, "LMPOP": keyCounted,
+		"LMOVEM": keyFirstTwo, "LMPOP": keyCounted, "MSETEX": keyCountedPairs,
 	} {
 		assert.Equal(t, want, commands[name].keys, name)
 	}
@@ -208,6 +208,10 @@ func TestTypeRuleIsIndexedWithTheCommand(t *testing.T) {
 		{"MSET", []string{"a", "1"}, []string{"a"}},
 		{"PFCOUNT", []string{"a", "b", "c"}, []string{"a", "b", "c"}},
 		{"PFMERGE", []string{"dest", "a", "b"}, []string{"dest", "a", "b"}},
+		{"MSETEX", []string{"2", "a", "1", "b", "2", "EX", "10"}, []string{"a", "b"}},
+		{"MSETEX", []string{"1", "a", "1", "b", "2"}, []string{"a"}},
+		{"MSETEX", []string{"3", "a", "1"}, nil},
+		{"MSETEX", []string{"x", "a", "1"}, nil},
 		{"GET", nil, nil},
 		{"LMOVE", []string{"src", "dst", "LEFT", "RIGHT"}, []string{"src", "dst"}},
 		{"LMPOP", []string{"2", "a", "b", "LEFT", "COUNT", "3"}, []string{"a", "b"}},
@@ -224,6 +228,7 @@ func TestTypeRuleIsIndexedWithTheCommand(t *testing.T) {
 		"GET": "string", "HSET": "hash", "ZADD": "zset", "PFADD": "hll",
 		"SET": "", "MSET": "", "BF.ADD": "", "CF.EXISTS": "", "DEL": "", "TYPE": "",
 		"LPOS": "list", "LMOVE": "", "LMPOP": "",
+		"DIGEST": "string", "INCREX": "string", "MSETEX": "", "DELEX": "",
 	} {
 		assert.Equal(t, want, commands[name].typed, name)
 	}
