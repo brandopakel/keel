@@ -190,6 +190,67 @@ func (l *List) VisitRange(start, stop int, yield func(string) bool) {
 	}
 }
 
+// Insert puts value at position i, from 0 before the first element to Len()
+// after the last, moving the elements from i on one place towards the tail:
+// LINSERT's insert, which finding the pivot has already made O(n).
+func (l *List) Insert(i int, value string) {
+	if i < 0 || i > l.count {
+		return
+	}
+	l.grow()
+	for k := l.count; k > i; k-- {
+		l.buf[(l.head+k)%len(l.buf)] = l.buf[(l.head+k-1)%len(l.buf)]
+	}
+	l.buf[(l.head+i)%len(l.buf)] = value
+	l.count++
+	l.elemBytes += uint64(len(value))
+}
+
+// Remove deletes the elements equal to value, LREM's way: the first count
+// of them from the head, or with fromTail the last count, and every one when
+// count is zero. It answers how many it deleted, keeping the others in order,
+// in one pass over the list (two from the tail, to count the matches).
+func (l *List) Remove(value string, count int, fromTail bool) int {
+	if l.count == 0 {
+		return 0
+	}
+	// From the tail, the last count matches go: all but the first skip.
+	skip := 0
+	if count > 0 && fromTail {
+		matches := 0
+		for i := 0; i < l.count; i++ {
+			if l.buf[(l.head+i)%len(l.buf)] == value {
+				matches++
+			}
+		}
+		skip = max(0, matches-count)
+	}
+	removed, kept := 0, 0
+	for i := 0; i < l.count; i++ {
+		v := l.buf[(l.head+i)%len(l.buf)]
+		if v == value && (count == 0 || removed < count) {
+			if skip == 0 {
+				removed++
+				l.elemBytes -= uint64(len(v))
+				continue
+			}
+			skip--
+		}
+		l.buf[(l.head+kept)%len(l.buf)] = v
+		kept++
+	}
+	// The slots the survivors no longer reach are cleared, as a pop clears
+	// its slot, so they stop holding removed strings alive.
+	for i := kept; i < l.count; i++ {
+		l.buf[(l.head+i)%len(l.buf)] = ""
+	}
+	l.count = kept
+	if removed > 0 {
+		l.trim()
+	}
+	return removed
+}
+
 // All returns every element in order, for the rewrite that has to write the
 // list back out as one command.
 func (l *List) All() []string { return l.Range(0, l.count-1) }

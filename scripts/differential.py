@@ -171,10 +171,26 @@ def operation(rng):
             ['HLEN', key], ['HGETALL', key], ['HINCRBY', key, field, rng.randrange(-4,5)],
         ])
     if kind == 'list':
+        other = 'list:' + str(rng.randrange(32))
         return rng.choice([
             ['LPUSH', key, value, b'b'], ['RPUSH', key, value, b'b'], ['LPOP', key], ['RPOP', key],
             ['LRANGE', key, -10, 10], ['LTRIM', key, -32, -1], ['LLEN', key],
             ['LINDEX', key, -1], ['LSET', key, 0, value],
+            ['LPOP', key, rng.randrange(0, 3)], ['LTRIM', key, 0, -1],
+            ['LPUSHX', key, value], ['RPUSHX', key, value, b'b'],
+            ['LINSERT', key, rng.choice(['BEFORE', 'after']), rng.choice([value, b'b']), value],
+            ['LREM', key, rng.randrange(-3, 4), rng.choice([value, b'b'])],
+            ['LPOS', key, rng.choice([value, b'b'])],
+            ['LPOS', key, b'b', 'RANK', rng.choice([-2, -1, 1, 2]), 'COUNT', rng.randrange(0, 3)],
+            ['LPOS', key, value, 'MAXLEN', rng.randrange(0, 5), 'COUNT', 0],
+            ['LMOVE', key, other, rng.choice(['LEFT', 'RIGHT']), rng.choice(['LEFT', 'right'])],
+            ['RPOPLPUSH', key, other], ['LMOVE', key, key, 'LEFT', 'RIGHT'],
+            ['LMOVE', key, rng.choice(['string:0', 'hash:0', 'missing']), 'RIGHT', 'LEFT'],
+            ['LMOVEM', key, other, 'LEFT', 'RIGHT'],
+            ['LMOVEM', key, rng.choice([other, key]), rng.choice(['LEFT', 'RIGHT']), rng.choice(['LEFT', 'RIGHT']),
+             rng.choice(['COUNT', 'EXACTLY']), rng.randrange(1, 4), rng.choice(['OBO', 'BULK'])],
+            ['LMPOP', 2, key, other, rng.choice(['LEFT', 'RIGHT'])],
+            ['LMPOP', 2, rng.choice(['missing', 'string:0']), key, 'RIGHT', 'COUNT', rng.randrange(1, 4)],
         ])
     if kind == 'set':
         return rng.choice([

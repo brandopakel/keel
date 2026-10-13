@@ -45,7 +45,7 @@ populate the variable; avoid putting secrets in process arguments or shell histo
 | Expiry, every type | `TTL`, `PTTL`, `EXPIRE`, `PEXPIRE`, `EXPIREAT`, `PEXPIREAT`, `PERSIST`; expiry setters accept `NX`, `XX`, `GT`, `LT` |
 | Keys | `DEL`, `UNLINK` (same as `DEL`), `EXISTS`, `TYPE`, `KEYS`, `SCAN` with `MATCH`/`COUNT`/`TYPE`, `DBSIZE`, `FLUSHDB` (`SYNC` and `ASYNC` both flush before the reply) |
 | Hashes | `HSET`, `HSETNX`, `HGET`, `HMGET`, `HDEL`, `HEXISTS`, `HLEN`, `HKEYS`, `HVALS`, `HGETALL`, `HINCRBY` |
-| Lists | `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LLEN`, `LINDEX`, `LSET`, `LRANGE`, `LTRIM`; pops accept an optional count |
+| Lists | `LPUSH`, `RPUSH`, `LPUSHX`, `RPUSHX`, `LPOP`, `RPOP`, `LMPOP`, `LLEN`, `LINDEX`, `LPOS`, `LSET`, `LINSERT`, `LREM`, `LRANGE`, `LTRIM`, `LMOVE`, `LMOVEM`, `RPOPLPUSH`; pops accept an optional count; no blocking forms |
 | Sets | `SADD`, `SREM`, `SCARD`, `SMEMBERS`, `SISMEMBER`, `SMISMEMBER`, `SPOP`, `SRANDMEMBER` |
 | Sorted sets | `ZADD` with `NX`/`XX`/`CH`, `ZRANK` with `WITHSCORE`, `ZREM`, `ZSCORE`, `ZCARD`, `ZCOUNT`, `ZINCRBY`, `ZPOPMIN`/`ZPOPMAX`; `ZRANGEBYSCORE`/`ZREVRANGEBYSCORE`; `ZRANGE` by rank or `BYSCORE`, with `REV`, `LIMIT` and `WITHSCORES` |
 | Geo | `GEOADD`, `GEODIST`, `GEOHASH`, `GEOSEARCH`, `GEOPOS` |

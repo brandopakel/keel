@@ -2385,6 +2385,39 @@ error-parity harnesses, which hold them to Redis 8.10.1 in CI.
   handlers left `commands_list.go`, and everything after `lists.go` is 5,120
   bytes later.
 
+**The missing commands.** `LPUSHX`, `RPUSHX`, `LINSERT`, `LREM`, `LPOS`
+(with `RANK`, `COUNT` and `MAXLEN`), `LMOVE`, `RPOPLPUSH`, `LMOVEM` (new in
+Redis 8.10, with `COUNT` or `EXACTLY` and `OBO` or `BULK`) and `LMPOP` (with
+`COUNT`), the non-blocking forms, as Redis 8.10.1's `t_list.c` defines
+each, added by the recipe's second half: a typed operation each, a command
+language that reads the arguments in Redis's order with Redis's error words,
+corpus cases for every reply and error, and steps in the differential and
+error-parity harnesses. The blocking forms stay in tier 2 of the parity plan.
+
+- **Records** follow Redis's propagation: `LPUSHX`, `RPUSHX`, `LINSERT`,
+  `LREM`, `LMOVE`, `RPOPLPUSH` and `LMOVEM` record themselves, and `LMPOP`
+  records the `LPOP` or `RPOP` with the count it took, as
+  `mpopGenericCommand` rewrites it. A log holding them is not read by a build
+  before this one, and the replica applies each (`replicationOperation`).
+- **No write that changes nothing is logged**, as Redis's `server.dirty`
+  decides: `LINSERT` without its pivot, `LREM` that removes nothing, a move
+  from a missing source, and now the no-op records develop logged - `LPOP`
+  and `RPOP` of a missing key or of a count of zero (`t_list.c` lines 836
+  and 840-844) and `LTRIM` of a missing key or of a range covering the whole
+  list (lines 946 and 994). An older log holding those records still
+  replays, as the no-ops they are.
+- **Keys checked where Redis checks them.** `LMOVE`, `RPOPLPUSH`, `LMOVEM`
+  and `LMPOP` check their keys' types themselves (`selfTypedCommands`): a
+  move from a missing source answers nil whatever the destination holds,
+  and `LMPOP` refuses a key of another type only when it reaches it. Their
+  keys are still named for the log's and the rewrite's bookkeeping, `LMPOP`'s
+  by a rule of their own (`keyCounted`: as many as `numkeys` counts).
+- **Admission before the write**: the element a move takes, `LMOVEM`'s
+  block and `LMPOP`'s key and elements are admitted before anything moves,
+  so a reply the output limit refuses leaves the lists as they were.
+- **The ring** gains `Insert` and `Remove`, O(n) as Redis's quicklist
+  operations are once the pivot or the matches have been found.
+
 ## Risks, in order
 
 1. Moving AOF, rewrite and replication state while MULTI/EXEC changes the same
