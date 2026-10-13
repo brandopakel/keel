@@ -2564,6 +2564,50 @@ the two convert together.
   0), ZSCORE 1.013, ZRANGE-100-WITHSCORES 1.020, controls GET 1.000 and SADD
   1.006.
 
+Then the commands the family lacked, as Redis 8.10.1's `t_zset.c` and
+`geo.c` define each:
+
+- **ZADD** takes `GT`, `LT` and `INCR` (`AddScore` in the data structure,
+  Redis's `zsetAdd`), refused in Redis's order and words.
+- **The ranges** share one reader of Redis's `zrangeGenericCommand`:
+  `ZREVRANGE`, `ZRANGEBYLEX`, `ZREVRANGEBYLEX` and `ZRANGE`'s `BYLEX` join
+  the rank and score ranges, over lexicographic ranges translated from
+  `t_zset.c` (`data_structure/zset_lex.go`); `ZRANGESTORE` stores any of
+  them at a destination of any type, deleting it for an empty range.
+- `ZREVRANK`, `ZMSCORE`, `ZLEXCOUNT`, the `ZREMRANGEBY*` commands,
+  `ZRANDMEMBER` (SRANDMEMBER's count and cap) and `ZMPOP`.
+- **The algebra**: `ZUNION`, `ZINTER`, `ZDIFF`, their `STORE` forms and
+  `ZINTERCARD`, over sorted sets and sets, with `WEIGHTS` and `AGGREGATE`
+  `SUM`, `MIN`, `MAX` and 8.x's `COUNT`, aggregating in Redis's order.
+- **Geo**: `GEORADIUS`, `GEORADIUSBYMEMBER`, their `_RO` forms and
+  `GEOSEARCHSTORE`, over GEOSEARCH's reader generalised to the forms of
+  `georadiusGeneric`, with `STORE` and `STOREDIST`. `GEORADIUS` and
+  `GEORADIUSBYMEMBER` are writes, as Redis flags them.
+- **Records** follow Redis's propagation: a `ZADD`, `ZREM`, `ZINCRBY` or
+  `ZREMRANGEBY*` that changed nothing records nothing; `GEOADD` records the
+  `ZADD` of its 52-bit scores, its options as given; the store forms record
+  themselves as sent when the destination changed; `ZMPOP` records the
+  `ZREM` of what it popped, as `ZPOPMIN` does. An older log holding a no-op
+  or a `GEOADD` still replays.
+- **The multi-key commands** check each key's type where Redis does, in the
+  handler, rather than through the type check: a destination is replaced
+  whatever it holds, `ZMPOP` stops at the first key that exists, and the
+  algebra takes sets.
+- **Geo arithmetic is the same on every platform**: the decode and the
+  distances round each product before adding it, so that no platform fuses
+  a multiply and an add. Go fused them on arm64 and not on amd64, so a
+  decoded position (the origin's) and a distance differed in their last
+  digits between the two, and from Redis's; a stored distance still depends
+  on the platform's `sin` and `cos` in its last digit, which the corpus and
+  the differential leave out.
+- **Held to Redis**: corpus cases for every reply and error in both
+  protocols, the persistence and replication goldens recaptured,
+  `error-parity.py` (1845 cases, 0 mismatches against 8.10.2 locally),
+  `stats-parity.py` (280 cases, 0 mismatches), the differential's
+  generators, and a local session differential in both protocols (0
+  differences). The blocking forms (`BZPOPMIN`, `BZPOPMAX`, `BZMPOP`) and
+  `ZSCAN` remain.
+
 ## Risks, in order
 
 1. Moving AOF, rewrite and replication state while MULTI/EXEC changes the same
