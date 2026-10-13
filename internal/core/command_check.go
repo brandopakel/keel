@@ -67,6 +67,11 @@ var commandArity = map[string]int{
 	"ZRANGE": -4, "ZADD": -4, "ZRANK": -3, "ZREM": -3, "ZSCORE": 3, "ZCARD": 2,
 	"GEOADD": -5, "GEODIST": -4, "GEOHASH": -2,
 	"GEOSEARCH": -7, "GEOPOS": -2,
+	"ZREVRANGE": -4, "ZRANGEBYLEX": -4, "ZREVRANGEBYLEX": -4, "ZREVRANK": -3, "ZMSCORE": -3, "ZLEXCOUNT": 4,
+	"ZREMRANGEBYRANK": 4, "ZREMRANGEBYSCORE": 4, "ZREMRANGEBYLEX": 4, "ZRANDMEMBER": -2,
+	"ZRANGESTORE": -5, "ZMPOP": -4,
+	"ZUNION": -3, "ZINTER": -3, "ZDIFF": -3, "ZUNIONSTORE": -4, "ZINTERSTORE": -4, "ZDIFFSTORE": -4, "ZINTERCARD": -3,
+	"GEORADIUS": -6, "GEORADIUS_RO": -6, "GEORADIUSBYMEMBER": -5, "GEORADIUSBYMEMBER_RO": -5, "GEOSEARCHSTORE": -8,
 
 	"BF.RESERVE": -4, "BF.INFO": -2, "BF.ADD": 3,
 	"BF.MADD": -3, "BF.EXISTS": 3, "BF.MEXISTS": -3,
@@ -147,8 +152,8 @@ func subcommandsOf(name string) []subcommand {
 // commandEntry is one command as dispatch finds it: the handler from
 // commandTable, nil for a command the transport or Transact answers, and the
 // count from commandArity. container marks CLIENT, MEMORY and CONFIG, whose count
-// depends on the subcommand, and namesItself the one handler that repeats the
-// name it was sent as - see Engine.runningName. Both are worked out once,
+// depends on the subcommand, and namesItself the handlers that repeat the name
+// they were sent as, GEOSEARCH's and GEOSEARCHSTORE's - see Engine.runningName. Both are worked out once,
 // here, so that a well-formed command is checked with one comparison of its
 // count.
 // typed and keys are the type check's reading of the tables in keytype.go -
@@ -199,7 +204,7 @@ func indexCommands() {
 		}
 		commands[name] = commandEntry{run: commandTable[name], arity: arity,
 			typed: typedKeyspace(name), keys: keyRuleOf(name),
-			container: subcommandsOf(name) != nil, namesItself: name == "GEOSEARCH", reads: keyspaceReads[name],
+			container: subcommandsOf(name) != nil, namesItself: name == "GEOSEARCH" || name == "GEOSEARCHSTORE", reads: keyspaceReads[name],
 			stat: stat}
 	}
 }
