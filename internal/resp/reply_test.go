@@ -191,3 +191,28 @@ func TestReplyWithoutAdmissionGrowsAsNeeded(t *testing.T) {
 	r.Bulk(strings.Repeat("v", 1<<16))
 	require.Equal(t, 102, strings.Count(string(r.Bytes()), "\r\n"))
 }
+
+// TestSingleBulkIsAReplysFirstBulk holds SingleBulk to what a Reply's Bulk
+// writes as its first value: the same bytes, the same reservation, the same
+// refusals, by reference.
+func TestSingleBulkIsAReplysFirstBulk(t *testing.T) {
+	t.Parallel()
+	for _, value := range []string{"", "v", strings.Repeat("v", 5000)} {
+		a, b := &Budget{Limit: 1 << 20}, &Budget{Limit: 1 << 20}
+		a.Begin(0)
+		b.Begin(0)
+		r := Reply{Budget: a}
+		want := r.Bulk(value).Bytes()
+		got := SingleBulk(0, b, value)
+		require.Equal(t, string(want), string(got), "%d bytes", len(value))
+		require.Equal(t, cap(want), cap(got), "allocated to the admitted size")
+		require.Equal(t, a.ReplyReserved, b.ReplyReserved, "reserved alike")
+	}
+	require.Equal(t, first(ReplyTooLarge), first(SingleBulk(MaxReplyBytes, nil, "x")), "nothing left of the limit")
+	require.Equal(t, first(ReplyTooLarge), first(SingleBulk(MaxReplyBytes-6, nil, "xx")), "one byte past it")
+	require.Equal(t, "$1\r\nx\r\n", string(SingleBulk(MaxReplyBytes-7, nil, "x")), "exactly at it")
+	small := &Budget{Limit: 4096}
+	small.Begin(0)
+	require.Equal(t, first(AllocationPressure), first(SingleBulk(0, small, "x")), "past what the budget holds")
+	require.Equal(t, uint64(1), small.Refusals)
+}

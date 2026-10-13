@@ -2280,7 +2280,11 @@ SET EX (3 to 0); the log's bytes are the same.
   1.018, and SET and INCR with the log 0.951 and 1.031 (staging and then
   encoding INCR's record costs a few nanoseconds more than logging the
   command as it arrived). An admission interface call had put GET at 1.062,
-  which is why admission is concrete (step 4.1).
+  which is why admission is concrete (step 4.1). On GitHub's x86 runners
+  GET still read 1.063 and 1.091 (runs 38333742145 and 38333744556): a
+  Reply built and read back for one value costs a few nanoseconds there. GET
+  now answers through `resp.SingleBulk`, a Reply's first-bulk path without
+  the Reply.
 
 ## Risks, in order
 

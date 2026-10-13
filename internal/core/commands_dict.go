@@ -9,6 +9,7 @@ import (
 
 	"github.com/brandopakel/keel/internal/constant"
 	"github.com/brandopakel/keel/internal/data_structure"
+	"github.com/brandopakel/keel/internal/resp"
 )
 
 // String commands, and the expiry commands, which apply to strings here: a TTL
@@ -218,11 +219,13 @@ func (e *Engine) cmdGET(args []string) []byte {
 	if len(args) != 1 {
 		return e.encode(wrongArguments("GET"), false)
 	}
-	r := e.reply()
+	// GET's reply is its one value, so it is answered without a Reply to
+	// build (resp.SingleBulk): the same sizing and admission, measurably
+	// cheaper on the hottest read.
 	if value, ok := e.opGet(args[0]); ok {
-		return r.Bulk(value).Bytes()
+		return resp.SingleBulk(MaxReplyBytes-e.replyCeiling, e.commandAllocations, value)
 	}
-	return r.Null().Bytes()
+	return e.wire().Null()
 }
 
 // remainingTTL is how long a key has left, in milliseconds. The two negative
