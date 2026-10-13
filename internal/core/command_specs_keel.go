@@ -112,20 +112,32 @@ var keelCommandSpecs = map[string]commandSpec{
 	"BF.EXISTS":  {arity: 3, group: "bf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "BLOOM"}, keys: oneKeyRead},
 	"BF.MEXISTS": {arity: -3, group: "bf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "BLOOM"}, keys: oneKeyRead},
 	"BF.INFO":    {arity: -2, group: "bf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "FAST", "BLOOM"}, keys: oneKeyRead},
+	"BF.INSERT":  {arity: -4, group: "bf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "BLOOM"}, keys: oneKey},
+	"BF.CARD":    {arity: 2, group: "bf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "FAST", "BLOOM"}, keys: oneKeyRead},
 
-	"CF.RESERVE": {arity: -3, group: "cf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "FAST", "CUCKOO"}, keys: oneKeyWrite},
-	"CF.ADD":     {arity: 3, group: "cf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "CUCKOO"}, keys: oneKey},
-	"CF.ADDNX":   {arity: 3, group: "cf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "CUCKOO"}, keys: oneKey},
-	"CF.EXISTS":  {arity: 3, group: "cf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "CUCKOO"}, keys: oneKeyRead},
-	"CF.MEXISTS": {arity: -3, group: "cf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "CUCKOO"}, keys: oneKeyRead},
-	"CF.DEL":     {arity: 3, group: "cf", flags: []string{"WRITE", "FAST"}, acl: []string{"WRITE", "CUCKOO"}, keys: oneKey},
-	"CF.COUNT":   {arity: 3, group: "cf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "CUCKOO"}, keys: oneKeyRead},
-	"CF.INFO":    {arity: 2, group: "cf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "FAST", "CUCKOO"}, keys: oneKeyRead},
+	"CF.RESERVE":  {arity: -3, group: "cf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "FAST", "CUCKOO"}, keys: oneKeyWrite},
+	"CF.ADD":      {arity: 3, group: "cf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "CUCKOO"}, keys: oneKey},
+	"CF.ADDNX":    {arity: 3, group: "cf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "CUCKOO"}, keys: oneKey},
+	"CF.EXISTS":   {arity: 3, group: "cf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "CUCKOO"}, keys: oneKeyRead},
+	"CF.MEXISTS":  {arity: -3, group: "cf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "CUCKOO"}, keys: oneKeyRead},
+	"CF.DEL":      {arity: 3, group: "cf", flags: []string{"WRITE", "FAST"}, acl: []string{"WRITE", "CUCKOO"}, keys: oneKey},
+	"CF.COUNT":    {arity: 3, group: "cf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "CUCKOO"}, keys: oneKeyRead},
+	"CF.INFO":     {arity: 2, group: "cf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "FAST", "CUCKOO"}, keys: oneKeyRead},
+	"CF.INSERT":   {arity: -4, group: "cf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "CUCKOO"}, keys: oneKey},
+	"CF.INSERTNX": {arity: -4, group: "cf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "CUCKOO"}, keys: oneKey},
+	// RedisBloom registers CF.COMPACT "readonly fast", in the read category,
+	// and propagates nothing for it; Keel logs and replicates the compaction
+	// it makes, so that a replica's and a replayed filter keep the primary's
+	// layout, and declares it a write (an approved departure, listed under
+	// "Improvements over Redis" where it was added).
+	"CF.COMPACT": {arity: -1, group: "cf", flags: []string{"WRITE", "FAST"}, acl: []string{"WRITE", "CUCKOO"}, keys: oneKey},
 
 	"CMS.INITBYDIM":  {arity: 4, group: "cms", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "FAST", "CMS"}, keys: oneKeyWrite},
 	"CMS.INITBYPROB": {arity: 4, group: "cms", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "FAST", "CMS"}, keys: oneKeyWrite},
 	"CMS.INCRBY":     {arity: -4, group: "cms", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "CMS"}, keys: oneKey},
 	"CMS.QUERY":      {arity: -3, group: "cms", flags: []string{"READONLY"}, acl: []string{"READ", "CMS"}, keys: oneKeyRead},
+	"CMS.MERGE":      {arity: -4, group: "cms", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "CMS"}, keys: oneKey},
+	"CMS.INFO":       {arity: 2, group: "cms", flags: []string{"READONLY"}, acl: []string{"READ", "FAST", "CMS"}, keys: oneKeyRead},
 }
 
 // commandSpecOf is the spec of a command, or of a container's subcommand
