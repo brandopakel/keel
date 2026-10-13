@@ -1,217 +1,217 @@
 run_id,time,branch,name,alias,family,kind,flags,documented,class,keel_value,redis_value,note,used_by,test_files
-38336687165,2026-10-13T02:23:54Z,develop,rdbchecksum,,persistence,bool,IMMUTABLE_CONFIG,active,lacks,,yes,,,0
-38336687165,2026-10-13T02:23:54Z,develop,daemonize,,logging and process,bool,IMMUTABLE_CONFIG,active,lacks,,no,,,1
-38336687165,2026-10-13T02:23:54Z,develop,always-show-logo,,logging and process,bool,IMMUTABLE_CONFIG,active,lacks,,no,,,0
-38336687165,2026-10-13T02:23:54Z,develop,protected-mode,,clients and network,bool,,active,mapped,,yes,-host: no mode: Keel listens on 127.0.0.1 unless -host says otherwise,,3
-38336687165,2026-10-13T02:23:54Z,develop,rdbcompression,,persistence,bool,,active,lacks,,yes,,,5
-38336687165,2026-10-13T02:23:54Z,develop,rdb-del-sync-files,,persistence,bool,,active,lacks,,no,,,0
-38336687165,2026-10-13T02:23:54Z,develop,activerehashing,,other,bool,,active,lacks,,yes,,,0
-38336687165,2026-10-13T02:23:54Z,develop,stop-writes-on-bgsave-error,,persistence,bool,,active,lacks,,yes,,,0
-38336687165,2026-10-13T02:23:54Z,develop,set-proc-title,,logging and process,bool,IMMUTABLE_CONFIG,active,lacks,,yes,,,0
-38336687165,2026-10-13T02:23:54Z,develop,dynamic-hz,,memory and eviction,bool,,active,lacks,,yes,,,4
-38336687165,2026-10-13T02:23:54Z,develop,lazyfree-lazy-eviction,,memory and eviction,bool,DEBUG_CONFIG,active,lacks,,no,,,0
-38336687165,2026-10-13T02:23:54Z,develop,lazyfree-lazy-expire,,memory and eviction,bool,DEBUG_CONFIG,active,lacks,,no,,,1
-38336687165,2026-10-13T02:23:54Z,develop,lazyfree-lazy-server-del,,memory and eviction,bool,DEBUG_CONFIG,active,lacks,,no,,,3
-38336687165,2026-10-13T02:23:54Z,develop,lazyfree-lazy-user-del,,memory and eviction,bool,DEBUG_CONFIG,active,lacks,,no,,,2
-38336687165,2026-10-13T02:23:54Z,develop,lazyfree-lazy-user-flush,,memory and eviction,bool,DEBUG_CONFIG,active,lacks,,no,,,1
-38336687165,2026-10-13T02:23:54Z,develop,repl-disable-tcp-nodelay,,replication,bool,,active,lacks,,no,,,0
-38336687165,2026-10-13T02:23:54Z,develop,repl-diskless-sync,,replication,bool,DEBUG_CONFIG,active,lacks,,yes,,,7
-38336687165,2026-10-13T02:23:54Z,develop,repl-rdb-channel,,replication,bool,HIDDEN_CONFIG,no,lacks,,yes,,,6
-38336687165,2026-10-13T02:23:54Z,develop,aof-rewrite-incremental-fsync,,persistence,bool,,active,lacks,,yes,,,0
-38336687165,2026-10-13T02:23:54Z,develop,no-appendfsync-on-rewrite,,persistence,bool,,active,lacks,,no,,,0
-38336687165,2026-10-13T02:23:54Z,develop,cluster-require-full-coverage,,cluster,bool,,example,lacks,,yes,,,1
-38336687165,2026-10-13T02:23:54Z,develop,rdb-save-incremental-fsync,,persistence,bool,,active,lacks,,yes,,,0
-38336687165,2026-10-13T02:23:54Z,develop,aof-load-truncated,,persistence,bool,,active,lacks,,yes,,,0
-38336687165,2026-10-13T02:23:54Z,develop,aof-use-rdb-preamble,,persistence,bool,,active,lacks,,yes,,,11
-38336687165,2026-10-13T02:23:54Z,develop,aof-timestamp-enabled,,persistence,bool,,active,lacks,,no,,,1
-38336687165,2026-10-13T02:23:54Z,develop,cluster-replica-no-failover,cluster-slave-no-failover,cluster,bool,,example,lacks,,no,,,1
-38336687165,2026-10-13T02:23:54Z,develop,replica-lazy-flush,slave-lazy-flush,replication,bool,,active,lacks,,no,,,1
-38336687165,2026-10-13T02:23:54Z,develop,replica-serve-stale-data,slave-serve-stale-data,replication,bool,,active,lacks,,yes,,,4
-38336687165,2026-10-13T02:23:54Z,develop,replica-read-only,slave-read-only,replication,bool,DEBUG_CONFIG,active,lacks,,yes,,,3
-38336687165,2026-10-13T02:23:54Z,develop,replica-ignore-maxmemory,slave-ignore-maxmemory,replication,bool,,example,lacks,,yes,,,0
-38336687165,2026-10-13T02:23:54Z,develop,jemalloc-bg-thread,,memory and eviction,bool,,active,lacks,,yes,,,0
-38336687165,2026-10-13T02:23:54Z,develop,activedefrag,,memory and eviction,bool,DEBUG_CONFIG,example,lacks,,no,,,3
-38336687165,2026-10-13T02:23:54Z,develop,syslog-enabled,,logging and process,bool,IMMUTABLE_CONFIG,example,lacks,,no,,,0
-38336687165,2026-10-13T02:23:54Z,develop,cluster-enabled,,cluster,bool,IMMUTABLE_CONFIG,example,lacks,,no,,,1
-38336687165,2026-10-13T02:23:54Z,develop,appendonly,,persistence,bool,,active,has,yes,yes,,Bitnami redis chart (commonConfiguration: appendonly yes),26
-38336687165,2026-10-13T02:23:54Z,develop,cluster-allow-reads-when-down,,cluster,bool,,example,lacks,,no,,,0
-38336687165,2026-10-13T02:23:54Z,develop,cluster-allow-pubsubshard-when-down,,cluster,bool,,example,lacks,,yes,,,0
-38336687165,2026-10-13T02:23:54Z,develop,crash-log-enabled,,logging and process,bool,,example,lacks,,yes,,,0
-38336687165,2026-10-13T02:23:54Z,develop,crash-memcheck-enabled,,logging and process,bool,,example,lacks,,yes,,,1
-38336687165,2026-10-13T02:23:54Z,develop,use-exit-on-panic,,other,bool,HIDDEN_CONFIG,no,lacks,,no,,,0
-38336687165,2026-10-13T02:23:54Z,develop,disable-thp,,other,bool,IMMUTABLE_CONFIG,active,lacks,,yes,,,0
-38336687165,2026-10-13T02:23:54Z,develop,cluster-allow-replica-migration,,cluster,bool,,example,lacks,,yes,,,1
-38336687165,2026-10-13T02:23:54Z,develop,replica-announced,,replication,bool,,example,lacks,,yes,,,0
-38336687165,2026-10-13T02:23:54Z,develop,latency-tracking,,monitoring,bool,,example,lacks,,yes,,,4
-38336687165,2026-10-13T02:23:54Z,develop,aof-disable-auto-gc,,persistence,bool,HIDDEN_CONFIG,no,lacks,,no,,,1
-38336687165,2026-10-13T02:23:54Z,develop,replica-ignore-disk-write-errors,,replication,bool,,example,lacks,,no,,,0
-38336687165,2026-10-13T02:23:54Z,develop,hide-user-data-from-log,,logging and process,bool,,example,lacks,,no,,,2
-38336687165,2026-10-13T02:23:54Z,develop,lazyexpire-nested-arbitrary-keys,,memory and eviction,bool,HIDDEN_CONFIG,no,lacks,,yes,,,1
-38336687165,2026-10-13T02:23:54Z,develop,cluster-slot-stats-enabled,,cluster,enum,MULTI_ARG_CONFIG,example,lacks,,no,,,3
-38336687165,2026-10-13T02:23:54Z,develop,lua-enable-deprecated-api,,scripting,bool,IMMUTABLE_CONFIG HIDDEN_CONFIG,no,lacks,,no,,,1
-38336687165,2026-10-13T02:23:54Z,develop,key-memory-histograms,,monitoring,bool,,example,lacks,,no,,,2
-38336687165,2026-10-13T02:23:54Z,develop,aclfile,,security,string,IMMUTABLE_CONFIG,example,lacks,,,,,0
-38336687165,2026-10-13T02:23:54Z,develop,unixsocket,,clients and network,string,IMMUTABLE_CONFIG,example,lacks,,,,,0
-38336687165,2026-10-13T02:23:54Z,develop,pidfile,,logging and process,string,IMMUTABLE_CONFIG,active,lacks,,,,,0
-38336687165,2026-10-13T02:23:54Z,develop,replica-announce-ip,slave-announce-ip,replication,string,,example,lacks,,,,,0
-38336687165,2026-10-13T02:23:54Z,develop,masteruser,,replication,string,SENSITIVE_CONFIG,example,lacks,,,,,2
-38336687165,2026-10-13T02:23:54Z,develop,cluster-announce-ip,,cluster,string,,example,lacks,,,,,1
-38336687165,2026-10-13T02:23:54Z,develop,cluster-config-file,,cluster,string,IMMUTABLE_CONFIG,example,lacks,,nodes.conf,,,1
-38336687165,2026-10-13T02:23:54Z,develop,cluster-announce-hostname,,cluster,string,,example,lacks,,,,,2
-38336687165,2026-10-13T02:23:54Z,develop,cluster-announce-human-nodename,,cluster,string,,example,lacks,,,,,2
-38336687165,2026-10-13T02:23:54Z,develop,syslog-ident,,logging and process,string,IMMUTABLE_CONFIG,example,lacks,,redis,,,0
-38336687165,2026-10-13T02:23:54Z,develop,dbfilename,,persistence,string,PROTECTED_CONFIG,active,lacks,,dump.rdb,,,3
-38336687165,2026-10-13T02:23:54Z,develop,appendfilename,,persistence,string,IMMUTABLE_CONFIG,active,has,/home/runner/work/keel/keel/dist/census/config-servers/keel/store.aof,appendonly.aof,,,1
-38336687165,2026-10-13T02:23:54Z,develop,appenddirname,,persistence,string,IMMUTABLE_CONFIG,active,lacks,,appendonlydir,,,0
-38336687165,2026-10-13T02:23:54Z,develop,backupdirname,,other,string,IMMUTABLE_CONFIG,example,lacks,,backupdir,,,0
-38336687165,2026-10-13T02:23:54Z,develop,preload-file,,other,string,IMMUTABLE_CONFIG,example,lacks,,,,,0
-38336687165,2026-10-13T02:23:54Z,develop,server-cpulist,server_cpulist,logging and process,string,IMMUTABLE_CONFIG,example,lacks,,,,,0
-38336687165,2026-10-13T02:23:54Z,develop,bio-cpulist,bio_cpulist,logging and process,string,IMMUTABLE_CONFIG,example,lacks,,,,,0
-38336687165,2026-10-13T02:23:54Z,develop,aof-rewrite-cpulist,aof_rewrite_cpulist,persistence,string,IMMUTABLE_CONFIG,example,lacks,,,,,0
-38336687165,2026-10-13T02:23:54Z,develop,bgsave-cpulist,bgsave_cpulist,logging and process,string,IMMUTABLE_CONFIG,example,lacks,,,,,0
-38336687165,2026-10-13T02:23:54Z,develop,ignore-warnings,,clients and network,string,,example,lacks,,,,,0
-38336687165,2026-10-13T02:23:54Z,develop,proc-title-template,,logging and process,string,,active,lacks,,{title} {listen-addr} {server-mode},,,1
-38336687165,2026-10-13T02:23:54Z,develop,bind-source-addr,,clients and network,string,,example,lacks,,,,,1
-38336687165,2026-10-13T02:23:54Z,develop,logfile,,logging and process,string,IMMUTABLE_CONFIG,active,lacks,,,,,1
-38336687165,2026-10-13T02:23:54Z,develop,locale-collate,,logging and process,string,,active,lacks,,,,,0
-38336687165,2026-10-13T02:23:54Z,develop,masterauth,,replication,sds,SENSITIVE_CONFIG,example,mapped,,,"-primary-password-env: the primary's password, named by an environment variable",spotahome redis-operator (written with the password); redis_exporter (redacted),3
-38336687165,2026-10-13T02:23:54Z,develop,requirepass,,security,sds,SENSITIVE_CONFIG,example,has,<password>,<password>,,spotahome redis-operator (written with the password); redis_exporter (redacted),7
-38336687165,2026-10-13T02:23:54Z,develop,supervised,,logging and process,enum,IMMUTABLE_CONFIG,example,lacks,,no,,,0
-38336687165,2026-10-13T02:23:54Z,develop,syslog-facility,,logging and process,enum,IMMUTABLE_CONFIG,example,lacks,,local0,,,0
-38336687165,2026-10-13T02:23:54Z,develop,repl-diskless-load,,replication,enum,DEBUG_CONFIG DENY_LOADING_CONFIG,active,lacks,,disabled,,,7
-38336687165,2026-10-13T02:23:54Z,develop,loglevel,,logging and process,enum,,active,lacks,,notice,,the official Docker image docs (--loglevel warning),9
-38336687165,2026-10-13T02:23:54Z,develop,maxmemory-policy,,memory and eviction,enum,,example,has,allkeys-lru,noeviction,,"Sidekiq (warns unless noeviction, read from INFO maxmemory_policy: lib/sidekiq/cli.rb); BullMQ (same warning, from INFO: src/classes/redis-connection.ts); Bitnami redis chart (an extraFlags example)",14
-38336687165,2026-10-13T02:23:54Z,develop,appendfsync,,persistence,enum,,example,has,everysec,everysec,,,5
-38336687165,2026-10-13T02:23:54Z,develop,oom-score-adj,,memory and eviction,enum,,active,lacks,,no,,,1
-38336687165,2026-10-13T02:23:54Z,develop,acl-pubsub-default,,security,enum,,example,lacks,,resetchannels,,,1
-38336687165,2026-10-13T02:23:54Z,develop,sanitize-dump-payload,,persistence,enum,DEBUG_CONFIG,example,lacks,,no,,,7
-38336687165,2026-10-13T02:23:54Z,develop,enable-protected-configs,,clients and network,enum,IMMUTABLE_CONFIG,example,lacks,,no,,,1
-38336687165,2026-10-13T02:23:54Z,develop,enable-debug-command,,security,enum,IMMUTABLE_CONFIG,example,lacks,,no,,,4
-38336687165,2026-10-13T02:23:54Z,develop,enable-module-command,,security,enum,IMMUTABLE_CONFIG,example,lacks,,no,,,1
-38336687165,2026-10-13T02:23:54Z,develop,cluster-preferred-endpoint-type,,cluster,enum,,example,lacks,,ip,,,2
-38336687165,2026-10-13T02:23:54Z,develop,propagation-error-behavior,,replication,enum,,example,lacks,,ignore,,,2
-38336687165,2026-10-13T02:23:54Z,develop,shutdown-on-sigint,,clients and network,enum,MULTI_ARG_CONFIG,example,lacks,,default,,,1
-38336687165,2026-10-13T02:23:54Z,develop,shutdown-on-sigterm,,clients and network,enum,MULTI_ARG_CONFIG,example,lacks,,default,,,2
-38336687165,2026-10-13T02:23:54Z,develop,databases,,other,int,IMMUTABLE_CONFIG,active,has,1,16,,"redis_exporter (per-database metrics); redis-cli (CONFIG GET databases, src/redis-cli.c:9734)",0
-38336687165,2026-10-13T02:23:54Z,develop,port,,clients and network,int,,active,has,39197,56037,,spotahome redis-operator,6
-38336687165,2026-10-13T02:23:54Z,develop,io-threads,,clients and network,int,DEBUG_CONFIG IMMUTABLE_CONFIG,example,has,1,1,,redis_exporter (config_io_threads),9
-38336687165,2026-10-13T02:23:54Z,develop,prefetch-batch-max-size,,other,int,HIDDEN_CONFIG,no,lacks,,16,,,1
-38336687165,2026-10-13T02:23:54Z,develop,auto-aof-rewrite-percentage,,persistence,int,,active,has,100,100,,,9
-38336687165,2026-10-13T02:23:54Z,develop,cluster-replica-validity-factor,cluster-slave-validity-factor,cluster,int,,example,lacks,,10,,,0
-38336687165,2026-10-13T02:23:54Z,develop,list-max-listpack-size,list-max-ziplist-size,encodings,int,,active,lacks,,-2,,,5
-38336687165,2026-10-13T02:23:54Z,develop,tcp-keepalive,,clients and network,int,,active,lacks,,300,,spotahome redis-operator (tcp-keepalive 60),0
-38336687165,2026-10-13T02:23:54Z,develop,cluster-migration-barrier,,cluster,int,,example,lacks,,1,,,0
-38336687165,2026-10-13T02:23:54Z,develop,active-defrag-cycle-min,,memory and eviction,int,,example,lacks,,1,,,3
-38336687165,2026-10-13T02:23:54Z,develop,active-defrag-cycle-max,,memory and eviction,int,,example,lacks,,25,,,2
-38336687165,2026-10-13T02:23:54Z,develop,active-defrag-threshold-lower,,memory and eviction,int,,example,lacks,,10,,,3
-38336687165,2026-10-13T02:23:54Z,develop,active-defrag-threshold-upper,,memory and eviction,int,,example,lacks,,100,,,0
-38336687165,2026-10-13T02:23:54Z,develop,lfu-log-factor,,memory and eviction,int,,example,has,10,10,,,0
-38336687165,2026-10-13T02:23:54Z,develop,lfu-decay-time,,memory and eviction,int,,example,mapped,,1,-lfu-decay-period: Redis decays an LFU counter by idle minutes; Keel by accesses,,0
-38336687165,2026-10-13T02:23:54Z,develop,replica-priority,slave-priority,replication,int,,active,lacks,,100,,,0
-38336687165,2026-10-13T02:23:54Z,develop,repl-diskless-sync-delay,,replication,int,,active,lacks,,5,,,9
-38336687165,2026-10-13T02:23:54Z,develop,maxmemory-samples,,memory and eviction,int,,example,has,5,5,,,2
-38336687165,2026-10-13T02:23:54Z,develop,maxmemory-eviction-tenacity,,memory and eviction,int,,example,lacks,,10,,,1
-38336687165,2026-10-13T02:23:54Z,develop,timeout,,clients and network,int,,active,lacks,,0,,,1
-38336687165,2026-10-13T02:23:54Z,develop,replica-announce-port,slave-announce-port,replication,int,,example,lacks,,0,,,0
-38336687165,2026-10-13T02:23:54Z,develop,tcp-backlog,,clients and network,int,IMMUTABLE_CONFIG,active,has,511,511,,,0
-38336687165,2026-10-13T02:23:54Z,develop,cluster-port,,cluster,int,IMMUTABLE_CONFIG,example,lacks,,0,,,0
-38336687165,2026-10-13T02:23:54Z,develop,cluster-announce-bus-port,,cluster,int,,example,lacks,,0,,,2
-38336687165,2026-10-13T02:23:54Z,develop,cluster-announce-port,,cluster,int,,example,lacks,,0,,,2
-38336687165,2026-10-13T02:23:54Z,develop,cluster-announce-tls-port,,cluster,int,,example,lacks,,0,,,2
-38336687165,2026-10-13T02:23:54Z,develop,repl-timeout,,replication,int,,example,lacks,,60,,,7
-38336687165,2026-10-13T02:23:54Z,develop,repl-ping-replica-period,repl-ping-slave-period,replication,int,,example,lacks,,10,,,6
-38336687165,2026-10-13T02:23:54Z,develop,list-compress-depth,,encodings,int,DEBUG_CONFIG,active,lacks,,0,,,4
-38336687165,2026-10-13T02:23:54Z,develop,rdb-key-save-delay,,persistence,int,HIDDEN_CONFIG,no,lacks,,0,,,17
-38336687165,2026-10-13T02:23:54Z,develop,key-load-delay,,persistence,int,HIDDEN_CONFIG,no,lacks,,0,,,7
-38336687165,2026-10-13T02:23:54Z,develop,active-expire-effort,,memory and eviction,int,,example,mapped,,1,-active-expire-samples: Redis scales an effort of 1 to 10; Keel sets keys sampled per cycle,,0
-38336687165,2026-10-13T02:23:54Z,develop,hz,,memory and eviction,int,,active,has,10,10,,,8
-38336687165,2026-10-13T02:23:54Z,develop,min-replicas-to-write,min-slaves-to-write,replication,int,,example,lacks,,0,,,3
-38336687165,2026-10-13T02:23:54Z,develop,min-replicas-max-lag,min-slaves-max-lag,replication,int,,example,lacks,,10,,,0
-38336687165,2026-10-13T02:23:54Z,develop,watchdog-period,,logging and process,int,HIDDEN_CONFIG,no,lacks,,0,,,2
-38336687165,2026-10-13T02:23:54Z,develop,shutdown-timeout,,replication,int,,example,mapped,,10,-shutdown-timeout: Redis waits for replicas to catch up; Keel for cleanup and the log sync,,2
-38336687165,2026-10-13T02:23:54Z,develop,repl-diskless-sync-max-replicas,,replication,int,,active,lacks,,0,,,2
-38336687165,2026-10-13T02:23:54Z,develop,cluster-compatibility-sample-ratio,,cluster,int,,example,lacks,,0,,,2
-38336687165,2026-10-13T02:23:54Z,develop,cluster-slot-migration-max-archived-tasks,,cluster,int,HIDDEN_CONFIG,no,lacks,,32,,,0
-38336687165,2026-10-13T02:23:54Z,develop,lookahead,,other,int,,example,lacks,,16,,,1
-38336687165,2026-10-13T02:23:54Z,develop,slowlog-entry-max-argc,,monitoring,int,,example,lacks,,32,,,1
-38336687165,2026-10-13T02:23:54Z,develop,maxclients,,clients and network,uint,,example,has,20000,10000,,redis_exporter (config_maxclients),3
-38336687165,2026-10-13T02:23:54Z,develop,unixsocketperm,,clients and network,uint,IMMUTABLE_CONFIG,example,lacks,,0,,,0
-38336687165,2026-10-13T02:23:54Z,develop,socket-mark-id,,clients and network,uint,IMMUTABLE_CONFIG,example,lacks,,0,,,0
-38336687165,2026-10-13T02:23:54Z,develop,max-new-connections-per-cycle,,clients and network,uint,,example,lacks,,10,,,0
-38336687165,2026-10-13T02:23:54Z,develop,max-new-tls-connections-per-cycle,,clients and network,uint,,example,lacks,,1,,,0
-38336687165,2026-10-13T02:23:54Z,develop,array-slice-size,,encodings,uint,,active,lacks,,4096,,,1
-38336687165,2026-10-13T02:23:54Z,develop,array-sparse-kmax,,encodings,uint,,active,lacks,,10,,,1
-38336687165,2026-10-13T02:23:54Z,develop,array-sparse-kmin,,encodings,uint,,active,lacks,,5,,,1
-38336687165,2026-10-13T02:23:54Z,develop,active-defrag-max-scan-fields,,memory and eviction,ulong,,example,lacks,,1000,,,1
-38336687165,2026-10-13T02:23:54Z,develop,slowlog-max-len,,monitoring,ulong,,active,lacks,,128,,,1
-38336687165,2026-10-13T02:23:54Z,develop,slowlog-entry-max-string-len,,monitoring,ulong,,example,lacks,,128,,,1
-38336687165,2026-10-13T02:23:54Z,develop,acllog-max-len,,security,ulong,,active,lacks,,128,,,1
-38336687165,2026-10-13T02:23:54Z,develop,busy-reply-threshold,lua-time-limit,clients and network,longlong,,example,lacks,,5000,,,5
-38336687165,2026-10-13T02:23:54Z,develop,cluster-node-timeout,,cluster,longlong,,example,lacks,,15000,,,1
-38336687165,2026-10-13T02:23:54Z,develop,cluster-ping-interval,,cluster,longlong,HIDDEN_CONFIG,no,lacks,,0,,,0
-38336687165,2026-10-13T02:23:54Z,develop,cluster-slot-migration-handoff-max-lag-bytes,,cluster,longlong,,example,lacks,,1048576,,,1
-38336687165,2026-10-13T02:23:54Z,develop,cluster-slot-migration-write-pause-timeout,,cluster,longlong,,example,lacks,,10000,,,1
-38336687165,2026-10-13T02:23:54Z,develop,cluster-slot-migration-sync-buffer-drain-timeout,,cluster,longlong,HIDDEN_CONFIG,no,lacks,,60000,,,1
-38336687165,2026-10-13T02:23:54Z,develop,slowlog-log-slower-than,,monitoring,longlong,,active,lacks,,10000,,,5
-38336687165,2026-10-13T02:23:54Z,develop,latency-monitor-threshold,,monitoring,longlong,,example,lacks,,0,,,2
-38336687165,2026-10-13T02:23:54Z,develop,proto-max-bulk-len,,clients and network,longlong,DEBUG_CONFIG,example,lacks,,536870912,,,6
-38336687165,2026-10-13T02:23:54Z,develop,stream-node-max-entries,,encodings,longlong,,active,lacks,,100,,,5
-38336687165,2026-10-13T02:23:54Z,develop,stream-idmp-duration,,encodings,longlong,,example,lacks,,100,,,1
-38336687165,2026-10-13T02:23:54Z,develop,stream-idmp-maxsize,,encodings,longlong,,example,lacks,,100,,,1
-38336687165,2026-10-13T02:23:54Z,develop,repl-backlog-size,,replication,longlong,,example,lacks,,1048576,,redis_exporter (config_repl_backlog_size); Bitnami redis chart (an extraFlags example),10
-38336687165,2026-10-13T02:23:54Z,develop,replica-full-sync-buffer-limit,,replication,longlong,,example,lacks,,0,,,2
-38336687165,2026-10-13T02:23:54Z,develop,maxmemory,,memory and eviction,ulonglong,,example,has,0,0,,"redis_exporter (config_maxmemory, from CONFIG GET *: exporter/exporter.go extractConfigMetrics)",19
-38336687165,2026-10-13T02:23:54Z,develop,cluster-link-sendbuf-limit,,cluster,ulonglong,,example,lacks,,0,,,1
-38336687165,2026-10-13T02:23:54Z,develop,hash-max-listpack-entries,hash-max-ziplist-entries,encodings,sizet,,active,lacks,,512,,,12
-38336687165,2026-10-13T02:23:54Z,develop,hash-min-template-entries,,encodings,sizet,,active,lacks,,0,,,6
-38336687165,2026-10-13T02:23:54Z,develop,hash-max-template-entries,,encodings,sizet,,active,lacks,,0,,,1
-38336687165,2026-10-13T02:23:54Z,develop,hash-rdb-load-min-template-entries,,encodings,sizet,,active,lacks,,0,,,1
-38336687165,2026-10-13T02:23:54Z,develop,hash-rdb-load-max-template-entries,,encodings,sizet,,active,lacks,,0,,,0
-38336687165,2026-10-13T02:23:54Z,develop,hash-rdb-load-template-disassembly-threshold,,encodings,sizet,,example,lacks,,0,,,1
-38336687165,2026-10-13T02:23:54Z,develop,set-max-intset-entries,,encodings,sizet,,active,lacks,,512,,,2
-38336687165,2026-10-13T02:23:54Z,develop,set-max-listpack-entries,,encodings,sizet,,active,lacks,,128,,,3
-38336687165,2026-10-13T02:23:54Z,develop,set-max-listpack-value,,encodings,sizet,,active,lacks,,64,,,0
-38336687165,2026-10-13T02:23:54Z,develop,zset-max-listpack-entries,zset-max-ziplist-entries,encodings,sizet,,active,lacks,,128,,,1
-38336687165,2026-10-13T02:23:54Z,develop,active-defrag-ignore-bytes,,memory and eviction,sizet,,example,lacks,,104857600,,,3
-38336687165,2026-10-13T02:23:54Z,develop,hash-max-listpack-value,hash-max-ziplist-value,encodings,sizet,,active,lacks,,64,,,4
-38336687165,2026-10-13T02:23:54Z,develop,stream-node-max-bytes,,encodings,sizet,,active,lacks,,4096,,,1
-38336687165,2026-10-13T02:23:54Z,develop,zset-max-listpack-value,zset-max-ziplist-value,encodings,sizet,,active,lacks,,64,,,0
-38336687165,2026-10-13T02:23:54Z,develop,hll-sparse-max-bytes,,encodings,sizet,,active,lacks,,3000,,,1
-38336687165,2026-10-13T02:23:54Z,develop,tracking-table-max-keys,,clients and network,sizet,,example,lacks,,1000000,,,1
-38336687165,2026-10-13T02:23:54Z,develop,client-query-buffer-limit,,clients and network,sizet,DEBUG_CONFIG,example,lacks,,1073741824,,,8
-38336687165,2026-10-13T02:23:54Z,develop,maxmemory-clients,,memory and eviction,ssizet,,example,lacks,,0,,,5
-38336687165,2026-10-13T02:23:54Z,develop,repl-backlog-ttl,,replication,timet,,example,lacks,,3600,,,2
-38336687165,2026-10-13T02:23:54Z,develop,backup-sealed-ttl,,persistence,timet,,active,lacks,,0,,,1
-38336687165,2026-10-13T02:23:54Z,develop,auto-aof-rewrite-min-size,,persistence,offt,,active,has,67108864,67108864,,,1
-38336687165,2026-10-13T02:23:54Z,develop,loading-process-events-interval-bytes,,persistence,offt,HIDDEN_CONFIG,no,lacks,,524288,,,4
-38336687165,2026-10-13T02:23:54Z,develop,aof-load-corrupt-tail-max-size,,persistence,offt,,example,lacks,,0,,,0
-38336687165,2026-10-13T02:23:54Z,develop,tls-port,,tls,int,,example,lacks,,0,,,5
-38336687165,2026-10-13T02:23:54Z,develop,tls-session-cache-size,,tls,int,,example,lacks,,20480,,,0
-38336687165,2026-10-13T02:23:54Z,develop,tls-session-cache-timeout,,tls,int,,example,lacks,,300,,,0
-38336687165,2026-10-13T02:23:54Z,develop,tls-cluster,,tls,bool,,example,lacks,,no,,,3
-38336687165,2026-10-13T02:23:54Z,develop,tls-replication,,tls,bool,,example,lacks,,no,,,2
-38336687165,2026-10-13T02:23:54Z,develop,tls-auth-clients,,tls,enum,,example,lacks,,yes,,,1
-38336687165,2026-10-13T02:23:54Z,develop,tls-auth-clients-user,,tls,enum,,example,lacks,,off,,,1
-38336687165,2026-10-13T02:23:54Z,develop,tls-prefer-server-ciphers,,tls,bool,,example,lacks,,no,,,1
-38336687165,2026-10-13T02:23:54Z,develop,tls-session-caching,,tls,bool,,example,lacks,,yes,,,0
-38336687165,2026-10-13T02:23:54Z,develop,tls-cert-file,,tls,string,VOLATILE_CONFIG,example,lacks,,,,,0
-38336687165,2026-10-13T02:23:54Z,develop,tls-key-file,,tls,string,VOLATILE_CONFIG,example,lacks,,,,,1
-38336687165,2026-10-13T02:23:54Z,develop,tls-key-file-pass,,tls,string,SENSITIVE_CONFIG,example,lacks,,,,,2
-38336687165,2026-10-13T02:23:54Z,develop,tls-client-cert-file,,tls,string,VOLATILE_CONFIG,example,lacks,,,,,0
-38336687165,2026-10-13T02:23:54Z,develop,tls-client-key-file,,tls,string,VOLATILE_CONFIG,example,lacks,,,,,0
-38336687165,2026-10-13T02:23:54Z,develop,tls-client-key-file-pass,,tls,string,SENSITIVE_CONFIG,example,lacks,,,,,1
-38336687165,2026-10-13T02:23:54Z,develop,tls-dh-params-file,,tls,string,VOLATILE_CONFIG,example,lacks,,,,,0
-38336687165,2026-10-13T02:23:54Z,develop,tls-ca-cert-file,,tls,string,VOLATILE_CONFIG,example,lacks,,,,,0
-38336687165,2026-10-13T02:23:54Z,develop,tls-ca-cert-dir,,tls,string,VOLATILE_CONFIG,example,lacks,,,,,0
-38336687165,2026-10-13T02:23:54Z,develop,tls-protocols,,tls,string,,example,lacks,,,,,1
-38336687165,2026-10-13T02:23:54Z,develop,tls-ciphers,,tls,string,,example,lacks,,,,,1
-38336687165,2026-10-13T02:23:54Z,develop,tls-ciphersuites,,tls,string,,example,lacks,,,,,0
-38336687165,2026-10-13T02:23:54Z,develop,tls-expected-peer-name,,tls,string,,example,lacks,,,,,1
-38336687165,2026-10-13T02:23:54Z,develop,dir,,persistence,special,PROTECTED_CONFIG DENY_LOADING_CONFIG,active,has,/home/runner/work/keel/keel/dist/census/config-servers/keel,/home/runner/work/keel/keel/dist/census/config-servers/redis,,,7
-38336687165,2026-10-13T02:23:54Z,develop,save,,persistence,special,MULTI_ARG_CONFIG,example,has,,,,"Bitnami redis chart (commonConfiguration: save """"); spotahome redis-operator (save 900 1, save 300 10); the official Docker image docs (redis-server --save 60 1)",23
-38336687165,2026-10-13T02:23:54Z,develop,client-output-buffer-limit,,clients and network,special,MULTI_ARG_CONFIG,example,lacks,,normal 0 0 0 slave 268435456 67108864 60 pubsub 33554432 8388608 60,,redis_exporter (config_client_output_buffer_limit_bytes and _overcome_seconds),10
-38336687165,2026-10-13T02:23:54Z,develop,oom-score-adj-values,,memory and eviction,special,MULTI_ARG_CONFIG,example,lacks,,0 200 800,,,2
-38336687165,2026-10-13T02:23:54Z,develop,notify-keyspace-events,,monitoring,special,,active,lacks,,,,,4
-38336687165,2026-10-13T02:23:54Z,develop,bind,,clients and network,special,MULTI_ARG_CONFIG,example,has,127.0.0.1,127.0.0.1,,,2
-38336687165,2026-10-13T02:23:54Z,develop,replicaof,slaveof,replication,special,IMMUTABLE_CONFIG MULTI_ARG_CONFIG,example,has,,,,spotahome redis-operator (slaveof 127.0.0.1 <port> in every pod),0
-38336687165,2026-10-13T02:23:54Z,develop,latency-tracking-info-percentiles,,monitoring,special,MULTI_ARG_CONFIG,example,lacks,,50 99 99.9,,,2
+38337454890,2026-10-13T02:33:37Z,develop,rdbchecksum,,persistence,bool,IMMUTABLE_CONFIG,active,lacks,,yes,,,0
+38337454890,2026-10-13T02:33:37Z,develop,daemonize,,logging and process,bool,IMMUTABLE_CONFIG,active,lacks,,no,,,1
+38337454890,2026-10-13T02:33:37Z,develop,always-show-logo,,logging and process,bool,IMMUTABLE_CONFIG,active,lacks,,no,,,0
+38337454890,2026-10-13T02:33:37Z,develop,protected-mode,,clients and network,bool,,active,mapped,,yes,-host: no mode: Keel listens on 127.0.0.1 unless -host says otherwise,,3
+38337454890,2026-10-13T02:33:37Z,develop,rdbcompression,,persistence,bool,,active,lacks,,yes,,,5
+38337454890,2026-10-13T02:33:37Z,develop,rdb-del-sync-files,,persistence,bool,,active,lacks,,no,,,0
+38337454890,2026-10-13T02:33:37Z,develop,activerehashing,,other,bool,,active,lacks,,yes,,,0
+38337454890,2026-10-13T02:33:37Z,develop,stop-writes-on-bgsave-error,,persistence,bool,,active,lacks,,yes,,,0
+38337454890,2026-10-13T02:33:37Z,develop,set-proc-title,,logging and process,bool,IMMUTABLE_CONFIG,active,lacks,,yes,,,0
+38337454890,2026-10-13T02:33:37Z,develop,dynamic-hz,,memory and eviction,bool,,active,lacks,,yes,,,4
+38337454890,2026-10-13T02:33:37Z,develop,lazyfree-lazy-eviction,,memory and eviction,bool,DEBUG_CONFIG,active,lacks,,no,,,0
+38337454890,2026-10-13T02:33:37Z,develop,lazyfree-lazy-expire,,memory and eviction,bool,DEBUG_CONFIG,active,lacks,,no,,,1
+38337454890,2026-10-13T02:33:37Z,develop,lazyfree-lazy-server-del,,memory and eviction,bool,DEBUG_CONFIG,active,lacks,,no,,,3
+38337454890,2026-10-13T02:33:37Z,develop,lazyfree-lazy-user-del,,memory and eviction,bool,DEBUG_CONFIG,active,lacks,,no,,,2
+38337454890,2026-10-13T02:33:37Z,develop,lazyfree-lazy-user-flush,,memory and eviction,bool,DEBUG_CONFIG,active,lacks,,no,,,1
+38337454890,2026-10-13T02:33:37Z,develop,repl-disable-tcp-nodelay,,replication,bool,,active,lacks,,no,,,0
+38337454890,2026-10-13T02:33:37Z,develop,repl-diskless-sync,,replication,bool,DEBUG_CONFIG,active,lacks,,yes,,,7
+38337454890,2026-10-13T02:33:37Z,develop,repl-rdb-channel,,replication,bool,HIDDEN_CONFIG,no,lacks,,yes,,,6
+38337454890,2026-10-13T02:33:37Z,develop,aof-rewrite-incremental-fsync,,persistence,bool,,active,lacks,,yes,,,0
+38337454890,2026-10-13T02:33:37Z,develop,no-appendfsync-on-rewrite,,persistence,bool,,active,lacks,,no,,,0
+38337454890,2026-10-13T02:33:37Z,develop,cluster-require-full-coverage,,cluster,bool,,example,lacks,,yes,,,1
+38337454890,2026-10-13T02:33:37Z,develop,rdb-save-incremental-fsync,,persistence,bool,,active,lacks,,yes,,,0
+38337454890,2026-10-13T02:33:37Z,develop,aof-load-truncated,,persistence,bool,,active,lacks,,yes,,,0
+38337454890,2026-10-13T02:33:37Z,develop,aof-use-rdb-preamble,,persistence,bool,,active,lacks,,yes,,,11
+38337454890,2026-10-13T02:33:37Z,develop,aof-timestamp-enabled,,persistence,bool,,active,lacks,,no,,,1
+38337454890,2026-10-13T02:33:37Z,develop,cluster-replica-no-failover,cluster-slave-no-failover,cluster,bool,,example,lacks,,no,,,1
+38337454890,2026-10-13T02:33:37Z,develop,replica-lazy-flush,slave-lazy-flush,replication,bool,,active,lacks,,no,,,1
+38337454890,2026-10-13T02:33:37Z,develop,replica-serve-stale-data,slave-serve-stale-data,replication,bool,,active,lacks,,yes,,,4
+38337454890,2026-10-13T02:33:37Z,develop,replica-read-only,slave-read-only,replication,bool,DEBUG_CONFIG,active,lacks,,yes,,,3
+38337454890,2026-10-13T02:33:37Z,develop,replica-ignore-maxmemory,slave-ignore-maxmemory,replication,bool,,example,lacks,,yes,,,0
+38337454890,2026-10-13T02:33:37Z,develop,jemalloc-bg-thread,,memory and eviction,bool,,active,lacks,,yes,,,0
+38337454890,2026-10-13T02:33:37Z,develop,activedefrag,,memory and eviction,bool,DEBUG_CONFIG,example,lacks,,no,,,3
+38337454890,2026-10-13T02:33:37Z,develop,syslog-enabled,,logging and process,bool,IMMUTABLE_CONFIG,example,lacks,,no,,,0
+38337454890,2026-10-13T02:33:37Z,develop,cluster-enabled,,cluster,bool,IMMUTABLE_CONFIG,example,lacks,,no,,,1
+38337454890,2026-10-13T02:33:37Z,develop,appendonly,,persistence,bool,,active,has,yes,yes,,Bitnami redis chart (commonConfiguration: appendonly yes),26
+38337454890,2026-10-13T02:33:37Z,develop,cluster-allow-reads-when-down,,cluster,bool,,example,lacks,,no,,,0
+38337454890,2026-10-13T02:33:37Z,develop,cluster-allow-pubsubshard-when-down,,cluster,bool,,example,lacks,,yes,,,0
+38337454890,2026-10-13T02:33:37Z,develop,crash-log-enabled,,logging and process,bool,,example,lacks,,yes,,,0
+38337454890,2026-10-13T02:33:37Z,develop,crash-memcheck-enabled,,logging and process,bool,,example,lacks,,yes,,,1
+38337454890,2026-10-13T02:33:37Z,develop,use-exit-on-panic,,other,bool,HIDDEN_CONFIG,no,lacks,,no,,,0
+38337454890,2026-10-13T02:33:37Z,develop,disable-thp,,other,bool,IMMUTABLE_CONFIG,active,lacks,,yes,,,0
+38337454890,2026-10-13T02:33:37Z,develop,cluster-allow-replica-migration,,cluster,bool,,example,lacks,,yes,,,1
+38337454890,2026-10-13T02:33:37Z,develop,replica-announced,,replication,bool,,example,lacks,,yes,,,0
+38337454890,2026-10-13T02:33:37Z,develop,latency-tracking,,monitoring,bool,,example,lacks,,yes,,,4
+38337454890,2026-10-13T02:33:37Z,develop,aof-disable-auto-gc,,persistence,bool,HIDDEN_CONFIG,no,lacks,,no,,,1
+38337454890,2026-10-13T02:33:37Z,develop,replica-ignore-disk-write-errors,,replication,bool,,example,lacks,,no,,,0
+38337454890,2026-10-13T02:33:37Z,develop,hide-user-data-from-log,,logging and process,bool,,example,lacks,,no,,,2
+38337454890,2026-10-13T02:33:37Z,develop,lazyexpire-nested-arbitrary-keys,,memory and eviction,bool,HIDDEN_CONFIG,no,lacks,,yes,,,1
+38337454890,2026-10-13T02:33:37Z,develop,cluster-slot-stats-enabled,,cluster,enum,MULTI_ARG_CONFIG,example,lacks,,no,,,3
+38337454890,2026-10-13T02:33:37Z,develop,lua-enable-deprecated-api,,scripting,bool,IMMUTABLE_CONFIG HIDDEN_CONFIG,no,lacks,,no,,,1
+38337454890,2026-10-13T02:33:37Z,develop,key-memory-histograms,,monitoring,bool,,example,lacks,,no,,,2
+38337454890,2026-10-13T02:33:37Z,develop,aclfile,,security,string,IMMUTABLE_CONFIG,example,lacks,,,,,0
+38337454890,2026-10-13T02:33:37Z,develop,unixsocket,,clients and network,string,IMMUTABLE_CONFIG,example,lacks,,,,,0
+38337454890,2026-10-13T02:33:37Z,develop,pidfile,,logging and process,string,IMMUTABLE_CONFIG,active,lacks,,,,,0
+38337454890,2026-10-13T02:33:37Z,develop,replica-announce-ip,slave-announce-ip,replication,string,,example,lacks,,,,,0
+38337454890,2026-10-13T02:33:37Z,develop,masteruser,,replication,string,SENSITIVE_CONFIG,example,lacks,,,,,2
+38337454890,2026-10-13T02:33:37Z,develop,cluster-announce-ip,,cluster,string,,example,lacks,,,,,1
+38337454890,2026-10-13T02:33:37Z,develop,cluster-config-file,,cluster,string,IMMUTABLE_CONFIG,example,lacks,,nodes.conf,,,1
+38337454890,2026-10-13T02:33:37Z,develop,cluster-announce-hostname,,cluster,string,,example,lacks,,,,,2
+38337454890,2026-10-13T02:33:37Z,develop,cluster-announce-human-nodename,,cluster,string,,example,lacks,,,,,2
+38337454890,2026-10-13T02:33:37Z,develop,syslog-ident,,logging and process,string,IMMUTABLE_CONFIG,example,lacks,,redis,,,0
+38337454890,2026-10-13T02:33:37Z,develop,dbfilename,,persistence,string,PROTECTED_CONFIG,active,lacks,,dump.rdb,,,3
+38337454890,2026-10-13T02:33:37Z,develop,appendfilename,,persistence,string,IMMUTABLE_CONFIG,active,has,/home/runner/work/keel/keel/dist/census/config-servers/keel/store.aof,appendonly.aof,,,1
+38337454890,2026-10-13T02:33:37Z,develop,appenddirname,,persistence,string,IMMUTABLE_CONFIG,active,lacks,,appendonlydir,,,0
+38337454890,2026-10-13T02:33:37Z,develop,backupdirname,,other,string,IMMUTABLE_CONFIG,example,lacks,,backupdir,,,0
+38337454890,2026-10-13T02:33:37Z,develop,preload-file,,other,string,IMMUTABLE_CONFIG,example,lacks,,,,,0
+38337454890,2026-10-13T02:33:37Z,develop,server-cpulist,server_cpulist,logging and process,string,IMMUTABLE_CONFIG,example,lacks,,,,,0
+38337454890,2026-10-13T02:33:37Z,develop,bio-cpulist,bio_cpulist,logging and process,string,IMMUTABLE_CONFIG,example,lacks,,,,,0
+38337454890,2026-10-13T02:33:37Z,develop,aof-rewrite-cpulist,aof_rewrite_cpulist,persistence,string,IMMUTABLE_CONFIG,example,lacks,,,,,0
+38337454890,2026-10-13T02:33:37Z,develop,bgsave-cpulist,bgsave_cpulist,logging and process,string,IMMUTABLE_CONFIG,example,lacks,,,,,0
+38337454890,2026-10-13T02:33:37Z,develop,ignore-warnings,,clients and network,string,,example,lacks,,,,,0
+38337454890,2026-10-13T02:33:37Z,develop,proc-title-template,,logging and process,string,,active,lacks,,{title} {listen-addr} {server-mode},,,1
+38337454890,2026-10-13T02:33:37Z,develop,bind-source-addr,,clients and network,string,,example,lacks,,,,,1
+38337454890,2026-10-13T02:33:37Z,develop,logfile,,logging and process,string,IMMUTABLE_CONFIG,active,lacks,,,,,1
+38337454890,2026-10-13T02:33:37Z,develop,locale-collate,,logging and process,string,,active,lacks,,,,,0
+38337454890,2026-10-13T02:33:37Z,develop,masterauth,,replication,sds,SENSITIVE_CONFIG,example,mapped,,,"-primary-password-env: the primary's password, named by an environment variable",spotahome redis-operator (written with the password); redis_exporter (redacted),3
+38337454890,2026-10-13T02:33:37Z,develop,requirepass,,security,sds,SENSITIVE_CONFIG,example,has,<password>,<password>,,spotahome redis-operator (written with the password); redis_exporter (redacted),7
+38337454890,2026-10-13T02:33:37Z,develop,supervised,,logging and process,enum,IMMUTABLE_CONFIG,example,lacks,,no,,,0
+38337454890,2026-10-13T02:33:37Z,develop,syslog-facility,,logging and process,enum,IMMUTABLE_CONFIG,example,lacks,,local0,,,0
+38337454890,2026-10-13T02:33:37Z,develop,repl-diskless-load,,replication,enum,DEBUG_CONFIG DENY_LOADING_CONFIG,active,lacks,,disabled,,,7
+38337454890,2026-10-13T02:33:37Z,develop,loglevel,,logging and process,enum,,active,lacks,,notice,,the official Docker image docs (--loglevel warning),9
+38337454890,2026-10-13T02:33:37Z,develop,maxmemory-policy,,memory and eviction,enum,,example,has,allkeys-lru,noeviction,,"Sidekiq (warns unless noeviction, read from INFO maxmemory_policy: lib/sidekiq/cli.rb); BullMQ (same warning, from INFO: src/classes/redis-connection.ts); Bitnami redis chart (an extraFlags example)",14
+38337454890,2026-10-13T02:33:37Z,develop,appendfsync,,persistence,enum,,example,has,everysec,everysec,,,5
+38337454890,2026-10-13T02:33:37Z,develop,oom-score-adj,,memory and eviction,enum,,active,lacks,,no,,,1
+38337454890,2026-10-13T02:33:37Z,develop,acl-pubsub-default,,security,enum,,example,lacks,,resetchannels,,,1
+38337454890,2026-10-13T02:33:37Z,develop,sanitize-dump-payload,,persistence,enum,DEBUG_CONFIG,example,lacks,,no,,,7
+38337454890,2026-10-13T02:33:37Z,develop,enable-protected-configs,,clients and network,enum,IMMUTABLE_CONFIG,example,lacks,,no,,,1
+38337454890,2026-10-13T02:33:37Z,develop,enable-debug-command,,security,enum,IMMUTABLE_CONFIG,example,lacks,,no,,,4
+38337454890,2026-10-13T02:33:37Z,develop,enable-module-command,,security,enum,IMMUTABLE_CONFIG,example,lacks,,no,,,1
+38337454890,2026-10-13T02:33:37Z,develop,cluster-preferred-endpoint-type,,cluster,enum,,example,lacks,,ip,,,2
+38337454890,2026-10-13T02:33:37Z,develop,propagation-error-behavior,,replication,enum,,example,lacks,,ignore,,,2
+38337454890,2026-10-13T02:33:37Z,develop,shutdown-on-sigint,,clients and network,enum,MULTI_ARG_CONFIG,example,lacks,,default,,,1
+38337454890,2026-10-13T02:33:37Z,develop,shutdown-on-sigterm,,clients and network,enum,MULTI_ARG_CONFIG,example,lacks,,default,,,2
+38337454890,2026-10-13T02:33:37Z,develop,databases,,other,int,IMMUTABLE_CONFIG,active,has,1,16,,"redis_exporter (per-database metrics); redis-cli (CONFIG GET databases, src/redis-cli.c:9734)",0
+38337454890,2026-10-13T02:33:37Z,develop,port,,clients and network,int,,active,has,55669,43413,,spotahome redis-operator,6
+38337454890,2026-10-13T02:33:37Z,develop,io-threads,,clients and network,int,DEBUG_CONFIG IMMUTABLE_CONFIG,example,has,1,1,,redis_exporter (config_io_threads),9
+38337454890,2026-10-13T02:33:37Z,develop,prefetch-batch-max-size,,other,int,HIDDEN_CONFIG,no,lacks,,16,,,1
+38337454890,2026-10-13T02:33:37Z,develop,auto-aof-rewrite-percentage,,persistence,int,,active,has,100,100,,,9
+38337454890,2026-10-13T02:33:37Z,develop,cluster-replica-validity-factor,cluster-slave-validity-factor,cluster,int,,example,lacks,,10,,,0
+38337454890,2026-10-13T02:33:37Z,develop,list-max-listpack-size,list-max-ziplist-size,encodings,int,,active,lacks,,-2,,,5
+38337454890,2026-10-13T02:33:37Z,develop,tcp-keepalive,,clients and network,int,,active,lacks,,300,,spotahome redis-operator (tcp-keepalive 60),0
+38337454890,2026-10-13T02:33:37Z,develop,cluster-migration-barrier,,cluster,int,,example,lacks,,1,,,0
+38337454890,2026-10-13T02:33:37Z,develop,active-defrag-cycle-min,,memory and eviction,int,,example,lacks,,1,,,3
+38337454890,2026-10-13T02:33:37Z,develop,active-defrag-cycle-max,,memory and eviction,int,,example,lacks,,25,,,2
+38337454890,2026-10-13T02:33:37Z,develop,active-defrag-threshold-lower,,memory and eviction,int,,example,lacks,,10,,,3
+38337454890,2026-10-13T02:33:37Z,develop,active-defrag-threshold-upper,,memory and eviction,int,,example,lacks,,100,,,0
+38337454890,2026-10-13T02:33:37Z,develop,lfu-log-factor,,memory and eviction,int,,example,has,10,10,,,0
+38337454890,2026-10-13T02:33:37Z,develop,lfu-decay-time,,memory and eviction,int,,example,mapped,,1,-lfu-decay-period: Redis decays an LFU counter by idle minutes; Keel by accesses,,0
+38337454890,2026-10-13T02:33:37Z,develop,replica-priority,slave-priority,replication,int,,active,lacks,,100,,,0
+38337454890,2026-10-13T02:33:37Z,develop,repl-diskless-sync-delay,,replication,int,,active,lacks,,5,,,9
+38337454890,2026-10-13T02:33:37Z,develop,maxmemory-samples,,memory and eviction,int,,example,has,5,5,,,2
+38337454890,2026-10-13T02:33:37Z,develop,maxmemory-eviction-tenacity,,memory and eviction,int,,example,lacks,,10,,,1
+38337454890,2026-10-13T02:33:37Z,develop,timeout,,clients and network,int,,active,lacks,,0,,,1
+38337454890,2026-10-13T02:33:37Z,develop,replica-announce-port,slave-announce-port,replication,int,,example,lacks,,0,,,0
+38337454890,2026-10-13T02:33:37Z,develop,tcp-backlog,,clients and network,int,IMMUTABLE_CONFIG,active,has,511,511,,,0
+38337454890,2026-10-13T02:33:37Z,develop,cluster-port,,cluster,int,IMMUTABLE_CONFIG,example,lacks,,0,,,0
+38337454890,2026-10-13T02:33:37Z,develop,cluster-announce-bus-port,,cluster,int,,example,lacks,,0,,,2
+38337454890,2026-10-13T02:33:37Z,develop,cluster-announce-port,,cluster,int,,example,lacks,,0,,,2
+38337454890,2026-10-13T02:33:37Z,develop,cluster-announce-tls-port,,cluster,int,,example,lacks,,0,,,2
+38337454890,2026-10-13T02:33:37Z,develop,repl-timeout,,replication,int,,example,lacks,,60,,,7
+38337454890,2026-10-13T02:33:37Z,develop,repl-ping-replica-period,repl-ping-slave-period,replication,int,,example,lacks,,10,,,6
+38337454890,2026-10-13T02:33:37Z,develop,list-compress-depth,,encodings,int,DEBUG_CONFIG,active,lacks,,0,,,4
+38337454890,2026-10-13T02:33:37Z,develop,rdb-key-save-delay,,persistence,int,HIDDEN_CONFIG,no,lacks,,0,,,17
+38337454890,2026-10-13T02:33:37Z,develop,key-load-delay,,persistence,int,HIDDEN_CONFIG,no,lacks,,0,,,7
+38337454890,2026-10-13T02:33:37Z,develop,active-expire-effort,,memory and eviction,int,,example,mapped,,1,-active-expire-samples: Redis scales an effort of 1 to 10; Keel sets keys sampled per cycle,,0
+38337454890,2026-10-13T02:33:37Z,develop,hz,,memory and eviction,int,,active,has,10,10,,,8
+38337454890,2026-10-13T02:33:37Z,develop,min-replicas-to-write,min-slaves-to-write,replication,int,,example,lacks,,0,,,3
+38337454890,2026-10-13T02:33:37Z,develop,min-replicas-max-lag,min-slaves-max-lag,replication,int,,example,lacks,,10,,,0
+38337454890,2026-10-13T02:33:37Z,develop,watchdog-period,,logging and process,int,HIDDEN_CONFIG,no,lacks,,0,,,2
+38337454890,2026-10-13T02:33:37Z,develop,shutdown-timeout,,replication,int,,example,mapped,,10,-shutdown-timeout: Redis waits for replicas to catch up; Keel for cleanup and the log sync,,2
+38337454890,2026-10-13T02:33:37Z,develop,repl-diskless-sync-max-replicas,,replication,int,,active,lacks,,0,,,2
+38337454890,2026-10-13T02:33:37Z,develop,cluster-compatibility-sample-ratio,,cluster,int,,example,lacks,,0,,,2
+38337454890,2026-10-13T02:33:37Z,develop,cluster-slot-migration-max-archived-tasks,,cluster,int,HIDDEN_CONFIG,no,lacks,,32,,,0
+38337454890,2026-10-13T02:33:37Z,develop,lookahead,,other,int,,example,lacks,,16,,,1
+38337454890,2026-10-13T02:33:37Z,develop,slowlog-entry-max-argc,,monitoring,int,,example,lacks,,32,,,1
+38337454890,2026-10-13T02:33:37Z,develop,maxclients,,clients and network,uint,,example,has,20000,10000,,redis_exporter (config_maxclients),3
+38337454890,2026-10-13T02:33:37Z,develop,unixsocketperm,,clients and network,uint,IMMUTABLE_CONFIG,example,lacks,,0,,,0
+38337454890,2026-10-13T02:33:37Z,develop,socket-mark-id,,clients and network,uint,IMMUTABLE_CONFIG,example,lacks,,0,,,0
+38337454890,2026-10-13T02:33:37Z,develop,max-new-connections-per-cycle,,clients and network,uint,,example,lacks,,10,,,0
+38337454890,2026-10-13T02:33:37Z,develop,max-new-tls-connections-per-cycle,,clients and network,uint,,example,lacks,,1,,,0
+38337454890,2026-10-13T02:33:37Z,develop,array-slice-size,,encodings,uint,,active,lacks,,4096,,,1
+38337454890,2026-10-13T02:33:37Z,develop,array-sparse-kmax,,encodings,uint,,active,lacks,,10,,,1
+38337454890,2026-10-13T02:33:37Z,develop,array-sparse-kmin,,encodings,uint,,active,lacks,,5,,,1
+38337454890,2026-10-13T02:33:37Z,develop,active-defrag-max-scan-fields,,memory and eviction,ulong,,example,lacks,,1000,,,1
+38337454890,2026-10-13T02:33:37Z,develop,slowlog-max-len,,monitoring,ulong,,active,lacks,,128,,,1
+38337454890,2026-10-13T02:33:37Z,develop,slowlog-entry-max-string-len,,monitoring,ulong,,example,lacks,,128,,,1
+38337454890,2026-10-13T02:33:37Z,develop,acllog-max-len,,security,ulong,,active,lacks,,128,,,1
+38337454890,2026-10-13T02:33:37Z,develop,busy-reply-threshold,lua-time-limit,clients and network,longlong,,example,lacks,,5000,,,5
+38337454890,2026-10-13T02:33:37Z,develop,cluster-node-timeout,,cluster,longlong,,example,lacks,,15000,,,1
+38337454890,2026-10-13T02:33:37Z,develop,cluster-ping-interval,,cluster,longlong,HIDDEN_CONFIG,no,lacks,,0,,,0
+38337454890,2026-10-13T02:33:37Z,develop,cluster-slot-migration-handoff-max-lag-bytes,,cluster,longlong,,example,lacks,,1048576,,,1
+38337454890,2026-10-13T02:33:37Z,develop,cluster-slot-migration-write-pause-timeout,,cluster,longlong,,example,lacks,,10000,,,1
+38337454890,2026-10-13T02:33:37Z,develop,cluster-slot-migration-sync-buffer-drain-timeout,,cluster,longlong,HIDDEN_CONFIG,no,lacks,,60000,,,1
+38337454890,2026-10-13T02:33:37Z,develop,slowlog-log-slower-than,,monitoring,longlong,,active,lacks,,10000,,,5
+38337454890,2026-10-13T02:33:37Z,develop,latency-monitor-threshold,,monitoring,longlong,,example,lacks,,0,,,2
+38337454890,2026-10-13T02:33:37Z,develop,proto-max-bulk-len,,clients and network,longlong,DEBUG_CONFIG,example,lacks,,536870912,,,6
+38337454890,2026-10-13T02:33:37Z,develop,stream-node-max-entries,,encodings,longlong,,active,lacks,,100,,,5
+38337454890,2026-10-13T02:33:37Z,develop,stream-idmp-duration,,encodings,longlong,,example,lacks,,100,,,1
+38337454890,2026-10-13T02:33:37Z,develop,stream-idmp-maxsize,,encodings,longlong,,example,lacks,,100,,,1
+38337454890,2026-10-13T02:33:37Z,develop,repl-backlog-size,,replication,longlong,,example,lacks,,1048576,,redis_exporter (config_repl_backlog_size); Bitnami redis chart (an extraFlags example),10
+38337454890,2026-10-13T02:33:37Z,develop,replica-full-sync-buffer-limit,,replication,longlong,,example,lacks,,0,,,2
+38337454890,2026-10-13T02:33:37Z,develop,maxmemory,,memory and eviction,ulonglong,,example,has,0,0,,"redis_exporter (config_maxmemory, from CONFIG GET *: exporter/exporter.go extractConfigMetrics)",19
+38337454890,2026-10-13T02:33:37Z,develop,cluster-link-sendbuf-limit,,cluster,ulonglong,,example,lacks,,0,,,1
+38337454890,2026-10-13T02:33:37Z,develop,hash-max-listpack-entries,hash-max-ziplist-entries,encodings,sizet,,active,lacks,,512,,,12
+38337454890,2026-10-13T02:33:37Z,develop,hash-min-template-entries,,encodings,sizet,,active,lacks,,0,,,6
+38337454890,2026-10-13T02:33:37Z,develop,hash-max-template-entries,,encodings,sizet,,active,lacks,,0,,,1
+38337454890,2026-10-13T02:33:37Z,develop,hash-rdb-load-min-template-entries,,encodings,sizet,,active,lacks,,0,,,1
+38337454890,2026-10-13T02:33:37Z,develop,hash-rdb-load-max-template-entries,,encodings,sizet,,active,lacks,,0,,,0
+38337454890,2026-10-13T02:33:37Z,develop,hash-rdb-load-template-disassembly-threshold,,encodings,sizet,,example,lacks,,0,,,1
+38337454890,2026-10-13T02:33:37Z,develop,set-max-intset-entries,,encodings,sizet,,active,lacks,,512,,,2
+38337454890,2026-10-13T02:33:37Z,develop,set-max-listpack-entries,,encodings,sizet,,active,lacks,,128,,,3
+38337454890,2026-10-13T02:33:37Z,develop,set-max-listpack-value,,encodings,sizet,,active,lacks,,64,,,0
+38337454890,2026-10-13T02:33:37Z,develop,zset-max-listpack-entries,zset-max-ziplist-entries,encodings,sizet,,active,lacks,,128,,,1
+38337454890,2026-10-13T02:33:37Z,develop,active-defrag-ignore-bytes,,memory and eviction,sizet,,example,lacks,,104857600,,,3
+38337454890,2026-10-13T02:33:37Z,develop,hash-max-listpack-value,hash-max-ziplist-value,encodings,sizet,,active,lacks,,64,,,4
+38337454890,2026-10-13T02:33:37Z,develop,stream-node-max-bytes,,encodings,sizet,,active,lacks,,4096,,,1
+38337454890,2026-10-13T02:33:37Z,develop,zset-max-listpack-value,zset-max-ziplist-value,encodings,sizet,,active,lacks,,64,,,0
+38337454890,2026-10-13T02:33:37Z,develop,hll-sparse-max-bytes,,encodings,sizet,,active,lacks,,3000,,,1
+38337454890,2026-10-13T02:33:37Z,develop,tracking-table-max-keys,,clients and network,sizet,,example,lacks,,1000000,,,1
+38337454890,2026-10-13T02:33:37Z,develop,client-query-buffer-limit,,clients and network,sizet,DEBUG_CONFIG,example,lacks,,1073741824,,,8
+38337454890,2026-10-13T02:33:37Z,develop,maxmemory-clients,,memory and eviction,ssizet,,example,lacks,,0,,,5
+38337454890,2026-10-13T02:33:37Z,develop,repl-backlog-ttl,,replication,timet,,example,lacks,,3600,,,2
+38337454890,2026-10-13T02:33:37Z,develop,backup-sealed-ttl,,persistence,timet,,active,lacks,,0,,,1
+38337454890,2026-10-13T02:33:37Z,develop,auto-aof-rewrite-min-size,,persistence,offt,,active,has,67108864,67108864,,,1
+38337454890,2026-10-13T02:33:37Z,develop,loading-process-events-interval-bytes,,persistence,offt,HIDDEN_CONFIG,no,lacks,,524288,,,4
+38337454890,2026-10-13T02:33:37Z,develop,aof-load-corrupt-tail-max-size,,persistence,offt,,example,lacks,,0,,,0
+38337454890,2026-10-13T02:33:37Z,develop,tls-port,,tls,int,,example,lacks,,0,,,5
+38337454890,2026-10-13T02:33:37Z,develop,tls-session-cache-size,,tls,int,,example,lacks,,20480,,,0
+38337454890,2026-10-13T02:33:37Z,develop,tls-session-cache-timeout,,tls,int,,example,lacks,,300,,,0
+38337454890,2026-10-13T02:33:37Z,develop,tls-cluster,,tls,bool,,example,lacks,,no,,,3
+38337454890,2026-10-13T02:33:37Z,develop,tls-replication,,tls,bool,,example,lacks,,no,,,2
+38337454890,2026-10-13T02:33:37Z,develop,tls-auth-clients,,tls,enum,,example,lacks,,yes,,,1
+38337454890,2026-10-13T02:33:37Z,develop,tls-auth-clients-user,,tls,enum,,example,lacks,,off,,,1
+38337454890,2026-10-13T02:33:37Z,develop,tls-prefer-server-ciphers,,tls,bool,,example,lacks,,no,,,1
+38337454890,2026-10-13T02:33:37Z,develop,tls-session-caching,,tls,bool,,example,lacks,,yes,,,0
+38337454890,2026-10-13T02:33:37Z,develop,tls-cert-file,,tls,string,VOLATILE_CONFIG,example,lacks,,,,,0
+38337454890,2026-10-13T02:33:37Z,develop,tls-key-file,,tls,string,VOLATILE_CONFIG,example,lacks,,,,,1
+38337454890,2026-10-13T02:33:37Z,develop,tls-key-file-pass,,tls,string,SENSITIVE_CONFIG,example,lacks,,,,,2
+38337454890,2026-10-13T02:33:37Z,develop,tls-client-cert-file,,tls,string,VOLATILE_CONFIG,example,lacks,,,,,0
+38337454890,2026-10-13T02:33:37Z,develop,tls-client-key-file,,tls,string,VOLATILE_CONFIG,example,lacks,,,,,0
+38337454890,2026-10-13T02:33:37Z,develop,tls-client-key-file-pass,,tls,string,SENSITIVE_CONFIG,example,lacks,,,,,1
+38337454890,2026-10-13T02:33:37Z,develop,tls-dh-params-file,,tls,string,VOLATILE_CONFIG,example,lacks,,,,,0
+38337454890,2026-10-13T02:33:37Z,develop,tls-ca-cert-file,,tls,string,VOLATILE_CONFIG,example,lacks,,,,,0
+38337454890,2026-10-13T02:33:37Z,develop,tls-ca-cert-dir,,tls,string,VOLATILE_CONFIG,example,lacks,,,,,0
+38337454890,2026-10-13T02:33:37Z,develop,tls-protocols,,tls,string,,example,lacks,,,,,1
+38337454890,2026-10-13T02:33:37Z,develop,tls-ciphers,,tls,string,,example,lacks,,,,,1
+38337454890,2026-10-13T02:33:37Z,develop,tls-ciphersuites,,tls,string,,example,lacks,,,,,0
+38337454890,2026-10-13T02:33:37Z,develop,tls-expected-peer-name,,tls,string,,example,lacks,,,,,1
+38337454890,2026-10-13T02:33:37Z,develop,dir,,persistence,special,PROTECTED_CONFIG DENY_LOADING_CONFIG,active,has,/home/runner/work/keel/keel/dist/census/config-servers/keel,/home/runner/work/keel/keel/dist/census/config-servers/redis,,,7
+38337454890,2026-10-13T02:33:37Z,develop,save,,persistence,special,MULTI_ARG_CONFIG,example,has,,,,"Bitnami redis chart (commonConfiguration: save """"); spotahome redis-operator (save 900 1, save 300 10); the official Docker image docs (redis-server --save 60 1)",23
+38337454890,2026-10-13T02:33:37Z,develop,client-output-buffer-limit,,clients and network,special,MULTI_ARG_CONFIG,example,lacks,,normal 0 0 0 slave 268435456 67108864 60 pubsub 33554432 8388608 60,,redis_exporter (config_client_output_buffer_limit_bytes and _overcome_seconds),10
+38337454890,2026-10-13T02:33:37Z,develop,oom-score-adj-values,,memory and eviction,special,MULTI_ARG_CONFIG,example,lacks,,0 200 800,,,2
+38337454890,2026-10-13T02:33:37Z,develop,notify-keyspace-events,,monitoring,special,,active,lacks,,,,,4
+38337454890,2026-10-13T02:33:37Z,develop,bind,,clients and network,special,MULTI_ARG_CONFIG,example,has,127.0.0.1,127.0.0.1,,,2
+38337454890,2026-10-13T02:33:37Z,develop,replicaof,slaveof,replication,special,IMMUTABLE_CONFIG MULTI_ARG_CONFIG,example,has,,,,spotahome redis-operator (slaveof 127.0.0.1 <port> in every pod),0
+38337454890,2026-10-13T02:33:37Z,develop,latency-tracking-info-percentiles,,monitoring,special,MULTI_ARG_CONFIG,example,lacks,,50 99 99.9,,,2
