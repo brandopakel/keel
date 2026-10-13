@@ -460,16 +460,22 @@ list it under "Improvements over Redis"). None is adopted by this document.
    strings cost 484 MiB. Keel's `-lcs-max-cells` (134 million cells, 512
    MiB) is the same bound under its own name; a lower default is the
    candidate.
-7. **A failed `AUTH` inside `EXEC` leaves a hole in the reply array.**
-   Observed on the wire by `scripts/error-parity.py` (`docs/error-replies.md`,
-   "Differences that stay"); Keel sends the `WRONGPASS` element. The
-   source path is not identified here; it is the first question below.
+7. **A failed `AUTH` gets no reply at all whenever another reply is still
+   pending.** `addAuthErrReply` returns without writing anything if
+   `clientHasPendingReplies(c)` (`acl.c:1495`). Inside `EXEC` the array
+   header is always pending, so the array counts an element that never
+   comes; at top level, a failed `AUTH` pipelined behind any other command
+   is silently dropped, and every later reply on that connection answers the
+   wrong request. Keel sends `WRONGPASS` in both places. Measured, with the
+   native call path, under "Runtime evidence from REA" (question 1). Already
+   a documented departure for `EXEC` (`docs/error-replies.md`); the
+   top-level case is new.
 
 ## Questions for runtime evidence (REA)
 
 The source leaves these open, or makes them depend on the build, the kernel
 or timing; a process or network capture of a real `redis-server` settles
-them. Listed so that REA can be pointed at them once the owner has it set up.
+them. Each is answered, or marked unanswered, in the next section.
 
 1. Why a failed `AUTH` queued in `MULTI` produces no element in `EXEC`'s
    array (candidate improvement 7): which reply path drops it, and whether
@@ -510,6 +516,292 @@ them. Listed so that REA can be pointed at them once the owner has it set up.
     expired key it still holds, and the `DEL` it then receives, with
     timing.
 
+## Runtime evidence from REA
+
+Status: October 12, 2026. The fourteen questions above, put to a running
+`redis-server` with the REA toolkit (`github.com/morluto/rea`, 6.4.0).
+**Twelve are answered, one in part (13) and one not (4).**
+
+**How.** `scripts/redis-runtime-scenarios.py` holds one scenario per
+question. Each starts a `redis-server` of its own on a loopback port,
+drives it over raw RESP sockets, prints the bytes it sees as `EVIDENCE`
+lines and stops the server. REA's `capture_process_scenario` ran the
+scenarios as three captures. REA's `observe_native_calls` then launched the
+binary under LLDB with entry breakpoints on four functions while a client
+drove question 1. Every run finished in under 20 seconds.
+
+| Evidence ID | REA tool | Questions |
+| --- | --- | --- |
+| `ev_fbba4ac28dd83a16edfa44f0b02f54beb08b27422a80419c5c034a1a6c678f7b` | `capture_process_scenario` | 1, 1b, 2, 3, 5, 6, 9, 10, 11, 12 |
+| `ev_7e37468430af7593729088101fad20c7b1e2c2fb2793bbdc81a852a33619d21e` | `capture_process_scenario` | 4, 7, 8, 13b, 14 |
+| `ev_bd4a0937e9dbc49e366d1a9b92b19776e236e450f462999f4e01a4d1561f5ca5` | `capture_process_scenario` | 1b, 13b (first run) |
+| `ev_25b02fb978cc62f0fb852aaf1ea49f3e1b8fb69d08979d37ff60cbe12760eb54` | `observe_native_calls` | 1 |
+
+The exported REA bundle (827,251 bytes, sha256 `85aad3e38da8863d99382b219887fa8cac0b20464f9821ee98304f5f1c576c70`)
+is not committed. The lines it observed, and the native call events, are
+committed in
+[`bench/results/redis-runtime-evidence-2026-10-12.json.gz`](../bench/results/redis-runtime-evidence-2026-10-12.json.gz)
+(sha256 `25bd0b48d28de5560fcf47b8886f6987bb564fda268c3b4e266c02216fc04dad`), keyed by Evidence ID.
+
+**Which Redis.** The binary is Homebrew's `redis-server` **8.10.2**,
+`malloc=libc`, sha256 `5f7cd7e2982bca1c7f31e4e3e396cee8c369838a18e41fc53f96ece23e955ae9`.
+No 8.10.1 build exists on this machine, and none was built, because the
+Redis source is read as data only. The `file:line` citations are 8.10.1's,
+the release CI pins. The two are one patch apart. An answer that rests on
+code a patch could plausibly change says so. Each answer is labelled
+**observed** (seen on the wire or at a breakpoint), **from the source**
+(read, not run), or an **inference** (drawn from the other two).
+
+### 1. A failed `AUTH` queued in `MULTI`
+
+- **Asked:** which reply path drops the element, and does `HELLO ... AUTH`
+  do the same?
+- **Observed (capture A, q1):** with `requirepass pw`, an authenticated
+  connection sends `MULTI`, `AUTH wrong`, `PING`, `EXEC`. Redis answers
+  `+OK +QUEUED +QUEUED *2 +PONG`: the array counts two elements and holds
+  one. A queued `HELLO 3 AUTH default wrong` leaves the same hole.
+  `MULTI`, `AUTH default wrong`, `EXEC` answers `*1` and nothing after it.
+  A correct `AUTH` inside `EXEC` answers `*2 +OK +PONG`. The connection
+  stays authenticated afterwards.
+- **Observed (native, `ev_25b02fb9…`):** inside `EXEC`, `authCommand` calls
+  `addAuthErrReply` with its `err` argument `NULL` (`x1 = 0x0`), and
+  `addReplyError` is never entered.
+- **From the source:** `addAuthErrReply` returns at once when
+  `clientHasPendingReplies(c)` (`acl.c:1494-1495`). Inside `EXEC`, the
+  array header written at `multi.c:185` is pending, so the error is never
+  written. `HELLO` reaches the same function (`networking.c:4990`).
+- **Follow-up, observed (q1b):** the cause is not specific to `EXEC`. At
+  top level, `PING`, `AUTH wrong`, `PING` pipelined in one write gets
+  `+PONG +PONG`: the failed `AUTH` has no reply at all. The same `AUTH wrong`
+  sent alone gets `-WRONGPASS`. A client that pipelines `AUTH` behind
+  another command reads the next `+PONG` as the `AUTH` reply, and every
+  reply after that answers the wrong request.
+- **Keel**, run on the same bytes through `scripts/run-local-validation.py`
+  at 72ed0cd: `+PONG -WRONGPASS ... +PONG` at top level, and `*2 -WRONGPASS
+  ... +PONG` inside `EXEC`.
+- **For Keel:** this confirms a departure Keel already takes, and widens it.
+  Candidate improvement 7 above is rewritten to match, and
+  `docs/error-replies.md` names both cases.
+
+### 2. `HELLO`'s exact bytes
+
+- **Observed (capture A, q2):**
+  - RESP2 `HELLO` is `*14` of `server redis`, `version 8.10.2`, `proto :2`,
+    `id`, `mode standalone`, `role master`, and `modules`. The `modules`
+    entry is an array of one entry, `*8`: `name vectorset`, `ver :1`,
+    `path ""` and `args *0`.
+  - `HELLO 3` is the same seven fields as a `%7` map, with the module entry
+    a `%4` map.
+  - There is no `availability_zone` and no other 8.x field.
+  - With no `loadmodule`, vector sets are listed: they are a built-in
+    module.
+- **For Keel:** this confirms the shape. Keel answers `server keel`,
+  `version 7.0.0` and an empty `modules` (`docs/resp3.md`, rule 6 of
+  `docs/info-compatibility.md`). That is a deliberate difference in values,
+  not in shape. Keel lists no `vectorset` entry, correctly, because it has
+  no vector sets.
+
+### 3. Push messages and replies on one RESP3 connection
+
+- **Observed (capture A, q3):**
+  - **Another client's write.** A tracking connection reads `k`, and
+    another client writes it. The tracking connection then pipelines `PING`
+    and `GET k`. It receives `>2 invalidate [k]` before `+PONG`: the push
+    was written when it was generated.
+  - **Its own write.** The same connection writes `k` itself, then sends
+    `PING`. It receives `+OK`, then the `invalidate` push, then `+PONG`:
+    the push is held until the reply that caused it is written
+    (`networking.c:539-544`, `server.c:4326-4327`).
+  - **Subscribing in RESP3.** `SUBSCRIBE ch`, `PING`, `GET k` answers
+    `>3 subscribe ch :1`, `+PONG`, `$1 w`. The connection keeps running
+    ordinary commands.
+  - **Subscribing in RESP2.** The same three commands answer `*3 subscribe
+    ch :1`, then `*2 pong ""` (`server.c:5290-5292`), then `Can't execute
+    'get': only (P|S)SUBSCRIBE / (P|S)UNSUBSCRIBE / PING / QUIT / RESET are
+    allowed in this context` (`server.c:4739-4754`).
+- **For Keel:** a specification for tier 2 and tier 4, which Keel has none
+  of yet. The rule to follow: a push caused by another client is written
+  at once, and a push caused by the connection's own command follows that
+  command's reply. The RESP2 subscribed `PING` is a two-element array, not
+  `+PONG`.
+
+### 4. `everysec` under a slow disk
+
+- **Not answered.** On this machine's SSD, 5,000 `SET`s under `appendfsync
+  everysec` left `aof_delayed_fsync:0`, `aof_pending_bio_fsync:0`,
+  `aof_buffer_length:0` and `aof_last_write_status:ok` in six samples over
+  six seconds (capture B, q4). That is the fast path only.
+- **What it would take:** the two-second postponed write
+  (`aof.c:1438-1457`) needs a disk whose fsync is slow. Throttling a device
+  here means installing or configuring something, which this task does not
+  do. A Linux runner with a `dm-delay` device would settle it.
+- **For Keel:** candidate improvement 2 stands on the source alone.
+
+### 5. Segmentation of a large pipelined reply
+
+- **Observed (capture A, q5):** four pipelined `GET`s of a 4 MiB value
+  delivered 16,777,264 bytes, all of it, in about 0.7 ms. The client made
+  205 reads, the largest 489,960 bytes. `io_threaded_writes_processed:0`.
+- **Inference:** on loopback, the 64 KiB-per-event write cap
+  (`networking.c:2887-2890`) is not visible as a pause, because the event
+  loop goes straight back to writing.
+- **For Keel:** this confirms there is nothing wire-visible to match.
+  Behaviour with I/O threads on (`io-threads` above 1) was not tested.
+
+### 6. The listen backlog
+
+- **Observed (capture A, q6):** with `kern.ipc.somaxconn` at 128, starting
+  Redis logs `WARNING: The TCP backlog setting of 511 cannot be enforced
+  because kern.ipc.somaxconn is set to the lower value of 128.` `CONFIG
+  GET tcp-backlog` still answers `511`, the configured value, not the
+  effective one.
+- **For Keel:** a gap. Keel answers `tcp-backlog` with its `maxclients`
+  (20000), because it listens with that backlog (`docs/redis-parity-plan.md`,
+  tier 1). The option the plan adds should report the configured value, as
+  Redis does, and log Redis's warning when the kernel caps it.
+
+### 7. `OBJECT ENCODING` thresholds
+
+- **Observed (capture B, q7), at the defaults:**
+  - **Strings:** `int` for `123`, `embstr` up to 44 bytes, `raw` at 45.
+  - **Hashes:** `listpack` at 128 and at 129 fields, because the default
+    `hash-max-listpack-entries` is 512. `hashtable` once a value is longer
+    than 64 bytes.
+  - **Sets:** `intset` up to 512 integers, `hashtable` at 513. `listpack`
+    up to 128 strings, `hashtable` at 129.
+  - **Sorted sets:** `listpack` up to 128 members. `skiplist` at 129, or
+    with a member longer than 64 bytes.
+  - **Lists:** `listpack` for one small element. `quicklist` for a
+    9,000-byte element, or for 100 elements of 100 bytes
+    (`list-max-listpack-size -2`, 8 KiB).
+- **For Keel:** a gap, and a decision for the owner. Keel has no
+  `OBJECT`. The Redis-test oracle runs with `--ignore-encoding`, so
+  encodings cost no test there. If Keel implements `OBJECT ENCODING`, these
+  names and thresholds can be computed from a value's size, without Redis's
+  data structures.
+
+### 8. Active expiry under load
+
+- **Observed (capture B, q8):** 200,000 keys with TTLs of 100 to 999 ms,
+  loaded in 2.2 s, at the defaults (`hz 10`, `active-expire-effort 1`).
+  - All 200,000 were expired by the active cycle:
+    `expired_keys_active:200000`, `DBSIZE` 0 at the first sample.
+  - `expired_time_cap_reached_count:4` and `expire_cycle_cpu_milliseconds:86`.
+  - `expired_stale_perc` decayed 14.67, 4.75, 1.89, 0.75, … over the
+    following seconds. It is a moving estimate, not a count of keys present.
+- **For Keel:** a gap, with a reference curve to compare against. Keel
+  reports `expired_keys` but not `expired_keys_active`,
+  `expired_stale_perc`, `expired_time_cap_reached_count` or
+  `expire_cycle_cpu_milliseconds` (`docs/info-compatibility.md`, "Left out
+  for now").
+
+### 9. Limits before authentication
+
+- **Observed (capture A, q9),** with `requirepass` set, on a connection
+  that has not logged in:
+  - **A bulk over 16,384 bytes** gets `-ERR Protocol error:
+    unauthenticated bulk length`, and the connection is closed. A bulk of
+    exactly 16,384 bytes is read; `AUTH` answers `WRONGPASS`.
+  - **An array of more than 10 elements** gets `-ERR Protocol error:
+    unauthenticated multibulk length`, and the connection is closed. The
+    header `*1000000` alone is enough. An array of 10 elements is read, and
+    `AUTH` answers `syntax error`.
+  - **After logging in**, the same 13-element array gets an ordinary
+    `syntax error`.
+  - The source is `networking.c:3388-3394` and `:3636-3651`. The 1 MiB
+    query-buffer limit (`:4030-4042`) was not exercised.
+- **For Keel:** this pins the thresholds of a known difference
+  (`docs/error-replies.md`, "Differences that stay"). The adoption is the
+  hardening change already listed there, now with exact numbers: more than
+  16,384 bytes in one bulk, and more than 10 elements in one array.
+
+### 10. `CLIENT INFO` and `CLIENT LIST` fields
+
+- **Observed (capture A, q10),** in this order: `id addr laddr fd name age
+  idle flags db sub psub ssub multi watch qbuf qbuf-free argv-mem
+  multi-mem rbs rbp obl oll omem omem-shared omem-unshared tot-mem events
+  cmd user redir resp lib-name lib-ver io-thread tot-net-in tot-net-out
+  tot-cmds read-events avg-pipeline-len-sum avg-pipeline-len-cnt`.
+  - In RESP2 it is a bulk string ending in `\n`. In RESP3 it is a
+    verbatim `=` string with format `txt`.
+  - 8.10.1's `catClientInfoString` has the same last fields
+    (`networking.c:4224-4228`).
+- **For Keel:** a gap. Keel's `CLIENT INFO` has seven of these 40 fields:
+  `id fd name db resp lib-name lib-ver` (`internal/server/connection_commands.go`).
+  It has no `addr` or `laddr`, which tools that show connections read.
+  `CLIENT LIST` is not implemented.
+
+### 11. `MONITOR` after a command rewrites itself
+
+- **Observed (capture A, q11):** `MONITOR` shows the command as the client
+  sent it.
+  - `"SET" "k" "v" "EX" "100"` appears, not `PXAT`; `"EXPIRE" "k" "200"`,
+    not `PEXPIREAT`; `"SET" "k2" "v" "GET"` with its `GET`.
+  - `MULTI`, the queued command and `EXEC` each appear as a line.
+  - This matches `server.c:4119-4125`, which feeds monitors the original
+    argv.
+- **For Keel:** a specification for `MONITOR` (tier 1, server commands).
+  Keel's log already records the rewritten forms, so `MONITOR` must keep
+  the client's argv separately.
+
+### 12. `SLOWLOG` truncation
+
+- **Observed (capture A, q12):** a `SADD` with 42 arguments of up to 203
+  bytes is recorded as an entry of **7** elements.
+  - `id`, `time`, `duration`, the argument array, `ip:port`, the client
+    name, and the command's real argument count (`slowlog.c:178-187`).
+  - The argument array has 32 elements, the default
+    `slowlog-entry-max-argc`.
+  - Each argument over 128 bytes is cut to 128 bytes plus `... (75 more
+    bytes)`, a 147-byte string.
+  - From the source, the last kept element reads `... (N more arguments)`
+    (`slowlog.c:42`, `:52`).
+- **For Keel:** a specification for the `SLOWLOG` work in the INFO stack
+  (part c). It includes the seventh field, which older documentation of
+  `SLOWLOG` does not show.
+
+### 13. The `PSYNC` handshake and stream
+
+- **Answered in part (q13b).**
+- **Observed:**
+  - `REPLCONF capa eof capa psync2` answers `+OK` on an ordinary connection.
+  - With `repl-diskless-sync-delay 0`, `PSYNC ? -1` answers
+    `+FULLRESYNC <40-hex replid> 0`, then `$EOF:<40 hex>`, then an RDB that
+    begins `REDIS0015`. RDB version 15 is what Redis 8.10.2 writes. The
+    whole transfer for one key was 325 bytes.
+  - With the default delay of 5 s (the first q13 run), the primary sent
+    only `\n` keepalives while it waited (`replication.c:2179-2191`).
+- **Not observed:** the command stream. Two writes on another connection
+  produced nothing on the replica link, although `INFO` listed the replica
+  `online` and `master_repl_offset` grew to 73.
+  - **From the source:** after a diskless transfer, the primary starts the
+    stream only when the replica's first `REPLCONF ACK` arrives
+    (`replication.c:2095`, `:1565`). The probe sent none.
+  - The stream's framing after that ack is the part still unanswered.
+- **For Keel:** input for the later decision on replicating with Redis.
+  Keel's replication protocol is its own (`KEEL.REPL.PULL`).
+
+### 14. An expired key on a replica
+
+- **Observed (capture B, q14):**
+  - The primary's active expiry is off (`DEBUG SET-ACTIVE-EXPIRE 0`). A key
+    is set with `PX 300`, and the replica is read about half a second
+    later. The replica still holds it (`DBSIZE` 1), but answers it as
+    absent: `GET` nil, `EXISTS` 0, `TTL` -2, `KEYS *` empty.
+  - The replica's `expired_keys` stays 0, so it deletes nothing itself.
+  - The key leaves the replica only when the primary deletes it and
+    propagates the `DEL`. Here that happened through the primary's own lazy
+    `GET`, or through its active cycle once re-enabled. This matches
+    `db.c:3038-3040`, where a replica returns `KEY_EXPIRED` without
+    deleting.
+- **For Keel:** a wire-visible gap. Keel's replica "follows primary expiry
+  events rather than expiring or evicting independently, so an expired value
+  can remain visible during lag" (`docs/replication-alpha.md`). Redis's
+  replica also waits for the primary to delete, but answers an expired key
+  as missing straight away. To follow Redis, a Keel replica should apply
+  the same logical-expiry check on reads, and still leave deletion to the
+  primary.
+
 ## How this document was made
 
 `scripts/reply-census.py` locates every command's function in the source by
@@ -517,4 +809,6 @@ its definition line and lists the `addReply*` calls in it and in the helpers
 it calls; the citations above for `processCommand`, `call`, the reply
 builders, propagation, expiry, eviction, transactions, blocking and Pub/Sub
 were read from the tarball by hand with the same line numbering. The Redis
-source was read as data: nothing in it was built or run on this machine.
+source was read as data: nothing in it was built or run on this machine. The
+runtime evidence came from Homebrew's 8.10.2 binary, as described in its
+section.
