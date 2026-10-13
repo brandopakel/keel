@@ -83,6 +83,37 @@ class Parsing(unittest.TestCase):
             self.assertEqual(rt.count_tests(tmp, 'unit/nosuch'), 0)
 
 
+SERVER_TCL = '''proc run_external_server_test {code overrides} {
+    set srv {}
+    }
+
+    r flushall
+    r function flush
+    r script flush
+    r config resetstat
+
+    # Resolve client dynamically
+}
+'''
+
+
+class Adaptation(unittest.TestCase):
+    def test_setup_is_adapted_once_and_only_when_exact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'tests/support/server.tcl'
+            path.parent.mkdir(parents=True)
+            path.write_text(SERVER_TCL)
+            self.assertTrue(rt.adapt_harness(tmp).startswith('adapted'))
+            text = path.read_text()
+            self.assertIn('    if {[catch {r flushall}]} { r flushdb }\n    catch {r function flush}\n', text)
+            self.assertNotIn('    r flushall\n', text)
+            self.assertIn('# Resolve client dynamically', text, 'nothing else changes')
+            self.assertEqual(rt.adapt_harness(tmp), 'already adapted')
+            path.write_text(SERVER_TCL.replace('    r script flush\n', ''))
+            with self.assertRaises(SystemExit):
+                rt.adapt_harness(tmp)
+
+
 class Groups(unittest.TestCase):
     def test_every_unit_once(self):
         units = [u for group in rt.GROUPS.values() for u in group]
@@ -125,6 +156,7 @@ class Report(unittest.TestCase):
             csv_text = (root / 'report/redis-tests.csv').read_text().splitlines()
             self.assertEqual(csv_text[0].split(',')[:3], ['unit', 'redis_passed', 'redis_failed'])
             self.assertTrue(csv_text[3].startswith('unit/type/string,144,0,0,ok,100,40,0,4,ok,3.5,'))
+            self.assertEqual(result['harness_adaptation'], ['unrecorded'])
             text = (root / 'report/redis-tests.md').read_text()
             self.assertIn('Keel passes **130** of the **154** Redis passes in external mode (84.4%)', text)
             self.assertIn('| unit/scan | 10 | 0 | 0 | 0 | 0 | crash | 3.5 |', text)

@@ -26,6 +26,15 @@ tagged external:skip are skipped by the harness itself. Redis is started as
 that workflow starts it (debug, module and protected configs enabled); Keel
 with its append-only file on.
 
+The harness's external-mode setup (run_external_server_test in
+tests/support/server.tcl) runs FLUSHALL, FUNCTION FLUSH, SCRIPT FLUSH and
+CONFIG RESETSTAT before every start_server block, and a server that lacks
+one of them ends every unit before its first test. Unless --strict is given,
+the runner's copy of that file is adapted before the run, for both servers
+alike: FLUSHALL falls back to FLUSHDB (the same thing on a server with one
+database) and the other three are tried and their failure ignored. For Redis
+this changes nothing; the adaptation is recorded in every result.
+
 A unit's outcome is ok (the harness finished), unconfigurable (the unit's
 start_server sets a configuration with CONFIG SET and the server refused
 it, so no test ran), exception (the harness stopped on another error it
@@ -69,6 +78,31 @@ GROUPS = {
         'unit/client-eviction', 'unit/aofrw', 'unit/gcra', 'unit/hotkeys'],
     7: ['unit/pubsub', 'unit/pubsubshard', 'unit/tracking', 'unit/pause', 'unit/wait'],
 }
+
+# The external-mode setup as Redis 8.10.1 has it, and as it is adapted.
+SETUP = ('    r flushall\n'
+         '    r function flush\n'
+         '    r script flush\n'
+         '    r config resetstat\n')
+ADAPTED_SETUP = ('    if {[catch {r flushall}]} { r flushdb }\n'
+                 '    catch {r function flush}\n'
+                 '    catch {r script flush}\n'
+                 '    catch {r config resetstat}\n')
+
+
+def adapt_harness(redis_src):
+    """Adapt the external-mode setup in a disposable copy of the Redis tree;
+    returns what was done. Refuses a file whose setup is not exactly the
+    expected one, rather than adapting something else."""
+    path = Path(redis_src) / 'tests' / 'support' / 'server.tcl'
+    text = path.read_text()
+    if ADAPTED_SETUP in text:
+        return 'already adapted'
+    if text.count(SETUP) != 1:
+        raise SystemExit(f'{path}: the external-mode setup is not the expected four lines; refusing to adapt it')
+    path.write_text(text.replace(SETUP, ADAPTED_SETUP))
+    return 'adapted: FLUSHALL falls back to FLUSHDB; FUNCTION FLUSH, SCRIPT FLUSH, CONFIG RESETSTAT failures ignored'
+
 
 HARNESS_FLAGS = ['--verbose', '--tags', '-slow', '--singledb', '--ignore-encoding', '--ignore-digest', '--durable',
                  '--dont-clean']
@@ -238,6 +272,8 @@ def run(args):
     results = []
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+    adaptation = 'none (--strict)' if args.strict else adapt_harness(args.redis_src)
+    print(f'harness setup: {adaptation}', flush=True)
     for unit in units:
         print(f'== {unit} against {args.server}', flush=True)
         result = run_unit(args.server, args.bin, args.redis_src, unit, args.out, args.timeout)
@@ -245,7 +281,8 @@ def run(args):
         print(f"   {result['outcome']}: {len(result['passed'])} passed, {len(result['failed'])} failed, "
               f"{len(result['ignored'])} ignored, {result['not_run']} not run, {result['seconds']} s", flush=True)
         (out / 'group.json').write_text(json.dumps({'server': args.server, 'group': args.group, 'units': results,
-                                                    'complete': len(results) == len(units)}, indent=1) + '\n')
+                                                    'complete': len(results) == len(units),
+                                                    'harness_adaptation': adaptation}, indent=1) + '\n')
     return 0
 
 
@@ -260,9 +297,11 @@ def summarise_unit(result):
 def report(args):
     """Join every group.json under the result directories into one report."""
     sides = {'keel': {}, 'redis': {}}
+    adaptations = set()
     for root in args.results:
         for path in Path(root).rglob('group.json'):
             group = json.loads(path.read_text())
+            adaptations.add(group.get('harness_adaptation', 'unrecorded'))
             for result in group['units']:
                 sides[group['server']][result['unit']] = summarise_unit(result)
     units = sorted(set(sides['keel']) | set(sides['redis']))
@@ -280,7 +319,7 @@ def report(args):
                         'units_timed_out': sum(u['outcome'] == 'timeout' for u in done),
                         'units_exception': sum(u['outcome'] == 'exception' for u in done),
                         'units_unconfigurable': sum(u['outcome'] == 'unconfigurable' for u in done)}
-    result = {'skipped_units': SKIPPED, 'totals': totals, 'units': rows}
+    result = {'skipped_units': SKIPPED, 'harness_adaptation': sorted(adaptations), 'totals': totals, 'units': rows}
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     (out / 'redis-tests.json').write_text(json.dumps(result, indent=1) + '\n')
@@ -317,7 +356,8 @@ def markdown(result):
         out.append(f"| {row['unit']} | {rr.get('passed', '-')} | {rr.get('failed', '-')} | {kk.get('passed', '-')} | "
                    f"{kk.get('failed', '-')} | {kk.get('not_run', '-')} | {kk.get('outcome', '-')} | "
                    f"{kk.get('seconds', '-')} |")
-    out += ['', 'Units not run: ' + ', '.join(f'{u} ({why})' for u, why in result['skipped_units'].items()) + '.', '']
+    out += ['', 'Units not run: ' + ', '.join(f'{u} ({why})' for u, why in result['skipped_units'].items()) + '.',
+            'Harness setup: ' + '; '.join(result.get('harness_adaptation') or ['unrecorded']) + '.', '']
     return '\n'.join(out) + '\n'
 
 
@@ -331,6 +371,8 @@ def main(argv=None):
     r.add_argument('--group', type=int, choices=sorted(GROUPS), required=True)
     r.add_argument('--out', required=True)
     r.add_argument('--timeout', type=int, default=1200, help='seconds per unit (default 1200)')
+    r.add_argument('--strict', action='store_true',
+                   help="run the harness's external-mode setup unadapted (see above)")
     r.set_defaults(func=run)
     p = sub.add_parser('report')
     p.add_argument('--out', required=True)

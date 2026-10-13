@@ -9,6 +9,13 @@
 # and keeps every line the harness prints, each test's assertion message
 # included. The units are split into groups, one job per group and server.
 #
+# The harness's external-mode setup runs FLUSHALL, FUNCTION FLUSH, SCRIPT
+# FLUSH and CONFIG RESETSTAT before every block of tests; unadapted, a server
+# without FLUSHALL fails every unit before its first test (the first baseline,
+# run 38305868896, did exactly that). The driver adapts that setup in the
+# runner's copy of the Redis tree for both servers alike (see
+# scripts/run-redis-tests.py), and records that it did.
+#
 # The report job joins the groups: redis-tests.json, .csv and .md in the
 # redis-tests artifact, which the Benchmark history workflow copies to
 # census/redis-tests.csv on the bench-history branch for Grafana. The step
@@ -73,7 +80,7 @@ jobs:
     name: ${{ matrix.server }} group ${{ matrix.group }}
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 300
     strategy:
       fail-fast: false
       matrix:
