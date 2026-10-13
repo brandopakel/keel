@@ -2094,6 +2094,87 @@ the zero-copy capture of a large reply, the io threads), which the paired
 command-path job and the client suites cover; and what the persistence and
 replication goldens hold already.
 
+#### Step 4.1: internal/resp
+
+`internal/resp` is the protocol as a leaf package: the parser that turns
+bytes into a `Command` (`ParseCmd`, `ParseCmdReserved`, `DecodeOne`,
+`FrameShortfall`, the request budget's `RequestAllocationSize`), the
+encoders that frame a reply (`Encode`, `EncodeAs`, the `Append` helpers, and
+`Framing`, which chooses RESP2 or RESP3 with the reply types `Map`, `Double`,
+`Bool`, `Verbatim` and `Field`), the reply sizes the admission checks use
+(`MaxReplyBytes`, `AddBulkSize`, `DecimalDigits`), the transport's allocation
+budget that replies are reserved from (`Budget`, which the engine still
+names `CommandAllocationBudget`, an alias), and `Reply`, the sink. It imports
+only `internal/constant`, so the server, the engine and, in phase 5, the
+public package can speak the protocol without each other.
+
+- **The move changed no handler and no hot-path file.** The engine keeps
+  every name it used - `Command` (an alias), `parsedCommand`, `Encode`,
+  `ParseCmd`, the `append` helpers, `framing` and its methods, `ReplyMap` and
+  its kin, `MaxReplyBytes`, `addBulkSize` - as wrappers over `resp` in
+  `resp.go` and `resp3.go`, all 34 of which the compiler inlines
+  (`-gcflags=-m`). `framing` stays the engine's one-byte field, so no field of
+  `Engine` moved, and a method of it builds the `resp.Framing` it stands for
+  on the way through (`wire`). The server reaches the parser through the
+  same `core` names. Only the two readers of a command's spelling changed, to
+  `SentName`, which the alias exports. The wrappers go once the server and
+  the families import `resp` directly, after the INFO work that holds those
+  files merges.
+- **What moved in the disassembly** (`go tool objdump` of the server built
+  from develop `80af8e4` and from this step, addresses, data offsets and
+  branch displacements normalized): `aofCommit`, `checkKeyTypes`, `cmdINCR`,
+  `(*client).respond` and `responseRw` are instruction-identical;
+  `executeRun`, `readCommandsReserved` and `cmdGET` keep their instruction
+  counts, calling `resp` where they called `core`; `EvalAndResponse`,
+  `cmdMGET` and `increment` gain four instructions and `setCommand` eight,
+  from the wrappers' conversion of `framing` to `resp.Framing`;
+  `encodeBoundedString` falls from 93 to 65, because `reserveReplyMemory`
+  now inlines into the `admitReply` it calls. `framing.encode` is no longer a
+  function of its own: its callers call `resp.Framing.Encode`.
+- **The server names `resp.Budget` itself.** Go's compiler did not inline the
+  methods of the budget while the server reached its type only through
+  core's alias: `executeRun` called `Begin` once a run, and its deferred
+  `End` cost 59 where it had cost 9. Importing `resp` and naming the type
+  there gave them back (`-gcflags=-m=2`: `inlining call to
+  resp.(*Budget).Begin`, `ObserveRetained` and `End`), and `executeRun`
+  its 573 instructions.
+- **The parser's tests moved with it** (`resp_test.go`,
+  `request_decode_test.go`, `parse_profile_test.go`), with the two
+  differential fuzz targets the Go and request-admission workflows run.
+  The engine's `resp3_test.go`, which pins each command's bytes in both
+  protocols, stays with the engine, as do the corpora.
+- **`Reply`** is the sink the command language writes into from step 4.3:
+  a buffer framed in the connection's protocol, with the shapes a reply has
+  (`Status`, `Error`, `Int`, `Bulk`, `Null`, `NullArray`, `Bool`, `Double`,
+  `Verbatim`, `Array`, `Set`, `Map`, `Pair`, `Raw`), its admission - what
+  is `Used` of the output limit already (EXEC's earlier replies; zero, the
+  whole limit is the reply's) and the transport's `Budget` - checked before
+  it grows to a size, and `Reserve` for a reply a command has sized before
+  building it. A refusal replaces the reply and ends it: `ReplyTooLarge`
+  past what is left of the limit, `AllocationPressure` past what the budget
+  holds, the bytes the engine's `admitReply` answers.
+  Its contract keeps three things the server's reply path has today:
+  - a bulk string is sized exactly, admitted, and allocated once, as
+    `encodeBoundedString` allocates one; admission is asked only when the
+    reply grows past what it has admitted, so a reply `Reserve` sized and a
+    command then fills is charged to the budget once;
+  - the transport takes `Bytes` by reference, as it takes a handler's slice,
+    and keeps a batch-of-one reply until its write phase, so a `Reply` never
+    reuses a buffer: `Reset` forgets the last command's, and the next
+    command allocates its own;
+  - `+OK`, `:0`, `:1`, the nulls, the booleans and the empty map and set are
+    the shared constants the handlers answer with, held by reference while
+    they are the whole reply, so a command that answers one of them
+    allocates nothing, as it allocates nothing now.
+
+  Admission is concrete, not an interface the engine implements, because
+  the interface call it took first measured as 3% of GET, locally, in a
+  paired comparison of step 4.3's conversion with and without it: the
+  limit used and a budget pointer are fields, checked by static calls, and
+  the engine fills them in for each command. Until step 4.3 nothing on a
+  command's path uses `Reply`, which is why this step's measurement is the
+  move's alone.
+
 ## Risks, in order
 
 1. Moving AOF, rewrite and replication state while MULTI/EXEC changes the same

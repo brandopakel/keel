@@ -47,7 +47,7 @@ jobs:
       - name: Differential parser fuzzing
         run: |
           set -euo pipefail
-          go test ./internal/core -run '^$' -fuzz '^FuzzReservedCommandParserMatchesValueDecoder$' -fuzztime=3m -parallel=2 | tee dist/request-admission/fuzz.log
+          go test ./internal/resp -run '^$' -fuzz '^FuzzReservedCommandParserMatchesValueDecoder$' -fuzztime=3m -parallel=2 | tee dist/request-admission/fuzz.log
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
