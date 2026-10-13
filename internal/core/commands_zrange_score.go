@@ -2,7 +2,6 @@ package core
 
 import (
 	"errors"
-	"math"
 	"strings"
 
 	"github.com/brandopakel/keel/internal/constant"
@@ -46,10 +45,14 @@ func (e *Engine) cmdZCOUNT(args []string) []byte {
 		return e.encode(err, false)
 	}
 	z, ok := e.zsetFor(args[0])
+	// A keyspace hit or a miss, counted after the range was read, as Redis's
+	// zcountCommand reads it before it looks the key up.
+	e.noteLookup(ok)
+	reply := e.reply()
 	if !ok {
-		return constant.RespZero
+		return reply.Int(0).Bytes()
 	}
-	return e.encode(z.CountByScore(r.min, r.max, r.minEx, r.maxEx), false)
+	return reply.Int(int64(z.CountByScore(r.min, r.max, r.minEx, r.maxEx))).Bytes()
 }
 
 func (e *Engine) cmdZRANGEBYSCORE(args []string) []byte {
@@ -98,6 +101,10 @@ func (e *Engine) scoreRange(name string, args []string, reverse bool) []byte {
 // scoreRangeReply answers the members of key whose scores are within r.
 func (e *Engine) scoreRangeReply(key string, r scoreInterval, offset, count int, reverse, withScores bool) []byte {
 	z, ok := e.zsetFor(key)
+	// A keyspace hit or a miss, counted after the range and options were
+	// read, as Redis's zrangeGenericCommand reads them before it looks the
+	// key up.
+	e.noteLookup(ok)
 	if !ok {
 		return constant.RespEmptyArray
 	}
@@ -111,6 +118,7 @@ func (e *Engine) scoreRangeReply(key string, r scoreInterval, offset, count int,
 }
 
 func (e *Engine) cmdZINCRBY(args []string) []byte {
+	e.recordsItself()
 	if len(args) != 3 {
 		return e.encode(wrongArguments("ZINCRBY"), false)
 	}
@@ -118,19 +126,10 @@ func (e *Engine) cmdZINCRBY(args []string) []byte {
 	if err != nil {
 		return e.encode(err, false)
 	}
-	z, ok := e.zsetFor(args[0])
-	score := increment
-	if ok {
-		if old, present := z.Score(args[2]); present {
-			score += old
-		}
+	score, err := e.opZIncrBy(args[0], increment, args[2])
+	if err != nil {
+		return e.encode(err, false)
 	}
-	if math.IsNaN(score) {
-		return e.encode(errors.New("ERR resulting score is not a number (NaN)"), false)
-	}
-	e.zaddApply(args[0], []float64{score}, []string{args[2]}, 0)
-	// Canonical commands keep the log readable by older Keel versions.
-	e.aofRecord("ZADD", args[0], formatZScore(score), args[2])
 	return e.encode(ReplyDouble(formatZScore(score)), false)
 }
 
@@ -152,14 +151,17 @@ func (e *Engine) zpopCount(name string, args []string) (int, error) {
 	return int(n), err
 }
 func (e *Engine) cmdZPOPMAX(args []string) []byte { return e.zpop("ZPOPMAX", args, true) }
+
+// zpop pops the count lowest or highest members, recording the ZREM of what
+// it popped and nothing when it popped nothing.
 func (e *Engine) zpop(name string, args []string, reverse bool) []byte {
+	e.recordsItself()
 	count, err := e.zpopCount(name, args)
 	if err != nil {
 		return e.encode(err, false)
 	}
 	z, ok := e.zsetFor(args[0])
 	if !ok || count == 0 {
-		e.aof.skip = true
 		return constant.RespEmptyArray
 	}
 	count = min(count, z.Len())

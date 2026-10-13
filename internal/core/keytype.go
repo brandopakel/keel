@@ -422,9 +422,8 @@ var keyspaceReads = map[string]bool{
 	"HGET": true, "HMGET": true, "HEXISTS": true, "HSTRLEN": true, "HLEN": true, "HKEYS": true, "HVALS": true, "HGETALL": true,
 	"LLEN": true, "LINDEX": true,
 	"SCARD": true, "SMEMBERS": true, "SISMEMBER": true, "SMISMEMBER": true,
-	"ZCOUNT": true, "ZRANGEBYSCORE": true, "ZREVRANGEBYSCORE": true, "ZRANGE": true, "ZRANK": true, "ZSCORE": true,
-	"ZCARD":   true,
-	"GEODIST": true, "GEOHASH": true, "GEOSEARCH": true, "GEOPOS": true,
+	"ZSCORE": true, "ZCARD": true,
+	"GEOHASH": true, "GEOSEARCH": true, "GEOPOS": true,
 	"PFCOUNT": true, "PFMERGE": true,
 	"CMS.QUERY": true, "CMS.INFO": true, "MORRIS.QUERY": true,
 }
@@ -433,15 +432,19 @@ var keyspaceReads = map[string]bool{
 // before it looks its key up with lookupKeyRead, so that a malformed
 // argument counts no keyspace hit or miss: getrangeCommand reads its indexes
 // first, getexCommand its options, lrangeCommand its start and stop,
-// lposCommand its options, and srandmemberWithCountCommand its count. They
-// count their lookup in their typed operation, after parsing, rather than
-// through keyspaceReads; the type check counts only the hit of a key of
-// another type, once the arguments Redis reads first have passed. Each
-// family moves its reads here as it is converted
-// (docs/phase4-family-recipe.md); the families not yet converted still count
-// through keyspaceReads (docs/info-compatibility.md).
+// lposCommand its options, srandmemberWithCountCommand its count,
+// zcountCommand and zrangeGenericCommand their ranges, zrankGenericCommand
+// its WITHSCORE, geodistCommand its unit. They count their lookup in their
+// typed operation or handler, after parsing, rather than through
+// keyspaceReads; the type check counts only the hit of a key of another
+// type, once the arguments Redis reads first have passed. Each family moves
+// its reads here as it is converted (docs/phase4-family-recipe.md); the
+// families not yet converted still count through keyspaceReads
+// (docs/info-compatibility.md).
 var readsAfterArguments = map[string]bool{"GETRANGE": true, "SUBSTR": true, "GETEX": true, "LRANGE": true, "LPOS": true,
-	"SRANDMEMBER": true, "SRAND": true}
+	"SRANDMEMBER": true, "SRAND": true,
+	"ZCOUNT": true, "ZRANGEBYSCORE": true, "ZREVRANGEBYSCORE": true, "ZRANGE": true, "ZRANK": true,
+	"GEODIST": true}
 
 // checkKeyTypes reports an error if any key the command names is already held
 // by a different kind of store: the command's own refusal of its arguments,
