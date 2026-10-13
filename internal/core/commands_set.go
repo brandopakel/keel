@@ -163,6 +163,8 @@ func (e *Engine) cmdSPOP(args []string) []byte {
 
 	s, ok := e.setFor(key)
 	if !ok {
+		// Nothing popped, nothing recorded; see below.
+		e.aof.skip = true
 		if given {
 			return e.emptySetReply()
 		}
@@ -206,6 +208,14 @@ func (e *Engine) cmdSPOP(args []string) []byte {
 		walk(func(value string) bool { record = append(record, value); return true })
 		s.Remove(record[2:]...)
 		e.aofRecord(record...)
+	} else {
+		// A SPOP that pops nothing - a missing key, above, or a count of 0 -
+		// changed nothing, and records nothing, as Redis counts no change for
+		// it (t_set.c, spopWithCountCommand, lines 849-857, and spopCommand,
+		// lines 1080-1081, return before server.dirty). Logged as it arrived,
+		// it stopped every protocol 2 replica, whose stream is the log and
+		// whose apply path takes no SPOP.
+		e.aof.skip = true
 	}
 	e.setSettle(key, s)
 	return out
