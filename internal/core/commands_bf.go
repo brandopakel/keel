@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/brandopakel/keel/internal/constant"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
@@ -34,23 +33,6 @@ const (
 	bfMaxCapacity  = 1 << 30
 	bfMaxExpansion = 32768
 )
-
-func (e *Engine) bloomFor(key string) (*data_structure.SBChain, bool) {
-	return e.sbStore.Get(key)
-}
-
-// bloomForWrite returns the filter at key, creating one with the default sizing
-// if there is none: adding to a filter that was never reserved is how most
-// filters come to exist.
-func (e *Engine) bloomForWrite(key string) *data_structure.SBChain {
-	sb, ok := e.sbStore.Get(key)
-	if !ok {
-		sb = data_structure.CreateSBChain(data_structure.BfDefaultInitCapacity,
-			data_structure.BfDefaultErrRate, data_structure.BfDefaultExpansion)
-		e.sbStore.Put(key, sb)
-	}
-	return sb
-}
 
 // bfReservation is what BF.RESERVE asks for. An expansion of zero is a filter
 // that does not grow.
@@ -137,8 +119,9 @@ func parseLegacyBFReserve(args []string) (bfReservation, bool) {
 }
 
 // cmdBFRESERVE implements BF.RESERVE key error_rate capacity [EXPANSION n]
-// [NONSCALING].
+// [NONSCALING]; see opBFReserve.
 func (e *Engine) cmdBFRESERVE(args []string) []byte {
+	e.recordsItself()
 	if len(args) < 3 || len(args) > 6 {
 		return e.encode(wrongArguments("BF.RESERVE"), false)
 	}
@@ -154,115 +137,89 @@ func (e *Engine) cmdBFRESERVE(args []string) []byte {
 			return e.encode(err, false)
 		}
 	}
-	switch e.filterKeyStatus(key, e.sbStore) {
-	case filterHeld:
-		return e.encode(errFilterExists, false)
-	case filterOtherType:
-		return e.encode(errWrongType, false)
-	}
-	// RedisBloom sizes the first filter of a chain that grows for half the
-	// rate asked for, and cannot build one for a rate that halves to zero.
-	// The earlier build could, so a log may hold one.
-	if r.expansion != 0 && r.errorRate/2 == 0 && !e.replayingFilterLog() {
-		return e.encode(errBFCouldNotCreate, false)
-	}
-	if err := e.affordable(data_structure.BloomBytesFor(r.capacity, r.errorRate)); err != nil {
-		return e.encode(err, false)
-	}
-	e.sbStore.Put(key, data_structure.CreateSBChain(r.capacity, r.errorRate, r.expansion))
+	text := args[1:]
 	if legacyForm && legacy != r {
 		// The one form both builds read, differently: a key named NONSCALING,
 		// which RedisBloom takes for the option and the earlier build took for
 		// a name. The log gets the option spelled out, a form the earlier
 		// build refused, so a replay builds what this command built.
-		e.aofRecord("BF.RESERVE", key, args[1], args[2], "NONSCALING")
+		text = []string{args[1], args[2], "NONSCALING"}
 	}
-	return constant.RespOk
+	reply := e.reply()
+	if err := e.opBFReserve(key, r, text); err != nil {
+		return reply.Error(err).Bytes()
+	}
+	return reply.Status("OK").Bytes()
 }
 
 // cmdBFADD implements BF.ADD key item: 1 (true) if the item was new, 0 (false)
 // if it may have been there already.
 func (e *Engine) cmdBFADD(args []string) []byte {
+	e.recordsItself()
 	if len(args) != 2 {
 		return e.encode(wrongArguments("BF.ADD"), false)
 	}
-	key := args[0]
-	if e.filterKeyStatus(key, e.sbStore) == filterOtherType {
-		return e.encode(errWrongType, false)
-	}
-	sb := e.bloomForWrite(key)
-	added, err := sb.Add(args[1])
-	// A scalable Bloom filter grows by adding filters as it fills, so its size
-	// after this command is not the size the store recorded on Put.
-	e.sbStore.Resize(key)
+	r := e.reply()
+	added, err := e.opBFAdd(args[0], args[1])
 	if err != nil {
-		return e.encode(err, false)
+		return r.Error(err).Bytes()
 	}
-	return e.boolReply(added)
+	return r.Bool(added).Bytes()
 }
 
 // cmdBFMADD implements BF.MADD key item [item ...]: one answer per item, as
-// BF.ADD would have answered for it.
+// BF.ADD would have answered for it, or the error that stood in for it.
 func (e *Engine) cmdBFMADD(args []string) []byte {
+	e.recordsItself()
 	if len(args) < 2 {
 		return e.encode(wrongArguments("BF.MADD"), false)
 	}
-	key := args[0]
-	if e.filterKeyStatus(key, e.sbStore) == filterOtherType {
-		return e.encode(errWrongType, false)
+	items := args[1:]
+	r := e.reply()
+	// The reply's length is the answers given, which a full filter that does
+	// not grow cuts short; they are gathered first, as RedisBloom answers
+	// them.
+	answers := make([]bfAnswer, 0, len(items))
+	err := e.opBFMAdd(args[0], items, func(added bool, err error) {
+		answers = append(answers, bfAnswer{added, err})
+	})
+	if err != nil {
+		return r.Error(err).Bytes()
 	}
-	sb := e.bloomForWrite(key)
-	out := make([]interface{}, 0, len(args)-1)
-	for _, item := range args[1:] {
-		added, err := sb.Add(item)
-		if err == data_structure.ErrNonScalingFull {
-			// A filter that does not grow is full. RedisBloom answers the
-			// items before this one and stops, so the reply ends with the
-			// refusal and the items after it are not tried.
-			out = append(out, err)
-			break
+	r.Array(len(answers))
+	for _, a := range answers {
+		if a.err != nil {
+			r.Error(a.err)
+		} else {
+			r.Bool(a.added)
 		}
-		if err != nil {
-			// The filter could not grow to take this item. The error stands in
-			// its position, as RedisBloom answers a filter that cannot take
-			// more, and the items after it are tried in turn: one that is
-			// already present still answers 0.
-			out = append(out, err)
-			continue
-		}
-		out = append(out, ReplyBool(added))
 	}
-	e.sbStore.Resize(key)
-	return e.encode(out, false)
+	return r.Bytes()
 }
 
-// bloomForRead is the filter a read asks about: RedisBloom's BF.EXISTS and
-// BF.MEXISTS answer no for a key that holds anything else.
-func (e *Engine) bloomForRead(key string) (*data_structure.SBChain, bool) {
-	if e.filterKeyRead(key, e.sbStore) != filterHeld {
-		return nil, false
-	}
-	return e.bloomFor(key)
+// bfAnswer is BF.MADD's answer for one item.
+type bfAnswer struct {
+	added bool
+	err   error
 }
 
 func (e *Engine) cmdBFEXISTS(args []string) []byte {
 	if len(args) != 2 {
 		return e.encode(wrongArguments("BF.EXISTS"), false)
 	}
-	sb, ok := e.bloomForRead(args[0])
-	return e.boolReply(ok && sb.Exists(args[1]))
+	r := e.reply()
+	e.opBFExists(args[0], args[1:], func(exists bool) { r.Bool(exists) })
+	return r.Bytes()
 }
 
 func (e *Engine) cmdBFMEXISTS(args []string) []byte {
 	if len(args) < 2 {
 		return e.encode(wrongArguments("BF.MEXISTS"), false)
 	}
-	sb, ok := e.bloomForRead(args[0])
-	out := make([]interface{}, 0, len(args)-1)
-	for _, item := range args[1:] {
-		out = append(out, ReplyBool(ok && sb.Exists(item)))
-	}
-	return e.encode(out, false)
+	r := e.reply()
+	r.Array(len(args) - 1)
+	e.opBFExists(args[0], args[1:], func(exists bool) { r.Bool(exists) })
+	return r.Bytes()
 }
 
 // bfInfoOptions are BF.INFO's single-field names, in the order of the fields
@@ -276,23 +233,19 @@ func (e *Engine) cmdBFINFO(args []string) []byte {
 	if len(args) != 1 && len(args) != 2 {
 		return e.encode(wrongArguments("BF.INFO"), false)
 	}
-	switch e.filterKeyRead(args[0], e.sbStore) {
-	case filterMissing:
-		return e.encode(errFilterNotFound, false)
-	case filterOtherType:
-		return e.encode(errWrongType, false)
+	info, err := e.opBFInfo(args[0])
+	if err != nil {
+		return e.encode(err, false)
 	}
-	// Peek rather than Get: reporting on a key is not using it.
-	sb, _ := e.sbStore.Peek(args[0])
 	var expansion interface{}
-	if !sb.NonScaling() {
-		expansion = int64(sb.Expansion())
+	if !info.nonScaling {
+		expansion = int64(info.expansion)
 	}
 	entries := []infoEntry{
-		{"Capacity", int64(sb.Capacity())},
-		{"Size", int64(sb.MemUsage())},
-		{"Number of filters", int64(sb.Filters())},
-		{"Number of items inserted", int64(sb.Count())},
+		{"Capacity", int64(info.capacity)},
+		{"Size", int64(info.size)},
+		{"Number of filters", int64(info.filters)},
+		{"Number of items inserted", int64(info.items)},
 		{"Expansion rate", expansion},
 	}
 	if len(args) == 1 {
