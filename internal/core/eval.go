@@ -58,6 +58,9 @@ var commandTable = map[string]func(*Engine, []string) []byte{
 	"LPUSH": (*Engine).cmdLPUSH, "RPUSH": (*Engine).cmdRPUSH, "LPOP": (*Engine).cmdLPOP,
 	"RPOP": (*Engine).cmdRPOP, "LTRIM": (*Engine).cmdLTRIM, "LLEN": (*Engine).cmdLLEN,
 	"LINDEX": (*Engine).cmdLINDEX, "LSET": (*Engine).cmdLSET, "LRANGE": (*Engine).cmdLRANGE,
+	"LPUSHX": (*Engine).cmdLPUSHX, "RPUSHX": (*Engine).cmdRPUSHX, "LINSERT": (*Engine).cmdLINSERT,
+	"LREM": (*Engine).cmdLREM, "LPOS": (*Engine).cmdLPOS, "LMOVE": (*Engine).cmdLMOVE,
+	"RPOPLPUSH": (*Engine).cmdRPOPLPUSH, "LMOVEM": (*Engine).cmdLMOVEM, "LMPOP": (*Engine).cmdLMPOP,
 
 	// Sets
 	"SADD": (*Engine).cmdSADD, "SREM": (*Engine).cmdSREM, "SCARD": (*Engine).cmdSCARD,

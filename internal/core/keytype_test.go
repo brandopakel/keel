@@ -172,7 +172,7 @@ func TestTypeRuleIsIndexedWithTheCommand(t *testing.T) {
 	t.Parallel()
 	for name, entry := range commands {
 		space, checked := commandKeyspace[name]
-		if !checked || replacingWrites[name] || filterCommands[name] {
+		if !checked || replacingWrites[name] || filterCommands[name] || selfTypedCommands[name] {
 			space = ""
 		}
 		assert.Equal(t, space, entry.typed, name)
@@ -187,7 +187,8 @@ func TestTypeRuleIsIndexedWithTheCommand(t *testing.T) {
 	}
 	for name, want := range map[string]keyRule{
 		"GET": keyFirst, "HSET": keyFirst, "LCS": keyFirstTwo, "MSET": keyStride,
-		"PFCOUNT": keyEvery, "PFMERGE": keyEvery,
+		"PFCOUNT": keyEvery, "PFMERGE": keyEvery, "LMOVE": keyFirstTwo, "RPOPLPUSH": keyFirstTwo,
+		"LMOVEM": keyFirstTwo, "LMPOP": keyCounted,
 	} {
 		assert.Equal(t, want, commands[name].keys, name)
 	}
@@ -208,6 +209,12 @@ func TestTypeRuleIsIndexedWithTheCommand(t *testing.T) {
 		{"PFCOUNT", []string{"a", "b", "c"}, []string{"a", "b", "c"}},
 		{"PFMERGE", []string{"dest", "a", "b"}, []string{"dest", "a", "b"}},
 		{"GET", nil, nil},
+		{"LMOVE", []string{"src", "dst", "LEFT", "RIGHT"}, []string{"src", "dst"}},
+		{"LMPOP", []string{"2", "a", "b", "LEFT", "COUNT", "3"}, []string{"a", "b"}},
+		{"LMPOP", []string{"1", "a", "RIGHT"}, []string{"a"}},
+		{"LMPOP", []string{"3", "a", "LEFT"}, nil},
+		{"LMPOP", []string{"0", "a", "LEFT"}, nil},
+		{"LMPOP", []string{"x", "a", "LEFT"}, nil},
 	} {
 		cmd := &Command{Cmd: c.name, Args: c.args}
 		assert.Equal(t, c.want, keysBy(cmd, commands[c.name].keys), "%s %v", c.name, c.args)
@@ -216,6 +223,7 @@ func TestTypeRuleIsIndexedWithTheCommand(t *testing.T) {
 	for name, want := range map[string]string{
 		"GET": "string", "HSET": "hash", "ZADD": "zset", "PFADD": "hll",
 		"SET": "", "MSET": "", "BF.ADD": "", "CF.EXISTS": "", "DEL": "", "TYPE": "",
+		"LPOS": "list", "LMOVE": "", "LMPOP": "",
 	} {
 		assert.Equal(t, want, commands[name].typed, name)
 	}

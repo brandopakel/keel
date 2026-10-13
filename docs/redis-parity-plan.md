@@ -36,7 +36,7 @@ TimeSeries come in CI.
 | Area | Keel has | Missing |
 | --- | --- | --- |
 | string | 12/26 (22 since step 4.3c of the embedding plan) | ~~`APPEND`, `GETRANGE`, `SETRANGE`, `STRLEN`, `GETDEL`, `GETEX`, `GETSET`, `SUBSTR`, `INCRBYFLOAT`, `MSETNX`~~ (step 4.3c), and 8.x's `DELEX`, `DIGEST`, `INCREX`, `MSETEX` |
-| list | 9/24 | `LPOS`, `LINSERT`, `LREM`, `LMOVE`, `LMOVEM`, `RPOPLPUSH`, `LPUSHX`, `RPUSHX`, `LMPOP`, and the blocking forms |
+| list | 9/24 (18 since the lists' missing commands in phase 4 of the embedding plan) | ~~`LPOS`, `LINSERT`, `LREM`, `LMOVE`, `LMOVEM`, `RPOPLPUSH`, `LPUSHX`, `RPUSHX`, `LMPOP`~~ (phase 4, lists), and the blocking forms |
 | hash | 11/29 | `HSTRLEN`, `HRANDFIELD`, `HINCRBYFLOAT`, `HMSET`, `HSCAN`, `HGETDEL`, `HGETEX`, `HSETEX`, `HIMPORT`, field expiry (`HEXPIRE` family, 8 commands) |
 | set | 8/19 | `SINTER`, `SUNION`, `SDIFF` with `STORE` and `CARD` forms, `SMOVE`, `SSCAN` |
 | sorted-set | 12/35 | `ZUNION`, `ZINTER`, `ZDIFF` with `STORE` forms, the lex ranges, `ZREMRANGEBY*`, `ZREVRANGE`, `ZREVRANK`, `ZMSCORE`, `ZRANDMEMBER`, `ZRANGESTORE`, `ZMPOP`, `ZSCAN`, and the blocking forms |
