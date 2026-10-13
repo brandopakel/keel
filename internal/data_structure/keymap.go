@@ -23,6 +23,12 @@ const ScanMaxWork = 1024
 const ScanByteTarget = 64 << 10
 const scanTimeTarget = time.Millisecond
 
+// scanClockEvery is how much work a scan does between clock reads. The time
+// target only bounds a scan that has done this much: a short scan is bounded by
+// its work alone, as Redis's SCAN is (db.c, scanGenericCommand, count*10 steps),
+// so a stall before then cannot cut it short.
+const scanClockEvery = 64
+
 type keySlot[V any] struct {
 	key   string
 	value V
@@ -205,9 +211,10 @@ func (m *keyMap[V]) keys() []string {
 }
 
 // scan charges one unit per live slot examined or empty page skipped, including
-// filtered-out keys. It never exceeds the requested work or ScanMaxWork. Byte
-// and time targets are checked between names; one oversized name is processed
-// alone to make progress. This is cooperative scheduling, not a real-time SLA.
+// filtered-out keys. It never exceeds the requested work or ScanMaxWork. The
+// byte target is checked between names, and the time target every
+// scanClockEvery units of work; one oversized name is processed alone to make
+// progress. This is cooperative scheduling, not a real-time SLA.
 func (m *keyMap[V]) scan(cursor uint64, budget int, keep func(string) bool, dst []string) ([]string, int, uint64) {
 	return m.scanUntil(cursor, m.end, budget, keep, dst)
 }
@@ -217,8 +224,8 @@ func (m *keyMap[V]) scanUntil(cursor, end uint64, budget int, keep func(string) 
 		return dst, 0, 0
 	}
 	budget = min(max(budget, 1), ScanMaxWork)
-	deadline := time.Now().Add(scanTimeTarget)
-	examined, bytes := 0, 0
+	var deadline time.Time
+	examined, bytes, nextClock := 0, 0, scanClockEvery
 	for cursor < end && examined < budget {
 		p := m.pages[cursor/keyPageSlots].page
 		if p == nil || p.used>>(cursor%keyPageSlots) == 0 {
@@ -240,8 +247,16 @@ func (m *keyMap[V]) scanUntil(cursor, end uint64, budget int, keep func(string) 
 				dst = append(dst, key)
 			}
 		}
-		if bytes >= ScanByteTarget || time.Now().After(deadline) {
+		if bytes >= ScanByteTarget {
 			break
+		}
+		if examined >= nextClock {
+			nextClock = examined + scanClockEvery
+			if now := time.Now(); deadline.IsZero() {
+				deadline = now.Add(scanTimeTarget)
+			} else if now.After(deadline) {
+				break
+			}
 		}
 	}
 	if cursor >= end {
