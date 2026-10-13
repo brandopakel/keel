@@ -76,8 +76,10 @@ type aofState struct {
 	// drain bounded fragments without syncing or advancing a rewrite mid-record.
 	buf []byte
 	// staged is what the command currently executing wants recorded in its
-	// place, for the commands that must not be replayed as they arrived.
-	staged       [][]string
+	// place, for the commands that must not be replayed as they arrived:
+	// each record's parts, flat, after a header that counts them - see
+	// aof_staging.go.
+	staged       []stagedPart
 	commandStart int
 	// A scope preserves the unpublished replication prefix across bounded
 	// buffer drains. Opaque commands publish their final image instead.
@@ -300,22 +302,13 @@ func aofLog(format string, args ...interface{}) {
 	log.Printf("appendonly: "+format, args...)
 }
 
-// aofRecord stages one command to be written for the command being executed.
-func (e *Engine) aofRecord(parts ...string) {
-	if e.aof.file == nil || e.aof.replaying {
-		return
-	}
-	e.aof.staged = append(e.aof.staged, parts)
-}
-
 // aofBegin resets the staging areas before a command runs.
 func (e *Engine) aofBegin(name string) {
 	e.aof.commandActive, e.aof.commandChanged = true, false
 	e.aof.commandOpaque = isOpaqueReplicationCommand(name)
 	e.aof.commandStart = len(e.aof.buf)
 	e.aof.skip = false
-	clear(e.aof.staged)
-	e.aof.staged = e.aof.staged[:0]
+	e.clearStaged()
 }
 
 // aofCommit records what the command that just ran actually did.
@@ -347,9 +340,7 @@ func (e *Engine) aofCommit(cmd *Command, reply []byte) {
 	case len(e.aof.staged) > 0:
 		// Staged because the command as it arrived would not replay to the
 		// same state, so the replacement is what goes in the log.
-		for _, parts := range e.aof.staged {
-			e.appendAOFCommand(parts[0], parts[1:]...)
-		}
+		e.appendStaged()
 	case !writeCommands[cmd.Cmd]:
 		// A read. Nothing of the command itself is recorded, but it may still
 		// have reaped an expired key, already recorded by the removal hook.
@@ -359,8 +350,7 @@ func (e *Engine) aofCommit(cmd *Command, reply []byte) {
 		e.appendAOFCommand(persistedName(cmd.Cmd), cmd.Args...)
 	}
 
-	clear(e.aof.staged)
-	e.aof.staged = e.aof.staged[:0]
+	e.clearStaged()
 }
 
 // aofEnd publishes the complete command after its eviction decisions. The

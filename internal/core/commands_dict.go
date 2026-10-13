@@ -187,7 +187,7 @@ func (e *Engine) setCommand(name string, args []string) []byte {
 	e.aofRecord("SET", key, value)
 	if expiry {
 		e.dictStore.SetExpiryAt(key, uint64(at))
-		e.aofRecord("PEXPIREAT", key, strconv.FormatInt(at, 10))
+		e.aofRecordInt("PEXPIREAT", key, at)
 	}
 	return reply
 }
@@ -208,7 +208,17 @@ func (e *Engine) dropOtherType(owner data_structure.Keyspace, key string) {
 // ends, reading the clock once, and reports false when that instant does not
 // fit in the signed 64 bits it is kept and compared in.
 func expiryInstant(ttlMs int64) (int64, bool) {
-	now := time.Now().UnixMilli()
+	return expiryInstantFrom(time.Now().UnixMilli(), ttlMs)
+}
+
+// unixMillis is the wall clock in Unix milliseconds, the engine's
+// commandClock.
+func unixMillis() int64 { return time.Now().UnixMilli() }
+
+// expiryInstantFrom is expiryInstant from a clock reading the caller already
+// took, so that a command can compute an expiry and judge whether it has
+// passed against one instant, as Redis's commandTimeSnapshot() does.
+func expiryInstantFrom(now, ttlMs int64) (int64, bool) {
 	if ttlMs > math.MaxInt64-now {
 		return 0, false
 	}
@@ -348,9 +358,15 @@ func (e *Engine) expireCommand(name string, args []string, scale int64, absolute
 		return e.encode(invalidExpireTime(name), false)
 	}
 	at := n * scale
+	// One instant for the whole command, as Redis's expireGenericCommand uses
+	// commandTimeSnapshot() both as the base of a relative time and in
+	// checkAlreadyExpired (expire.c 652-661, 726-754). Reading the clock twice
+	// let a slow moment between the reads delete a key PEXPIRE k 1 had just
+	// given a future expiry, which Redis never does.
+	now := e.commandClock()
 	if !absolute && at > 0 {
 		var ok bool
-		at, ok = expiryInstant(at)
+		at, ok = expiryInstantFrom(now, at)
 		if !ok {
 			return e.encode(invalidExpireTime(name), false)
 		}
@@ -365,13 +381,13 @@ func (e *Engine) expireCommand(name string, args []string, scale int64, absolute
 		e.aof.skip = true
 		return constant.RespZero
 	}
-	if at <= time.Now().UnixMilli() && !e.aof.replaying && !e.replicaApplying {
+	if at <= now && !e.aof.replaying && !e.replicaApplying {
 		owner.Delete(args[0])
 		e.aofRecord("DEL", args[0])
 		return constant.RespOne
 	}
 	owner.SetExpiryAt(args[0], uint64(at))
-	e.aofRecord("PEXPIREAT", args[0], strconv.FormatInt(at, 10))
+	e.aofRecordInt("PEXPIREAT", args[0], at)
 	return constant.RespOne
 }
 

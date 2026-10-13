@@ -281,6 +281,14 @@ jobs:
           common = ['python3','bench/run-general.py','--candidate','/tmp/keel-candidate','--memtier','/tmp/memtier_benchmark-2.5.1/memtier_benchmark','--server-cpus',server,'--client-cpus',clients,'--load-threads','2']
           policy = os.environ['LOG_POLICY']
           compare = common+['--baseline','/tmp/keel-baseline','--reps',os.environ['REPETITIONS'],'--seconds',os.environ['MEASURE_SECONDS'],'--policy',policy]
+          # With the log on, shutdown ends with an fsync of everything the run
+          # wrote: about 5 GB after cache-write-1m, which a hosted disk can take
+          # longer than Keel's 5 s default grace to sync, failing the leg on
+          # either arm (runs 38333321384 and 38337597958). This job measures
+          # throughput, not shutdown, so both arms get the same 30 s grace the
+          # transcript job uses.
+          if policy != 'off':
+              compare += ['--shutdown-seconds','30']
           suites = ['standard'] + (['memory'] if os.environ['INCLUDE_MEMORY'] == 'true' and policy == 'off' else [])
           for suite in suites:
               selected = ['--cases',os.environ['SELECTED_CASES']] if suite == 'standard' and os.environ['SELECTED_CASES'] else []

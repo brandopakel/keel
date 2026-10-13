@@ -132,6 +132,10 @@ type Engine struct {
 	// test has replaced them.
 	aofWrite func(*os.File, []byte) (int, error)
 	aofSync  func(*os.File) error
+	// commandClock is the clock, in Unix milliseconds, that EXPIRE and its
+	// family read once per command: unixMillis, unless a test has replaced it
+	// to put time between a command's steps.
+	commandClock func() int64
 	// replicationTransaction is the protocol 2 framing of the transaction
 	// running on the engine, which EXEC opens and closes with the log's frame
 	// of the same block; see transaction.go.
@@ -308,7 +312,7 @@ func engineIn(space *data_structure.Space) *Engine {
 	now := time.Now()
 	e := &Engine{
 		space: space, replyCeiling: MaxReplyBytes,
-		aofWrite: writeLog, aofSync: syncLog, aofTruncate: truncateLog,
+		aofWrite: writeLog, aofSync: syncLog, aofTruncate: truncateLog, commandClock: unixMillis,
 		rewriteFileWrite: writeLog, rewriteFileSync: syncLog, rewriteOpenLog: openRewrittenLog,
 		rewriteRename: os.Rename, rewriteSyncDir: syncDir, keyCountForRewrite: space.TotalKeys,
 		checkpointSync: syncFile, checkpointRename: os.Rename, checkpointSyncDir: syncDir,
