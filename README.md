@@ -6,8 +6,9 @@ dashboard can show them over months. `scripts/collect-bench-history.py` on
 `develop` writes these files, and `.github/workflows/bench-history.yml` runs it
 after each benchmark, census and telemetry run, and once a day. Don't edit the
 files by hand: a run is recorded once, keyed by its artifact ID, and the
-collector rewrites each file sorted by time. `census/latest.csv` is the one
-file replaced rather than appended to.
+collector rewrites each file sorted by time. The census snapshots
+(`census/latest.csv`, `arguments.csv`, `replies.csv`, `config.csv` and
+`redis-tests-failing.csv`) are the files replaced rather than appended to.
 
 Grafana reads the files through its Infinity data source, from
 `https://raw.githubusercontent.com/brandopakel/keel/bench-history/<file>`.
@@ -158,6 +159,41 @@ configuration table (`src/config.c`) with Keel. For each directive it checks
   - `test_files`: how many files of Redis's test suite set it.
 
   It is replaced only by a newer census of `develop`.
+
+The Redis tests workflow (`.github/workflows/redis-tests.yml`, driven by
+`scripts/run-redis-tests.py`) runs Redis 8.10.1's own test suite in external
+mode, against Keel and against Redis built from the same source, one unit (a
+`tests/unit/...tcl` file) at a time. Redis is the control. A run is complete
+only when every group of both servers reported and finished.
+
+- `redis-tests.csv`: one line per run:
+  - `complete` (`yes` or `no`) and `incomplete_groups`: the groups that did
+    not report or did not finish, or `not recorded` for a report from before
+    the field existed. A run that is not complete adds this line and nothing
+    else.
+  - `units`: the units run.
+  - `redis_passed` and `redis_failed`: Redis's tests.
+  - `keel_passed` and `keel_failed`; `keel_ignored`, tests the harness skips
+    (`[ignore]` or `[skip]`); and `keel_not_run`, tests a unit declares that
+    were never reached.
+  - `keel_units_crashed`, `keel_units_timed_out`, `keel_units_exception`
+    and `keel_units_unconfigurable`: units that ended early, by outcome.
+  - `parity`: `keel_passed` over `redis_passed`.
+- `redis-tests-units.csv`: one line per unit of each complete run, with both
+  servers' counts, Keel's `keel_seconds`, and each server's outcome
+  (`redis_outcome`, `keel_outcome`):
+  - `ok`: the unit ran to its end.
+  - `unconfigurable`: a `CONFIG SET` outside any test was refused, in the
+    setup of the unit or of one of its blocks, and the tests after it never
+    ran.
+  - `exception`: another error outside any test did that.
+  - `timeout`: the unit's time limit, or the harness's own, stopped it.
+  - `incomplete`: the harness stopped without finishing.
+  - `crash`: the server was gone.
+- `redis-tests-failing.csv`: every test Keel failed in the newest complete
+  run of `develop`, with `unit`, `test` and `detail` (the error or assertion,
+  cut to 200 characters). It is replaced only by a newer complete run of
+  `develop`, and a complete run with no failures empties it.
 
 ## telemetry/
 
