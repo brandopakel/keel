@@ -33,7 +33,7 @@ import (
 // the session switches the connection as it would a client's. The engine
 // keeps no log here: what the data commands write is the command corpus's.
 const (
-	connectionGoldenRevision = "1f59ae4"
+	connectionGoldenRevision = "bb4ce07"
 	connectionGoldenDir      = "testdata/connection-" + connectionGoldenRevision
 )
 
@@ -105,7 +105,7 @@ func TestConnectionGoldenCapture(t *testing.T) {
 	manifest := connectionGoldenManifest{
 		SourceRevision: connectionGoldenRevision,
 		Captured:       time.Now().UTC().Format("2006-01-02"),
-		Note:           "The connection commands' RESP2 and RESP3 replies on develop, before phase 4 of the embedding plan; see connection_golden_test.go.",
+		Note:           "The connection commands' RESP2 and RESP3 replies at source_revision; see connection_golden_test.go.",
 		Files:          map[string]string{"connection.txt": hex.EncodeToString(sum[:])},
 		Cases:          len(cases), Commands: commands,
 	}
