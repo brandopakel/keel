@@ -3,9 +3,9 @@ package resp
 import "github.com/brandopakel/keel/internal/constant"
 
 // Reply is the sink a command writes its answer into: a buffer framed in the
-// connection's protocol, which grows only once its admission has allowed the
-// growth, and which the transport takes by reference when the command is
-// done.
+// connection's protocol, which grows only once it has been admitted - within
+// its ceiling, and reserved from the transport's budget - and which the
+// transport takes by reference when the command is done.
 //
 // It is the command language's side of phase 4 (docs/embedding-plan.md): a
 // typed operation answers with Go values, and the command language writes
@@ -14,11 +14,15 @@ import "github.com/brandopakel/keel/internal/constant"
 // hold here, and a handler that writes through a Reply keeps them without
 // trying:
 //
-//   - Reserve before allocate. A reply whose size is known before it is built
-//   - a bulk string, a sized array - is sized exactly, admitted through
-//     Admission, and allocated once, as encodeBoundedString and the collection
-//     replies allocate today. An admission that refuses replaces the reply
-//     with its refusal, and nothing more is written.
+//   - Reserve before allocate. A reply whose size is known before it is
+//     built, a bulk string or a sized array, is sized exactly, admitted, and
+//     allocated once, as encodeBoundedString and the collection replies
+//     allocate today. Admission is asked only past what was admitted
+//     already, and refuses with ReplyTooLarge past the ceiling and with
+//     AllocationPressure when the budget cannot hold the reply; a refusal
+//     replaces the reply, and nothing more is written. Admission is concrete,
+//     the ceiling and a budget pointer checked by static calls, because an
+//     interface call on every reply measured as 3% of GET.
 //   - Zero copy, and a buffer per command. Bytes returns the buffer itself,
 //     which the transport keeps as the reply of a batch of one until it is
 //     written, or appends to its arena, as it does with a handler's returned
@@ -30,10 +34,12 @@ import "github.com/brandopakel/keel/internal/constant"
 //     that answers one of them allocates nothing.
 type Reply struct {
 	Framing
-	// Admission is asked before the buffer is grown to size bytes, nil when
-	// nothing bounds the reply. It answers the refusal to send instead, or
-	// nil to allow the growth.
-	Admission Admission
+	// Ceiling is the most the reply may come to: the output limit, or what
+	// EXEC's replies so far have left of it. Zero is MaxReplyBytes.
+	Ceiling int
+	// Budget is the transport's allocation budget, which the reply's memory
+	// is reserved from; nil reserves nothing.
+	Budget *Budget
 	// buf is the reply being built, nil until something that is not a
 	// canned value alone is written.
 	buf []byte
@@ -44,13 +50,6 @@ type Reply struct {
 	// that a reply reserved once and then filled is asked for once.
 	admitted int
 	refused  bool
-}
-
-// Admission bounds a reply before it is built.
-type Admission interface {
-	// AdmitReply is asked for a reply of size encoded bytes: nil allows it,
-	// and a refusal is the reply to send in its place.
-	AdmitReply(size int) []byte
 }
 
 // Reset readies r for a command answered in f's protocol. The buffer of the
@@ -93,8 +92,8 @@ func (r *Reply) admit(size int) bool {
 	if r.refused {
 		return false
 	}
-	if size > r.admitted && r.Admission != nil {
-		if refusal := r.Admission.AdmitReply(size); refusal != nil {
+	if size > r.admitted {
+		if refusal := r.admission(size); refusal != nil {
 			r.refuse(refusal)
 			return false
 		}
@@ -107,6 +106,23 @@ func (r *Reply) admit(size int) bool {
 		r.buf = grown
 	}
 	return true
+}
+
+// admission is nil when a reply of size encoded bytes may be built, and
+// otherwise the refusal to send in its place: past the ceiling, or past what
+// the budget can hold.
+func (r *Reply) admission(size int) []byte {
+	ceiling := r.Ceiling
+	if ceiling == 0 {
+		ceiling = MaxReplyBytes
+	}
+	if size > ceiling {
+		return ReplyTooLarge
+	}
+	if r.Budget != nil && !r.Budget.ReserveReply(size) {
+		return AllocationPressure
+	}
+	return nil
 }
 
 // refuse replaces the reply with refusal, by reference, and ends it.
@@ -167,6 +183,21 @@ func (r *Reply) Int(n int64) *Reply {
 
 // Bulk writes a bulk string, sized and admitted before it is copied.
 func (r *Reply) Bulk(s string) *Reply {
+	if r.buf == nil && r.canned == nil && !r.refused {
+		// The reply is this one value, as GET's is: sized, admitted and
+		// allocated once, with nothing before it to keep.
+		size, fits := AddBulkSize(0, len(s))
+		if !fits {
+			return r.tooLarge()
+		}
+		if refusal := r.admission(size); refusal != nil {
+			r.refuse(refusal)
+			return r
+		}
+		r.admitted = size
+		r.buf = AppendBulkString(make([]byte, 0, size), s)
+		return r
+	}
 	size, fits := AddBulkSize(r.Len(), len(s))
 	if !fits {
 		return r.tooLarge()

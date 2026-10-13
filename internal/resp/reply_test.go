@@ -11,22 +11,6 @@ import (
 	"github.com/brandopakel/keel/internal/constant"
 )
 
-// admission refuses any reply over limit bytes with refusal, and counts what
-// it was asked.
-type admission struct {
-	limit   int
-	refusal []byte
-	asked   []int
-}
-
-func (a *admission) AdmitReply(size int) []byte {
-	a.asked = append(a.asked, size)
-	if size > a.limit {
-		return a.refusal
-	}
-	return nil
-}
-
 func TestReplyWritesEachShapeInBothProtocols(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -122,43 +106,54 @@ func TestReplyGivesEachCommandABufferOfItsOwn(t *testing.T) {
 
 func TestReplyAdmitsBeforeItAllocates(t *testing.T) {
 	// Not parallel: AllocsPerRun refuses to run beside other tests.
-	a := &admission{limit: 100, refusal: []byte("-ERR no room\r\n")}
-	r := &Reply{Admission: a}
+	budget := &Budget{Limit: 1 << 20}
+	r := &Reply{Budget: budget}
 	value := strings.Repeat("v", 50)
 	allocs := testing.AllocsPerRun(10, func() {
+		budget.Begin(0)
 		r.Reset(Framing{})
+		r.Budget = budget
 		r.Bulk(value)
 	})
 	require.Equal(t, 1.0, allocs, "the buffer, once")
-	require.Equal(t, len(value)+7, a.asked[len(a.asked)-1], "the exact encoded size, before the copy")
 	require.Equal(t, len(value)+7, cap(r.Bytes()), "allocated to the admitted size")
+	require.Equal(t, 3*4096, budget.ReplyReserved, "reserved from the budget before the copy: three pages")
 	require.False(t, r.Refused())
 
-	a.asked = nil
+	// Past the ceiling: the output limit's refusal replaces what was written.
 	r.Reset(Framing{})
+	r.Ceiling = 100
 	r.Int(2).Bulk(strings.Repeat("v", 200))
 	require.True(t, r.Refused())
-	require.Equal(t, "-ERR no room\r\n", string(r.Bytes()), "the refusal replaces what was written")
-	require.Equal(t, first(a.refusal), first(r.Bytes()), "by reference")
-	require.Equal(t, []int{4 + 200 + 8}, a.asked, "asked for the whole reply so far")
+	require.Equal(t, string(ReplyTooLarge), string(r.Bytes()), "the refusal replaces what was written")
+	require.Equal(t, first(ReplyTooLarge), first(r.Bytes()), "by reference")
 	r.Status("OK").Int(2).Null().Array(1).Raw([]byte("x")).Bulk("y").Double("1")
-	require.Equal(t, "-ERR no room\r\n", string(r.Bytes()), "nothing after a refusal is written")
+	require.Equal(t, string(ReplyTooLarge), string(r.Bytes()), "nothing after a refusal is written")
 	require.False(t, r.Reserve(1))
 
-	a.asked = nil
+	// Past what the budget holds: the budget's refusal.
+	small := &Budget{Limit: 4096}
+	small.Begin(0)
 	r.Reset(Framing{})
-	require.False(t, r.Refused())
-	require.Empty(t, r.Bytes())
+	r.Budget = small
+	r.Bulk("x")
+	require.True(t, r.Refused())
+	require.Equal(t, string(AllocationPressure), string(r.Bytes()))
+	require.Equal(t, uint64(1), small.Refusals)
+
+	// A reply reserved once is charged once, however it is filled; growing
+	// past the reservation asks again, for the whole.
+	budget.Begin(0)
+	r.Reset(Framing{})
+	r.Budget, r.Ceiling = budget, 0
 	require.True(t, r.Reserve(64))
 	require.GreaterOrEqual(t, cap(r.Bytes()), 64)
 	r.Array(2).Bulk("a").Bulk("b")
 	require.Equal(t, "*2\r\n$1\r\na\r\n$1\r\nb\r\n", string(r.Bytes()))
-	require.Equal(t, []int{64}, a.asked, "a reply reserved once is admitted once, however it is filled")
-	r.Bulk(strings.Repeat("v", 40))
-	require.Equal(t, []int{64, 18 + 47}, a.asked, "growing past the reservation asks again, for the whole")
-	require.False(t, r.Reserve(101))
-	require.True(t, r.Refused())
-	require.Equal(t, "-ERR no room\r\n", string(r.Bytes()))
+	require.Equal(t, 3*4096, budget.ReplyReserved, "once")
+	r.Bulk(strings.Repeat("v", 5000))
+	require.False(t, r.Refused())
+	require.Equal(t, 3*4096+3*8192, budget.ReplyReserved, "again, for the whole")
 }
 
 func TestReplyRefusesWhatPassesTheOutputLimit(t *testing.T) {

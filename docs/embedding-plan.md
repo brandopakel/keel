@@ -2102,9 +2102,11 @@ bytes into a `Command` (`ParseCmd`, `ParseCmdReserved`, `DecodeOne`,
 encoders that frame a reply (`Encode`, `EncodeAs`, the `Append` helpers, and
 `Framing`, which chooses RESP2 or RESP3 with the reply types `Map`, `Double`,
 `Bool`, `Verbatim` and `Field`), the reply sizes the admission checks use
-(`MaxReplyBytes`, `AddBulkSize`, `DecimalDigits`), and `Reply`, the sink. It
-imports only `internal/constant`, so the server, the engine and, in phase 5,
-the public package can speak the protocol without each other.
+(`MaxReplyBytes`, `AddBulkSize`, `DecimalDigits`), the transport's allocation
+budget that replies are reserved from (`Budget`, which the engine still
+names `CommandAllocationBudget`, an alias), and `Reply`, the sink. It imports
+only `internal/constant`, so the server, the engine and, in phase 5, the
+public package can speak the protocol without each other.
 
 - **The move changed no handler and no hot-path file.** The engine keeps
   every name it used - `Command` (an alias), `parsedCommand`, `Encode`,
@@ -2135,10 +2137,13 @@ the public package can speak the protocol without each other.
 - **`Reply`** is the sink the command language writes into from step 4.3:
   a buffer framed in the connection's protocol, with the shapes a reply has
   (`Status`, `Error`, `Int`, `Bulk`, `Null`, `NullArray`, `Bool`, `Double`,
-  `Verbatim`, `Array`, `Set`, `Map`, `Pair`, `Raw`), an `Admission` it asks
-  before it grows to a size, and `Reserve` for a reply a command has sized
-  before building it. A refusal replaces the reply and ends it. Its
-  contract keeps three things the server's reply path has today:
+  `Verbatim`, `Array`, `Set`, `Map`, `Pair`, `Raw`), its admission - a
+  `Ceiling` (the output limit, or what EXEC has left of it) and the
+  transport's `Budget` - checked before it grows to a size, and `Reserve`
+  for a reply a command has sized before building it. A refusal replaces the
+  reply and ends it: `ReplyTooLarge` past the ceiling, `AllocationPressure`
+  past what the budget holds, the bytes the engine's `admitReply` answers.
+  Its contract keeps three things the server's reply path has today:
   - a bulk string is sized exactly, admitted, and allocated once, as
     `encodeBoundedString` allocates one; admission is asked only when the
     reply grows past what it has admitted, so a reply `Reserve` sized and a
@@ -2152,9 +2157,13 @@ the public package can speak the protocol without each other.
     they are the whole reply, so a command that answers one of them
     allocates nothing, as it allocates nothing now.
 
-  The engine implements `Admission` with `admitReply` when the first family
-  writes through it; until then nothing on a command's path uses `Reply`,
-  which is why this step's measurement is the move's alone.
+  Admission is concrete, not an interface the engine implements, because
+  the interface call it took first measured as 3% of GET, locally, in a
+  paired comparison of step 4.3's conversion with and without it: the
+  ceiling and a budget pointer are fields, checked by static calls, and
+  the engine fills them in for each command. Until step 4.3 nothing on a
+  command's path uses `Reply`, which is why this step's measurement is the
+  move's alone.
 
 ## Risks, in order
 
