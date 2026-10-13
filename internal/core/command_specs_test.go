@@ -159,11 +159,18 @@ var keyRuleExceptions = map[string]string{
 }
 
 // keyRuleOfSpecs is the key rule keys amount to: the first argument, the
-// first two, every argument, or every step-th from the first; false for key
-// specs no rule describes. Keys found from the first argument by range are
+// first two, every argument, every step-th from the first, or a count and
+// that many key value pairs; false for key specs no rule describes. Keys found from the first argument by range are
 // read directly, and PFMERGE's two specs - the destination, then every
 // source - together name every argument.
 func keyRuleOfSpecs(keys []keySpec) (rule keyRule, stride int, ok bool) {
+	// A count in the first argument, then that many key value pairs:
+	// MSETEX's numkeys.
+	if len(keys) == 1 && keys[0].begin.kind == "index" && keys[0].begin.pos == 1 &&
+		keys[0].find.kind == "keynum" && keys[0].find.keynumIdx == 0 && keys[0].find.firstKey == 1 &&
+		keys[0].find.step == 2 {
+		return keyCountedPairs, 0, true
+	}
 	for _, k := range keys {
 		if k.begin.kind != "index" || k.find.kind != "range" {
 			return 0, 0, false
