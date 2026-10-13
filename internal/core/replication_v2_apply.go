@@ -145,11 +145,10 @@ func (e *Engine) applyReplicationV2(frame ReplicationFrame) (err error) {
 			units = append(units, replicationUnit{commands: e.replicaV2.block, transaction: true})
 			e.replicaV2.block, e.replicaV2.blockOpen, e.replicaV2.blockBytes = nil, false, 0
 			continue
-		case "FLUSHDB", "DEL", "SET", "MSET", "INCR", "INCRBY", "DECR", "DECRBY", "PEXPIREAT", "PERSIST",
-			"HSET", "HSETNX", "HDEL", "HINCRBY", "LPUSH", "RPUSH", "LPOP", "RPOP", "LTRIM", "LSET",
-			"SADD", "SREM", "ZADD", "ZREM", "GEOADD", "KEEL.RESTORE":
 		default:
-			return fmt.Errorf("invalid replication operation %s", cmd.Cmd)
+			if !replicationOperation(cmd.Cmd) {
+				return fmt.Errorf("invalid replication operation %s", cmd.Cmd)
+			}
 		}
 		if e.replicaV2.blockOpen {
 			e.replicaV2.block = append(e.replicaV2.block, cmd)
@@ -224,4 +223,23 @@ func (u replicationUnit) apply(e *Engine) error {
 	err := e.EvalAndResponse(u.commands[0], &reply)
 	check(0, reply, err)
 	return failed
+}
+
+// replicationOperation reports whether a replica applies a record named
+// name. The replication stream of protocol 2 is the primary's log records,
+// so every record name a write stages must be here, or a replica stops at
+// the first one with "invalid replication operation"; the records of the
+// filters and sketches are sent as key images instead (see
+// isOpaqueReplicationCommand), and MULTI and EXEC frame a transaction.
+// TestEveryRecordNameReplicates holds every record name the command corpus
+// and the persistence and replication goldens hold to this list, so a change
+// that adds one fails until it is here.
+func replicationOperation(name string) bool {
+	switch name {
+	case "FLUSHDB", "DEL", "SET", "MSET", "INCR", "INCRBY", "DECR", "DECRBY", "PEXPIREAT", "PERSIST",
+		"HSET", "HSETNX", "HDEL", "HINCRBY", "LPUSH", "RPUSH", "LPOP", "RPOP", "LTRIM", "LSET",
+		"SADD", "SREM", "ZADD", "ZREM", "GEOADD", "KEEL.RESTORE":
+		return true
+	}
+	return false
 }
