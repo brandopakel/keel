@@ -80,7 +80,9 @@ CASES = [[c] for c in [
     ['HSET', 'hash', 'g', '2'], ['HSETNX', 'hash', 'f', 'x'], ['HGET', 'hash', 'f'], ['HGET', 'hash', 'nofield'],
     ['HGET', 'missing', 'f'], ['HGET', 'str', 'f'], ['HMGET', 'hash', 'f', 'g'], ['HDEL', 'hash', 'f'],
     ['HEXISTS', 'hash', 'f'], ['HLEN', 'hash'], ['HKEYS', 'hash'], ['HVALS', 'hash'], ['HGETALL', 'hash'],
-    ['HGETALL', 'missing'], ['HINCRBY', 'hash', 'n', '1'],
+    ['HGETALL', 'missing'], ['HINCRBY', 'hash', 'n', '1'], ['HSTRLEN', 'hash', 'f'], ['HSTRLEN', 'missing', 'f'],
+    ['HSTRLEN', 'str', 'f'], ['HMSET', 'hash', 'g', '2'], ['HINCRBYFLOAT', 'hash', 'n', '1.5'], ['HINCRBYFLOAT', 'str', 'f', '1'],
+    ['HGETDEL', 'hash', 'FIELDS', '1', 'f'], ['HGETDEL', 'missing', 'FIELDS', '1', 'f'], ['HGETDEL', 'str', 'FIELDS', '1', 'f'],
     # Lists.
     ['LPUSH', 'list', 'x'], ['RPUSH', 'list', 'x'], ['LPOP', 'list'], ['RPOP', 'missing'], ['LTRIM', 'list', '0', '1'],
     ['LLEN', 'list'], ['LINDEX', 'list', '0'], ['LSET', 'list', '0', 'x'], ['LRANGE', 'list', '0', '-1'],
