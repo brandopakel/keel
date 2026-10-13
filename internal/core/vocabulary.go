@@ -781,6 +781,8 @@ func getKeysProc(name string) func(argv []string) []foundKey {
 		return pfmergeGetKeys
 	case "lmpopGetKeys":
 		return lmpopGetKeys
+	case "delexGetKeys":
+		return delexGetKeys
 	}
 	return nil
 }
@@ -850,6 +852,19 @@ func setGetKeys(argv []string) []foundKey {
 		}
 	}
 	return []foundKey{{pos: 1, flags: append([]string{actual}, logical...)}}
+}
+
+// delexGetKeys: DELEX's key is removed, or read and removed with a
+// condition on its value.
+func delexGetKeys(argv []string) []foundKey {
+	actual := "RM"
+	for _, arg := range argv[2:] {
+		if strings.EqualFold(arg, "ifeq") || strings.EqualFold(arg, "ifne") ||
+			strings.EqualFold(arg, "ifdeq") || strings.EqualFold(arg, "ifdne") {
+			actual = "RW"
+		}
+	}
+	return []foundKey{{pos: 1, flags: []string{actual, "DELETE"}}}
 }
 
 // pfmergeGetKeys: the destination is read and inserted into, the sources

@@ -237,15 +237,21 @@ var keyRuleExceptions = map[string]string{
 
 // keyRuleOfSpecs is the key rule keys amount to: the first argument, the
 // first two (one spec for both, as LCS has, or one each, as a move has),
-// every argument, every step-th from the first, or as many as the first
-// counts; false for key specs no rule describes. Keys found from the first
-// argument by range are read directly, and PFMERGE's two specs - the
-// destination, then every source - together name every argument.
+// every argument, every step-th from the first, as many as the first counts,
+// or a count and that many key value pairs; false for key specs no rule
+// describes. Keys found from the first argument by range are read directly,
+// and PFMERGE's two specs - the destination, then every source - together
+// name every argument.
 func keyRuleOfSpecs(keys []keySpec) (rule keyRule, stride int, ok bool) {
-	// LMPOP's keys are as many as its first argument counts, after it.
+	// A count in the first argument, then that many keys (LMPOP's numkeys)
+	// or that many key value pairs (MSETEX's).
 	if len(keys) == 1 && keys[0].begin.kind == "index" && keys[0].begin.pos == 1 && keys[0].find.kind == "keynum" {
-		if f := keys[0].find; f.keynumIdx == 0 && f.firstKey == 1 && f.step == 1 {
+		f := keys[0].find
+		switch {
+		case f.keynumIdx == 0 && f.firstKey == 1 && f.step == 1:
 			return keyCounted, 0, true
+		case f.keynumIdx == 0 && f.firstKey == 1 && f.step == 2:
+			return keyCountedPairs, 0, true
 		}
 		return 0, 0, false
 	}
