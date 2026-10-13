@@ -2003,7 +2003,7 @@ PRs each, in this order:
    Keel lacks (docs/redis-parity-plan.md), and a recipe for the families that
    follow.
 
-Then keys and TTL (step 4.4), then hashes, each family converted and then completed.
+Then keys and TTL (step 4.4), then hashes (step 4.5), each family converted and then completed.
 
 #### Step 4.0: golden corpora
 
@@ -2579,6 +2579,25 @@ define them, and the no-op records dropped:
   914-919) count no change for them. The corpus and the replication goldens
   are recaptured (a replica's own log no longer holds those records); an
   older log holding one still replays it, as a no-op.
+
+#### Step 4.5: hashes
+
+The third family, by the recipe.
+
+- **Typed operations** (`hashes.go`): `opHSet`, `opHSetNX`, `opHGet`,
+  `opHDel`, `opHExists`, `opHLen` and `opHIncrBy`. A hash is created only
+  when something will be put in it and removed with its last field
+  (`dropIfEmpty`), as Redis has no empty hash. Each write records what
+  develop logged, byte for byte: `HSET` with its pairs
+  (`aofRecordKeyArgs`), `HSETNX`, `HDEL` with its fields, `HINCRBY` with its
+  increment. `HSETNX` of a field that exists and `HDEL` that removes nothing
+  are logged although they change nothing, which Redis does not (t_hash.c
+  counts a change only when there was one); the family's missing-commands
+  step drops them.
+- **The command language** (`commands_hash.go`): `HGET` answers its one
+  value through `resp.SingleBulk`, as GET does; `HMGET`, `HKEYS`, `HVALS`
+  and `HGETALL` keep their lookup array and walk replies. The reads count
+  their keyspace hits and misses in the type check, as #160 counts them.
 
 ## Risks, in order
 
