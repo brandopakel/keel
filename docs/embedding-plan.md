@@ -2564,6 +2564,22 @@ The third family, by the recipe.
   and `HGETALL` keep their lookup array and walk replies. The reads count
   their keyspace hits and misses in the type check, as #160 counts them.
 
+**Completing the family, part one.** `HSTRLEN`, `HMSET`, `HINCRBYFLOAT` and
+`HGETDEL`, as Redis 8.10.1's `t_hash.c` defines them, and the no-op records
+dropped: an `HSETNX` of a field that exists and an `HDEL` that removes
+nothing record nothing, as `hsetnxCommand` and `hdelCommand` count no change
+for them; the command corpus and the persistence goldens (whose session held
+one such `HSETNX`) are recaptured. `HMSET` is recorded as the `HSET` it
+performs, `HINCRBYFLOAT` as an `HSET` of the value it made (Redis
+propagates `HSETEX ... KEEPTTL`, for field expiry Keel does not have yet),
+`HGETDEL` as `HDEL` with every field given, as Redis propagates it.
+`HINCRBYFLOAT` adds in the long double `INCRBYFLOAT` uses and reads its
+increment before the key's type, as Redis does; `HGETDEL` and
+`HINCRBYFLOAT` admit their reply before they write. `HRANDFIELD` and
+`HSCAN` need a hash that can be sampled and walked by a cursor across
+calls, and field expiry (`HEXPIRE` and its family, `HGETEX`, `HSETEX`) a
+deadline per field; they follow.
+
 ## Risks, in order
 
 1. Moving AOF, rewrite and replication state while MULTI/EXEC changes the same

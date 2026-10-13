@@ -36,6 +36,7 @@ var commandKeyspace = map[string]string{
 	"HSET": "hash", "HSETNX": "hash", "HGET": "hash", "HMGET": "hash",
 	"HDEL": "hash", "HEXISTS": "hash", "HLEN": "hash", "HKEYS": "hash",
 	"HVALS": "hash", "HGETALL": "hash", "HINCRBY": "hash",
+	"HMSET": "hash", "HSTRLEN": "hash", "HINCRBYFLOAT": "hash", "HGETDEL": "hash",
 
 	"LPUSH": "list", "RPUSH": "list", "LPOP": "list", "RPOP": "list",
 	"LTRIM": "list", "LLEN": "list", "LINDEX": "list", "LSET": "list", "LRANGE": "list",
@@ -254,11 +255,12 @@ var argumentsBeforeType = map[string]func(e *Engine, args []string) error{
 	// GETRANGE, SUBSTR and SETRANGE read their integers before the key, and
 	// GETEX its options, though not its expiry's value, which Redis reads
 	// only once it has found the key.
-	"GETRANGE": func(e *Engine, args []string) error { _, _, err := e.rangeIndexes(args); return err },
-	"SUBSTR":   func(e *Engine, args []string) error { _, _, err := e.rangeIndexes(args); return err },
-	"SETRANGE": func(e *Engine, args []string) error { _, err := e.setRangeOffset(args); return err },
-	"GETEX":    func(_ *Engine, args []string) error { _, _, _, err := getExOptions(args[1:]); return err },
-	"INCREX":   func(e *Engine, args []string) error { _, err := e.increxArguments(args[1:]); return err },
+	"GETRANGE":     func(e *Engine, args []string) error { _, _, err := e.rangeIndexes(args); return err },
+	"SUBSTR":       func(e *Engine, args []string) error { _, _, err := e.rangeIndexes(args); return err },
+	"SETRANGE":     func(e *Engine, args []string) error { _, err := e.setRangeOffset(args); return err },
+	"GETEX":        func(_ *Engine, args []string) error { _, _, _, err := getExOptions(args[1:]); return err },
+	"HINCRBYFLOAT": func(_ *Engine, args []string) error { _, err := hincrByFloatIncrement(args[2]); return err },
+	"INCREX":       func(e *Engine, args []string) error { _, err := e.increxArguments(args[1:]); return err },
 	"GEODIST": func(e *Engine, args []string) error {
 		_, err := geodistUnit(args)
 		return err
@@ -411,7 +413,7 @@ func typedKeyspace(name string) string {
 // their own name; they count as SRANDMEMBER, CMS.QUERY, CMS.INFO and DUMP do.
 var keyspaceReads = map[string]bool{
 	"GET": true, "LCS": true, "STRLEN": true, "GETDEL": true, "GETSET": true, "DIGEST": true,
-	"HGET": true, "HMGET": true, "HEXISTS": true, "HLEN": true, "HKEYS": true, "HVALS": true, "HGETALL": true,
+	"HGET": true, "HMGET": true, "HEXISTS": true, "HSTRLEN": true, "HLEN": true, "HKEYS": true, "HVALS": true, "HGETALL": true,
 	"LLEN": true, "LINDEX": true,
 	"SCARD": true, "SMEMBERS": true, "SISMEMBER": true, "SMISMEMBER": true, "SRANDMEMBER": true, "SRAND": true,
 	"ZCOUNT": true, "ZRANGEBYSCORE": true, "ZREVRANGEBYSCORE": true, "ZRANGE": true, "ZRANK": true, "ZSCORE": true,

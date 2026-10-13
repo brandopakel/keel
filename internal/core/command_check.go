@@ -51,7 +51,7 @@ var commandArity = map[string]int{
 
 	"HSET": -4, "HSETNX": 4, "HGET": 3, "HMGET": -3,
 	"HDEL": -3, "HEXISTS": 3, "HLEN": 2, "HKEYS": 2,
-	"HVALS": 2, "HGETALL": 2, "HINCRBY": 4,
+	"HVALS": 2, "HGETALL": 2, "HINCRBY": 4, "HMSET": -4, "HSTRLEN": 3, "HINCRBYFLOAT": 4, "HGETDEL": -5,
 
 	"LPUSH": -3, "RPUSH": -3, "LPOP": -2, "RPOP": -2,
 	"LTRIM": 4, "LLEN": 2, "LINDEX": 3, "LSET": 4, "LRANGE": 4,
