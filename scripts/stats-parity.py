@@ -98,7 +98,8 @@ CASES = [[c] for c in [
     # Sets.
     ['SADD', 'set', 'c'], ['SREM', 'set', 'a'], ['SCARD', 'set'], ['SMEMBERS', 'set'], ['SISMEMBER', 'set', 'a'],
     ['SISMEMBER', 'missing', 'a'], ['SMISMEMBER', 'set', 'a', 'z'], ['SPOP', 'set'], ['SRANDMEMBER', 'set'],
-    ['SRANDMEMBER', 'missing'],
+    ['SRANDMEMBER', 'missing'], ['SRANDMEMBER', 'set', 'x'], ['SRANDMEMBER', 'missing', 'x'], ['SRANDMEMBER', 'str', 'x'],
+    ['SRANDMEMBER', 'str', '1'], ['SRANDMEMBER', 'set', '1'], ['SRANDMEMBER', 'missing', '-2'],
     # Sorted sets.
     ['ZCOUNT', 'zset', '0', '10'], ['ZRANGEBYSCORE', 'zset', '0', '10'], ['ZREVRANGEBYSCORE', 'zset', '10', '0'],
     ['ZINCRBY', 'zset', '1', 'a'], ['ZPOPMIN', 'zset'], ['ZPOPMAX', 'zset'], ['ZRANGE', 'zset', '0', '-1'],
