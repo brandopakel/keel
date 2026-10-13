@@ -2175,6 +2175,49 @@ public package can speak the protocol without each other.
   command's path uses `Reply`, which is why this step's measurement is the
   move's alone.
 
+#### Step 4.2: the operation table
+
+Step 4.2 replaces `commandTable`, `commandArity`, `commandKeyspace`,
+`writeCommands`, the key rules and the subcommand lists with one table of
+descriptors - name, handler, arity, flags, key specs, ACL categories, group
+and subcommands - from which `COMMAND` is answered (COUNT, INFO, LIST, DOCS,
+GETKEYS, the tier 1 server commands client libraries call at connect, in a
+follow-on). It comes in two parts, because the dispatch tables are in the
+files the INFO work holds until it merges.
+
+**Part a: the specs.** What Redis declares of each command Keel has is
+read from Redis 8.10.1's own declarations, `src/commands/<name>.json`, by
+`scripts/generate-command-specs.py`, which writes
+`internal/core/command_specs.go`: for each of the 104 commands and
+subcommands Redis declares among Keel's, its arity, group, command flags,
+ACL categories and key specs (`begin_search` and `find_keys` as they are).
+Only facts are copied - names, numbers and flags - and none of the text the
+specs carry, which is Redis's under its license where the numbers are not
+anyone's; the source is the release tarball CI already downloads, pinned by
+checksum, and nothing of it is checked in. The commands Redis has no spec
+for - Keel's own (`KEEL.*`, `MEMKV.*`, `MORRIS.*`, `SRAND`) and RedisBloom's
+(`BF.*`, `CF.*`, `CMS.*`), which the module declares in its source - are
+declared by hand in `command_specs_keel.go`, in the same form. Two tests
+hold the specs:
+
+- `TestRedisCommandSpecsMatchRedisSource` reads the JSON itself, where
+  `KEEL_REDIS_SRC` names the unpacked tree, and compares every entry with
+  the generated table, and checks that every command Keel has that Redis
+  declares is in it; the differential job runs it, and the generator's
+  `--check`, from the tarball it builds Redis from.
+- `TestCommandSpecsAgreeWithTheTables` reads the specs against the tables
+  they will replace, on every run: each command has one spec, with the
+  tables' arity; `WRITE` is the log's `writeCommands`, exactly; and the key
+  specs amount to the key rule the type check applies (the first argument,
+  the first two, every argument, every second), apart from `DEL`, `UNLINK`,
+  `EXISTS` and `MGET`, which name every argument and constrain none to a
+  type, as keytype.go says.
+
+**Part b: the table.** After the INFO work merges, the handlers join the
+specs in one table and the dispatch tables go; the index `commands` is
+built from it, as it is from `commandArity` and `commandTable` now. The
+corpora hold the replies and records, and the paired job the cost.
+
 ## Risks, in order
 
 1. Moving AOF, rewrite and replication state while MULTI/EXEC changes the same
