@@ -22,6 +22,10 @@ var replicaWrites = [][]string{
 	{"APPEND", "k", "x"}, {"SETRANGE", "k", "0", "x"}, {"GETDEL", "k"}, {"GETEX", "k"},
 	{"GETEX", "k", "EX", "100"}, {"GETEX", "k", "PERSIST"}, {"GETSET", "k", "v"},
 	{"MSETNX", "missing", "1", "other", "2"}, {"INCRBYFLOAT", "n", "1.5"},
+	// Redis 8's string commands (step 4.3d).
+	{"DELEX", "k"}, {"DELEX", "k", "IFEQ", "v"}, {"MSETEX", "1", "k", "v", "EX", "100"}, {"INCREX", "n"},
+	{"INCREX", "missing", "BYFLOAT", "1.5"}, {"SET", "k", "v", "IFEQ", "v"}, {"SET", "k", "v", "IFNE", "x"},
+	{"SET", "k", "v", "IFDEQ", "0000000000000000"}, {"SET", "k", "v", "IFDNE", "0000000000000000"},
 }
 
 var replicaWritesSeed = [][]string{
