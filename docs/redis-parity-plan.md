@@ -39,10 +39,10 @@ TimeSeries come in CI.
 | list | 9/24 (18 since the lists' missing commands in phase 4 of the embedding plan) | ~~`LPOS`, `LINSERT`, `LREM`, `LMOVE`, `LMOVEM`, `RPOPLPUSH`, `LPUSHX`, `RPUSHX`, `LMPOP`~~ (phase 4, lists), and the blocking forms |
 | hash | 11/29 (15 since step 4.5 of the embedding plan) | ~~`HSTRLEN`~~, `HRANDFIELD`, ~~`HINCRBYFLOAT`, `HMSET`~~, `HSCAN`, ~~`HGETDEL`~~ (step 4.5), `HGETEX`, `HSETEX`, `HIMPORT`, field expiry (`HEXPIRE` family, 8 commands) |
 | set | 8/19 | `SINTER`, `SUNION`, `SDIFF` with `STORE` and `CARD` forms, `SMOVE`, `SSCAN` |
-| sorted-set | 12/35 | `ZUNION`, `ZINTER`, `ZDIFF` with `STORE` forms, the lex ranges, `ZREMRANGEBY*`, `ZREVRANGE`, `ZREVRANK`, `ZMSCORE`, `ZRANDMEMBER`, `ZRANGESTORE`, `ZMPOP`, `ZSCAN`, and the blocking forms |
+| sorted-set | 12/35 (31 since step 4.7 of the embedding plan) | ~~`ZUNION`, `ZINTER`, `ZDIFF` with `STORE` forms (and `ZINTERCARD`), the lex ranges, `ZREMRANGEBY*`, `ZREVRANGE`, `ZREVRANK`, `ZMSCORE`, `ZRANDMEMBER`, `ZRANGESTORE`, `ZMPOP`~~ (step 4.7, with `ZADD`'s `GT`, `LT` and `INCR`), `ZSCAN`, and the blocking forms (`BZPOPMIN`, `BZPOPMAX`, `BZMPOP`) |
 | generic | 13/29 (20 since step 4.4 of the embedding plan) | ~~`RENAME`, `RENAMENX`, `COPY`, `TOUCH`~~, `OBJECT`, ~~`RANDOMKEY`, `EXPIRETIME`, `PEXPIRETIME`~~ (step 4.4), `SORT`, `SORT_RO`, `DUMP`, `RESTORE`, `MOVE`, `MIGRATE`, `WAIT`, `WAITAOF` |
 | server | 5/32 | `CONFIG`, `COMMAND`, `TIME`, `ROLE`, `FLUSHALL`, `SWAPDB`, `SLOWLOG`, `LATENCY`, `MONITOR`, `ACL`, `DEBUG`, `SAVE`, `BGSAVE`, `LASTSAVE`, `REPLICAOF`, `FAILOVER`, `SHUTDOWN`, `MODULE`, `SYNC`, `PSYNC`, `REPLCONF`, and others |
-| geo, hyperloglog, connection, transactions | 19/28 | the `GEORADIUS` family, `GEOSEARCHSTORE`, `PFDEBUG` and `PFSELFTEST` (not planned: they read Redis's own HyperLogLog encoding, which Keel's sketches do not share), `RESET`, `WATCH` |
+| geo, hyperloglog, connection, transactions | 19/28 (24 since step 4.7) | ~~the `GEORADIUS` family, `GEOSEARCHSTORE`~~ (step 4.7), `PFDEBUG` and `PFSELFTEST` (not planned: they read Redis's own HyperLogLog encoding, which Keel's sketches do not share), `RESET`, `WATCH` |
 | bitmap | 0/7 | all |
 | pubsub | 0/9 | all |
 | scripting | 0/8 | all: `EVAL`, `EVALSHA`, `SCRIPT`, `FUNCTION`, `FCALL` |
