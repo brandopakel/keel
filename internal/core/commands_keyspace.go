@@ -1,10 +1,12 @@
 package core
 
 import (
+	"math"
 	"strings"
 	"time"
 
 	"github.com/brandopakel/keel/internal/data_structure"
+	"github.com/brandopakel/keel/internal/resp"
 )
 
 // Keyspace commands: the ones a client library reaches for before it reaches
@@ -247,4 +249,52 @@ func (e *Engine) cmdRENAMENX(args []string) []byte {
 		return r.Int(1).Bytes()
 	}
 	return r.Int(0).Bytes()
+}
+
+// cmdCOPY implements COPY source destination [DB destination-db] [REPLACE];
+// see opCopy. Keel has one database, so DB names it or is refused as Redis
+// refuses a database it does not have.
+func (e *Engine) cmdCOPY(args []string) []byte {
+	e.recordsItself()
+	if len(args) < 2 {
+		return e.encode(wrongArguments("COPY"), false)
+	}
+	replace := false
+	for i := 2; i < len(args); i++ {
+		switch {
+		case strings.EqualFold(args[i], "REPLACE"):
+			replace = true
+		case strings.EqualFold(args[i], "DB") && i+1 < len(args):
+			db, valid := e.counterInteger(args[i+1])
+			if !valid || db < math.MinInt32 || db > math.MaxInt32 {
+				return e.encode(errNotAnInteger, false)
+			}
+			if db != 0 {
+				return e.encode(errDBIndex, false)
+			}
+			i++
+		default:
+			return e.encode(errSyntax, false)
+		}
+	}
+	r := e.reply()
+	copied, err := e.opCopy(args[0], args[1], replace)
+	switch {
+	case err != nil:
+		return r.Error(err).Bytes()
+	case copied:
+		return r.Int(1).Bytes()
+	}
+	return r.Int(0).Bytes()
+}
+
+// cmdRANDOMKEY answers a key chosen at random, or null; see opRandomKey.
+func (e *Engine) cmdRANDOMKEY(args []string) []byte {
+	if len(args) != 0 {
+		return e.encode(wrongArguments("RANDOMKEY"), false)
+	}
+	if key, ok := e.opRandomKey(); ok {
+		return resp.SingleBulk(MaxReplyBytes-e.replyCeiling, e.commandAllocations, key)
+	}
+	return e.wire().Null()
 }

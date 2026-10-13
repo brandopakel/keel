@@ -121,6 +121,7 @@ func TestEveryRegisteredCommandIsTypeCheckedOrDeliberatelyNot(t *testing.T) {
 		"DEL": true, "UNLINK": true, "EXISTS": true, "TYPE": true, "KEYS": true, "MGET": true,
 		"DELEX": true, // DEL of a key of any type, and its own refusal of one with a condition
 		"TOUCH": true, "RENAME": true, "RENAMENX": true, "EXPIRETIME": true, "PEXPIRETIME": true,
+		"COPY": true, "RANDOMKEY": true,
 		"FLUSHDB": true, "DBSIZE": true, "MEMORY": true, "INFO": true, "CONFIG": true, "LATENCY": true, "SLOWLOG": true, "COMMAND": true, "BGREWRITEAOF": true, "SCAN": true,
 		"KEEL.DUMP": true, "KEEL.RESTORE": true, "MEMKV.DUMP": true, "MEMKV.RESTORE": true,
 		"TTL": true, "PTTL": true, "EXPIRE": true, "PEXPIRE": true, "EXPIREAT": true, "PEXPIREAT": true, "PERSIST": true, "MORRIS.INFO": true,

@@ -127,7 +127,7 @@ type aofState struct {
 // the next restart, while a read listed by accident only makes the file bigger.
 // An explicit list is the one that can be read against eval.go and checked.
 var writeCommands = map[string]bool{
-	"SET": true, "SETNX": true, "MSET": true, "DEL": true, "UNLINK": true, "FLUSHDB": true, "RENAME": true, "RENAMENX": true,
+	"SET": true, "SETNX": true, "MSET": true, "DEL": true, "UNLINK": true, "FLUSHDB": true, "RENAME": true, "RENAMENX": true, "COPY": true,
 	"APPEND": true, "SETRANGE": true, "GETDEL": true, "GETEX": true, "GETSET": true, "MSETNX": true,
 	"INCRBYFLOAT": true, "DELEX": true, "MSETEX": true, "INCREX": true,
 	"SETEX": true, "PSETEX": true,

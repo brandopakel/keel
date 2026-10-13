@@ -231,8 +231,9 @@ func TestReplicaAppliesTheRedis8StringCommandsRecords(t *testing.T) {
 }
 
 // TestReplicaAppliesTheKeyCommandsRecords: a protocol 2 replica applies
-// RENAME, recorded as itself (RENAMENX too), across types and with an
-// expiry, and is handed no record of a DEL or PERSIST that changed nothing.
+// RENAME and COPY, recorded as themselves (RENAMENX as RENAME), across types
+// and with an expiry, and is handed no record of a DEL or PERSIST that
+// changed nothing.
 func TestReplicaAppliesTheKeyCommandsRecords(t *testing.T) {
 	t.Parallel()
 	e := newTestEngine(t, Options{})
@@ -243,6 +244,7 @@ func TestReplicaAppliesTheKeyCommandsRecords(t *testing.T) {
 		{"SET", "a", "1"}, {"RENAME", "a", "b"}, {"HSET", "h", "f", "v"}, {"EXPIREAT", "h", "4102444800"},
 		{"RENAME", "h", "h2"}, {"RENAMENX", "h2", "h3"}, {"SET", "s", "str"}, {"RPUSH", "l", "x"},
 		{"RENAME", "s", "l"}, {"DEL", "missing"}, {"PERSIST", "b"}, {"PERSIST", "missing"},
+		{"COPY", "h3", "h4"}, {"SADD", "set", "m"}, {"COPY", "l", "set", "REPLACE"}, {"COPY", "b", "b2"},
 	} {
 		reply := rawReplyOn(t, e, cmd[0], cmd[1:]...)
 		require.NotEqual(t, byte('-'), reply[0], "%v: %q", cmd, reply)
@@ -254,11 +256,13 @@ func TestReplicaAppliesTheKeyCommandsRecords(t *testing.T) {
 		return []interface{}{
 			runOn(t, e, "GET", "b"), runOn(t, e, "TYPE", "a"), runOn(t, e, "HGET", "h3", "f"),
 			runOn(t, e, "PEXPIRETIME", "h3"), runOn(t, e, "TYPE", "h2"), runOn(t, e, "GET", "l"),
-			runOn(t, e, "DBSIZE"),
+			runOn(t, e, "HGET", "h4", "f"), runOn(t, e, "PEXPIRETIME", "h4"), runOn(t, e, "GET", "set"),
+			runOn(t, e, "GET", "b2"), runOn(t, e, "DBSIZE"),
 		}
 	}
 	want := state()
-	require.Equal(t, []interface{}{"1", "none", "v", int64(4102444800000), "none", "str", int64(3)}, want)
+	require.Equal(t, []interface{}{"1", "none", "v", int64(4102444800000), "none", "str",
+		"v", int64(4102444800000), "str", "1", int64(6)}, want)
 	becomeReplicaV2On(t, e)
 	for _, frame := range frames {
 		require.NoError(t, e.ApplyReplication(frame))
