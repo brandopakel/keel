@@ -66,9 +66,9 @@ func (e *Engine) setWithTTL(name string, args []string, unit string) []byte {
 	return r.Status("OK").Bytes()
 }
 
-// cmdSET implements SET key value [NX | XX] [GET] [EX seconds | PX
-// milliseconds | EXAT unix-time-seconds | PXAT unix-time-milliseconds |
-// KEEPTTL].
+// cmdSET implements SET key value [NX | XX | IFEQ value | IFNE value |
+// IFDEQ digest | IFDNE digest] [GET] [EX seconds | PX milliseconds | EXAT
+// unix-time-seconds | PXAT unix-time-milliseconds | KEEPTTL].
 //
 // The expiry keyword used to be skipped over entirely: whatever sat in args[2]
 // was ignored and args[3] was read as a number of seconds. So PX asked for
@@ -82,7 +82,7 @@ func (e *Engine) cmdSET(args []string) []byte {
 	if len(args) < 2 {
 		return e.encode(wrongArguments("SET"), false)
 	}
-	req, get, err := e.setArguments("SET", args[2:])
+	req, get, cond, err := e.setArguments("SET", args[2:], true)
 	if err != nil {
 		return e.encode(err, false)
 	}
@@ -94,20 +94,32 @@ func (e *Engine) cmdSET(args []string) []byte {
 		// keyspace hit or a miss, a key of another type a hit.
 		e.noteLookup(t.exists())
 	}
-	if get {
+	if get && t.other != nil {
 		// GET reads the old value as a string, so a key of another type is
-		// refused, and its reply is admitted before anything is written: a
-		// reply that cannot be sent leaves the key as it was.
+		// refused.
+		return r.Error(errWrongType).Bytes()
+	}
+	write := true
+	if cond.kind != condNone {
+		// Redis checks a digest's length after GET has answered, and so
+		// answers a SET ... GET IFDEQ with a digest of the wrong length
+		// twice (t_string.c, setGenericCommand, lines 99-101 and 136-137);
+		// the error is answered alone here.
+		if write, err = e.setConditionHolds(t, cond); err != nil {
+			return r.Error(err).Bytes()
+		}
+	}
+	if get {
+		// GET's reply is admitted before anything is written: a reply that
+		// cannot be sent leaves the key as it was.
 		switch {
-		case t.other != nil:
-			return r.Error(errWrongType).Bytes()
 		case t.obj == nil:
 			r.Null()
 		case r.Bulk(t.obj.Value).Refused():
 			return r.Bytes()
 		}
 	}
-	stored := e.opSet(t, key, value, req)
+	stored := write && e.opSet(t, key, value, req)
 	switch {
 	case get:
 	case stored:
@@ -118,21 +130,23 @@ func (e *Engine) cmdSET(args []string) []byte {
 	return r.Bytes()
 }
 
-// setArguments reads SET's options as Redis reads them: NX and XX exclude
-// each other, KEEPTTL and the four expiry options exclude one another, though
-// one expiry option may be given again, and its last value counts. The expiry
-// is checked only once every option has been read, so a malformed option is
-// refused ahead of a malformed expiry; name is the command running, which an
-// invalid expiry names.
-func (e *Engine) setArguments(name string, opts []string) (req setRequest, get bool, err error) {
+// setArguments reads SET's options, and MSETEX's when isSET is false, as
+// Redis's parseExtendedStringArgumentsOrReply reads them: NX, XX and SET's
+// four conditions exclude one another, though one may be given again;
+// KEEPTTL and the four expiry options exclude one another, though one expiry
+// option may be given again, and its last value counts; GET and the
+// conditions are SET's alone. The expiry is checked only once every option
+// has been read, so a malformed option is refused ahead of a malformed
+// expiry; name is the command running, which an invalid expiry names.
+func (e *Engine) setArguments(name string, opts []string, isSET bool) (req setRequest, get bool, cond valueCondition, err error) {
 	unit, expire := "", ""
 	for i := 0; i < len(opts); i++ {
 		switch opt := strings.ToUpper(opts[i]); {
-		case opt == "NX" && !req.xx:
+		case opt == "NX" && !req.xx && cond.kind == condNone:
 			req.nx = true
-		case opt == "XX" && !req.nx:
+		case opt == "XX" && !req.nx && cond.kind == condNone:
 			req.xx = true
-		case opt == "GET":
+		case opt == "GET" && isSET:
 			get = true
 		case opt == "KEEPTTL" && unit == "":
 			req.keepTTL = true
@@ -140,17 +154,21 @@ func (e *Engine) setArguments(name string, opts []string) (req setRequest, get b
 			(unit == "" || unit == opt) && i+1 < len(opts):
 			unit, expire = opt, opts[i+1]
 			i++
+		case isSET && !req.nx && !req.xx && i+1 < len(opts) && conditionKind(opt) != condNone &&
+			(cond.kind == condNone || cond.kind == conditionKind(opt)):
+			cond = valueCondition{kind: conditionKind(opt), match: opts[i+1]}
+			i++
 		default:
-			return req, false, errSyntax
+			return req, false, cond, errSyntax
 		}
 	}
 	if unit != "" {
 		if req.at, err = e.expiryArgument(name, unit, expire); err != nil {
-			return req, false, err
+			return req, false, cond, err
 		}
 		req.expires = true
 	}
-	return req, get, nil
+	return req, get, cond, nil
 }
 
 // expiryArgument reads an expiry given in unit - EX or PX relative to now,
