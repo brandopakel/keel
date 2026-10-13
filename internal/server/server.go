@@ -15,6 +15,7 @@ import (
 
 	"github.com/brandopakel/keel/internal/core"
 	"github.com/brandopakel/keel/internal/core/io_multiplexing"
+	"github.com/brandopakel/keel/internal/resp"
 )
 
 // readChunkSize is how much we attempt to pull off a socket when we have no
@@ -781,7 +782,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 		log.Println("client interest cache off: every registration goes to the kernel")
 	}
 	var requestBudget requestAllocationBudget
-	e.SetCommandAllocations(&core.CommandAllocationBudget{Limit: maxRetainedClientBytes, ReplyLimit: maxRetainedClassBytes})
+	e.SetCommandAllocations(&resp.Budget{Limit: maxRetainedClientBytes, ReplyLimit: maxRetainedClassBytes})
 	defer e.SetCommandAllocations(nil)
 	e.SetClientBuffers(func() core.ClientBufferStats {
 		return core.ClientBufferStats{Connected: len(clients), InputBytes: retainedInputBytes, ReplyBytes: retainedReplyBytes, TotalBytes: retainedClientBytes,

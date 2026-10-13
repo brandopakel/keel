@@ -2121,14 +2121,23 @@ public package can speak the protocol without each other.
   the families import `resp` directly, after the INFO work that holds those
   files merges.
 - **What moved in the disassembly** (`go tool objdump` of the server built
-  from the step before and after, addresses normalized): `aofCommit`,
-  `cmdINCR`, `(*client).respond` and `responseRw` are instruction-identical;
-  `checkKeyTypes`, `executeRun` and `readCommandsReserved` differ only in
-  data offsets and branch displacements; `cmdGET` and
-  `encodeBoundedString` keep their instruction counts with registers
-  renamed; `cmdMGET` and `increment` gain four instructions and `setCommand`
-  eight, from the inlined wrappers. `framing.encode` is no longer a function
-  of its own: its callers call `resp.Framing.Encode`.
+  from develop `80af8e4` and from this step, addresses, data offsets and
+  branch displacements normalized): `aofCommit`, `checkKeyTypes`, `cmdINCR`,
+  `(*client).respond` and `responseRw` are instruction-identical;
+  `executeRun`, `readCommandsReserved` and `cmdGET` keep their instruction
+  counts, calling `resp` where they called `core`; `EvalAndResponse`,
+  `cmdMGET` and `increment` gain four instructions and `setCommand` eight,
+  from the wrappers' conversion of `framing` to `resp.Framing`;
+  `encodeBoundedString` falls from 93 to 65, because `reserveReplyMemory`
+  now inlines into the `admitReply` it calls. `framing.encode` is no longer a
+  function of its own: its callers call `resp.Framing.Encode`.
+- **The server names `resp.Budget` itself.** Go's compiler did not inline the
+  methods of the budget while the server reached its type only through
+  core's alias: `executeRun` called `Begin` once a run, and its deferred
+  `End` cost 59 where it had cost 9. Importing `resp` and naming the type
+  there gave them back (`-gcflags=-m=2`: `inlining call to
+  resp.(*Budget).Begin`, `ObserveRetained` and `End`), and `executeRun`
+  its 573 instructions.
 - **The parser's tests moved with it** (`resp_test.go`,
   `request_decode_test.go`, `parse_profile_test.go`), with the two
   differential fuzz targets the Go and request-admission workflows run.
