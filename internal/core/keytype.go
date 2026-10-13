@@ -371,8 +371,9 @@ func typedKeyspace(name string) string {
 // SRAND, MORRIS.QUERY, MORRIS.INFO and KEEL.DUMP have no Redis counterpart of
 // their own name; they count as SRANDMEMBER, CMS.QUERY, CMS.INFO and DUMP do.
 var keyspaceReads = map[string]bool{
-	"GET": true, "LCS": true,
-	"HGET": true, "HMGET": true, "HEXISTS": true, "HLEN": true, "HKEYS": true, "HVALS": true, "HGETALL": true,
+	"GET": true, "LCS": true, "STRLEN": true, "GETRANGE": true, "SUBSTR": true, "GETEX": true, "GETDEL": true,
+	"GETSET": true,
+	"HGET":   true, "HMGET": true, "HEXISTS": true, "HLEN": true, "HKEYS": true, "HVALS": true, "HGETALL": true,
 	"LLEN": true, "LINDEX": true, "LRANGE": true,
 	"SCARD": true, "SMEMBERS": true, "SISMEMBER": true, "SMISMEMBER": true, "SRANDMEMBER": true, "SRAND": true,
 	"ZCOUNT": true, "ZRANGEBYSCORE": true, "ZREVRANGEBYSCORE": true, "ZRANGE": true, "ZRANK": true, "ZSCORE": true,
