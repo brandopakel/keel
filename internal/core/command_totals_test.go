@@ -211,7 +211,10 @@ func TestKeyspaceLookupsCountAsRedisLookupKeyRead(t *testing.T) {
 		{"PFMERGE reads its destination", [][]string{{"PFMERGE", "dest", "hll"}}, [2]uint64{1, 1}, [][]string{{"PFADD", "hll", "a"}}},
 		{"a filter's reads", [][]string{{"BF.EXISTS", "bf", "a"}, {"BF.EXISTS", "nosuch", "a"}, {"BF.ADD", "bf", "b"}, {"BF.INFO", "str"}},
 			[2]uint64{2, 1}, [][]string{{"BF.RESERVE", "bf", "0.01", "100"}}},
-		{"expired", [][]string{{"GET", "gone"}, {"MGET", "gone"}, {"EXISTS", "gone"}}, [2]uint64{0, 3}, [][]string{{"SET", "gone", "v"}}},
+		{"KEEL.DUMP", [][]string{{"KEEL.DUMP", "str"}, {"KEEL.DUMP", "nosuch"}, {"KEEL.DUMP", "hash"}}, [2]uint64{2, 1}, nil},
+		// KEEL.DUMP first: it finds the key expired without deleting it, and
+		// the reads after it find it expired again.
+		{"expired", [][]string{{"KEEL.DUMP", "gone"}, {"GET", "gone"}, {"MGET", "gone"}, {"EXISTS", "gone"}}, [2]uint64{0, 4}, [][]string{{"SET", "gone", "v"}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

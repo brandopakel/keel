@@ -182,10 +182,11 @@ func (e *Engine) cmdDUMP(args []string) []byte {
 	if len(args) != 1 {
 		return e.encode(wrongArguments("KEEL.DUMP"), false)
 	}
-	// A keyspace hit or a miss, as DUMP's is in Redis.
-	_, held := e.space.OwnerOf(args[0])
-	e.noteLookup(held)
+	// A keyspace hit or a miss, as DUMP's is in Redis. planDump finds a key
+	// of every type without expiring it, as KEEL.DUMP always has: an expired
+	// key is a miss, and nothing is logged for it.
 	plan, ok := e.planDump(args[0], MaxReplyBytes)
+	e.noteLookup(ok)
 	if !ok {
 		return e.nullReply()
 	}
