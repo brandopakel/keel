@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -90,6 +91,36 @@ func TestKeyMapScanBudgetsExaminedKeysNotReturnedKeys(t *testing.T) {
 	assert.Equal(t, 4000, totalExamined, "but every key was still examined")
 	assert.Greater(t, calls, 1, "and it took more than one call to do it")
 	assert.LessOrEqual(t, worst, 100, "COUNT is an actual work ceiling")
+}
+
+// A stall can cut a scan short only once it has done scanClockEvery units of
+// work, so a short scan is bounded by its work alone, as Redis's SCAN is. The
+// filter's sleep stands in for a stall: a race-instrumented runner once took
+// longer than the time target between two keys, and SCAN COUNT 100 over a few
+// keys returned two of them.
+func TestKeyMapScanIsNotCutShortBeforeItHasDoneWork(t *testing.T) {
+	m := &keyMap[int]{}
+	for i := 0; i < 10; i++ {
+		m.set("k"+strconv.Itoa(i), i)
+	}
+	slow := func(string) bool { time.Sleep(2 * scanTimeTarget); return true }
+	keys, examined, next := m.scan(0, 100, slow, nil)
+	assert.Len(t, keys, 10, "every key, though each one took twice the time target")
+	assert.Equal(t, 10, examined)
+	assert.Zero(t, next, "the scan finished")
+}
+
+// Past scanClockEvery units the time target still bounds a long scan.
+func TestKeyMapScanStopsALongScanOnTime(t *testing.T) {
+	m := &keyMap[int]{}
+	for i := 0; i < 600; i++ {
+		m.set("key:"+strconv.Itoa(i), i)
+	}
+	slow := func(string) bool { time.Sleep(scanTimeTarget / 10); return true }
+	_, examined, next := m.scan(0, ScanMaxWork, slow, nil)
+	assert.GreaterOrEqual(t, examined, scanClockEvery, "no clock before scanClockEvery units")
+	assert.Less(t, examined, 600, "the time target stopped it before the end")
+	assert.NotZero(t, next, "and it can resume")
 }
 
 func TestKeyMapScanRejectsCursorsPastTheEnd(t *testing.T) {
