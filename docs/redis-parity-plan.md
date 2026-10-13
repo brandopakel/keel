@@ -118,8 +118,9 @@ replies and where in the Redis source the reply is built, to
 The **configuration census** (`scripts/config-census.py`, same workflow)
 reads Redis's configuration table (`static_configs` in `src/config.c`) and
 `redis.conf`, asks Redis and Keel `CONFIG GET` for each directive, and
-checks Keel's flags. The first run (local, Redis 8.10.2, October 12, 2026):
-of the **216 directives** this build of Redis has, Keel reports **20** under
+checks Keel's flags. The first CI run, against Redis 8.10.1 (run
+38305867780, October 12, 2026; a local run against 8.10.2 agreed): of the
+**216 directives** this build of Redis has, Keel reports **20** under
 Redis's name through `CONFIG GET`, has a flag for **5** more under another
 meaning, and lacks **191**.
 
