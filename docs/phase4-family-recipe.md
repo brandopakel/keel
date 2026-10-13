@@ -28,11 +28,17 @@ example.
 - **A change to a reply recaptures the corpus in the same PR.** The corpus
   pins develop's replies, so a PR that changes one on purpose - a new
   command, a new error, a new INFO field, a new line of a HELP - fails it
-  until it recaptures: set `commandGoldenRevision` and
-  `connectionGoldenRevision` to the develop revision the PR is based on,
-  run `python3 scripts/capture-command-goldens.py --out dist/<name>`, and
-  put the fixture's diff in the PR body as the change's wire-visible
-  effect. Every INFO-stack PR does this too.
+  until it recaptures. Commit the change first. Then, in a commit that
+  touches only tests and fixtures, add the cases that send what is new, set
+  `commandGoldenRevision` and `connectionGoldenRevision` to the change's
+  commit (`git rev-parse --short=7 HEAD`), and run
+  `python3 scripts/capture-command-goldens.py --out dist/<name>`: it
+  refuses a tree whose source differs from the revision the constants name,
+  so the fixture is the change's and nothing else's. Put the fixture's diff
+  in the PR body as the change's wire-visible effect. A rebase makes a new
+  commit of the change, so recapture after one. Every INFO-stack PR does
+  this too (#164: the change in `ca986b7`, the recapture at it in
+  `ac25a7f`).
 
 ## Converting a family
 

@@ -2073,11 +2073,14 @@ and recaptured at `1f59ae4` (see "When a reply changes" below):
 
 **When a reply changes.** The corpora pin develop's replies, so a change
 that alters one on purpose fails them until it recaptures, and it
-recaptures in the same pull request: it sets the two revision constants
-(`commandGoldenRevision`, `connectionGoldenRevision`) to the develop
-revision it is based on, runs `scripts/capture-command-goldens.py`, and
-puts the fixture's diff in its body as the change's wire-visible effect,
-reviewed as such. A change that adds a command, a subcommand or an error
+recaptures in the same pull request. It commits the change; then, in a
+commit of tests and fixtures alone, it sets the two revision constants
+(`commandGoldenRevision`, `connectionGoldenRevision`) to that commit, runs
+`scripts/capture-command-goldens.py` (which refuses a tree whose source
+differs from the revision the constants name, so the fixture describes the
+change and nothing else), and puts the fixture's diff in its body as the
+change's wire-visible effect, reviewed as such. A rebase makes a new commit
+of the change, so the corpus is recaptured after one. A change that adds a command, a subcommand or an error
 text adds the case that sends it, as the coverage tests require. The first
 was #158 (INFO part c1): it added `RESETSTAT` to `CONFIG HELP`, which a trial
 merge of the corpus onto develop failed on at `server/info-config` step 6,
