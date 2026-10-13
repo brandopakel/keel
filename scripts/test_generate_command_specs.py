@@ -44,6 +44,22 @@ class Commands(unittest.TestCase):
                               ('CLIENT', 'ID'), ('CLIENT', 'HELP')])
 
 
+    def test_reads_a_subcommand_literal_over_several_lines(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / 'command_check.go'
+            source.write_text(CHECK.replace('clientSubcommands = []subcommand{{"id", 2}, {"help", 2}}',
+                                            'clientSubcommands = []subcommand{\n\t\t{"id", 2},\n\t\t{"help", 2},\n\t}'))
+            self.assertEqual(gcs.keel_commands(source)[-2:], [('CLIENT', 'ID'), ('CLIENT', 'HELP')])
+
+    def test_refuses_a_subcommand_literal_it_cannot_read(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / 'command_check.go'
+            source.write_text(CHECK.replace('clientSubcommands = []subcommand{{"id", 2}, {"help", 2}}',
+                                            'clientSubcommands = []subcommand{{"id", 2}, {helpName, 2}}'))
+            with self.assertRaises(ValueError):
+                gcs.keel_commands(source)
+
+
 class Specs(unittest.TestCase):
     def test_key_spec_forms(self):
         ks = gcs.key_spec(GET['GET']['key_specs'][0])

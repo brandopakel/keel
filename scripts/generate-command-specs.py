@@ -48,10 +48,31 @@ def keel_commands(source=CHECK):
     if not arity:
         raise ValueError(f'{source}: no commandArity')
     names = [(n, None) for n in re.findall(r'"([^"]+)":\s*-?\d+', arity.group(1))]
-    for container, body in re.findall(r'(\w+)Subcommands\s*=\s*\[\]subcommand\{(.*?)\}\s*$', text, re.MULTILINE):
-        for sub in re.findall(r'\{"([^"]+)",\s*-?\d+\}', body):
-            names.append((container.upper(), sub.upper()))
+    for container, body in subcommand_literals(text, source):
+        subs = re.findall(r'\{"([^"]+)",\s*-?\d+\}', body)
+        # Every entry is {"name", arity}; a body with anything else in it is
+        # one this reader would half-read, so it refuses rather than leave a
+        # subcommand out of the generated file.
+        if not subs or re.sub(r'\{"[^"]+",\s*-?\d+\}', '', body).strip(' \t\n,'):
+            raise ValueError(f'{source}: cannot read {container}Subcommands: {body!r}')
+        names.extend((container.upper(), sub.upper()) for sub in subs)
     return names
+
+
+def subcommand_literals(text, source):
+    """Each container's []subcommand literal in command_check.go, as
+    (container, body), the body read to its matching brace whether it spans
+    one line or several."""
+    literals = []
+    for m in re.finditer(r'(\w+)Subcommands\s*=\s*\[\]subcommand\{', text):
+        depth, i = 1, m.end()
+        while depth and i < len(text):
+            depth += {'{': 1, '}': -1}.get(text[i], 0)
+            i += 1
+        if depth:
+            raise ValueError(f'{source}: {m.group(1)}Subcommands is not closed')
+        literals.append((m.group(1), text[m.end():i - 1]))
+    return literals
 
 
 def spec_file(commands, name, sub):
