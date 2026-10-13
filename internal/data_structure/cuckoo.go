@@ -258,7 +258,16 @@ func (c *CuckooFilter) deleteFrom(fp uint16, i uint64) bool {
 	return false
 }
 
-func (c *CuckooFilter) Size() uint64       { return c.inserted - c.deleted }
+func (c *CuckooFilter) Size() uint64 { return c.inserted - c.deleted }
+
+// Compact is RedisBloom's CuckooFilter_Compact for a filter of one table:
+// there is no later table to move fingerprints out of, and what remains is
+// its count of deletions, which compaction resets. The items it holds stay
+// counted.
+func (c *CuckooFilter) Compact() {
+	c.inserted -= c.deleted
+	c.deleted = 0
+}
 func (c *CuckooFilter) Inserted() uint64   { return c.inserted }
 func (c *CuckooFilter) Deleted() uint64    { return c.deleted }
 func (c *CuckooFilter) Capacity() uint64   { return c.capacity }

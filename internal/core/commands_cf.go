@@ -218,3 +218,113 @@ func (e *Engine) cmdCFINFO(args []string) []byte {
 		{"Max iterations", int64(data_structure.CuckooMaxKicks)},
 	})
 }
+
+// The cuckoo filter commands Keel lacked, as RedisBloom 8.10.1 defines them
+// (rebloom.c, CFInsert_RedisCommand and CFCompact_RedisCommand).
+
+var (
+	// errCFInsertCapacityRange is CF.INSERT's refusal of a capacity outside
+	// cf-initial-size's range, in RedisBloom's words, which name the bucket
+	// size's configuration where they mean its value.
+	errCFInsertCapacityRange = errors.New("Capacity must be in the range [cf-bucket-size * 2, 1073741824]")
+	errCFCompactNotFound     = errors.New("Cuckoo filter was not found")
+)
+
+// cfMinInsertCapacity is the bottom of cf-initial-size's range: twice
+// RedisBloom's default bucket size.
+const cfMinInsertCapacity = 4
+
+// parseCFInsert reads CF.INSERT or CF.INSERTNX key [CAPACITY c] [NOCREATE]
+// ITEMS item [item ...] as RedisBloom does: each option by its first letter,
+// in turn, until ITEMS; a CAPACITY with no value, or no item after ITEMS, is
+// the wrong number of arguments.
+func parseCFInsert(name string, args []string, nx bool) (cfInsertRequest, error) {
+	req := cfInsertRequest{capacity: data_structure.CfDefaultCapacity, nx: nx}
+	itemsAt := -1
+	for pos := 1; pos < len(args) && itemsAt < 0; {
+		switch lowerAt(args[pos], 0) {
+		case 'c':
+			if pos++; pos == len(args) {
+				return req, wrongArguments(name)
+			}
+			capacity, ok := redisInteger(args[pos])
+			if !ok {
+				return req, errCFBadCapacity
+			}
+			if capacity < cfMinInsertCapacity || capacity > cfMaxCapacity {
+				return req, errCFInsertCapacityRange
+			}
+			req.capacity = uint64(capacity)
+			pos++
+		case 'i':
+			pos++
+			itemsAt = pos
+		case 'n':
+			req.noCreate = true
+			pos++
+		default:
+			return req, errModuleUnknownArg
+		}
+	}
+	if itemsAt < 0 || itemsAt == len(args) {
+		return req, wrongArguments(name)
+	}
+	req.items = args[itemsAt:]
+	return req, nil
+}
+
+func (e *Engine) cmdCFINSERT(args []string) []byte   { return e.cfInsert("CF.INSERT", args, false) }
+func (e *Engine) cmdCFINSERTNX(args []string) []byte { return e.cfInsert("CF.INSERTNX", args, true) }
+
+// cfInsert answers CF.INSERT and CF.INSERTNX: an array of what each item
+// came to. CF.INSERT answers a RESP3 client with booleans - true for an item
+// inserted, false for one a full filter could not take - and a RESP2 one
+// with 1 and -1; CF.INSERTNX answers both with 1, 0 for an item that appears
+// present, and -1, as RedisBloom's cfInsertCommon does.
+func (e *Engine) cfInsert(name string, args []string, nx bool) []byte {
+	e.recordsItself()
+	if len(args) < 3 {
+		return e.encode(wrongArguments(name), false)
+	}
+	req, err := parseCFInsert(name, args, nx)
+	if err != nil {
+		return e.encode(err, false)
+	}
+	req.text = args[1:]
+	r := e.reply()
+	started := false
+	booleans := r.RESP3 && !nx
+	err = e.opCFInsert(args[0], req, func(result cfInsertResult) {
+		if !started {
+			r.Array(len(req.items))
+			started = true
+		}
+		switch {
+		case booleans:
+			r.Bool(result == cfInserted)
+		case result == cfInserted:
+			r.Int(1)
+		case result == cfExists:
+			r.Int(0)
+		default:
+			r.Int(-1)
+		}
+	})
+	if err != nil {
+		return r.Error(err).Bytes()
+	}
+	return r.Bytes()
+}
+
+// cmdCFCOMPACT implements CF.COMPACT key; see opCFCompact.
+func (e *Engine) cmdCFCOMPACT(args []string) []byte {
+	e.recordsItself()
+	if len(args) != 1 {
+		return e.encode(wrongArguments("CF.COMPACT"), false)
+	}
+	r := e.reply()
+	if err := e.opCFCompact(args[0]); err != nil {
+		return r.Error(err).Bytes()
+	}
+	return r.Status("OK").Bytes()
+}

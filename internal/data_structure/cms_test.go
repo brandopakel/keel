@@ -32,10 +32,7 @@ func TestCalcCMSDim(t *testing.T) {
 	assert.EqualValues(t, 1, d)
 }
 
-func incr(c *CMS, item string, n uint32) uint32 {
-	estimate, _ := c.IncrBy(item, n)
-	return estimate
-}
+func incr(c *CMS, item string, n uint64) uint32 { return c.IncrBy(item, n) }
 
 func TestCMSCountsExactlyWhenThereAreNoCollisions(t *testing.T) {
 	c := CreateCMS(1000, 5)
@@ -64,7 +61,7 @@ func TestCMSNeverUnderestimates(t *testing.T) {
 		n := uint32(1 + rng.Intn(5))
 		truth[item] += n
 		total += uint64(n)
-		c.IncrBy(item, n)
+		c.IncrBy(item, uint64(n))
 	}
 	assert.Equal(t, total, c.TotalCount())
 
@@ -80,25 +77,41 @@ func TestCMSNeverUnderestimates(t *testing.T) {
 		"estimates past the error bound should be rarer than delta allows, with room")
 }
 
-func TestCMSSaturatesInsteadOfWrapping(t *testing.T) {
+// TestCMSSaturatesAsRedisBloomDoes: a counter that cannot take an increment
+// stops at the maximum rather than wrapping, and an estimate of the maximum
+// is the overflow RedisBloom reports, reached exactly or not, an increment
+// of 2^32 or more included.
+func TestCMSSaturatesAsRedisBloomDoes(t *testing.T) {
 	c := CreateCMS(16, 2)
-	estimate, saturated := c.IncrBy("x", math.MaxUint32-5)
-	assert.EqualValues(t, math.MaxUint32-5, estimate)
-	assert.False(t, saturated)
-
-	estimate, saturated = c.IncrBy("x", 5)
-	assert.EqualValues(t, math.MaxUint32, estimate)
-	assert.False(t, saturated, "reaching the maximum exactly is not an overflow")
-
-	estimate, saturated = c.IncrBy("x", 0)
-	assert.EqualValues(t, math.MaxUint32, estimate)
-	assert.False(t, saturated, "nor is adding nothing to it")
-
-	estimate, saturated = c.IncrBy("x", 10)
-	assert.EqualValues(t, math.MaxUint32, estimate, "an overflowing counter pins to the maximum")
-	assert.True(t, saturated, "and says so")
+	assert.EqualValues(t, math.MaxUint32-5, c.IncrBy("x", math.MaxUint32-5))
+	assert.EqualValues(t, math.MaxUint32, c.IncrBy("x", 5), "reaching the maximum exactly")
+	assert.EqualValues(t, math.MaxUint32, c.IncrBy("x", 0))
+	assert.EqualValues(t, math.MaxUint32, c.IncrBy("x", 10), "an overflowing counter pins to the maximum")
 	assert.EqualValues(t, math.MaxUint32, c.Count("x"))
-	assert.EqualValues(t, uint64(math.MaxUint32)+10, c.TotalCount(), "the total keeps counting in 64 bits")
+	assert.EqualValues(t, math.MaxUint32, c.IncrBy("y", 1<<32), "an increment past 32 bits")
+	assert.EqualValues(t, math.MaxUint32, c.IncrBy("z", math.MaxInt64))
+	assert.EqualValues(t, uint64(math.MaxUint32)+10+(1<<32)+math.MaxInt64, c.TotalCount())
+}
+
+// TestCMSMergeIsRedisBloomsWeightedSum: MergeFrom sets each counter to the
+// weighted sum of the sources' and the total to theirs, the destination
+// among the sources included, and refuses a sum that leaves a counter's 32
+// bits or goes negative, leaving the destination as it was.
+func TestCMSMergeIsRedisBloomsWeightedSum(t *testing.T) {
+	a, b, dest := CreateCMS(100, 3), CreateCMS(100, 3), CreateCMS(100, 3)
+	a.IncrBy("x", 5)
+	b.IncrBy("x", 7)
+	b.IncrBy("y", 1)
+	assert.NoError(t, dest.MergeFrom([]*CMS{a, b}, []int64{1, 1}))
+	assert.EqualValues(t, 12, dest.Count("x"))
+	assert.EqualValues(t, 1, dest.Count("y"))
+	assert.EqualValues(t, 13, dest.TotalCount())
+	assert.NoError(t, dest.MergeFrom([]*CMS{dest, a}, []int64{2, -1}))
+	assert.EqualValues(t, 19, dest.Count("x"), "the destination as a source, its weight applied before it is overwritten")
+	assert.EqualValues(t, 21, dest.TotalCount())
+	assert.ErrorIs(t, dest.MergeFrom([]*CMS{a}, []int64{-1}), ErrCMSMergeOverflow, "a negative counter")
+	assert.ErrorIs(t, dest.MergeFrom([]*CMS{a}, []int64{1 << 32}), ErrCMSMergeOverflow, "a counter past 32 bits")
+	assert.EqualValues(t, 19, dest.Count("x"), "a refused merge leaves the destination")
 }
 
 // TestCMSReadsAPriorBuildsState decodes a sketch marshalled by the build before

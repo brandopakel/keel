@@ -148,3 +148,83 @@ func (e *Engine) opBFInfo(key string) (bfInfo, error) {
 	return bfInfo{capacity: sb.Capacity(), size: sb.MemUsage(), filters: uint64(sb.Filters()),
 		items: sb.Count(), expansion: uint64(sb.Expansion()), nonScaling: sb.NonScaling()}, nil
 }
+
+// bfInsertRequest is a BF.INSERT's filter, should it create one, and its
+// items.
+type bfInsertRequest struct {
+	// r is the filter BF.INSERT creates for a key that holds none, unless
+	// noCreate.
+	r        bfReservation
+	noCreate bool
+	items    []string
+	// text is the arguments after the key as the client wrote them, which the
+	// record repeats; nil for a Go caller.
+	text []string
+}
+
+// opBFInsert adds each of req's items to the filter key holds, creating the
+// one req describes for a key that holds none, and hands each its answer as
+// opBFMAdd's: BF.INSERT. A key that holds none with NOCREATE is
+// errFilterNotFound, and one of another type errWrongType. RedisBloom
+// replicates every BF.INSERT that reaches its items, so every one is
+// recorded.
+func (e *Engine) opBFInsert(key string, req bfInsertRequest, each func(added bool, err error)) error {
+	switch e.filterKeyStatus(key, e.sbStore) {
+	case filterOtherType:
+		return errWrongType
+	case filterMissing:
+		if req.noCreate {
+			return errFilterNotFound
+		}
+		r := req.r
+		if r.expansion != 0 && r.errorRate/2 == 0 {
+			return errBFCouldNotCreate
+		}
+		if err := e.affordable(data_structure.BloomBytesFor(r.capacity, r.errorRate)); err != nil {
+			return err
+		}
+		sb := data_structure.CreateSBChain(r.capacity, r.errorRate, r.expansion)
+		if sb == nil {
+			return errBFCouldNotCreate
+		}
+		e.sbStore.Put(key, sb)
+	}
+	sb, _ := e.bloomFor(key)
+	for _, item := range req.items {
+		added, err := sb.Add(item)
+		each(added, err)
+		if err == data_structure.ErrNonScalingFull {
+			break
+		}
+	}
+	e.sbStore.Resize(key)
+	text := req.text
+	if text == nil {
+		text = []string{"CAPACITY", strconv.FormatUint(req.r.capacity, 10),
+			"ERROR", strconv.FormatFloat(req.r.errorRate, 'g', -1, 64)}
+		if req.r.expansion == 0 {
+			text = append(text, "NONSCALING")
+		} else {
+			text = append(text, "EXPANSION", strconv.FormatUint(req.r.expansion, 10))
+		}
+		if req.noCreate {
+			text = append(text, "NOCREATE")
+		}
+		text = append(append(text, "ITEMS"), req.items...)
+	}
+	e.aofRecordKeyArgs("BF.INSERT", key, text)
+	return nil
+}
+
+// opBFCard is how many items have been added to the filter key holds, zero
+// for a key that holds none: BF.CARD. A key of another type is errWrongType.
+func (e *Engine) opBFCard(key string) (int64, error) {
+	switch e.filterKeyRead(key, e.sbStore) {
+	case filterMissing:
+		return 0, nil
+	case filterOtherType:
+		return 0, errWrongType
+	}
+	sb, _ := e.sbStore.Peek(key)
+	return int64(sb.Count()), nil
+}
