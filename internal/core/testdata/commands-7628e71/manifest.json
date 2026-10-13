@@ -1,5 +1,5 @@
 {
-  "source_revision": "3fba36c",
+  "source_revision": "7628e71",
   "captured": "2026-10-13",
   "note": "Every command's RESP2 and RESP3 replies and log records at source_revision; see command_golden_test.go.",
   "files": {
@@ -52,9 +52,9 @@
       "records": 30
     },
     "refusals.txt": {
-      "sha256": "b5664567b7e52cded8a5fd8d4c73cddd1c2986d7ec5e738abea458e8a3eb11cc",
+      "sha256": "c5e7b705b737d5d3bac610478d75a49f5194737de33c86c721d34301201f23a4",
       "cases": 2,
-      "commands": 219,
+      "commands": 224,
       "records": 0
     },
     "replication.txt": {
@@ -82,10 +82,10 @@
       "records": 13
     },
     "strings.txt": {
-      "sha256": "2c2686280ca1e01edf9b6ad36c5bcd381b0e2c92af76356502d42b3611254d90",
-      "cases": 17,
-      "commands": 402,
-      "records": 166
+      "sha256": "863583000456c0637c98c96a0c31ca4c3d7c29d07ffdca31221be6060efc9a7e",
+      "cases": 23,
+      "commands": 604,
+      "records": 264
     },
     "transactions.txt": {
       "sha256": "9ce59c9c6f24438b60e6c5c190812720c3705ac197a5f730e08f778f092c35f8",
