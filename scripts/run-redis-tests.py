@@ -35,12 +35,13 @@ alike: FLUSHALL falls back to FLUSHDB (the same thing on a server with one
 database) and the other three are tried and their failure ignored. For Redis
 this changes nothing; the adaptation is recorded in every result.
 
-A unit's outcome is ok (the harness finished), unconfigurable (the unit's
-start_server sets a configuration with CONFIG SET and the server refused
-it, so no test ran), exception (the harness stopped on another error it
-could not count), timeout (this script stopped it), or crash (the server was
-gone when the unit ended). Tests the harness never reached are counted as
-not run.
+A unit's outcome is ok (the harness finished), unconfigurable (a CONFIG SET
+outside any test, in the setup of the unit or of one of its start_server
+blocks, was refused, so the tests after it never ran), exception (another
+error outside any test did that), timeout (this script or the harness's own
+timeout stopped it), incomplete (the harness stopped without finishing), or
+crash (the server was gone when the unit ended). Tests the harness never
+reached are counted as not run.
 """
 import argparse
 import csv
