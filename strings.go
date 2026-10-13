@@ -2,6 +2,8 @@ package keel
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"strconv"
 	"time"
 
@@ -56,10 +58,9 @@ func setOptions(opts []SetOption, nx, xx bool) (core.SetOptions, error) {
 	return o, nil
 }
 
-// Get is the string key holds: GET. A key that holds nothing is ErrNotFound,
-// and one of another type ErrWrongType.
-func (db *DB) Get(ctx context.Context, key string) (string, error) {
-	value, found, err := db.e.Get(ctx, key)
+// foundAnswer is the answer of a command that reads a string a key may not
+// hold: ErrNotFound when it does not.
+func foundAnswer(value string, found bool, err error) (string, error) {
 	switch {
 	case err != nil:
 		return "", wrap(err)
@@ -69,11 +70,36 @@ func (db *DB) Get(ctx context.Context, key string) (string, error) {
 	return value, nil
 }
 
+// bytesAnswer is a string answer as bytes of its own.
+func bytesAnswer(value string, err error) ([]byte, error) {
+	if err != nil {
+		return nil, err
+	}
+	return []byte(value), nil
+}
+
+// Get is the string key holds: GET. A key that holds nothing is ErrNotFound,
+// and one of another type ErrWrongType.
+func (db *DB) Get(ctx context.Context, key string) (string, error) {
+	return foundAnswer(db.e.Get(ctx, key))
+}
+
+// GetBytes is the string key holds, as bytes the caller owns: GET; see Get.
+func (db *DB) GetBytes(ctx context.Context, key string) ([]byte, error) {
+	return bytesAnswer(db.Get(ctx, key))
+}
+
 // Set stores value at key, replacing whatever the key held, of any type, and
 // clearing its expiry unless an option sets one or keeps it: SET.
 func (db *DB) Set(ctx context.Context, key, value string, opts ...SetOption) error {
 	_, err := db.set(ctx, key, value, opts, false, false)
 	return err
+}
+
+// SetBytes stores value at key, as Set does: SET. The bytes are copied, so
+// the caller may reuse them once it returns.
+func (db *DB) SetBytes(ctx context.Context, key string, value []byte, opts ...SetOption) error {
+	return db.Set(ctx, key, string(value), opts...)
 }
 
 // SetNX stores value at key only if the key holds nothing, of any type, and
@@ -100,14 +126,7 @@ func (db *DB) set(ctx context.Context, key, value string, opts []SetOption, nx, 
 // GetDel is the string key held, which it deletes: GETDEL. A key that held
 // nothing is ErrNotFound.
 func (db *DB) GetDel(ctx context.Context, key string) (string, error) {
-	value, found, err := db.e.GetDel(ctx, key)
-	switch {
-	case err != nil:
-		return "", wrap(err)
-	case !found:
-		return "", ErrNotFound
-	}
-	return value, nil
+	return foundAnswer(db.e.GetDel(ctx, key))
 }
 
 // Incr adds one to the integer key holds, a key that holds nothing holding
@@ -142,7 +161,11 @@ func (db *DB) DecrBy(ctx context.Context, key string, by int64) (int64, error) {
 // long double's, and stored as Redis writes it. A sum that would be infinite
 // is ErrOverflow.
 func (db *DB) IncrByFloat(ctx context.Context, key string, by float64) (float64, error) {
-	sum, err := db.e.IncrByFloat(ctx, key, by)
+	return floatAnswer(db.e.IncrByFloat(ctx, key, by))
+}
+
+// floatAnswer is INCRBYFLOAT's sum, as Redis writes it, as a float64.
+func floatAnswer(sum string, err error) (float64, error) {
 	if err != nil {
 		return 0, wrap(err)
 	}
@@ -176,4 +199,52 @@ func (db *DB) GetRange(ctx context.Context, key string, start, end int64) (strin
 func (db *DB) SetRange(ctx context.Context, key string, offset int64, value string) (int64, error) {
 	n, err := db.e.SetRange(ctx, key, offset, value)
 	return n, wrap(err)
+}
+
+// MGet is the strings keys hold, by key: MGET, in one look at the instance.
+// A key that holds nothing, or holds another type, is not in the map, as
+// MGET answers nil for both. With no keys it runs nothing, and the map is
+// empty.
+func (db *DB) MGet(ctx context.Context, keys ...string) (map[string]string, error) {
+	if len(keys) == 0 {
+		return map[string]string{}, nil
+	}
+	values, found, err := db.e.MGet(ctx, keys)
+	if err != nil {
+		return nil, wrap(err)
+	}
+	return mgetAnswer(keys, values, found), nil
+}
+
+// mgetAnswer is MGET's answer as a map of the keys that hold strings.
+func mgetAnswer(keys, values []string, found []bool) map[string]string {
+	m := make(map[string]string, len(keys))
+	for i, key := range keys {
+		if found[i] {
+			m[key] = values[i]
+		}
+	}
+	return m
+}
+
+// MSet stores each of values at its key, replacing whatever each held, of
+// any type, and clearing its expiry: one MSET, so that no call sees some of
+// them stored and not the rest. It is logged as that MSET, its keys in
+// sorted order. With no values it runs nothing.
+func (db *DB) MSet(ctx context.Context, values map[string]string) error {
+	if len(values) == 0 {
+		return nil
+	}
+	return wrap(db.e.MSet(ctx, msetPairs(values)))
+}
+
+// msetPairs is values as MSET's arguments, keys in sorted order, so that
+// the record is the same however the map is ranged over.
+func msetPairs(values map[string]string) []string {
+	keys := slices.Sorted(maps.Keys(values))
+	pairs := make([]string, 0, 2*len(keys))
+	for _, key := range keys {
+		pairs = append(pairs, key, values[key])
+	}
+	return pairs
 }

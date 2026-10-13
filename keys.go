@@ -112,7 +112,11 @@ func (db *DB) Persist(ctx context.Context, key string) (bool, error) {
 // TTL is how long key has left, to the millisecond: PTTL. A key that holds
 // nothing is ErrNotFound, and one that does not expire answers NoTTL.
 func (db *DB) TTL(ctx context.Context, key string) (time.Duration, error) {
-	ms, err := db.e.TTL(ctx, key)
+	return ttlAnswer(db.e.TTL(ctx, key))
+}
+
+// ttlAnswer is PTTL's answer as a duration.
+func ttlAnswer(ms int64, err error) (time.Duration, error) {
 	switch {
 	case err != nil:
 		return 0, wrap(err)
@@ -128,7 +132,11 @@ func (db *DB) TTL(ctx context.Context, key string) (time.Duration, error) {
 // key that holds nothing is ErrNotFound, and one that does not expire answers
 // the zero time.
 func (db *DB) ExpireTime(ctx context.Context, key string) (time.Time, error) {
-	ms, err := db.e.ExpireTime(ctx, key)
+	return expireTimeAnswer(db.e.ExpireTime(ctx, key))
+}
+
+// expireTimeAnswer is PEXPIRETIME's answer as an instant.
+func expireTimeAnswer(ms int64, err error) (time.Time, error) {
 	switch {
 	case err != nil:
 		return time.Time{}, wrap(err)

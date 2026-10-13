@@ -418,22 +418,31 @@ func (tx *Transaction) exec(e *Engine, w io.Writer, conn Connection) error {
 }
 
 // runTransaction runs commands on e as one unit through run, for EXEC and for
-// a block a replica has received. The unit is framed in the log and in the
-// protocol 2 stream, and eviction in e's space waits until the block is
-// closed, so a block holds what its transaction did and not the removal of
-// whatever unrelated key the budget chose. Redis evicts before EXEC rather
-// than between its commands, for the same reason; the budget can be passed by
-// up to one transaction meanwhile, which the queue limit bounds. reply hears
-// each command's answer in order.
+// a block a replica has received, in a transactionBlock. reply hears each
+// command's answer in order.
 func (e *Engine) runTransaction(commands []*Command, run func(*Command, io.ReadWriter) error, reply func(int, []byte, error)) {
+	e.transactionBlock(len(commands), func(i int) {
+		var sink transactionSink
+		err := run(commands[i], &sink)
+		reply(i, sink.p, err)
+	})
+}
+
+// transactionBlock runs n commands on e as one unit, through run with each's
+// index in turn: EXEC's block, a replica's received one, and the public
+// package's Atomic (Exec). The unit is framed in the log and in the protocol
+// 2 stream, and eviction in e's space waits until the block is closed, so a
+// block holds what its transaction did and not the removal of whatever
+// unrelated key the budget chose. Redis evicts before EXEC rather than
+// between its commands, for the same reason; the budget can be passed by up
+// to one transaction meanwhile, which the queue limit bounds.
+func (e *Engine) transactionBlock(n int, run func(int)) {
 	e.aof.transaction, e.aof.transactionLogged = true, false
 	e.replicationTransaction = replicationBlock{active: true}
 	suspended := e.space.SuspendEviction
 	e.space.SuspendEviction = true
-	for i, cmd := range commands {
-		var sink transactionSink
-		err := run(cmd, &sink)
-		reply(i, sink.p, err)
+	for i := range n {
+		run(i)
 	}
 	e.closeAOFTransaction()
 	e.closeReplicationTransaction()

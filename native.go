@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"time"
-
-	"github.com/brandopakel/keel/internal/core"
 )
 
 // The Keel-native methods: what an embedded cache wants and Redis's command
@@ -28,7 +26,8 @@ var errLoadPanicked = errors.New("keel: GetOrSet's load panicked")
 // load returns, which it stores, as SET with opts stores one: the cache-aside
 // read, done once for every caller at a time. Keel-native: no Redis command
 // does this; it is GET, then SET NX, and is logged as the SET (and its
-// PEXPIREAT) it performs.
+// PEXPIREAT) it performs. A WithTTL runs from when the value is stored, not
+// from when the load began.
 //
 // Concurrent callers that miss the same key share one load: the first starts
 // it and the rest wait for it, and all answer with what it returned. A load
@@ -44,8 +43,9 @@ func (db *DB) GetOrSet(ctx context.Context, key string, load func(context.Contex
 	if !errors.Is(err, ErrNotFound) {
 		return value, err
 	}
-	o, err := setOptions(opts, true, false)
-	if err != nil {
+	// Refused before anything loads; set again once the load is done, so
+	// that a TTL runs from when the value is stored, as SET's PX does.
+	if _, err := setOptions(opts, true, false); err != nil {
 		return "", err
 	}
 	db.mu.Lock()
@@ -56,7 +56,7 @@ func (db *DB) GetOrSet(ctx context.Context, key string, load func(context.Contex
 			db.flights = map[string]*flight{}
 		}
 		db.flights[key] = f
-		go db.runLoad(context.WithoutCancel(ctx), key, f, load, o)
+		go db.runLoad(context.WithoutCancel(ctx), key, f, load, opts)
 	}
 	db.mu.Unlock()
 	select {
@@ -69,7 +69,7 @@ func (db *DB) GetOrSet(ctx context.Context, key string, load func(context.Contex
 
 // runLoad runs one GetOrSet load and stores what it returns, then answers
 // every waiter.
-func (db *DB) runLoad(ctx context.Context, key string, f *flight, load func(context.Context) (string, error), o core.SetOptions) {
+func (db *DB) runLoad(ctx context.Context, key string, f *flight, load func(context.Context) (string, error), opts []SetOption) {
 	defer func() {
 		if p := recover(); p != nil {
 			f.err = fmt.Errorf("%w: %v", errLoadPanicked, p)
@@ -84,9 +84,9 @@ func (db *DB) runLoad(ctx context.Context, key string, f *flight, load func(cont
 		f.err = err
 		return
 	}
-	stored, err := db.e.Set(ctx, key, value, o)
+	stored, err := db.set(ctx, key, value, opts, true, false)
 	if err != nil {
-		f.err = wrap(err)
+		f.err = err
 		return
 	}
 	if !stored {

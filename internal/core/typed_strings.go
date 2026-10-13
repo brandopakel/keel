@@ -155,3 +155,35 @@ func (e *Engine) SetRange(ctx context.Context, key string, offset int64, value s
 	})
 	return n, err
 }
+
+// MGet is the string each of keys holds, and whether it holds one: MGET. A
+// key of another type reads as none, as MGET answers nil for it, and counts
+// as the keyspace hit Redis counts it as (cmdMGET).
+func (e *Engine) MGet(ctx context.Context, keys []string) (values []string, found []bool, err error) {
+	values, found = make([]string, len(keys)), make([]bool, len(keys))
+	err = e.call(ctx, "MGET", keys, func() error {
+		for i, key := range keys {
+			values[i], found[i] = e.opGet(key)
+			held := found[i]
+			if !held {
+				_, held = e.space.OwnerOf(key)
+			}
+			e.noteLookup(held)
+		}
+		return nil
+	})
+	return values, found, err
+}
+
+// MSet stores pairs, keys and values in turn, each value replacing whatever
+// its key held, of any type, and clearing its expiry: MSET.
+func (e *Engine) MSet(ctx context.Context, pairs []string) error {
+	keys := make([]string, 0, len(pairs)/2)
+	for i := 0; i+1 < len(pairs); i += 2 {
+		keys = append(keys, pairs[i])
+	}
+	return e.call(ctx, "MSET", keys, func() error {
+		e.opMSet(pairs)
+		return nil
+	})
+}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/brandopakel/keel"
@@ -147,4 +148,73 @@ func ExampleDB_Stats() {
 	s, _ := db.Stats(ctx)
 	fmt.Println(s.Keys, s.KeyspaceHits, s.KeyspaceMisses)
 	// Output: 1 1 1
+}
+
+func ExampleDB_Atomic() {
+	ctx := context.Background()
+	db, _ := keel.Open(ctx, keel.Options{})
+	defer db.Close()
+
+	// Count a hit and start its window together: no other call sees the
+	// count without its expiry.
+	var hits *keel.Result[int64]
+	err := db.Atomic(ctx, func(tx *keel.Tx) error {
+		hits = tx.Incr("hits:ada")
+		tx.Expire("hits:ada", time.Minute, keel.ExpireNX)
+		return nil
+	})
+	fmt.Println(err)
+	fmt.Println(hits.Value())
+	// Output:
+	// <nil>
+	// 1 <nil>
+}
+
+func ExampleDB_Atomic_failure() {
+	ctx := context.Background()
+	db, _ := keel.Open(ctx, keel.Options{})
+	defer db.Close()
+	db.Set(ctx, "name", "Ada")
+
+	// As in Redis, a command that fails does not undo the others.
+	var incr *keel.Result[int64]
+	db.Atomic(ctx, func(tx *keel.Tx) error {
+		tx.Set("seen", "yes")
+		incr = tx.Incr("name")
+		return nil
+	})
+	fmt.Println(errors.Is(incr.Err(), keel.ErrNotInteger))
+	fmt.Println(db.Get(ctx, "seen"))
+	// Output:
+	// true
+	// yes <nil>
+}
+
+func ExampleDB_Scan() {
+	ctx := context.Background()
+	db, _ := keel.Open(ctx, keel.Options{})
+	defer db.Close()
+	db.MSet(ctx, map[string]string{"user:1": "Ada", "user:2": "Grace", "session:9": "x"})
+
+	var users []string
+	for key, err := range db.Scan(ctx, keel.ScanOptions{Match: "user:*"}) {
+		if err != nil {
+			panic(err)
+		}
+		users = append(users, key)
+	}
+	slices.Sort(users)
+	fmt.Println(users)
+	// Output: [user:1 user:2]
+}
+
+func ExampleDB_MGet() {
+	ctx := context.Background()
+	db, _ := keel.Open(ctx, keel.Options{})
+	defer db.Close()
+	db.MSet(ctx, map[string]string{"a": "1", "b": "2"})
+
+	values, _ := db.MGet(ctx, "a", "b", "missing")
+	fmt.Println(values)
+	// Output: map[a:1 b:2]
 }

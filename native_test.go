@@ -242,3 +242,19 @@ func TestStatsAgreesWithINFO(t *testing.T) {
 		assert.Equal(t, s.Commands+1, s2.Commands, "INFO counted itself once it ran; Stats counts as nothing")
 	}
 }
+
+// TestGetOrSetTTLRunsFromTheStore: a WithTTL runs from when the loaded value
+// is stored, as SET's PX runs from when SET does, however long the load took.
+func TestGetOrSetTTLRunsFromTheStore(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db := open(t, keel.Options{})
+	_, err := db.GetOrSet(ctx, "k", func(context.Context) (string, error) {
+		time.Sleep(500 * time.Millisecond)
+		return "v", nil
+	}, keel.WithTTL(time.Second))
+	require.NoError(t, err)
+	ttl, err := db.TTL(ctx, "k")
+	require.NoError(t, err)
+	assert.Greater(t, ttl, 600*time.Millisecond, "the load's half second is not taken from the TTL")
+}

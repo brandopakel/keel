@@ -3,7 +3,10 @@ package core
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
+
+	"github.com/brandopakel/keel/internal/data_structure"
 )
 
 // Typed calls: keys and expiry. Each runs the typed operation of the command
@@ -12,6 +15,7 @@ import (
 var (
 	errExpireNXWithOthers = errors.New("ERR NX and XX, GT or LT options at the same time are not compatible")
 	errExpireGTWithLT     = errors.New("ERR GT and LT options at the same time are not compatible")
+	errScanMatchWork      = errors.New("ERR SCAN pattern work limit exceeded; use a simpler MATCH or smaller COUNT")
 )
 
 // ExpireCondition is the EXPIRE family's NX, XX, GT and LT: set the expiry
@@ -162,4 +166,73 @@ func (e *Engine) ExpireTime(ctx context.Context, key string) (ms int64, err erro
 		return nil
 	})
 	return ms, err
+}
+
+// ScanOptions is SCAN's MATCH, TYPE and COUNT, each empty or zero when not
+// given.
+type ScanOptions struct {
+	// Match is a glob the keys returned match, as MATCH's.
+	Match string
+	// Type is the name of the type the keys returned hold, as TYPE's.
+	Type string
+	// Count is how many keys a step may look at, as COUNT's: from 1 to
+	// SCAN's bound, zero for Redis's default of 10.
+	Count int
+}
+
+// Scan is one step of SCAN's walk from cursor, 0 to start: the keys it
+// looked at that o keeps, which may be none while the walk goes on, and the
+// cursor to continue from, 0 once the walk is done. It holds nothing between
+// steps, and a key present for a whole walk is returned at least once, as
+// SCAN guarantees.
+//
+// It refuses what SCAN refuses: a Count outside SCAN's bounds, as its syntax
+// error, and a Match that uses up its work, as its work limit.
+func (e *Engine) Scan(ctx context.Context, cursor uint64, o ScanOptions) (keys []string, next uint64, err error) {
+	count := scanDefaultCount
+	if o.Count != 0 {
+		if o.Count < 1 || o.Count > scanMaxCount {
+			return nil, 0, errSyntax
+		}
+		count = o.Count
+	}
+	keyspace := strings.ToLower(o.Type)
+	err = e.call(ctx, "SCAN", nil, func() error {
+		var exhausted bool
+		keys, next, exhausted = e.scanStep(cursor, count, o.Match, keyspace)
+		if exhausted {
+			return errScanMatchWork
+		}
+		return nil
+	})
+	return keys, next, err
+}
+
+// scanStep is SCAN's walk of up to count keys from cursor, keeping those
+// that match pattern and are held by keyspace, each filter skipped when
+// empty, and that have not expired; and whether the pattern used up its
+// work. It filters as cmdSCAN's keep does, in the same order, and its test
+// holds a walk of its steps to the keys a walk of SCAN keeps.
+func (e *Engine) scanStep(cursor uint64, count int, pattern, keyspace string) ([]string, uint64, bool) {
+	remainingMatchWork := scanMatchWork
+	matchExhausted := false
+	keep := func(ks data_structure.Keyspace, key string) bool {
+		if keyspace != "" && ks.KeyspaceName() != keyspace {
+			return false
+		}
+		if pattern != "" {
+			if matchExhausted {
+				return false
+			}
+			matched, exhausted := globMatchBounded(pattern, key, &remainingMatchWork)
+			matchExhausted = exhausted
+			if !matched {
+				return false
+			}
+		}
+		at, expires := ks.GetExpiry(key)
+		return !expires || at > uint64(time.Now().UnixMilli())
+	}
+	keys, next := e.space.ScanKeyspaces(cursor, count, keep, nil)
+	return keys, next, matchExhausted
 }

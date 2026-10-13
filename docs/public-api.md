@@ -58,16 +58,76 @@ Every method takes a context and Go types and is safe for concurrent use.
 | Area | Methods |
 | --- | --- |
 | Lifecycle | `Open`, `Close` |
-| Strings | `Get`, `Set` (`WithTTL`, `WithExpireAt`, `WithKeepTTL`), `SetNX`, `SetXX`, `GetDel`, `Incr`, `Decr`, `IncrBy`, `DecrBy`, `IncrByFloat`, `Append`, `StrLen`, `GetRange`, `SetRange` |
-| Keys | `Del`, `Exists`, `Type`, `Rename`, `RenameNX`, `DBSize`, `FlushDB` |
+| Strings | `Get`, `GetBytes`, `Set`, `SetBytes` (`WithTTL`, `WithExpireAt`, `WithKeepTTL`), `SetNX`, `SetXX`, `GetDel`, `MGet`, `MSet`, `Incr`, `Decr`, `IncrBy`, `DecrBy`, `IncrByFloat`, `Append`, `StrLen`, `GetRange`, `SetRange` |
+| Keys | `Del`, `Exists`, `Type`, `Rename`, `RenameNX`, `DBSize`, `FlushDB`, `Scan` (`ScanOptions`) |
 | Expiry | `Expire`, `ExpireAt` (`ExpireNX`, `ExpireXX`, `ExpireGT`, `ExpireLT`), `Persist`, `TTL` (`NoTTL`), `ExpireTime` |
+| Transactions | `Atomic`, with `Tx`'s methods answering in `Result`s |
 | Keel-native | `GetOrSet`, `CompareAndSwap`, `DeleteIf`, `Stats` |
 | Experimental | `Do` |
 
-Hashes, lists, sets, sorted sets, geo, the sketches and filters, `Scan`,
-`Dump` and `Restore`, `MGet` and `MSet`, `[]byte` forms, and `Atomic` follow
-as their families' typed operations reach develop; until then `Do` runs
-them.
+Hashes, lists, sets, sorted sets, geo, the sketches and filters, and `Dump`
+and `Restore` follow as their families' typed operations reach develop;
+until then `Do` runs them.
+
+- **`MGet` and `MSet` take and give maps.** `MGet` answers the keys that hold
+  strings; a key that holds nothing, or another type, is left out, as `MGET`
+  answers nil for both. `MSet` is one `MSET`, so that no call sees some of
+  its keys stored and not the rest, logged with its keys in sorted order.
+  With no keys, neither runs anything.
+- **`[]byte` forms copy.** `SetBytes` copies its value before it returns,
+  and `GetBytes` answers a copy the caller owns.
+
+## Transactions
+
+```go
+var hits *keel.Result[int64]
+err := db.Atomic(ctx, func(tx *keel.Tx) error {
+    hits = tx.Incr("hits:" + user)
+    tx.Expire("hits:"+user, time.Minute, keel.ExpireNX)
+    return nil
+})
+n, err := hits.Value()
+```
+
+`Atomic` is Redis's `MULTI` and `EXEC`, on the same transaction block the
+server's `EXEC` runs:
+
+- **Queued, then run whole.** The function queues commands on the `Tx`, whose
+  methods are the `DB`'s without a context, each answering with a `Result`.
+  Once the function returns nil they run, in order, under one hold of the
+  instance's lock, so that no other call runs between them, and what they
+  write is logged as one `MULTI ... EXEC` block, which a replay applies whole
+  or, cut off by a crash, not at all. The function runs before the lock is
+  taken, and a `Result` is answered only once `Atomic` returns, so the
+  function can take its time but cannot read what the transaction writes.
+- **No rollback.** A command that fails fails alone, as in Redis: those after
+  it run and those before it stand. `Atomic` returns nil once the
+  transaction has run; each `Result` holds its command's answer and error.
+- **Refused whole.** Nothing runs, and `Atomic` returns why, if the function
+  returns an error, the context is done, the `DB` is closed, or its log has
+  failed - while a failed write or sync is retried, a transaction that
+  writes is refused with `ErrPersistence`, as Redis refuses `EXEC`. Each
+  `Result` then holds that error.
+- **Counted as a client's.** A transaction counts as the commands a client
+  sends for it, its `MULTI` and `EXEC` with the rest.
+
+## Scanning
+
+```go
+for key, err := range db.Scan(ctx, keel.ScanOptions{Match: "user:*", Type: "hash"}) {
+    if err != nil { ... }
+    ...
+}
+```
+
+`Scan` walks the keys as a client walks them with `SCAN`, one step at a time,
+each step a `SCAN` of its own. The lock is held for one step and never while
+the loop's body runs, so the body may call the `DB`, change the keys it
+walks, or take its time, and other calls run between steps. It guarantees
+what `SCAN` guarantees: a key that holds something for the whole walk is
+yielded at least once; a key may be yielded twice, and one added or deleted
+during the walk may or may not be. `Match` and `Type` are `SCAN`'s `MATCH`
+and `TYPE`, and `Count` its `COUNT`: the work each step does under the lock.
 
 **Keel-native methods** are Keel's own surface, with Redis's semantics
 underneath, and each says so in its doc comment:

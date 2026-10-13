@@ -2466,6 +2466,39 @@ Redis.
     `MSet` from a map, and `[]byte` forms. After the alpha: notifications
     and a rate-limit helper; not planned: a generic `Value[T]` codec, which
     callers can wrap themselves.
+  - **`Atomic` queues, then runs** (part 3), as `EXEC` does: the function
+    queues commands on a `Tx`, whose methods are the `DB`'s without a
+    context, each answering with a `Result[T]` that is filled when the
+    transaction runs. The block runs under one hold of the lock through the
+    transaction block the server's `EXEC` runs (`transactionBlock`), framed
+    `MULTI ... EXEC` in the log and the protocol 2 stream; it is refused
+    whole as `EXEC` is - `MISCONF` when it writes while the log retries, a
+    replica's refusal - and counts as `MULTI`, its commands and `EXEC`. A
+    function that returns an error runs nothing, as `DISCARD`. The function
+    runs outside the lock, so no caller code ever runs under it, the rule the
+    iterators keep. Not chosen: running the function under the lock with
+    immediate answers, as bbolt's `Update` does, which would let a
+    transaction read what it wrote but would hold every other call while
+    caller code runs, and deadlock a function that calls the `DB`; Redis's
+    answer to read-then-write is `WATCH` or a script, and `CompareAndSwap`
+    covers the common case.
+  - **A transaction's commands are the `DB`'s methods.** `core.Exec` hands
+    each queued command a context that tells the typed call it runs inside
+    the block - under the lock `Exec` holds, without the refusals `Exec`
+    made for the block, and without a wait of its own - so a `Tx` method
+    runs exactly what its `DB` method runs. Each `Tx` method names the
+    command it queues; `Exec` refuses the block by those names before any
+    of it runs, and the typed call holds each command to its name.
+  - **`Scan` is an iterator over `SCAN`'s steps**, `iter.Seq2[string,
+    error]`: each step one typed `SCAN`, the lock let go between steps and
+    while the loop's body runs, and `SCAN`'s guarantee that a key present
+    for the whole walk is yielded at least once. `Count` is `COUNT`, with
+    Redis's default of 10; an empty `Match` or `Type` filters nothing.
+  - **`MGet` answers a map and `MSet` takes one**, `MSET`'s record with its
+    keys sorted so that a map's order never changes the log; with no keys
+    neither runs anything. `GetBytes` and `SetBytes` copy.
+  - **`GetOrSet`'s TTL runs from when the value is stored**, as `SET`'s
+    `PX` does from when it runs, rather than from when the load began.
 
 - **Phase 4's choices** (October 12, 2026), where the code needed more than
   the plan said:

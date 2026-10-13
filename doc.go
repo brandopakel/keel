@@ -30,6 +30,14 @@
 // and synced under FsyncAlways. The log is the instance's alone while it is
 // open: a second Open of the same path fails with ErrLocked.
 //
+// # Transactions and scans
+//
+// Atomic runs commands as one transaction, as Redis's MULTI and EXEC do: a
+// function queues them on a Tx, and they run together, with nothing between
+// them, logged as one block; a command that fails does not undo the others.
+// Scan walks the keys as SCAN does, as an iterator that never holds the lock
+// while the loop's body runs.
+//
 // # Errors
 //
 // An error keeps the text Redis answers with - "WRONGTYPE Operation against
