@@ -2285,6 +2285,25 @@ SET EX (3 to 0); the log's bytes are the same.
   Reply built and read back for one value costs a few nanoseconds there. GET
   now answers through `resp.SingleBulk`, a Reply's first-bulk path without
   the Reply.
+- **The measured cost of ordered staging.** A converted write stages its
+  record and the log takes it at the command's end, so that a command's
+  records keep the order it made them in, which replay and replicas depend
+  on. On GitHub's x86 runners, against `b1d914b`, INCR with the log reads
+  1.059 and 1.037 (+18 to +20 ns of 344 to 483) and with a replica 1.086
+  and 1.062 (+34 to +36 ns of 412 to 595), INCR alone 1.007 and 1.000,
+  the medians 1.0079 and 1.0132 (runs 38342261532, 38342263599). A
+  profiling pass found nothing incidental to remove: on an Apple M-series
+  machine, with the log's buffer dropped rather than written, the staged
+  path (`aofRecord` 0.6% of samples, `appendStaged` and `appendAOFParts`
+  10.8%) costs no more than logging INCR as it arrived did
+  (`appendAOFCommand` 12.2%), the record is encoded once into the buffer
+  the log and a protocol 2 replica share, and the value is formatted once;
+  there INCR with a replica reads 0.96. A control build that gives every
+  function on the logged write path the baseline's 64-byte phase (run
+  38345899057) still reads INCR at 1.051 with the log and 1.113 with a
+  replica, and the logged writes this step does not touch (SADD,
+  LPUSH-RPOP, HSET) at 1.03 to 1.07: the x86 runners price the logged
+  path's layout beyond function phase, and staging is kept at that price.
 
 ## Risks, in order
 
