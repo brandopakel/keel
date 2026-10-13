@@ -127,12 +127,12 @@ func (e *Engine) cmdMGET(args []string) []byte {
 	// once to write it, and each is counted the first time.
 	others, counted := -1, 0
 	return e.encodeLookupArray(len(args), func(i int) (string, bool) {
-		obj := e.dictStore.Get(args[i])
+		value, ok := e.opGet(args[i])
 		first := i >= counted
 		if first {
 			counted = i + 1
 		}
-		if obj == nil {
+		if !ok {
 			if first {
 				if others < 0 {
 					others = 0
@@ -153,43 +153,26 @@ func (e *Engine) cmdMGET(args []string) []byte {
 		if first {
 			e.noteLookup(true)
 		}
-		return obj.Value, true
+		return value, true
 	}, shapeArray)
 }
 
-// cmdMSET writes several string keys at once.
+// cmdMSET writes several string keys at once; see opMSet.
 //
-// Unlike MGET this does type-check, because it writes. A name held by a set is
-// refused rather than overwritten, which is this server's rule rather than
-// Redis's - Redis lets SET clobber any type. Following SET here matters more
-// than following Redis: MSET that behaved differently from SET on the same key
-// would be the surprising one.
+// A name another type holds is replaced, as SET replaces it and as Redis's
+// MSET does (see replacingWrites), and its DEL is recorded first.
 //
 // Redis documents MSET as atomic, and on a server whose command execution is
 // single-threaded it is, with nothing needed to make it so: no other client can
-// observe a moment inside it. The type check having already run for every key
-// is what makes that true of failures too - it cannot write half the pairs and
-// then refuse.
+// observe a moment inside it.
 func (e *Engine) cmdMSET(args []string) []byte {
+	e.recordsItself()
 	if len(args) == 0 || len(args)%2 != 0 {
 		return e.encode(wrongArguments("MSET"), false)
 	}
-
-	replaced := false
-	for i := 0; i < len(args); i += 2 {
-		key, value := args[i], args[i+1]
-		if other, held := e.space.OwnerOf(key); held && other.KeyspaceName() != e.dictStore.KeyspaceName() {
-			e.dropOtherType(other, key)
-			replaced = true
-		}
-		e.dictStore.Put(key, e.dictStore.NewObj(value))
-	}
-	if replaced {
-		// Staged records replace the command in the log, so once a DEL is
-		// staged the MSET has to be staged after it too.
-		e.aofRecord(append([]string{"MSET"}, args...)...)
-	}
-	return constant.RespOk
+	e.opMSet(args)
+	r := e.reply()
+	return r.Status("OK").Bytes()
 }
 
 // cmdFLUSHDB empties every keyspace.
