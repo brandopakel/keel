@@ -39,6 +39,18 @@ example.
   nothing; the type check then counts only the hit of a key of another
   type. Add a `stats-parity.py` case with a bad argument for each such
   read, and one with a key of another type.
+- **A record is the command as Redis propagates it.** Where Redis
+  propagates a command verbatim, the operation records the client's own
+  argument text, carried in its request (`text []string`, nil for a Go
+  caller, whose record is formatted from the values), so that `1e-2` or `007`
+  stays the same bytes. Where Redis rewrites what it propagates, the
+  operation records the rewritten form: INCRBYFLOAT as `SET ... KEEPTTL`,
+  the EXPIRE family as `PEXPIREAT` or `DEL`, GETDEL as `DEL`, GEOADD as
+  `ZADD` with each member's 52-bit geohash as its score (geo.c, lines
+  490-503, `replaceClientCommandVector` and then `zaddCommand`). A
+  conversion PR keeps today's bytes; where Keel's record differs from
+  Redis's form, the family's missing-commands PR moves it there and
+  recaptures (an older record still replays).
 - **A write that changes nothing is not logged**, as Redis decides with
   `server.dirty`: Redis propagates a command only when it counted a change
   (for example `t_list.c`, `popGenericCommand`, which returns before
