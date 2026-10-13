@@ -22,6 +22,52 @@ def sha256(path):
     return digest.hexdigest()
 
 
+# The ports this process has given its servers. A port is reserved by binding
+# port 0 and reading the one the kernel chose, and released at once so that the
+# server can bind it; released, it is free again, and the kernel may choose it
+# for the next reservation before the first server has started. Two Servers
+# made before either starts, as soak.py makes its primary and replica, then
+# share a port: the second fails to bind it, and the first answers the second's
+# readiness check (#183's "Recovery on xfs", run 38341148820).
+_given_ports = set()
+
+
+def reserve_port():
+    """A loopback port free now that no server of this process was given."""
+    held = []
+    try:
+        for _ in range(64):
+            reservation = socket.socket()
+            held.append(reservation)
+            reservation.bind(('127.0.0.1', 0))
+            port = reservation.getsockname()[1]
+            if port not in _given_ports:
+                _given_ports.add(port)
+                return port
+        raise RuntimeError('no loopback port this process has not already given out')
+    finally:
+        # Held until a new port is found, so that the kernel cannot choose
+        # the same given one again while it is looked for.
+        for reservation in held:
+            reservation.close()
+
+
+def check_owner(client, pid, port):
+    """Refuse a server on port that is not process pid, as INFO server says.
+
+    A server that cannot bind its port leaves whatever holds it to answer for
+    it, and a readiness check that only pings is answered. Builds before
+    INFO's process_id (#140) cannot say who they are, and are taken as they
+    answer."""
+    try:
+        answered = info(client, 'server').get('process_id')
+    except RuntimeError:
+        return
+    if answered is not None and answered.strip() != str(pid):
+        raise RuntimeError(f'port {port} is answered by process {answered.strip()}, '
+                           f'not the server started as {pid}')
+
+
 class Server:
     def __init__(self, binary, directory, *, policy='always', async_append=False,
                  port=None, extra=(), file_limit=None, password=None, startup_timeout=10,
@@ -40,9 +86,10 @@ class Server:
         self.directory.mkdir(parents=True, exist_ok=True)
         self.password = password or secrets.token_hex(24)
         if port is None:
-            with socket.socket() as reservation:
-                reservation.bind(('127.0.0.1', 0))
-                port = reservation.getsockname()[1]
+            port = reserve_port()
+        else:
+            # Given, so that no reservation hands it to another server.
+            _given_ports.add(port)
         self.port = port
         self.args = [self.binary, '-host', '127.0.0.1', '-port', str(port),
                      '-requirepass-env', 'KEEL_VALIDATION_PASSWORD', '-appendonly',
@@ -75,6 +122,7 @@ class Server:
                     self.client = Client('127.0.0.1', self.port, self.password)
                     if self.client.call('PING') != b'PONG':
                         raise RuntimeError('server returned an invalid readiness response')
+                    check_owner(self.client, self.process.pid, self.port)
                     if self.reply_timeout is not None:
                         self.client.socket.settimeout(self.reply_timeout)
                     return self
