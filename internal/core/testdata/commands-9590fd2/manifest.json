@@ -1,5 +1,5 @@
 {
-  "source_revision": "1c3e755",
+  "source_revision": "9590fd2",
   "captured": "2026-10-14",
   "note": "Every command's RESP2 and RESP3 replies and log records on develop, before phase 4 of the embedding plan; see command_golden_test.go.",
   "files": {
