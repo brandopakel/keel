@@ -147,7 +147,10 @@ type client struct {
 	// libVersion are what CLIENT SETNAME and CLIENT SETINFO recorded.
 	id uint64
 	// addr is the peer's address, as Redis writes one (peerAddr).
-	addr                      string
+	addr string
+	// replica is whether the connection has pulled the log as a replica, so
+	// that what it is sent is replication traffic (isReplicationPull).
+	replica                   bool
 	name, libName, libVersion string
 	// resp3 is set by HELLO 3 and cleared by HELLO 2, and frames every reply
 	// the connection is sent from the command after it.
@@ -228,6 +231,7 @@ func (c *client) readCommandsReserved(scratch []byte, budget *requestAllocationB
 			// per-connection memory, and no copy at all unless this read ends
 			// mid-frame.
 			n, err = syscall.Read(c.fd, scratch)
+			countRead(n)
 		} else {
 			// A frame is in progress. Read straight into the connection's own
 			// buffer - going via the scratch would only add a copy - and ask for
@@ -262,6 +266,7 @@ func (c *client) readCommandsReserved(scratch []byte, budget *requestAllocationB
 			}
 			b.reserve(want)
 			n, err = syscall.Read(c.fd, b.spare(want))
+			countRead(n)
 		}
 
 		if err == syscall.EAGAIN || err == syscall.EINTR {
@@ -793,10 +798,13 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 			RequestAllocationPeak: requestBudget.peak, RequestAllocationRefusals: requestBudget.refusals.Load(),
 			ClosedSlow: clientsClosedSlow, ClosedUnanswered: clientsClosedUnanswered, ClosedUnread: clientsClosedUnread,
 			RunsUnreplied: runsUnreplied, ConnectionsReceived: connectionsReceived - connectionsReceivedBase,
-			ConnectionsRejected: connectionsRejected}
+			ConnectionsRejected: connectionsRejected,
+			NetInputBytes:       netInputBytes.Load(), NetOutputBytes: netOutputBytes.Load(),
+			NetReplInputBytes: netReplInputBytes.Load(), NetReplOutputBytes: netReplOutputBytes.Load(),
+			ReadsProcessed: readsProcessed.Load(), WritesProcessed: writesProcessed.Load()}
 	})
 	defer e.SetClientBuffers(nil)
-	e.SetStatsReset(resetConnectionStats)
+	e.SetStatsReset(func() { resetConnectionStats(); resetNetStats() })
 	defer e.SetStatsReset(nil)
 	e.SetServerInfo(&core.ServerInfo{Port: o.Port, MaxClients: o.MaxClients, TCPBacklog: o.TCPBacklog, IOThreads: o.IOThreads,
 		Host: o.Host, RequirePass: o.RequirePass,
@@ -1390,7 +1398,27 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 	// Set as the command runs rather than as it was parsed: a HELLO earlier
 	// in the same pipeline has already changed it.
 	cmd.RESP3 = c.resp3
+	if !c.replica && isReplicationPull(cmd.Cmd) {
+		// A pull the engine accepts makes this a replica's connection, as
+		// Redis makes a client a replica only once its SYNC is accepted
+		// (CLIENT_SLAVE, set in syncCommand after its checks): what it is sent
+		// from then on, this reply included, is replication output. A pull
+		// refused, for want of a login or as invalid, leaves it a client.
+		reply := &firstByte{ReadWriter: w}
+		responseRw(c.engine, cmd, reply)
+		c.replica = reply.b != 0 && reply.b != '-'
+		return
+	}
 	responseRw(c.engine, cmd, w)
+}
+
+// countRead counts one read from a client and the bytes it brought, as
+// Redis's readQueryFromClient counts them.
+func countRead(n int) {
+	readsProcessed.Add(1)
+	if n > 0 {
+		netInputBytes.Add(uint64(n))
+	}
 }
 
 // peerAddr is a peer's address as Redis writes one (connection.h's
