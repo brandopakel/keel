@@ -76,6 +76,7 @@ func TestCommandGoldensCoverEveryCommand(t *testing.T) {
 // case does reach has to leave this list, and a text that leaves the source
 // has to leave it too.
 var uncoveredErrorTexts = map[string]string{
+	"ERR Invalid arguments specified for command":                                "COMMAND GETKEYS of a command whose key spec cannot be followed, a keyword or keynum spec, which no command Keel has has",
 	"ERR command produced no reply":                                              "EXEC's stand-in for a command that wrote nothing, which no command does",
 	"ERR transaction exceeds the %d MiB queued command limit":                    "queueing 16 MiB of commands, which the corpus does not hold",
 	"ERR persisting term: %w":                                                    "a term file that cannot be written: a disk failure",
