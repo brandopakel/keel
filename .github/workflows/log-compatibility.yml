@@ -30,9 +30,18 @@ on:
         default: ''
   pull_request:
     branches: [develop]
+    types: [opened, synchronize, reopened, ready_for_review]
     paths: ['internal/**', 'cmd/**', 'go.mod', 'go.sum', 'scripts/check-log-compatibility.py',
             'scripts/test_check_log_compatibility.py', 'scripts/validation_lib.py',
             '.github/workflows/log-compatibility.yml']
+
+# A newer push to a pull request supersedes its older runs, so those are
+# cancelled rather than left holding the free macOS runners every pull request
+# queues for. Runs on develop and dispatched runs each get a group of their own
+# and always finish.
+concurrency:
+  group: log-compatibility-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -45,7 +54,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # A draft runs Linux only; marking it ready runs macOS too, before merge.
+        os: ${{ fromJSON(github.event.pull_request.draft && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest"]') }}
     defaults:
       run:
         shell: bash
