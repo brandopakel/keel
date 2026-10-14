@@ -239,6 +239,7 @@ func replicationOperation(name string) bool {
 	case "FLUSHDB", "DEL", "SET", "MSET", "INCR", "INCRBY", "DECR", "DECRBY", "PEXPIREAT", "PERSIST",
 		"APPEND", "SETRANGE",
 		"HSET", "HSETNX", "HDEL", "HINCRBY", "LPUSH", "RPUSH", "LPOP", "RPOP", "LTRIM", "LSET",
+		"LPUSHX", "RPUSHX", "LINSERT", "LREM", "LMOVE", "RPOPLPUSH", "LMOVEM",
 		"SADD", "SREM", "ZADD", "ZREM", "GEOADD", "KEEL.RESTORE":
 		return true
 	}

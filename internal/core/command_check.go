@@ -54,6 +54,8 @@ var commandArity = map[string]int{
 
 	"LPUSH": -3, "RPUSH": -3, "LPOP": -2, "RPOP": -2,
 	"LTRIM": 4, "LLEN": 2, "LINDEX": 3, "LSET": 4, "LRANGE": 4,
+	"LPUSHX": -3, "RPUSHX": -3, "LINSERT": 5, "LREM": 4, "LPOS": -3, "LMOVE": 5, "RPOPLPUSH": 3,
+	"LMOVEM": -5, "LMPOP": -4,
 
 	"SADD": -3, "SREM": -3, "SCARD": 2, "SMEMBERS": 2,
 	"SISMEMBER": 3, "SMISMEMBER": -3, "SPOP": -2,
