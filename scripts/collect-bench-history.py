@@ -525,8 +525,11 @@ def ci_records(artifact_id, run, pr, files):
     packages = [{**common, 'pr': pr or '', 'package': p['package'].removeprefix('github.com/brandopakel/keel/'),
                  'result': p['result'], 'seconds': p['seconds']} for p in record.get('packages', [])]
     biggest = sorted(record.get('tests', []), key=lambda t: t.get('peak_bytes', 0), reverse=True)[:10]
-    tests = [{**common, 'test': t['name'], 'package': t.get('package') or '', 'peak_bytes': t.get('peak_bytes', ''),
-              'peak_file_bytes': t.get('peak_file_bytes', '')} for t in biggest]
+    # A test's package is a path from the repository's root (./internal/core),
+    # where go test's line names it by import path; both are written as
+    # packages.csv has them (internal/core), so the two files join.
+    tests = [{**common, 'test': t['name'], 'package': (t.get('package') or '').removeprefix('./'),
+              'peak_bytes': t.get('peak_bytes', ''), 'peak_file_bytes': t.get('peak_file_bytes', '')} for t in biggest]
     return {'runs': runs, 'packages': packages, 'tests': tests}
 
 RECORDS = {'command-path': command_path_records, 'matched': matched_records,

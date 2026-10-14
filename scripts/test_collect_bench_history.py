@@ -637,6 +637,8 @@ class FrameworkAndCIKinds(unittest.TestCase):
                          [('internal/core', 12.345), ('cmd/keel', 31.2)])
         self.assertEqual(len(records['tests']), 10, 'the ten tests that held the most')
         self.assertEqual(records['tests'][0]['test'], 'TestBig11')
+        self.assertEqual(records['tests'][0]['package'], 'cmd/keel', "named as packages.csv names it, to join")
+        self.assertTrue({t['package'] for t in records['tests']} <= {p['package'] for p in records['packages']})
 
     def test_ci_before_package_times(self):
         older = {k: v for k, v in FOOTPRINT.items() if k != 'packages'}
