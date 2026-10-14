@@ -51,17 +51,30 @@ example.
 - **A change to a reply recaptures the corpus in the same PR.** The corpus
   pins develop's replies, so a PR that changes one on purpose - a new
   command, a new error, a new INFO field, a new line of a HELP - fails it
-  until it recaptures. Commit the change first. Then, in a commit that
-  touches only tests and fixtures, add the cases that send what is new, set
-  `commandGoldenRevision` and `connectionGoldenRevision` to the change's
-  commit (`git rev-parse --short=7 HEAD`), and run
+  until it recaptures. Commit the change first, then add the cases that
+  send what is new and run
   `python3 scripts/capture-command-goldens.py --out dist/<name>`: it
-  refuses a tree whose source differs from the revision the constants name,
-  so the fixture is the change's and nothing else's. Put the fixture's diff
-  in the PR body as the change's wire-visible effect. A rebase makes a new
-  commit of the change, so recapture after one. Every INFO-stack PR does
-  this too (#164: the change in `ca986b7`, the recapture at it in
-  `ac25a7f`).
+  refuses a working tree whose source differs from HEAD, so the fixture is
+  the change's and nothing else's, and records HEAD as the revision of
+  each file it changes. Commit what it wrote, in a commit that touches only
+  tests and fixtures. Put the fixture's diff in the PR body as the change's
+  wire-visible effect. Every INFO-stack PR does this too (#164: the change
+  in `ca986b7`, the recapture at it in `ac25a7f`).
+- **The fixture directories keep their names**
+  (`internal/core/testdata/commands/` and
+  `internal/server/testdata/connection/`); the revision and day a file was
+  captured are in its entry in the directory's `manifest.json`, and a
+  capture that writes a file with the bytes it already held keeps that
+  entry as it was. So a capture's diff is the files that changed and their
+  entries, and two PRs that recapture different families' files merge
+  without a conflict. **Recapture after a rebase only when a fixture file
+  conflicts**, that is when the other change recaptured the same family's
+  file (`refusals.txt` is the one families most often share): take
+  develop's side of the fixture, rerun the capture on the rebased branch,
+  and commit it. A rebase whose fixture merges cleanly needs no recapture;
+  the replay tests in CI hold the merged fixture to the merged code, and an
+  entry still naming the branch's earlier commit says where its bytes were
+  first captured.
 
 ## Converting a family
 
@@ -71,7 +84,7 @@ has merged, or coordinate: two families converting at once touch
 table), `aof.go`'s `writeCommands` and `keytype.go`'s tables, in different
 lines.
 
-1. **Read the corpus for the family** (`internal/core/testdata/commands-*/`
+1. **Read the corpus for the family** (`internal/core/testdata/commands/`
    `<family>.txt`): every reply and record your conversion must reproduce.
    If a path of a handler is not in it - an error, an option, a reply shape
    - add the case to `command_golden_corpus_test.go` and recapture **before**

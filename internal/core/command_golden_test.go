@@ -21,7 +21,8 @@ import (
 
 // The command corpus: what every command this package runs answers, on a
 // RESP2 and on a RESP3 connection, and what it writes to the log, held to
-// what develop answered and wrote at commandGoldenRevision.
+// what develop answered and wrote at the revision each family's file was
+// captured from.
 //
 // Phase 4 of the embedding plan (docs/embedding-plan.md) rewrites how a
 // command is parsed, run and answered - the reply encoders into a package of
@@ -47,19 +48,23 @@ import (
 // clock's or the machine's is held to its type byte. A relative expiry's
 // record is normalized as the persistence goldens normalize one.
 //
-// testdata/commands-<revision>/ holds one file per family and a manifest.
+// testdata/commands/ holds one file per family and a manifest, whose entry
+// for each file holds the file's digest, its counts and its provenance: the
+// revision the file was captured at and the day (golden.Provenance). The
+// directory's name does not change with a capture, so a change that
+// recaptures one family changes that family's file and its entry and
+// nothing else, and two changes to different families merge cleanly.
 // scripts/capture-command-goldens.py writes it, by running
 // TestCommandGoldenCapture with KEEL_CAPTURE_COMMAND_GOLDEN naming a
-// directory; the capture runs every case three times in each protocol and
-// refuses to write a case whose replies or records differ between runs. Two
-// tests read the fixture on every run: TestCommandGoldenRepliesAreUnchanged
+// directory and KEEL_CAPTURE_REVISION the revision; the capture runs every
+// case three times in each protocol and refuses to write a case whose
+// replies or records differ between runs, and a file it writes with the
+// bytes the fixture already holds keeps the entry's provenance. Two tests
+// read the fixture on every run: TestCommandGoldenRepliesAreUnchanged
 // replays every case and compares each command's replies and records, and
 // command_golden_coverage_test.go checks that the corpus names every command
 // and reaches every error text the handlers hold.
-const (
-	commandGoldenRevision = "67aa4e2"
-	commandGoldenDir      = "testdata/commands-" + commandGoldenRevision
-)
+const commandGoldenDir = "testdata/commands"
 
 // goldenStep is one step of a case: a command, with the normalizers its
 // reply and records take, or a directive run on the harness between
@@ -358,17 +363,31 @@ func goldenFamilies() ([]string, map[string][]commandGoldenCase) {
 
 // commandGoldenManifest is the fixture's manifest.
 type commandGoldenManifest struct {
-	SourceRevision string                                `json:"source_revision"`
-	Captured       string                                `json:"captured"`
-	Note           string                                `json:"note"`
-	Files          map[string]commandGoldenManifestEntry `json:"files"`
+	Note  string                                `json:"note"`
+	Files map[string]commandGoldenManifestEntry `json:"files"`
 }
 
+// commandGoldenManifestEntry is one family's file: its digest and counts,
+// and the revision and day it was captured.
 type commandGoldenManifestEntry struct {
 	SHA256   string `json:"sha256"`
 	Cases    int    `json:"cases"`
 	Commands int    `json:"commands"`
 	Records  int    `json:"records"`
+	golden.Provenance
+}
+
+const commandGoldenNote = "Every command's RESP2 and RESP3 replies and log records, a file per family, " +
+	"each as captured at the revision its entry names; see command_golden_test.go."
+
+// readCommandGoldenManifest reads the fixture's manifest.
+func readCommandGoldenManifest(dir string) (commandGoldenManifest, error) {
+	var manifest commandGoldenManifest
+	body, err := os.ReadFile(filepath.Join(dir, "manifest.json"))
+	if err != nil {
+		return manifest, err
+	}
+	return manifest, json.Unmarshal(body, &manifest)
 }
 
 func commandGoldenEntry(body []byte, cases []golden.Case) commandGoldenManifestEntry {
@@ -428,12 +447,15 @@ func TestCommandGoldenCapture(t *testing.T) {
 	}
 	dir = filepath.Join(dir, "core")
 	require.NoError(t, os.MkdirAll(dir, 0o755))
-	manifest := commandGoldenManifest{
-		SourceRevision: commandGoldenRevision,
-		Captured:       time.Now().UTC().Format("2006-01-02"),
-		Note:           "Every command's RESP2 and RESP3 replies and log records on develop, before phase 4 of the embedding plan; see command_golden_test.go.",
-		Files:          map[string]commandGoldenManifestEntry{},
+	fresh, err := golden.CaptureProvenance()
+	require.NoError(t, err)
+	// What the fixture holds now, so that a file captured with the same
+	// bytes keeps its entry; none when there is no fixture yet.
+	held, err := readCommandGoldenManifest(commandGoldenDir)
+	if !errors.Is(err, os.ErrNotExist) {
+		require.NoError(t, err, "the fixture's manifest")
 	}
+	manifest := commandGoldenManifest{Note: commandGoldenNote, Files: map[string]commandGoldenManifestEntry{}}
 	order, byFamily := goldenFamilies()
 	for _, family := range order {
 		var cases []golden.Case
@@ -452,7 +474,10 @@ func TestCommandGoldenCapture(t *testing.T) {
 		require.NoError(t, golden.Write(&body, cases))
 		name := family + ".txt"
 		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(body.String()), 0o644))
-		manifest.Files[name] = commandGoldenEntry([]byte(body.String()), cases)
+		entry := commandGoldenEntry([]byte(body.String()), cases)
+		was := held.Files[name]
+		entry.Provenance = golden.Carry(was.Provenance, was.SHA256, entry.SHA256, fresh)
+		manifest.Files[name] = entry
 	}
 	body, err := json.MarshalIndent(manifest, "", "  ")
 	require.NoError(t, err)
@@ -465,23 +490,24 @@ func goldenStepsEqual(a, b golden.Step) bool {
 }
 
 // loadCommandGoldens reads the fixture: its manifest, checked against each
-// file's bytes, and every case by name.
+// file's bytes, with a sound provenance for each file, and every case by
+// name.
 func loadCommandGoldens(t *testing.T) (commandGoldenManifest, map[string]golden.Case) {
 	t.Helper()
-	var manifest commandGoldenManifest
-	body, err := os.ReadFile(filepath.Join(commandGoldenDir, "manifest.json"))
-	require.NoError(t, err)
-	require.NoError(t, json.Unmarshal(body, &manifest))
-	require.Equal(t, commandGoldenRevision, manifest.SourceRevision, "the fixture's revision")
+	manifest, err := readCommandGoldenManifest(commandGoldenDir)
+	require.NoError(t, err, "the fixture's manifest")
 	cases := map[string]golden.Case{}
 	for name, entry := range manifest.Files {
+		require.NoError(t, entry.Check(), "%s: the manifest's provenance", name)
 		body, err := os.ReadFile(filepath.Join(commandGoldenDir, name))
 		require.NoError(t, err)
 		sum := sha256.Sum256(body)
 		require.Equal(t, entry.SHA256, hex.EncodeToString(sum[:]), "%s: the fixture's bytes", name)
 		parsed, err := golden.Parse(strings.NewReader(string(body)))
 		require.NoError(t, err, name)
-		require.Equal(t, entry, commandGoldenEntry(body, parsed), "%s: the manifest's counts", name)
+		counted := commandGoldenEntry(body, parsed)
+		counted.Provenance = entry.Provenance
+		require.Equal(t, entry, counted, "%s: the manifest's counts", name)
 		for _, c := range parsed {
 			_, dup := cases[c.Name]
 			require.False(t, dup, "%s holds %s twice", name, c.Name)
@@ -492,7 +518,8 @@ func loadCommandGoldens(t *testing.T) (commandGoldenManifest, map[string]golden.
 }
 
 // TestCommandGoldenRepliesAreUnchanged: every case of the corpus answers, in
-// both protocols, and records, what develop did at the fixture's revision.
+// both protocols, and records, what develop did at the revision its file was
+// captured at.
 func TestCommandGoldenRepliesAreUnchanged(t *testing.T) {
 	t.Parallel()
 	if os.Getenv("KEEL_CAPTURE_COMMAND_GOLDEN") != "" {

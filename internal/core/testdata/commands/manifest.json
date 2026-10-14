@@ -1,103 +1,133 @@
 {
-  "source_revision": "67aa4e2",
-  "captured": "2026-10-14",
-  "note": "Every command's RESP2 and RESP3 replies and log records on develop, before phase 4 of the embedding plan; see command_golden_test.go.",
+  "note": "Every command's RESP2 and RESP3 replies and log records, a file per family, each as captured at the revision its entry names; see command_golden_test.go.",
   "files": {
     "bloom.txt": {
       "sha256": "840be97747c81d012bb66cfd875bbaa9e6a894f995c834ab91ed4a4b7e1efac7",
       "cases": 3,
       "commands": 85,
-      "records": 19
+      "records": 19,
+      "source_revision": "67aa4e2",
+      "captured": "2026-10-14"
     },
     "cuckoo.txt": {
       "sha256": "d034c86c3c7c8981768a6af7f680f65006d1a49d073f12a0b5ac0bccc3936c7e",
       "cases": 2,
       "commands": 93,
-      "records": 28
+      "records": 28,
+      "source_revision": "67aa4e2",
+      "captured": "2026-10-14"
     },
     "dump.txt": {
       "sha256": "107ecb5b71fa22974d6289e7e6716cbc96eb7b3e1df822f0f130beb2dcbc9332",
       "cases": 2,
       "commands": 75,
-      "records": 31
+      "records": 31,
+      "source_revision": "67aa4e2",
+      "captured": "2026-10-14"
     },
     "geo.txt": {
       "sha256": "a27cfb7ed22caab8db74c29a49cacb8a5987c40b40ccd259e3bbc1b53a45d972",
       "cases": 3,
       "commands": 104,
-      "records": 9
+      "records": 9,
+      "source_revision": "67aa4e2",
+      "captured": "2026-10-14"
     },
     "hashes.txt": {
       "sha256": "fc84e5bc644f937464a0d3780c4ff1d60e8bc7641df2e87f5de36a4e19dcea7d",
       "cases": 3,
       "commands": 83,
-      "records": 21
+      "records": 21,
+      "source_revision": "67aa4e2",
+      "captured": "2026-10-14"
     },
     "hll.txt": {
       "sha256": "6b4e2ea85ecaa49460d99a592e57aab6a511cce1dff6b5fabf341b263f2b211a",
       "cases": 1,
       "commands": 33,
-      "records": 13
+      "records": 13,
+      "source_revision": "67aa4e2",
+      "captured": "2026-10-14"
     },
     "keys.txt": {
       "sha256": "04c1ab9e3da43d2da64e52feb265736265db141a2ad30852d3fe8119f81f6499",
       "cases": 7,
       "commands": 172,
-      "records": 79
+      "records": 79,
+      "source_revision": "67aa4e2",
+      "captured": "2026-10-14"
     },
     "lists.txt": {
       "sha256": "3935a2c2225d6f5087fc5b1f4f5804afe31c5065b71e12c4ca4ec63d2a4b671d",
       "cases": 3,
       "commands": 104,
-      "records": 30
+      "records": 30,
+      "source_revision": "67aa4e2",
+      "captured": "2026-10-14"
     },
     "refusals.txt": {
       "sha256": "bfd05d9cd4f5b0377f9d3f7b8a60c159fd75ad5cddad5ad2d33abbe203c26886",
       "cases": 2,
       "commands": 221,
-      "records": 0
+      "records": 0,
+      "source_revision": "67aa4e2",
+      "captured": "2026-10-14"
     },
     "replication.txt": {
       "sha256": "48ffbf1c1b195c5174f390fde8cd3322e0e61eca78a055f954ebb9354604c40b",
       "cases": 7,
       "commands": 76,
-      "records": 3
+      "records": 3,
+      "source_revision": "67aa4e2",
+      "captured": "2026-10-14"
     },
     "server.txt": {
       "sha256": "4ca4f18e96f1f60812e245e558a1ac27fed305e0c50703531c8ba5bcfad8a650",
       "cases": 11,
       "commands": 187,
-      "records": 23
+      "records": 23,
+      "source_revision": "67aa4e2",
+      "captured": "2026-10-14"
     },
     "sets.txt": {
       "sha256": "6391c62bd6c9189a68f838963f95209d6617b79b822ac0ac6dff9ad6f8660f8b",
       "cases": 3,
       "commands": 83,
-      "records": 16
+      "records": 16,
+      "source_revision": "67aa4e2",
+      "captured": "2026-10-14"
     },
     "sketches.txt": {
       "sha256": "596cb8b05d15957059cf48997c82137ae0acd855ee524a774cba1e40c1f25e94",
       "cases": 2,
       "commands": 81,
-      "records": 13
+      "records": 13,
+      "source_revision": "67aa4e2",
+      "captured": "2026-10-14"
     },
     "strings.txt": {
       "sha256": "2c2686280ca1e01edf9b6ad36c5bcd381b0e2c92af76356502d42b3611254d90",
       "cases": 17,
       "commands": 402,
-      "records": 166
+      "records": 166,
+      "source_revision": "67aa4e2",
+      "captured": "2026-10-14"
     },
     "transactions.txt": {
       "sha256": "9ce59c9c6f24438b60e6c5c190812720c3705ac197a5f730e08f778f092c35f8",
       "cases": 4,
       "commands": 116,
-      "records": 26
+      "records": 26,
+      "source_revision": "67aa4e2",
+      "captured": "2026-10-14"
     },
     "zsets.txt": {
       "sha256": "08bb2ebe8ac604bcb4a270ff7aef58afffe47d6c18a9ddc1b480065609f6bf80",
       "cases": 5,
       "commands": 172,
-      "records": 26
+      "records": 26,
+      "source_revision": "67aa4e2",
+      "captured": "2026-10-14"
     }
   }
 }

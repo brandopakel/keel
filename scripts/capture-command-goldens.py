@@ -10,23 +10,31 @@ the commands the server answers itself; each writes its fixture when its
 capture test runs with KEEL_CAPTURE_COMMAND_GOLDEN naming a directory, and
 each reads it back on every run.
 
+Each fixture lives in a directory whose name does not change
+(commandGoldenDir and connectionGoldenDir), and its manifest.json gives each
+file its own provenance: the revision it was captured at and the day. A
+capture that writes a file with the bytes the fixture already holds keeps
+that file's entry as it was, so a capture's diff is the files that changed
+and their entries, and two branches that change different families' files
+merge without a conflict.
+
 This script is how the fixture is written, so that it is written the same
 way every time:
 
-1. It reads the revision each test names (commandGoldenRevision and
-   connectionGoldenRevision) and refuses to run unless both name the same
-   revision, in the short form `git rev-parse --short=7` prints, and nothing
-   outside tests, fixtures, scripts and docs differs between that revision
-   and the working tree. The fixture then describes that revision, and
-   nothing else, though it may be captured on a branch that adds tests to
-   it.
+1. It refuses to run while anything outside tests, fixtures, scripts and
+   docs differs between HEAD and the working tree, committed or not, and
+   names HEAD, in the short form `git rev-parse --short=7` prints, as the
+   revision captured: a file that changes is recorded as captured at HEAD.
+   Commit the change first, and capture on top of it.
 2. It runs both capture tests through scripts/run-local-validation.py, with
    the wrapper's time and disk limits and its disposable Go cache, into a
-   fresh directory under dist/. Each capture runs every case three times in
-   each protocol and refuses a case that is not the same from run to run.
+   fresh directory under dist/, with KEEL_CAPTURE_REVISION naming the
+   revision. Each capture runs every case three times in each protocol and
+   refuses a case that is not the same from run to run.
 3. It copies what was captured into the fixture directories the tests name,
-   replacing what was there, and runs the replay tests once through the
-   wrapper, so that the fixture it leaves is one the tests pass on.
+   replacing what was there, prints which files changed, and runs the
+   replay tests once through the wrapper, so that the fixture it leaves is
+   one the tests pass on.
 
 With --check it runs only the replay tests, the way CI does, and writes
 nothing into the tree.
@@ -42,12 +50,12 @@ import sys
 
 ROOT = Path(__file__).resolve().parent.parent
 WRAPPER = ROOT / 'scripts' / 'run-local-validation.py'
-# Each test file, the constant naming its revision, the one naming its
-# fixture directory, and the directory the capture writes under the root
-# KEEL_CAPTURE_COMMAND_GOLDEN names.
+# Each test file, the constant naming its fixture directory, and the
+# directory the capture writes under the root KEEL_CAPTURE_COMMAND_GOLDEN
+# names.
 SOURCES = (
-    ('internal/core/command_golden_test.go', 'commandGoldenRevision', 'commandGoldenDir', 'core'),
-    ('internal/server/connection_golden_test.go', 'connectionGoldenRevision', 'connectionGoldenDir', 'server'),
+    ('internal/core/command_golden_test.go', 'commandGoldenDir', 'core'),
+    ('internal/server/connection_golden_test.go', 'connectionGoldenDir', 'server'),
 )
 CAPTURE_TESTS = '^Test(Command|Connection)GoldenCapture$'
 REPLAY_TESTS = '^Test(Command|Connection)Golden'
@@ -60,10 +68,11 @@ HARMLESS = re.compile(r'(^|/)(testdata/|docs/|scripts/|internal/golden/|[^/]*_te
 
 
 def read_constant(source, name):
-    """The string a Go constant is declared as, which may be built from
-    another constant: `const x = "a" + y`."""
+    """The string a Go constant is declared as, on a line of its own or in a
+    const block, which may be built from another constant:
+    `const x = "a" + y`."""
     text = source.read_text()
-    constants = dict(re.findall(r'^\s*(\w+)\s*=\s*(.+?)\s*$', text, re.MULTILINE))
+    constants = dict(re.findall(r'^\s*(?:const\s+)?(\w+)\s*=\s*(.+?)\s*$', text, re.MULTILINE))
     if name not in constants:
         raise ValueError(f'{source}: no constant {name}')
 
@@ -83,12 +92,12 @@ def read_constant(source, name):
 
 
 def fixture_targets(root=ROOT):
-    """For each corpus, its revision and the directory its fixture lives in."""
+    """For each corpus, the directory its fixture lives in."""
     targets = []
-    for source, revision, directory, captured in SOURCES:
+    for source, directory, captured in SOURCES:
         path = root / source
         fixture = (path.parent / read_constant(path, directory)).resolve()
-        targets.append(dict(source=source, revision=read_constant(path, revision), fixture=fixture, captured=captured))
+        targets.append(dict(source=source, fixture=fixture, captured=captured))
     return targets
 
 
@@ -96,12 +105,9 @@ def git(root, *args):
     return subprocess.run(['git', '-C', str(root), *args], check=True, capture_output=True, text=True).stdout
 
 
-def resolve(revision, root=ROOT):
-    """A revision's full hash, or None when the repository does not hold it."""
-    try:
-        return git(root, 'rev-parse', '--verify', '--quiet', revision + '^{commit}').strip()
-    except subprocess.CalledProcessError:
-        return None
+def head_revision(root=ROOT):
+    """HEAD's hash in the short form the manifests record."""
+    return git(root, 'rev-parse', '--short=7', 'HEAD').strip()
 
 
 def changed_source(revision, root=ROOT):
@@ -111,6 +117,24 @@ def changed_source(revision, root=ROOT):
     status = git(root, 'status', '--porcelain', '--untracked-files=all')
     pending = [line[3:].split(' -> ')[-1] for line in status.splitlines()]
     return sorted({path for path in committed + pending if not HARMLESS.search(path)})
+
+
+def manifest_files(fixture):
+    """The entries a fixture's manifest holds, by file; none when it has no
+    manifest."""
+    path = fixture / 'manifest.json'
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text()).get('files', {})
+
+
+def compare_entries(held, captured):
+    """The files a capture changed, added and removed, from the entries the
+    fixture held and the ones the capture wrote, by digest."""
+    changed = sorted(name for name in captured if name in held and held[name].get('sha256') != captured[name]['sha256'])
+    added = sorted(name for name in captured if name not in held)
+    removed = sorted(name for name in held if name not in captured)
+    return changed, added, removed
 
 
 def summarize(fixture):
@@ -140,26 +164,18 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     targets = fixture_targets()
-    revisions = {t['revision'] for t in targets}
-    if len(revisions) != 1:
-        print('the corpora name different revisions: ' + ', '.join(f"{t['source']} {t['revision']}" for t in targets),
-              file=sys.stderr)
-        return 2
-    revision = revisions.pop()
-    if resolve(revision) is None:
-        print(f'the corpora name revision {revision}, which this repository does not hold', file=sys.stderr)
-        return 2
     if not args.check:
-        changed = changed_source(revision)
+        changed = changed_source('HEAD')
         if changed:
-            print(f'the tree differs from {revision} in what a command may answer; set the constants to the '
-                  'revision being captured, or commit or stash first:', file=sys.stderr)
+            print('the working tree differs from HEAD in what a command may answer; commit or stash first, '
+                  'so that the fixture names the revision it was captured at:', file=sys.stderr)
             for path in changed:
                 print(f'  {path}', file=sys.stderr)
             return 2
+        revision = head_revision()
         capture_root = (args.out / 'fixtures').resolve()
-        status = run_wrapped(args.out, args.seconds, {'KEEL_CAPTURE_COMMAND_GOLDEN': str(capture_root)},
-                             'go', 'test', '-count=1', '-run', CAPTURE_TESTS, *PACKAGES)
+        env = {'KEEL_CAPTURE_COMMAND_GOLDEN': str(capture_root), 'KEEL_CAPTURE_REVISION': revision}
+        status = run_wrapped(args.out, args.seconds, env, 'go', 'test', '-count=1', '-run', CAPTURE_TESTS, *PACKAGES)
         if status != 0:
             print(f'capture failed with status {status}; see {args.out}', file=sys.stderr)
             return 1
@@ -168,9 +184,17 @@ def main(argv=None):
             if not (captured / 'manifest.json').exists():
                 print(f'{captured} holds no manifest: the capture test wrote nothing', file=sys.stderr)
                 return 1
+            held = manifest_files(target['fixture'])
             shutil.rmtree(target['fixture'], ignore_errors=True)
             shutil.copytree(captured, target['fixture'])
+            changed, added, removed = compare_entries(held, manifest_files(target['fixture']))
             print(f"{target['fixture'].relative_to(ROOT)}: {summarize(target['fixture'])}")
+            for label, names in ((f'changed at {revision}', changed), (f'added at {revision}', added),
+                                 ('removed', removed)):
+                if names:
+                    print(f'  {label}: ' + ', '.join(names))
+            if not (changed or added or removed):
+                print('  unchanged')
     check_out = args.out.with_name(args.out.name + '-check') if not args.check else args.out
     status = run_wrapped(check_out, args.seconds, {}, 'go', 'test', '-count=1', '-run', REPLAY_TESTS, *PACKAGES)
     if status != 0:

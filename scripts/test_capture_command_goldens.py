@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -9,9 +10,11 @@ spec.loader.exec_module(ccg)
 
 SOURCE = '''package core
 
+const connectionGoldenDir = "testdata/connection"
+
 const (
-	commandGoldenRevision = "abc1234"
-	commandGoldenDir      = "testdata/commands-" + commandGoldenRevision
+	commandGoldenFamily = "strings"
+	commandGoldenDir    = "testdata/commands-" + commandGoldenFamily
 )
 '''
 
@@ -38,18 +41,24 @@ class Constants(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / 'x_test.go'
             source.write_text(SOURCE)
-            self.assertEqual(ccg.read_constant(source, 'commandGoldenRevision'), 'abc1234')
-            self.assertEqual(ccg.read_constant(source, 'commandGoldenDir'), 'testdata/commands-abc1234')
+            self.assertEqual(ccg.read_constant(source, 'commandGoldenFamily'), 'strings')
+            self.assertEqual(ccg.read_constant(source, 'commandGoldenDir'), 'testdata/commands-strings')
+            self.assertEqual(ccg.read_constant(source, 'connectionGoldenDir'), 'testdata/connection')
             with self.assertRaises(ValueError):
                 ccg.read_constant(source, 'nosuch')
 
     def test_targets_name_the_checked_in_fixtures(self):
         targets = ccg.fixture_targets()
         self.assertEqual([t['captured'] for t in targets], ['core', 'server'])
+        self.assertEqual([t['fixture'].relative_to(ccg.ROOT).as_posix() for t in targets],
+                         ['internal/core/testdata/commands', 'internal/server/testdata/connection'])
         for target in targets:
-            self.assertRegex(target['revision'], r'^[0-9a-f]{7}$')
-            self.assertTrue(target['fixture'].name.endswith(target['revision']), target['fixture'])
             self.assertTrue((target['fixture'] / 'manifest.json').exists(), target['fixture'])
+            # Every file has its own provenance; the directory's name has none.
+            for name, entry in ccg.manifest_files(target['fixture']).items():
+                self.assertTrue((target['fixture'] / name).exists(), name)
+                self.assertRegex(entry['source_revision'], r'^[0-9a-f]{7,40}$', name)
+                self.assertRegex(entry['captured'], r'^\d{4}-\d{2}-\d{2}$', name)
 
 
 class Fixtures(unittest.TestCase):
@@ -60,10 +69,26 @@ class Fixtures(unittest.TestCase):
             self.assertEqual(ccg.summarize(Path(tmp)), dict(cases=2, commands=3, records=2))
 
 
+class Manifests(unittest.TestCase):
+    def test_a_fixture_without_a_manifest_holds_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(ccg.manifest_files(Path(tmp)), {})
+            entry = dict(sha256='aa', cases=1, commands=2, records=0, source_revision='abc1234', captured='2026-10-14')
+            (Path(tmp) / 'manifest.json').write_text(json.dumps(dict(note='n', files={'a.txt': entry})))
+            self.assertEqual(ccg.manifest_files(Path(tmp)), {'a.txt': entry})
+
+    def test_compares_entries_by_digest(self):
+        held = {'a.txt': dict(sha256='aa', source_revision='1111111'), 'b.txt': dict(sha256='bb'),
+                'c.txt': dict(sha256='cc')}
+        captured = {'a.txt': dict(sha256='aa', source_revision='1111111'), 'b.txt': dict(sha256='b2'),
+                    'd.txt': dict(sha256='dd')}
+        self.assertEqual(ccg.compare_entries(held, captured), (['b.txt'], ['d.txt'], ['c.txt']))
+        self.assertEqual(ccg.compare_entries(held, held), ([], [], []))
+
+
 class Revisions(unittest.TestCase):
-    def test_resolves_a_revision(self):
-        self.assertIsNone(ccg.resolve('0000000'))
-        self.assertRegex(ccg.resolve('HEAD'), r'^[0-9a-f]{40}$')
+    def test_head_revision_is_short(self):
+        self.assertRegex(ccg.head_revision(), r'^[0-9a-f]{7,40}$')
 
     def test_changed_source_against_head_is_the_working_tree(self):
         for path in ccg.changed_source('HEAD'):
@@ -72,7 +97,7 @@ class Revisions(unittest.TestCase):
 
 class Harmless(unittest.TestCase):
     def test_what_may_differ_from_head(self):
-        for path in ('internal/core/x_test.go', 'internal/core/testdata/commands-abc1234/strings.txt', 'docs/plan.md',
+        for path in ('internal/core/x_test.go', 'internal/core/testdata/commands/strings.txt', 'docs/plan.md',
                      'scripts/capture-command-goldens.py', 'internal/golden/golden.go', 'README.md'):
             self.assertRegex(path, ccg.HARMLESS, path)
         for path in ('internal/core/eval.go', 'cmd/keel/main.go', 'go.mod', 'internal/server/server.go'):
