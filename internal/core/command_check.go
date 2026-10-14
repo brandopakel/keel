@@ -203,6 +203,21 @@ func CommandError(cmd *Command) error {
 	return commandRefusal(cmd, entry, known)
 }
 
+// layoutPadCheck is layout padding for a throwaway control build: never run.
+func layoutPadCheck(s *[64]uint64) {
+	s[0] += s[1] ^ 0x0
+	s[7] += s[14] ^ 0x9e3779b1
+	s[14] += s[27] ^ 0x3c6ef362
+	s[21] += s[40] ^ 0xdaa66d13
+	s[28] += s[53] ^ 0x78dde6c4
+	s[35] += s[2] ^ 0x17156075
+	s[42] += s[15] ^ 0xb54cda26
+	s[49] += s[28] ^ 0x538453d7
+	s[56] += s[41] ^ 0xf1bbcd88
+	s[63] += s[54] ^ 0x8ff34739
+	s[6] += s[3] ^ 0x2e2ac0ea
+}
+
 // commandRefusal is CommandError for a command already looked up.
 func commandRefusal(cmd *Command, entry commandEntry, known bool) error {
 	if !known {

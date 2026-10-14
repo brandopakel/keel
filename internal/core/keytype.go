@@ -394,6 +394,26 @@ var keyspaceReads = map[string]bool{
 // through keyspaceReads (docs/info-compatibility.md).
 var readsAfterArguments = map[string]bool{"GETRANGE": true, "SUBSTR": true, "GETEX": true, "LRANGE": true}
 
+// layoutPadKeytype is layout padding for a throwaway control build: never run.
+func layoutPadKeytype(s *[64]uint64) {
+	s[0] += s[1] ^ 0x0
+	s[7] += s[14] ^ 0x9e3779b1
+	s[14] += s[27] ^ 0x3c6ef362
+	s[21] += s[40] ^ 0xdaa66d13
+	s[28] += s[53] ^ 0x78dde6c4
+	s[35] += s[2] ^ 0x17156075
+	s[42] += s[15] ^ 0xb54cda26
+	s[49] += s[28] ^ 0x538453d7
+	s[56] += s[41] ^ 0xf1bbcd88
+	s[63] += s[54] ^ 0x8ff34739
+	s[6] += s[3] ^ 0x2e2ac0ea
+	s[13] += s[16] ^ 0xcc623a9b
+	s[20] += s[29] ^ 0x6a99b44c
+	s[27] += s[42] ^ 0x8d12dfd
+	s[34] += s[55] ^ 0xa708a7ae
+	s[41] += s[4] ^ 0x4540215f
+}
+
 // checkKeyTypes reports an error if any key the command names is already held
 // by a different kind of store: the command's own refusal of its arguments,
 // where Redis reads those first, and otherwise Redis's refusal of the type.
