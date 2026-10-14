@@ -120,13 +120,15 @@ func TestRequirepassChangesWhileTheServerRuns(t *testing.T) {
 // looks them up, and HELP lists the ones there are.
 func TestClientHelpAndSubcommandErrors(t *testing.T) {
 	c := clientWithPassword(t, "")
-	require.Equal(t, "-ERR unknown subcommand 'kill'. Try CLIENT HELP.\r\n", runOnce(t, c, sent("CLIENT", "kill", "x", "y")))
+	require.Equal(t, "-ERR unknown subcommand 'tracking'. Try CLIENT HELP.\r\n", runOnce(t, c, sent("CLIENT", "tracking", "on")),
+		"client tracking is not offered")
 	require.Equal(t, "-ERR wrong number of arguments for 'client|setinfo' command\r\n", runOnce(t, c, sent("client", "SetInfo", "lib-name")))
 	require.Equal(t, "-ERR Unrecognized option 'a'\r\n", runOnce(t, c, sent("CLIENT", "SETINFO", "a\x00b", "v")),
 		"the option is repeated as C prints it, up to a NUL")
 	help := runOnce(t, c, sent("client", "help"))
-	require.Contains(t, help, "*19\r\n+CLIENT <subcommand> [<arg> [value] [opt] ...]. Subcommands are:\r\n+GETNAME\r\n")
+	require.Contains(t, help, "*53\r\n+CLIENT <subcommand> [<arg> [value] [opt] ...]. Subcommands are:\r\n+GETREDIR\r\n",
+		"Redis's lines but CACHING's and TRACKING's")
 	require.Contains(t, help, "+HELP\r\n+    Print this help.\r\n")
-	require.Contains(t, help, "+INFO\r\n+    Return information about the current client connection.\r\n+UNPAUSE\r\n"+
+	require.Contains(t, help, "+      Return clients of specified type.\r\n+UNPAUSE\r\n"+
 		"+    Stop the current client pause, resuming traffic.\r\n+PAUSE <timeout> [WRITE|ALL]\r\n", "in Redis's order")
 }

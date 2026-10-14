@@ -199,15 +199,18 @@ func (c *client) encode(value interface{}, isSimpleString bool) []byte {
 	return core.EncodeAs(value, isSimpleString, c.resp3)
 }
 
-// clientCommand implements the CLIENT subcommands a library sends on its own:
-// ID, SETNAME and GETNAME for applications that name their connections, and
-// SETINFO, which redis-py, node-redis, ioredis and go-redis all send on every
-// connection and ignore the failure of. INFO describes this connection, and
-// HELP lists these. Listing or killing other connections is not offered.
+// clientCommand implements Redis's CLIENT subcommands but those built on
+// client tracking: ID, SETNAME and GETNAME for applications that name their
+// connections; SETINFO, which redis-py, node-redis, ioredis and go-redis all
+// send on every connection and ignore the failure of; INFO and LIST, which
+// describe connections, and KILL, which closes them (client_list.go); PAUSE
+// and UNPAUSE (pause.go); REPLY, NO-EVICT and NO-TOUCH, which set the
+// connection's modes; UNBLOCK, GETREDIR and TRACKINGINFO, which answer as
+// Redis does for connections with nothing blocked and no tracking; and HELP.
 //
-// Neither is anything RESP3 makes possible beyond its reply types: push
-// messages, and the TRACKING and MAINT_NOTIFICATIONS subcommands built on
-// them. A subcommand this server does not have gets the error Redis gives for
+// Nothing RESP3 makes possible beyond its reply types is offered: push
+// messages, and the TRACKING, CACHING and MAINT_NOTIFICATIONS subcommands
+// built on them. A subcommand this server does not have gets the error Redis gives for
 // one it does not have - Redis 8.10 answers MAINT_NOTIFICATIONS exactly so -
 // and redis-py 8, node-redis 6 and go-redis 9, which send it while connecting
 // over RESP3, carry on without it.
@@ -255,8 +258,33 @@ func (c *client) clientCommand(cmd *core.Command, w io.Writer) {
 		*field = args[2]
 		w.Write(c.encode("OK", true))
 	case "INFO":
-		w.Write(c.encode(core.ReplyVerbatim(fmt.Sprintf("id=%d fd=%d name=%s db=0 resp=%d lib-name=%s lib-ver=%s\n",
-			c.id, c.fd, c.name, c.protocol(), c.libName, c.libVersion)), false))
+		c.clientInfo(w)
+	case "LIST":
+		c.clientList(args, w)
+	case "KILL":
+		c.clientKill(args, w)
+	case "REPLY":
+		c.clientReply(args[1], w)
+	case "NO-EVICT", "NO-TOUCH":
+		on, ok := onOff(args[1])
+		if !ok {
+			responseError(errSyntax, w)
+			return
+		}
+		// Keel evicts no connections, so NO-EVICT changes nothing but the
+		// flag CLIENT LIST shows; NO-TOUCH is read as each command runs.
+		if strings.EqualFold(args[0], "no-evict") {
+			c.conn.noEvict = on
+		} else {
+			c.conn.noTouch = on
+		}
+		w.Write(c.encode("OK", true))
+	case "UNBLOCK":
+		c.clientUnblock(args, w)
+	case "GETREDIR":
+		w.Write(c.encode(int64(-1), false))
+	case "TRACKINGINFO":
+		c.clientTrackingInfo(w)
 	case "PAUSE":
 		clientPauseCommand(args, w, c.encode)
 	case "UNPAUSE":
@@ -269,22 +297,56 @@ func (c *client) clientCommand(cmd *core.Command, w io.Writer) {
 
 // clientHelp is Redis's CLIENT HELP, for the subcommands this server has.
 var clientHelp = core.HelpReply("CLIENT",
+	"GETREDIR",
+	"    Return the client ID we are redirecting to when tracking is enabled.",
 	"GETNAME",
 	"    Return the name of the current connection.",
 	"ID",
 	"    Return the ID of the current connection.",
 	"INFO",
 	"    Return information about the current client connection.",
+	"KILL <ip:port>",
+	"    Kill connection made from <ip:port>.",
+	"KILL <option> <value> [<option> <value> [...]]",
+	"    Kill connections. Options are:",
+	"    * ADDR (<ip:port>|<unixsocket>:0)",
+	"      Kill connections made from the specified address",
+	"    * LADDR (<ip:port>|<unixsocket>:0)",
+	"      Kill connections made to specified local address",
+	"    * TYPE (NORMAL|MASTER|REPLICA|PUBSUB)",
+	"      Kill connections by type.",
+	"    * USER <username>",
+	"      Kill connections authenticated by <username>.",
+	"    * SKIPME (YES|NO)",
+	"      Skip killing current connection (default: yes).",
+	"    * ID <client-id>",
+	"      Kill connections by client id.",
+	"    * MAXAGE <maxage>",
+	"      Kill connections older than the specified age.",
+	"LIST [options ...]",
+	"    Return information about client connections. Options:",
+	"    * TYPE (NORMAL|MASTER|REPLICA|PUBSUB)",
+	"      Return clients of specified type.",
 	"UNPAUSE",
 	"    Stop the current client pause, resuming traffic.",
 	"PAUSE <timeout> [WRITE|ALL]",
 	"    Suspend all, or just write, clients for <timeout> milliseconds.",
+	"REPLY (ON|OFF|SKIP)",
+	"    Control the replies sent to the current connection.",
 	"SETNAME <name>",
 	"    Assign the name <name> to the current connection.",
 	"SETINFO <option> <value>",
 	"    Set client meta attr. Options are:",
 	"    * LIB-NAME: the client lib name.",
-	"    * LIB-VER: the client lib version.")
+	"    * LIB-VER: the client lib version.",
+	"UNBLOCK <clientid> [TIMEOUT|ERROR]",
+	"    Unblock the specified blocked client.",
+	"TRACKINGINFO",
+	"    Report tracking status for the current connection.",
+	"NO-EVICT (ON|OFF)",
+	"    Protect current client connection from eviction.",
+	"NO-TOUCH (ON|OFF)",
+	"    Will not touch LRU/LFU stats when this mode is on.")
 
 // validClientName is Redis's rule for a client name and library information:
 // printable ASCII with no spaces, because CLIENT LIST output separates fields

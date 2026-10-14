@@ -161,8 +161,11 @@ func (s *Space) NewAccess() uint64 {
 }
 
 // Touch records an access. What that means is the policy's business: LRU wants
-// to know when, LFU how often.
+// to know when, LFU how often. Under CLIENT NO-TOUCH it records nothing.
 func (s *Space) Touch(access *uint64) {
+	if s.noTouch {
+		return
+	}
 	s.clock++
 	if s.limits.Eviction == EvictLFU {
 		s.touchLFU(access)
@@ -333,3 +336,8 @@ func (s *Space) VisitKeyspacesFrom(start int, fn func(Keyspace) bool) int {
 	}
 	return (start + 1) % len(s.keyspaces)
 }
+
+// SetNoTouch sets whether accesses are recorded: off while a connection in
+// CLIENT NO-TOUCH mode runs a command, as Redis's lookupKey leaves a key's
+// LRU or LFU alone for such a client.
+func (s *Space) SetNoTouch(on bool) { s.noTouch = on }
