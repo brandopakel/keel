@@ -1,9 +1,9 @@
 {
   "note": "First captured at 9736d8d, before step 2.4 of the embedding plan moved replication and failover into core.Engine; recaptured when INFO replication put Redis's fields first. See replication_golden_test.go.",
-  "source_revision": "6c4a916",
+  "source_revision": "64fd852",
   "transcript_sha256": {
-    "protocol-1": "3c25a89e923833cd4f93a9f988eaac02ed0419c818b3bbeb2c7e8aa69b483502",
-    "protocol-2": "7087faa43831bd0c2994ae1b4ea899e9493c1afebb1b34de8973c178f93c614d",
+    "protocol-1": "c820c4d868de88541eceb118c7f5fec95a59e8b286b6b2cc57d250bf6c13f10b",
+    "protocol-2": "857502e5dcadc3975287a8417127768806fd53fe9817f433f67eccca62d82443",
     "terms": "d13a9b01616a13ec206178403613f6307e66f870ec87078a2db7e8fcd6efefb1"
   }
 }

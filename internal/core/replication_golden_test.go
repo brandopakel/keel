@@ -47,7 +47,9 @@ import (
 // They were first captured at 9736d8d, before step 2.4 moved replication into
 // the engine, and recaptured at 6c4a916, INFO part (e), which put Redis's
 // fields first in INFO replication; that recapture changed only the info
-// lines.
+// lines. They were recaptured again at 64fd852, when a DEL or PERSIST that
+// changed nothing stopped being logged, which leaves out of a replica's own
+// log the DEL it applied to a key it did not yet have.
 //
 // and every run since must write the same transcript, line for line, under
 // every fsync policy with synchronous and worker appends. With
@@ -78,7 +80,7 @@ import (
 // Every opaque command here changes one key, so the record order of each
 // protocol 2 frame is the order the primary published it in, and is kept.
 const (
-	replicationGoldenRevision = "6c4a916"
+	replicationGoldenRevision = "64fd852"
 	replicationGoldenDir      = "testdata/replication-" + replicationGoldenRevision
 )
 
