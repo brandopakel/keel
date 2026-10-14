@@ -33,6 +33,40 @@ var denyOOMCommands = func() map[string]bool {
 // (EvictionPolicy.MayStayOver), so those policies pay one test of a bit and no
 // call. A replica ignores maxmemory, as Redis's does by default
 // (replica-ignore-maxmemory), and refuses nothing for it.
+//
+// It keeps Redis's eviction exceeded time as it looks, as performEvictions
+// does before each command (update_metrics).
 func (e *Engine) oomRefuses(cmd string) bool {
-	return denyOOMCommands[cmd] && e.replicaOf() == "" && e.space.OverLimit()
+	if e.replicaOf() != "" {
+		// Redis's replica returns before it measures anything.
+		return false
+	}
+	over := e.space.OverLimit()
+	e.noteEvictionExceeded(over)
+	return over && denyOOMCommands[cmd]
+}
+
+// noteEvictionExceeded starts the time the keyspace is over its bound with
+// nothing to evict, or adds it to the total once the keyspace is back inside,
+// as Redis's performEvictions does when it fails and when it next succeeds
+// (evict.c, update_metrics).
+func (e *Engine) noteEvictionExceeded(over bool) {
+	switch {
+	case over && e.evictionExceededSince == 0:
+		e.evictionExceededSince = nanotime()
+	case !over && e.evictionExceededSince != 0:
+		e.evictionExceededNanos += nanotime() - e.evictionExceededSince
+		e.evictionExceededSince = 0
+	}
+}
+
+// evictionExceeded is INFO's current_eviction_exceeded_time and
+// total_eviction_exceeded_time, in nanoseconds: how long the keyspace has now
+// been over its bound with nothing to evict, and that with the time it was so
+// before.
+func (e *Engine) evictionExceeded() (current, total int64) {
+	if e.evictionExceededSince != 0 {
+		current = nanotime() - e.evictionExceededSince
+	}
+	return current, e.evictionExceededNanos + current
 }

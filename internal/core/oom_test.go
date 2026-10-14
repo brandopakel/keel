@@ -158,3 +158,64 @@ func TestConfigSetChoosesEveryPolicyLive(t *testing.T) {
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+// TestEvictionExceededTimeIsRedis: the time the keyspace is over its bound
+// with nothing to evict starts at the first command that finds it so and ends
+// at the first that finds it back inside, as Redis's performEvictions keeps it
+// before each command; INFO reports the time so far and the total, in
+// milliseconds; a switch to an allkeys policy ends it; and CONFIG RESETSTAT
+// zeroes both, as resetServerStats does.
+func TestEvictionExceededTimeIsRedis(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{MaxMemory: 1, Eviction: EvictNone})
+	s := newSession(t, e)
+	exceeded := func() (total, current int) {
+		fields := infoFields(t, runOn(t, e, "INFO", "stats").(string))
+		total, _ = strconv.Atoi(fields["total_eviction_exceeded_time"])
+		current, _ = strconv.Atoi(fields["current_eviction_exceeded_time"])
+		return total, current
+	}
+	require.Equal(t, "+OK\r\n", s.send("SET", "a", "v"))
+	total, current := exceeded()
+	assert.Zero(t, total+current, "INFO is the first command to find it over")
+	waitPast(30)
+	total, current = exceeded()
+	assert.GreaterOrEqual(t, current, 30)
+	assert.Equal(t, total, current)
+
+	require.Equal(t, ":1\r\n", s.send("DEL", "a"))
+	s.send("PING") // the first command to find it back inside
+	waitPast(10)
+	total, current = exceeded()
+	assert.Zero(t, current)
+	assert.GreaterOrEqual(t, total, 30, "the time over is kept")
+
+	require.Equal(t, "+OK\r\n", s.send("SET", "b", "v"))
+	s.send("PING")
+	require.NotZero(t, e.evictionExceededSince)
+	reconfigure(t, e, func(o *Options) { o.Eviction = EvictLRU })
+	assert.Zero(t, e.evictionExceededSince, "an allkeys policy ends it")
+
+	runOn(t, e, "CONFIG", "RESETSTAT")
+	total, current = exceeded()
+	assert.Zero(t, total+current)
+}
+
+// TestEvictionExceededTimeStaysZeroWhereNothingIsMeasured: an allkeys policy
+// never leaves the keyspace over its bound, and a replica measures nothing,
+// as Redis's returns before performEvictions does.
+func TestEvictionExceededTimeStaysZeroWhereNothingIsMeasured(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{MaxMemory: 1})
+	runOn(t, e, "SET", "a", "v")
+	runOn(t, e, "SET", "b", "v")
+	assert.Zero(t, e.evictionExceededSince+e.evictionExceededNanos)
+
+	r := newTestEngine(t, Options{MaxMemory: 1, Eviction: EvictNone})
+	reconfigure(t, r, func(o *Options) { o.ReplicaOf = "primary.test:6379" })
+	r.replicaApplying = true
+	runOn(t, r, "SET", "a", "v")
+	r.replicaApplying = false
+	assert.False(t, r.oomRefuses("GET"))
+	assert.Zero(t, r.evictionExceededSince+r.evictionExceededNanos)
+}

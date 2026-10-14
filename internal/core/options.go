@@ -350,6 +350,11 @@ func (e *Engine) configure(o Options) error {
 	e.space.SetLimits(o.limits())
 	e.settings = o.settings()
 	e.role = o.role()
+	if !e.space.EvictionPolicy().MayStayOver() {
+		// An allkeys policy never leaves the keyspace over its bound, and the
+		// check that would end the time over it is not made under one.
+		e.noteEvictionExceeded(false)
+	}
 	return nil
 }
 
