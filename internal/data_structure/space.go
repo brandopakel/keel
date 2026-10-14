@@ -68,6 +68,12 @@ type Space struct {
 	// so that nothing reads as expired and historical log mutations do not
 	// depend on the wall clock at replay.
 	SuspendExpiry bool
+
+	// ttlSum and ttlSamples are the time left, in milliseconds, of the keys
+	// active expiry found not yet due, which the engine's expiry cycle takes
+	// for INFO's avg_ttl (TakeTTLSamples). Only that cycle reads them, so they
+	// go last, after everything an access reads.
+	ttlSum, ttlSamples uint64
 }
 
 // EvictionPolicy is how a space that is over one of its bounds chooses the

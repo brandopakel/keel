@@ -203,5 +203,7 @@ func (e *Engine) cmdFLUSHDB(args []string) []byte {
 			ks.Delete(key)
 		}
 	})
+	// As Redis's emptyData zeroes a database's avg_ttl.
+	e.avgTTL = 0
 	return constant.RespOk
 }

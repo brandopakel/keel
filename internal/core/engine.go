@@ -277,6 +277,11 @@ type Engine struct {
 	// statsReset is the transport's part of CONFIG RESETSTAT, installed with
 	// SetStatsReset; nil, there is none.
 	statsReset func()
+	// avgTTL is INFO keyspace's avg_ttl: Redis's running estimate, in
+	// milliseconds, of the time left to the keys that carry a TTL, which the
+	// expiry cycle keeps (foldAvgTTL). Like expiredKeys it describes the
+	// stores, so resetStores clears it.
+	avgTTL int64
 
 	// mu is e's lock, which Lock and Unlock take and release. No command
 	// reads it, so it goes last, and every field a command reads keeps its

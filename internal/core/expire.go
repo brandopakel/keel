@@ -19,13 +19,24 @@ import (
 // it takes against e.
 func (e *Engine) ExpireCycle() int {
 	samples := e.settings.expireSamples
-	if e.replicaOf() != "" || samples <= 0 || e.KeysWithExpiry() == 0 {
+	if e.replicaOf() != "" || samples <= 0 {
+		return 0
+	}
+	if e.KeysWithExpiry() == 0 {
+		// Redis zeroes a database's avg_ttl when nothing in it expires.
+		e.avgTTL = 0
 		return 0
 	}
 
 	e.aofBegin("")
 	defer e.aofEnd()
+	// What active expiry noted outside a cycle is not this cycle's sample.
+	e.space.TakeTTLSamples()
 	total := 0
+	// The time left to the keys found not yet due, over the rounds since
+	// avg_ttl last took them, and how many of those rounds found any.
+	var ttlSum, ttlSamples uint64
+	updates := 0
 	for round := 0; round < e.settings.expireRounds; round++ {
 		examined, expired := 0, 0
 		e.expireCursor = e.space.EachKeyspaceFrom(e.expireCursor, func(ks data_structure.Keyspace) {
@@ -36,14 +47,21 @@ func (e *Engine) ExpireCycle() int {
 			}
 		})
 		total += expired
-		if examined == 0 {
-			break
+		if sum, n := e.space.TakeTTLSamples(); n > 0 {
+			ttlSum, ttlSamples = ttlSum+sum, ttlSamples+n
+			updates++
 		}
 		// Another round only while the sample keeps coming up expired. The
 		// threshold is what stops this being a full scan on a keyspace where
 		// nothing has fallen due, and what makes it one on a keyspace where
 		// everything has.
-		if expired*100 < examined*e.settings.expirePercent {
+		last := examined == 0 || expired*100 < examined*e.settings.expirePercent || round == e.settings.expireRounds-1
+		// Redis folds its sample into avg_ttl every 16 rounds and as it stops.
+		if (round+1)%16 == 0 || last {
+			e.foldAvgTTL(ttlSum, ttlSamples, updates)
+			ttlSum, ttlSamples, updates = 0, 0, 0
+		}
+		if last {
 			break
 		}
 	}
@@ -52,6 +70,27 @@ func (e *Engine) ExpireCycle() int {
 		e.expiredKeys += uint64(total)
 	}
 	return total
+}
+
+// avgTTLFactor is Redis's avg_ttl_factor (expire.c): 0.98 to the power of
+// 1 to 16.
+var avgTTLFactor = [16]float64{0.98, 0.9604, 0.941192, 0.922368, 0.903921, 0.885842, 0.868126, 0.850763,
+	0.833748, 0.817073, 0.800731, 0.784717, 0.769022, 0.753642, 0.738569, 0.723798}
+
+// foldAvgTTL folds into avg_ttl the mean of samples TTLs summing sum, taken
+// over updates rounds, as Redis's activeExpireCycle folds its sample: the
+// first estimate as it is, and after it the old one with a weight of 98% for
+// each round, the new mean for the rest.
+func (e *Engine) foldAvgTTL(sum, samples uint64, updates int) {
+	if samples == 0 {
+		return
+	}
+	mean := int64(sum / samples)
+	if e.avgTTL == 0 {
+		e.avgTTL = mean
+		return
+	}
+	e.avgTTL = int64(float64(mean) + float64(e.avgTTL-mean)*avgTTLFactor[updates-1])
 }
 
 // ExpiredKeys reports how many keys e's cycle has removed.

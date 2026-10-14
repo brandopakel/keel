@@ -305,6 +305,11 @@ func (e *Engine) clusterInfo(b *strings.Builder) {
 }
 
 func (e *Engine) keyspaceInfo(b *strings.Builder) {
-	fmt.Fprintf(b, "# Keyspace\r\ndb0:keys=%d,expires=%d\r\n\r\n",
-		e.space.TotalKeys(), e.KeysWithExpiry())
+	b.WriteString("# Keyspace\r\n")
+	// Redis writes a database's line only when it holds keys. Keel has no
+	// hash field expiry, so no subexpiry.
+	if keys, expires := e.space.TotalKeys(), e.KeysWithExpiry(); keys > 0 || expires > 0 {
+		fmt.Fprintf(b, "db0:keys=%d,expires=%d,avg_ttl=%d,subexpiry=0\r\n", keys, expires, e.avgTTL)
+	}
+	b.WriteString("\r\n")
 }

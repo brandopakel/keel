@@ -230,6 +230,8 @@ func (k *Keyed[T]) ActiveExpire(samples int) (examined, expired int) {
 			k.Delete(key)
 			k.space.noteRemoval(k, key)
 			expired++
+		} else {
+			k.space.noteTTL(at - now)
 		}
 		if examined >= samples {
 			break
