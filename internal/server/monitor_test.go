@@ -143,6 +143,8 @@ func TestAppendReprQuotesAsRedis(t *testing.T) {
 // TestAMonitorThatDoesNotReadIsClosed: lines past the output limit kill it.
 func TestAMonitorThatDoesNotReadIsClosed(t *testing.T) {
 	t.Cleanup(func() { monitors, fedMonitors, killedClients = nil, nil, nil })
+	total, input, reply := retainedClientBytes, retainedInputBytes, retainedReplyBytes
+	t.Cleanup(func() { retainedClientBytes, retainedInputBytes, retainedReplyBytes = total, input, reply })
 	r, _ := socketPair(t)
 	m := &client{fd: r, engine: newTestEngine(t, core.Options{})}
 	clients[r] = m
