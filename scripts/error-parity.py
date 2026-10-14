@@ -374,6 +374,43 @@ SUBCOMMANDS = [
     ['slowlog', 'nosuch'], ['slowlog'], ['SLOWLOG', 'x' * 200], ['slowlog', 'help', 'x'],
 ]
 
+# CONFIG SET's refusals, which Keel answers from Redis's own table of
+# directives: each type's errors, Redis's order of refusals, and settings
+# that only tune Redis's internals, which Keel keeps without effect, set to
+# their defaults so that no case changes what a later one sees. CONFIG GET of
+# those and their aliases reads the same defaults on both.
+CONFIG_SET = [
+    ['config', 'set', 'nosuch', '1', 'maxmemory', '1'], ['config', 'set', 'databases', '1', 'nosuch', '1'],
+    ['CONFIG', 'SET', 'maxmemory', '1', 'nosuch', '1', 'other', '2'], ['config', 'set', 'dir', '/tmp'],
+    ['config', 'set', 'Databases', '1'], ['config', 'set', 'slaveof', 'x'], ['config', 'set', 'daemonize', 'yes'],
+    ['config', 'set', 'maxmemory', '1', 'MAXMEMORY', '2'],
+    ['config', 'set', 'hash-max-listpack-entries', '1', 'hash-max-ziplist-entries', '2'],
+    ['config', 'set', 'maxmemory', '1mb', 'maxmemory-samples', '100'], ['config', 'set', 'maxmemory', '1', 'hz'],
+    ['config', 'set', 'activerehashing', 'maybe'], ['config', 'set', 'maxmemory', '1zb'],
+    ['config', 'set', 'maxmemory', '-1'], ['config', 'set', 'maxmemory-samples', '0'],
+    ['config', 'set', 'maxmemory-samples', '+5'], ['config', 'set', 'MAXMEMORY-SAMPLES', '05'],
+    ['config', 'set', 'hash-max-ziplist-entries', 'x'], ['config', 'set', 'hash-max-listpack-entries', '-1'],
+    ['config', 'set', 'set-max-intset-entries', '1e3'], ['config', 'set', 'maxmemory-policy', 'lru'],
+    ['config', 'set', 'appendfsync', 'sometimes'], ['config', 'set', 'maxmemory-clients', '200%'],
+    ['config', 'set', 'maxmemory-clients', 'x%'], ['config', 'set', 'array-slice-size', '300'],
+    ['config', 'set', 'array-sparse-kmax', '5'], ['config', 'set', 'array-sparse-kmin', '10'],
+    ['config', 'set', 'repl-diskless-load', 'nosuch'], ['config', 'set', 'cluster-slot-stats-enabled', 'cpu x'],
+    ['config', 'set', 'save', '900'], ['config', 'set', 'save', '0 1'], ['config', 'set', 'save', '1 -1'],
+    ['config', 'set', 'notify-keyspace-events', 'Q'], ['config', 'set', 'notify-keyspace-events', 'K E'],
+    ['config', 'set', 'proto-max-bulk-len', '1kb'],
+    ['config', 'set', 'req-res-logfile', 'x'], ['config', 'set', 'repl-compression', '1'],
+    ['config', 'get', 'req-res-logfile'], ['config', 'get', 'repl-compression'],
+    ['config', 'set', 'hash-max-ziplist-entries', '512', 'list-max-ziplist-size', '-2', 'activerehashing', 'yes'],
+    ['config', 'set', 'save', ''], ['config', 'set', 'notify-keyspace-events', ''],
+    # One directive each: Redis keeps no order between several.
+    ['config', 'get', 'hash-max-ziplist-entries'], ['config', 'get', 'HASH-MAX-LISTPACK-ENTRIES'],
+    ['config', 'get', 'list-max-ziplist-*'], ['config', 'get', 'lazyexpire-*'],
+    ['config', 'get', 'lazyexpire-nested-arbitrary-keys'], ['config', 'get', 'zset-max-ziplist-value'],
+    ['config', 'get', 'set-max-intset-entries'], ['config', 'get', 'stream-node-max-bytes'],
+    ['config', 'get', 'hll-sparse-max-bytes'], ['config', 'get', 'activedefrag'], ['config', 'get', 'lazyfree-lazy-user-flush'],
+    ['config', 'get', 'notify-keyspace-events'], ['config', 'get', 'maxmemory-clients'], ['config', 'get', 'save'],
+]
+
 # Commands whose arity Redis does not hold, worded as it words every other.
 KEEL_ONLY_ARITY = {'MORRIS.INITBYDIM': 4, 'MORRIS.INITBYPROB': 4, 'MORRIS.INCRBY': -4, 'MORRIS.QUERY': -3,
                    'MORRIS.INFO': 2, 'KEEL.DUMP': 2, 'KEEL.RESTORE': 3, 'MEMKV.DUMP': 2, 'MEMKV.RESTORE': 3,
@@ -430,6 +467,10 @@ def build_cases(redis_arities, modules):
     # The slow log's length straight after it is emptied, the same on both
     # whatever ran slowly before.
     cases.append(case('slow log emptied', [['SLOWLOG', 'RESET'], ['SLOWLOG', 'LEN']]))
+    for command in CONFIG_SET:
+        cases.append(case('config set', [command]))
+    for command in CONFIG_SET[::4]:
+        cases.append(case('config set queued', [['MULTI'], command, ['EXEC']]))
     # A failed AUTH inside EXEC leaves no element in Redis 8.10.1's reply, whose
     # header still counts one, so a client reading it waits forever; AUTH is
     # not queued here.
