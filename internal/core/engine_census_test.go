@@ -40,7 +40,7 @@ var packageVars = map[string]string{
 	"queuedReply": table, "execAbortReply": table, "allocationPressure": table,
 	"replyTooLarge": table, "transactionOpenFrame": table, "transactionCloseFrame": table,
 	"redisConfigSpecs": table, "configLookup": table, "keelConfigs": table, "storedConfigs": table,
-	"configOnce": table,
+	"configOnce":         table,
 	"commandSubcommands": table, "commandFlagOrder": table, "aclCategoryOrder": table,
 	"keyFlagOrder": table, "redisCommandFacts": table,
 
