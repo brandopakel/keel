@@ -1679,6 +1679,61 @@ var goldenServer = []commandGoldenCase{
 		send("CONFIG", strings.Repeat("x", 200)),
 		send("CONFIG"),
 	}},
+	{family: "server", name: "config-set", steps: []goldenStep{
+		// Keel's own settings, changed at once and read back.
+		send("CONFIG", "SET", "maxmemory", "1mb", "maxmemory-policy", "ALLKEYS-LFU", "maxmemory-samples", "10", "lfu-log-factor", "0"),
+		send("CONFIG", "GET", "maxmemory", "maxmemory-policy", "maxmemory-samples", "lfu-log-factor").norm(golden.FlagPairs),
+		send("CONFIG", "SET", "appendfsync", "always", "auto-aof-rewrite-percentage", "0", "auto-aof-rewrite-min-size", "1kb"),
+		send("CONFIG", "GET", "appendfsync", "auto-aof-rewrite-*").norm(golden.FlagPairs),
+		send("CONFIG", "SET", "maxmemory", "0", "maxmemory-policy", "allkeys-lru"),
+		send("CONFIG", "SET", "maxmemory-policy", "noeviction"),
+		send("CONFIG", "SET", "maxmemory-policy", "lru"),
+		// Settings that tune only Redis's internals: kept and reported, under
+		// a name and its alias.
+		send("CONFIG", "SET", "hash-max-ziplist-entries", "128", "list-max-ziplist-size", "-1", "hll-sparse-max-bytes", "1kb"),
+		send("CONFIG", "GET", "hash-max-*-entries", "list-max-*-size", "hll-sparse-max-bytes").norm(golden.FlagPairs),
+		send("CONFIG", "SET", "cluster-slot-stats-enabled", "cpu net"),
+		send("CONFIG", "GET", "cluster-slot-stats-enabled"),
+		send("CONFIG", "GET", "lazyexpire-*"),
+		send("CONFIG", "GET", "lazyexpire-nested-arbitrary-keys"),
+		// Settings Keel cannot change: its own value taken, any other refused.
+		send("CONFIG", "SET", "save", ""),
+		send("CONFIG", "SET", "save", "900 1"),
+		send("CONFIG", "SET", "save", "900"),
+		send("CONFIG", "SET", "appendonly", "no"),
+		send("CONFIG", "SET", "appendonly", "yes"),
+		send("CONFIG", "SET", "notify-keyspace-events", ""),
+		send("CONFIG", "SET", "notify-keyspace-events", "KEA"),
+		send("CONFIG", "SET", "notify-keyspace-events", "Q"),
+		send("CONFIG", "SET", "proto-max-bulk-len", "536870912"),
+		send("CONFIG", "SET", "proto-max-bulk-len", "1kb"),
+		send("CONFIG", "SET", "daemonize", "yes"),
+		send("CONFIG", "SET", "dbfilename", "x"),
+		// Each type's errors, and Redis's order of refusals.
+		send("CONFIG", "SET", "activerehashing", "maybe"),
+		send("CONFIG", "SET", "maxmemory", "1zb"),
+		send("CONFIG", "SET", "maxmemory-samples", "0"),
+		send("CONFIG", "SET", "maxmemory-samples", "+5"),
+		send("CONFIG", "SET", "hash-max-ziplist-entries", "x"),
+		send("CONFIG", "SET", "maxmemory-clients", "200%"),
+		send("CONFIG", "SET", "maxmemory-clients", "x%"),
+		send("CONFIG", "SET", "array-slice-size", "300"),
+		send("CONFIG", "SET", "appendfsync", "sometimes"),
+		send("CONFIG", "SET", "nosuch", "1", "maxmemory", "1"),
+		send("CONFIG", "SET", "databases", "1", "nosuch", "1"),
+		send("CONFIG", "SET", "maxmemory", "1", "MAXMEMORY", "2"),
+		send("CONFIG", "SET", "hash-max-listpack-entries", "1", "hash-max-ziplist-entries", "2"),
+		// A value that does not read fails the command before anything is
+		// set: maxmemory keeps the 2mb set before it. (A change that fails
+		// after others were made needs a transport's maxclients; config_test.go
+		// has that one.)
+		send("CONFIG", "SET", "maxmemory", "2mb"),
+		send("CONFIG", "SET", "maxmemory", "1mb", "maxmemory-samples", "100"),
+		send("CONFIG", "GET", "maxmemory"),
+		send("CONFIG", "SET", "maxmemory", "0"),
+		send("CONFIG", "SET", "req-res-logfile", "x"),
+		send("CONFIG", "SET", "timeout", "10"),
+	}},
 	{family: "server", name: "bgrewriteaof", noRecords: true, steps: []goldenStep{
 		send("SET", "k", "v"),
 		send("BGREWRITEAOF"),

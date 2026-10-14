@@ -82,11 +82,11 @@
       "captured": "2026-10-14"
     },
     "server.txt": {
-      "sha256": "4ca4f18e96f1f60812e245e558a1ac27fed305e0c50703531c8ba5bcfad8a650",
-      "cases": 11,
-      "commands": 187,
+      "sha256": "0ea3feda1237ac5cee8c170f3a7e090772e9e3f609bff726ba577a317b905af5",
+      "cases": 12,
+      "commands": 231,
       "records": 23,
-      "source_revision": "67aa4e2",
+      "source_revision": "ae8f607",
       "captured": "2026-10-14"
     },
     "sets.txt": {
