@@ -205,6 +205,14 @@ class Servers:
 # Differences that stay, each with the reason. The key is the command that
 # differs, as sent, its words joined by spaces.
 KNOWN = {
+    'COMMAND INFO set': "a key spec's notes are Redis's text, which Keel's COMMAND leaves out (docs/info-compatibility.md)",
+    'COMMAND INFO pfcount': "a key spec's notes are Redis's text, which Keel's COMMAND leaves out (docs/info-compatibility.md)",
+    'COMMAND INFO client': "Keel has some of CLIENT's subcommands, and Redis lists its own in no fixed order",
+    'COMMAND INFO config': "Keel has some of CONFIG's subcommands, and Redis lists its own in no fixed order",
+    'COMMAND INFO memory': "Keel has some of MEMORY's subcommands, and Redis lists its own in no fixed order",
+    'COMMAND INFO command': "Redis lists COMMAND's subcommands in no fixed order",
+    'COMMAND INFO latency': "Redis lists LATENCY's subcommands in no fixed order",
+    'COMMAND INFO slowlog': "Redis lists SLOWLOG's subcommands in no fixed order",
     'watch k': 'WATCH is not implemented and stays an unknown command, so an optimistic-locking API fails '
                'loudly instead of quietly not watching (docs/transactions.md); before AUTH that answers '
                'unknown command rather than NOAUTH, as Redis answers for any command it does not have',
@@ -432,6 +440,33 @@ CONFIG_SET = [
     ['config', 'get', 'hll-sparse-max-bytes'], ['config', 'get', 'activedefrag'], ['config', 'get', 'lazyfree-lazy-user-flush'],
     ['config', 'get', 'notify-keyspace-events'], ['config', 'get', 'maxmemory-clients'], ['config', 'get', 'save'],
 ]
+# COMMAND, answered from Redis's own specs: GETKEYS and GETKEYSANDFLAGS, their
+# errors, LIST's filters where one command matches, HELP and the subcommand
+# errors. COMMAND INFO of every command Keel has is added in build_cases.
+COMMAND_CASES = [
+    ['COMMAND', 'GETKEYS', 'set', 'k', 'v'], ['COMMAND', 'GETKEYSANDFLAGS', 'set', 'k', 'v', 'GET'],
+    ['COMMAND', 'GETKEYSANDFLAGS', 'set', 'k', 'v', 'ifeq', 'x'], ['COMMAND', 'GETKEYSANDFLAGS', 'set', 'k', 'v'],
+    ['COMMAND', 'GETKEYS', 'mset', 'a', '1', 'b', '2'], ['COMMAND', 'GETKEYS', 'mset', 'a', '1', 'b'],
+    ['COMMAND', 'GETKEYSANDFLAGS', 'lcs', 'a', 'b'], ['COMMAND', 'GETKEYS', 'pfmerge', 'd', 's1', 's2'],
+    ['COMMAND', 'GETKEYSANDFLAGS', 'pfmerge', 'd'], ['COMMAND', 'GETKEYS', 'memory', 'usage', 'k'],
+    ['COMMAND', 'GETKEYSANDFLAGS', 'zadd', 'z', '1', 'm'], ['COMMAND', 'GETKEYS', 'del', 'a', 'b', 'c'],
+    ['COMMAND', 'GETKEYS', 'ping'], ['COMMAND', 'GETKEYS', 'nosuch', 'x'], ['COMMAND', 'GETKEYS', 'get'],
+    ['COMMAND', 'GETKEYS', 'get', 'a', 'b'], ['COMMAND', 'GETKEYS', 'config', 'get', 'x'], ['COMMAND', 'GETKEYS', 'config'],
+    ['COMMAND', 'GETKEYS', 'memory|usage', 'k'], ['COMMAND', 'GETKEYS', 'memory', 'nosuch', 'k'],
+    ['COMMAND', 'GETKEYS', 'scan', '0'], ['command', 'getkeys'], ['COMMAND', 'INFO', 'nosuch', 'get'],
+    ['COMMAND', 'INFO', 'CONFIG|GET', 'memory|nosuch'], ['COMMAND', 'LIST', 'FILTERBY', 'PATTERN', 'config|g*'],
+    ['COMMAND', 'LIST', 'FILTERBY', 'PATTERN', 'lcs'], ['COMMAND', 'LIST', 'FILTERBY', 'ACLCAT', 'nosuchcat'],
+    ['COMMAND', 'LIST', 'FILTERBY', 'MODULE', 'nosuch'], ['COMMAND', 'LIST', 'FILTERBY', 'x', 'y'], ['COMMAND', 'LIST', 'x'],
+    ['COMMAND', 'LIST', 'FILTERBY', 'PATTERN'], ['COMMAND', 'DOCS', 'nosuch'], ['COMMAND', 'HELP'], ['command', 'help', 'x'],
+    ['COMMAND', 'COUNT', 'x'], ['COMMAND', 'nosuch'],
+]
+# The subcommands Keel has, each of which COMMAND INFO describes.
+KEEL_SUBCOMMANDS = ['client|id', 'client|setname', 'client|getname', 'client|setinfo', 'client|info', 'client|help',
+                    'memory|stats', 'memory|usage', 'memory|help', 'config|get', 'config|set', 'config|resetstat',
+                    'config|rewrite', 'config|help', 'command|count', 'command|docs', 'command|getkeys',
+                    'command|getkeysandflags', 'command|help', 'command|info', 'command|list', 'latency|doctor',
+                    'latency|graph', 'latency|help', 'latency|histogram', 'latency|history', 'latency|latest',
+                    'latency|reset', 'slowlog|get', 'slowlog|help', 'slowlog|len', 'slowlog|reset']
 
 # Commands whose arity Redis does not hold, worded as it words every other.
 KEEL_ONLY_ARITY = {'MORRIS.INITBYDIM': 4, 'MORRIS.INITBYPROB': 4, 'MORRIS.INCRBY': -4, 'MORRIS.QUERY': -3,
@@ -493,6 +528,10 @@ def build_cases(redis_arities, modules):
         cases.append(case('config set', [command]))
     for command in CONFIG_SET[::4]:
         cases.append(case('config set queued', [['MULTI'], command, ['EXEC']]))
+    for command in COMMAND_CASES:
+        cases.append(case('command', [command]))
+    for name in sorted(n.lower() for n in redis_arities) + KEEL_SUBCOMMANDS:
+        cases.append(case('command info', [['COMMAND', 'INFO', name]]))
     # A failed AUTH inside EXEC leaves no element in Redis 8.10.1's reply, whose
     # header still counts one, so a client reading it waits forever; AUTH is
     # not queued here.
@@ -552,7 +591,7 @@ def redis_arities(port):
              'SCARD', 'SMEMBERS', 'SISMEMBER', 'SMISMEMBER', 'SPOP', 'SRANDMEMBER', 'ZCOUNT', 'ZRANGEBYSCORE',
              'ZREVRANGEBYSCORE', 'ZINCRBY', 'ZPOPMIN', 'ZPOPMAX', 'ZRANGE', 'ZADD', 'ZRANK', 'ZREM', 'ZSCORE', 'ZCARD',
              'GEOADD', 'GEODIST', 'GEOHASH', 'GEOSEARCH', 'GEOPOS', 'PFADD', 'PFCOUNT', 'PFMERGE', 'AUTH', 'HELLO',
-             'QUIT', 'CLIENT', 'CONFIG', 'LATENCY', 'SLOWLOG', 'MULTI', 'EXEC', 'DISCARD']
+             'QUIT', 'CLIENT', 'CONFIG', 'LATENCY', 'SLOWLOG', 'COMMAND', 'MULTI', 'EXEC', 'DISCARD']
     session = Session(port, auth=True, protocol=2)
     try:
         session.socket.sendall(encode(['COMMAND', 'INFO', *names]))
