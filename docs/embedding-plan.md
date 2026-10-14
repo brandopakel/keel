@@ -1734,7 +1734,13 @@ settles it this way:
       takes the first wherever the file ends at a record boundary, for every
       engine, the server's included: the short write is cut back to the
       file's own size less what it wrote, so the log stays whole and a crash
-      needs no repair. In the middle of a large record, whose earlier drains
+      needs no repair. Whoever wrote cuts, right after the write, as Redis
+      does: the loop for its own writes, and the server's append worker for
+      a batch (`-aof-async-append`), before it hands the batch back; the
+      loop's cut of a batch is kept as a second try when the worker's cut
+      fails. (At first the loop cut the worker's short write when it next
+      polled the batch, so a process killed in between, on any retry, left a
+      torn tail.) In the middle of a large record, whose earlier drains
       are in the file already, and when the cut fails, what was written
       stays and the rest is written after it, as in Redis's second case.
       Either way the log is whole once the write succeeds; a crash in the

@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -113,4 +114,73 @@ func TestAFailedWorkerBatchIsRetriedFromTheFrontOfTheBuffer(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestAWorkerCutsItsShortWriteBeforeItReturns: the append worker cuts its
+// short write back off the log itself, right after the write, as Redis
+// truncates right after its own (aof.c 1515-1526), and not when the loop
+// next polls the batch: a process killed between the worker's return and
+// that poll finds a whole log. The cut keeps the rule the loop's has: a batch
+// that starts while the log ends partway through a record, because an
+// earlier cut failed, is not cut, and what follows is written after it.
+func TestAWorkerCutsItsShortWriteBeforeItReturns(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "keel.aof")
+	e := newTestEngine(t, Options{Fsync: FsyncEverySec, AsyncAppend: true})
+	require.NoError(t, e.OpenAOF(path))
+	disk := failDisk(e)
+	assert.Equal(t, "+OK\r\n", string(rawReplyOn(t, e, "SET", "before", "v")))
+	settleAppend(t, e)
+	whole := logSize(t, nil, path)
+	disk.writes.Store(true)
+	assert.Equal(t, "+OK\r\n", string(rawReplyOn(t, e, "SET", "inflight", "v")))
+
+	// runBatch starts a batch and waits for its worker to return, without
+	// polling it: the file is then what a kill would leave.
+	runBatch := func() {
+		t.Helper()
+		e.appendRetryAt = time.Time{}
+		returned := make(chan struct{})
+		_, err := e.FlushAOFAsync(func() { close(returned) })
+		require.NoError(t, err)
+		require.True(t, e.AppendPending(), "a batch is out")
+		select {
+		case <-returned:
+		case <-time.After(10 * time.Second):
+			t.Fatal("the worker never returned")
+		}
+	}
+	runBatch()
+	assert.Equal(t, whole, logSize(t, nil, path), "the worker cut its short write back before it returned")
+	settleAppend(t, e)
+	require.True(t, e.LogRetrying())
+	assert.Equal(t, whole, logSize(t, nil, path))
+	runBatch()
+	assert.Equal(t, whole, logSize(t, nil, path), "and so does each retry's")
+	settleAppend(t, e)
+
+	// A cut that fails leaves what was written; the retry then begins
+	// partway through a record, and is not cut.
+	truncate := e.aofTruncate
+	e.aofTruncate = func(*os.File, int64) error { return errors.New("the test's disk cannot truncate") }
+	runBatch()
+	settleAppend(t, e)
+	torn := logSize(t, nil, path)
+	assert.Greater(t, torn, whole, "the failed cut left what the worker wrote")
+	e.aofTruncate = truncate
+	runBatch()
+	assert.Greater(t, logSize(t, nil, path), torn, "a batch that began partway through a record is not cut")
+	settleAppend(t, e)
+
+	disk.writes.Store(false)
+	e.appendRetryAt = time.Time{}
+	settleAppend(t, e)
+	require.False(t, e.LogRetrying(), "the retry succeeded")
+	require.NoError(t, e.CloseAOF())
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, 1, strings.Count(string(body), logRecord("SET", "inflight", "v")), "written once, whole")
+	again, cut := reopenedCopy(t, nil, path)
+	assert.Zero(t, cut, "the log is whole")
+	assert.Equal(t, "$1\r\nv\r\n", mustDo(t, again, "GET", "inflight"))
 }

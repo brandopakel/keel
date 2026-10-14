@@ -56,8 +56,10 @@ func (e *Engine) pollAppend(wait bool) {
 		// A batch is whole records, so the file ends at a record boundary.
 		e.aof.midRecord = false
 	} else if result.n > 0 && !e.aof.midRecord && e.cutShortWrite(result.n) {
-		// Cut back, as the loop's own short write is (aof_transcript.go),
-		// so that the log ends at its last whole record.
+		// The worker cuts a short write back itself, right after it, as
+		// Redis does (aof.c 1515-1526), so that a kill finds no torn tail;
+		// what it wrote is here only when its cut failed, and this is a
+		// second try, with the same rule as the loop's own (aof_transcript.go).
 		result.n = 0
 	}
 	e.recordAOFDigest(result.body[:result.n])
@@ -135,7 +137,11 @@ func (e *Engine) FlushAOFAsync(wake func()) (ready bool, err error) {
 	}
 	body := e.aof.buf
 	e.aof.buf = nil
-	file, writeFile, syncFile := e.aof.file, e.aofWrite, e.aofSync
+	file, writeFile, syncFile, truncateFile := e.aof.file, e.aofWrite, e.aofSync, e.aofTruncate
+	// Whether the log ends at a whole record as the batch starts: nothing
+	// else writes it while the batch is out, so it still does when the
+	// worker's write fails, and a short write may then be cut back.
+	atRecord := !e.aof.midRecord
 	writeStats, syncStats := &e.appendWriteStats, &e.appendSyncStats
 	result := make(chan appendResult, 1)
 	e.appendPending = result
@@ -147,6 +153,12 @@ func (e *Engine) FlushAOFAsync(wake func()) (ready bool, err error) {
 		n, err := timedPersistenceWrite(writeStats, file, body, writeFile)
 		if err == nil && n != len(body) {
 			err = io.ErrShortWrite
+		}
+		if err != nil && n > 0 && atRecord && cutShortWriteOf(file, n, truncateFile) {
+			// Cut back at once, as Redis truncates right after its write
+			// (aof.c 1515-1526), rather than when the loop next polls: a
+			// process killed in between would leave a torn tail.
+			n = 0
 		}
 		synced := false
 		if err == nil && always {
