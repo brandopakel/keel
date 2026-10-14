@@ -128,3 +128,59 @@ func TestReplicaAppliesASpopThatPopsNothing(t *testing.T) {
 	require.True(t, e.replicaReady)
 	require.Equal(t, want, runOn(t, e, "SMEMBERS", "s"))
 }
+
+// stringStateOn is each of keys' value and expiry instant on e, read
+// without reaping, for comparing a replica with its primary.
+func stringStateOn(e *Engine, keys ...string) map[string]string {
+	state := map[string]string{}
+	for _, key := range keys {
+		obj := e.dictStore.Peek(key)
+		if obj == nil {
+			state[key] = "(none)"
+			continue
+		}
+		at, expires := e.dictStore.GetExpiry(key)
+		state[key] = obj.Value + " expires " + strconv.FormatBool(expires) + " " + strconv.FormatUint(at, 10)
+	}
+	return state
+}
+
+// TestReplicaAppliesTheStringCommandsRecords: a protocol 2 replica applies
+// the records of every string command, each as the primary staged it -
+// APPEND and SETRANGE as themselves, GETSET as SET, GETDEL as DEL, GETEX's
+// expiry as PEXPIREAT, PERSIST or DEL, INCRBYFLOAT as SET with KEEPTTL,
+// MSETNX as MSET - and ends with the primary's strings and expiries.
+func TestReplicaAppliesTheStringCommandsRecords(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	setupReplicationV2On(t, e)
+	frames := snapshotV2On(t, e)
+	base, epoch := frames[0].To, frames[0].Epoch
+	for _, cmd := range [][]string{
+		{"SET", "a", "hello"}, {"APPEND", "a", " world"}, {"APPEND", "fresh", "x"},
+		{"SETRANGE", "a", "0", "J"}, {"SETRANGE", "padded", "3", "x"},
+		{"GETSET", "a", "replaced"}, {"SET", "gone", "v"}, {"GETDEL", "gone"},
+		{"SET", "g", "v"}, {"GETEX", "g", "EX", "100000"}, {"SET", "p", "v", "EX", "100000"},
+		{"GETEX", "p", "PERSIST"}, {"SET", "past", "v"}, {"GETEX", "past", "PXAT", "1"},
+		{"INCRBYFLOAT", "f", "10.5"}, {"INCRBYFLOAT", "f", "0.1"}, {"SET", "t", "5", "EX", "100000"},
+		{"INCRBYFLOAT", "t", "0.5"}, {"MSETNX", "m1", "a", "m2", "b"}, {"MSETNX", "m1", "x", "m3", "y"},
+	} {
+		reply := rawReplyOn(t, e, cmd[0], cmd[1:]...)
+		require.NotEqual(t, byte('-'), reply[0], "%v: %q", cmd, reply)
+	}
+	delta := pullV2On(t, e, epoch, base, "", 0)
+	keys := []string{"a", "fresh", "padded", "gone", "g", "p", "past", "f", "t", "m1", "m2", "m3"}
+	want := stringStateOn(e, keys...)
+	require.Equal(t, "replaced expires false 0", want["a"])
+	require.Equal(t, "\x00\x00\x00x expires false 0", want["padded"])
+	require.Equal(t, "10.6 expires false 0", want["f"])
+	require.Equal(t, "(none)", want["past"])
+	require.Contains(t, want["t"], "5.5 expires true")
+	becomeReplicaV2On(t, e)
+	for _, frame := range frames {
+		require.NoError(t, e.ApplyReplication(frame))
+	}
+	require.NoError(t, e.ApplyReplication(delta))
+	require.True(t, e.replicaReady)
+	require.Equal(t, want, stringStateOn(e, keys...))
+}

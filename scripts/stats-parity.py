@@ -47,7 +47,17 @@ CASES = [[c] for c in [
     ['SETNX', 'str', 'x'], ['SETNX', 'new', 'x'], ['INCR', 'num'], ['INCR', 'missing'], ['INCR', 'str'],
     ['INCRBY', 'num', '5'], ['DECR', 'num'], ['DECRBY', 'num', '2'], ['MGET', 'str', 'missing', 'num', 'hash'],
     ['MSET', 'a', '1', 'b', '2'], ['SETEX', 'k', '10', 'v'], ['PSETEX', 'k', '1000', 'v'], ['LCS', 'str', 'other'],
-    ['LCS', 'str', 'missing'],
+    ['LCS', 'str', 'missing'], ['STRLEN', 'str'], ['STRLEN', 'missing'], ['STRLEN', 'hash'],
+    ['GETRANGE', 'str', '0', '1'], ['GETRANGE', 'missing', '0', '1'], ['SUBSTR', 'str', '0', '1'], ['GETEX', 'str'],
+    # A read whose handler parses arguments before it looks its key up
+    # counts nothing for a malformed argument, and a hit for another type.
+    ['GETRANGE', 'str', 'x', '1'], ['GETRANGE', 'missing', '0', 'y'], ['GETRANGE', 'hash', '0', '1'],
+    ['GETRANGE', 'hash', 'x', '1'], ['SUBSTR', 'str', '0', 'y'], ['SUBSTR', 'hash', '0', '1'], ['GETEX', 'str', 'BAD'],
+    ['GETEX', 'missing', 'EX'], ['GETEX', 'hash', 'BAD'], ['GETEX', 'hash', 'EX', '1'], ['GETEX', 'str', 'EX', 'x'],
+    ['GETEX', 'missing'], ['GETEX', 'str', 'EX', '100'], ['GETEX', 'hash'], ['GETDEL', 'str'], ['GETDEL', 'missing'],
+    ['GETDEL', 'hash'], ['GETSET', 'str', 'x'], ['GETSET', 'missing', 'x'], ['APPEND', 'str', 'x'],
+    ['APPEND', 'missing', 'x'], ['SETRANGE', 'str', '0', 'x'], ['INCRBYFLOAT', 'num', '1.5'],
+    ['INCRBYFLOAT', 'missing', '1.5'], ['MSETNX', 'str', '1', 'n2', '2'], ['MSETNX', 'n3', '1', 'n4', '2'],
     # The keyspace.
     ['DEL', 'str', 'missing'], ['UNLINK', 'str'], ['EXISTS', 'str', 'missing', 'str'], ['TYPE', 'str'],
     ['TYPE', 'missing'], ['KEYS', '*'], ['SCAN', '0'], ['TTL', 'str'], ['TTL', 'missing'], ['PTTL', 'str'],

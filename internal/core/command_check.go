@@ -36,7 +36,9 @@ var commandArity = map[string]int{
 
 	"SET": -3, "SETNX": 3, "GET": 2, "INCR": 2, "INCRBY": 3, "DECR": 2, "DECRBY": 3, "MGET": -2, "MSET": -3,
 	"SETEX": 4, "PSETEX": 4,
-	"LCS": -3,
+	"LCS":    -3,
+	"APPEND": 3, "STRLEN": 2, "GETRANGE": 4, "SUBSTR": 4, "SETRANGE": 4, "GETDEL": 2, "GETEX": -2,
+	"GETSET": 3, "MSETNX": -3, "INCRBYFLOAT": 3,
 
 	"DEL": -2, "UNLINK": -2, "EXISTS": -2, "TYPE": 2, "KEYS": 2, "SCAN": -2,
 	"TTL": 2, "PTTL": 2, "EXPIRE": -3, "PEXPIREAT": -3,

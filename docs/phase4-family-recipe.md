@@ -30,6 +30,15 @@ example.
   Redis lacks would serve users better, propose or build it under a Keel
   name - a `KEEL.*` command or the Go API - never under a Redis command's
   name with different behaviour.
+- **A read counts its keyspace hit or miss where Redis's does.** A read
+  that looks its key up first counts in the type check (`keyspaceReads`).
+  A read whose Redis handler parses arguments before `lookupKeyRead`
+  (`getrangeCommand`, `lrangeCommand`: check each handler in the 8.10.1
+  source) counts in its typed operation, after parsing, and goes in
+  `readsAfterArguments` instead, so that a malformed argument counts
+  nothing; the type check then counts only the hit of a key of another
+  type. Add a `stats-parity.py` case with a bad argument for each such
+  read, and one with a key of another type.
 - **A write that changes nothing is not logged**, as Redis decides with
   `server.dirty`: Redis propagates a command only when it counted a change
   (for example `t_list.c`, `popGenericCommand`, which returns before
@@ -199,7 +208,11 @@ After the family's conversion has merged, in a PR of its own
    arity), `commandKeyspace` and, if needed, the key rules (keytype.go),
    `writeCommands` (aof.go) for a write (a replica then refuses it with
    READONLY), and `argumentsBeforeType` if Redis reads an argument before the
-   key. Then run `scripts/generate-command-specs.py
+   key. A new record name goes on `replication_v2_apply.go`'s allowlist
+   (`replicationOperation`): protocol 2's replication stream is the log's
+   records, and a replica stops at a name it does not take.
+   `TestEveryRecordNameReplicates` enforces it, for every record name the
+   corpus and the persistence and replication goldens hold. Then run `scripts/generate-command-specs.py
    --redis-src <redis-8.10.1>` so `command_specs.go` declares it, and check
    `TestCommandSpecsAgreeWithTheTables`.
 4. **Pin it**: cases in the corpus for every reply shape and error, in both

@@ -22,7 +22,9 @@ import (
 var commandKeyspace = map[string]string{
 	"SET": "string", "SETNX": "string", "GET": "string", "INCR": "string", "INCRBY": "string", "DECR": "string", "DECRBY": "string", "MSET": "string",
 	"SETEX": "string", "PSETEX": "string",
-	"LCS": "string",
+	"LCS":    "string",
+	"APPEND": "string", "STRLEN": "string", "GETRANGE": "string", "SUBSTR": "string", "SETRANGE": "string",
+	"GETDEL": "string", "GETEX": "string", "GETSET": "string", "MSETNX": "string", "INCRBYFLOAT": "string",
 
 	// EXISTS, TYPE, KEYS, DEL, UNLINK and FLUSHDB are deliberately absent: they answer
 	// about a name whatever type holds it, so constraining them to a keyspace
@@ -82,7 +84,7 @@ var multiKeyCommands = map[string]bool{
 // values as though they were names, and refuse a perfectly good write the first
 // time somebody stored a string whose contents happened to match a set's name.
 var strideKeyCommands = map[string]int{
-	"MSET": 2,
+	"MSET": 2, "MSETNX": 2,
 }
 
 // commandKeys returns the arguments of cmd that name keys.
@@ -225,6 +227,13 @@ var argumentsBeforeType = map[string]func(e *Engine, args []string) error{
 		return err
 	},
 	"GEOADD": func(_ *Engine, args []string) error { return geoaddArguments(args) },
+	// GETRANGE, SUBSTR and SETRANGE read their integers before the key, and
+	// GETEX its options, though not its expiry's value, which Redis reads
+	// only once it has found the key.
+	"GETRANGE": func(e *Engine, args []string) error { _, _, err := e.rangeIndexes(args); return err },
+	"SUBSTR":   func(e *Engine, args []string) error { _, _, err := e.rangeIndexes(args); return err },
+	"SETRANGE": func(e *Engine, args []string) error { _, err := e.setRangeOffset(args); return err },
+	"GETEX":    func(_ *Engine, args []string) error { _, _, _, err := getExOptions(args[1:]); return err },
 	"GEODIST": func(e *Engine, args []string) error {
 		_, err := geodistUnit(args)
 		return err
@@ -319,7 +328,11 @@ func writtenKeys(cmd *Command) []string {
 // nowhere else - and it came from the check being applied to every command
 // alike, not from anything a string write needs. SET's GET option still answers
 // WRONGTYPE for a key it cannot read as a string; cmdSET checks that itself.
-var replacingWrites = map[string]bool{"SET": true, "SETEX": true, "PSETEX": true, "MSET": true, "SETNX": true}
+//
+// MSETNX is exempt for SETNX's reason: Redis's finds a key of any type,
+// answers 0 and stores nothing, where the check would answer WRONGTYPE.
+var replacingWrites = map[string]bool{"SET": true, "SETEX": true, "PSETEX": true, "MSET": true, "SETNX": true,
+	"MSETNX": true}
 
 // filterCommands check the type of the key they name themselves, at the point
 // RedisBloom's do, and are exempt from the check below as well: a reservation
@@ -358,7 +371,7 @@ func typedKeyspace(name string) string {
 // SRAND, MORRIS.QUERY, MORRIS.INFO and KEEL.DUMP have no Redis counterpart of
 // their own name; they count as SRANDMEMBER, CMS.QUERY, CMS.INFO and DUMP do.
 var keyspaceReads = map[string]bool{
-	"GET": true, "LCS": true,
+	"GET": true, "LCS": true, "STRLEN": true, "GETDEL": true, "GETSET": true,
 	"HGET": true, "HMGET": true, "HEXISTS": true, "HLEN": true, "HKEYS": true, "HVALS": true, "HGETALL": true,
 	"LLEN": true, "LINDEX": true, "LRANGE": true,
 	"SCARD": true, "SMEMBERS": true, "SISMEMBER": true, "SMISMEMBER": true, "SRANDMEMBER": true, "SRAND": true,
@@ -368,6 +381,17 @@ var keyspaceReads = map[string]bool{
 	"PFCOUNT": true, "PFMERGE": true,
 	"CMS.QUERY": true, "MORRIS.QUERY": true,
 }
+
+// readsAfterArguments are the reads whose Redis handler parses arguments
+// before it looks its key up with lookupKeyRead, so that a malformed
+// argument counts no keyspace hit or miss: getrangeCommand reads its indexes
+// first, getexCommand its options. They count their lookup in their typed
+// operation, after parsing, rather than through keyspaceReads; the type
+// check counts only the hit of a key of another type, once the arguments
+// Redis reads first have passed. Each family moves its reads here as it is
+// converted (docs/phase4-family-recipe.md); the families not yet converted
+// still count through keyspaceReads (docs/info-compatibility.md).
+var readsAfterArguments = map[string]bool{"GETRANGE": true, "SUBSTR": true, "GETEX": true}
 
 // checkKeyTypes reports an error if any key the command names is already held
 // by a different kind of store: the command's own refusal of its arguments,
@@ -401,6 +425,15 @@ func (e *Engine) checkKeyTypes(cmd *Command, entry commandEntry) error {
 				if err := arguments(e, cmd.Args); err != nil {
 					return err
 				}
+			}
+			// A read that counts its own lookup after its arguments
+			// (readsAfterArguments) has its hit counted here, the arguments
+			// having passed. Looked up on this path alone, rather than kept
+			// in the entry: a field more in commandEntry changed how
+			// EvalAndResponse compiles, and every command paid for it on
+			// AMD's x86 runners (paired runs 38503376294 and 38503370017).
+			if readsAfterArguments[cmd.Cmd] {
+				e.noteLookup(true)
 			}
 			return e.typeError(cmd.Cmd, owner)
 		}

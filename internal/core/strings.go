@@ -3,7 +3,10 @@ package core
 import (
 	"errors"
 	"math"
+	"math/big"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/brandopakel/keel/internal/data_structure"
 	"github.com/brandopakel/keel/internal/resp"
@@ -283,4 +286,257 @@ func (e *Engine) lcsValue(key string) string {
 		return ""
 	}
 	return obj.Value
+}
+
+// The string commands Keel did not have (docs/redis-parity-plan.md), as
+// Redis 8.10.1's t_string.c defines each. Each records itself in commands
+// the builds before it know where that costs nothing - GETSET as SET,
+// GETDEL as DEL, GETEX as PEXPIREAT, DEL or PERSIST, INCRBYFLOAT as SET with
+// KEEPTTL, MSETNX as MSET - and APPEND and SETRANGE as themselves, as Redis
+// does, because writing them as SET would copy the whole value into the log
+// on every call.
+
+var (
+	// errStringTooLong is Redis's refusal of a string longer than its
+	// proto-max-bulk-len, 512 MiB, which is also the longest bulk string a
+	// client may send Keel.
+	errStringTooLong = errors.New("ERR string exceeds maximum allowed size (proto-max-bulk-len)")
+	errOffsetRange   = errors.New("ERR offset is out of range")
+	errFloatInfinite = errors.New("ERR increment would produce NaN or Infinity")
+)
+
+// stringFits is Redis's checkStringLength: whether a string of size grown by
+// more stays within the longest a command may make. A log's replay and a
+// replica apply what their source accepted, as Redis's mustObeyClient does.
+func (e *Engine) stringFits(size, more int64) bool {
+	if e.aof.replaying || e.replicaApplying {
+		return true
+	}
+	total := uint64(size) + uint64(more)
+	return total <= maxBulkLength
+}
+
+// opAppend appends value to the string key holds, creating the key, and
+// answers its new length. The key keeps its expiry.
+func (e *Engine) opAppend(key, value string) (int64, error) {
+	obj := e.dictStore.Get(key)
+	if obj == nil {
+		e.dictStore.Put(key, e.dictStore.NewObj(value))
+		e.aofRecord("APPEND", key, value)
+		return int64(len(value)), nil
+	}
+	if !e.stringFits(int64(len(obj.Value)), int64(len(value))) {
+		return 0, errStringTooLong
+	}
+	joined := obj.Value + value
+	e.dictStore.UpdateValue(key, joined)
+	e.aofRecord("APPEND", key, value)
+	return int64(len(joined)), nil
+}
+
+// opStrlen is the length of the string key holds, 0 for none.
+func (e *Engine) opStrlen(key string) int64 {
+	obj := e.dictStore.Get(key)
+	if obj == nil {
+		return 0
+	}
+	return int64(len(obj.Value))
+}
+
+// opGetRange is the part of the string key holds from start to end, both
+// inclusive, either counted from the end when negative, as Redis's
+// getrangeCommand reads them: empty for a missing key, or a range that
+// selects nothing.
+func (e *Engine) opGetRange(key string, start, end int64) string {
+	obj := e.dictStore.Get(key)
+	// A keyspace hit or a miss, counted here, after the indexes were read,
+	// as Redis's getrangeCommand reads them before it looks the key up.
+	e.noteLookup(obj != nil)
+	if obj == nil {
+		return ""
+	}
+	s := obj.Value
+	n := int64(len(s))
+	if start < 0 && end < 0 && start > end {
+		return ""
+	}
+	if start < 0 {
+		start = n + start
+	}
+	if end < 0 {
+		end = n + end
+	}
+	start, end = max(start, 0), max(end, 0)
+	if end >= n {
+		end = n - 1
+	}
+	if start > end || n == 0 {
+		return ""
+	}
+	return s[start : end+1]
+}
+
+// opSetRange writes value into the string key holds at offset, padding with
+// zero bytes, and answers the string's length. An empty value changes
+// nothing, creates no key, and records nothing.
+func (e *Engine) opSetRange(key string, offset int64, value string) (int64, error) {
+	obj := e.dictStore.Get(key)
+	var old string
+	if obj != nil {
+		old = obj.Value
+	}
+	if len(value) == 0 {
+		return int64(len(old)), nil
+	}
+	if !e.stringFits(offset, int64(len(value))) {
+		return 0, errStringTooLong
+	}
+	end := offset + int64(len(value))
+	length := max(int64(len(old)), end)
+	var b strings.Builder
+	b.Grow(int(length))
+	if offset <= int64(len(old)) {
+		b.WriteString(old[:offset])
+	} else {
+		b.WriteString(old)
+		writeZeros(&b, offset-int64(len(old)))
+	}
+	b.WriteString(value)
+	if end < int64(len(old)) {
+		b.WriteString(old[end:])
+	}
+	if obj == nil {
+		e.dictStore.Put(key, e.dictStore.NewObj(b.String()))
+	} else {
+		e.dictStore.UpdateValue(key, b.String())
+	}
+	e.aofRecord("SETRANGE", key, strconv.FormatInt(offset, 10), value)
+	return length, nil
+}
+
+// writeZeros writes n zero bytes to b, a block at a time.
+func writeZeros(b *strings.Builder, n int64) {
+	var zeros [4096]byte
+	for n > 0 {
+		chunk := min(n, int64(len(zeros)))
+		b.Write(zeros[:chunk])
+		n -= chunk
+	}
+}
+
+// opGetDel answers the string key holds and deletes the key: false, and
+// nothing recorded, for none.
+func (e *Engine) opGetDel(key string) (string, bool) {
+	value, ok := e.opGet(key)
+	if ok {
+		e.deleteString(key)
+	}
+	return value, ok
+}
+
+// deleteString deletes the string key holds, recorded as the DEL it is, as
+// Redis propagates GETDEL.
+func (e *Engine) deleteString(key string) {
+	e.dictStore.Delete(key)
+	e.aofRecord("DEL", key)
+}
+
+// getExRequest is what a GETEX does to the key's expiry: set it at an
+// instant, which an absolute one (EXAT, PXAT) may have passed, or remove it
+// (PERSIST), or nothing.
+type getExRequest struct {
+	expires, absolute, persist bool
+	at                         int64
+}
+
+// opGetExExpiry applies a GETEX's expiry to a key that holds a string, which
+// the command has already answered. An instant that has passed deletes the
+// key, recorded as DEL; an instant to come is recorded as PEXPIREAT; PERSIST
+// is recorded only when there was an expiry to remove. A log's replay and a
+// replica do not delete for an instant that has passed, as Redis's
+// checkAlreadyExpired does not while loading or on a replica.
+func (e *Engine) opGetExExpiry(key string, req getExRequest) {
+	switch {
+	case req.expires && req.absolute && req.at <= time.Now().UnixMilli() && !e.aof.replaying && !e.replicaApplying:
+		e.dictStore.Delete(key)
+		e.aofRecord("DEL", key)
+	case req.expires:
+		e.dictStore.SetExpiryAt(key, uint64(req.at))
+		e.aofRecordInt("PEXPIREAT", key, req.at)
+	case req.persist && e.dictStore.ClearExpiry(key):
+		e.aofRecord("PERSIST", key)
+	}
+}
+
+// opGetSet stores value at key, as SET does without options, and answers
+// the string it held: false for none.
+func (e *Engine) opGetSet(key, value string) (string, bool) {
+	old, ok := e.opGet(key)
+	e.storeString(key, value)
+	return old, ok
+}
+
+// storeString stores value at a key that holds a string or nothing, its
+// expiry dropped, recorded as the SET it is, as Redis propagates GETSET.
+func (e *Engine) storeString(key, value string) {
+	e.dictStore.Put(key, e.dictStore.NewObj(value))
+	e.aofRecord("SET", key, value)
+}
+
+// opMSetNX stores each value of pairs only if none of the keys exists, of
+// any type, as Redis's MSETNX does, and reports whether it stored them. It
+// is recorded as the MSET it then is.
+func (e *Engine) opMSetNX(pairs []string) bool {
+	for i := 0; i < len(pairs); i += 2 {
+		if _, held := e.space.OwnerOf(pairs[i]); held {
+			return false
+		}
+	}
+	for i := 0; i < len(pairs); i += 2 {
+		e.dictStore.Put(pairs[i], e.dictStore.NewObj(pairs[i+1]))
+	}
+	e.aofRecordArgs("MSET", pairs)
+	return true
+}
+
+// opIncrByFloat adds by to the number the string key holds, a missing key
+// being 0, in Redis's long double (long_double.go), and answers the sum as
+// it stores it.
+func (e *Engine) opIncrByFloat(key string, by *big.Float) (string, error) {
+	value, exists, err := e.floatSum(key, by)
+	if err == nil {
+		e.storeFloatSum(key, value, exists)
+	}
+	return value, err
+}
+
+// floatSum is the text INCRBYFLOAT would store at key, and whether the key
+// exists, with nothing written yet, so that the command can admit its reply
+// first.
+func (e *Engine) floatSum(key string, by *big.Float) (value string, exists bool, err error) {
+	obj := e.dictStore.Get(key)
+	current := new(big.Float).SetPrec(longDoublePrec)
+	if obj != nil {
+		var ok bool
+		if current, ok = parseLongDouble(obj.Value); !ok {
+			return "", true, errNotAFloat
+		}
+	}
+	sum, finite := addLongDouble(current, by)
+	if !finite {
+		return "", obj != nil, errFloatInfinite
+	}
+	return formatLongDoubleHuman(sum), obj != nil, nil
+}
+
+// storeFloatSum stores what floatSum made, the key keeping its expiry. It is
+// recorded as SET with KEEPTTL, as Redis propagates INCRBYFLOAT, so that a
+// replay stores the same text whatever its arithmetic.
+func (e *Engine) storeFloatSum(key, value string, exists bool) {
+	if exists {
+		e.dictStore.UpdateValue(key, value)
+	} else {
+		e.dictStore.Put(key, e.dictStore.NewObj(value))
+	}
+	e.aofRecord("SET", key, value, "KEEPTTL")
 }
