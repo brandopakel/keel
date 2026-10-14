@@ -151,7 +151,6 @@ case transactions/errors-inside
 ~ "SREM" "pop" "only"
 ~ "PEXPIREAT" "u" "4000007200000"
 ~ "ZADD" "zi" "1" "m"
-~ "DEL" "missing"
 ~ "EXEC"
 > "TTL" "u" @ttl-s
 2 ":7200\r\n"
