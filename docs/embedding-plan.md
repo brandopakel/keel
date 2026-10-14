@@ -2343,6 +2343,48 @@ error-parity harnesses, which hold them to Redis 8.10.1 in CI.
   quadratic; a buffer kept with spare capacity is follow-on work if a
   workload needs it.
 
+#### Lists, the first collection family
+
+**The conversion.** Lists follow the strings' recipe
+(`docs/phase4-family-recipe.md`): `lists.go` holds `opPush`, `opPop`,
+`opLLen`, `opLIndex`, `opLSet`, `opLRange` and `opLTrim`, and
+`commands_list.go` is their command language.
+
+- **Records**: every write stages its own record, the bytes the as-arrived
+  log held: LPUSH and RPUSH through `aofRecordKeyArgs`, a counted pop through
+  `aofRecordInt`, LSET's index and LTRIM's range in decimal (`strconv`, off
+  the measured rows). The no-op records develop logs - a pop of a missing key
+  or of a count of zero, a trim of a missing key - are staged byte for byte,
+  and the lists' missing-commands PR drops them under the recipe's rule.
+- **Split lookups**: where Redis answers a missing key before it reads the
+  index (LINDEX, LSET), the handler reads the index first and asks whether
+  the key exists only when the index is invalid, one lookup on either path.
+  LPOP and RPOP look the list up, answer and admit the elements, and only
+  then pop them (`opPop` takes the list it was given), so a reply the output
+  limit refuses leaves the list as it was.
+- **Replies**: one element is answered with `resp.SingleBulk`, as GET's is;
+  LRANGE and a counted pop stay on `encodeWalkReply`, and `opLRange` answers
+  a view of the list rather than a copy.
+- **Keyspace reads** count where Redis looks (#160's rule, refined here):
+  LLEN and LINDEX look their key up first, so the type check counts them;
+  LRANGE reads start and stop first and counts nothing for a malformed one,
+  so `opLRange` counts its lookup after them (`readsAfterArguments`), and the
+  type check counts a key of another type only once those have passed.
+- **Measured**: allocations per operation fall from 7 to 2 on LPUSH-RPOP,
+  with and without the log and a replica (the push's length is no longer
+  boxed for `encode`, and a single pop is no longer walked through a
+  closure), and stay at 6 on LRANGE-100. Paired runs of 12 rounds read a
+  median of 0.999 and 0.999 against the strings' conversion (0e371dd, runs
+  38337585288 and 38337587784) and 1.005 and 1.003 against the string
+  commands (ddbad86, runs 38339052646 and 38339054811); LPUSH-RPOP 0.81 to
+  0.82, with the log 0.88 to 0.90, with a replica 0.90 to 0.91; LRANGE-100
+  0.99 to 1.01. The rows over 1.04 run no code the conversion changed (ZADD
+  against 0e371dd, HGET and INCR against ddbad86): the dispatch's handlers in
+  `eval.go` and `keytype.go` are the base's instruction for instruction
+  (`go tool objdump` of both test binaries), 256 bytes earlier, since the
+  handlers left `commands_list.go`, and everything after `lists.go` is 5,120
+  bytes later.
+
 ## Risks, in order
 
 1. Moving AOF, rewrite and replication state while MULTI/EXEC changes the same

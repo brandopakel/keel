@@ -1,51 +1,23 @@
 package core
 
 import (
-	"errors"
-
 	"github.com/brandopakel/keel/internal/constant"
-	"github.com/brandopakel/keel/internal/data_structure"
+	"github.com/brandopakel/keel/internal/resp"
 )
 
-// List commands.
-//
-// A list, like a hash, has no empty form: popping the last element removes the
-// key. Everything that can empty one goes through dropListIfEmpty, for the same
-// reason - a key with no elements would answer EXISTS 1 and LRANGE nothing, and
-// the rewrite would write it as an RPUSH with no values, which is a syntax
-// error on replay.
-
-func (e *Engine) listFor(key string) (*data_structure.List, bool) {
-	return e.listStore.Get(key)
-}
-
-func (e *Engine) dropListIfEmpty(key string, l *data_structure.List) {
-	if l.Len() == 0 {
-		e.listStore.Delete(key)
-		return
-	}
-	e.listStore.Resize(key)
-}
+// The list commands' command language: each reads its arguments as Redis
+// reads them, calls its typed operation (lists.go), and answers through the
+// engine's reply sink. A write records itself; it is never logged as it
+// arrived.
 
 // push is LPUSH and RPUSH, which differ only in the end they add to.
 func (e *Engine) push(args []string, front bool, name string) []byte {
+	e.recordsItself()
 	if len(args) < 2 {
 		return e.encode(wrongArguments(name), false)
 	}
-	key := args[0]
-
-	l, ok := e.listFor(key)
-	if !ok {
-		l = data_structure.NewList()
-		e.listStore.Put(key, l)
-	}
-	if front {
-		l.PushFront(args[1:]...)
-	} else {
-		l.PushBack(args[1:]...)
-	}
-	e.listStore.Resize(key)
-	return e.encode(l.Len(), false)
+	r := e.reply()
+	return r.Int(e.opPush(args[0], args[1:], front)).Bytes()
 }
 
 func (e *Engine) cmdLPUSH(args []string) []byte { return e.push(args, true, "LPUSH") }
@@ -54,38 +26,58 @@ func (e *Engine) cmdRPUSH(args []string) []byte { return e.push(args, false, "RP
 // pop is LPOP and RPOP. Without a count it answers one element; with one it
 // answers an array, which is Redis 6.2's behaviour and the one clients test
 // for - a count of zero is an empty array rather than a nil.
+//
+// The count is read before the key is looked at, as Redis reads it. The
+// elements are answered, and their reply admitted, before they are removed:
+// a reply that cannot be sent leaves the list as it was.
 func (e *Engine) pop(args []string, front bool, name string) []byte {
+	e.recordsItself()
 	if len(args) < 1 || len(args) > 2 {
 		return e.encode(wrongArguments(name), false)
 	}
-	key := args[0]
-
-	count := 1
-	counted := len(args) == 2
-	if counted {
+	req := listPop{front: front, counted: len(args) == 2}
+	if req.counted {
 		n, err := e.positiveCount(args[1])
 		if err != nil {
 			return e.encode(err, false)
 		}
-		count = int(n)
+		req.count = n
 	}
+	key := args[0]
 
 	l, ok := e.listFor(key)
 	if !ok {
+		e.opPop(key, nil, req)
 		// A null array and a null bulk string are different replies, and which
 		// one belongs here depends on what the command was going to answer.
 		// Checked against Redis 8.10.1, which sends *-1 for the counted form
 		// and $-1 for the bare one; sending $-1 for both is a type error in any
 		// client that decodes the counted reply into a list. RESP3 has one
 		// null for both.
-		if counted {
-			return e.nullArrayReply()
+		if req.counted {
+			return e.wire().NullArray()
 		}
-		return e.nullReply()
+		return e.wire().Null()
 	}
 
-	count = min(count, l.Len())
-	walk := replyWalk(func(yield func(string) bool) {
+	if !req.counted {
+		// One element is a reply of one bulk string, answered as GET's is
+		// (resp.SingleBulk).
+		end := 0
+		if !front {
+			end = -1
+		}
+		value, _ := l.Index(end)
+		out := resp.SingleBulk(MaxReplyBytes-e.replyCeiling, e.commandAllocations, value)
+		if out[0] == '-' {
+			return out
+		}
+		e.opPop(key, l, req)
+		return out
+	}
+
+	count := req.popped(l.Len())
+	out := e.encodeWalkReply(func(yield func(string) bool) {
 		for i := 0; i < count; i++ {
 			index := i
 			if !front {
@@ -96,23 +88,11 @@ func (e *Engine) pop(args []string, front bool, name string) []byte {
 				return
 			}
 		}
-	})
-	shape := shapeArray
-	if !counted {
-		shape = shapeOne
-	}
-	out := e.encodeWalkReply(walk, shape)
+	}, shapeArray)
 	if len(out) > 0 && out[0] == '-' {
 		return out
 	}
-	for i := 0; i < count; i++ {
-		if front {
-			l.PopFront()
-		} else {
-			l.PopBack()
-		}
-	}
-	e.dropListIfEmpty(key, l)
+	e.opPop(key, l, req)
 	return out
 }
 
@@ -123,58 +103,56 @@ func (e *Engine) cmdLLEN(args []string) []byte {
 	if len(args) != 1 {
 		return e.encode(wrongArguments("LLEN"), false)
 	}
-	l, ok := e.listFor(args[0])
-	if !ok {
-		return constant.RespZero
-	}
-	return e.encode(l.Len(), false)
+	r := e.reply()
+	return r.Int(e.opLLen(args[0])).Bytes()
 }
 
-// cmdLINDEX looks the key up before it reads the index, as Redis does, so a
-// key that is not there answers nil whatever the index says.
+// cmdLINDEX answers a key that is not there with nil whatever the index says,
+// because Redis looks the key up before it reads the index.
 func (e *Engine) cmdLINDEX(args []string) []byte {
 	if len(args) != 2 {
 		return e.encode(wrongArguments("LINDEX"), false)
 	}
-	l, ok := e.listFor(args[0])
-	if !ok {
-		return e.nullReply()
-	}
 	index, valid := e.counterInteger(args[1])
 	if !valid {
+		if _, ok := e.listFor(args[0]); !ok {
+			return e.wire().Null()
+		}
 		return e.encode(errNotAnInteger, false)
 	}
-	value, found := l.Index(int(index))
-	if !found {
-		return e.nullReply()
+	// One element, answered as GET's is (resp.SingleBulk).
+	if value, ok := e.opLIndex(args[0], index); ok {
+		return resp.SingleBulk(MaxReplyBytes-e.replyCeiling, e.commandAllocations, value)
 	}
-	return e.encodeBoundedString(value)
+	return e.wire().Null()
 }
 
-// cmdLSET, like LINDEX, finds the key before it reads the index.
+// cmdLSET, like LINDEX, refuses a key that is not there before it reads the
+// index.
 func (e *Engine) cmdLSET(args []string) []byte {
+	e.recordsItself()
 	if len(args) != 3 {
 		return e.encode(wrongArguments("LSET"), false)
 	}
-	l, ok := e.listFor(args[0])
-	if !ok {
-		return e.encode(errors.New("ERR no such key"), false)
-	}
+	r := e.reply()
 	index, valid := e.counterInteger(args[1])
 	if !valid {
-		return e.encode(errNotAnInteger, false)
+		if _, ok := e.listFor(args[0]); !ok {
+			return r.Error(errNoSuchKey).Bytes()
+		}
+		return r.Error(errNotAnInteger).Bytes()
 	}
-	if !l.Set(int(index), args[2]) {
-		return e.encode(errors.New("ERR index out of range"), false)
+	if err := e.opLSet(args[0], index, args[2]); err != nil {
+		return r.Error(err).Bytes()
 	}
-	e.listStore.Resize(args[0])
-	return constant.RespOk
+	return r.Status("OK").Bytes()
 }
 
 // cmdLRANGE answers the elements between two positions, both inclusive and both
 // allowed to be negative or out of range - a range outside the list is empty
 // rather than an error, which is what makes LRANGE key 0 -1 the idiom for
-// "everything" whatever the length.
+// "everything" whatever the length. The positions are read before the key is
+// looked at, as Redis reads them.
 func (e *Engine) cmdLRANGE(args []string) []byte {
 	if len(args) != 3 {
 		return e.encode(wrongArguments("LRANGE"), false)
@@ -183,15 +161,16 @@ func (e *Engine) cmdLRANGE(args []string) []byte {
 	if err != nil {
 		return e.encode(err, false)
 	}
-
-	l, ok := e.listFor(args[0])
+	rng, ok := e.opLRange(args[0], start, stop)
 	if !ok {
 		return constant.RespEmptyArray
 	}
-	return e.encodeWalkReply(func(yield func(string) bool) { l.VisitRange(start, stop, yield) }, shapeArray)
+	return e.encodeWalkReply(rng.visit, shapeArray)
 }
 
+// cmdLTRIM reads its positions before the key, as LRANGE does; see opLTrim.
 func (e *Engine) cmdLTRIM(args []string) []byte {
+	e.recordsItself()
 	if len(args) != 3 {
 		return e.encode(wrongArguments("LTRIM"), false)
 	}
@@ -199,21 +178,7 @@ func (e *Engine) cmdLTRIM(args []string) []byte {
 	if err != nil {
 		return e.encode(err, false)
 	}
-	l, ok := e.listFor(args[0])
-	if !ok {
-		return constant.RespOk
-	}
-	values := l.Range(start, stop)
-	if len(values) == 0 {
-		e.listStore.Delete(args[0])
-		return constant.RespOk
-	}
-	ttl, expires := e.listStore.GetExpiry(args[0])
-	replacement := data_structure.NewList()
-	replacement.PushBack(values...)
-	e.listStore.Put(args[0], replacement)
-	if expires {
-		e.listStore.SetExpiryAt(args[0], ttl)
-	}
-	return constant.RespOk
+	e.opLTrim(args[0], start, stop)
+	r := e.reply()
+	return r.Status("OK").Bytes()
 }

@@ -55,7 +55,7 @@ var packageVars = map[string]string{
 	"errFenced": sentinel, "errLCSType": sentinel, "errLCSTooLong": sentinel, "errLCSLenWithIdx": sentinel,
 	"errCommandBudget": sentinel, "errNotHLL": sentinel, "errWrongType": sentinel, "errStringTooLong": sentinel,
 	"errOffsetRange": sentinel, "errFloatInfinite": sentinel,
-	"errCountNegative": sentinel, "errNotAnInteger": sentinel,
+	"errCountNegative": sentinel, "errNotAnInteger": sentinel, "errNoSuchKey": sentinel, "errIndexOutOfRange": sentinel,
 	"errFilterExists": sentinel, "errFilterNotFound": sentinel, "errReadOnlyReplica": sentinel,
 	"ErrRequestAllocation": sentinel, "ErrIncompleteFrame": sentinel, "ErrProtocol": sentinel,
 	"errDiscardNoMulti": sentinel, "errExecNoMulti": sentinel, "errNestedMulti": sentinel,
