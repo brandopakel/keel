@@ -3829,3 +3829,13 @@ artifact_id,run_id,time,branch,test,package,peak_bytes,peak_file_bytes
 11924155926,38615386288,2026-10-14T18:27:59Z,feat/command,TestReplicasThroughAFailedRewriteprotocol-,cmd/keel,21568684,21567977
 11924155926,38615386288,2026-10-14T18:27:59Z,feat/command,TestReplicationV2LargeSnapshotOperationsAndFrozenFile,internal/core,19365412,10845770
 11924155926,38615386288,2026-10-14T18:27:59Z,feat/command,TestRewriteSlicesObeyKeyBudgetAndReplay,internal/core,12888890,12888890
+11924548562,38618980032,2026-10-14T18:53:20Z,feat/info-avg-ttl,TestRewriteStallProfile,internal/core,110801652,56788890
+11924548562,38618980032,2026-10-14T18:53:20Z,feat/info-avg-ttl,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierzse,cmd/keel,68160485,68160485
+11924548562,38618980032,2026-10-14T18:53:20Z,feat/info-avg-ttl,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierlis,cmd/keel,68160040,68160040
+11924548562,38618980032,2026-10-14T18:53:20Z,feat/info-avg-ttl,TestRejectedCollectionPopsPreservePipelineAndRestartconcurrent,cmd/keel,68160040,68160040
+11924548562,38618980032,2026-10-14T18:53:20Z,feat/info-avg-ttl,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierset,cmd/keel,68159910,68159910
+11924548562,38618980032,2026-10-14T18:53:20Z,feat/info-avg-ttl,TestStagedRecordsAreTheBytesAppendAOFCommandWrites,internal/core,51119806,4259918
+11924548562,38618980032,2026-10-14T18:53:20Z,feat/info-avg-ttl,TestReplicasThroughAFailedRewriteprotocol-,cmd/keel,21568684,21567977
+11924548562,38618980032,2026-10-14T18:53:20Z,feat/info-avg-ttl,TestAShortWriteInTheMiddleOfARecordStays,internal/core,19234916,8650820
+11924548562,38618980032,2026-10-14T18:53:20Z,feat/info-avg-ttl,TestAOFTranscriptMassEvictionKeepsBoundedBuffer,internal/core,16781002,16781002
+11924548562,38618980032,2026-10-14T18:53:20Z,feat/info-avg-ttl,TestReplicationV2LargeSnapshotOperationsAndFrozenFile,internal/core,15105572,10845770
