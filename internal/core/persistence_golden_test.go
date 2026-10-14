@@ -29,8 +29,9 @@ import (
 // keeps three things: the log it leaves, the replies it got, and the keyspace
 // it ends with. testdata/persistence-<persistenceGoldenRevision>/ holds what
 // that revision produced (first develop at 40eb2f6; recaptured at a888f48, when
-// an HSETNX of a field that exists stopped being logged), written by these
-// tests with
+// an HSETNX of a field that exists stopped being logged, and at 5359f0f, when
+// a ZADD or ZREM that changed nothing stopped being logged and GEOADD began to
+// be logged as the ZADD Redis rewrites it to), written by these tests with
 //
 //	KEEL_CAPTURE_PERSISTENCE_GOLDEN=$PWD/testdata/persistence-<revision> \
 //	  go test ./internal/core -run '^TestPersistenceGoldenCapture$'
@@ -73,7 +74,7 @@ import (
 // rewrite's dirty keys come out in random order, so each rewrite here has
 // exactly one key written while it runs.
 // persistenceGoldenRevision is the revision the fixture was captured at.
-const persistenceGoldenRevision = "a888f48"
+const persistenceGoldenRevision = "5359f0f"
 
 const persistenceGoldenDir = "testdata/persistence-" + persistenceGoldenRevision
 
