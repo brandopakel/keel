@@ -42,7 +42,7 @@ var commandTable = map[string]func(*Engine, []string) []byte{
 	"KEEL.PROMOTE": (*Engine).cmdPROMOTE, "KEEL.FENCE": (*Engine).cmdFENCE,
 	"KEEL.REPL.PULL": (*Engine).cmdReplicationPull, "KEEL.REPL.PULL2": (*Engine).cmdReplicationPullV2,
 	"DBSIZE": (*Engine).cmdDBSIZE, "FLUSHDB": (*Engine).cmdFLUSHDB, "MEMORY": (*Engine).cmdMEMORY,
-	"INFO": (*Engine).cmdINFO, "CONFIG": (*Engine).cmdCONFIG, "LATENCY": (*Engine).cmdLATENCY, "SLOWLOG": (*Engine).cmdSLOWLOG, "BGREWRITEAOF": (*Engine).cmdBGREWRITEAOF, "KEEL.DUMP": (*Engine).cmdDUMP,
+	"INFO": (*Engine).cmdINFO, "CONFIG": (*Engine).cmdCONFIG, "LATENCY": (*Engine).cmdLATENCY, "SLOWLOG": (*Engine).cmdSLOWLOG, "COMMAND": (*Engine).cmdCOMMAND, "BGREWRITEAOF": (*Engine).cmdBGREWRITEAOF, "KEEL.DUMP": (*Engine).cmdDUMP,
 	"KEEL.RESTORE": (*Engine).cmdRESTORE,
 	// The names from before the server was renamed, so a log written then
 	// still replays; a command is written to the log under its current name.
