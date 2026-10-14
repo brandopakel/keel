@@ -113,6 +113,24 @@ var goldenStrings = []commandGoldenCase{
 		send("SET", "k", "v", "EXAT", "10", "PXAT", "10"),
 		send("GET", "k"),
 	}},
+	// An instant that has passed stores nothing: the key is deleted, recorded
+	// as DEL, and counted as expired, as Redis's setGenericCommand does; NX
+	// and XX decide first.
+	{family: "strings", name: "set-instant-passed", steps: []goldenStep{
+		send("SET", "gone", "v", "PXAT", "1"),
+		send("EXISTS", "gone"),
+		send("SET", "s", "old"),
+		send("SET", "s", "new", "EXAT", "1", "GET"),
+		send("EXISTS", "s"),
+		send("HSET", "h", "f", "v"),
+		send("SET", "h", "v", "PXAT", "1"),
+		send("EXISTS", "h"),
+		send("SET", "kept", "v"),
+		send("SET", "kept", "w", "NX", "PXAT", "1"),
+		send("GET", "kept"),
+		send("SET", "none", "v", "XX", "PXAT", "1"),
+		send("DBSIZE"),
+	}},
 	{family: "strings", name: "set-over-other-types", steps: []goldenStep{
 		send("HSET", "h", "f", "v"),
 		send("SET", "h", "string now"),
@@ -613,6 +631,13 @@ var goldenKeys = []commandGoldenCase{
 		sleepStep(5 * time.Millisecond),
 		send("DEL", "brief6"),
 		send("DBSIZE"),
+		// MEMORY USAGE finds its key as Redis 8's dbFind does, so it reports
+		// a key whose TTL has passed and leaves it for a lookup to remove.
+		send("SET", "brief7", "v", "PX", "1"),
+		sleepStep(5 * time.Millisecond),
+		send("MEMORY", "USAGE", "brief7").norm(golden.FlagMasked),
+		send("EXISTS", "brief7"),
+		send("MEMORY", "USAGE", "brief7"),
 	}},
 	{family: "keys", name: "active-expiry", steps: []goldenStep{
 		send("SET", "brief", "v", "PX", "1"),
