@@ -252,7 +252,8 @@ var developFlags = []struct{ name, kind, value string }{
 	{"replication-feed", "", "false"},
 	{"replication-protocol", "int", "1"},
 	{"requirepass-env", "string", ""},
-	{"shutdown-timeout", "duration", "5s"},
+	// Ten seconds since October 2026, Redis's shutdown-timeout default.
+	{"shutdown-timeout", "duration", "10s"},
 	{"version", "", "false"},
 }
 
