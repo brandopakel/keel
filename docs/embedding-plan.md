@@ -2428,6 +2428,9 @@ whatever type holds it.
   counted them in the handlers. Each records what develop logged: `DEL` with every
   key given (and `UNLINK` as `DEL`), an expiry as `PEXPIREAT` or the `DEL` an
   instant already past amounts to, `PERSIST`, and the plain `FLUSHDB`.
+  `opExpireAt` judges an instant against the clock reading the command took
+  once (`e.commandClock()`, #189), the base of a relative expiry too, as
+  Redis's `commandTimeSnapshot()` is both.
 - **No-op records kept, for now.** develop logs `DEL` of keys none of which
   exist and `PERSIST` of a key with no expiry, which Redis does not
   propagate (`db.c`, `delGenericCommand`; `expire.c`, `persistCommand`,
