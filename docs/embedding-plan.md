@@ -555,7 +555,9 @@ choice open, step 2.4 settles it this way:
   adds them, on develop's code at 9736d8d, before anything moves:
   - `replication_golden_test.go` runs three scenarios under every fsync
     policy, with synchronous and worker appends, and compares a transcript of
-    each with `testdata/replication-9736d8d`. A protocol 2 primary's stream
+    each with `testdata/replication-6c4a916` (first captured at 9736d8d,
+    recaptured when INFO part (e) put Redis's fields first in INFO
+    replication, which changed only its info lines). A protocol 2 primary's stream
     from its start, a snapshot and the deltas after it (every operation the
     stream carries, the records written in a command's place, opaque images,
     a key reaped lazily, transactions of writes, reads, a failed command and
@@ -2003,7 +2005,7 @@ Then keys and TTL, then hashes, each family converted and then completed.
 
 The persistence goldens (`testdata/persistence-40eb2f6`) hold the log's bytes
 through flushes, rewrites and transactions, and the replication goldens
-(`testdata/replication-9736d8d`) the stream's; both hold replies only as a
+(`testdata/replication-6c4a916`) the stream's; both hold replies only as a
 hash of one session's. Phase 4 needs each command's own answer and records,
 command by command, in both protocols, so that a difference names the command
 and the byte. Step 4.0 adds two corpora, captured from develop at `72ed0cd`
