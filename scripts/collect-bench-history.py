@@ -482,12 +482,23 @@ def telemetry_records(artifact_id, run, pr, files):
 # that may be empty (a complete Redis-tests run with no failing test).
 SNAPSHOT_ORIGIN = '_snapshot_origin'
 
+def framework_result_complete(r):
+    """Whether one framework's result has what its lines need: a name, and
+    whether each server passed."""
+    return (isinstance(r, dict) and r.get('framework')
+            and all(isinstance(r.get(side), dict) and 'passed' in r[side] for side in ('redis', 'keel')))
+
+
 def framework_records(artifact_id, run, pr, files):
     """runs.csv lines, one per framework, and latest.csv lines for one
-    Framework checks run."""
+    Framework checks run. A framework whose result is incomplete is left
+    out, and the run's other frameworks are kept."""
     record = json.loads(files['frameworks.json'])
     runs, latest = [], []
     for r in record.get('results', []):
+        if not framework_result_complete(r):
+            print(f'run {run["id"]}: skipping an incomplete framework result: {json.dumps(r)[:200]}', file=sys.stderr)
+            continue
         runs.append({'artifact_id': artifact_id, **run_fields(run, pr), 'framework': r['framework'],
                      'redis_passed': 'yes' if r['redis']['passed'] else 'no',
                      'keel_passed': 'yes' if r['keel']['passed'] else 'no',

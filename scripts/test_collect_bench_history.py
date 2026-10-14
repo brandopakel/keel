@@ -1,3 +1,4 @@
+import contextlib
 import csv
 import importlib.util
 import io
@@ -615,6 +616,16 @@ class FrameworkAndCIKinds(unittest.TestCase):
                        'framework': 'Sidekiq', 'command': 'script|load', 'calls': 1, 'keel': 'missing'},
                       records['latest'])
         self.assertEqual(len(records['latest']), 5)
+
+    def test_frameworks_keeps_the_complete_results_of_a_run(self):
+        broken = {'results': [FRAMEWORKS['results'][0], {'framework': 'Celery', 'keel': {'passed': False}},
+                              {'redis': {'passed': True}, 'keel': {'passed': True}}, 'not a result',
+                              FRAMEWORKS['results'][1]]}
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            records = cbh.framework_records(3, self.run, '', {'frameworks.json': json.dumps(broken)})
+        self.assertEqual([r['framework'] for r in records['runs']], ['Rails cache store', 'Sidekiq'])
+        self.assertEqual(len(records['latest']), 5)
+        self.assertEqual(err.getvalue().count('skipping an incomplete framework result'), 3)
 
     def test_ci(self):
         records = cbh.ci_records(4, self.run, 144, {'test-file-footprint.json': json.dumps(FOOTPRINT)})
