@@ -299,6 +299,11 @@ type Engine struct {
 	// either is retried (log_failures.go). Last, so that adding it moved no
 	// field before it.
 	logFailure logFailures
+	// execReplyBytes is what the reply of the EXEC running has come to so
+	// far, set as it hands a command to the connection to answer, for CLIENT
+	// LIST's obl (ExecReplyBytes). Last, so that adding it moved no field
+	// before it.
+	execReplyBytes int
 }
 
 // Lock takes e's lock, waiting until whoever holds it lets go. Its holder is

@@ -147,7 +147,10 @@ type client struct {
 	// libVersion are what CLIENT SETNAME and CLIENT SETINFO recorded.
 	id uint64
 	// addr is the peer's address, as Redis writes one (peerAddr).
-	addr                      string
+	addr string
+	// replica is whether the connection has pulled the log as a replica, so
+	// that what it is sent is replication traffic (isReplicationPull).
+	replica                   bool
 	name, libName, libVersion string
 	// resp3 is set by HELLO 3 and cleared by HELLO 2, and frames every reply
 	// the connection is sent from the command after it.
@@ -189,6 +192,11 @@ type client struct {
 	// engine the server was handed. Last, so that every field the loop reads
 	// keeps its offset.
 	engine *core.Engine
+
+	// conn is what CLIENT LIST reports of the connection and the modes the
+	// CLIENT subcommands set (client_list.go), after engine for the same
+	// reason.
+	conn connState
 }
 
 // clients is every connected socket, keyed by descriptor.
@@ -231,6 +239,7 @@ func (c *client) readCommandsReserved(scratch []byte, budget *requestAllocationB
 			// per-connection memory, and no copy at all unless this read ends
 			// mid-frame.
 			n, err = syscall.Read(c.fd, scratch)
+			c.conn.reads++
 		} else {
 			// A frame is in progress. Read straight into the connection's own
 			// buffer - going via the scratch would only add a copy - and ask for
@@ -265,6 +274,7 @@ func (c *client) readCommandsReserved(scratch []byte, budget *requestAllocationB
 			}
 			b.reserve(want)
 			n, err = syscall.Read(c.fd, b.spare(want))
+			c.conn.reads++
 		}
 
 		if err == syscall.EAGAIN || err == syscall.EINTR {
@@ -286,6 +296,7 @@ func (c *client) readCommandsReserved(scratch []byte, budget *requestAllocationB
 		// into the connection's own buffer, so the scratch must not be resliced by
 		// it.
 		c.lastProgress = time.Now()
+		c.conn.netIn += uint64(n)
 		if b != nil {
 			b.commit(n)
 			src = b.unparsed()
@@ -325,6 +336,13 @@ func (c *client) readCommandsReserved(scratch []byte, budget *requestAllocationB
 	}
 
 	c.bufferedReady = len(cmds) == maxCommandsPerTurn && used < len(src)
+	if len(cmds) > 0 {
+		// What CLIENT LIST reports: how many commands each read parsed, and
+		// the bytes they take, held until they have run.
+		c.conn.pipelineSum += uint64(len(cmds))
+		c.conn.pipelines++
+		c.conn.held, c.conn.next = used, 0
+	}
 
 	switch {
 	case used == len(src):
@@ -636,8 +654,9 @@ func acceptClient(serverFD int, mux io_multiplexing.IOMultiplexer, password stri
 		return nil, false
 	}
 	connectionsReceived++
-	return &client{fd: connFD, id: connectionsReceived, addr: peerAddr(peer), lastProgress: time.Now(), interestKnown: true, interest: io_multiplexing.OpRead,
-		password: password, engine: e}, true
+	now := time.Now()
+	return &client{fd: connFD, id: connectionsReceived, addr: peerAddr(peer), lastProgress: now, interestKnown: true, interest: io_multiplexing.OpRead,
+		password: password, engine: e, conn: connState{created: now}}, true
 }
 
 // replyBuffer collects the replies produced from one read so they can be sent
@@ -681,12 +700,17 @@ func executeRun(c *client, arena *replyArena) bool {
 	c.out, c.inArena = nil, false
 	c.outBytes = 0
 	consumed := 0
+	// silenced is set when a command was answered with nothing on purpose,
+	// under CLIENT REPLY OFF or SKIP (gateReply).
+	silenced := false
 	defer func() {
 		remaining := copy(c.cmds, c.cmds[consumed:])
 		clear(c.cmds[remaining:])
 		c.cmds = c.cmds[:remaining]
+		c.conn.next = 0
 		if remaining == 0 {
 			c.cmds = nil
+			c.conn.held = 0
 		}
 	}()
 	if len(c.cmds) == 0 {
@@ -694,7 +718,7 @@ func executeRun(c *client, arena *replyArena) bool {
 	}
 	first := c.cmds[0].Cmd
 	defer func() {
-		if consumed == 0 || c.err != nil || len(c.out) > 0 || c.inArena {
+		if consumed == 0 || c.err != nil || len(c.out) > 0 || c.inArena || silenced {
 			return
 		}
 		c.err = errUnreplied
@@ -710,7 +734,8 @@ func executeRun(c *client, arena *replyArena) bool {
 			c.postpone()
 			return false
 		}
-		respond(c, c.cmds[0], &capture)
+		c.conn.staged = 0
+		silenced = c.run(c.cmds[0], &capture)
 		consumed = 1
 		if c.err != nil {
 			return false
@@ -720,7 +745,9 @@ func executeRun(c *client, arena *replyArena) bool {
 			return false
 		}
 		c.out = capture.p
-		return len(c.out) > 0
+		// Silenced, it still goes to the write phase, which reads the
+		// connection again.
+		return len(c.out) > 0 || silenced
 	}
 	deadline := time.Now().Add(runTimeTarget)
 	c.outStart = len(arena.buf)
@@ -735,7 +762,10 @@ func executeRun(c *client, arena *replyArena) bool {
 			budget.ReplyRetained = retainedReplyBytes
 		}
 		capture.p = nil
-		respond(c, cmd, &capture)
+		c.conn.next, c.conn.staged = consumed, len(arena.buf)-c.outStart
+		if c.run(cmd, &capture) {
+			silenced = true
+		}
 		consumed++
 		if c.err != nil {
 			arena.buf = arena.buf[:c.outStart]
@@ -746,7 +776,7 @@ func executeRun(c *client, arena *replyArena) bool {
 			// as Redis drops them, and the batch ends with its reply.
 			consumed = len(c.cmds)
 			arena.buf = append(arena.buf, capture.p...)
-			if WriteUnbuffered {
+			if WriteUnbuffered && len(capture.p) > 0 {
 				c.frames = append(c.frames, len(capture.p))
 			}
 			break
@@ -762,7 +792,7 @@ func executeRun(c *client, arena *replyArena) bool {
 			return len(c.out) > 0
 		}
 		arena.buf = append(arena.buf, capture.p...)
-		if WriteUnbuffered {
+		if WriteUnbuffered && len(capture.p) > 0 {
 			c.frames = append(c.frames, len(capture.p))
 		}
 		if len(arena.buf)-c.outStart > maxOutputBuffer {
@@ -777,7 +807,7 @@ func executeRun(c *client, arena *replyArena) bool {
 	}
 	c.outEnd = len(arena.buf)
 	c.inArena = c.outEnd > c.outStart
-	return c.inArena
+	return c.inArena || silenced
 }
 
 // RunAsyncTCPServer serves e on the event loop, as o says, until Stop. Every
@@ -826,6 +856,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 		}
 		queuedClientReads = nil
 		postponed, pause, pauseEased = nil, clientPause{}, false
+		killedClients = nil
 		setWaker(nil)
 	}()
 	log.Println("starting an asynchronous TCP server on", o.Host, o.Port)
@@ -1143,6 +1174,10 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 		}
 		readable = live
 		for _, c := range readable {
+			if c.conn.killed {
+				// CLIENT KILL, from a connection that ran before it this turn.
+				continue
+			}
 			if c.err != nil {
 				if errors.Is(c.err, core.ErrRequestAllocation) {
 					c.out = requestAllocationReply
@@ -1199,6 +1234,12 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 		// A CLIENT UNPAUSE this turn, or a pause that ended, frees the
 		// connections it held; they run from the next turn.
 		releasePostponed(ioMultiplexer)
+		// The connections a CLIENT KILL killed this turn are sent nothing
+		// more, and closed.
+		if len(killedClients) > 0 {
+			writable = dropKilled(writable)
+			reapKilled(func(c *client) { delete(paused, c.fd) })
+		}
 
 		// Reap idle keys before flushing their removal records. A pause
 		// pauses active expiry, as Redis pauses it.
@@ -1424,7 +1465,7 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 
 // peerAddr is a peer's address as Redis writes one (connection.h's
 // formatAddr): ip:port, or [ip]:port for IPv6, and a Unix socket's path with
-// port 0, which is how SLOWLOG GET reports the client that sent a command.
+// port 0, which is how SLOWLOG GET and CLIENT LIST report the client.
 func peerAddr(sa syscall.Sockaddr) string {
 	switch a := sa.(type) {
 	case *syscall.SockaddrInet4:
@@ -1441,6 +1482,12 @@ func peerAddr(sa syscall.Sockaddr) string {
 // connection a command came from (core.CommandClient).
 func (c *client) PeerAddr() string   { return c.addr }
 func (c *client) ClientName() string { return c.name }
+
+// isReplicationPull reports whether a command is a replica pulling the log,
+// which makes the connection a replica's.
+func isReplicationPull(name string) bool {
+	return name == "KEEL.REPL.PULL" || name == "KEEL.REPL.PULL2"
+}
 
 // countedReplies counts each error the transport writes itself toward INFO's
 // total_error_replies and errorstats. Each reply is one write.
@@ -1476,8 +1523,8 @@ func (c *client) AnswerConnection(cmd *core.Command, w io.ReadWriter) {
 	// Answered as it would be outside a transaction. EXEC is still running,
 	// so the transaction is set aside rather than queued into again.
 	tx := c.tx
-	c.tx = nil
-	defer func() { c.tx = tx }()
+	c.tx, c.conn.exec = nil, tx
+	defer func() { c.tx, c.conn.exec = tx, nil }()
 	c.respond(cmd, w)
 }
 

@@ -144,8 +144,13 @@ func (p *ioPool) serve(c *client, write bool, scratch []byte) {
 		if len(c.frames) > 0 {
 			part = part[:c.frames[0]]
 		}
+		if len(c.out) == 0 {
+			// Nothing to send: a run CLIENT REPLY silenced.
+			return
+		}
 		n, err := syscall.Write(c.fd, part)
 		if n > 0 {
+			c.conn.netOut += uint64(n)
 			c.out = c.out[n:]
 			if len(c.frames) > 0 {
 				c.frames[0] -= n
