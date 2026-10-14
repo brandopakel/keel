@@ -2204,6 +2204,8 @@ var goldenGeo = []commandGoldenCase{
 		send("GEORADIUS_RO", "Sicily", "15", "37", "200", "km", "WITHDIST"),
 		send("GEORADIUS_RO", "Sicily", "15", "37", "200", "km", "STORE", "dst"),
 		send("GEORADIUSBYMEMBER", "Sicily", "Agrigento", "100", "km", "WITHDIST"),
+		send("GEORADIUSBYMEMBER", "Sicily", "Palermo", "300", "km", "STORE", "bymember"),
+		send("ZRANGE", "bymember", "0", "-1", "WITHSCORES"),
 		send("GEORADIUSBYMEMBER", "Sicily", "nobody", "100", "km"),
 		send("GEORADIUSBYMEMBER", "missing", "nobody", "x", "parsec"),
 		send("GEORADIUSBYMEMBER", "missing", "nobody", "x", "parsec", "STORE", "dst2"),

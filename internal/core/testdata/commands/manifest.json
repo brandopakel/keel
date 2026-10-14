@@ -34,12 +34,12 @@
       "captured": "2026-10-15"
     },
     "geo.txt": {
-      "sha256": "a27cfb7ed22caab8db74c29a49cacb8a5987c40b40ccd259e3bbc1b53a45d972",
-      "cases": 3,
-      "commands": 104,
-      "records": 9,
-      "source_revision": "67aa4e2",
-      "captured": "2026-10-14"
+      "sha256": "af2c5d1433f8949a9652cb42963a28c1de101bf4fcca48dd6d9b3dc52249037b",
+      "cases": 5,
+      "commands": 163,
+      "records": 19,
+      "source_revision": "8f73364",
+      "captured": "2026-10-15"
     },
     "hashes.txt": {
       "sha256": "44698622512d0bbfc767ed839e6cba2b855a27aa0c7af4eb0c555cfc0f6f9bce",
@@ -74,11 +74,11 @@
       "captured": "2026-10-14"
     },
     "refusals.txt": {
-      "sha256": "2fa2e7395268cf1de96f4f398ecde64f64004c3ef5ee7c004ce7ccb4cd576fbd",
+      "sha256": "cb1167989d9bc3e60425d3388d45c2e87ea85e30da3965473d4b646932a785e2",
       "cases": 2,
-      "commands": 256,
+      "commands": 284,
       "records": 0,
-      "source_revision": "89c66b6",
+      "source_revision": "8f73364",
       "captured": "2026-10-15"
     },
     "replication.txt": {
@@ -90,11 +90,11 @@
       "captured": "2026-10-14"
     },
     "server.txt": {
-      "sha256": "b3bb446c9f4e18d9b8e8437eb6d200f84ee1d1b501bed9c6654855c586aef960",
+      "sha256": "cb945478bfecdd4408f0df2b05ee5d4f6bf32c1e04ce6110eea457d8b75268d7",
       "cases": 13,
       "commands": 255,
       "records": 23,
-      "source_revision": "89c66b6",
+      "source_revision": "8f73364",
       "captured": "2026-10-15"
     },
     "sets.txt": {
@@ -130,12 +130,12 @@
       "captured": "2026-10-15"
     },
     "zsets.txt": {
-      "sha256": "08bb2ebe8ac604bcb4a270ff7aef58afffe47d6c18a9ddc1b480065609f6bf80",
-      "cases": 5,
-      "commands": 172,
-      "records": 26,
-      "source_revision": "67aa4e2",
-      "captured": "2026-10-14"
+      "sha256": "62366fad8b8e8ad155b38fa213716d26cccc65b9f3d8e8d59fe7134158693e23",
+      "cases": 16,
+      "commands": 467,
+      "records": 85,
+      "source_revision": "8f73364",
+      "captured": "2026-10-15"
     }
   }
 }
