@@ -221,6 +221,24 @@ Past its first refusal, a unit may need more: the 17 units set 54 settings
 in all, read from their files. Inside tests that run, a refused `CONFIG SET`
 fails 72 more: `notify-keyspace-events` 26, `maxmemory` 19, and 27 others.
 
+**With `CONFIG SET` (#196).** Run 38614590952 on #196's head (develop
+4414eba with it) passed 486 of 3,194, up from about 269. 15 of the 17
+units now get past their settings. The other two stop at a setting Keel
+cannot honour, and each is its own gap:
+
+- **Redis's `volatile-*` eviction policies** (`volatile-lru`,
+  `volatile-lfu`, `volatile-random`, `volatile-ttl`). These evict only keys
+  with an expiry, `volatile-ttl` the soonest to expire first. Keel has the
+  `allkeys-*` three. `unit/pubsub` sets one, where Redis passes 129. Doing
+  them means the eviction sampler choosing among keys with an expiry, with
+  `volatile-ttl` ranking them by expiry rather than by access.
+- **`latency-monitor-threshold`**, Redis's latency monitor
+  (`latency.c`): events that take longer than the threshold, kept per
+  event, which `LATENCY LATEST`, `HISTORY`, `GRAPH` and `DOCTOR` report.
+  Keel holds the threshold at 0 and answers those subcommands as Redis's
+  monitor does when off. `unit/latency-monitor` sets it, where Redis passes
+  16.
+
 By family, the failing tests are: streams 229, strings 184, scripting
 162, arrays 129, bitmaps 74, generic 36, geo 29 and Pub/Sub 16. Pub/Sub
 also stops `unit/tracking` at `SUBSCRIBE`, where Redis passes 62. Hashes
