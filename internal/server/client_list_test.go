@@ -1,9 +1,11 @@
 package server
 
 import (
+	"errors"
 	"io"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -222,12 +224,16 @@ func TestClientKillClosesConnections(t *testing.T) {
 	requireClosed(t, other)
 }
 
-// requireClosed waits for the server to close c.
+// requireClosed waits for the server to close c: an end of file, or a reset
+// when the server closed it with input it had not read, as the connection
+// that sent CLIENT KILL SKIPME no and then PING is.
 func requireClosed(t *testing.T, c *pauseConn) {
 	t.Helper()
 	require.NoError(t, c.conn.SetReadDeadline(time.Now().Add(2*time.Second)))
 	_, err := c.r.ReadByte()
-	require.ErrorIs(t, err, io.EOF)
+	if !errors.Is(err, syscall.ECONNRESET) {
+		require.ErrorIs(t, err, io.EOF)
+	}
 }
 
 // TestClientReplyOffSkipOn: OFF silences every reply until ON, which is
