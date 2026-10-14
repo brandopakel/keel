@@ -115,7 +115,7 @@ def workload(c):
     do('HSET', 'h', 'f1', 'v1', 'f2', 'v2', 'f3', 'v3'); do('HSETNX', 'h', 'f4', 'v4')
     do('HDEL', 'h', 'f2'); do('HINCRBY', 'h', 'n', 5)
     do('RPUSH', 'l', 'a', 'b', 'c', 'd'); do('LPUSH', 'l', 'z'); do('LPOP', 'l'); do('RPOP', 'l')
-    do('LPOP', 'l', 1); do('LSET', 'l', 0, 'q'); do('LTRIM', 'l', 0, 1)
+    do('LPOP', 'l', 1); do('LSET', 'l', 0, 'q'); do('LTRIM', 'l', 0, 0)
     do('SADD', 'set', 'a', 'b', 'c', 'd'); do('SREM', 'set', 'd'); do('SADD', 'set:one', 'only'); do('SPOP', 'set:one')
     do('ZADD', 'z', 1, 'a', 2, 'b', 3, 'c'); do('ZADD', 'z', 'XX', 'CH', 10, 'b'); do('ZINCRBY', 'z', 2.5, 'a')
     do('ZREM', 'z', 'c'); do('ZADD', 'z2', 1, 'x', 2, 'y'); do('ZPOPMIN', 'z2')
