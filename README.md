@@ -4,11 +4,14 @@ This branch holds data, not code. It keeps the results of Keel's benchmark
 workflows after GitHub deletes their artifacts (30 days), so that a Grafana
 dashboard can show them over months. `scripts/collect-bench-history.py` on
 `develop` writes these files, and `.github/workflows/bench-history.yml` runs it
-after each benchmark, census and telemetry run, and once a day. Don't edit the
+after each benchmark, census, telemetry, Redis tests and Framework checks run,
+and once a day; go.yml's test file footprints come with whichever collection
+runs next. Don't edit the
 files by hand: a run is recorded once, keyed by its artifact ID, and the
 collector rewrites each file sorted by time. The census snapshots
 (`census/latest.csv`, `arguments.csv`, `replies.csv`, `config.csv` and
-`redis-tests-failing.csv`) are the files replaced rather than appended to.
+`redis-tests-failing.csv`) and `frameworks/latest.csv` are the files replaced
+rather than appended to.
 
 Grafana reads the files through its Infinity data source, from
 `https://raw.githubusercontent.com/brandopakel/keel/bench-history/<file>`.
@@ -208,3 +211,37 @@ of each.
 - `phases.csv`: one line per load phase of each run (`steady`, `pipelined`,
   `eviction`, `expiry`), with each server's ops/s. Both servers share one
   unpinned runner, so these are not a comparison of speed.
+
+## frameworks/
+
+The Framework checks workflow (`.github/workflows/framework-checks.yml`): small real
+workloads of Rails' cache store, ActionCable, Sidekiq, Celery and BullMQ, run
+against Redis (the control, which must pass) and then against Keel, with
+every command each sent read from Redis's `INFO commandstats`.
+
+- `runs.csv`: one line per framework of each run: whether Redis
+  (`redis_passed`) and Keel (`keel_passed`) passed, the first command Keel
+  refused (`keel_first_unknown`), Keel's time in seconds, how many distinct
+  commands the framework sent (`commands_sent`), and the ones Keel lacks
+  (`keel_lacks`, space-separated, subcommands as `script|load`). A framework
+  whose result is incomplete is left out of its run.
+- `latest.csv`: for the newest run of develop, every command each framework
+  sent, how often (`calls`), and whether Keel has it (`keel`: `present` or
+  `missing`). Replaced, not appended to.
+
+## ci/
+
+go.yml's test file footprint (`scripts/test-file-footprint.py`), from each run
+of the Go test suite: how much the tests held on disk, and how long they took.
+
+- `runs.csv`: one line per run, with the suite's exit code and time
+  (`suite_seconds`), the most bytes its tests held at once
+  (`peak_concurrent_test_bytes`), the build's peak (`peak_build_bytes`), the
+  warning line that peak is drawn against (`warn_suite_bytes`, 160 MiB), and
+  how many warnings the run raised.
+- `packages.csv`: each package's result (`ok` or `FAIL`) and time in seconds,
+  named without the module prefix (`internal/core`). Runs from before per-package
+  times (#144) have none.
+- `tests.csv`: the ten tests of each run that held the most on disk, with their
+  package named as `packages.csv` names it, so the two join, and their peak
+  bytes in all and in one file.
