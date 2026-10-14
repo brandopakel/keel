@@ -232,7 +232,9 @@ func TestConnectionGoldenRepliesAreUnchanged(t *testing.T) {
 
 // uncoveredConnectionErrorTexts are the error texts the server holds that no
 // case of the connection corpus can reach, each with the reason.
-var uncoveredConnectionErrorTexts = map[string]string{}
+var uncoveredConnectionErrorTexts = map[string]string{
+	"ERR can only reset normal client connections": "RESET from a replica's connection, which the corpus's connections never are",
+}
 
 // TestConnectionGoldensCoverEveryErrorText: every error text the server can
 // answer with (golden.ErrorTexts) is answered somewhere in the fixture,

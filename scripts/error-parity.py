@@ -694,7 +694,10 @@ def build_cases(redis_arities, modules):
                      [['MULTI'], ['WATCH', 'k'], ['EXEC']], [['MULTI'], ['WATCH'], ['EXEC']],
                      [['MULTI'], ['AUTH', 'x', 'y', 'z'], ['EXEC']], [['MULTI'], ['AUTH'], ['EXEC']],
                      [['MULTI'], ['QUIT', 'x']], [['MULTI'], ['CLIENT', 'SETNAME', 'a b'], ['EXEC']],
-                     [['MULTI'], ['SET', 'k', 'v', 'EX', '0'], ['GET', 'k'], ['EXEC']]):
+                     [['MULTI'], ['SET', 'k', 'v', 'EX', '0'], ['GET', 'k'], ['EXEC']],
+                     # MONITOR inside EXEC is refused; RESET is not queued, and ends the transaction.
+                     [['MULTI'], ['MONITOR'], ['EXEC']], [['MULTI'], ['GET', 'k'], ['RESET'], ['EXEC']],
+                     [['CLIENT', 'SETNAME', 'n'], ['CLIENT', 'NO-TOUCH', 'on'], ['RESET'], ['CLIENT', 'GETNAME']]):
         cases.append(case('transaction', commands))
     # A replica refuses writes before it queues them, and counts arguments and
     # names commands first, as a primary does.
@@ -744,7 +747,8 @@ def redis_arities(port):
              'SCARD', 'SMEMBERS', 'SISMEMBER', 'SMISMEMBER', 'SPOP', 'SRANDMEMBER', 'ZCOUNT', 'ZRANGEBYSCORE',
              'ZREVRANGEBYSCORE', 'ZINCRBY', 'ZPOPMIN', 'ZPOPMAX', 'ZRANGE', 'ZADD', 'ZRANK', 'ZREM', 'ZSCORE', 'ZCARD',
              'GEOADD', 'GEODIST', 'GEOHASH', 'GEOSEARCH', 'GEOPOS', 'PFADD', 'PFCOUNT', 'PFMERGE', 'AUTH', 'HELLO',
-             'QUIT', 'CLIENT', 'CONFIG', 'LATENCY', 'SLOWLOG', 'COMMAND', 'MULTI', 'EXEC', 'DISCARD']
+             'QUIT', 'CLIENT', 'CONFIG', 'LATENCY', 'SLOWLOG', 'COMMAND', 'MULTI', 'EXEC', 'DISCARD', 'TIME', 'RESET',
+             'MONITOR']
     session = Session(port, auth=True, protocol=2)
     try:
         session.socket.sendall(encode(['COMMAND', 'INFO', *names]))

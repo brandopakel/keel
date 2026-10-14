@@ -310,7 +310,11 @@ schedule them.
         `KILL`, `REPLY`, `NO-EVICT`, `NO-TOUCH`, `UNBLOCK`, `GETREDIR` and
         `TRACKINGINFO`; `TRACKING` and `CACHING` wait for client tracking.
      5. `MONITOR`, `TIME`, `RESET` and `ROLE`, and `SLOWLOG` from the
-        monitoring work.
+        monitoring work. S4c adds `MONITOR`, `RESET` and `TIME`. `ROLE`
+        waits for the primary to know each replica as Redis does: its
+        listening port and its acknowledged offset. Keel's primary keeps one
+        acknowledged offset for all its replicas, and its replicas announce
+        no port.
 
      `CONFIG GET` is done (#156). `DEBUG SET-ACTIVE-EXPIRE` is a test hook
      that 16 tests use; adding it is the owner's choice;

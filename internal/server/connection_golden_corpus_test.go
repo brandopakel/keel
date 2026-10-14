@@ -204,6 +204,35 @@ var connectionGoldenCorpus = []connectionGoldenCase{
 		{"CLIENT", "TRACKINGINFO"},
 		{"CLIENT", "TRACKING", "on"},
 	}},
+	{name: "reset-and-monitor", commands: [][]string{
+		// MONITOR itself is the loop's to show (monitor_test.go): a
+		// connection that monitors here would be fed every other test's
+		// commands. Here, MONITOR inside EXEC, and RESET.
+		{"MULTI"},
+		{"MONITOR"},
+		{"EXEC"},
+		{"MONITOR", "x"},
+		{"CLIENT", "SETNAME", "named"},
+		{"CLIENT", "NO-EVICT", "on"},
+		{"HELLO", "3"},
+		{"MULTI"},
+		{"SET", "k", "v"},
+		{"RESET"},
+		{"EXEC"},
+		{"CLIENT", "GETNAME"},
+		{"CLIENT", "INFO"},
+		{"CLIENT", "REPLY", "OFF"},
+		{"RESET"},
+		{"PING"},
+		{"RESET", "x"},
+	}},
+	{name: "reset-logs-out", password: "secret", commands: [][]string{
+		{"RESET"},
+		{"AUTH", "secret"},
+		{"GET", "k"},
+		{"RESET"},
+		{"GET", "k"},
+	}},
 	{name: "hello-auth-before-anything", password: "secret", commands: [][]string{
 		{"HELLO", "3", "AUTH", "default", "secret"},
 		{"GET", "missing"},
