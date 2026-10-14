@@ -48,3 +48,4 @@ artifact_id,run_id,time,event,branch,pr,conclusion,redis_version,commands,comman
 11867592549,38503143231,2026-10-14T02:50:33Z,push,develop,190,success,8.10.1,401,108,148,14,https://github.com/brandopakel/keel/actions/runs/38503143231
 11868393488,38507838462,2026-10-14T03:44:55Z,push,develop,162,success,8.10.1,401,108,148,14,https://github.com/brandopakel/keel/actions/runs/38507838462
 11870058393,38511597712,2026-10-14T04:28:52Z,push,develop,163,failure,8.10.1,401,109,148,21,https://github.com/brandopakel/keel/actions/runs/38511597712
+11872272366,38515788296,2026-10-14T05:16:55Z,push,develop,193,failure,8.10.1,401,119,148,21,https://github.com/brandopakel/keel/actions/runs/38515788296
