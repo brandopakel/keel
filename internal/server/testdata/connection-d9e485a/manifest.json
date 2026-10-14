@@ -1,10 +1,10 @@
 {
-  "source_revision": "8b60e49",
+  "source_revision": "d9e485a",
   "captured": "2026-10-14",
   "note": "The connection commands' RESP2 and RESP3 replies on develop, before phase 4 of the embedding plan; see connection_golden_test.go.",
   "files": {
-    "connection.txt": "aec1da301b709bc8ce212c2beea59b3658cff162beb747fd0f29efa16e820ca4"
+    "connection.txt": "7ddb9bd435a85b84a2412bddd4498dfba2a1f365b2c774a62483fe3092cd22ef"
   },
-  "cases": 10,
-  "commands": 211
+  "cases": 12,
+  "commands": 233
 }

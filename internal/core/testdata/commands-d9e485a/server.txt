@@ -290,6 +290,14 @@ case server/info-config
 2 "-ERR wrong number of arguments for 'config' command\r\n"
 3 "-ERR wrong number of arguments for 'config' command\r\n"
 
+case server/time
+> "TIME" @masked
+2 "*"
+3 "*"
+> "time" "x"
+2 "-ERR wrong number of arguments for 'time' command\r\n"
+3 "-ERR wrong number of arguments for 'time' command\r\n"
+
 case server/bgrewriteaof
 > "SET" "k" "v"
 2 "+OK\r\n"
