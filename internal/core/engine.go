@@ -283,13 +283,6 @@ type Engine struct {
 	// expiry cycle keeps (foldAvgTTL). Like expiredKeys it describes the
 	// stores, so resetStores clears it.
 	avgTTL int64
-	// evictionExceededSince is when the keyspace last went over its bound
-	// with nothing its policy may evict, by nanotime, or 0 while it is not;
-	// evictionExceededNanos is the time it was so before that: Redis's
-	// stat_last_eviction_exceeded_time and stat_total_eviction_exceeded_time
-	// (evict.c), which INFO reports. Only the check before a command and INFO
-	// read them, so they go with avgTTL.
-	evictionExceededSince, evictionExceededNanos int64
 
 	// mu is e's lock, which Lock and Unlock take and release. No command
 	// reads it, so it goes last, and every field a command reads keeps its
@@ -338,6 +331,13 @@ type Engine struct {
 	expireStalePerc  float64
 	expireCapReached uint64
 	expireCycleUsec  uint64
+	// evictionExceededSince is when the keyspace last went over its bound
+	// with nothing its policy may evict, by nanotime, or 0 while it is not;
+	// evictionExceededNanos is the time it was so before that: Redis's
+	// stat_last_eviction_exceeded_time and stat_total_eviction_exceeded_time
+	// (evict.c), which INFO reports. Last, so that adding them moved no field
+	// before them.
+	evictionExceededSince, evictionExceededNanos int64
 }
 
 // Lock takes e's lock, waiting until whoever holds it lets go. Its holder is
