@@ -27,10 +27,12 @@ import (
 //
 // Every scenario below runs a fixed sequence of commands with the log open and
 // keeps three things: the log it leaves, the replies it got, and the keyspace
-// it ends with. testdata/persistence-40eb2f6/ holds what develop at 40eb2f6
-// produced, written by these tests with
+// it ends with. testdata/persistence-<persistenceGoldenRevision>/ holds what
+// that revision produced (first develop at 40eb2f6; recaptured at a888f48, when
+// an HSETNX of a field that exists stopped being logged), written by these
+// tests with
 //
-//	KEEL_CAPTURE_PERSISTENCE_GOLDEN=$PWD/testdata/persistence-40eb2f6 \
+//	KEEL_CAPTURE_PERSISTENCE_GOLDEN=$PWD/testdata/persistence-<revision> \
 //	  go test ./internal/core -run '^TestPersistenceGoldenCapture$'
 //
 // and every run since compares with it, under every fsync policy, with
@@ -62,7 +64,7 @@ import (
 //     falls depends on how fast the machine is. When the log is compared,
 //     records of the same collection command on the same key that follow one
 //     another are joined into one, then sorted as above. The fixture keeps the
-//     records as they were cut on 40eb2f6.
+//     records as they were cut when it was captured.
 //
 // A large hash is rewritten in several HSET records whose split is random too,
 // so the scenarios hold small hashes only; aof_rewrite_test.go and
@@ -70,7 +72,10 @@ import (
 // rewritten in rank order, which is not random. Map order also makes the
 // rewrite's dirty keys come out in random order, so each rewrite here has
 // exactly one key written while it runs.
-const persistenceGoldenDir = "testdata/persistence-40eb2f6"
+// persistenceGoldenRevision is the revision the fixture was captured at.
+const persistenceGoldenRevision = "a888f48"
+
+const persistenceGoldenDir = "testdata/persistence-" + persistenceGoldenRevision
 
 // goldenBase is year 2096, after anything the scenarios write relative to now
 // and before their absolute expiries.
@@ -912,7 +917,7 @@ func requireSameLog(t *testing.T, want, got []byte, what string) {
 }
 
 // TestPersistenceGoldenCapture writes the fixture when asked to, and is
-// skipped otherwise. It was run once, on develop at 40eb2f6. Every mode must
+// skipped otherwise. Every mode must
 // agree before anything is written.
 func TestPersistenceGoldenCapture(t *testing.T) {
 	t.Parallel()
@@ -922,8 +927,8 @@ func TestPersistenceGoldenCapture(t *testing.T) {
 	}
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	manifest := goldenManifest{
-		SourceRevision: "40eb2f6",
-		Note:           "Captured before step 2.3 of the embedding plan moved persistence into core.Engine; see persistence_golden_test.go.",
+		SourceRevision: persistenceGoldenRevision,
+		Note:           "The logs, replies and keyspaces at source_revision; see persistence_golden_test.go.",
 		Scenarios:      map[string]goldenManifestEntry{},
 	}
 	for _, scenario := range goldenScenarios {
