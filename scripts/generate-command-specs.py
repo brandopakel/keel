@@ -149,11 +149,17 @@ def render(specs):
         '',
         'package core',
         '',
-        f'// redisCommandSpecs is what Redis {REDIS_VERSION} declares of each command Keel',
-        '// has, by name, a subcommand as container|sub: its arity, its group, its',
-        '// command flags, its ACL categories and its key specs. Keel\'s own commands',
-        '// and RedisBloom\'s are not here; see command_specs_keel.go.',
-        'var redisCommandSpecs = map[string]commandSpec{',
+        f'// redisCommandSpecTable is what Redis {REDIS_VERSION} declares of each command',
+        '// Keel has, a subcommand as container|sub, in name order: its arity, its',
+        '// group, its command flags, its ACL categories and its key specs. Keel\'s',
+        '// own commands and RedisBloom\'s are not here; see command_specs_keel.go.',
+        '//',
+        '// It is an array rather than a map literal so that the compiler lays it out',
+        '// as data: a map literal of these specs is built by code in the package\'s',
+        '// init, which the linker places ahead of the command handlers, so every',
+        '// command added to it moved them all. redisCommandSpecs is built from it',
+        '// by a loop whose size does not depend on the table\'s.',
+        'var redisCommandSpecTable = [...]namedCommandSpec{',
     ]
     for name in sorted(specs):
         s = specs[name]
@@ -169,7 +175,7 @@ def render(specs):
                              % (go_strings(k['flags']), json.dumps(b[0]), b[1], json.dumps(b[2]), b[3],
                                 json.dumps(f[0]), ', ' + find if find else ''))
             keys = '[]keySpec{' + ', '.join(parts) + '}'
-        lines.append('\t%s: {arity: %d, group: %s, flags: %s, acl: %s, keys: %s},'
+        lines.append('\t{name: %s, spec: commandSpec{arity: %d, group: %s, flags: %s, acl: %s, keys: %s}},'
                      % (json.dumps(name), s['arity'], json.dumps(s['group']), go_strings(s['flags']), go_strings(s['acl']), keys))
     lines += ['}', '']
     return gofmt('\n'.join(lines))

@@ -243,3 +243,16 @@ func TestCommandSpecsAgreeWithTheTables(t *testing.T) {
 		require.Equal(t, -1, spec.keys[0].find.lastKey, "%s is excepted and its spec does not name every argument", name)
 	}
 }
+
+// TestRedisCommandSpecTableIsInNameOrder: the generated table holds each name
+// once, in order, so that indexing it by name loses none.
+func TestRedisCommandSpecTableIsInNameOrder(t *testing.T) {
+	t.Parallel()
+	for i := 1; i < len(redisCommandSpecTable); i++ {
+		require.Less(t, redisCommandSpecTable[i-1].name, redisCommandSpecTable[i].name)
+	}
+	require.Len(t, redisCommandSpecs, len(redisCommandSpecTable))
+	for _, entry := range redisCommandSpecTable {
+		require.Equal(t, entry.spec, redisCommandSpecs[entry.name], entry.name)
+	}
+}

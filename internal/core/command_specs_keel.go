@@ -128,6 +128,26 @@ var keelCommandSpecs = map[string]commandSpec{
 	"CMS.QUERY":      {arity: -3, group: "cms", flags: []string{"READONLY"}, acl: []string{"READ", "CMS"}, keys: oneKeyRead},
 }
 
+// namedCommandSpec is one entry of redisCommandSpecTable: a command's name,
+// a subcommand as container|sub, and its spec.
+type namedCommandSpec struct {
+	name string
+	spec commandSpec
+}
+
+// redisCommandSpecs is redisCommandSpecTable by name, built by a loop whose
+// size does not depend on the table's, so that a command added to the
+// generated table adds data and no code. The loop is the initializer's own,
+// with the package's init ahead of the command handlers, rather than a
+// function among them, so that it moves none of them either.
+var redisCommandSpecs = func() map[string]commandSpec {
+	specs := make(map[string]commandSpec, len(redisCommandSpecTable))
+	for _, entry := range redisCommandSpecTable {
+		specs[entry.name] = entry.spec
+	}
+	return specs
+}()
+
 // commandSpecOf is the spec of a command, or of a container's subcommand
 // as container|sub, from either table.
 func commandSpecOf(name string) (commandSpec, bool) {
