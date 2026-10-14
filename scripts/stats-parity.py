@@ -102,11 +102,21 @@ MODULE_CASES = [[c] for c in [
 ]]
 
 
+# The marker counters records for INFO's Commandstats section.
+COMMANDSTATS = '_commandstats'
+
+
 def counters(info):
     """INFO's counters, from a bulk or verbatim reply."""
     text = info.decode()
     fields = {}
     for line in text.split('\r\n'):
+        if line == '# Commandstats':
+            # The section is there, lines or not: a server that has it and
+            # leaves out a command Redis counts is a mismatch, not a field
+            # it does not report.
+            fields[COMMANDSTATS] = 1
+            continue
         name, sep, value = line.partition(':')
         if not sep:
             continue
@@ -138,8 +148,10 @@ def run_case(port, base, case):
 def compare(keel, redis):
     """The fields that differ, and those Keel does not report at all."""
     mismatched, not_reported = {}, []
-    keel_cmdstats = any(name.startswith('cmdstat_') for name in keel)
+    keel_cmdstats = COMMANDSTATS in keel
     for name in sorted(set(keel) | set(redis)):
+        if name == COMMANDSTATS:
+            continue
         if name in FIELDS and name not in keel:
             not_reported.append(name)
         elif name.startswith('cmdstat_') and not keel_cmdstats:
