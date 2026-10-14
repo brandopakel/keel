@@ -3699,3 +3699,13 @@ artifact_id,run_id,time,branch,test,package,peak_bytes,peak_file_bytes
 11874072186,38518818094,2026-10-14T05:50:36Z,feat/info-net-bytes,TestReplicationV2LargeSnapshotOperationsAndFrozenFile,internal/core,21952673,11106903
 11874072186,38518818094,2026-10-14T05:50:36Z,feat/info-net-bytes,TestReplicasThroughAFailedRewriteprotocol-,cmd/keel,21568684,21568061
 11874072186,38518818094,2026-10-14T05:50:36Z,feat/info-net-bytes,TestReplicationV2HistoryOverrunAndProtocolMismatch,internal/core,18463790,18463790
+11874745072,38518819016,2026-10-14T05:50:37Z,feat/info-net-bytes,TestRewriteStallProfile,internal/core,113577780,56788890
+11874745072,38518819016,2026-10-14T05:50:37Z,feat/info-net-bytes,"TestEveryAcknowledgedWriteSurvivesAKilleverysec,_during_a_faile",internal/core,72615405,68158920
+11874745072,38518819016,2026-10-14T05:50:37Z,feat/info-net-bytes,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierzse,cmd/keel,68160485,68160485
+11874745072,38518819016,2026-10-14T05:50:37Z,feat/info-net-bytes,TestRejectedCollectionPopsPreservePipelineAndRestartconcurrent,cmd/keel,68160485,68160485
+11874745072,38518819016,2026-10-14T05:50:37Z,feat/info-net-bytes,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierlis,cmd/keel,68160040,68160040
+11874745072,38518819016,2026-10-14T05:50:37Z,feat/info-net-bytes,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierset,cmd/keel,68159910,68159910
+11874745072,38518819016,2026-10-14T05:50:37Z,feat/info-net-bytes,TestStagedRecordsAreTheBytesAppendAOFCommandWrites,internal/core,68159664,4259925
+11874745072,38518819016,2026-10-14T05:50:37Z,feat/info-net-bytes,TestRewriteSlicesObeyKeyBudgetAndReplay,internal/core,22362420,12888890
+11874745072,38518819016,2026-10-14T05:50:37Z,feat/info-net-bytes,TestReplicationV2LargeSnapshotOperationsAndFrozenFile,internal/core,21952673,11106903
+11874745072,38518819016,2026-10-14T05:50:37Z,feat/info-net-bytes,TestReplicasThroughAFailedRewriteprotocol-,cmd/keel,21568737,21568030

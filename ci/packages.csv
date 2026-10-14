@@ -1913,3 +1913,14 @@ artifact_id,run_id,time,branch,pr,package,result,seconds
 11874072186,38518818094,2026-10-14T05:50:36Z,feat/info-net-bytes,165,internal/resp,ok,0.105
 11874072186,38518818094,2026-10-14T05:50:36Z,feat/info-net-bytes,165,internal/server,ok,1.223
 11874072186,38518818094,2026-10-14T05:50:36Z,feat/info-net-bytes,165,internal/testlock,ok,0.309
+11874745072,38518819016,2026-10-14T05:50:37Z,feat/info-net-bytes,165,bench/arrival,ok,1.211
+11874745072,38518819016,2026-10-14T05:50:37Z,feat/info-net-bytes,165,cmd/keel,ok,11.969
+11874745072,38518819016,2026-10-14T05:50:37Z,feat/info-net-bytes,165,internal/config,ok,0.312
+11874745072,38518819016,2026-10-14T05:50:37Z,feat/info-net-bytes,165,internal/core,ok,14.289
+11874745072,38518819016,2026-10-14T05:50:37Z,feat/info-net-bytes,165,internal/core/io_multiplexing,ok,0.047
+11874745072,38518819016,2026-10-14T05:50:37Z,feat/info-net-bytes,165,internal/data_structure,ok,10.621
+11874745072,38518819016,2026-10-14T05:50:37Z,feat/info-net-bytes,165,internal/golden,ok,0.008
+11874745072,38518819016,2026-10-14T05:50:37Z,feat/info-net-bytes,165,internal/procinfo,ok,0.028
+11874745072,38518819016,2026-10-14T05:50:37Z,feat/info-net-bytes,165,internal/resp,ok,0.079
+11874745072,38518819016,2026-10-14T05:50:37Z,feat/info-net-bytes,165,internal/server,ok,1.169
+11874745072,38518819016,2026-10-14T05:50:37Z,feat/info-net-bytes,165,internal/testlock,ok,0.309
