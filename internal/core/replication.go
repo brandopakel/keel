@@ -250,7 +250,7 @@ func (e *Engine) cmdReplicationPull(args []string) []byte {
 		return e.encode(err, false)
 	}
 	if full {
-		e.totals.syncFull++
+		e.syncFull++
 	}
 	return e.encode(string(encoded), false)
 }

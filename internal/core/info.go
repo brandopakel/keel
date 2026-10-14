@@ -254,7 +254,7 @@ func (e *Engine) statsInfo(b *strings.Builder) {
 			t.netIn.kbps(), t.netOut.kbps(), t.replIn.kbps(), t.replOut.kbps())
 		fmt.Fprintf(b, "rejected_connections:%d\r\n", stats.ConnectionsRejected)
 	}
-	fmt.Fprintf(b, "sync_full:%d\r\n", e.totals.syncFull)
+	fmt.Fprintf(b, "sync_full:%d\r\n", e.syncFull)
 	fmt.Fprintf(b, "expired_keys:%d\r\nevicted_keys:%d\r\n", e.ExpiredKeys(), e.space.Evicted())
 	// Keel evicts no clients and has no scripts, Pub/Sub or client tracking,
 	// and it never forks.

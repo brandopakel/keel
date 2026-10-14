@@ -277,10 +277,6 @@ type Engine struct {
 	// statsReset is the transport's part of CONFIG RESETSTAT, installed with
 	// SetStatsReset; nil, there is none.
 	statsReset func()
-	// replicationTransport is what INFO reads of the transport's replication,
-	// a replica's link and a primary's replicas, installed with
-	// SetReplicationTransport; nil, there is none (replication_info.go).
-	replicationTransport func() ReplicationTransport
 	// avgTTL is INFO keyspace's avg_ttl: Redis's running estimate, in
 	// milliseconds, of the time left to the keys that carry a TTL, which the
 	// expiry cycle keeps (foldAvgTTL). Like expiredKeys it describes the
@@ -312,6 +308,16 @@ type Engine struct {
 	// without effect (config.go); nil until it keeps one. Last, so that adding
 	// it moved no field before it.
 	config *configState
+	// replicationTransport is what INFO reads of the transport's replication,
+	// a replica's link and a primary's replicas, installed with
+	// SetReplicationTransport; nil, there is none (replication_info.go); and
+	// syncFull is sync_full, the full syncs e has served its replicas, a
+	// protocol 1 full frame or the start of a protocol 2 snapshot. Last, so
+	// that adding them moved no field before them: as fields of
+	// commandTotals and beside statsReset they moved logFailure, which every
+	// command reads, and the paired job's log rows read 1.12 twice.
+	replicationTransport func() ReplicationTransport
+	syncFull             uint64
 }
 
 // Lock takes e's lock, waiting until whoever holds it lets go. Its holder is
