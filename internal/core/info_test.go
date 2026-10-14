@@ -47,21 +47,24 @@ func infoSectionNames(info string) []string {
 	return names
 }
 
-// TestINFOSectionsComeInRedisOrder: the sections are Redis's, in its order,
-// with Clients only where a transport reports its connections and CPU only
-// where the platform reports processor time.
+// TestINFOSectionsComeInRedisOrder: the sections are Redis 8.10.1's default
+// ones, in its order (server.c, genInfoSectionDict), with Clients and Threads
+// only where a transport reports its connections and CPU only where the
+// platform reports processor time.
 func TestINFOSectionsComeInRedisOrder(t *testing.T) {
 	t.Parallel()
 	e := newTestEngine(t, Options{})
-	want := []string{"Server", "Memory", "Persistence", "Stats", "Replication", "CPU", "Errorstats", "Cluster", "Keyspace"}
+	want := []string{"Server", "Memory", "Persistence", "Stats", "Replication", "CPU", "Hotkeys", "Modules", "Errorstats",
+		"Cluster", "Keyspace"}
 	if runtime.GOOS == "windows" {
-		want = []string{"Server", "Memory", "Persistence", "Stats", "Replication", "Errorstats", "Cluster", "Keyspace"}
+		want = []string{"Server", "Memory", "Persistence", "Stats", "Replication", "Hotkeys", "Modules", "Errorstats",
+			"Cluster", "Keyspace"}
 	}
 	assert.Equal(t, want, infoSectionNames(runOn(t, e, "INFO").(string)))
 
 	e.SetClientBuffers(func() ClientBufferStats { return ClientBufferStats{Connected: 1} })
 	got := infoSectionNames(runOn(t, e, "INFO").(string))
-	assert.Equal(t, append([]string{"Server", "Clients"}, want[1:]...), got)
+	assert.Equal(t, append([]string{"Server", "Clients", "Memory", "Persistence", "Threads"}, want[3:]...), got)
 	assert.Equal(t, "cluster_enabled:0", strings.TrimSpace(strings.TrimPrefix(runOn(t, e, "INFO", "cluster").(string), "# Cluster")))
 }
 

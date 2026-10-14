@@ -196,6 +196,10 @@ type client struct {
 	// engine the server was handed. Last, so that every field the loop reads
 	// keeps its offset.
 	engine *core.Engine
+	// reads counts the reads made from the connection, so that the I/O
+	// thread that made them can count them as its own (ioPool.serve). Only the
+	// thread serving the connection writes it.
+	reads uint64
 }
 
 // clients is every connected socket, keyed by descriptor.
@@ -239,6 +243,7 @@ func (c *client) readCommandsReserved(scratch []byte, budget *requestAllocationB
 			// mid-frame.
 			n, err = syscall.Read(c.fd, scratch)
 			countRead(n)
+			c.reads++
 		} else {
 			// A frame is in progress. Read straight into the connection's own
 			// buffer - going via the scratch would only add a copy - and ask for
@@ -274,6 +279,7 @@ func (c *client) readCommandsReserved(scratch []byte, budget *requestAllocationB
 			b.reserve(want)
 			n, err = syscall.Read(c.fd, b.spare(want))
 			countRead(n)
+			c.reads++
 		}
 
 		if err == syscall.EAGAIN || err == syscall.EINTR {
@@ -801,6 +807,8 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 		log.Println("client interest cache off: every registration goes to the kernel")
 	}
 	var requestBudget requestAllocationBudget
+	// The I/O threads, made below; INFO's hooks read their counts once it is.
+	var pool *ioPool
 	e.SetCommandAllocations(&resp.Budget{Limit: maxRetainedClientBytes, ReplyLimit: maxRetainedClassBytes})
 	defer e.SetCommandAllocations(nil)
 	e.SetClientBuffers(func() core.ClientBufferStats {
@@ -813,10 +821,11 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 			ConnectionsRejected: connectionsRejected,
 			NetInputBytes:       netInputBytes.Load(), NetOutputBytes: netOutputBytes.Load(),
 			NetReplInputBytes: netReplInputBytes.Load(), NetReplOutputBytes: netReplOutputBytes.Load(),
-			ReadsProcessed: readsProcessed.Load(), WritesProcessed: writesProcessed.Load()}
+			ReadsProcessed: readsProcessed.Load(), WritesProcessed: writesProcessed.Load(),
+			IOThreads: pool.threadStats(len(clients))}
 	})
 	defer e.SetClientBuffers(nil)
-	e.SetStatsReset(func() { resetConnectionStats(); resetNetStats() })
+	e.SetStatsReset(func() { resetConnectionStats(); resetNetStats(); pool.resetIO() })
 	defer e.SetStatsReset(nil)
 	// The settings CONFIG SET changes while the server runs: the password,
 	// the most clients, and the clock's rate, which the cron goroutine below
@@ -875,7 +884,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 		arena    replyArena
 	)
 
-	pool := newIOPool(o.IOThreads)
+	pool = newIOPool(o.IOThreads)
 	pool.requestBudget = &requestBudget
 	defer pool.stop()
 

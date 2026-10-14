@@ -128,6 +128,17 @@ type ClientBufferStats struct {
 	// apart for the replicas' (mem_clients_normal, mem_clients_slaves).
 	RecentMaxInput, RecentMaxReply int
 	NormalBytes, ReplicaBytes      int
+	// IOThreads is each I/O thread's share, the loop's own first, for
+	// Redis's Threads section; their reads and writes sum to ReadsProcessed
+	// and WritesProcessed.
+	IOThreads []IOThreadStats
+}
+
+// IOThreadStats is one I/O thread's line in INFO's Threads section: the
+// clients it serves, and the reads and writes it has made.
+type IOThreadStats struct {
+	Clients       int
+	Reads, Writes uint64
 }
 
 // SetClientBuffers installs on e the hook INFO reads the connections of the

@@ -371,6 +371,13 @@ Also outside the command list: replication with Redis itself (`PSYNC` and
 `REPLCONF`, so that Keel could replicate from or to Redis) and reading
 Redis's AOF. Both are interoperability decisions for later.
 
+**`INFO keysizes` waits for the families.** Redis 8 keeps, per database,
+histograms of string sizes and collection lengths, updated on every write.
+Keel would need the same step in every family's write path
+(`docs/phase4-family-recipe.md`), so it is revisited once phase 4's families
+are in, as one more item of the recipe. Until then INFO leaves the section
+out (`docs/info-compatibility.md`, part (j)).
+
 ## Sequencing with the embedding plan
 
 The embedding plan (`docs/embedding-plan.md`) still has three phases:
