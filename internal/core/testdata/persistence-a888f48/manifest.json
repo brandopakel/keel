@@ -1,6 +1,6 @@
 {
-  "source_revision": "40eb2f6",
-  "note": "Captured before step 2.3 of the embedding plan moved persistence into core.Engine; see persistence_golden_test.go.",
+  "source_revision": "a888f48",
+  "note": "The logs, replies and keyspaces at source_revision; see persistence_golden_test.go.",
   "scenarios": {
     "evictions": {
       "log_bytes": 190,
@@ -33,8 +33,8 @@
       "state_sha256": "df0d6c89aca7af7a0dc0a6cfb23fd07aebd0efbf9d71094dca3dd55137560c93"
     },
     "session": {
-      "log_bytes": 5249238,
-      "log_sha256": "4eb976dc008bc9d7c313a961799d8199c8574d478dcf2629d4c4bebbfc0bd645",
+      "log_bytes": 5249200,
+      "log_sha256": "b2ae52e74fd7b2590e0b7f6fec869937d6284e4f70c5f476059cf99ab7837952",
       "replies_sha256": "88f8c28e1073952e29e629ec3bfbd25c1fc0dbebfb55d4c155e899c51a66c9a5",
       "state_sha256": "388686f13f49af29e146a3cf0ee912a2f41ec374235aa52a2a319a1f21b30dd0"
     }
