@@ -235,6 +235,8 @@ func TestConfigSetRefusesWhatKeelCannotChange(t *testing.T) {
 		"dbfilename x":                 configError("dbfilename", "can't set protected config"),
 		"timeout 10":                   "-ERR Unknown option or number of arguments for CONFIG SET - 'timeout'\r\n",
 		"port 6000":                    "-ERR Unknown option or number of arguments for CONFIG SET - 'port'\r\n",
+		"req-res-logfile x":            "-ERR Unknown option or number of arguments for CONFIG SET - 'req-res-logfile'\r\n",
+		"repl-compression 1":           "-ERR Unknown option or number of arguments for CONFIG SET - 'repl-compression'\r\n",
 	} {
 		assert.Equal(t, want, configSet(t, e, args), args)
 	}

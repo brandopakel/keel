@@ -35,5 +35,9 @@ func TestClientLimitFitsTheProcesssFileLimit(t *testing.T) {
 	get, set, _ = limit(1024, 4096, true)
 	require.Equal(t, "The operating system is not able to handle the specified number of clients, try with 992",
 		fitClientLimit(2000, get, set))
+	broken := func(*syscall.Rlimit) error { return errors.New("unreadable") }
+	require.Equal(t, "The operating system is not able to handle the specified number of clients, try with 992",
+		fitClientLimit(2000, broken, broken), "an unreadable limit is taken as 1024, as Redis takes it")
+	require.Empty(t, fitClientLimit(992, broken, broken))
 	require.Empty(t, checkClientLimit(10), "the process's own limit")
 }

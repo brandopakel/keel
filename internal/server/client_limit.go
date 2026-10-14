@@ -25,7 +25,10 @@ func checkClientLimit(n int) string {
 func fitClientLimit(n int, get, set func(*syscall.Rlimit) error) string {
 	var limit syscall.Rlimit
 	if err := get(&limit); err != nil {
-		return ""
+		// Redis assumes 1024 when it cannot read the limit, and holds the
+		// clients that fit in that.
+		limit = syscall.Rlimit{Cur: 1024, Max: 1024}
+		set = func(*syscall.Rlimit) error { return err }
 	}
 	need := uint64(n) + reservedDescriptors
 	if limit.Cur >= need {

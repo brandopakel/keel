@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"log"
 	"os"
 	"strings"
 
@@ -125,7 +126,7 @@ func (e *Engine) configGet(patterns []string) ReplyMap {
 		lowered := strings.ToLower(pattern)
 		for i := range redisConfigSpecs {
 			s := &redisConfigSpecs[i]
-			if s.flags&configHidden != 0 {
+			if s.flags&configHidden != 0 || !s.built() {
 				continue
 			}
 			k := e.keelConfigFor(s)
@@ -133,7 +134,7 @@ func (e *Engine) configGet(patterns []string) ReplyMap {
 				continue
 			}
 			for _, key := range [2]string{s.name, s.alias} {
-				if key != "" && !seen[key] && globMatch(lowered, key) {
+				if key != "" && !seen[strings.ToLower(key)] && globMatch(lowered, key) {
 					add(key, s, k)
 				}
 			}
@@ -266,7 +267,12 @@ func (e *Engine) configSet(args []string) error {
 	for i := 0; i < n; i++ {
 		if why := e.applyConfig(specs[i], keels[i], values[i]); why != "" {
 			for j := i - 1; j >= 0; j-- {
-				e.applyConfig(specs[j], keels[j], old[j])
+				// Putting a value back can fail too, the file limit having
+				// moved under maxclients, say; Redis logs it
+				// (restoreBackupConfig), and so does Keel.
+				if again := e.applyConfig(specs[j], keels[j], old[j]); again != "" {
+					log.Printf("CONFIG SET: failed restoring %s to '%s': %s", specs[j].name, old[j], again)
+				}
 			}
 			return configSetError(names[i], why)
 		}

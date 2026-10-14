@@ -380,6 +380,8 @@ CONFIG_SET = [
     ['config', 'set', 'save', '900'], ['config', 'set', 'save', '0 1'], ['config', 'set', 'save', '1 -1'],
     ['config', 'set', 'notify-keyspace-events', 'Q'], ['config', 'set', 'notify-keyspace-events', 'K E'],
     ['config', 'set', 'proto-max-bulk-len', '1kb'],
+    ['config', 'set', 'req-res-logfile', 'x'], ['config', 'set', 'repl-compression', '1'],
+    ['config', 'get', 'req-res-logfile'], ['config', 'get', 'repl-compression'],
     ['config', 'set', 'hash-max-ziplist-entries', '512', 'list-max-ziplist-size', '-2', 'activerehashing', 'yes'],
     ['config', 'set', 'save', ''], ['config', 'set', 'notify-keyspace-events', ''],
     # One directive each: Redis keeps no order between several.
