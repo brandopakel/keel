@@ -1,7 +1,6 @@
 package core
 
 import (
-	"errors"
 	"sort"
 	"strings"
 
@@ -27,33 +26,37 @@ import (
 // The file is named to sort after the command handlers, so that it moves none
 // of them in the test binary the paired command-path job measures.
 
-// commandHelp is Redis's COMMAND HELP.
-var commandHelp = HelpReply("COMMAND",
-	"(no subcommand)",
-	"    Return details about all Redis commands.",
-	"COUNT",
-	"    Return the total number of commands in this Redis server.",
-	"LIST",
-	"    Return a list of all commands in this Redis server.",
-	"INFO [<command-name> ...]",
-	"    Return details about multiple Redis commands.",
-	"    If no command names are given, documentation details for all",
-	"    commands are returned.",
-	"DOCS [<command-name> ...]",
-	"    Return documentation details about multiple Redis commands.",
-	"    If no command names are given, documentation details for all",
-	"    commands are returned.",
-	"GETKEYS <full-command>",
-	"    Return the keys from a full Redis command.",
-	"GETKEYSANDFLAGS <full-command>",
-	"    Return the keys and the access flags from a full Redis command.")
+// commandHelp is Redis's COMMAND HELP, built when asked for, so that it
+// adds nothing to the package's init.
+func commandHelp() []byte {
+	return HelpReply("COMMAND",
+		"(no subcommand)",
+		"    Return details about all Redis commands.",
+		"COUNT",
+		"    Return the total number of commands in this Redis server.",
+		"LIST",
+		"    Return a list of all commands in this Redis server.",
+		"INFO [<command-name> ...]",
+		"    Return details about multiple Redis commands.",
+		"    If no command names are given, documentation details for all",
+		"    commands are returned.",
+		"DOCS [<command-name> ...]",
+		"    Return documentation details about multiple Redis commands.",
+		"    If no command names are given, documentation details for all",
+		"    commands are returned.",
+		"GETKEYS <full-command>",
+		"    Return the keys from a full Redis command.",
+		"GETKEYSANDFLAGS <full-command>",
+		"    Return the keys and the access flags from a full Redis command.")
+}
 
-// The errors of COMMAND GETKEYS and GETKEYSANDFLAGS, Redis's words.
-var (
-	errGetKeysInvalidCommand   = errors.New("ERR Invalid command specified")
-	errGetKeysNoKeys           = errors.New("ERR The command has no key arguments")
-	errGetKeysArity            = errors.New("ERR Invalid number of arguments specified for command")
-	errGetKeysInvalidArguments = errors.New("ERR Invalid arguments specified for command")
+// The errors of COMMAND GETKEYS and GETKEYSANDFLAGS, Redis's words, written
+// as constants so that they add nothing to the package's init.
+const (
+	errGetKeysInvalidCommand   = "ERR Invalid command specified"
+	errGetKeysNoKeys           = "ERR The command has no key arguments"
+	errGetKeysArity            = "ERR Invalid number of arguments specified for command"
+	errGetKeysInvalidArguments = "ERR Invalid arguments specified for command"
 )
 
 // commandFlagOrder is COMMAND INFO's flags, in the order Redis writes them
@@ -77,17 +80,24 @@ var keyFlagOrder = [][2]string{{"RO", "RO"}, {"RW", "RW"}, {"OW", "OW"}, {"RM", 
 	{"UPDATE", "update"}, {"INSERT", "insert"}, {"DELETE", "delete"}, {"NOT_KEY", "not_key"},
 	{"INCOMPLETE", "incomplete"}, {"VARIABLE_FLAGS", "variable_flags"}}
 
-// redisBloomGroups are the groups of the commands of the RedisBloom module,
-// which Redis loads as the module "bf".
-var redisBloomGroups = map[string]bool{"bf": true, "cf": true, "cms": true}
+// redisBloomGroup is whether group is one of the groups of the commands of
+// the RedisBloom module, which Redis loads as the module "bf".
+func redisBloomGroup(group string) bool {
+	switch group {
+	case "bf", "cf", "cms":
+		return true
+	}
+	return false
+}
 
 // introspected is one command as COMMAND describes it: its name as Redis
 // writes it, in lower case and a subcommand as container|sub, its spec, and
 // its subcommands, those Keel has.
 type introspected struct {
-	name string
-	spec commandSpec
-	subs []introspected
+	name  string
+	spec  commandSpec
+	facts commandFacts
+	subs  []introspected
 }
 
 // introspect is a command Keel has, by its name in any case, with its
@@ -104,7 +114,7 @@ func introspect(name string) (introspected, bool) {
 			if strings.EqualFold(s.name, sub) {
 				full := container + "|" + strings.ToUpper(s.name)
 				spec, ok := commandSpecOf(full)
-				return introspected{name: strings.ToLower(full), spec: spec}, ok
+				return introspected{name: strings.ToLower(full), spec: spec, facts: commandFactsOf(full)}, ok
 			}
 		}
 		return introspected{}, false
@@ -113,7 +123,7 @@ func introspect(name string) (introspected, bool) {
 	if !ok {
 		return introspected{}, false
 	}
-	c := introspected{name: strings.ToLower(container), spec: spec}
+	c := introspected{name: strings.ToLower(container), spec: spec, facts: commandFactsOf(container)}
 	for _, s := range subcommandsOf(container) {
 		if sub, ok := introspect(container + "|" + s.name); ok {
 			c.subs = append(c.subs, sub)
@@ -139,7 +149,7 @@ func everyCommand() []introspected {
 }
 
 // isModule reports whether the command is a module's: RedisBloom's.
-func (c introspected) isModule() bool { return redisBloomGroups[c.spec.group] }
+func (c introspected) isModule() bool { return redisBloomGroup(c.spec.group) }
 
 // legacyKeys is the first key, last key and step Redis reports for clients
 // that read no key specs, and whether its key specs leave the keys'
@@ -292,8 +302,8 @@ func writeCommandInfo(r *resp.Reply, c introspected) {
 	r.Int(int64(last))
 	r.Int(int64(step))
 	statusSet(r, c.categories())
-	r.Set(len(c.spec.tips))
-	for _, tip := range c.spec.tips {
+	r.Set(len(c.facts.tips))
+	for _, tip := range c.facts.tips {
 		r.Bulk(tip)
 	}
 	writeKeySpecs(r, c.spec.keys)
@@ -366,7 +376,7 @@ func writeKeySpecs(r *resp.Reply, keys []keySpec) {
 // text: since, group, module, doc flags, the version it was deprecated in,
 // its arguments and its subcommands.
 func writeCommandDocs(r *resp.Reply, c introspected) {
-	s := c.spec
+	s := c.facts
 	n := 1
 	for _, present := range []bool{s.since != "", c.isModule(), len(s.docFlags) > 0, s.deprecatedSince != "",
 		len(s.args) > 0, len(c.subs) > 0} {
@@ -383,7 +393,7 @@ func writeCommandDocs(r *resp.Reply, c introspected) {
 	if c.isModule() {
 		r.Bulk("module")
 	} else {
-		r.Bulk(s.group)
+		r.Bulk(c.spec.group)
 	}
 	if c.isModule() {
 		r.Bulk("module")
@@ -490,7 +500,7 @@ func (e *Engine) cmdCOMMAND(args []string) []byte {
 	}
 	switch strings.ToLower(args[0]) {
 	case "help":
-		return commandHelp
+		return commandHelp()
 	case "count":
 		return r.Int(int64(len(everyCommand()))).Bytes()
 	case "list":
@@ -598,18 +608,18 @@ func (e *Engine) commandGetKeys(r *resp.Reply, args []string, withFlags bool) []
 	}
 	switch {
 	case !ok:
-		return e.encode(errGetKeysInvalidCommand, false)
-	case !c.spec.hasKeys():
-		return e.encode(errGetKeysNoKeys, false)
+		return appendError(nil, errGetKeysInvalidCommand)
+	case !c.hasKeys():
+		return appendError(nil, errGetKeysNoKeys)
 	case (c.spec.arity > 0 && c.spec.arity != len(args)) || len(args) < -c.spec.arity:
-		return e.encode(errGetKeysArity, false)
+		return appendError(nil, errGetKeysArity)
 	}
-	keys := c.spec.findKeys(args)
+	keys := c.findKeys(args)
 	if len(keys) == 0 {
 		if c.spec.hasFlag("NO_MANDATORY_KEYS") {
 			return r.Array(0).Bytes()
 		}
-		return e.encode(errGetKeysInvalidArguments, false)
+		return appendError(nil, errGetKeysInvalidArguments)
 	}
 	r.Array(len(keys))
 	for _, k := range keys {
@@ -633,11 +643,11 @@ type foundKey struct {
 
 // hasKeys is doesCommandHaveKeys: a function of its own that finds them, or
 // a key spec that is not NOT_KEY.
-func (s commandSpec) hasKeys() bool {
-	if s.getKeys != "" {
+func (c introspected) hasKeys() bool {
+	if c.facts.getKeys != "" {
 		return true
 	}
-	for _, k := range s.keys {
+	for _, k := range c.spec.keys {
 		if !k.hasFlag("NOT_KEY") {
 			return true
 		}
@@ -647,9 +657,9 @@ func (s commandSpec) hasKeys() bool {
 
 // findKeys is getKeysFromCommandWithSpecs: the key specs, when they say all
 // there is to say, and otherwise the command's own function.
-func (s commandSpec) findKeys(argv []string) []foundKey {
+func (c introspected) findKeys(argv []string) []foundKey {
 	hasKeySpec, variable := false, false
-	for _, k := range s.keys {
+	for _, k := range c.spec.keys {
 		if !k.hasFlag("NOT_KEY") {
 			hasKeySpec = true
 		}
@@ -658,11 +668,11 @@ func (s commandSpec) findKeys(argv []string) []foundKey {
 		}
 	}
 	if hasKeySpec && !variable {
-		if keys, ok := keysFromSpecs(s, argv); ok {
+		if keys, ok := keysFromSpecs(c.spec, argv); ok {
 			return keys
 		}
 	}
-	if proc := getKeysProcs[s.getKeys]; proc != nil {
+	if proc := getKeysProc(c.facts.getKeys); proc != nil {
 		return proc(argv)
 	}
 	return nil
@@ -749,31 +759,52 @@ func keysFromSpecs(s commandSpec, argv []string) ([]foundKey, bool) {
 	return out, true
 }
 
-// getKeysProcs are Keel's own of the functions Redis finds a command's keys
-// with where its key specs cannot say, by the name of Redis's (db.c).
-var getKeysProcs = map[string]func(argv []string) []foundKey{
-	// setGetKeys: SET's key is overwritten, or read and written with GET or a
-	// condition on its value.
-	"setGetKeys": func(argv []string) []foundKey {
-		actual, logical := "OW", []string{"UPDATE"}
-		for _, arg := range argv[3:] {
-			switch {
-			case len(arg) == 3 && strings.EqualFold(arg, "get"):
-				actual, logical = "RW", []string{"ACCESS", "UPDATE"}
-			case strings.EqualFold(arg, "ifeq"), strings.EqualFold(arg, "ifne"),
-				strings.EqualFold(arg, "ifdeq"), strings.EqualFold(arg, "ifdne"):
-				actual = "RW"
-			}
+// commandFactsOf is what else Redis declares of a command, by its name as
+// redisCommandSpecs holds it, from redisCommandFacts; none for Keel's own
+// commands and RedisBloom's.
+func commandFactsOf(name string) commandFacts {
+	i := sort.Search(len(redisCommandFacts), func(i int) bool { return redisCommandFacts[i].name >= name })
+	if i < len(redisCommandFacts) && redisCommandFacts[i].name == name {
+		return redisCommandFacts[i]
+	}
+	return commandFacts{}
+}
+
+// getKeysProc is Keel's own of the function Redis finds a command's keys
+// with where its key specs cannot say, by the name of Redis's (db.c), or nil
+// for one Keel lacks.
+func getKeysProc(name string) func(argv []string) []foundKey {
+	switch name {
+	case "setGetKeys":
+		return setGetKeys
+	case "pfmergeGetKeys":
+		return pfmergeGetKeys
+	}
+	return nil
+}
+
+// setGetKeys: SET's key is overwritten, or read and written with GET or a
+// condition on its value.
+func setGetKeys(argv []string) []foundKey {
+	actual, logical := "OW", []string{"UPDATE"}
+	for _, arg := range argv[3:] {
+		switch {
+		case len(arg) == 3 && strings.EqualFold(arg, "get"):
+			actual, logical = "RW", []string{"ACCESS", "UPDATE"}
+		case strings.EqualFold(arg, "ifeq"), strings.EqualFold(arg, "ifne"),
+			strings.EqualFold(arg, "ifdeq"), strings.EqualFold(arg, "ifdne"):
+			actual = "RW"
 		}
-		return []foundKey{{pos: 1, flags: append([]string{actual}, logical...)}}
-	},
-	// pfmergeGetKeys: the destination is read and inserted into, the sources
-	// read.
-	"pfmergeGetKeys": func(argv []string) []foundKey {
-		keys := []foundKey{{pos: 1, flags: []string{"RW", "ACCESS", "INSERT"}}}
-		for i := 2; i < len(argv); i++ {
-			keys = append(keys, foundKey{pos: i, flags: []string{"RO", "ACCESS"}})
-		}
-		return keys
-	},
+	}
+	return []foundKey{{pos: 1, flags: append([]string{actual}, logical...)}}
+}
+
+// pfmergeGetKeys: the destination is read and inserted into, the sources
+// read.
+func pfmergeGetKeys(argv []string) []foundKey {
+	keys := []foundKey{{pos: 1, flags: []string{"RW", "ACCESS", "INSERT"}}}
+	for i := 2; i < len(argv); i++ {
+		keys = append(keys, foundKey{pos: i, flags: []string{"RO", "ACCESS"}})
+	}
+	return keys
 }

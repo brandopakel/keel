@@ -113,13 +113,20 @@ func argsFromRedis(args []redisArg) []commandArg {
 	return out
 }
 
-// specFromRedis is the table's form of a spec read from Redis's source.
-func specFromRedis(s redisSpec) commandSpec {
-	out := commandSpec{arity: s.Arity, group: s.Group, flags: s.Flags, acl: s.ACL, since: s.Since, docFlags: s.DocFlags,
-		deprecatedSince: s.DeprecatedSince, getKeys: s.GetKeys, args: argsFromRedis(s.Arguments)}
+// factsFromRedis is redisCommandFacts' form of what else a spec read from
+// Redis's source declares, under name.
+func factsFromRedis(name string, s redisSpec) commandFacts {
+	out := commandFacts{name: name, since: s.Since, docFlags: s.DocFlags, deprecatedSince: s.DeprecatedSince,
+		getKeys: s.GetKeys, args: argsFromRedis(s.Arguments)}
 	for _, tip := range s.Tips {
 		out.tips = append(out.tips, strings.ToLower(tip))
 	}
+	return out
+}
+
+// specFromRedis is the table's form of a spec read from Redis's source.
+func specFromRedis(s redisSpec) commandSpec {
+	out := commandSpec{arity: s.Arity, group: s.Group, flags: s.Flags, acl: s.ACL}
 	for _, ks := range s.KeySpecs {
 		k := keySpec{flags: ks.Flags, begin: keyBegin{kind: "unknown"}, find: keyFind{kind: "unknown"}}
 		switch {
@@ -182,11 +189,29 @@ func TestRedisCommandSpecsMatchRedisSource(t *testing.T) {
 		got, ok := redisCommandSpecs[name]
 		require.True(t, ok, "%s is declared by Redis and missing from the generated table: run scripts/generate-command-specs.py", name)
 		require.Equal(t, want, normalizedSpec(got), "%s: the generated table differs from %s", name, file)
+		require.Equal(t, factsFromRedis(name, entry), commandFactsOf(name), "%s: the generated facts differ from %s", name, file)
 		seen[name] = true
 	}
 	for name := range redisCommandSpecs {
 		require.True(t, seen[name], "%s is in the generated table and not in the tables", name)
 	}
+}
+
+// TestRedisCommandFactsAreTheSpecsInOrder: redisCommandFacts holds one entry
+// for each command in redisCommandSpecs, in name order, which commandFactsOf's
+// search relies on.
+func TestRedisCommandFactsAreTheSpecsInOrder(t *testing.T) {
+	t.Parallel()
+	require.Len(t, redisCommandFacts, len(redisCommandSpecs))
+	for i, f := range redisCommandFacts {
+		_, ok := redisCommandSpecs[f.name]
+		require.True(t, ok, "%s has facts and no spec", f.name)
+		if i > 0 {
+			require.Less(t, redisCommandFacts[i-1].name, f.name, "redisCommandFacts is in name order")
+		}
+		require.Equal(t, f, commandFactsOf(f.name))
+	}
+	require.Equal(t, commandFacts{}, commandFactsOf("KEEL.DUMP"), "Keel's own commands have none")
 }
 
 // normalizedSpec is s with nil slices as empty ones where the JSON form has
