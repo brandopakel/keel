@@ -551,3 +551,30 @@ func (e *Engine) closeReplicationTransaction() {
 	}
 	e.appendReplicationV2History(transactionCloseFrame)
 }
+
+// MayReplicate reports whether cmd writes or may be replicated, as Redis's
+// processCommand decides it for CLIENT PAUSE WRITE (is_may_replicate_command):
+// its spec declares WRITE or MAY_REPLICATE, a container's subcommand by its
+// own spec. A command Keel does not have is neither.
+func MayReplicate(cmd *Command) bool {
+	name := cmd.Cmd
+	if subcommandsOf(name) != nil && len(cmd.Args) > 0 {
+		name += "|" + strings.ToUpper(cmd.Args[0])
+	}
+	spec, ok := commandSpecOf(name)
+	return ok && (spec.hasFlag("WRITE") || spec.hasFlag("MAY_REPLICATE"))
+}
+
+// MayReplicate reports whether a command tx has queued writes or may be
+// replicated, which makes its EXEC one that CLIENT PAUSE WRITE holds.
+func (tx *Transaction) MayReplicate() bool {
+	if tx == nil {
+		return false
+	}
+	for _, cmd := range tx.commands {
+		if MayReplicate(cmd) {
+			return true
+		}
+	}
+	return false
+}
