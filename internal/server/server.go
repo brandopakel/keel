@@ -553,6 +553,7 @@ func closeClient(c *client) {
 	delete(clients, c.fd)
 	c.buf = nil
 	c.out = nil
+	c.stopMonitoring()
 	syscall.Close(c.fd)
 }
 
@@ -745,12 +746,17 @@ func executeRun(c *client, arena *replyArena) bool {
 		}
 	}()
 	var capture captureWriter
+	// Lines MONITOR queued for the connection before its commands ran go
+	// out ahead of their replies.
+	feed := c.conn.feed
+	c.conn.feed = nil
 	if len(c.cmds) == 1 {
 		if c.waitsForPause(c.cmds[0]) {
+			c.conn.feed = feed
 			c.postpone()
 			return false
 		}
-		c.conn.staged = 0
+		c.conn.staged = len(feed)
 		silenced = c.run(c.cmds[0], &capture)
 		consumed = 1
 		if c.err != nil {
@@ -761,12 +767,16 @@ func executeRun(c *client, arena *replyArena) bool {
 			return false
 		}
 		c.out = capture.p
+		if len(feed) > 0 {
+			c.out = append(feed, capture.p...)
+		}
 		// Silenced, it still goes to the write phase, which reads the
 		// connection again.
 		return len(c.out) > 0 || silenced
 	}
 	deadline := time.Now().Add(runTimeTarget)
 	c.outStart = len(arena.buf)
+	arena.buf = append(arena.buf, feed...)
 	for _, cmd := range c.cmds {
 		if c.waitsForPause(cmd) {
 			// It waits, and so does everything the connection sent after it.
@@ -805,6 +815,10 @@ func executeRun(c *client, arena *replyArena) bool {
 			// One large response owns its existing allocation. Yield before copying
 			// it into a shared arena or executing further commands from this client.
 			c.out = capture.p
+			if len(feed) > 0 {
+				arena.buf = arena.buf[:c.outStart]
+				c.out = append(feed, capture.p...)
+			}
 			return len(c.out) > 0
 		}
 		arena.buf = append(arena.buf, capture.p...)
@@ -909,6 +923,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 		queuedClientReads = nil
 		postponed, pause, pauseEased = nil, clientPause{}, false
 		killedClients = nil
+		monitors, fedMonitors = nil, nil
 		setWaker(nil)
 	}()
 	log.Println("starting an asynchronous TCP server on", o.Host, o.Port)
@@ -1294,6 +1309,9 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 			writable = dropKilled(writable)
 			reapKilled(func(c *client) { delete(paused, c.fd) })
 		}
+		// What MONITOR is owed from this turn's commands goes out with its
+		// replies.
+		writable = deliverMonitorFeeds(writable, &arena, paused)
 
 		// Reap idle keys before flushing their removal records. A pause
 		// pauses active expiry, as Redis pauses it.
@@ -1458,7 +1476,7 @@ const legacyAOFFileName = "./memkv-master.aof"
 // the transaction. Only an authenticated connection can have opened the
 // transaction, so queueing is no way around AUTH.
 func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
-	if c.tx != nil && cmd.Cmd != "QUIT" {
+	if c.tx != nil && cmd.Cmd != "QUIT" && cmd.Cmd != "RESET" {
 		c.transact(cmd, w)
 		return
 	}
@@ -1495,6 +1513,12 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 		c.closeAfterWrite = true
 		c.engine.NoteCommandRan(cmd, start)
 		return
+	case "RESET":
+		// Before AUTH too, as Redis takes it (monitor.go).
+		start := c.engine.StartCommand()
+		c.reset(own)
+		c.engine.NoteCommandRan(cmd, start)
+		return
 	}
 	if locked {
 		own.Write(core.Refusal(cmd, errNoAuth))
@@ -1508,6 +1532,12 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 	if cmd.Cmd == "CLIENT" {
 		start := c.engine.StartCommand()
 		c.clientCommand(cmd, own)
+		c.engine.NoteCommandRan(cmd, start)
+		return
+	}
+	if cmd.Cmd == "MONITOR" {
+		start := c.engine.StartCommand()
+		c.monitor(own)
 		c.engine.NoteCommandRan(cmd, start)
 		return
 	}

@@ -760,6 +760,43 @@ subcommand it does not have.
 - **CLIENT GETREDIR and TRACKINGINFO.** They answer as Redis does for a
   connection without tracking.
 
+## MONITOR, RESET and TIME
+
+`MONITOR`, `RESET` and `TIME` are Redis 8.10.1's (`server.c`,
+`monitorCommand`, `timeCommand` and call's `replicationFeedMonitors`;
+`networking.c`, `resetCommand` and `clearClientConnectionState`).
+
+- **MONITOR.** The connection is sent a line for each command any connection
+  runs, as it runs:
+  - the time, `[0 address]`, and the arguments quoted as Redis's
+    `sdscatrepr` quotes them;
+  - what `EXEC` runs comes before `EXEC` itself;
+  - a command refused before it would run is not sent;
+  - nor is one whose spec marks it `ADMIN` or `SKIP_MONITOR`, such as
+    `CONFIG`, `CLIENT LIST` or `MONITOR` itself.
+
+  `MONITOR` again is answered with nothing, and inside `EXEC` it is Redis's
+  `MONITOR isn't allowed for DENY BLOCKING client`. A monitor's `CLIENT LIST`
+  flag is `O`. The commands a replica applies from its primary are not sent,
+  since Keel's replica applies them below the connections.
+- **RESET.** It answers `RESET` and leaves the connection as it connected,
+  but for its library's name and version. It ends `MONITOR` and discards a
+  transaction; it is not queued inside one. It switches to RESP2, clears the
+  name, and turns off `CLIENT REPLY OFF`, `NO-EVICT` and `NO-TOUCH`. Where the
+  server has a password, the connection needs `AUTH` again. It is answered
+  before `AUTH`, as Redis answers it.
+- **TIME.** The Unix time in seconds and the microseconds past it, as two
+  bulk strings.
+
+### An improvement over Redis
+
+`MONITOR` sends `AUTH`'s arguments, and `HELLO`'s `AUTH` user and
+password, as `(redacted)` whatever the command does. Redis redacts them only
+once the command has read them (`server.c`, `authCommand` and
+`helloCommand` call `redactClientCommandArgument` as they parse). So a
+`HELLO` it refuses before that, for a protocol version it does not speak,
+shows the password to every monitor. No client depends on seeing it.
+
 ## What each part should show in Grafana
 
 These are the exporter metrics each part should turn on for Keel. The

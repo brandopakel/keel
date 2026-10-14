@@ -77,3 +77,28 @@ func (tx *Transaction) ArgvBytes() int {
 // commands before it: what Redis would hold in the connection's reply buffer
 // by then (CLIENT LIST's obl).
 func (e *Engine) ExecReplyBytes() int { return e.execReplyBytes }
+
+// ShownToMonitors reports whether a command that ran is fed to the
+// connections in MONITOR mode: every command Keel has but those Redis keeps
+// from them, the ones its spec marks ADMIN or SKIP_MONITOR, a container's by
+// its subcommand's (call's check before replicationFeedMonitors).
+func ShownToMonitors(cmd *Command) bool {
+	name := cmd.Cmd
+	if len(cmd.Args) > 0 {
+		for _, s := range subcommandsOf(name) {
+			if strings.EqualFold(s.name, cmd.Args[0]) {
+				name += "|" + strings.ToUpper(s.name)
+				break
+			}
+		}
+	}
+	spec, ok := commandSpecOf(name)
+	return ok && !spec.hasFlag("ADMIN") && !spec.hasFlag("SKIP_MONITOR")
+}
+
+// ExecObserver is a Connection that hears of each command its EXEC runs, as
+// it runs, for MONITOR: Redis feeds each command EXEC calls to the monitors
+// before EXEC itself.
+type ExecObserver interface {
+	Executed(cmd *Command)
+}
