@@ -217,7 +217,11 @@ How each step is verified:
   single benchmark. But code layout alone moved that median by up to 3.5% and
   a single benchmark by up to 9.5%. So the 0.98 rule reads the median across
   benchmarks, and a result near the budget, or a single family over it, is
-  repeated before it counts. The job's header has the runs.
+  repeated before it counts. The job's header has the runs. The
+  `WithReplica` rows are mostly the log's write syscalls (`EvalAndResponse`
+  is about 4% of that benchmark's CPU), and a placement-only control moved
+  `WithReplica/SADD` by 4.5% on EPYC 7763 (#204), so a reading over 1.04
+  there needs a repeat and a control before it counts.
 - **Phase 4:** byte-identical reply and transcript goldens.
 - **Persistence steps:** restart, upgrade and rollback checks.
 - **Phase 5:** two-instance isolation and contention stress tests under
