@@ -4,13 +4,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -21,10 +21,11 @@ import (
 // The connection corpus: what the server answers for the commands it
 // answers itself - AUTH, HELLO, QUIT and CLIENT - and for a command refused
 // before it reaches the engine, on a connection that has not logged in,
-// held to what develop answered at connectionGoldenRevision. It is the
-// server's counterpart of internal/core's command corpus
-// (command_golden_test.go), in the same fixture format (package golden), and
-// the same script captures both.
+// held to what develop answered at the revision its manifest names. It is
+// the server's counterpart of internal/core's command corpus
+// (command_golden_test.go), in the same fixture format (package golden),
+// with the same manifest, in a directory whose name does not change, and the
+// same script captures both.
 //
 // Each case is a session on a connection of its own, to an engine of its own
 // with an empty keyspace, run through the server's own execution of a run of
@@ -32,10 +33,7 @@ import (
 // on one that starts in RESP3, as HELLO 3 would have left it. A HELLO inside
 // the session switches the connection as it would a client's. The engine
 // keeps no log here: what the data commands write is the command corpus's.
-const (
-	connectionGoldenRevision = "67aa4e2"
-	connectionGoldenDir      = "testdata/connection-" + connectionGoldenRevision
-)
+const connectionGoldenDir = "testdata/connection"
 
 // connectionGoldenCase is one session.
 type connectionGoldenCase struct {
@@ -63,13 +61,29 @@ func runConnectionGoldenCase(t *testing.T, cs connectionGoldenCase) golden.Case 
 	return out
 }
 
+// connectionGoldenManifest is the fixture's manifest: for each file, its
+// digest and counts, and the revision and day it was captured
+// (golden.Provenance).
 type connectionGoldenManifest struct {
-	SourceRevision string            `json:"source_revision"`
-	Captured       string            `json:"captured"`
-	Note           string            `json:"note"`
-	Files          map[string]string `json:"files"`
-	Cases          int               `json:"cases"`
-	Commands       int               `json:"commands"`
+	Note  string                                   `json:"note"`
+	Files map[string]connectionGoldenManifestEntry `json:"files"`
+}
+
+type connectionGoldenManifestEntry struct {
+	SHA256   string `json:"sha256"`
+	Cases    int    `json:"cases"`
+	Commands int    `json:"commands"`
+	golden.Provenance
+}
+
+// readConnectionGoldenManifest reads the fixture's manifest.
+func readConnectionGoldenManifest(dir string) (connectionGoldenManifest, error) {
+	var manifest connectionGoldenManifest
+	body, err := os.ReadFile(filepath.Join(dir, "manifest.json"))
+	if err != nil {
+		return manifest, err
+	}
+	return manifest, json.Unmarshal(body, &manifest)
 }
 
 // TestConnectionGoldenCapture writes the fixture when asked to, and is
@@ -82,6 +96,12 @@ func TestConnectionGoldenCapture(t *testing.T) {
 	}
 	dir = filepath.Join(dir, "server")
 	require.NoError(t, os.MkdirAll(dir, 0o755))
+	fresh, err := golden.CaptureProvenance()
+	require.NoError(t, err)
+	held, err := readConnectionGoldenManifest(connectionGoldenDir)
+	if !errors.Is(err, os.ErrNotExist) {
+		require.NoError(t, err, "the fixture's manifest")
+	}
 	var cases []golden.Case
 	commands := 0
 	for _, cs := range connectionGoldenCorpus {
@@ -102,12 +122,12 @@ func TestConnectionGoldenCapture(t *testing.T) {
 	require.NoError(t, golden.Write(&body, cases))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "connection.txt"), []byte(body.String()), 0o644))
 	sum := sha256.Sum256([]byte(body.String()))
+	entry := connectionGoldenManifestEntry{SHA256: hex.EncodeToString(sum[:]), Cases: len(cases), Commands: commands}
+	was := held.Files["connection.txt"]
+	entry.Provenance = golden.Carry(was.Provenance, was.SHA256, entry.SHA256, fresh)
 	manifest := connectionGoldenManifest{
-		SourceRevision: connectionGoldenRevision,
-		Captured:       time.Now().UTC().Format("2006-01-02"),
-		Note:           "The connection commands' RESP2 and RESP3 replies on develop, before phase 4 of the embedding plan; see connection_golden_test.go.",
-		Files:          map[string]string{"connection.txt": hex.EncodeToString(sum[:])},
-		Cases:          len(cases), Commands: commands,
+		Note:  "The connection commands' RESP2 and RESP3 replies, as captured at the revision the entry names; see connection_golden_test.go.",
+		Files: map[string]connectionGoldenManifestEntry{"connection.txt": entry},
 	}
 	encoded, err := json.MarshalIndent(manifest, "", "  ")
 	require.NoError(t, err)
@@ -136,38 +156,37 @@ func explainConnectionGoldenDifference(t *testing.T, want, got golden.Case) {
 	}
 }
 
-// loadConnectionGoldens reads the fixture, checked against its manifest.
+// loadConnectionGoldens reads the fixture, checked against its manifest,
+// with a sound provenance for each file.
 func loadConnectionGoldens(t *testing.T) map[string]golden.Case {
 	t.Helper()
-	var manifest connectionGoldenManifest
-	body, err := os.ReadFile(filepath.Join(connectionGoldenDir, "manifest.json"))
-	require.NoError(t, err)
-	require.NoError(t, json.Unmarshal(body, &manifest))
-	require.Equal(t, connectionGoldenRevision, manifest.SourceRevision, "the fixture's revision")
+	manifest, err := readConnectionGoldenManifest(connectionGoldenDir)
+	require.NoError(t, err, "the fixture's manifest")
 	cases := map[string]golden.Case{}
-	commands := 0
-	for name, want := range manifest.Files {
+	for name, entry := range manifest.Files {
+		require.NoError(t, entry.Check(), "%s: the manifest's provenance", name)
 		body, err := os.ReadFile(filepath.Join(connectionGoldenDir, name))
 		require.NoError(t, err)
 		sum := sha256.Sum256(body)
-		require.Equal(t, want, hex.EncodeToString(sum[:]), "%s: the fixture's bytes", name)
+		require.Equal(t, entry.SHA256, hex.EncodeToString(sum[:]), "%s: the fixture's bytes", name)
 		parsed, err := golden.Parse(strings.NewReader(string(body)))
 		require.NoError(t, err, name)
+		commands := 0
 		for _, c := range parsed {
 			_, dup := cases[c.Name]
 			require.False(t, dup, "%s holds %s twice", name, c.Name)
 			cases[c.Name] = c
 			commands += len(c.Steps)
 		}
+		require.Equal(t, entry.Cases, len(parsed), "%s: the manifest's count of cases", name)
+		require.Equal(t, entry.Commands, commands, "%s: the manifest's count of commands", name)
 	}
-	require.Equal(t, manifest.Cases, len(cases), "the manifest's count of cases")
-	require.Equal(t, manifest.Commands, commands, "the manifest's count of commands")
 	return cases
 }
 
 // TestConnectionGoldenRepliesAreUnchanged: every case answers, on a
 // connection starting in either protocol, what develop answered at the
-// fixture's revision.
+// revision the fixture was captured at.
 func TestConnectionGoldenRepliesAreUnchanged(t *testing.T) {
 	if os.Getenv("KEEL_CAPTURE_COMMAND_GOLDEN") != "" {
 		t.Skip("capturing")

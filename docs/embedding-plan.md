@@ -2011,7 +2011,7 @@ and recaptured at `1f59ae4` (see "When a reply changes" below):
 
 - **The command corpus** (`internal/core/command_golden_test.go`, the cases in
   `command_golden_corpus_test.go`, the fixture in
-  `internal/core/testdata/commands-1f59ae4/`): 65 sessions in 16 families,
+  `internal/core/testdata/commands/`, `commands-1f59ae4/` then): 65 sessions in 16 families,
   1,832 commands, 432 log records. Each session runs on an engine of its own
   with the log open under fsync no, once as a RESP2 connection and once as a
   RESP3 one; the fixture holds both replies beside each command, and the
@@ -2027,7 +2027,7 @@ and recaptured at `1f59ae4` (see "When a reply changes" below):
   (Redis's MISCONF), an exhausted allocation budget, a reply over the ceiling,
   a memory bound's OOM, and dump images restored under both names.
 - **The connection corpus** (`internal/server/connection_golden_test.go`, the
-  fixture in `internal/server/testdata/connection-1f59ae4/`): 8 sessions and
+  fixture in `internal/server/testdata/connection/`, `connection-1f59ae4/` then): 8 sessions and
   154 commands through the server's own run of a connection's commands
   (`executeRun`): AUTH, HELLO, QUIT and CLIENT, the refusals before a
   connection has logged in, and those commands queued inside MULTI; each run
@@ -2049,16 +2049,22 @@ and recaptured at `1f59ae4` (see "When a reply changes" below):
   (`0.0000012673605809254695` against `0.0000012673605796694755`); the
   corpus holds the origin's geohash and not its coordinates.
 - **The generator** (`scripts/capture-command-goldens.py`): refuses to run
-  unless both corpora name one revision and nothing outside tests, fixtures,
-  scripts and docs differs between it and the tree, so that a fixture
-  describes the revision it names though it is captured on a branch that
-  adds tests to it; runs both capture tests through
-  the local validation wrapper; copies the result into the fixture
-  directories; and runs the replay tests once. The capture runs every case
-  three times in each protocol and refuses a case that is not the same from
-  run to run. To recapture after an intended change: set the two revision
-  constants to the new develop revision, run the script, and review the
-  fixture's diff as the change's wire-visible effect.
+  while anything outside tests, fixtures, scripts and docs differs between
+  HEAD and the working tree, so that a fixture describes the revision it
+  names; runs both capture tests through the local validation wrapper, with
+  HEAD as the revision captured; copies the result into the fixture
+  directories, printing which files changed; and runs the replay tests
+  once. The capture runs every case three times in each protocol and
+  refuses a case that is not the same from run to run.
+- **The manifest** (`manifest.json` in each fixture directory): for each
+  file, its digest, its counts and its provenance, the revision it was
+  captured at and the day (`golden.Provenance`), which the replay tests
+  check is a revision's hash and a date. The directories began named for
+  the revision they held (`commands-72ed0cd/` and on), which made every
+  recapture a rename and every two recapturing PRs a conflict; they have
+  kept one name since, and a capture that writes a file with the bytes the
+  fixture held keeps that file's entry as it was, so two PRs that recapture
+  different families merge cleanly.
 - **The gates**, which `go test ./...` runs on every push:
   `TestCommandGoldenRepliesAreUnchanged` and
   `TestConnectionGoldenRepliesAreUnchanged` replay every case and name the
@@ -2079,14 +2085,15 @@ and recaptured at `1f59ae4` (see "When a reply changes" below):
 
 **When a reply changes.** The corpora pin develop's replies, so a change
 that alters one on purpose fails them until it recaptures, and it
-recaptures in the same pull request. It commits the change; then, in a
-commit of tests and fixtures alone, it sets the two revision constants
-(`commandGoldenRevision`, `connectionGoldenRevision`) to that commit, runs
+recaptures in the same pull request. It commits the change; then it runs
 `scripts/capture-command-goldens.py` (which refuses a tree whose source
-differs from the revision the constants name, so the fixture describes the
-change and nothing else), and puts the fixture's diff in its body as the
-change's wire-visible effect, reviewed as such. A rebase makes a new commit
-of the change, so the corpus is recaptured after one. A change that adds a command, a subcommand or an error
+differs from HEAD, so the fixture describes the change and nothing else,
+and records HEAD for each file that changed), commits the fixture in a
+commit of tests and fixtures alone, and puts the fixture's diff in its body
+as the change's wire-visible effect, reviewed as such. After a rebase it
+recaptures only when a fixture file conflicts, because the other change
+recaptured the same family's file; a fixture that merged cleanly is held to
+the merged code by the replay tests. A change that adds a command, a subcommand or an error
 text adds the case that sends it, as the coverage tests require. The first
 was #158 (INFO part c1): it added `RESETSTAT` to `CONFIG HELP`, which a trial
 merge of the corpus onto develop failed on at `server/info-config` step 6,
