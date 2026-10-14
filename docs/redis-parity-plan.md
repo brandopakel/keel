@@ -273,8 +273,11 @@ schedule them.
         acts is the owner's decision; Keel has no encodings for the
         encoding thresholds to tune, for example.
      2. `FLUSHALL`.
-     3. `COMMAND`, with `COUNT`, `DOCS`, `INFO`, `LIST` and `GETKEYS`.
-        Client libraries also call it at connect.
+     3. `COMMAND`, with `COUNT`, `DOCS`, `INFO`, `LIST` and `GETKEYS`,
+        done in S3. It is answered from Redis's own command specs, byte for
+        byte with Redis apart from Redis's text, which `DOCS` leaves out
+        (`docs/info-compatibility.md`). Client libraries also call it at
+        connect.
      4. The remaining `CLIENT` subcommands, `PAUSE` and `UNPAUSE` first.
      5. `MONITOR`, `TIME`, `RESET` and `ROLE`, and `SLOWLOG` from the
         monitoring work.
