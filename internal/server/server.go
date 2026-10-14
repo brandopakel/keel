@@ -800,7 +800,9 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 	e.SetCommandAllocations(&resp.Budget{Limit: maxRetainedClientBytes, ReplyLimit: maxRetainedClassBytes})
 	defer e.SetCommandAllocations(nil)
 	e.SetClientBuffers(func() core.ClientBufferStats {
-		return core.ClientBufferStats{Connected: len(clients), InputBytes: retainedInputBytes, ReplyBytes: retainedReplyBytes, TotalBytes: retainedClientBytes,
+		m := sampleClientMemory(time.Now().Unix())
+		return core.ClientBufferStats{Connected: m.connected, InputBytes: retainedInputBytes, ReplyBytes: retainedReplyBytes, TotalBytes: retainedClientBytes,
+			RecentMaxInput: m.recentInput, RecentMaxReply: m.recentReply, NormalBytes: m.normal, ReplicaBytes: m.replicas,
 			RequestAllocationPeak: requestBudget.peak, RequestAllocationRefusals: requestBudget.refusals.Load(),
 			ClosedSlow: clientsClosedSlow, ClosedUnanswered: clientsClosedUnanswered, ClosedUnread: clientsClosedUnread,
 			RunsUnreplied: runsUnreplied, ConnectionsReceived: connectionsReceived - connectionsReceivedBase,
