@@ -85,7 +85,7 @@ class Specs(unittest.TestCase):
             self.assertIn('{name: "CLIENT|ID", spec: commandSpec{arity: 2, group: "connection", flags: []string{"NOSCRIPT"}, '
                           'acl: []string{"CONNECTION"}, keys: nil}},', text)
             self.assertIn('find: keyFind{kind: "range", lastKey: -1, step: 2, limit: 0}}}}}', text)
-            self.assertIn('var redisCommandSpecTable = [...]namedCommandSpec{', text, 'an array, laid out as data')
+            self.assertIn('var redisCommandSpecTable = []namedCommandSpec{', text, 'a slice, laid out as data')
             self.assertNotIn('map[string]commandSpec', text, 'no map literal, whose initializer is code')
             names = [line.split('"')[1] for line in text.splitlines() if line.startswith('\t{name: ') and 'spec: commandSpec' in line]
             self.assertEqual(names, sorted(names), 'in name order')
