@@ -33,14 +33,19 @@ type commandSpec struct {
 	acl []string
 	// keys are the key specs: where in the arguments the keys are.
 	keys []keySpec
+}
 
-	// What COMMAND INFO and DOCS report besides (commands_introspection.go),
-	// none of it Redis's text: tips are Redis's command tips, in lower case;
-	// since is the version the command appeared in; docFlags are DEPRECATED
-	// and SYSCMD; deprecatedSince the version it was deprecated in; args its
-	// arguments' structure; and getKeys names the function Redis finds its
-	// keys with where its key specs cannot say, which Keel has its own of
-	// (getKeysProcs).
+// commandFacts is what else Redis declares of a command, for COMMAND INFO
+// and DOCS (vocabulary.go), none of it Redis's text: tips are Redis's command
+// tips, in lower case; since is the version the command appeared in;
+// docFlags are DEPRECATED and SYSCMD; deprecatedSince the version it was
+// deprecated in; args its arguments' structure; and getKeys names the
+// function Redis finds its keys with where its key specs cannot say, which
+// Keel has its own of (getKeysProc). They are kept apart from commandSpec,
+// which the command table is built from, in a table the compiler lays out as
+// data (redisCommandFacts).
+type commandFacts struct {
+	name            string
 	tips            []string
 	since           string
 	docFlags        []string

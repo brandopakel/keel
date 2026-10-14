@@ -113,7 +113,9 @@ class Specs(unittest.TestCase):
         self.assertEqual(s['args'][1]['args'][0]['token'], 'NX', 'tokens in upper case, as Redis writes them')
         self.assertEqual(s['args'][2], {'name': 'seconds', 'type': 'integer', 'display': 'seconds', 'key_spec': -1, 'token': '',
                                         'since': '', 'deprecated_since': '7.0.0', 'flags': ['multiple', 'multiple_token'], 'args': []})
-        self.assertIn('getKeys: "setGetKeys"', text)
+        self.assertIn('\t{name: "SET", tips: []string{"nondeterministic_output"}, since: "1.0.0", args: ', text)
+        self.assertIn('getKeys: "setGetKeys"},', text)
+        self.assertIn('"SET": {arity: -3, group: "string", flags: []string{"WRITE"}, acl: []string{"STRING"}, keys: ', text)
         self.assertIn('tips: []string{"nondeterministic_output"}', text)
         self.assertIn('{name: "condition", typ: "oneof", keySpec: -1, since: "2.6.12", flags: []string{"optional"}, args: []commandArg{', text)
         self.assertNotIn('not copied', text)
