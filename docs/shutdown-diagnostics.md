@@ -1,12 +1,22 @@
 # Shutdown grace and large-write diagnostics
 
-Keel defaults to a five-second grace period after SIGTERM/SIGINT. The
+Keel defaults to a ten-second grace period after SIGTERM/SIGINT, Redis's
+`shutdown-timeout` default; it was five seconds until October 2026. The
 `-shutdown-timeout 30s` option allows a deployment to choose a longer positive
 period for server cleanup and the final persistence sync. A second termination
 signal still exits early. Timeout logs include a bounded 1 MiB goroutine dump;
 cleanup and persistence errors remain failures. This changes the permitted wait,
 not the fsync policy, acknowledgment guarantee or filesystem speed. Operating
 system calls blocked in the kernel can delay process exit beyond that period.
+
+The number is Redis's and the meaning is Keel's own, a documented departure.
+Redis's `shutdown-timeout` is how long a shutting-down primary waits for
+lagging replicas to catch up before it goes on with its shutdown, and it
+applies only when there are replicas (`redis.conf`; `config.c:3430` in
+8.10.1). Keel's is the whole grace for its cleanup and the log's final sync,
+after which it exits with a goroutine dump. Ten seconds came from a hosted
+macOS runner on October 14, 2026, where a clean stop in the log-compatibility
+check spent most of five seconds in the final sync (run 38518819057).
 
 ## Observed failure
 

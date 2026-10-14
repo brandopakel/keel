@@ -76,7 +76,7 @@ jobs:
           assert 1 <= repetitions <= 10 and 1 <= seconds <= 30
           shutdown_seconds = int(os.environ['SHUTDOWN_SECONDS'])
           assert 1 <= shutdown_seconds <= 60
-          assert shutdown_seconds != 5, 'matched grace requires an explicit non-default setting supported by both runtimes'
+          assert shutdown_seconds != 10, 'matched grace requires an explicit non-default setting supported by both runtimes'
           cpus = sorted(os.sched_getaffinity(0))
           topology = {}
           for cpu in cpus:

@@ -185,7 +185,7 @@ retried. See [rewrite failures](docs/rewrite-failure.md).
 Keep Keel on a private network. AUTH does not encrypt traffic and grants access to
 all commands, including destructive ones. Use a TLS proxy for untrusted network hops,
 restrict access, mount a persistent writable data directory, and supervise restarts.
-SIGINT/SIGTERM requests shutdown with a five-second backstop; forced termination is
+SIGINT/SIGTERM requests shutdown with a ten-second backstop (`-shutdown-timeout`, Redis's default); forced termination is
 crash recovery, not a clean-shutdown durability guarantee.
 
 For containers, build `docker build -t keel:local .`, then:

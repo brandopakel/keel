@@ -67,7 +67,7 @@ var (
 	passwordEnv        string
 	replicaPasswordEnv string
 	profileDir         string
-	shutdownTimeout    = 5 * time.Second
+	shutdownTimeout    = 10 * time.Second
 )
 
 // parseFlags reads the command line into the values engineOptions maps onto
@@ -75,7 +75,10 @@ var (
 // starts, from main rather than from an init, so that nothing else in the
 // process can observe a setting before the flag that changes it has been read.
 func parseFlags() {
-	flag.DurationVar(&shutdownTimeout, "shutdown-timeout", 5*time.Second,
+	// Ten seconds, Redis's shutdown-timeout default. Redis waits that long for
+	// its replicas to catch up; Keel waits for its cleanup and the log's last
+	// sync, which on a slow disk can take most of five (docs/shutdown-diagnostics.md).
+	flag.DurationVar(&shutdownTimeout, "shutdown-timeout", 10*time.Second,
 		"grace period after SIGTERM/SIGINT for server cleanup and persistence sync; a second signal exits early")
 	flag.StringVar(&profileDir, "profile-dir", "", "diagnostic only: create a fresh private directory for CPU/heap/allocation profiles on shutdown")
 	flag.BoolVar(&replicationFeed, "replication-feed", false, "experimental: enable bounded canonical replication feed")

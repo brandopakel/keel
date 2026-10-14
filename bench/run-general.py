@@ -24,7 +24,10 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from validation_lib import Client, sha256
 
-DEFAULT_SHUTDOWN_SECONDS = 5
+# Keel's -shutdown-timeout default (10 s since October 2026, Redis's), which a
+# run leaves implicit. A run whose baseline predates that change and whose
+# arms must share a grace passes --shutdown-seconds explicitly.
+DEFAULT_SHUTDOWN_SECONDS = 10
 
 def compatible_load_threads(requested, clients):
     # Use the maximum allowed divisor, not gcd(requested, clients): the maximum
