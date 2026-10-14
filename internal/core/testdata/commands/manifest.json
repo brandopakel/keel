@@ -66,12 +66,12 @@
       "captured": "2026-10-14"
     },
     "refusals.txt": {
-      "sha256": "aaf15710c0bdef07917d60090e1eb6598b9ce993b8a6efebc5c2e22c1596fdca",
+      "sha256": "c6ce85fff6f23c9bc08fd41abe71216f302b7863a076cf5e9b6ebe7867aac9c7",
       "cases": 2,
-      "commands": 234,
+      "commands": 235,
       "records": 0,
-      "source_revision": "e38c84e",
-      "captured": "2026-10-14"
+      "source_revision": "a527e26",
+      "captured": "2026-10-15"
     },
     "replication.txt": {
       "sha256": "48ffbf1c1b195c5174f390fde8cd3322e0e61eca78a055f954ebb9354604c40b",
@@ -82,12 +82,12 @@
       "captured": "2026-10-14"
     },
     "server.txt": {
-      "sha256": "f02a42510e36e6b3f02ffa32cdbb7624d62c0aae6be4444af334a5ebbeb71546",
-      "cases": 13,
-      "commands": 255,
+      "sha256": "2043fb2f8c8aa8d00f2166a9ba3a3d66fed2102d2788c8b957c63c74a0fba1bf",
+      "cases": 14,
+      "commands": 257,
       "records": 23,
-      "source_revision": "e38c84e",
-      "captured": "2026-10-14"
+      "source_revision": "a527e26",
+      "captured": "2026-10-15"
     },
     "sets.txt": {
       "sha256": "6391c62bd6c9189a68f838963f95209d6617b79b822ac0ac6dff9ad6f8660f8b",
