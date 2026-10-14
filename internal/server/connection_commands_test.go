@@ -125,6 +125,8 @@ func TestClientHelpAndSubcommandErrors(t *testing.T) {
 	require.Equal(t, "-ERR Unrecognized option 'a'\r\n", runOnce(t, c, sent("CLIENT", "SETINFO", "a\x00b", "v")),
 		"the option is repeated as C prints it, up to a NUL")
 	help := runOnce(t, c, sent("client", "help"))
-	require.Contains(t, help, "*15\r\n+CLIENT <subcommand> [<arg> [value] [opt] ...]. Subcommands are:\r\n+GETNAME\r\n")
+	require.Contains(t, help, "*19\r\n+CLIENT <subcommand> [<arg> [value] [opt] ...]. Subcommands are:\r\n+GETNAME\r\n")
 	require.Contains(t, help, "+HELP\r\n+    Print this help.\r\n")
+	require.Contains(t, help, "+INFO\r\n+    Return information about the current client connection.\r\n+UNPAUSE\r\n"+
+		"+    Stop the current client pause, resuming traffic.\r\n+PAUSE <timeout> [WRITE|ALL]\r\n", "in Redis's order")
 }
