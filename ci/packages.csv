@@ -2082,6 +2082,17 @@ artifact_id,run_id,time,branch,pr,package,result,seconds
 11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,203,internal/resp,ok,0.13
 11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,203,internal/server,ok,1.557
 11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,203,internal/testlock,ok,0.311
+11922783501,38615987034,2026-10-14T18:32:11Z,feat/client-list,,bench/arrival,ok,1.299
+11922783501,38615987034,2026-10-14T18:32:11Z,feat/client-list,,cmd/keel,ok,17.085
+11922783501,38615987034,2026-10-14T18:32:11Z,feat/client-list,,internal/config,ok,0.379
+11922783501,38615987034,2026-10-14T18:32:11Z,feat/client-list,,internal/core,ok,24.871
+11922783501,38615987034,2026-10-14T18:32:11Z,feat/client-list,,internal/core/io_multiplexing,ok,0.045
+11922783501,38615987034,2026-10-14T18:32:11Z,feat/client-list,,internal/data_structure,ok,11.434
+11922783501,38615987034,2026-10-14T18:32:11Z,feat/client-list,,internal/golden,ok,0.01
+11922783501,38615987034,2026-10-14T18:32:11Z,feat/client-list,,internal/procinfo,ok,0.024
+11922783501,38615987034,2026-10-14T18:32:11Z,feat/client-list,,internal/resp,ok,0.085
+11922783501,38615987034,2026-10-14T18:32:11Z,feat/client-list,,internal/server,ok,1.991
+11922783501,38615987034,2026-10-14T18:32:11Z,feat/client-list,,internal/testlock,ok,0.444
 11921539796,38616478095,2026-10-14T18:35:43Z,feat/phase4-list-commands,204,bench/arrival,ok,1.247
 11921539796,38616478095,2026-10-14T18:35:43Z,feat/phase4-list-commands,204,cmd/keel,ok,8.706
 11921539796,38616478095,2026-10-14T18:35:43Z,feat/phase4-list-commands,204,internal/config,ok,0.309

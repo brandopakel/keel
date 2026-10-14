@@ -384,6 +384,7 @@ artifact_id,run_id,time,event,branch,pr,conclusion,exit_code,suite_seconds,peak_
 11924155926,38615386288,2026-10-14T18:27:59Z,pull_request,feat/command,197,success,0,25.4,112680372,88219798,167772160,0,https://github.com/brandopakel/keel/actions/runs/38615386288
 11922411411,38615644359,2026-10-14T18:29:50Z,pull_request,feat/shutdown-timeout-10s,205,success,0,26.1,113544948,87168225,167772160,0,https://github.com/brandopakel/keel/actions/runs/38615644359
 11921663848,38615660934,2026-10-14T18:29:57Z,pull_request,perf/command-specs-data,203,success,0,26.2,113577780,82080271,167772160,0,https://github.com/brandopakel/keel/actions/runs/38615660934
+11922783501,38615987034,2026-10-14T18:32:11Z,pull_request,feat/client-list,,failure,0,31.3,127957666,82460040,167772160,0,https://github.com/brandopakel/keel/actions/runs/38615987034
 11921539796,38616478095,2026-10-14T18:35:43Z,pull_request,feat/phase4-list-commands,204,success,0,19.9,135146548,79125380,167772160,0,https://github.com/brandopakel/keel/actions/runs/38616478095
 11923212713,38616776565,2026-10-14T18:37:51Z,pull_request,tooling/stable-corpus-dirs,206,success,0,25.4,120638409,82360765,167772160,0,https://github.com/brandopakel/keel/actions/runs/38616776565
 11923674427,38617637329,2026-10-14T18:43:57Z,pull_request,feat/server-misc,,failure,0,25.8,113577780,82503770,167772160,0,https://github.com/brandopakel/keel/actions/runs/38617637329
