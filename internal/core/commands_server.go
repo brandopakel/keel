@@ -99,6 +99,8 @@ func evictionPolicyName(policy EvictionPolicy) string {
 // ClientBufferStats describes retained event-loop buffers, not process RSS or
 // kernel socket buffers. The event loop owns both collection and observation.
 type ClientBufferStats struct {
+	// Connected counts the connections that are not replicas, as Redis's
+	// connected_clients leaves its replicas out.
 	Connected, InputBytes, ReplyBytes, TotalBytes int
 	RequestAllocationPeak                         int64
 	RequestAllocationRefusals                     uint64
@@ -120,6 +122,12 @@ type ClientBufferStats struct {
 	NetInputBytes, NetOutputBytes         uint64
 	NetReplInputBytes, NetReplOutputBytes uint64
 	ReadsProcessed, WritesProcessed       uint64
+	// The most one connection has held of requests and of replies over the
+	// last seven seconds, Redis's client_recent_max_input_buffer and
+	// client_recent_max_output_buffer, and what the connections retain,
+	// apart for the replicas' (mem_clients_normal, mem_clients_slaves).
+	RecentMaxInput, RecentMaxReply int
+	NormalBytes, ReplicaBytes      int
 }
 
 // SetClientBuffers installs on e the hook INFO reads the connections of the

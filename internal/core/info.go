@@ -147,6 +147,7 @@ func (e *Engine) clientsInfo(b *strings.Builder) {
 		if s := e.serverInfo; s != nil {
 			fmt.Fprintf(b, "maxclients:%d\r\n", s.MaxClients)
 		}
+		fmt.Fprintf(b, "client_recent_max_input_buffer:%d\r\nclient_recent_max_output_buffer:%d\r\n", stats.RecentMaxInput, stats.RecentMaxReply)
 		// Keel has no blocking commands, client tracking, Pub/Sub or WATCH (the
 		// README's integration contract), so Redis's counts of them are zero.
 		b.WriteString("blocked_clients:0\r\ntracking_clients:0\r\npubsub_clients:0\r\nwatching_clients:0\r\n" +
@@ -182,6 +183,15 @@ func (e *Engine) memoryInfo(b *strings.Builder) {
 	limits := e.space.Limits()
 	fmt.Fprintf(b, "maxmemory:%d\r\nmaxmemory_human:%s\r\nmaxmemory_policy:%s\r\n",
 		limits.MaxMemory, humanBytes(limits.MaxMemory), evictionPolicyName(limits.Eviction))
+	if e.clientBuffers != nil {
+		// What the connections retain, the replicas' apart. Redis's shared
+		// and unshared count the replies that refer to stored values rather
+		// than copy them (networking.c), and are 0 while none does; every
+		// reply here is a copy.
+		stats := e.clientBuffers()
+		fmt.Fprintf(b, "mem_clients_slaves:%d\r\nmem_clients_normal:%d\r\nmem_clients_normal_shared:0\r\nmem_clients_normal_unshared:0\r\n",
+			stats.ReplicaBytes, stats.NormalBytes)
+	}
 	// Keel defragments nothing and frees nothing lazily.
 	b.WriteString("active_defrag_running:0\r\nlazyfree_pending_objects:0\r\nlazyfreed_objects:0\r\n\r\n")
 }

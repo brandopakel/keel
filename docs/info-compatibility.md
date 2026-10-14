@@ -150,14 +150,14 @@ where the plan's phase 6 wants server state.
 
 | Redis field | Keel today | Plan |
 | --- | --- | --- |
-| `connected_clients` | yes | Stays |
+| `connected_clients` | yes, every connection | (i), done. The connections that are not replicas, as Redis's counts `server.clients` less `server.slaves` (server.c). A connection is a replica's once the primary has accepted its pull (`KEEL.REPL.PULL`), as part (d) marks it. |
 | `maxclients` | - | (a) `-maxclients` |
 | `blocked_clients`, `total_blocking_keys`, `total_blocking_keys_on_nokey` | - | (a) `0`: no blocking commands |
 | `pubsub_clients` | - | (a) `0`: no pub/sub |
 | `tracking_clients` | - | (a) `0`: no client tracking |
 | `cluster_connections` | - | (a) `0`: no cluster |
 | `watching_clients`, `total_watched_keys` | - | (a) `0`: no `WATCH` (see the README's integration contract) |
-| `client_recent_max_input_buffer`, `client_recent_max_output_buffer` | - | Left out for now. Redis's are maxima over a recent window; Keel's `retained_*` fields are totals. |
+| `client_recent_max_input_buffer`, `client_recent_max_output_buffer` | - | (i), done. The most one connection held of requests and of replies in the last seven seconds, a replica's too, kept as Redis keeps them: eight slots of a second each, the slot after the current one cleared (`CLIENTS_PEAK_MEM_USAGE_SLOTS`, server.c). Redis samples each client about once a second in its cron; Keel samples every connection when the engine takes its rate sample, ten times a second, and when `INFO` runs, so the command path gains nothing. A connection's size is what the event loop accounts it as retaining (`retained_*`): its request buffer and parsed requests, and its reply buffer. Neither server sees a request read, run and released between two samples. |
 | `clients_in_timeout_table`, `active_clients` | - | Left out: Redis bookkeeping with no Keel counterpart |
 
 Keel's `command_allocation_*` lines are written after the Clients section's
@@ -175,7 +175,9 @@ blank line today, so they fall outside any section. (a) moves them inside.
 | `mem_allocator` | - | Left out: Go's allocator is none of the allocators Redis names (jemalloc, tcmalloc, libc) |
 | `mem_fragmentation_ratio`, `mem_fragmentation_bytes`, `used_memory_dataset*`, `used_memory_overhead`, `used_memory_startup`, `rss_overhead_*`, `allocator_*` | - | Left out (rules 3 and 4) |
 | `used_memory_lua*`, `used_memory_vm_*`, `used_memory_scripts*`, `used_memory_functions`, `number_of_cached_scripts`, `number_of_functions`, `number_of_libraries`, `used_memory_hash_templates` | - | Left out: no scripting, functions or hash templates |
-| `mem_clients_*`, `mem_aof_buffer`, `mem_replication_backlog`, `mem_total_replication_buffers`, `mem_cluster_*`, `mem_not_counted_for_evict`, `mem_overhead_db_hashtable_rehashing` | - | Left out for now. Each needs an accounting Keel does not keep in Redis's terms. |
+| `mem_clients_slaves`, `mem_clients_normal` | - | (i), done. What the replicas' connections and the others retain, the `retained_client_bytes` split between them. **Differs in what it counts:** Redis adds each client's own structures (about 1 KiB each, idle); Keel counts the buffers its event loop accounts, so an idle connection counts what it still holds, often nothing. |
+| `mem_clients_normal_shared`, `mem_clients_normal_unshared` | - | (i) `0`. Redis counts the replies that refer to stored values rather than copy them, and is at 0 while none does (networking.c); every Keel reply is a copy. |
+| `mem_aof_buffer`, `mem_replication_backlog`, `mem_total_replication_buffers`, `mem_replica_full_sync_buffer`, `mem_cluster_*`, `mem_not_counted_for_evict`, `mem_overhead_db_hashtable_rehashing` | - | Left out for now. Each needs an accounting Keel does not keep in Redis's terms. |
 | `active_defrag_running`, `lazyfree_pending_objects`, `lazyfreed_objects` | - | (a) `0`: Keel defragments nothing and frees nothing lazily |
 
 ## Persistence
@@ -436,3 +438,11 @@ Live telemetry run after each merge confirms them.
   200 from Redis 8.10.2. Given the same commands, each on a connection of its
   own, Keel's six are the same numbers as Redis's: 3,972 bytes in, 777 out,
   210 reads, 105 writes.
+- **(i):** `redis_client_recent_max_input_buffer_bytes`,
+  `redis_client_recent_max_output_buffer_bytes`, `redis_mem_clients_normal` and
+  `redis_mem_clients_slaves`, and `redis_connected_clients` without the
+  replicas. Locally, a Keel primary with a live replica attached and one
+  client asking reported `connected_clients:2` before (i) and `1` after, as
+  Redis would. With an idle client beside the one asking, both servers
+  report 2; `redis_mem_clients_normal` was 2304 from Redis and 95 from Keel,
+  for the reason above.

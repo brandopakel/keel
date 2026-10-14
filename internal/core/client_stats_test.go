@@ -19,9 +19,11 @@ func TestINFOClientBuffersHasExplicitScopeAndStableValues(t *testing.T) {
 	e.SetClientBuffers(func() ClientBufferStats {
 		return ClientBufferStats{Connected: 3, InputBytes: 10, ReplyBytes: 20, TotalBytes: 30,
 			RequestAllocationPeak: 40, RequestAllocationRefusals: 5, ClosedSlow: 6, ClosedUnanswered: 7,
-			ClosedUnread: 8, RunsUnreplied: 9, ConnectionsReceived: 11, ConnectionsRejected: 12}
+			ClosedUnread: 8, RunsUnreplied: 9, ConnectionsReceived: 11, ConnectionsRejected: 12,
+			RecentMaxInput: 13, RecentMaxReply: 14, NormalBytes: 15, ReplicaBytes: 16}
 	})
 	assert.Contains(t, string(e.cmdINFO([]string{"clients"})), "# Clients\r\nconnected_clients:3\r\ncluster_connections:0\r\n"+
+		"client_recent_max_input_buffer:13\r\nclient_recent_max_output_buffer:14\r\n"+
 		"blocked_clients:0\r\ntracking_clients:0\r\npubsub_clients:0\r\nwatching_clients:0\r\n"+
 		"total_watched_keys:0\r\ntotal_blocking_keys:0\r\ntotal_blocking_keys_on_nokey:0\r\n"+
 		"retained_input_bytes:10\r\nretained_reply_bytes:20\r\nretained_client_bytes:30\r\n"+
@@ -33,6 +35,10 @@ func TestINFOClientBuffersHasExplicitScopeAndStableValues(t *testing.T) {
 		"instantaneous_input_kbps:0.00\r\ninstantaneous_output_kbps:0.00\r\ninstantaneous_input_repl_kbps:0.00\r\ninstantaneous_output_repl_kbps:0.00\r\n"+
 		"rejected_connections:12\r\nexpired_keys:0\r\nevicted_keys:0\r\n")
 	assert.NotContains(t, string(e.cmdINFO([]string{"memory"})), "connected_clients")
+	assert.Contains(t, string(e.cmdINFO([]string{"memory"})), "maxmemory_policy:allkeys-lru\r\n"+
+		"mem_clients_slaves:16\r\nmem_clients_normal:15\r\nmem_clients_normal_shared:0\r\nmem_clients_normal_unshared:0\r\n"+
+		"active_defrag_running:0\r\n")
+	assert.NotContains(t, string(other.cmdINFO([]string{"memory"})), "mem_clients", "an engine with no transport has no clients")
 	assert.NotContains(t, string(other.cmdINFO([]string{"clients"})), "connected_clients", "the hook is e's alone")
 	assert.NotContains(t, string(other.cmdINFO([]string{"stats"})), "total_connections_received")
 	e.SetClientBuffers(nil)
