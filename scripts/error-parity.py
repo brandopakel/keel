@@ -211,6 +211,7 @@ KNOWN = {
     'COMMAND INFO config': "Keel has some of CONFIG's subcommands, and Redis lists its own in no fixed order",
     'COMMAND INFO memory': "Keel has some of MEMORY's subcommands, and Redis lists its own in no fixed order",
     'COMMAND INFO command': "Redis lists COMMAND's subcommands in no fixed order",
+    'COMMAND INFO latency': "Redis lists LATENCY's subcommands in no fixed order",
     'watch k': 'WATCH is not implemented and stays an unknown command, so an optimistic-locking API fails '
                'loudly instead of quietly not watching (docs/transactions.md); before AUTH that answers '
                'unknown command rather than NOAUTH, as Redis answers for any command it does not have',
@@ -389,7 +390,9 @@ COMMAND_CASES = [
 KEEL_SUBCOMMANDS = ['client|id', 'client|setname', 'client|getname', 'client|setinfo', 'client|info', 'client|help',
                     'memory|stats', 'memory|usage', 'memory|help', 'config|get', 'config|set', 'config|resetstat',
                     'config|rewrite', 'config|help', 'command|count', 'command|docs', 'command|getkeys',
-                    'command|getkeysandflags', 'command|help', 'command|info', 'command|list']
+                    'command|getkeysandflags', 'command|help', 'command|info', 'command|list', 'latency|doctor',
+                    'latency|graph', 'latency|help', 'latency|histogram', 'latency|history', 'latency|latest',
+                    'latency|reset']
 
 # Commands whose arity Redis does not hold, worded as it words every other.
 KEEL_ONLY_ARITY = {'MORRIS.INITBYDIM': 4, 'MORRIS.INITBYPROB': 4, 'MORRIS.INCRBY': -4, 'MORRIS.QUERY': -3,
