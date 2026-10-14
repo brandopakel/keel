@@ -138,7 +138,7 @@ func (c *client) waitsForPause(cmd *core.Command) bool {
 	if core.CommandError(cmd) != nil {
 		return false
 	}
-	if c.password != "" && !c.authenticated && cmd.Cmd != "AUTH" && cmd.Cmd != "HELLO" && cmd.Cmd != "QUIT" {
+	if !c.authenticated && c.requiredPassword() != "" && cmd.Cmd != "AUTH" && cmd.Cmd != "HELLO" && cmd.Cmd != "QUIT" {
 		return false
 	}
 	if pause.all {
