@@ -177,8 +177,12 @@ class Servers:
         # process against maxmemory, so a byte is over it from the start, and
         # Keel its keyspace, which each case's setup puts over it.
         self.start_keel('keel-full', '-maxmemory', '1', '-evict', 'noeviction')
+        # The same under volatile-lru, with no key that carries a TTL to evict:
+        # Redis's performEvictions fails, as under noeviction (evict.c).
+        self.start_keel('keel-volatile', '-maxmemory', '1', '-evict', 'volatile-lru')
         reference = self.start_redis('redis-primary')
         self.start_redis('redis-full', 'maxmemory 1', 'maxmemory-policy noeviction')
+        self.start_redis('redis-volatile', 'maxmemory 1', 'maxmemory-policy volatile-lru')
         self.start_redis('redis-nopass', password=False)
         self.start_redis('redis-replica', f'replicaof 127.0.0.1 {reference}', f'masterauth {PASSWORD}')
         # A replica answers reads once it has its primary's state; wait for both.
@@ -609,6 +613,14 @@ def build_cases(redis_arities, modules):
         cases.append(case('over maxmemory', [command], server='full', setup=FULL_SETUP))
     for commands in OOM_ANSWERED:
         cases.append(case('over maxmemory, answered', commands, server='full', setup=FULL_SETUP))
+    # Under a volatile policy with no key that carries a TTL, nothing can be
+    # evicted, so the same commands are refused; a write giving a key a TTL
+    # is refused too, being a write.
+    for command in OOM_REFUSED + [['SET', 'k', 'v', 'EX', '100']]:
+        cases.append(case('over maxmemory, volatile-lru with no TTL', [command], server='volatile', setup=FULL_SETUP))
+    for commands in OOM_ANSWERED:
+        cases.append(case('over maxmemory, volatile-lru with no TTL, answered', commands, server='volatile',
+                          setup=FULL_SETUP))
     return cases
 
 
@@ -641,7 +653,7 @@ def redis_arities(port):
 
 def run_case(servers, side, spec, protocol):
     port = servers.ports[side, f'{side}-{spec["server"]}']
-    if spec['server'] in ('primary', 'full'):
+    if spec['server'] in ('primary', 'full', 'volatile'):
         admin = Session(port, auth=True, protocol=2)
         try:
             assert admin.call('FLUSHDB') == b'+OK\r\n'

@@ -161,6 +161,11 @@ func TestConfigSetChangesKeelsSettingsAtOnce(t *testing.T) {
 	assert.Equal(t, 7, e.Limits().LFULogFactor)
 }
 
+// keelPolicies is how CONFIG SET refuses a policy of Redis's that Keel does
+// not have (volatile-lrm, allkeys-lrm): Redis's words, naming Keel's.
+const keelPolicies = "argument(s) must be one of the following: volatile-lru, volatile-lfu, volatile-random, volatile-ttl, " +
+	"allkeys-lru, allkeys-lfu, allkeys-random, noeviction"
+
 // TestConfigSetReadsValuesAsRedisDoes: each type's errors, word for word, and
 // the directive named as Redis spells it, its alias if that is what was set.
 func TestConfigSetReadsValuesAsRedisDoes(t *testing.T) {
@@ -177,8 +182,8 @@ func TestConfigSetReadsValuesAsRedisDoes(t *testing.T) {
 		"hash-max-listpack-entries -1":   configError("hash-max-listpack-entries", "argument must be between 0 and 9223372036854775807 inclusive"),
 		"set-max-intset-entries 1e3":     configError("set-max-intset-entries", "argument couldn't be parsed into an integer"),
 		"maxmemory-policy lru":           configError("maxmemory-policy", "argument(s) must be one of the following: volatile-lru, volatile-lfu, volatile-random, volatile-ttl, volatile-lrm, allkeys-lru, allkeys-lfu, allkeys-random, allkeys-lrm, noeviction"),
-		"maxmemory-policy noeviction":    configError("maxmemory-policy", "argument(s) must be one of the following: allkeys-lru, allkeys-lfu, allkeys-random"),
-		"maxmemory-policy volatile-ttl":  configError("maxmemory-policy", "argument(s) must be one of the following: allkeys-lru, allkeys-lfu, allkeys-random"),
+		"maxmemory-policy volatile-lrm":  configError("maxmemory-policy", keelPolicies),
+		"maxmemory-policy allkeys-lrm":   configError("maxmemory-policy", keelPolicies),
 		"appendfsync sometimes":          configError("appendfsync", "argument(s) must be one of the following: everysec, always, no"),
 		"maxmemory-clients 200%":         configError("maxmemory-clients", "percentage argument must be less or equal to 100"),
 		"maxmemory-clients x%":           configError("maxmemory-clients", "argument must be a memory or percent value"),

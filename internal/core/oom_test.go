@@ -1,6 +1,7 @@
 package core
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -127,3 +128,33 @@ func TestEvictionPoliciesHaveRedisNames(t *testing.T) {
 		assert.False(t, ok, name)
 	}
 }
+
+// TestConfigSetChoosesEveryPolicyLive: CONFIG SET maxmemory-policy takes each
+// of Keel's policies by Redis's name and holds the engine to it at once, as
+// CONFIG GET reports; volatile-lrm and allkeys-lrm, which Keel does not have
+// yet, are refused in Redis's words, naming the ones it has.
+func TestConfigSetChoosesEveryPolicyLive(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{MaxMemory: 1})
+	s := newSession(t, e)
+	for _, name := range []string{"volatile-lru", "volatile-lfu", "volatile-random", "volatile-ttl", "allkeys-lfu",
+		"allkeys-random", "noeviction", "allkeys-lru"} {
+		require.Equal(t, "+OK\r\n", s.send("CONFIG", "SET", "maxmemory-policy", name), name)
+		policy, _ := EvictionPolicyNamed(name)
+		assert.Equal(t, policy, e.space.EvictionPolicy(), name)
+		assert.Contains(t, s.send("CONFIG", "GET", "maxmemory-policy"), "$"+itoa(len(name))+"\r\n"+name+"\r\n", name)
+	}
+	assert.Equal(t, "-ERR CONFIG SET failed (possibly related to argument 'maxmemory-policy') - argument(s) must be one of "+
+		"the following: volatile-lru, volatile-lfu, volatile-random, volatile-ttl, allkeys-lru, allkeys-lfu, allkeys-random, "+
+		"noeviction\r\n", s.send("CONFIG", "SET", "maxmemory-policy", "volatile-lrm"))
+
+	// Live: a keyspace over its bound refuses writes the moment the policy is
+	// noeviction, and evicts for them again under allkeys-lru.
+	require.Equal(t, "+OK\r\n", s.send("CONFIG", "SET", "maxmemory-policy", "noeviction"))
+	require.Equal(t, "+OK\r\n", s.send("SET", "a", "v"))
+	assert.Equal(t, oomReply, s.send("SET", "b", "v"))
+	require.Equal(t, "+OK\r\n", s.send("CONFIG", "SET", "maxmemory-policy", "allkeys-lru"))
+	assert.Equal(t, "+OK\r\n", s.send("SET", "b", "v"))
+}
+
+func itoa(n int) string { return strconv.Itoa(n) }

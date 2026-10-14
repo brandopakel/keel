@@ -98,11 +98,12 @@ func keelConfigTable() map[string]keelConfig {
 		"maxmemory-policy": {handling: configLive,
 			get: func(e *Engine) string { return evictionPolicyName(e.space.Limits().Eviction) },
 			set: func(e *Engine, v string) string {
-				policy, ok := evictionPolicy(v)
+				policy, ok := EvictionPolicyNamed(v)
 				if !ok {
-					// A policy of Redis's that Keel does not have is refused
-					// in Redis's words, naming the ones Keel has.
-					return "argument(s) must be one of the following: allkeys-lru, allkeys-lfu, allkeys-random"
+					// A policy of Redis's that Keel does not have,
+					// volatile-lrm or allkeys-lrm, is refused in Redis's
+					// words, naming the ones Keel has.
+					return "argument(s) must be one of the following: " + evictionPolicyNames()
 				}
 				return e.setOption(func(o *Options) { o.Eviction = policy })
 			}},
@@ -313,20 +314,6 @@ const (
 // maxQueryBufferBytes is the most of a request not yet whole the transport
 // holds for one connection (internal/server's maxQueryBuffer).
 const maxQueryBufferBytes = 16 * 1024 * 1024
-
-// evictionPolicy is the policy Keel has by Redis's name, or false for one it
-// does not have.
-func evictionPolicy(name string) (EvictionPolicy, bool) {
-	switch name {
-	case "allkeys-lru":
-		return EvictLRU, true
-	case "allkeys-lfu":
-		return EvictLFU, true
-	case "allkeys-random":
-		return EvictRandom, true
-	}
-	return 0, false
-}
 
 // setOption changes one of e's options as CONFIG SET does, and returns the
 // error text if the engine refuses the result (which a value Redis's checks

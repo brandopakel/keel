@@ -161,6 +161,16 @@ var evictionPolicies = [...]struct {
 	{"allkeys-random", EvictRandom}, {"noeviction", EvictNone},
 }
 
+// evictionPolicyNames are Keel's policies' names, in Redis's order, as
+// Redis lists an enum's values when it refuses one.
+func evictionPolicyNames() string {
+	names := make([]string, len(evictionPolicies))
+	for i, p := range evictionPolicies {
+		names[i] = p.name
+	}
+	return strings.Join(names, ", ")
+}
+
 // EvictionPolicyNamed is the policy Redis names name, as maxmemory-policy
 // takes it, and false for a name Keel has no policy for. Case does not
 // matter, as it does not to Redis.
