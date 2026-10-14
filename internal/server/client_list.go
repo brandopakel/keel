@@ -77,6 +77,11 @@ type connState struct {
 	// CLIENT NO-EVICT and NO-TOUCH; and killed by CLIENT KILL.
 	replyOff, replySkip, replySkipNext bool
 	noEvict, noTouch, killed           bool
+	// monitor is set in MONITOR mode, and feed holds the lines queued for
+	// the connection that the loop has not yet put after its replies
+	// (monitor.go).
+	monitor bool
+	feed    []byte
 }
 
 // clientStructBytes is what a connection's own record takes, for tot-mem.
@@ -159,7 +164,11 @@ func (c *client) noteCommand(cmd *core.Command) {
 // is the connection whose command asks.
 func (c *client) infoLine(b []byte, now time.Time, running *client) []byte {
 	flags := make([]byte, 0, 8)
-	if c.replica {
+	switch {
+	case c.conn.monitor:
+		// Redis marks a monitor a replica too, and writes it O.
+		flags = append(flags, 'O')
+	case c.replica:
 		flags = append(flags, 'S')
 	}
 	tx := c.tx
@@ -530,10 +539,19 @@ func (c *client) run(cmd *core.Command, w *captureWriter) (silenced bool) {
 	}
 	c.conn.capture = nil
 	c.conn.commands += c.engine.CommandsProcessed() - ran
+	silenced = false
 	if c.conn.replyOff || c.conn.replySkip || c.conn.replySkipNext {
-		return c.gateReply(w)
+		silenced = c.gateReply(w)
 	}
-	return false
+	if len(w.p) == 0 && cmd.Cmd == "MONITOR" {
+		// MONITOR from a connection already monitoring is answered with
+		// nothing, as Redis answers it.
+		silenced = true
+	}
+	if len(monitors) > 0 && c.engine.CommandsProcessed() > ran {
+		feedMonitors(c, cmd)
+	}
+	return silenced
 }
 
 // clientUnblock is CLIENT UNBLOCK id [TIMEOUT|ERROR]. Keel has no blocking
