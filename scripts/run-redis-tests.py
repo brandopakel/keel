@@ -119,8 +119,11 @@ IGNORE = re.compile(r'^\[(ignore|skip)\]: (.*)$')
 EXCEPTION = re.compile(r'^\[exception\]: (.*)$')
 TIMEOUT = re.compile(r'^\[TIMEOUT\]')
 DONE = re.compile(r'^\[\d+/\d+ done\]: (\S+) \((\d+) seconds\)$')
-# An exception raised by the harness applying a unit's configuration.
-CONFIG_SET = re.compile(r'CONFIG SET|config set', re.I)
+# A server's refusal of a CONFIG SET, in Redis's two words for it
+# (configSetCommand): a name it does not know, or one it will not set. Only
+# the refusal itself counts: a stack trace quotes the command that read an
+# error, so "config set" in the trace says nothing about what the error was.
+CONFIG_SET = re.compile(r'Unknown option or number of arguments for CONFIG SET|CONFIG SET failed \(possibly related to argument')
 
 
 def parse(text):

@@ -149,6 +149,21 @@ class Outcomes(unittest.TestCase):
         self.assertEqual(rt.outcome('ok', parsed, True), 'unconfigurable')
         other = rt.parse(BLOCK_ERROR.replace("CONFIG SET - 'hash-max-listpack-value'", "command 'subscribe'"))
         self.assertEqual(rt.outcome('ok', other, True), 'exception')
+        # An error that is not a CONFIG SET refusal is an exception, though
+        # the stack trace quotes the config set that read it (type/zset,
+        # run 38505351057, after a readraw test left the reply stream out of
+        # step).
+        desync = rt.parse("[\x1b[0;31merr\x1b[0m]: ol, ' ' as reply type byte\n"
+                          "Bad protocol, ' ' as reply type byte\n"
+                          '    while executing\n'
+                          '"[srv $level "client"] {*}$args"\n'
+                          '    invoked from within\n'
+                          '"r config set zset-max-ziplist-value $original_max_value"\n'
+                          '[1/1 \x1b[0;33mdone\x1b[0m]: unit/type/zset (9 seconds)\n')
+        self.assertEqual(rt.outcome('ok', desync, True), 'exception')
+        immutable = rt.parse("[\x1b[0;31mexception\x1b[0m]: Executing test client: ERR CONFIG SET failed "
+                             "(possibly related to argument 'appendonly') - can't set immutable config.\n")
+        self.assertEqual(rt.outcome('ok', immutable, True), 'unconfigurable')
         self.assertEqual(rt.outcome('ok', rt.parse(HARNESS), True), 'ok', 'failed tests alone are ok')
         self.assertEqual(rt.outcome('ok', rt.parse(HARNESS), False), 'crash')
         self.assertEqual(rt.outcome('timeout', rt.parse(HARNESS), True), 'timeout')
