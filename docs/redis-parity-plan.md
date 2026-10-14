@@ -275,7 +275,8 @@ schedule them.
      2. `FLUSHALL`.
      3. `COMMAND`, with `COUNT`, `DOCS`, `INFO`, `LIST` and `GETKEYS`.
         Client libraries also call it at connect.
-     4. The remaining `CLIENT` subcommands, `PAUSE` and `UNPAUSE` first.
+     4. The remaining `CLIENT` subcommands, `PAUSE` and `UNPAUSE` first:
+        those two are done in S4a.
      5. `MONITOR`, `TIME`, `RESET` and `ROLE`, and `SLOWLOG` from the
         monitoring work.
 
