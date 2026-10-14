@@ -7,12 +7,15 @@ package core
 // group, its command flags, its ACL categories and its key specs. Keel's
 // own commands and RedisBloom's are not here; see command_specs_keel.go.
 //
-// It is an array rather than a map literal so that the compiler lays it out
+// It is a slice rather than a map literal so that the compiler lays it out
 // as data: a map literal of these specs is built by code in the package's
 // init, which the linker places ahead of the command handlers, so every
 // command added to it moved them all. redisCommandSpecs is built from it
-// by a loop whose size does not depend on the table's.
-var redisCommandSpecTable = [...]namedCommandSpec{
+// by a loop whose size does not depend on the table's. A slice rather
+// than an array, because the loop reads a slice's length where an
+// array's is a constant in its instructions, which take more room once
+// it passes 127.
+var redisCommandSpecTable = []namedCommandSpec{
 	{name: "APPEND", spec: commandSpec{arity: 3, group: "string", flags: []string{"WRITE", "DENYOOM", "FAST"}, acl: []string{"STRING"}, keys: []keySpec{{flags: []string{"RW", "INSERT"}, begin: keyBegin{kind: "index", pos: 1, keyword: "", startFrom: 0}, find: keyFind{kind: "range", lastKey: 0, step: 1, limit: 0}}}}},
 	{name: "AUTH", spec: commandSpec{arity: -2, group: "connection", flags: []string{"NOSCRIPT", "LOADING", "STALE", "FAST", "NO_AUTH", "SENTINEL", "ALLOW_BUSY"}, acl: []string{"CONNECTION"}, keys: nil}},
 	{name: "BGREWRITEAOF", spec: commandSpec{arity: 1, group: "server", flags: []string{"NO_ASYNC_LOADING", "ADMIN", "NOSCRIPT"}, acl: nil, keys: nil}},
