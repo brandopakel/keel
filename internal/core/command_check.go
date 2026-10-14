@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -142,6 +143,9 @@ type commandEntry struct {
 	// reads is whether the type check counts the keys it looks up as
 	// keyspace hits and misses: keyspaceReads.
 	reads bool
+	// stat is the command's place in Engine.cmdStats and statNames; a
+	// container's subcommands follow it, in the order of its table.
+	stat uint16
 }
 
 // counted reports whether a command of entry's, given args arguments, needs
@@ -159,10 +163,24 @@ func init() { indexCommands() }
 
 func indexCommands() {
 	commands = make(map[string]commandEntry, len(commandArity))
-	for name, arity := range commandArity {
+	statNames = nil
+	// In name order, so that each command has the same place every run.
+	names := make([]string, 0, len(commandArity))
+	for name := range commandArity {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		arity := commandArity[name]
+		stat := uint16(len(statNames))
+		statNames = append(statNames, strings.ToLower(name))
+		for _, sub := range subcommandsOf(name) {
+			statNames = append(statNames, strings.ToLower(name)+"|"+sub.name)
+		}
 		commands[name] = commandEntry{run: commandTable[name], arity: arity,
 			typed: typedKeyspace(name), keys: keyRuleOf(name),
-			container: subcommandsOf(name) != nil, namesItself: name == "GEOSEARCH", reads: keyspaceReads[name]}
+			container: subcommandsOf(name) != nil, namesItself: name == "GEOSEARCH", reads: keyspaceReads[name],
+			stat: stat}
 	}
 }
 

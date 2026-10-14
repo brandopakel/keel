@@ -82,5 +82,10 @@ func TestInfoTakesSectionsAsRedisDoes(t *testing.T) {
 	require.Contains(t, both, "# Keyspace\r\n")
 	require.NotContains(t, both, "# Memory\r\n")
 	require.Equal(t, "", runOn(t, e, "INFO", "nosuch", "other"))
-	require.Equal(t, infoSteady(runOn(t, e, "INFO").(string)), infoSteady(runOn(t, e, "INFO", "everything").(string)))
+	require.Equal(t, infoSteady(runOn(t, e, "INFO").(string)), infoSteady(runOn(t, e, "INFO", "default").(string)))
+	// all and everything add Commandstats, which Redis leaves out of the default.
+	require.NotContains(t, runOn(t, e, "INFO").(string), "# Commandstats\r\n")
+	for _, every := range []string{"all", "everything", "commandstats"} {
+		require.Contains(t, runOn(t, e, "INFO", every).(string), "# Commandstats\r\n", every)
+	}
 }
