@@ -26,15 +26,13 @@ var denyOOMCommands = func() map[string]bool {
 // oomRefuses reports whether cmd is refused for memory: a DENYOOM command,
 // while the keyspace is over its bound and eviction cannot bring it back, as
 // Redis's processCommand refuses it when performEvictions fails (server.c,
-// evict.c). An allkeys policy always can, since every write evicts until the
-// keyspace is back inside its bounds; so this costs those policies one test of
-// the policy. Under noeviction nothing is evicted, and under a volatile
-// policy only keys that carry a TTL are, so a keyspace may stay over. A
-// replica ignores maxmemory, as Redis's does by default
+// evict.c). Under noeviction nothing is evicted, and under a volatile policy
+// only keys that carry a TTL are, so a keyspace may stay over. An allkeys
+// policy always brings it back, since every write evicts until the keyspace
+// is inside its bounds; its caller tests the policy first
+// (EvictionPolicy.MayStayOver), so those policies pay one test of a bit and no
+// call. A replica ignores maxmemory, as Redis's does by default
 // (replica-ignore-maxmemory), and refuses nothing for it.
 func (e *Engine) oomRefuses(cmd string) bool {
-	if policy := e.space.EvictionPolicy(); policy.Evicts() && !policy.Volatile() {
-		return false
-	}
 	return denyOOMCommands[cmd] && e.replicaOf() == "" && e.space.OverLimit()
 }

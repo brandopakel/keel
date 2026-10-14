@@ -125,6 +125,11 @@ func (p EvictionPolicy) Volatile() bool { return p&evictVolatile != 0 }
 // Evicts reports whether p evicts anything at all.
 func (p EvictionPolicy) Evicts() bool { return p&evictNothing == 0 }
 
+// MayStayOver reports whether a space under p may stay over its bound after
+// evicting what it can: under noeviction, or a volatile policy once no key
+// carries a TTL. An allkeys policy always brings it back inside.
+func (p EvictionPolicy) MayStayOver() bool { return p&(evictVolatile|evictNothing) != 0 }
+
 // Limits are the bounds a space's stores are held to, and the parameters of
 // the policy that keeps them inside those bounds. Each is taken as it is
 // written: zero means none where a field says so. The engine fills them from

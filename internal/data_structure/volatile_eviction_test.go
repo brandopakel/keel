@@ -126,3 +126,14 @@ func TestChangingThePolicyDropsThePool(t *testing.T) {
 	d.Put("one-more", d.NewObj("v"))
 	assert.Equal(t, before+1, d.Len(), "no key carries a TTL, so volatile-lru takes none")
 }
+
+// TestMayStayOverIsTheVolatilePoliciesAndNoeviction: only a policy that may
+// find nothing to evict can leave a space over its bound, which is what the
+// engine tests before it looks at memory at all.
+func TestMayStayOverIsTheVolatilePoliciesAndNoeviction(t *testing.T) {
+	t.Parallel()
+	for policy, may := range map[EvictionPolicy]bool{EvictLRU: false, EvictLFU: false, EvictRandom: false,
+		EvictVolatileLRU: true, EvictVolatileLFU: true, EvictVolatileRandom: true, EvictVolatileTTL: true, EvictNone: true} {
+		assert.Equal(t, may, policy.MayStayOver(), "policy %d", policy)
+	}
+}

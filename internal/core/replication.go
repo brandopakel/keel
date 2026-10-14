@@ -350,7 +350,7 @@ func (e *Engine) replicaCommandError(cmd string) error {
 	}
 	// A command that would grow a keyspace over its bound is refused first,
 	// as Redis's processCommand checks maxmemory before the disk.
-	if e.oomRefuses(cmd) {
+	if e.space.EvictionPolicy().MayStayOver() && e.oomRefuses(cmd) {
 		return errOOM
 	}
 	// While a failed write or sync of the log is retried, write commands and
