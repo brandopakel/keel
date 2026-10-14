@@ -26,7 +26,9 @@ type replicaUpdate struct {
 // the event loop, and the cursor advances only after successful application.
 // It follows the primary e's role names, from where e's checkpoint resumes,
 // and sends e's term, which it reads atomically from its own goroutine.
-func startReplicaTransport(e *core.Engine, password string, useTLS bool) (<-chan replicaUpdate, func()) {
+//
+// It records its link to the primary in link, which INFO reports.
+func startReplicaTransport(e *core.Engine, password string, useTLS bool, link *replicaLink) (<-chan replicaUpdate, func()) {
 	updates := make(chan replicaUpdate, 1)
 	// The primary, and the protocol it is followed in, are the engine's role.
 	role := e.Configuration().WithDefaults()
@@ -46,6 +48,7 @@ func startReplicaTransport(e *core.Engine, password string, useTLS bool) (<-chan
 		var lastErrorLog time.Time
 		for ctx.Err() == nil {
 			dialer := net.Dialer{Timeout: 2 * time.Second}
+			link.dialing()
 			conn, err := dialer.DialContext(ctx, "tcp", address)
 			if err == nil {
 				disconnected := make(chan struct{})
@@ -110,6 +113,7 @@ func startReplicaTransport(e *core.Engine, password string, useTLS bool) (<-chan
 					if err != nil {
 						break
 					}
+					link.pulled(time.Now())
 					if protocol == 2 && frame.Full {
 						if frame.Pending {
 							epoch, offset, snapshotID, snapshotOffset = "", 0, "", 0
@@ -131,6 +135,7 @@ func startReplicaTransport(e *core.Engine, password string, useTLS bool) (<-chan
 				}
 				conn.Close()
 				close(disconnected)
+				link.lost(time.Now())
 			}
 			if err != nil && time.Since(lastErrorLog) >= 30*time.Second {
 				log.Printf("replication protocol %d: %v", protocol, err)

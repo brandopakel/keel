@@ -254,6 +254,7 @@ func (e *Engine) statsInfo(b *strings.Builder) {
 			t.netIn.kbps(), t.netOut.kbps(), t.replIn.kbps(), t.replOut.kbps())
 		fmt.Fprintf(b, "rejected_connections:%d\r\n", stats.ConnectionsRejected)
 	}
+	fmt.Fprintf(b, "sync_full:%d\r\n", e.totals.syncFull)
 	fmt.Fprintf(b, "expired_keys:%d\r\nevicted_keys:%d\r\n", e.ExpiredKeys(), e.space.Evicted())
 	// Keel evicts no clients and has no scripts, Pub/Sub or client tracking,
 	// and it never forks.
@@ -267,35 +268,6 @@ func (e *Engine) statsInfo(b *strings.Builder) {
 	}
 	fmt.Fprintf(b, "slowlog_commands_count:%d\r\nslowlog_commands_time_ms_max:%.2f\r\nslowlog_commands_time_ms_sum:%.2f\r\n\r\n",
 		e.slowlog.count, float64(e.slowlog.usecMax)/1000, float64(e.slowlog.usecSum)/1000)
-}
-
-func (e *Engine) replicationInfo(b *strings.Builder) {
-	role := "primary"
-	if e.replicaOf() != "" {
-		role = "replica"
-	}
-	ready := 0
-	if e.replicaReady {
-		ready = 1
-	}
-	age := int64(-1)
-	if !e.replicaUpdated.IsZero() {
-		age = time.Since(e.replicaUpdated).Milliseconds()
-	}
-	fmt.Fprintf(b, "# Replication\r\nprimary_epoch:%s\r\nreplica_epoch:%s\r\nreplication_pending_keys:%d\r\nreplication_epoch_invalidated:%t\r\n", e.replication.epoch, e.replicaEpoch, len(e.replication.dirty), e.replication.invalidated)
-	offset, history := e.replication.offset, e.replication.bytes
-	if e.replicationProtocol() == 2 {
-		offset, history = e.replicationV2.end, e.replicationV2.bytes
-		fmt.Fprintf(b, "replication_snapshot_bytes:%d\r\nreplica_checkpoint_resumed:%t\r\nreplica_snapshot_received:%d\r\n", e.replicationV2.snapshotBytes, e.replicaV2.resumed, e.replicaV2.snapshotReceived)
-		// What the primary knows about its replicas. Lag is the distance
-		// a promotion would lose right now; age says whether replication
-		// is alive at all. Neither is a quorum signal - see
-		// replication_ack.go for why.
-		ackOffset, ackBehind, ackAge := e.ReplicationAcknowledged()
-		fmt.Fprintf(b, "replication_acked_offset:%d\r\nreplication_lag_bytes:%d\r\nreplication_acked_age_ms:%d\r\n", ackOffset, ackBehind, ackAge)
-	}
-	fmt.Fprintf(b, "failover_term:%d\r\nfailover_held_term:%d\r\nfailover_fenced:%t\r\nwritable:%t\r\n", e.CurrentTerm(), e.failover.held, e.failover.fenced, e.writable())
-	fmt.Fprintf(b, "replication_protocol:%d\r\nrole:%s\r\nreplica_ready:%d\r\nreplica_offset:%d\r\nreplica_last_update_ms:%d\r\nprimary_offset:%d\r\nreplication_history_bytes:%d\r\n\r\n", e.replicationProtocol(), role, ready, e.replicaOffset, age, offset, history)
 }
 
 // cpuInfo reports the processor time the process has used, as Redis does from

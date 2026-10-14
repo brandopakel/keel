@@ -40,6 +40,9 @@ type commandTotals struct {
 	// transport's byte counts as Redis's serverCron samples its own.
 	ops                            instantaneousMetric
 	netIn, netOut, replIn, replOut instantaneousMetric
+	// syncFull is sync_full: the full syncs e has served its replicas, a
+	// protocol 1 full frame or the start of a protocol 2 snapshot.
+	syncFull uint64
 }
 
 const (

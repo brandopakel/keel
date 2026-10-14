@@ -204,17 +204,66 @@ blank line today, so they fall outside any section. (a) moves them inside.
 | `slowlog_commands_count`, `slowlog_commands_time_ms_max`, `slowlog_commands_time_ms_sum` | - | (c3c), done. The commands the slow log has taken since the last `CONFIG RESETSTAT`, and their time, in milliseconds with two decimals |
 | `pubsub_channels`, `pubsub_patterns`, `pubsubshard_channels`, `tracking_total_*`, `evicted_clients`, `evicted_scripts` | - | (a) `0` |
 | `total_forks`, `latest_fork_usec` | - | (a) `0`: Keel never forks |
-| `sync_full`, `sync_partial_ok`, `sync_partial_err` | - | Left out until Keel's replication protocol is mapped onto Redis's terms |
+| `sync_full` | - | (e). The full syncs a primary has served |
+| `sync_partial_ok`, `sync_partial_err` | - | Left out: Redis counts a replica's reconnection that resumes, and a Keel replica pulls again every 100 ms (see Replication) |
 | `expired_subkeys*`, `expired_keys_active`, `expired_stale_perc`, `expired_time_cap_reached_count`, `expire_cycle_cpu_milliseconds`, `total_eviction_exceeded_time`, `current_eviction_exceeded_time` | - | Left out for now. Each is an expiry or eviction internal that needs its own measurement. |
 | `active_defrag_*`, `io_threaded_*`, `eventloop_*`, `avg_pipeline_length*`, `client_*_buffer_limit_disconnections`, `reply_buffer_*`, `unexpected_error_replies`, `dump_payload_sanitizations`, `hash_template*`, `acl_access_denied_*`, `migrate_cached_sockets`, `slave_expires_tracked_keys` | - | Left out (rule 3), or until Keel has the feature |
 
 ## Replication
 
-Keel reports its own replication fields (`role:primary`, `primary_offset`, the
-`replication_*` and `failover_*` lines). Redis reports `role:master` or
-`role:slave`, `connected_slaves`, `master_repl_offset` and `master_replid`.
-Exporters and dashboards key on Redis's `role` values, so this needs a
-decision of its own, and none of (a) to (d) changes it.
+Part (e). Redis's fields come first, in Redis 8.10.1's order
+(`genRedisInfoString`, server.c), and Keel's own lines follow unchanged, as
+extras: `primary_epoch`, `replica_epoch`, the `replication_*`, `failover_*`
+and `replica_*` lines, `writable` and `primary_offset`. Keel's own `role` line
+gives way to Redis's, since exporters and alert rules key on `role:master`
+(redis_exporter's `redis_instance_info{role="master"}`, and the common alerts
+for a missing or a second master). A Keel primary is the `master`, and a Keel
+replica the `slave`, as HELLO already answers.
+
+On a replica:
+
+| Redis field | Keel |
+| --- | --- |
+| `master_host`, `master_port` | The primary `-replicaof` names |
+| `master_link_status` | `up` while the replica's connection to its primary is open and its last pull succeeded; `down` before the first and between reconnections |
+| `master_last_io_seconds_ago` | Seconds since the last successful pull; `-1` with no link, as Redis gives with no master client |
+| `master_sync_in_progress` | `1` from the replica's first pull until its keyspace is a whole prefix of the primary's stream (`replica_ready`), `0` after |
+| `slave_read_repl_offset`, `slave_repl_offset` | `replica_offset`. Keel applies a pull whole, so what it has read and what it has applied are one offset |
+| `replica_full_sync_buffer_size`, `replica_full_sync_buffer_peak` | `0`: Keel applies a full sync as it arrives and keeps no buffer for one |
+| `master_current_sync_attempts`, `master_total_sync_attempts` | Connections to the primary attempted since the link was last up, and in all |
+| `master_link_down_since_seconds` | While down: seconds since the link went down, `-1` if it has never been up |
+| `master_link_up_since_seconds`, `master_client_io_thread` | While up: seconds since it came up, and `0`, the event loop's thread |
+| `total_disconnect_time_sec` | Seconds the link has been down since it was first up, the current outage included |
+| `slave_read_only` | `1`: a Keel replica refuses writes, as Redis's does with `replica-read-only yes` |
+| `slave_priority`, `replica_announced` | Left out: Sentinel's settings, which Keel has no counterpart of. A Keel replica is promoted explicitly (`KEEL.PROMOTE`) |
+| `master_sync_total_bytes` and the other transfer fields | Left out: a full sync's size is not known before it arrives |
+
+On every server:
+
+| Redis field | Keel |
+| --- | --- |
+| `connected_slaves` | The replicas connected now: connections whose pull the engine accepted (part (d)) |
+| `min_slaves_good_slaves` | Never written, as in Redis without `min-replicas-to-write`, which Keel does not have |
+| `slave<n>` | One per connected replica: `ip` and `port` of its connection, `state=online`, `offset` its last pull started from, `lag` the seconds since that pull, `io-thread=0`. A Keel replica announces no listening port, so `port` is its connection's, which also keeps two replicas on one host apart |
+| `master_failover_state` | `no-failover`: Keel has no `FAILOVER`; `KEEL.PROMOTE` and `KEEL.FENCE` act at once |
+| `master_replid` | The stream's identity: a primary's epoch, and a replica's primary's once it has one (`replica_epoch`), as a Redis replica takes its master's ID. Keel's epoch is 32 hex digits, where Redis's ID is 40 |
+| `master_replid2`, `second_repl_offset` | Forty zeros and `-1`, Redis's values with no previous ID: a Keel replica does not continue across a change of epoch |
+| `master_repl_offset` | `primary_offset` on a primary, `replica_offset` on a replica |
+| `repl_backlog_active` | `1` on a primary feeding replicas, which keeps the history a replica catches up from; `0` otherwise |
+| `repl_backlog_size` | The history's bound, 16 MiB |
+| `repl_backlog_first_byte_offset`, `repl_backlog_histlen` | The offset of the history's first entry, and the bytes it holds; `0` and `0` with none |
+
+The Stats section gains `sync_full`, the full syncs a primary has served.
+`sync_partial_ok` and `sync_partial_err` are left out: Redis counts a
+replica's reconnection that resumes, and a Keel replica pulls again every
+100 ms, resuming or not, so no count of Keel's means what Redis's does.
+
+**Departures, documented.** Under replication protocol 1, Keel's default,
+offsets count the batches the primary has recorded, not bytes; under
+protocol 2 they count bytes, as Redis's do. A dashboard that subtracts a
+replica's offset from its primary's shows the lag in batches under protocol 1.
+The epoch's length is Keel's own. Both keep Redis's fields' meaning (where the
+stream stands, which stream it is) and change their unit and form.
 
 ## CPU
 

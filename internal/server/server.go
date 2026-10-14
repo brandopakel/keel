@@ -152,8 +152,12 @@ type client struct {
 	// addr is the peer's address, as Redis writes one (peerAddr).
 	addr string
 	// replica is whether the connection has pulled the log as a replica, so
-	// that what it is sent is replication traffic (isReplicationPull).
+	// that what it is sent is replication traffic (isReplicationPull);
+	// replicaOffset and replicaPulled are where its last accepted pull
+	// started, and when, which INFO's slave<n> lines report.
 	replica                   bool
+	replicaOffset             uint64
+	replicaPulled             time.Time
 	name, libName, libVersion string
 	// resp3 is set by HELLO 3 and cleared by HELLO 2, and frames every reply
 	// the connection is sent from the command after it.
@@ -818,6 +822,11 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 	auth := newServerPassword(o.RequirePass)
 	maxClients := o.MaxClients
 	cronInterval := make(chan time.Duration, 1)
+	link := &replicaLink{}
+	e.SetReplicationTransport(func() core.ReplicationTransport {
+		return core.ReplicationTransport{Link: link.state(), Replicas: connectedReplicas()}
+	})
+	defer e.SetReplicationTransport(nil)
 	e.SetServerInfo(&core.ServerInfo{Port: o.Port, MaxClients: o.MaxClients, TCPBacklog: o.TCPBacklog, IOThreads: o.IOThreads,
 		Host: o.Host, RequirePass: o.RequirePass,
 		Hz: max(1, int(time.Second/o.CronInterval)), Multiplexer: io_multiplexing.API,
@@ -917,7 +926,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 	defer setWaker(nil) // detach callbacks before closing/reusing the pipe descriptors
 	e.SetRewriteWaker(wake)
 	defer e.SetRewriteWaker(nil)
-	replicaUpdates, stopReplica := startReplicaTransport(e, o.PrimaryPassword, o.PrimaryTLS)
+	replicaUpdates, stopReplica := startReplicaTransport(e, o.PrimaryPassword, o.PrimaryTLS, link)
 	defer stopReplica()
 
 	// A heartbeat, so work that is due because of the clock happens on a server
@@ -1427,15 +1436,20 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 	// Set as the command runs rather than as it was parsed: a HELLO earlier
 	// in the same pipeline has already changed it.
 	cmd.RESP3 = c.resp3
-	if !c.replica && isReplicationPull(cmd.Cmd) {
+	if isReplicationPull(cmd.Cmd) {
 		// A pull the engine accepts makes this a replica's connection, as
 		// Redis makes a client a replica only once its SYNC is accepted
 		// (CLIENT_SLAVE, set in syncCommand after its checks): what it is sent
 		// from then on, this reply included, is replication output. A pull
 		// refused, for want of a login or as invalid, leaves it a client.
+		// Each accepted pull records where it started, and when.
 		reply := &firstByte{ReadWriter: w}
 		responseRw(c.engine, cmd, reply)
-		c.replica = reply.b != 0 && reply.b != '-'
+		if reply.b != 0 && reply.b != '-' {
+			c.replica = true
+			c.replicaOffset, _ = strconv.ParseUint(cmd.Args[1], 10, 64)
+			c.replicaPulled = time.Now()
+		}
 		return
 	}
 	responseRw(c.engine, cmd, w)

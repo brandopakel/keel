@@ -31,7 +31,7 @@ func TestINFOClientBuffersHasExplicitScopeAndStableValues(t *testing.T) {
 		"total_commands_processed:0\r\ninstantaneous_ops_per_sec:0\r\n"+
 		"total_net_input_bytes:0\r\ntotal_net_output_bytes:0\r\ntotal_net_repl_input_bytes:0\r\ntotal_net_repl_output_bytes:0\r\n"+
 		"instantaneous_input_kbps:0.00\r\ninstantaneous_output_kbps:0.00\r\ninstantaneous_input_repl_kbps:0.00\r\ninstantaneous_output_repl_kbps:0.00\r\n"+
-		"rejected_connections:12\r\nexpired_keys:0\r\nevicted_keys:0\r\n")
+		"rejected_connections:12\r\nsync_full:0\r\nexpired_keys:0\r\nevicted_keys:0\r\n")
 	assert.NotContains(t, string(e.cmdINFO([]string{"memory"})), "connected_clients")
 	assert.NotContains(t, string(other.cmdINFO([]string{"clients"})), "connected_clients", "the hook is e's alone")
 	assert.NotContains(t, string(other.cmdINFO([]string{"stats"})), "total_connections_received")

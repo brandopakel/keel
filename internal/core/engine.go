@@ -277,6 +277,10 @@ type Engine struct {
 	// statsReset is the transport's part of CONFIG RESETSTAT, installed with
 	// SetStatsReset; nil, there is none.
 	statsReset func()
+	// replicationTransport is what INFO reads of the transport's replication,
+	// a replica's link and a primary's replicas, installed with
+	// SetReplicationTransport; nil, there is none (replication_info.go).
+	replicationTransport func() ReplicationTransport
 	// avgTTL is INFO keyspace's avg_ttl: Redis's running estimate, in
 	// milliseconds, of the time left to the keys that carry a TTL, which the
 	// expiry cycle keeps (foldAvgTTL). Like expiredKeys it describes the
