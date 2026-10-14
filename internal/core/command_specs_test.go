@@ -37,12 +37,18 @@ func specNames() []string {
 // redisSpec is a command's spec as src/commands/<name>.json holds it, the
 // fields the table keeps.
 type redisSpec struct {
-	Container string   `json:"container"`
-	Arity     int      `json:"arity"`
-	Group     string   `json:"group"`
-	Flags     []string `json:"command_flags"`
-	ACL       []string `json:"acl_categories"`
-	KeySpecs  []struct {
+	Container       string     `json:"container"`
+	Arity           int        `json:"arity"`
+	Group           string     `json:"group"`
+	Flags           []string   `json:"command_flags"`
+	ACL             []string   `json:"acl_categories"`
+	Tips            []string   `json:"command_tips"`
+	Since           string     `json:"since"`
+	DocFlags        []string   `json:"doc_flags"`
+	DeprecatedSince string     `json:"deprecated_since"`
+	GetKeys         string     `json:"get_keys_function"`
+	Arguments       []redisArg `json:"arguments"`
+	KeySpecs        []struct {
 		Flags       []string `json:"flags"`
 		BeginSearch struct {
 			Index   *struct{ Pos int } `json:"index"`
@@ -65,9 +71,55 @@ type redisSpec struct {
 	} `json:"key_specs"`
 }
 
+// redisArg is one argument as a spec holds it.
+type redisArg struct {
+	Name            string     `json:"name"`
+	Type            string     `json:"type"`
+	Display         string     `json:"display"`
+	KeySpecIndex    *int       `json:"key_spec_index"`
+	Token           string     `json:"token"`
+	Since           string     `json:"since"`
+	DeprecatedSince string     `json:"deprecated_since"`
+	Optional        bool       `json:"optional"`
+	Multiple        bool       `json:"multiple"`
+	MultipleToken   bool       `json:"multiple_token"`
+	Arguments       []redisArg `json:"arguments"`
+}
+
+// argsFromRedis is the table's form of arguments read from Redis's source:
+// names and display names in lower case and tokens in upper, as Redis's own
+// generator writes them, and a oneof's or block's arguments its own.
+func argsFromRedis(args []redisArg) []commandArg {
+	var out []commandArg
+	for _, a := range args {
+		c := commandArg{name: strings.ToLower(a.Name), typ: a.Type, display: strings.ToLower(a.Display), keySpec: -1,
+			token: strings.ToUpper(a.Token), since: a.Since, deprecatedSince: a.DeprecatedSince}
+		if a.KeySpecIndex != nil {
+			c.keySpec = *a.KeySpecIndex
+		}
+		for _, f := range []struct {
+			on   bool
+			name string
+		}{{a.Optional, "optional"}, {a.Multiple, "multiple"}, {a.MultipleToken, "multiple_token"}} {
+			if f.on {
+				c.flags = append(c.flags, f.name)
+			}
+		}
+		if a.Type == "oneof" || a.Type == "block" {
+			c.args = argsFromRedis(a.Arguments)
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
 // specFromRedis is the table's form of a spec read from Redis's source.
 func specFromRedis(s redisSpec) commandSpec {
-	out := commandSpec{arity: s.Arity, group: s.Group, flags: s.Flags, acl: s.ACL}
+	out := commandSpec{arity: s.Arity, group: s.Group, flags: s.Flags, acl: s.ACL, since: s.Since, docFlags: s.DocFlags,
+		deprecatedSince: s.DeprecatedSince, getKeys: s.GetKeys, args: argsFromRedis(s.Arguments)}
+	for _, tip := range s.Tips {
+		out.tips = append(out.tips, strings.ToLower(tip))
+	}
 	for _, ks := range s.KeySpecs {
 		k := keySpec{flags: ks.Flags, begin: keyBegin{kind: "unknown"}, find: keyFind{kind: "unknown"}}
 		switch {
