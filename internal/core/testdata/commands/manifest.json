@@ -25,6 +25,14 @@
       "source_revision": "67aa4e2",
       "captured": "2026-10-14"
     },
+    "eviction.txt": {
+      "sha256": "b524079c12f0b4f87f49516a085fd8cb5c1b793dcc11998706e35b3b885c84b3",
+      "cases": 3,
+      "commands": 28,
+      "records": 19,
+      "source_revision": "f2aa48d",
+      "captured": "2026-10-14"
+    },
     "geo.txt": {
       "sha256": "a27cfb7ed22caab8db74c29a49cacb8a5987c40b40ccd259e3bbc1b53a45d972",
       "cases": 3,
