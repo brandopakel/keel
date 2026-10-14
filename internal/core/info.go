@@ -338,9 +338,9 @@ func (e *Engine) hotkeysInfo(b *strings.Builder) {
 }
 
 // modulesInfo is Redis's Modules section, a line for each module loaded. Keel
-// loads none: its Bloom, cuckoo and count-min commands are its own, and
-// listing them as RedisBloom's would also commit MODULE LIST to answering for
-// a module, which is a decision of its own (docs/info-compatibility.md).
+// loads none: its Bloom, cuckoo and count-min commands are its own, and the
+// owner decided they are not listed as RedisBloom's, which would also commit
+// MODULE LIST to answering for a module (docs/info-compatibility.md).
 func (e *Engine) modulesInfo(b *strings.Builder) {
 	b.WriteString("# Modules\r\n\r\n")
 }

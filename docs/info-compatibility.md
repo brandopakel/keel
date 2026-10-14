@@ -291,8 +291,8 @@ stream stands, which stream it is) and change their unit and form.
 Redis 8.10.1's default INFO has four sections more than (a) to (i) wrote,
 in this order: Threads after Persistence; Hotkeys and Modules after CPU;
 Keysizes after Keyspace (`server.c`, `genInfoSectionDict`). Part (j) writes
-the first three. The owner may still revise the Modules decision; the
-manager's call of October 14, 2026 stands until then.
+the first three. The owner decided on October 14, 2026 that Modules stays
+empty.
 
 - **Threads:** `io_thread_<n>:clients=<n>,reads=<n>,writes=<n>`, a line for
   each I/O thread, the loop's own first, as Redis writes them.
@@ -311,10 +311,10 @@ manager's call of October 14, 2026 stands until then.
   tracking runs, and Keel has no hot key tracking.
 - **Modules:** the header alone, as a Redis with no module loaded writes it;
   `INFO modules` and `INFO module_list` ask for it, as in Redis.
-  - Keel's Bloom, cuckoo and count-min commands are its own. Listing them as
-    RedisBloom's would let module-detecting clients find them, but it would
-    also commit `MODULE LIST` to answering for a module. That is a decision
-    for the owner, not one to slip in through INFO.
+  - Keel's Bloom, cuckoo and count-min commands are its own, and the owner
+    decided on October 14, 2026 that they are not listed as RedisBloom's.
+    Listing them would let module-detecting clients find them, but it would
+    also commit `MODULE LIST` to answering for a module that is not loaded.
   - Redis 8 builds may list modules of their own; Homebrew's 8.10.2 lists
     `vectorset`.
 - **Keysizes:** left out. Redis keeps per-database histograms of string sizes
