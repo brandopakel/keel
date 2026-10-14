@@ -113,9 +113,9 @@ func TestCommandGetKeysAsRedisFindsThem(t *testing.T) {
 // with that a command Keel has names has its counterpart here.
 func TestEveryKeyFunctionIsKeels(t *testing.T) {
 	t.Parallel()
-	for name, spec := range redisCommandSpecs {
-		if spec.getKeys != "" {
-			assert.NotNil(t, getKeysProcs[spec.getKeys], "%s finds its keys with %s, which Keel lacks", name, spec.getKeys)
+	for _, f := range redisCommandFacts {
+		if f.getKeys != "" {
+			assert.NotNil(t, getKeysProc(f.getKeys), "%s finds its keys with %s, which Keel lacks", f.name, f.getKeys)
 		}
 	}
 }

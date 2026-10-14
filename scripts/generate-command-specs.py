@@ -188,9 +188,9 @@ def go_arguments(args):
     return '[]commandArg{' + ', '.join(parts) + '}'
 
 
-def go_doc(s):
-    """The fields beyond the dispatch's, for COMMAND INFO and DOCS."""
-    fields = []
+def go_facts(name, s):
+    """One entry of redisCommandFacts: the name, then each fact it has."""
+    fields = [f'name: {json.dumps(name)}']
     if s['tips']:
         fields.append(f'tips: {go_strings(s["tips"])}')
     if s['since']:
@@ -203,7 +203,7 @@ def go_doc(s):
         fields.append(f'args: {go_arguments(s["args"])}')
     if s['getkeys']:
         fields.append(f'getKeys: {json.dumps(s["getkeys"])}')
-    return ''.join(', ' + f for f in fields)
+    return '\t{' + ', '.join(fields) + '},'
 
 
 def go_strings(values):
@@ -220,10 +220,8 @@ def render(specs):
         '',
         f'// redisCommandSpecs is what Redis {REDIS_VERSION} declares of each command Keel',
         '// has, by name, a subcommand as container|sub: its arity, its group, its',
-        '// command flags, its ACL categories and its key specs, and for COMMAND INFO',
-        '// and DOCS its tips, the version it appeared in, its doc flags and its',
-        '// arguments\' structure, none of Redis\'s text. Keel\'s own commands and',
-        '// RedisBloom\'s are not here; see command_specs_keel.go.',
+        '// command flags, its ACL categories and its key specs. Keel\'s own commands',
+        '// and RedisBloom\'s are not here; see command_specs_keel.go.',
         'var redisCommandSpecs = map[string]commandSpec{',
     ]
     for name in sorted(specs):
@@ -240,9 +238,21 @@ def render(specs):
                              % (go_strings(k['flags']), json.dumps(b[0]), b[1], json.dumps(b[2]), b[3],
                                 json.dumps(f[0]), ', ' + find if find else ''))
             keys = '[]keySpec{' + ', '.join(parts) + '}'
-        lines.append('\t%s: {arity: %d, group: %s, flags: %s, acl: %s, keys: %s%s},'
-                     % (json.dumps(name), s['arity'], json.dumps(s['group']), go_strings(s['flags']), go_strings(s['acl']), keys,
-                        go_doc(s)))
+        lines.append('\t%s: {arity: %d, group: %s, flags: %s, acl: %s, keys: %s},'
+                     % (json.dumps(name), s['arity'], json.dumps(s['group']), go_strings(s['flags']), go_strings(s['acl']), keys))
+    lines += [
+        '}',
+        '',
+        f'// redisCommandFacts is what else Redis {REDIS_VERSION} declares of each command in',
+        '// redisCommandSpecs, for COMMAND INFO and DOCS: its tips, the version it',
+        '// appeared in, its doc flags, the version it was deprecated in, its',
+        '// arguments\' structure and the function that finds its keys where its key',
+        '// specs cannot say, none of Redis\'s text. It is an array in name order',
+        '// rather than a map, so that the compiler lays it out as data and adds',
+        '// nothing to the package\'s init; commandFactsOf finds an entry.',
+        'var redisCommandFacts = [...]commandFacts{',
+    ]
+    lines += [go_facts(name, specs[name]) for name in sorted(specs)]
     lines += ['}', '']
     return gofmt('\n'.join(lines))
 
