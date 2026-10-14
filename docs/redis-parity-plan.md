@@ -306,7 +306,9 @@ schedule them.
         (`docs/info-compatibility.md`). Client libraries also call it at
         connect.
      4. The remaining `CLIENT` subcommands, `PAUSE` and `UNPAUSE` first:
-        those two are done in S4a.
+        those two are done in S4a. S4b adds `LIST`, `INFO`'s full line,
+        `KILL`, `REPLY`, `NO-EVICT`, `NO-TOUCH`, `UNBLOCK`, `GETREDIR` and
+        `TRACKINGINFO`; `TRACKING` and `CACHING` wait for client tracking.
      5. `MONITOR`, `TIME`, `RESET` and `ROLE`, and `SLOWLOG` from the
         monitoring work.
 

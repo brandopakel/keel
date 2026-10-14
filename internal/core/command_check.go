@@ -108,7 +108,8 @@ type subcommand struct {
 // listed; any other gets the error Redis gives for one it does not have.
 var (
 	clientSubcommands = []subcommand{{"id", 2}, {"setname", 3}, {"getname", 2}, {"setinfo", 4}, {"info", 2},
-		{"pause", -3}, {"unpause", 2}, {"help", 2}}
+		{"pause", -3}, {"unpause", 2}, {"list", -2}, {"kill", -3}, {"reply", 3}, {"no-evict", 3}, {"no-touch", 3},
+		{"unblock", -3}, {"getredir", 2}, {"trackinginfo", 2}, {"help", 2}}
 	memorySubcommands = []subcommand{{"stats", 2}, {"usage", -3}, {"help", 2}}
 	configSubcommands = []subcommand{{"get", -3}, {"set", -4}, {"resetstat", 2}, {"rewrite", 2}, {"help", 2}}
 	// Redis's LATENCY subcommands, with Redis's counts.

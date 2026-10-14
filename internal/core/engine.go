@@ -331,6 +331,11 @@ type Engine struct {
 	expireStalePerc  float64
 	expireCapReached uint64
 	expireCycleUsec  uint64
+	// execReplyBytes is what the reply of the EXEC running has come to so
+	// far, set as it hands a command to the connection to answer, for CLIENT
+	// LIST's obl (ExecReplyBytes). After the expiry cycle's, last, so that
+	// adding it moved no field before it.
+	execReplyBytes int
 }
 
 // Lock takes e's lock, waiting until whoever holds it lets go. Its holder is
