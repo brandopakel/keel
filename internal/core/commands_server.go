@@ -114,6 +114,9 @@ type ClientBufferStats struct {
 	// ConnectionsRejected every one closed at once because the server already
 	// held its most clients (Redis's rejected_connections).
 	ConnectionsReceived, ConnectionsRejected uint64
+	// Blocked is how many connections wait out a CLIENT PAUSE, Redis's
+	// blocked_clients, which counts the clients a pause postpones.
+	Blocked int
 }
 
 // SetClientBuffers installs on e the hook INFO reads the connections of the

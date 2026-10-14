@@ -157,6 +157,9 @@ type client struct {
 	appendOffset               uint64
 	appendHeld, appendDeferred bool
 	bufferedReady, readQueued  bool
+	// postponed is set while the connection's next command waits out a
+	// CLIENT PAUSE (pause.go); its input is not read until the pause eases.
+	postponed bool
 
 	// buf holds the bytes of a command that arrived split across reads, and is
 	// nil the rest of the time.
@@ -441,6 +444,11 @@ func sweepStalledClients(now time.Time, mux io_multiplexing.IOMultiplexer, pause
 		if now.Sub(c.lastProgress) <= stalledClientTimeout {
 			continue
 		}
+		if c.postponed {
+			// Held by CLIENT PAUSE, however long it lasts: Redis keeps such
+			// a connection until the pause ends.
+			continue
+		}
 		switch {
 		case c.unanswered():
 			// Whether the kernel still had the descriptor decides between two
@@ -694,6 +702,10 @@ func executeRun(c *client, arena *replyArena) bool {
 	}()
 	var capture captureWriter
 	if len(c.cmds) == 1 {
+		if c.waitsForPause(c.cmds[0]) {
+			c.postpone()
+			return false
+		}
 		respond(c, c.cmds[0], &capture)
 		consumed = 1
 		if c.err != nil {
@@ -709,6 +721,11 @@ func executeRun(c *client, arena *replyArena) bool {
 	deadline := time.Now().Add(runTimeTarget)
 	c.outStart = len(arena.buf)
 	for _, cmd := range c.cmds {
+		if c.waitsForPause(cmd) {
+			// It waits, and so does everything the connection sent after it.
+			c.postpone()
+			break
+		}
 		if budget := c.engine.CommandAllocations(); budget != nil {
 			budget.ObserveRetained(retainedClientBytes + c.engine.AppendRetainedBytes() + cap(arena.buf))
 			budget.ReplyRetained = retainedReplyBytes
@@ -789,7 +806,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 			RequestAllocationPeak: requestBudget.peak, RequestAllocationRefusals: requestBudget.refusals.Load(),
 			ClosedSlow: clientsClosedSlow, ClosedUnanswered: clientsClosedUnanswered, ClosedUnread: clientsClosedUnread,
 			RunsUnreplied: runsUnreplied, ConnectionsReceived: connectionsReceived - connectionsReceivedBase,
-			ConnectionsRejected: connectionsRejected}
+			ConnectionsRejected: connectionsRejected, Blocked: blockedClients()}
 	})
 	defer e.SetClientBuffers(nil)
 	e.SetStatsReset(resetConnectionStats)
@@ -804,6 +821,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 			closeClient(c)
 		}
 		queuedClientReads = nil
+		postponed, pause, pauseEased = nil, clientPause{}, false
 		setWaker(nil)
 	}()
 	log.Println("starting an asynchronous TCP server on", o.Host, o.Port)
@@ -916,6 +934,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 		e.Unlock()
 		events, err := ioMultiplexer.Check()
 		e.Lock()
+		updatePause(time.Now())
 		if err != nil {
 			if shuttingDown() {
 				break
@@ -1165,11 +1184,21 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 				writable = append(writable, c)
 			} else if c.err != nil {
 				closeClient(c)
+			} else if c.postponed {
+				// Held by CLIENT PAUSE with nothing to answer: not read
+				// again until the pause eases.
+				if err := c.setInterest(ioMultiplexer, io_multiplexing.OpNone); err != nil {
+					closeClient(c)
+				}
 			}
 		}
+		// A CLIENT UNPAUSE this turn, or a pause that ended, frees the
+		// connections it held; they run from the next turn.
+		releasePostponed(ioMultiplexer)
 
-		// Reap idle keys before flushing their removal records.
-		if !o.ConcurrentAppend || (!e.AppendPending() && e.AppendBufferedBytes() == 0) {
+		// Reap idle keys before flushing their removal records. A pause
+		// pauses active expiry, as Redis pauses it.
+		if (!o.ConcurrentAppend || (!e.AppendPending() && e.AppendBufferedBytes() == 0)) && !pause.active(time.Now()) {
 			e.ExpireCycle()
 		}
 		// Once a turn, not once a command: INFO's used_memory_peak, and
@@ -1476,6 +1505,14 @@ func flushClientReplies(pool *ioPool, ioMultiplexer io_multiplexing.IOMultiplexe
 			c.inArena = false
 			if c.closeAfterWrite {
 				closeClient(c)
+				continue
+			}
+			if c.postponed {
+				// Its replies are out, and its next command waits out a
+				// CLIENT PAUSE: not read again until the pause eases.
+				if err := c.setInterest(ioMultiplexer, io_multiplexing.OpNone); err != nil {
+					closeClient(c)
+				}
 				continue
 			}
 			if err := c.setInterest(ioMultiplexer, io_multiplexing.OpRead); err != nil {
