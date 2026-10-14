@@ -426,8 +426,8 @@ case server/config-set
 
 case server/command
 > "COMMAND" "COUNT"
-2 ":162\r\n"
-3 ":162\r\n"
+2 ":166\r\n"
+3 ":166\r\n"
 > "COMMAND" @masked
 2 "*"
 3 "*"
