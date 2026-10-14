@@ -1,3 +1,4 @@
+import contextlib
 import csv
 import importlib.util
 import io
@@ -126,6 +127,25 @@ TELEMETRY = {
                                       {'phase': 'expiry', 'description': '', 'start': 1, 'end': 2,
                                        'ops_per_second': {'keel': None, 'redis': 90740.1}}]),
 }
+
+# bench/frameworks/run.py's frameworks.json, trimmed from run 37693134193.
+FRAMEWORKS = {'broken_checks': [], 'results': [
+    {'framework': 'Rails cache store', 'redis': {'passed': True, 'exit': 0, 'seconds': 2.1, 'first_unknown': ''},
+     'keel': {'passed': True, 'exit': 0, 'seconds': 2.0, 'first_unknown': ''},
+     'commands_used': {'get': 6, 'set': 4}, 'keel_lacks': []},
+    {'framework': 'Sidekiq', 'redis': {'passed': True, 'exit': 0, 'seconds': 15.5, 'first_unknown': ''},
+     'keel': {'passed': False, 'exit': 1, 'seconds': 30.3, 'first_unknown': 'brpop'},
+     'commands_used': {'brpop': 12, 'incrby': 19, 'script|load': 1}, 'keel_lacks': ['brpop', 'script|load']},
+]}
+
+# scripts/test-file-footprint.py's record, trimmed, with #144's packages.
+FOOTPRINT = {'exit_code': 0, 'elapsed_seconds': 18.4547, 'peak_concurrent_test_bytes': 72000000,
+             'peak_build_bytes': 180000000, 'warn_suite_bytes': 167772160, 'warnings': [],
+             'packages': [{'package': 'github.com/brandopakel/keel/internal/core', 'result': 'ok', 'seconds': 12.345},
+                          {'package': 'github.com/brandopakel/keel/cmd/keel', 'result': 'ok', 'seconds': 31.2}],
+             'tests': [{'name': 'TestSmall', 'package': './internal/core', 'peak_bytes': 10, 'peak_file_bytes': 10}] +
+                      [{'name': f'TestBig{i}', 'package': './cmd/keel', 'peak_bytes': 1000 + i, 'peak_file_bytes': 900}
+                       for i in range(12)]}
 
 GO_HEADER = 'goos: linux\ngoarch: amd64\ncpu: AMD EPYC 9V74 80-Core Processor                \n'
 
@@ -578,6 +598,65 @@ class Latest(unittest.TestCase):
         cbh.collect(self.gh, self.data, ['census'])
         self.assertEqual(read(self.data / 'census/arguments.csv')[0]['run_id'], '20')
         self.assertEqual(read(self.data / 'census/latest.csv')[0]['run_id'], '30')
+
+
+class FrameworkAndCIKinds(unittest.TestCase):
+    def setUp(self):
+        self.run = {'id': 37693134193, 'created_at': '2026-10-07T22:00:00Z', 'event': 'push',
+                    'head_branch': 'develop', 'conclusion': 'success', 'html_url': 'u'}
+
+    def test_frameworks(self):
+        records = cbh.framework_records(3, self.run, '', {'frameworks.json': json.dumps(FRAMEWORKS)})
+        rails, sidekiq = records['runs']
+        self.assertEqual((rails['framework'], rails['keel_passed'], rails['keel_lacks']), ('Rails cache store', 'yes', ''))
+        self.assertEqual((sidekiq['keel_passed'], sidekiq['keel_first_unknown'], sidekiq['commands_sent'],
+                          sidekiq['keel_lacks']), ('no', 'brpop', 3, 'brpop script|load'))
+        self.assertEqual(set(rails) | set(sidekiq), set(cbh.FRAMEWORK_RESULTS))
+        self.assertIn({'run_id': 37693134193, 'time': '2026-10-07T22:00:00Z', 'branch': 'develop',
+                       'framework': 'Sidekiq', 'command': 'script|load', 'calls': 1, 'keel': 'missing'},
+                      records['latest'])
+        self.assertEqual(len(records['latest']), 5)
+
+    def test_frameworks_keeps_the_complete_results_of_a_run(self):
+        broken = {'results': [FRAMEWORKS['results'][0], {'framework': 'Celery', 'keel': {'passed': False}},
+                              {'redis': {'passed': True}, 'keel': {'passed': True}}, 'not a result',
+                              FRAMEWORKS['results'][1]]}
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            records = cbh.framework_records(3, self.run, '', {'frameworks.json': json.dumps(broken)})
+        self.assertEqual([r['framework'] for r in records['runs']], ['Rails cache store', 'Sidekiq'])
+        self.assertEqual(len(records['latest']), 5)
+        self.assertEqual(err.getvalue().count('skipping an incomplete framework result'), 3)
+
+    def test_ci(self):
+        records = cbh.ci_records(4, self.run, 144, {'test-file-footprint.json': json.dumps(FOOTPRINT)})
+        run, = records['runs']
+        self.assertEqual((run['suite_seconds'], run['peak_concurrent_test_bytes'], run['warn_suite_bytes'],
+                          run['warnings']), (18.5, 72000000, 167772160, 0))
+        self.assertEqual(set(run), set(cbh.CI_RUNS))
+        self.assertEqual([(p['package'], p['seconds']) for p in records['packages']],
+                         [('internal/core', 12.345), ('cmd/keel', 31.2)])
+        self.assertEqual(len(records['tests']), 10, 'the ten tests that held the most')
+        self.assertEqual(records['tests'][0]['test'], 'TestBig11')
+        self.assertEqual(records['tests'][0]['package'], 'cmd/keel', "named as packages.csv names it, to join")
+        self.assertTrue({t['package'] for t in records['tests']} <= {p['package'] for p in records['packages']})
+
+    def test_ci_before_package_times(self):
+        older = {k: v for k, v in FOOTPRINT.items() if k != 'packages'}
+        records = cbh.ci_records(4, self.run, '', {'test-file-footprint.json': json.dumps(older)})
+        self.assertEqual(records['packages'], [])
+        self.assertEqual(len(records['runs']), 1)
+
+    def test_collects_both_into_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data, gh = Path(tmp) / 'data', FakeGitHub()
+            gh.add('framework-checks', 5, 50, {'frameworks.json': json.dumps(FRAMEWORKS)}, branch='develop')
+            gh.add('test-file-footprint', 6, 60, {'test-file-footprint.json': json.dumps(FOOTPRINT)})
+            counts, errors = cbh.collect(gh, data, ['frameworks', 'ci'])
+            self.assertEqual((counts, errors), ({'frameworks collected': 1, 'ci collected': 1}, []))
+            self.assertEqual(len(read(data / 'frameworks/runs.csv')), 2)
+            self.assertEqual(len(read(data / 'frameworks/latest.csv')), 5)
+            self.assertEqual(len(read(data / 'ci/packages.csv')), 2)
+            self.assertEqual(len(read(data / 'ci/tests.csv')), 10)
 
 
 if __name__ == '__main__':
