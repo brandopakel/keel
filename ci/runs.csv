@@ -380,3 +380,5 @@ artifact_id,run_id,time,event,branch,pr,conclusion,exit_code,suite_seconds,peak_
 11919873516,38614803913,2026-10-14T18:23:54Z,pull_request,feat/phase4-list-commands,204,success,0,20.2,135146548,79133924,167772160,0,https://github.com/brandopakel/keel/actions/runs/38614803913
 11921856042,38614952020,2026-10-14T18:24:55Z,pull_request,feat/client-pause,198,success,0,26.9,111093492,87423798,167772160,0,https://github.com/brandopakel/keel/actions/runs/38614952020
 11921306281,38615081560,2026-10-14T18:25:50Z,pull_request,feat/phase4-keys,195,success,0,20.8,120768315,79076913,167772160,0,https://github.com/brandopakel/keel/actions/runs/38615081560
+11921388412,38615240524,2026-10-14T18:26:56Z,pull_request,feat/info-net-bytes,165,success,0,25.3,113577780,87319954,167772160,0,https://github.com/brandopakel/keel/actions/runs/38615240524
+11924155926,38615386288,2026-10-14T18:27:59Z,pull_request,feat/command,197,success,0,25.4,112680372,88219798,167772160,0,https://github.com/brandopakel/keel/actions/runs/38615386288
