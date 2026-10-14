@@ -58,12 +58,12 @@
       "captured": "2026-10-14"
     },
     "keys.txt": {
-      "sha256": "335bb460968cfa34083d59df6f3144494c8c99ab9eb28ce0023364be965d37d0",
-      "cases": 7,
-      "commands": 176,
-      "records": 83,
-      "source_revision": "1ce5848",
-      "captured": "2026-10-14"
+      "sha256": "4894b51dfe62cbeb86374cb64d5eba683d32a4e36f4e84f3c9f1584b576b8897",
+      "cases": 13,
+      "commands": 290,
+      "records": 138,
+      "source_revision": "c6d0021",
+      "captured": "2026-10-15"
     },
     "lists.txt": {
       "sha256": "97d8e6fb19d8cfb352d3333ac131de0287d6f756b3ec56f1a05327b8d7e49cdd",
@@ -74,11 +74,11 @@
       "captured": "2026-10-14"
     },
     "refusals.txt": {
-      "sha256": "e748cfbbf1b70847ae18b793744e186b77c64a749f85c993c3a1b625bca66215",
+      "sha256": "179ebfd94aba7e0f3cbd2d7bf808c2dddc7c535ffdd6eeb8e9bebe4d1525f068",
       "cases": 2,
-      "commands": 239,
+      "commands": 250,
       "records": 0,
-      "source_revision": "38540eb",
+      "source_revision": "c6d0021",
       "captured": "2026-10-15"
     },
     "replication.txt": {
@@ -90,11 +90,11 @@
       "captured": "2026-10-14"
     },
     "server.txt": {
-      "sha256": "369b39b922cb57184aa0bfd08e4b9122a685262810db659f141543eb70a7db2b",
+      "sha256": "d3f85af6e0b7b7c2f8abe35efd972f6e27ebb61e104c59b64d7c7dd73b0b927a",
       "cases": 13,
       "commands": 255,
       "records": 23,
-      "source_revision": "38540eb",
+      "source_revision": "c6d0021",
       "captured": "2026-10-15"
     },
     "sets.txt": {
@@ -122,12 +122,12 @@
       "captured": "2026-10-15"
     },
     "transactions.txt": {
-      "sha256": "9ce59c9c6f24438b60e6c5c190812720c3705ac197a5f730e08f778f092c35f8",
+      "sha256": "ecd002d9f4b4f57f6ba8028c20fb76b6d35d34a4b7f8ee3bebcf4b481f75d530",
       "cases": 4,
       "commands": 116,
-      "records": 26,
-      "source_revision": "67aa4e2",
-      "captured": "2026-10-14"
+      "records": 25,
+      "source_revision": "c6d0021",
+      "captured": "2026-10-15"
     },
     "zsets.txt": {
       "sha256": "08bb2ebe8ac604bcb4a270ff7aef58afffe47d6c18a9ddc1b480065609f6bf80",
