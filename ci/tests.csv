@@ -4159,6 +4159,16 @@ artifact_id,run_id,time,branch,test,package,peak_bytes,peak_file_bytes
 11934334318,38651311559,2026-10-14T22:59:54Z,feat/client-pause,TestAOFTranscriptMassEvictionKeepsBoundedBuffer,internal/core,16781002,16781002
 11934334318,38651311559,2026-10-14T22:59:54Z,feat/client-pause,TestRewriteSlicesObeyKeyBudgetAndReplay,internal/core,14778324,12888890
 11934334318,38651311559,2026-10-14T22:59:54Z,feat/client-pause,TestStagedRecordsAreTheBytesAppendAOFCommandWrites,internal/core,12780115,4259906
+11935326352,38651740967,2026-10-14T23:03:52Z,feat/info-replication,TestRewriteStallProfile,internal/core,113544948,56788890
+11935326352,38651740967,2026-10-14T23:03:52Z,feat/info-replication,"TestEveryAcknowledgedWriteSurvivesAKilleverysec,_during_a_faile",internal/core,85917696,85458944
+11935326352,38651740967,2026-10-14T23:03:52Z,feat/info-replication,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierzse,cmd/keel,68160485,68160485
+11935326352,38651740967,2026-10-14T23:03:52Z,feat/info-replication,TestRejectedCollectionPopsPreservePipelineAndRestartconcurrent,cmd/keel,68160485,68160485
+11935326352,38651740967,2026-10-14T23:03:52Z,feat/info-replication,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierset,cmd/keel,68159910,68159910
+11935326352,38651740967,2026-10-14T23:03:52Z,feat/info-replication,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierlis,cmd/keel,65014192,65014192
+11935326352,38651740967,2026-10-14T23:03:52Z,feat/info-replication,TestStagedRecordsAreTheBytesAppendAOFCommandWrites,internal/core,51119806,4259918
+11935326352,38651740967,2026-10-14T23:03:52Z,feat/info-replication,TestRewriteSlicesObeyKeyBudgetAndReplay,internal/core,23565895,12888890
+11935326352,38651740967,2026-10-14T23:03:52Z,feat/info-replication,TestReplicasThroughAFailedRewriteprotocol-,cmd/keel,21568684,21568061
+11935326352,38651740967,2026-10-14T23:03:52Z,feat/info-replication,TestRewriteRetainsBoundedNameBatches,internal/core,13993780,11188890
 11936455361,38651883311,2026-10-14T23:05:12Z,ci/runner-queue,TestRewriteStallProfile,internal/core,113577780,56788890
 11936455361,38651883311,2026-10-14T23:05:12Z,ci/runner-queue,TestStagedRecordsAreTheBytesAppendAOFCommandWrites,internal/core,76679598,4259925
 11936455361,38651883311,2026-10-14T23:05:12Z,ci/runner-queue,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierzse,cmd/keel,68160485,68160485
