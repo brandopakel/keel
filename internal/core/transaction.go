@@ -389,17 +389,25 @@ func (tx *Transaction) exec(e *Engine, w io.Writer, conn Connection) (aborted bo
 	}
 	e.replyCeiling = ceiling(0)
 	defer func() { e.replyCeiling = MaxReplyBytes }()
+	observer, _ := conn.(ExecObserver)
 	run := func(cmd *Command, sink io.ReadWriter) error {
 		if answers(conn, cmd.Cmd) {
 			e.execReplyBytes = total
 			conn.AnswerConnection(cmd, sink)
+			if observer != nil {
+				observer.Executed(cmd)
+			}
 			return nil
 		}
 		// Each reply is framed in the protocol the connection has when the
 		// command runs, not when it was queued: Redis runs a queued HELLO in
 		// its place, and frames every reply after it in the new protocol.
 		cmd.RESP3 = conn != nil && conn.RESP3()
-		return e.EvalAndResponse(cmd, sink)
+		err := e.EvalAndResponse(cmd, sink)
+		if observer != nil {
+			observer.Executed(cmd)
+		}
+		return err
 	}
 	e.runTransaction(tx.commands, run, func(i int, reply []byte, err error) {
 		if err == nil && len(reply) == 0 {
