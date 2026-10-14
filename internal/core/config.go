@@ -69,6 +69,7 @@ type configState struct {
 // does not know: one it has no handling for, or a transport's setting with no
 // transport to say what it is.
 func (e *Engine) keelConfigFor(s *configSpec) *keelConfig {
+	configTables()
 	k, ok := keelConfigs[s.name]
 	if !ok || (k.transport && e.serverInfo == nil) {
 		return nil

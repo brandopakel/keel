@@ -4,6 +4,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // Which of Redis's configuration directives Keel answers CONFIG GET and SET
@@ -63,8 +64,29 @@ type keelConfig struct {
 // errImmutableConfig is Redis's reason for refusing a directive it cannot set.
 const errImmutableConfig = "can't set immutable config"
 
-// keelConfigs is every directive Keel answers for, by Redis's name.
-var keelConfigs = func() map[string]keelConfig {
+// keelConfigs is every directive Keel answers for, by Redis's name, built
+// the first time CONFIG asks (configTables). The tables CONFIG reads are
+// built in functions of their own, on first use, rather than in package
+// initializers: the compiler places the package's init, and an initializer's
+// closures, ahead of the command handlers, where their room would move every
+// handler in the binary the paired command-path job measures, and places a
+// function and its closures after it, here, after the handlers.
+var (
+	keelConfigs  map[string]keelConfig
+	configLookup map[string]*configSpec
+	configOnce   sync.Once
+)
+
+// configTables builds keelConfigs and configLookup, once.
+func configTables() {
+	configOnce.Do(func() {
+		keelConfigs = keelConfigTable()
+		configLookup = configLookupTable()
+	})
+}
+
+// keelConfigTable builds keelConfigs.
+func keelConfigTable() map[string]keelConfig {
 	m := map[string]keelConfig{
 		// The keyspace's limits and eviction.
 		"maxmemory": {handling: configLive,
@@ -76,7 +98,7 @@ var keelConfigs = func() map[string]keelConfig {
 		"maxmemory-policy": {handling: configLive,
 			get: func(e *Engine) string { return evictionPolicyName(e.space.Limits().Eviction) },
 			set: func(e *Engine, v string) string {
-				policy, ok := evictionPolicies[v]
+				policy, ok := evictionPolicy(v)
 				if !ok {
 					// A policy of Redis's that Keel does not have is refused
 					// in Redis's words, naming the ones Keel has.
@@ -209,7 +231,7 @@ var keelConfigs = func() map[string]keelConfig {
 	m["array-sparse-kmax"] = keelConfig{handling: configStored, valid: validArraySparseKmax}
 	m["array-sparse-kmin"] = keelConfig{handling: configStored, valid: validArraySparseKmin}
 	return m
-}()
+}
 
 // storedConfigs are the directives that tune only Redis's internals, which
 // Keel accepts, keeps and reports without effect (configStored).
@@ -266,9 +288,18 @@ const (
 // holds for one connection (internal/server's maxQueryBuffer).
 const maxQueryBufferBytes = 16 * 1024 * 1024
 
-// evictionPolicies are the policies Keel has, by Redis's names.
-var evictionPolicies = map[string]EvictionPolicy{
-	"allkeys-lru": EvictLRU, "allkeys-lfu": EvictLFU, "allkeys-random": EvictRandom,
+// evictionPolicy is the policy Keel has by Redis's name, or false for one it
+// does not have.
+func evictionPolicy(name string) (EvictionPolicy, bool) {
+	switch name {
+	case "allkeys-lru":
+		return EvictLRU, true
+	case "allkeys-lfu":
+		return EvictLFU, true
+	case "allkeys-random":
+		return EvictRandom, true
+	}
+	return 0, false
 }
 
 // setOption changes one of e's options as CONFIG SET does, and returns the
