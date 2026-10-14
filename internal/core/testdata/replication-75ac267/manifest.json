@@ -1,0 +1,9 @@
+{
+  "note": "The replication transcripts at source_revision; see replication_golden_test.go.",
+  "source_revision": "75ac267",
+  "transcript_sha256": {
+    "protocol-1": "ca5432c91608eb17e92346d2592299c2027334801c17b70743a7dd81eab89525",
+    "protocol-2": "a483ae5849462e9f9eabdac81bf3d280ca311932e44de907289bd1648b77ac47",
+    "terms": "b5e7f52bdbcd8ce7a4534d853490d0a936cfb9515a7a77449ac77f442a15a4a8"
+  }
+}

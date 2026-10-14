@@ -38,10 +38,12 @@ import (
 //   - the keyspace, which the replica must share with its primary after each
 //     frame that brings it level.
 //
-// testdata/replication-9736d8d/ holds the transcripts develop at 9736d8d
-// wrote, captured with
+// testdata/replication-<replicationGoldenRevision>/ holds the transcripts
+// written at that revision (first at 9736d8d, before step 2.4 of the
+// embedding plan; recaptured at 75ac267, when a DEL or PERSIST that changed
+// nothing stopped being logged), captured with
 //
-//	KEEL_CAPTURE_REPLICATION_GOLDEN=$PWD/testdata/replication-9736d8d \
+//	KEEL_CAPTURE_REPLICATION_GOLDEN=$PWD/testdata/replication-<revision> \
 //	  go test ./internal/core -run '^TestReplicationGoldenCapture$'
 //
 // and every run since must write the same transcript, line for line, under
@@ -72,7 +74,10 @@ import (
 //
 // Every opaque command here changes one key, so the record order of each
 // protocol 2 frame is the order the primary published it in, and is kept.
-const replicationGoldenDir = "testdata/replication-9736d8d"
+// replicationGoldenRevision is the revision the transcripts were captured at.
+const replicationGoldenRevision = "75ac267"
+
+const replicationGoldenDir = "testdata/replication-" + replicationGoldenRevision
 
 // goldenPrimary is what a golden replica names as its primary.
 const goldenPrimary = "primary.golden:6379"
@@ -812,8 +817,8 @@ func goldenTerms(g *replicationGolden) {
 }
 
 // TestReplicationGoldenCapture writes the fixture when asked to, and is
-// skipped otherwise. It was run once, on develop at 9736d8d. Every mode must
-// write the same transcript before anything is written.
+// skipped otherwise. Every mode must write the same transcript before
+// anything is written.
 func TestReplicationGoldenCapture(t *testing.T) {
 	t.Parallel()
 	dir := os.Getenv("KEEL_CAPTURE_REPLICATION_GOLDEN")
@@ -822,8 +827,8 @@ func TestReplicationGoldenCapture(t *testing.T) {
 	}
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	manifest := map[string]any{
-		"source_revision": "9736d8d",
-		"note":            "Captured before step 2.4 of the embedding plan moved replication and failover into core.Engine; see replication_golden_test.go.",
+		"source_revision": replicationGoldenRevision,
+		"note":            "The replication transcripts at source_revision; see replication_golden_test.go.",
 	}
 	sums := map[string]string{}
 	for _, scenario := range replicationGoldenScenarios {
