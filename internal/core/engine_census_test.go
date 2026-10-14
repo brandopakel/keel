@@ -39,6 +39,8 @@ var packageVars = map[string]string{
 	"answersWithoutData": table, "bfInfoOptions": table, "cfOptions": table, "memoryHelp": table,
 	"queuedReply": table, "execAbortReply": table, "allocationPressure": table,
 	"replyTooLarge": table, "transactionOpenFrame": table, "transactionCloseFrame": table,
+	"redisConfigSpecs": table, "configLookup": table, "keelConfigs": table, "storedConfigs": table,
+	"configOnce": table,
 
 	"errTruncatedAOF": sentinel, "errTooLargeForBudget": sentinel, "errTooLargeForOneKey": sentinel,
 	"errRewriteCantStart": sentinel, "errRewriteInProgress": sentinel,

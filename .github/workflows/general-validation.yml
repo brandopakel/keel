@@ -167,6 +167,11 @@ jobs:
         run: |
           python3 scripts/generate-command-specs.py --redis-src /tmp/redis-8.10.1 --check
           KEEL_REDIS_SRC=/tmp/redis-8.10.1 go test ./internal/core -run '^TestRedisCommandSpecsMatchRedisSource$' -count=1 -v
+      - name: Configuration directives against Redis 8.10.1's src/config.c
+        # CONFIG GET and SET answer from Redis's table of directives
+        # (internal/core/config_specs.go), read from the same tarball; the
+        # error-parity step below holds the answers to the running server.
+        run: python3 scripts/generate-config-specs.py --redis-src /tmp/redis-8.10.1 --check
       - name: Error replies byte for byte against Redis 8.10.1 and RedisBloom
         run: |
           python3 scripts/error-parity.py --bin /tmp/keel-general --redis /tmp/redis-8.10.1/src/redis-server \
