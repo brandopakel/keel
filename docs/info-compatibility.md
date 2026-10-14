@@ -386,8 +386,10 @@ and RedisBloom's (`command_specs_keel.go`).
   - a key spec's `notes`, in `COMMAND INFO`.
 
   So every `COMMAND DOCS` reply for a command Redis declares differs from
-  Redis's, because every one has a summary. Other ways to answer `DOCS` are
-  the owner's to decide.
+  Redis's, because every one has a summary. This is the owner's decision of
+  October 14, 2026, and it is final: no Redis documentation text in Keel's
+  repository or binary, and no loading of it at run time for now (the
+  embedding plan's Decisions).
 - **`COMMAND HELP`** is Redis's text, as every `HELP` of Keel's is.
 
 ## What each part should show in Grafana
