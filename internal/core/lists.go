@@ -29,7 +29,8 @@ import (
 // (dropListIfEmpty).
 
 var (
-	// errNoSuchKey is LSET on a key that holds nothing, in Redis's words.
+	// errNoSuchKey is LSET on a key that holds nothing, and RENAME or
+	// RENAMENX of one, in Redis's words.
 	errNoSuchKey = errors.New("ERR no such key")
 	// errIndexOutOfRange is LSET past either end of the list.
 	errIndexOutOfRange = errors.New("ERR index out of range")
