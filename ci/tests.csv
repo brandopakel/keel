@@ -3829,6 +3829,16 @@ artifact_id,run_id,time,branch,test,package,peak_bytes,peak_file_bytes
 11924155926,38615386288,2026-10-14T18:27:59Z,feat/command,TestReplicasThroughAFailedRewriteprotocol-,cmd/keel,21568684,21567977
 11924155926,38615386288,2026-10-14T18:27:59Z,feat/command,TestReplicationV2LargeSnapshotOperationsAndFrozenFile,internal/core,19365412,10845770
 11924155926,38615386288,2026-10-14T18:27:59Z,feat/command,TestRewriteSlicesObeyKeyBudgetAndReplay,internal/core,12888890,12888890
+11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,TestRewriteStallProfile,internal/core,113577780,56788890
+11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierzse,cmd/keel,68160485,68160485
+11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,TestRejectedCollectionPopsPreservePipelineAndRestartconcurrent,cmd/keel,68160485,68160485
+11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierlis,cmd/keel,68160040,68160040
+11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierset,cmd/keel,68159910,68159910
+11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,"TestEveryAcknowledgedWriteSurvivesAKilleverysec,_during_a_faile",internal/core,59638944,59638944
+11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,TestStagedRecordsAreTheBytesAppendAOFCommandWrites,internal/core,42599666,4259907
+11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,TestRewriteSlicesObeyKeyBudgetAndReplay,internal/core,22695220,12888890
+11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,TestReplicasThroughAFailedRewriteprotocol-,cmd/keel,21568684,21567977
+11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,TestReplicationV2LargeSnapshotOperationsAndFrozenFile,internal/core,19562340,10846052
 11924548562,38618980032,2026-10-14T18:53:20Z,feat/info-avg-ttl,TestRewriteStallProfile,internal/core,110801652,56788890
 11924548562,38618980032,2026-10-14T18:53:20Z,feat/info-avg-ttl,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierzse,cmd/keel,68160485,68160485
 11924548562,38618980032,2026-10-14T18:53:20Z,feat/info-avg-ttl,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierlis,cmd/keel,68160040,68160040

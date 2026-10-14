@@ -2060,6 +2060,17 @@ artifact_id,run_id,time,branch,pr,package,result,seconds
 11924155926,38615386288,2026-10-14T18:27:59Z,feat/command,197,internal/resp,ok,0.092
 11924155926,38615386288,2026-10-14T18:27:59Z,feat/command,197,internal/server,ok,1.328
 11924155926,38615386288,2026-10-14T18:27:59Z,feat/command,197,internal/testlock,ok,0.312
+11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,203,bench/arrival,ok,1.239
+11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,203,cmd/keel,ok,9.634
+11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,203,internal/config,ok,0.35
+11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,203,internal/core,ok,17.562
+11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,203,internal/core/io_multiplexing,ok,0.05
+11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,203,internal/data_structure,ok,17.275
+11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,203,internal/golden,ok,0.007
+11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,203,internal/procinfo,ok,0.024
+11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,203,internal/resp,ok,0.13
+11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,203,internal/server,ok,1.557
+11921663848,38615660934,2026-10-14T18:29:57Z,perf/command-specs-data,203,internal/testlock,ok,0.311
 11924548562,38618980032,2026-10-14T18:53:20Z,feat/info-avg-ttl,209,bench/arrival,ok,1.25
 11924548562,38618980032,2026-10-14T18:53:20Z,feat/info-avg-ttl,209,cmd/keel,ok,8.456
 11924548562,38618980032,2026-10-14T18:53:20Z,feat/info-avg-ttl,209,internal/config,ok,0.366
