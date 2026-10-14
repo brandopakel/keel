@@ -137,7 +137,8 @@ func TestClientCommands(t *testing.T) {
 		{[]string{"CLIENT", "SETINFO", "COLOUR", "blue"}, "-ERR Unrecognized option 'COLOUR'"},
 		{[]string{"CLIENT", "SETINFO", "LIB-NAME", "a b"}, "-ERR LIB-NAME cannot contain spaces, newlines or special characters."},
 		{[]string{"CLIENT", "SETNAME"}, "-ERR wrong number of arguments for 'client|setname' command"},
-		{[]string{"CLIENT", "KILL", "ID", "1"}, "-ERR unknown subcommand 'KILL'. Try CLIENT HELP."},
+		{[]string{"CLIENT", "KILL", "ID", "999999"}, ":0"},
+		{[]string{"CLIENT", "TRACKING", "ON"}, "-ERR unknown subcommand 'TRACKING'. Try CLIENT HELP."},
 		{[]string{"CLIENT"}, "-ERR wrong number of arguments for 'client' command"},
 	} {
 		if got := call(t, c, r, tc.args...); got != tc.want {
@@ -145,7 +146,8 @@ func TestClientCommands(t *testing.T) {
 		}
 	}
 	info := call(t, c, r, "CLIENT", "INFO")
-	for _, field := range []string{"id=" + strings.TrimPrefix(id, ":") + " ", "name=worker-1 ", "lib-name=redis-py ", "lib-ver=8.1.0\n"} {
+	for _, field := range []string{"id=" + strings.TrimPrefix(id, ":") + " ", "name=worker-1 ", "lib-name=redis-py ", "lib-ver=8.1.0 ",
+		" cmd=client|info ", " flags=N "} {
 		if !strings.Contains(info, field) {
 			t.Errorf("CLIENT INFO %q lacks %q", info, field)
 		}
