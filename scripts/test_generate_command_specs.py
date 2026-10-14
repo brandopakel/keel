@@ -93,6 +93,38 @@ class Specs(unittest.TestCase):
             with self.assertRaises(ValueError):
                 gcs.collect(Path(tmp) / 'nowhere', [('GET', None)])
 
+    def test_facts_for_command_info_and_docs_and_no_text(self):
+        set_spec = {"SET": {"summary": "text that is not copied", "complexity": "O(1), not copied", "since": "1.0.0",
+                            "arity": -3, "group": "string", "get_keys_function": "setGetKeys",
+                            "history": [["2.6.12", "text that is not copied"]], "command_tips": ["NONDETERMINISTIC_OUTPUT"],
+                            "command_flags": ["WRITE"], "acl_categories": ["STRING"],
+                            "key_specs": [{"notes": "text that is not copied", "flags": ["RW"], "begin_search": {"index": {"pos": 1}},
+                                           "find_keys": {"range": {"lastkey": 0, "step": 1, "limit": 0}}}],
+                            "arguments": [{"name": "key", "type": "key", "key_spec_index": 0},
+                                          {"name": "condition", "type": "oneof", "optional": True, "since": "2.6.12",
+                                           "arguments": [{"name": "nx", "type": "pure-token", "token": "nx"},
+                                                         {"name": "xx", "type": "pure-token", "token": "XX",
+                                                          "summary": "text that is not copied"}]},
+                                          {"name": "Seconds", "type": "integer", "display": "SECONDS", "multiple": True,
+                                           "multiple_token": True, "deprecated_since": "7.0.0"}]}}
+        with tempfile.TemporaryDirectory() as tmp:
+            commands = Path(tmp) / 'src' / 'commands'
+            commands.mkdir(parents=True)
+            (commands / 'set.json').write_text(json.dumps(set_spec))
+            specs = gcs.collect(tmp, [('SET', None)])
+            text = gcs.render(specs)
+        s = specs['SET']
+        self.assertEqual((s['tips'], s['since'], s['getkeys']), (['nondeterministic_output'], '1.0.0', 'setGetKeys'))
+        self.assertEqual(s['args'][1]['args'][0]['token'], 'NX', 'tokens in upper case, as Redis writes them')
+        self.assertEqual(s['args'][2], {'name': 'seconds', 'type': 'integer', 'display': 'seconds', 'key_spec': -1, 'token': '',
+                                        'since': '', 'deprecated_since': '7.0.0', 'flags': ['multiple', 'multiple_token'], 'args': []})
+        self.assertIn('\t{name: "SET", tips: []string{"nondeterministic_output"}, since: "1.0.0", args: ', text)
+        self.assertIn('getKeys: "setGetKeys"},', text)
+        self.assertIn('"SET": {arity: -3, group: "string", flags: []string{"WRITE"}, acl: []string{"STRING"}, keys: ', text)
+        self.assertIn('tips: []string{"nondeterministic_output"}', text)
+        self.assertIn('{name: "condition", typ: "oneof", keySpec: -1, since: "2.6.12", flags: []string{"optional"}, args: []commandArg{', text)
+        self.assertNotIn('not copied', text)
+
 
 if __name__ == '__main__':
     unittest.main()
