@@ -2482,7 +2482,12 @@ Count-Min sketches too, and by the error, stats and differential harnesses.
 - **CF.COMPACT is a write here.** RedisBloom declares it read-only, though it
   changes the filter (it resets the count of deletions) and replicates it,
   so a Redis replica would run it and differ from its primary; a Keel replica
-  refuses it with READONLY, and the log records it.
+  refuses it with READONLY, and the log records it. Its descriptor
+  (`command_specs_keel.go`) declares it `WRITE FAST`, in the write ACL
+  category, where RedisBloom 8.10.1 registers it `"readonly fast"`, `"read"`
+  (`rebloom.c`, line 1648), so COMMAND INFO reports it as a write, and a
+  cluster-aware client sends it to the primary, the only node that accepts
+  it.
 - **Not done**: the `SCANDUMP`/`LOADCHUNK` pairs, whose chunks are
   RedisBloom's own bit layout and hashing, which Keel's filters do not
   share, so a chunk of one would not load into the other; and `PFDEBUG` and
