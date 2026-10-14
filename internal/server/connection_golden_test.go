@@ -33,7 +33,7 @@ import (
 // the session switches the connection as it would a client's. The engine
 // keeps no log here: what the data commands write is the command corpus's.
 const (
-	connectionGoldenRevision = "a62baae"
+	connectionGoldenRevision = "45d9eba"
 	connectionGoldenDir      = "testdata/connection-" + connectionGoldenRevision
 )
 
