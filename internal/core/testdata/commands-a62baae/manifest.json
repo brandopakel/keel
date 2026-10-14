@@ -1,6 +1,6 @@
 {
-  "source_revision": "3fba36c",
-  "captured": "2026-10-13",
+  "source_revision": "a62baae",
+  "captured": "2026-10-14",
   "note": "Every command's RESP2 and RESP3 replies and log records at source_revision; see command_golden_test.go.",
   "files": {
     "bloom.txt": {
