@@ -39,6 +39,7 @@ func (e *Engine) resetStores() {
 	// and so do the keys a replay of the log removed, which the log's next
 	// open would record as deleted from it.
 	e.expiredKeys = 0
+	e.avgTTL = 0
 	e.aof.recovered = nil
 
 	e.dictStore = data_structure.CreateDict(space)

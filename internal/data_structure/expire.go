@@ -49,6 +49,8 @@ func (d *Dict) ActiveExpire(samples int) (examined, expired int) {
 		examined++
 		if at <= now {
 			doomed = append(doomed, key)
+		} else {
+			d.space.noteTTL(at - now)
 		}
 		if examined >= samples {
 			break
@@ -62,6 +64,25 @@ func (d *Dict) ActiveExpire(samples int) (examined, expired int) {
 		}
 	}
 	return examined, expired
+}
+
+// noteTTL records a key active expiry found with left milliseconds still to
+// live, for avg_ttl; not while expiry is suspended, when nothing is due.
+func (s *Space) noteTTL(left uint64) {
+	if s.SuspendExpiry {
+		return
+	}
+	s.ttlSum += left
+	s.ttlSamples++
+}
+
+// TakeTTLSamples returns what active expiry has noted since the last call -
+// the time left to the keys it found not yet due, in milliseconds, and how
+// many - and starts again.
+func (s *Space) TakeTTLSamples() (sum, samples uint64) {
+	sum, samples = s.ttlSum, s.ttlSamples
+	s.ttlSum, s.ttlSamples = 0, 0
+	return sum, samples
 }
 
 // KeysWithExpiry is how many keys carry a TTL, for INFO and for a cycle that

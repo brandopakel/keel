@@ -34,7 +34,7 @@ var packageVars = map[string]string{
 	"redisCommandSpecs": table, "redisCommandSpecTable": table, "keelCommandSpecs": table, "oneKey": table, "oneKeyRead": table, "oneKeyWrite": table,
 	"connectionCommands": table, "containerCommands": table, "clientSubcommands": table,
 	"memorySubcommands": table, "configSubcommands": table, "configHelp": table, "keyspaceReads": table, "readsAfterArguments": table, "statNames": table, "latencySubcommands": table, "latencyHelp": table, "latencyPercentiles": table, "hdrBucketCount": table, "hdrCountsLen": table, "commandKeyspace": table, "multiKeyCommands": table, "slowlogSubcommands": table, "slowlogHelp": table, "sensitiveSettings": table, "errSlowlogCount": sentinel,
-	"strideKeyCommands": table, "argumentsBeforeType": table, "replacingWrites": table,
+	"strideKeyCommands": table, "argumentsBeforeType": table, "replacingWrites": table, "avgTTLFactor": table,
 	"filterCommands": table, "writeCommands": table, "notInTransaction": table,
 	"answersWithoutData": table, "bfInfoOptions": table, "cfOptions": table, "memoryHelp": table,
 	"queuedReply": table, "execAbortReply": table, "allocationPressure": table,

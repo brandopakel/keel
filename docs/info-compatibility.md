@@ -226,12 +226,26 @@ decision of its own, and none of (a) to (d) changes it.
 
 ## Keyspace
 
-`db0:keys=N,expires=N,avg_ttl=N,subexpiry=N`. Keel reports `keys` and
-`expires`. `avg_ttl` is Redis's estimate in milliseconds of the TTL of keys
-that have one, taken from the active expiry cycle's samples. It waits for a
-later part, because Keel's keyspaces report how many keys a sample examined
-and removed, not their TTLs. `subexpiry=0` comes with it, since Keel has no
-hash field expiry.
+`db0:keys=N,expires=N,avg_ttl=N,subexpiry=N`, all four, as Redis 8.10.1
+writes them (part (f)):
+
+- **The line is written only when the keyspace holds keys,** as Redis writes a
+  database's line only then (`if (keys || vkeys)`, server.c). An empty Keel
+  has a Keyspace section with no line, where it used to write
+  `db0:keys=0,expires=0`.
+- **`avg_ttl`** is Redis's running estimate, in milliseconds, of the time left
+  to the keys that carry a TTL, from the active expiry cycle's sample, as
+  Redis's `activeExpireCycle` keeps it (expire.c).
+  - Each key the cycle samples that is not yet due adds its time left. Every 16
+    rounds, and as the cycle stops, the sample's mean is folded in: the first
+    estimate as it is, and after it the old one weighted 0.98 for each round
+    that sampled, with Redis's `avg_ttl_factor` table, truncated as Redis's
+    `long long` is.
+  - It is `0` when no key carries a TTL, after `FLUSHDB` (Redis's `emptyData`),
+    and on a replica, which runs no active expiry, as Redis's does not.
+  - While expiry is suspended, as a replay of the log suspends it, the cycle
+    samples nothing.
+- **`subexpiry`** is `0`: Keel has no hash field expiry.
 
 ## Commandstats, Errorstats and Latencystats
 
