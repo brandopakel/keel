@@ -217,8 +217,18 @@ extras: `primary_epoch`, `replica_epoch`, the `replication_*`, `failover_*`
 and `replica_*` lines, `writable` and `primary_offset`. Keel's own `role` line
 gives way to Redis's, since exporters and alert rules key on `role:master`
 (redis_exporter's `redis_instance_info{role="master"}`, and the common alerts
-for a missing or a second master). A Keel primary is the `master`, and a Keel
-replica the `slave`, as HELLO already answers.
+for a missing or a second master), and tools and client libraries that find
+replicas through INFO look for `role:slave`.
+
+**Names.** Keel calls its servers a primary and a replica, everywhere it speaks
+for itself: these docs, its logs, its flags (`-replicaof`), its own INFO lines
+and HELLO's `role` (`master` or `replica`, as Redis's HELLO answers). INFO
+replication's field names and its `role` value are Redis's wire format, which
+Redis itself kept when it renamed the rest (`REPLICAOF`, `replica-*`), because
+tooling matches on them: there a Keel primary is `role:master` and a Keel
+replica `role:slave`, and the fields keep Redis's names (`connected_slaves`,
+`slave_repl_offset`). The owner chose this on October 14, 2026, over a name of
+Keel's own, which would have broken that tooling.
 
 On a replica:
 
