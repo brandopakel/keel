@@ -391,6 +391,7 @@ func (tx *Transaction) exec(e *Engine, w io.Writer, conn Connection) (aborted bo
 	defer func() { e.replyCeiling = MaxReplyBytes }()
 	run := func(cmd *Command, sink io.ReadWriter) error {
 		if answers(conn, cmd.Cmd) {
+			e.execReplyBytes = total
 			conn.AnswerConnection(cmd, sink)
 			return nil
 		}
