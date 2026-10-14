@@ -184,3 +184,16 @@ func (e *Engine) cmdFLUSHDB(args []string) []byte {
 	r := e.reply()
 	return r.Status("OK").Bytes()
 }
+
+// cmdFLUSHALL empties every database, which in Keel is its one: FLUSHDB's
+// work, with Redis's SYNC and ASYNC (flushAllDataAndResetRDB), recorded as
+// FLUSHALL. Keel keeps no snapshot, so there is none to save or stop.
+func (e *Engine) cmdFLUSHALL(args []string) []byte {
+	e.recordsItself()
+	if len(args) > 1 || len(args) == 1 && !strings.EqualFold(args[0], "SYNC") && !strings.EqualFold(args[0], "ASYNC") {
+		return e.encode(errSyntax, false)
+	}
+	e.opFlushAll()
+	r := e.reply()
+	return r.Status("OK").Bytes()
+}

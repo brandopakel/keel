@@ -288,6 +288,7 @@ GENERIC = [
     ['SCAN', 'x'], ['SCAN', '-1'], ['SCAN', '0', 'COUNT', '0'], ['SCAN', '0', 'COUNT', 'x'], ['SCAN', '0', 'BAD'],
     ['SCAN', '0', 'MATCH'], ['SCAN', '0', 'TYPE'], ['SCAN', '18446744073709551616'],
     ['SELECT', '1'], ['SELECT', 'x'], ['SELECT', '-1'], ['SELECT', '00'], ['FLUSHDB', 'BAD'], ['FLUSHDB', 'SYNC', 'ASYNC'],
+    ['FLUSHALL', 'BAD'], ['FLUSHALL', 'SYNC', 'ASYNC'], ['FLUSHALL', 'async'],
     ['TYPE', 'nokey'],
     # Hashes
     ['HSET', 'hash', 'f'], ['HSET', 'hash', 'f', 'v', 'g'], ['HSET', 'str', 'f', 'v', 'g'], ['HGET', 'list', 'f'],
@@ -495,7 +496,7 @@ def redis_arities(port):
     """The arity Redis holds for every command name Keel answers."""
     names = ['PING', 'ECHO', 'SELECT', 'UNWATCH', 'SET', 'SETNX', 'GET', 'INCR', 'INCRBY', 'DECR', 'DECRBY', 'MGET',
              'MSET', 'SETEX', 'PSETEX', 'LCS', 'DEL', 'UNLINK', 'EXISTS', 'TYPE', 'KEYS', 'SCAN', 'TTL', 'PTTL',
-             'EXPIRE', 'PEXPIREAT', 'PEXPIRE', 'EXPIREAT', 'PERSIST', 'DBSIZE', 'FLUSHDB', 'MEMORY', 'INFO',
+             'EXPIRE', 'PEXPIREAT', 'PEXPIRE', 'EXPIREAT', 'PERSIST', 'DBSIZE', 'FLUSHDB', 'FLUSHALL', 'MEMORY', 'INFO',
              'BGREWRITEAOF', 'HSET', 'HSETNX', 'HGET', 'HMGET', 'HDEL', 'HEXISTS', 'HLEN', 'HKEYS', 'HVALS', 'HGETALL',
              'HINCRBY', 'LPUSH', 'RPUSH', 'LPOP', 'RPOP', 'LTRIM', 'LLEN', 'LINDEX', 'LSET', 'LRANGE', 'SADD', 'SREM',
              'SCARD', 'SMEMBERS', 'SISMEMBER', 'SMISMEMBER', 'SPOP', 'SRANDMEMBER', 'ZCOUNT', 'ZRANGEBYSCORE',

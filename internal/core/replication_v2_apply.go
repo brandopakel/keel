@@ -236,7 +236,7 @@ func (u replicationUnit) apply(e *Engine) error {
 // that adds one fails until it is here.
 func replicationOperation(name string) bool {
 	switch name {
-	case "FLUSHDB", "DEL", "SET", "MSET", "INCR", "INCRBY", "DECR", "DECRBY", "PEXPIREAT", "PERSIST",
+	case "FLUSHDB", "FLUSHALL", "DEL", "SET", "MSET", "INCR", "INCRBY", "DECR", "DECRBY", "PEXPIREAT", "PERSIST",
 		"APPEND", "SETRANGE",
 		"HSET", "HSETNX", "HDEL", "HINCRBY", "LPUSH", "RPUSH", "LPOP", "RPOP", "LTRIM", "LSET",
 		"SADD", "SREM", "ZADD", "ZREM", "GEOADD", "KEEL.RESTORE":

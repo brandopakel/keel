@@ -128,8 +128,17 @@ func (e *Engine) opDBSize() int64 { return int64(e.space.TotalKeys()) }
 // the keyspace and for the replicas, before it is deleted: a rewrite that
 // has written some of them into the new log would otherwise finish by
 // restoring what FLUSHDB removed.
-func (e *Engine) opFlushDB() {
-	e.aofRecord("FLUSHDB")
+func (e *Engine) opFlushDB() { e.opFlush("FLUSHDB") }
+
+// opFlushAll is FLUSHALL's: every key of every keyspace, as FLUSHDB deletes
+// them in Keel's one database, recorded as FLUSHALL, as Redis propagates it,
+// whether or not there was anything to delete (db.c, flushallCommand's
+// forceCommandPropagation).
+func (e *Engine) opFlushAll() { e.opFlush("FLUSHALL") }
+
+// opFlush deletes every key, recorded as record.
+func (e *Engine) opFlush(record string) {
+	e.aofRecord(record)
 	e.space.EachKeyspace(func(ks data_structure.Keyspace) {
 		for _, key := range ks.Keys() {
 			e.noteRewriteDirty(key)

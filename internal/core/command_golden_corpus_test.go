@@ -1834,6 +1834,23 @@ var goldenServer = []commandGoldenCase{
 		send("FLUSHDB", "BAD"),
 		send("FLUSHDB", "SYNC", "ASYNC"),
 	}},
+	{family: "server", name: "flushall", steps: []goldenStep{
+		send("MSET", "a", "1", "b", "2"),
+		send("HSET", "h", "f", "v"),
+		send("DBSIZE"),
+		send("FLUSHALL"),
+		send("DBSIZE"),
+		send("EXISTS", "a", "h"),
+		// An empty keyspace's FLUSHALL is recorded too, as Redis propagates it.
+		send("FLUSHALL"),
+		send("SET", "a", "1"),
+		send("flushall", "SYNC"),
+		send("SET", "a", "1"),
+		send("FLUSHALL", "async"),
+		send("DBSIZE"),
+		send("FLUSHALL", "BAD"),
+		send("FLUSHALL", "SYNC", "ASYNC"),
+	}},
 	{family: "server", name: "memory", steps: []goldenStep{
 		send("MEMORY", "HELP"),
 		send("memory", "help"),
