@@ -787,6 +787,14 @@ Live telemetry run after each merge confirms them.
   200 from Redis 8.10.2. Given the same commands, each on a connection of its
   own, Keel's six are the same numbers as Redis's: 3,972 bytes in, 777 out,
   210 reads, 105 writes.
+- **(h):** `redis_expired_keys_total` as Redis counts it, and
+  `redis_expired_stale_percentage`, `redis_expired_time_cap_reached_total`,
+  `redis_expire_cycle_cpu_time_ms_total` and `redis_expired_subkeys_total`.
+  Given the same keys, 200 read after their TTL, 300 left to the cycle and a
+  `SET` with a `PXAT` that had passed, Keel and Redis 8.10.2 both report 501
+  expired, 500 of them by the cycle. Keel's cycle stopped once at its cap of
+  rounds on the burst, where Redis's stayed inside its time; the two
+  eviction-exceeded metrics stay Redis's alone (see Stats).
 - **(i):** `redis_client_recent_max_input_buffer_bytes`,
   `redis_client_recent_max_output_buffer_bytes`, `redis_mem_clients_normal` and
   `redis_mem_clients_slaves`, and `redis_connected_clients` without the
