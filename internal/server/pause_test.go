@@ -206,3 +206,19 @@ func TestRedisInt(t *testing.T) {
 		require.False(t, ok, s)
 	}
 }
+
+// TestAPauseAnswersNOAUTHAtOnce: a connection that has not logged in to a
+// server with a password, set at start or by CONFIG SET requirepass since,
+// is refused at once under a pause, as Redis refuses it before it pauses.
+func TestAPauseAnswersNOAUTHAtOnce(t *testing.T) {
+	t.Cleanup(func() { pause = clientPause{} })
+	pause = clientPause{end: time.Now().Add(time.Minute), all: true}
+	set := &core.Command{Cmd: "SET", Args: []string{"k", "v"}}
+	auth := newServerPassword("")
+	c := &client{serverPass: auth, authenticated: true}
+	require.True(t, c.waitsForPause(set), "a logged-in connection waits")
+	auth.set("secret")
+	c = &client{serverPass: auth}
+	require.False(t, c.waitsForPause(set), "one that has not logged in is refused at once")
+	require.True(t, c.waitsForPause(&core.Command{Cmd: "AUTH", Args: []string{"secret"}}), "AUTH itself waits under ALL")
+}
