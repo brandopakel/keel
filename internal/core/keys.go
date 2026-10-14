@@ -21,8 +21,8 @@ import (
 // something, as Redis propagates a command only when it counted a change
 // (server.dirty).
 
+// RENAME and RENAMENX of a missing key answer errNoSuchKey, LSET's (lists.go).
 var (
-	errNoSuchKey  = errors.New("ERR no such key")
 	errSameObject = errors.New("ERR source and destination objects are the same")
 	errDBIndex    = errors.New("ERR DB index is out of range")
 )
