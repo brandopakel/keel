@@ -22,6 +22,14 @@ var replicaWrites = [][]string{
 	{"APPEND", "k", "x"}, {"SETRANGE", "k", "0", "x"}, {"GETDEL", "k"}, {"GETEX", "k"},
 	{"GETEX", "k", "EX", "100"}, {"GETEX", "k", "PERSIST"}, {"GETSET", "k", "v"},
 	{"MSETNX", "missing", "1", "other", "2"}, {"INCRBYFLOAT", "n", "1.5"},
+	// Redis 8's string commands (step 4.3d).
+	{"DELEX", "k"}, {"DELEX", "k", "IFEQ", "v"}, {"MSETEX", "1", "k", "v", "EX", "100"}, {"INCREX", "n"},
+	{"INCREX", "missing", "BYFLOAT", "1.5"}, {"SET", "k", "v", "IFEQ", "v"}, {"SET", "k", "v", "IFNE", "x"},
+	{"SET", "k", "v", "IFDEQ", "0000000000000000"}, {"SET", "k", "v", "IFDNE", "0000000000000000"},
+	// Keys and expiry (step 4.4).
+	{"DEL", "k"}, {"DEL", "missing"}, {"UNLINK", "k"}, {"EXPIRE", "k", "100"}, {"EXPIRE", "k", "100", "NX"},
+	{"PEXPIRE", "k", "100000"}, {"EXPIREAT", "k", "9999999999"}, {"PEXPIREAT", "k", "9999999999000"},
+	{"EXPIRE", "k", "-1"}, {"PERSIST", "k"}, {"FLUSHDB"}, {"FLUSHDB", "ASYNC"},
 }
 
 var replicaWritesSeed = [][]string{

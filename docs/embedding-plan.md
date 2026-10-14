@@ -1997,7 +1997,7 @@ PRs each, in this order:
    Keel lacks (docs/redis-parity-plan.md), and a recipe for the families that
    follow.
 
-Then keys and TTL, then hashes, each family converted and then completed.
+Then keys and TTL (step 4.4), then hashes, each family converted and then completed.
 
 #### Step 4.0: golden corpora
 
@@ -2350,6 +2350,35 @@ error-parity harnesses, which hold them to Redis 8.10.1 in CI.
   quadratic; a buffer kept with spare capacity is follow-on work if a
   workload needs it.
 
+**4.3d: the string commands Redis 8 added.** `DIGEST`, `DELEX`, `MSETEX`
+(8.4), `INCREX` (8.8), and `SET`'s `IFEQ`, `IFNE`, `IFDEQ` and `IFDNE`
+conditions (8.4), as Redis 8.10.1's `t_string.c` and `db.c` define them.
+
+- **The digest** is XXH3's 64-bit hash, in 16 hexadecimal digits. Keel's
+  runtime dependencies stay murmur3 alone, so XXH3 is translated in-tree
+  (`internal/xxh3`) from the scalar code of xxHash 0.8.3's `xxhash.h`, the
+  version Redis vendors, with its BSD 2-Clause notice in the file and in
+  `THIRD_PARTY_NOTICES.md`. It matches xxHash's published test vectors (one
+  length in each of the algorithm's ranges, and the long inputs ending at a
+  stripe, a block or partway through one) and, locally, Redis 8.10.2's
+  `DIGEST` at 38 lengths from 0 to 100,000 bytes; CI's differential holds it
+  to Redis 8.10.1's.
+- **Records**: `DELEX` as `DEL`, `MSETEX` as a `SET` and `PEXPIREAT` per key
+  (a key of another type's `DEL` first), `INCREX` as Redis propagates it, a
+  `SET` of the final value, plain under `PERSIST`, followed by `PEXPIREAT`
+  under a new expiry, and with `KEEPTTL` otherwise; an expiry already past
+  is the `DEL` it amounts to. `SET` with a condition records what `SET`
+  records. Every record is a command older builds replay.
+- **Admission**: `INCREX`'s reply, two integers or two long doubles, is
+  admitted before it writes, as `INCRBYFLOAT`'s is.
+- **Improvement over Redis**: `SET key value GET IFDEQ digest` (or `IFDNE`)
+  with a digest that is not 16 characters long, on a key holding a string,
+  is answered twice by Redis, the old value and then `ERR must be exactly 16
+  hexadecimal characters`: `setGenericCommand` answers `GET` (t_string.c
+  lines 99-101) before it checks the digest (lines 136-137). A client then
+  reads the error as the reply to its next command. Keel answers the error
+  alone and writes nothing.
+
 #### Lists, the first collection family
 
 **The conversion.** Lists follow the strings' recipe
@@ -2391,6 +2420,38 @@ error-parity harnesses, which hold them to Redis 8.10.1 in CI.
   (`go tool objdump` of both test binaries), 256 bytes earlier, since the
   handlers left `commands_list.go`, and everything after `lists.go` is 5,120
   bytes later.
+
+#### Step 4.4: keys and expiry
+
+The second family, by the recipe: the commands that answer about a name
+whatever type holds it.
+
+- **Typed operations** (`keys.go`): `opDel`, `opExists`, `opType`, `opTTL`,
+  `opExpireAt` (with `expireCondition`, EXPIRE's NX, XX, GT and LT),
+  `opPersist`, `opDBSize` and `opFlushDB`. They run with no type check in
+  their scope and look a name up across every keyspace, which reaps a key
+  whose expiry has passed. The reads (EXISTS, TYPE, TTL, PTTL) count each
+  key they look up as a keyspace hit or a miss, in the operation, as #160
+  counted them in the handlers. Each records what develop logged: `DEL` with every
+  key given (and `UNLINK` as `DEL`), an expiry as `PEXPIREAT` or the `DEL` an
+  instant already past amounts to, `PERSIST`, and the plain `FLUSHDB`.
+  `opExpireAt` judges an instant against the clock reading the command took
+  once (`e.commandClock()`, #189), the base of a relative expiry too, as
+  Redis's `commandTimeSnapshot()` is both.
+- **No-op records kept, for now.** develop logs `DEL` of keys none of which
+  exist and `PERSIST` of a key with no expiry, which Redis does not
+  propagate (`db.c`, `delGenericCommand`; `expire.c`, `persistCommand`,
+  lines 914-919, count a change only when there was one). The conversion
+  keeps them, byte for byte; the family's missing-commands step drops them
+  and recaptures, as the recipe's rule says, and an older log holding one
+  still replays, as a no-op.
+- **The command language** (`commands_dict.go`, `commands_keyspace.go`)
+  reads the arguments as before and answers through `e.reply()`. `KEYS` and
+  `SCAN` keep their walks and collection replies, which move into `Reply`
+  with a measurement when a family needs them to.
+- **Measured**: no row of the paired job runs these commands, so the job
+  checks only that nothing else moved; the corpora and the persistence and
+  replication goldens replay unchanged.
 
 ## Risks, in order
 
