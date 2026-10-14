@@ -147,6 +147,8 @@ func (e *Engine) resetStats() {
 	e.totals = commandTotals{}
 	clear(e.cmdStats)
 	clear(e.latency)
+	// The slow log's counts, not its entries, which SLOWLOG RESET clears.
+	e.slowlog.count, e.slowlog.usecSum, e.slowlog.usecMax = 0, 0, 0
 	e.expiredKeys = 0
 	e.space.ResetEvicted()
 	e.aof.rewrites = 0

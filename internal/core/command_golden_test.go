@@ -57,7 +57,7 @@ import (
 // command_golden_coverage_test.go checks that the corpus names every command
 // and reaches every error text the handlers hold.
 const (
-	commandGoldenRevision = "7011d17"
+	commandGoldenRevision = "67aa4e2"
 	commandGoldenDir      = "testdata/commands-" + commandGoldenRevision
 )
 
@@ -118,6 +118,15 @@ func budgetStep(n int) goldenStep {
 	return goldenStep{directive: "budget " + strconv.Itoa(n), do: func(r *commandGoldenRun) {
 		r.e.SetCommandAllocations(&CommandAllocationBudget{Limit: n})
 		r.e.CommandAllocations().Begin(0)
+	}}
+}
+
+// slowlogStep sets the slow log's threshold, slowlog-log-slower-than, to n
+// microseconds: 0 logs every command and -1 none, so that what the slow log
+// holds does not depend on how long a command happened to take.
+func slowlogStep(n int) goldenStep {
+	return goldenStep{directive: "slowlog-log-slower-than " + strconv.Itoa(n), do: func(r *commandGoldenRun) {
+		r.e.slowlog.slowerThan = int64(n)
 	}}
 }
 

@@ -95,6 +95,11 @@ func (e *Engine) configParameters() []configParameter {
 		{"latency-tracking", "yes"},
 		{"latency-tracking-info-percentiles", "50 99 99.9"},
 		{"latency-monitor-threshold", "0"},
+		// The slow log's, Redis's defaults (slowlog.go).
+		{"slowlog-log-slower-than", strconv.FormatInt(e.slowlog.slowerThan, 10)},
+		{"slowlog-max-len", strconv.Itoa(e.slowlog.maxLen)},
+		{"slowlog-entry-max-argc", strconv.Itoa(e.slowlog.maxArgc)},
+		{"slowlog-entry-max-string-len", strconv.Itoa(e.slowlog.maxStringLen)},
 	}
 	// Relative paths, the log's among them, resolve against it, as against
 	// Redis's dir.
