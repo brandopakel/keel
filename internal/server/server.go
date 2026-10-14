@@ -140,9 +140,12 @@ type client struct {
 	unreadSeen      time.Time
 	closeAfterWrite bool
 	authenticated   bool
-	// password is what the connection authenticates with: the server's
-	// RequirePass when it was accepted. Empty, it needs none.
+	// password is what the connection authenticates with when it has no
+	// auth: a fixed password, as a test gives it. Empty, it needs none.
 	password string
+	// serverPass is the server's password, which CONFIG SET requirepass
+	// changes while the server runs; nil, the connection uses password.
+	serverPass *serverPassword
 	// id numbers the connection for HELLO and CLIENT ID; name, libName and
 	// libVersion are what CLIENT SETNAME and CLIENT SETINFO recorded.
 	id uint64
@@ -601,7 +604,7 @@ func ipv4Address(host string, port int) (*syscall.SockaddrInet4, error) {
 // else. These used to return from the loop, which unwound RunAsyncTCPServer
 // and took every other connected client down over one bad descriptor. The
 // connection's commands will run on e.
-func acceptClient(serverFD int, mux io_multiplexing.IOMultiplexer, password string, e *core.Engine) (*client, bool) {
+func acceptClient(serverFD int, mux io_multiplexing.IOMultiplexer, auth *serverPassword, e *core.Engine) (*client, bool) {
 	connFD, peer, err := syscall.Accept(serverFD)
 	if err != nil {
 		log.Println("accept:", err)
@@ -633,8 +636,11 @@ func acceptClient(serverFD int, mux io_multiplexing.IOMultiplexer, password stri
 		return nil, false
 	}
 	connectionsReceived++
+	// A connection made while the server needs no password is logged in, as
+	// Redis logs in a client of its nopass default user when it connects, and
+	// stays logged in if a password is set later.
 	return &client{fd: connFD, id: connectionsReceived, addr: peerAddr(peer), lastProgress: time.Now(), interestKnown: true, interest: io_multiplexing.OpRead,
-		password: password, engine: e}, true
+		serverPass: auth, authenticated: auth.get() == "", engine: e}, true
 }
 
 // replyBuffer collects the replies produced from one read so they can be sent
@@ -806,9 +812,30 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 	defer e.SetClientBuffers(nil)
 	e.SetStatsReset(func() { resetConnectionStats(); resetNetStats() })
 	defer e.SetStatsReset(nil)
+	// The settings CONFIG SET changes while the server runs: the password,
+	// the most clients, and the clock's rate, which the cron goroutine below
+	// picks up.
+	auth := newServerPassword(o.RequirePass)
+	maxClients := o.MaxClients
+	cronInterval := make(chan time.Duration, 1)
 	e.SetServerInfo(&core.ServerInfo{Port: o.Port, MaxClients: o.MaxClients, TCPBacklog: o.TCPBacklog, IOThreads: o.IOThreads,
 		Host: o.Host, RequirePass: o.RequirePass,
-		Hz: max(1, int(time.Second/o.CronInterval)), Multiplexer: io_multiplexing.API})
+		Hz: max(1, int(time.Second/o.CronInterval)), Multiplexer: io_multiplexing.API,
+		SetRequirePass: auth.set,
+		SetMaxClients: func(n int) string {
+			if why := checkClientLimit(n); why != "" {
+				return why
+			}
+			maxClients = n
+			return ""
+		},
+		SetHz: func(hz int) {
+			select {
+			case <-cronInterval:
+			default:
+			}
+			cronInterval <- time.Second / time.Duration(hz)
+		}})
 	defer e.SetServerInfo(nil)
 	defer func() {
 		e.CancelRewrite()
@@ -915,6 +942,8 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 			select {
 			case <-cronStop:
 				return
+			case d := <-cronInterval:
+				tick.Reset(d)
 			case <-tick.C:
 				wake()
 			}
@@ -1004,8 +1033,8 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 					var drain [64]byte
 					syscall.Read(wakeupFDs[0], drain[:])
 				case serverFD:
-					if len(clients) < o.MaxClients {
-						if c, ok := acceptClient(serverFD, ioMultiplexer, o.RequirePass, e); ok {
+					if len(clients) < maxClients {
+						if c, ok := acceptClient(serverFD, ioMultiplexer, auth, e); ok {
 							clients[c.fd] = c
 						}
 					} else {
@@ -1078,7 +1107,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 			case serverFD:
 				// The listening socket is readable: a client is waiting to be
 				// accepted.
-				if len(clients) >= o.MaxClients {
+				if len(clients) >= maxClients {
 					fd, _, err := syscall.Accept(serverFD)
 					if err == nil {
 						syscall.Close(fd)
@@ -1086,7 +1115,7 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 					}
 					continue
 				}
-				if c, ok := acceptClient(serverFD, ioMultiplexer, o.RequirePass, e); ok {
+				if c, ok := acceptClient(serverFD, ioMultiplexer, auth, e); ok {
 					clients[c.fd] = c
 				}
 			default:
@@ -1352,7 +1381,7 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 	// is answered here is counted here: as it runs, with its time, and as
 	// its errors are written (countedReplies), or as refused.
 	own := countedReplies{c.engine, w}
-	locked := c.password != "" && !c.authenticated
+	locked := c.requiredPassword() != "" && !c.authenticated
 	if locked || core.IsConnectionCommand(cmd.Cmd) {
 		if err := core.CommandError(cmd); err != nil {
 			own.Write(core.Refusal(cmd, err))

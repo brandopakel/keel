@@ -28,6 +28,14 @@ type ServerInfo struct {
 	// Multiplexer is the readiness facility the transport waits on: epoll or
 	// kqueue.
 	Multiplexer string
+
+	// SetRequirePass, SetHz and SetMaxClients change the transport's
+	// password, clock rate and most connections while it runs, for CONFIG
+	// SET, which then records the new value here. SetMaxClients returns
+	// Redis's error text when it cannot. Nil, the setting cannot change.
+	SetRequirePass func(password string)
+	SetHz          func(hz int)
+	SetMaxClients  func(n int) string
 }
 
 // SetServerInfo installs on e what INFO reports of the transport driving e,
