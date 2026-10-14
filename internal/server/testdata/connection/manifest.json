@@ -2,10 +2,10 @@
   "note": "The connection commands' RESP2 and RESP3 replies, as captured at the revision the entry names; see connection_golden_test.go.",
   "files": {
     "connection.txt": {
-      "sha256": "5475f7d8055a18eda9daa65b572f9847a7009917937dea6a2413f21594d435b5",
-      "cases": 9,
-      "commands": 166,
-      "source_revision": "ff6a57d",
+      "sha256": "aec1da301b709bc8ce212c2beea59b3658cff162beb747fd0f29efa16e820ca4",
+      "cases": 10,
+      "commands": 211,
+      "source_revision": "fcb0310",
       "captured": "2026-10-14"
     }
   }
