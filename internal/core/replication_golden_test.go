@@ -41,7 +41,9 @@ import (
 // testdata/replication-<replicationGoldenRevision>/ holds the transcripts
 // written at that revision (first at 9736d8d, before step 2.4 of the
 // embedding plan; recaptured at 75ac267, when a DEL or PERSIST that changed
-// nothing stopped being logged), captured with
+// nothing stopped being logged, and at 5359f0f, when a ZADD or ZREM that
+// changed nothing did, and GEOADD began to be logged as the ZADD Redis
+// rewrites it to), captured with
 //
 //	KEEL_CAPTURE_REPLICATION_GOLDEN=$PWD/testdata/replication-<revision> \
 //	  go test ./internal/core -run '^TestReplicationGoldenCapture$'
@@ -75,7 +77,7 @@ import (
 // Every opaque command here changes one key, so the record order of each
 // protocol 2 frame is the order the primary published it in, and is kept.
 // replicationGoldenRevision is the revision the transcripts were captured at.
-const replicationGoldenRevision = "75ac267"
+const replicationGoldenRevision = "5359f0f"
 
 const replicationGoldenDir = "testdata/replication-" + replicationGoldenRevision
 
