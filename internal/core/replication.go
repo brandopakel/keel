@@ -348,6 +348,11 @@ func (e *Engine) replicaCommandError(cmd string) error {
 	if e.replicaApplying || e.aof.replaying {
 		return nil
 	}
+	// A command that would grow a keyspace over its bound is refused first,
+	// as Redis's processCommand checks maxmemory before the disk.
+	if e.oomRefuses(cmd) {
+		return errOOM
+	}
 	// While a failed write or sync of the log is retried, write commands and
 	// PING are refused, as Redis's processCommand refuses them before the
 	// checks below (server.c 4675-4697). A healthy log costs this one field.

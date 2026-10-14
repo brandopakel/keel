@@ -84,16 +84,14 @@ func humanBytes(n uint64) string {
 }
 
 // evictionPolicyName is Redis's name for an eviction policy, as INFO reports
-// it.
+// it, and empty for a value that is none of Keel's.
 func evictionPolicyName(policy EvictionPolicy) string {
-	switch policy {
-	case EvictLRU:
-		return "allkeys-lru"
-	case EvictLFU:
-		return "allkeys-lfu"
-	default:
-		return "allkeys-random"
+	for _, p := range evictionPolicies {
+		if p.policy == policy {
+			return p.name
+		}
 	}
+	return ""
 }
 
 // ClientBufferStats describes retained event-loop buffers, not process RSS or

@@ -173,7 +173,12 @@ class Servers:
         self.start_keel('keel-replica', '-replicaof', f'127.0.0.1:{primary}', '-appendonly',
                         '-appendfilename', str(self.root / 'keel-replica' / 'store.aof'),
                         '-primary-password-env', 'KEEL_ERROR_PARITY_PASSWORD')
+        # Over its memory bound under noeviction: Redis counts the whole
+        # process against maxmemory, so a byte is over it from the start, and
+        # Keel its keyspace, which each case's setup puts over it.
+        self.start_keel('keel-full', '-maxmemory', '1', '-evict', 'noeviction')
         reference = self.start_redis('redis-primary')
+        self.start_redis('redis-full', 'maxmemory 1', 'maxmemory-policy noeviction')
         self.start_redis('redis-nopass', password=False)
         self.start_redis('redis-replica', f'replicaof 127.0.0.1 {reference}', f'masterauth {PASSWORD}')
         # A replica answers reads once it has its primary's state; wait for both.
@@ -499,6 +504,24 @@ def arity_cases(arities):
     return cases
 
 
+# The write that puts Keel's keyspace over its byte of maxmemory; Redis, over
+# it already, refuses it. Nothing reads it back.
+FULL_SETUP = [['SET', 'seed', 'v']]
+# Commands whose spec says DENYOOM, refused while memory is over its bound.
+OOM_REFUSED = [['SET', 'k', 'v'], ['SETNX', 'k', 'v'], ['APPEND', 'k', 'v'], ['INCR', 'n'], ['MSET', 'a', '1', 'b', '2'],
+               ['SETEX', 'k', '10', 'v'], ['GETSET', 'k', 'v'], ['HSET', 'h', 'f', 'v'], ['HINCRBY', 'h', 'f', '1'],
+               ['LPUSH', 'l', 'a'], ['RPUSH', 'l', 'a'], ['LSET', 'l', '0', 'a'], ['SADD', 's', 'm'],
+               ['ZADD', 'z', '1', 'm'], ['ZINCRBY', 'z', '1', 'm'], ['PFADD', 'p', 'a'], ['PFMERGE', 'p', 'q'],
+               ['GEOADD', 'g', '1', '1', 'm']]
+# Sessions over maxmemory whose commands are not DENYOOM, or are queued with
+# one: reads, deletes and expiry run; a refused command spoils its
+# transaction, and one of reads runs.
+OOM_ANSWERED = [[['GET', 'k']], [['DEL', 'k']], [['EXPIRE', 'k', '10']], [['EXISTS', 'k']],
+                [['CONFIG', 'GET', 'maxmemory-policy']], [['PING']],
+                [['MULTI'], ['SET', 'k', 'v'], ['GET', 'k'], ['EXEC']],
+                [['MULTI'], ['GET', 'k'], ['TTL', 'k'], ['EXEC']]]
+
+
 def case(name, commands, *, server='primary', auth=True, protocols=(2, 3), expect=None, loose=(), setup=()):
     return dict(name=name, commands=[list(c) for c in commands], server=server, auth=auth,
                 protocols=list(protocols), expect=expect, loose=list(loose), setup=[list(c) for c in setup])
@@ -580,6 +603,12 @@ def build_cases(redis_arities, modules):
         # another type answers 0, for one - are RedisBloom parity's to compare.
         for command in (['BF.ADD', 'str', 'a'], ['CF.ADD', 'str', 'a'], ['CMS.QUERY', 'str', 'a']):
             cases.append(case('generic, RedisBloom', [command], setup=SETUP))
+    # Over maxmemory under noeviction, a DENYOOM command is refused, run or
+    # queued, and the transaction it was queued in with it; the rest run.
+    for command in OOM_REFUSED:
+        cases.append(case('over maxmemory', [command], server='full', setup=FULL_SETUP))
+    for commands in OOM_ANSWERED:
+        cases.append(case('over maxmemory, answered', commands, server='full', setup=FULL_SETUP))
     return cases
 
 
@@ -612,7 +641,7 @@ def redis_arities(port):
 
 def run_case(servers, side, spec, protocol):
     port = servers.ports[side, f'{side}-{spec["server"]}']
-    if spec['server'] == 'primary':
+    if spec['server'] in ('primary', 'full'):
         admin = Session(port, auth=True, protocol=2)
         try:
             assert admin.call('FLUSHDB') == b'+OK\r\n'

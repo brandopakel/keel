@@ -36,9 +36,9 @@ command line and Redis's value used wherever Keel offers the same knob:
 | Address | 127.0.0.1:16379 behind the wire tap on :6379 | the same |
 
 Keel's own default of 20,000 clients is replaced by Redis's 10,000. Eviction
-is the one place Redis's default (`noeviction`) cannot be followed, because
-Keel has no such policy; both arms evict by sampled LRU over all keys, and the
-pilot's keyspace stays far below the limit.
+is the one place the arms do not take Redis's default (`noeviction`), which
+Keel did not have when the pilot was set up; both arms evict by sampled LRU
+over all keys, and the pilot's keyspace stays far below the limit.
 
 Both arms of the application run on one runner, one after the other, so a
 difference in CPU or disk between hosted machines cannot appear as a

@@ -78,18 +78,52 @@ type Space struct {
 
 // EvictionPolicy is how a space that is over one of its bounds chooses the
 // keys to evict. The zero value is EvictLRU.
+//
+// A policy is a set of flags, as Redis's maxmemory policies are (server.h),
+// so that the test an access makes, whether keys are ranked by frequency, is
+// one bit whatever the policy.
 type EvictionPolicy int
 
-// The eviction policies. Redis names them allkeys-lru, allkeys-lfu and
-// allkeys-random, which is what INFO reports.
+// What a policy is made of: ranking by frequency rather than recency, taking
+// keys at random, choosing among the keys that carry a TTL only, ranking them
+// by when they fall due, and evicting nothing.
 const (
-	// EvictLRU evicts the least recently used key of a sample.
-	EvictLRU EvictionPolicy = iota
-	// EvictLFU evicts the least frequently used key of a sample.
-	EvictLFU
-	// EvictRandom takes whichever key comes to hand, without regard to use.
-	EvictRandom
+	evictByFrequency EvictionPolicy = 1 << iota
+	evictAtRandom
+	evictVolatile
+	evictByTTL
+	evictNothing
 )
+
+// The eviction policies, by Redis's names, which INFO reports.
+const (
+	// EvictLRU evicts the least recently used key of a sample: allkeys-lru.
+	EvictLRU EvictionPolicy = 0
+	// EvictLFU evicts the least frequently used key of a sample:
+	// allkeys-lfu.
+	EvictLFU = evictByFrequency
+	// EvictRandom takes whichever key comes to hand, without regard to use:
+	// allkeys-random.
+	EvictRandom = evictAtRandom
+	// EvictVolatileLRU, EvictVolatileLFU and EvictVolatileRandom choose as
+	// their namesakes do, among the keys that carry a TTL only:
+	// volatile-lru, volatile-lfu and volatile-random.
+	EvictVolatileLRU    = evictVolatile
+	EvictVolatileLFU    = evictVolatile | evictByFrequency
+	EvictVolatileRandom = evictVolatile | evictAtRandom
+	// EvictVolatileTTL evicts, of a sample of the keys that carry a TTL, the
+	// one due soonest: volatile-ttl.
+	EvictVolatileTTL = evictVolatile | evictByTTL
+	// EvictNone evicts nothing: noeviction. A space over its bound stays
+	// over it, and the engine refuses the commands that would grow it.
+	EvictNone = evictNothing
+)
+
+// Volatile reports whether p chooses among the keys that carry a TTL only.
+func (p EvictionPolicy) Volatile() bool { return p&evictVolatile != 0 }
+
+// Evicts reports whether p evicts anything at all.
+func (p EvictionPolicy) Evicts() bool { return p&evictNothing == 0 }
 
 // Limits are the bounds a space's stores are held to, and the parameters of
 // the policy that keeps them inside those bounds. Each is taken as it is
@@ -193,7 +227,16 @@ func (s *Space) Limits() Limits { return s.limits }
 // configured at startup. A space's policy is meant to be chosen before it
 // holds keys: changing it later reinterprets the access words of the keys it
 // holds, which LRU and LFU read differently.
-func (s *Space) SetLimits(limits Limits) { s.limits = limits }
+func (s *Space) SetLimits(limits Limits) {
+	if limits.Eviction != s.limits.Eviction {
+		// The pool's candidates were scored by the old policy.
+		s.pool = nil
+	}
+	s.limits = limits
+}
+
+// EvictionPolicy is how the space chooses the keys it evicts.
+func (s *Space) EvictionPolicy() EvictionPolicy { return s.limits.Eviction }
 
 // MaxKeys is the space's bound on its key count; zero is none.
 func (s *Space) MaxKeys() int { return s.limits.MaxKeys }
