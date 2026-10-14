@@ -1499,6 +1499,30 @@ var goldenServer = []commandGoldenCase{
 		send("LCS", "a", "b"),
 		send("LCS", "a", "b", "LEN"),
 	}},
+	// LATENCY's histograms are each command's times, so a histogram of a
+	// command that has run is held to its type; the rest is exact. Nothing
+	// has run when the case starts, so the first histogram is empty.
+	{family: "server", name: "latency", steps: []goldenStep{
+		send("LATENCY", "HISTOGRAM"),
+		send("SET", "k", "v"),
+		send("LATENCY", "HISTOGRAM", "get", "nosuch"),
+		send("LATENCY", "HISTOGRAM", "SET").norm(golden.FlagMasked),
+		send("LATENCY", "HISTOGRAM").norm(golden.FlagMasked),
+		send("LATENCY", "HISTOGRAM", "config"),
+		send("LATENCY", "LATEST"),
+		send("LATENCY", "HISTORY", "command"),
+		send("LATENCY", "RESET"),
+		send("LATENCY", "RESET", "command", "fork"),
+		send("LATENCY", "DOCTOR"),
+		send("LATENCY", "GRAPH", "command"),
+		send("LATENCY", "HELP"),
+		send("latency", "help"),
+		send("LATENCY", "HISTORY"),
+		send("LATENCY", "GRAPH"),
+		send("LATENCY", "HELP", "x"),
+		send("LATENCY", "nosuch"),
+		send("LATENCY"),
+	}},
 	{family: "server", name: "reply-ceiling", steps: []goldenStep{
 		send("SET", "k", "a value of some length"),
 		send("RPUSH", "l", "a", "b"),
