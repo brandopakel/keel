@@ -299,6 +299,10 @@ type Engine struct {
 	// either is retried (log_failures.go). Last, so that adding it moved no
 	// field before it.
 	logFailure logFailures
+	// config is what CONFIG SET has kept of the directives Keel accepts
+	// without effect (config.go); nil until it keeps one. Last, so that adding
+	// it moved no field before it.
+	config *configState
 }
 
 // Lock takes e's lock, waiting until whoever holds it lets go. Its holder is

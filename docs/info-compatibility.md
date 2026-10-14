@@ -366,13 +366,129 @@ General validation runs it against Redis 8.10.1 and RedisBloom.
 
 | Command | Plan |
 | --- | --- |
-| `CONFIG GET pattern [pattern ...]` | (b), done. Keel's settings under Redis's names, read live: `maxmemory`, `maxmemory-policy`, `maxmemory-samples`, `lfu-log-factor`, `appendonly`, `appendfilename`, `appendfsync`, `auto-aof-rewrite-percentage`, `auto-aof-rewrite-min-size`, `replicaof` and its old name `slaveof` (`host port`, as Redis writes it), `databases` (`1`), `save` (`""`, no snapshots) and `dir` (the working directory, against which relative paths resolve). With the server, also `port`, `bind`, `maxclients`, `tcp-backlog`, `io-threads`, `hz` and `requirepass`, which Redis gives to any client that has logged in. The latency settings (`latency-tracking`, `latency-tracking-info-percentiles`, `latency-monitor-threshold`) came with (c3b), and the slow log's (`slowlog-log-slower-than`, `slowlog-max-len`, `slowlog-entry-max-argc`, `slowlog-entry-max-string-len`) with (c3c). A RESP2 flat array, or a RESP3 map. A name matches without regard to case and comes back as asked; a glob comes back in Redis's spelling. Settings whose meaning differs are left out: `lfu-decay-time` against Keel's access-counted decay; `client-output-buffer-limit`, since Keel's 64 MiB `MaxReplyBytes` caps one reply rather than disconnecting a client that falls behind; and `repl-backlog-size`, since a Keel replica reads the primary's log, not a backlog. |
-| `CONFIG SET parameter value [parameter value ...]` | (b), done. Keel has no runtime configuration yet, so every pair is refused in Redis's words for the first that fails: `Unknown option or number of arguments for CONFIG SET - '<name>'` for a name Keel does not report, `CONFIG SET failed (possibly related to argument '<name>') - can't set immutable config` for one it does, and `can't set protected config` for `dir`, as Redis keeps it by default. An odd count is Redis's `syntax error`. |
+| `CONFIG GET pattern [pattern ...]` | (b), done; extended by `CONFIG SET` (below). Every directive Keel answers for, from Redis 8.10.1's own table (`internal/core/config_specs.go`), under Redis's names and aliases: Keel's settings read live, the settings that only tune Redis's internals at the value last set (Redis's default until then), and the settings Keel cannot change at Keel's value. `replicaof` is written `host port`, as Redis writes it; `dir` is the working directory, against which relative paths resolve. The transport's (`port`, `bind`, `maxclients`, `tcp-backlog`, `io-threads`, `hz`, `requirepass`) only with the server; Redis gives the password to any client that has logged in. A RESP2 flat array, or a RESP3 map. A name matches without regard to case and comes back as asked; a glob matches names and aliases in Redis's spelling, and never a hidden directive, which only its name finds, as in Redis. The slow log's settings came with (c3c). |
+| `CONFIG SET parameter value [parameter value ...]` | Done (S1). Redis's `configSetCommand`, all pairs or none: see "CONFIG SET" below. |
 | `CONFIG REWRITE` | (b), done. `The server is running without a config file`, Redis's answer when it was started without one: Keel takes flags. |
 | `CONFIG RESETSTAT` | (c1), done. Resets what Redis's `resetServerStats` resets that Keel reports: `total_commands_processed` and the ops-per-second samples, `total_error_replies` and errorstats, `total_connections_received` and `rejected_connections` (client ids keep growing, as Redis's do), `expired_keys`, `evicted_keys`, `keyspace_hits`, `keyspace_misses`, commandstats, latencystats, the slow log's counts (not its entries, which `SLOWLOG RESET` clears), `aof_rewrites` and `aof_rewrites_consecutive_failures`. Network bytes join them with (d). `used_memory_peak` stays, as Redis keeps it. Keel's own fields keep counting. |
 | `SLOWLOG GET [count]`, `LEN`, `RESET`, `HELP` | (c3c), done. The commands that took `slowlog-log-slower-than` microseconds or more (10000), newest first, at most `slowlog-max-len` (128). Each entry has Redis 8.10's seven fields: id, Unix time, duration in µs, the arguments (at most `slowlog-entry-max-argc`, 32, the last place saying how many more; each cut at `slowlog-entry-max-string-len`, 128 bytes, saying how many more), the client's address (`ip:port`, `[ip]:port` for IPv6, as Redis writes it) and name, and how many arguments the command really had. `EXEC` is not logged, as in Redis; what it runs is. `GET`'s count is read as Redis reads it, `-1` meaning all. The four settings are Redis's defaults, which `CONFIG GET` reports. `CONFIG RESETSTAT` clears the counts and keeps the entries, and the log's replay adds none. |
 | `LATENCY LATEST`, `HISTORY`, `RESET`, `GRAPH`, `DOCTOR`, `HELP` | (c3b), done. Redis's latency monitor is off by default (`latency-monitor-threshold 0`, which `CONFIG GET` reports), and Keel has none, so these answer as Redis's do when it has never been on: `LATEST` and `HISTORY` an empty array, `RESET` `0`, `GRAPH` Redis's `No samples available for event` error, and `DOCTOR` its report that monitoring is disabled. Each subcommand has Redis's count. |
 | `LATENCY HISTOGRAM [command ...]` | (c3b), done. Each command that has run, or each named (a container brings its subcommands, `config|get` names one, an unknown name nothing): its `calls` and its `histogram_usec`, the cumulative count at each power of two microseconds from 1, as Redis's `fillCommandCDF` walks its histogram. The exporter reads it for `redis_commands_latencies_usec`. |
+
+## CONFIG SET
+
+`CONFIG SET` answers as Redis 8.10.1's `configSetCommand` (`src/config.c`)
+does, from Redis's own table of directives, `static_configs`, which
+`scripts/generate-config-specs.py` reads into `internal/core/config_specs.go`
+(CI checks the file is current). Every directive is read with Redis's set
+function for its type, so its errors are Redis's, word for word: `argument
+must be 'yes' or 'no'`, `argument couldn't be parsed into an integer`,
+`argument must be a memory value`, `argument must be between <lower> and
+<upper> inclusive`, `percentage argument must be less or equal to <n>`,
+`argument(s) must be one of the following: ...`, and the checks some
+directives have of their own. The error-parity job compares them with Redis's.
+
+All pairs are set, or none:
+
+1. Every name is looked up first. The first name Redis does not know, or Keel
+   does not answer for, fails the command: `Unknown option or number of
+   arguments for CONFIG SET - '<name>'`. If a pair before it already failed,
+   that pair's error is returned instead.
+2. A directive Redis cannot set at all fails the command, whether Keel
+   answers for it or not: `can't set immutable config`, or `can't set
+   protected config` for `dir` and `dbfilename`, as Redis's default
+   `enable-protected-configs no` keeps them. So does a directive given twice,
+   under its name or its alias: `duplicate parameter`.
+3. Each value is then read, in order. The first that does not read fails the
+   command. The error names the directive as Redis spells it, its alias if
+   that is what was set.
+4. Only then is anything changed, in order. A change that fails puts back
+   every change made before it.
+
+An odd count is Redis's `syntax error`. Keel answers for these directives:
+
+- **Keel's own settings, changed at once.**
+  - `maxmemory`, `maxmemory-samples` and `lfu-log-factor`.
+  - `maxmemory-policy`, for the policies Keel has: `allkeys-lru`,
+    `allkeys-lfu` and `allkeys-random`. Redis's other policies are refused in
+    Redis's words, naming the three: `argument(s) must be one of the
+    following: allkeys-lru, allkeys-lfu, allkeys-random`.
+  - The log's `appendfsync`, `auto-aof-rewrite-percentage` and
+    `auto-aof-rewrite-min-size`.
+  - The slow log's `slowlog-log-slower-than`, `slowlog-max-len`,
+    `slowlog-entry-max-argc` and `slowlog-entry-max-string-len`. A shorter
+    `slowlog-max-len` cuts the log back when the next entry joins it, as
+    Redis's does.
+  - With the server, three more:
+    - `requirepass`. New connections, and `AUTH` on any connection, use the new
+      password. A connection already logged in stays logged in, as in Redis,
+      and so does one made while no password was needed.
+    - `hz`. The event loop's clock changes rate at once. A value outside
+      Redis's 1 to 500 is taken at its nearest end, as Redis's `updateHZ`
+      takes it.
+    - `maxclients`. Raising it raises the process's limit on open files to
+      fit, as Redis's `adjustOpenFilesLimit` does. Where the system cannot,
+      the value is refused in Redis's words: `The operating system is not able
+      to handle the specified number of clients, try with <n>`.
+- **Settings that only tune Redis's internals, accepted without effect.**
+  Nothing a client sees depends on them, beyond `OBJECT ENCODING`, and Keel
+  has nothing they would tune. They are validated as Redis validates them,
+  kept, and reported by `CONFIG GET`, so that tools and Redis's own test suite
+  can set them:
+  - the encoding thresholds: `hash-max-listpack-*`, `list-max-listpack-size`,
+    `list-compress-depth`, `set-max-intset-entries`, `set-max-listpack-*`,
+    `zset-max-listpack-*` (with their `ziplist` aliases), the hash template
+    settings, `hll-sparse-max-bytes`, `stream-node-max-*` and `array-*`;
+  - how Redis spends memory and CPU: `activerehashing`, `activedefrag` and
+    `active-defrag-*`, `jemalloc-bg-thread`, `dynamic-hz`, `lazyfree-lazy-*`,
+    `lazyexpire-nested-arbitrary-keys`, `maxmemory-eviction-tenacity`,
+    `lookahead` and `prefetch-batch-max-size`;
+  - the format and pace of Redis's own files: `rdbcompression`,
+    `rdb-save-incremental-fsync`, `aof-rewrite-incremental-fsync`,
+    `rdb-del-sync-files`, `aof-use-rdb-preamble`, `aof-timestamp-enabled`,
+    `no-appendfsync-on-rewrite` (Keel keeps syncing during a rewrite) and
+    `sanitize-dump-payload`;
+  - how Redis moves a snapshot to a replica: `repl-diskless-*`,
+    `repl-rdb-channel` and `repl-disable-tcp-nodelay`;
+  - the `cluster-*` settings, which change nothing on a server not in cluster
+    mode, as Keel never is;
+  - Redis's crash reports, log level and redaction, and the delays and
+    watchdog its own tests set: `crash-log-enabled`, `crash-memcheck-enabled`,
+    `use-exit-on-panic`, `hide-user-data-from-log`, `loglevel`,
+    `watchdog-period`, `rdb-key-save-delay`, `key-load-delay`,
+    `loading-process-events-interval-bytes` and `aof-disable-auto-gc`;
+  - `busy-reply-threshold` (`lua-time-limit`), since Keel runs no scripts.
+- **Settings Keel cannot change, at Keel's value.** `CONFIG SET` accepts the
+  value Keel has, as Redis accepts setting a directive to the value it has,
+  and refuses any other value with `can't set immutable config`:
+  - `appendonly`: turning the log on or off while the server runs is not done
+    yet;
+  - `save` (`""`: no snapshots);
+  - `notify-keyspace-events` (`""`: no keyspace notifications);
+  - `maxmemory-clients` (`0`: no eviction of clients);
+  - `latency-tracking` (`yes`: every command's latency is tracked) and
+    `latency-tracking-info-percentiles` (Redis's default `50 99 99.9`, read
+    as Redis reads numbers, so `50.0 99 99.900` is the same value), and
+    `latency-monitor-threshold` (`0`: there is no latency monitor);
+  - `proto-max-bulk-len` (Keel's 512 MiB, Redis's default);
+  - `client-query-buffer-limit` (Keel's 16 MiB of a request not yet whole);
+  - with the server, `port` and `bind`: changing the listener while the
+    server runs is not done yet.
+
+  Both values are still validated as Redis validates them first: `Invalid
+  save parameters`, and `Invalid event class character`.
+- **Settings Redis cannot change while it runs, at Keel's value:** `databases`
+  (`1`), `appendfilename`, `dir`, `replicaof` and `slaveof`, `tcp-backlog`
+  and `io-threads`. They are refused before any value is read, as Redis
+  refuses them.
+
+Every other directive in Redis's table is one whose being ignored would
+change what a client relies on. Examples are `timeout`,
+`client-output-buffer-limit`, `min-replicas-to-write`, `tracking-table-max-keys`,
+`key-memory-histograms`, the `tls-*` and `acl*` settings, `repl-backlog-size`
+and `repl-timeout`. Keel answers each as a name it does not know, and they
+come one by one, with the features they configure. `CONFIG SET`'s sensitive
+arguments (`requirepass`, `masterauth`) are to be redacted from the slow log
+when it comes (c3c), as Redis's `redactClientCommandArgument` does.
 
 ## What each part should show in Grafana
 
