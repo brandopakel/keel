@@ -24,6 +24,9 @@ type Space struct {
 	// clock. They are held by value, so reading one is a load from the space
 	// rather than a load of a pointer and then of what it points at.
 	limits Limits
+	// noTouch is set while a command of a connection in CLIENT NO-TOUCH mode
+	// runs: what it reads is left as it was, unaccessed (Touch).
+	noTouch bool
 
 	// pool carries the best candidates between evictions.
 	pool []Candidate
