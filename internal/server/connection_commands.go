@@ -8,6 +8,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/brandopakel/keel/internal/core"
 )
@@ -39,6 +40,31 @@ var (
 	errNoProto = errors.New("NOPROTO unsupported protocol version")
 )
 
+// serverPassword is the password the server's clients log in with, which
+// CONFIG SET requirepass changes while it runs. The transport's goroutines
+// read it as the engine's sets it, so it is held atomically.
+type serverPassword struct{ v atomic.Pointer[string] }
+
+func newServerPassword(password string) *serverPassword {
+	p := &serverPassword{}
+	p.set(password)
+	return p
+}
+
+func (p *serverPassword) set(password string) { p.v.Store(&password) }
+
+func (p *serverPassword) get() string { return *p.v.Load() }
+
+// requiredPassword is the password c logs in with: the server's now, as Redis
+// checks a client against its default user's password as it is now; empty,
+// none.
+func (c *client) requiredPassword() string {
+	if c.serverPass != nil {
+		return c.serverPass.get()
+	}
+	return c.password
+}
+
 // authenticate checks a user and password the way Redis checks them for its
 // default user, for AUTH and for HELLO's AUTH option, so the two cannot drift
 // apart. There is one user, default. Without a password configured it takes
@@ -49,10 +75,12 @@ func (c *client) authenticate(user, password string) error {
 	if user != "default" {
 		return errWrongPass
 	}
-	if c.password == "" {
+	required := c.requiredPassword()
+	if required == "" {
+		c.authenticated = true
 		return nil
 	}
-	got, want := sha256.Sum256([]byte(password)), sha256.Sum256([]byte(c.password))
+	got, want := sha256.Sum256([]byte(password)), sha256.Sum256([]byte(required))
 	if subtle.ConstantTimeCompare(got[:], want[:]) != 1 {
 		return errWrongPass
 	}
@@ -69,7 +97,7 @@ func (c *client) auth(args []string, w io.Writer) {
 		return
 	case len(args) == 2:
 		user = args[0]
-	case c.password == "":
+	case c.requiredPassword() == "":
 		// The one-argument form names no user, and Redis refuses it when
 		// the default user has no password rather than accept anything.
 		responseError(errNoPassword, w)
@@ -134,7 +162,7 @@ func (c *client) hello(args []string, w io.Writer) {
 			return
 		}
 	}
-	if c.password != "" && !c.authenticated {
+	if c.requiredPassword() != "" && !c.authenticated {
 		responseError(errHelloNotAuthenticated, w)
 		return
 	}
