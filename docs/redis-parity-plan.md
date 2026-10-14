@@ -70,7 +70,7 @@ answered differently:
 | hash | 11 | 14 | 14 | 0 | |
 | hyperloglog | 3 | 8 | 8 | 0 | |
 | list | 9 | 13 | 13 | 0 | |
-| server | 11 | 18 | 16 | 2 | `CONFIG SET` (parsed, then refused: no setting is writable) |
+| server | 11 | 18 | 16 | 2 | `CONFIG SET` was refused for every setting until S1, which answers it from Redis's table (see tier 1) |
 | set | 8 | 13 | 13 | 0 | |
 | sorted_set | 12 | 32 | 28 | 4 | `ZADD GT`, `LT`, `INCR`; `ZRANGE BYLEX` |
 | string | 12 | 30 | 26 | 4 | `SET IFEQ`, `IFNE`, `IFDEQ`, `IFDNE` (8.4) |
@@ -269,9 +269,18 @@ schedule them.
    - **`WATCH`**;
    - **server and connection commands,** ordered by how many of Redis's
      tests each unlocks (see "What the tests rank"):
-     1. `CONFIG SET` for the settings Redis's tests set. How far each one
-        acts is the owner's decision; Keel has no encodings for the
-        encoding thresholds to tune, for example.
+     1. `CONFIG SET`, done in S1. It answers from Redis 8.10.1's own table
+        of directives, generated from `src/config.c`, with Redis's
+        validation, errors and all-or-nothing order. Keel's own settings
+        change at once. Settings that only tune Redis's internals, such as
+        the encoding thresholds, are kept and reported without effect,
+        because no client relies on them beyond `OBJECT ENCODING`. A setting
+        Keel cannot change is refused as Redis refuses an immutable one, and
+        one whose being ignored would change what a client relies on is
+        refused as unknown. `docs/info-compatibility.md` lists each kind.
+        This scope is the coordinator's decision under the owner's rule
+        that parity is a floor, not a ceiling; the owner may override it.
+        `appendonly`, `port` and `bind` are not yet changed live.
      2. `FLUSHALL`.
      3. `COMMAND`, with `COUNT`, `DOCS`, `INFO`, `LIST` and `GETKEYS`.
         Client libraries also call it at connect.
