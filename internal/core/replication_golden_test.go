@@ -49,7 +49,9 @@ import (
 // fields first in INFO replication; that recapture changed only the info
 // lines. They were recaptured again at 64fd852, when a DEL or PERSIST that
 // changed nothing stopped being logged, which leaves out of a replica's own
-// log the DEL it applied to a key it did not yet have.
+// log the DEL it applied to a key it did not yet have, and at 20afbca, when a
+// ZADD or ZREM that changed nothing did, and GEOADD began to be logged as the
+// ZADD Redis rewrites it to.
 //
 // and every run since must write the same transcript, line for line, under
 // every fsync policy with synchronous and worker appends. With
@@ -80,7 +82,7 @@ import (
 // Every opaque command here changes one key, so the record order of each
 // protocol 2 frame is the order the primary published it in, and is kept.
 const (
-	replicationGoldenRevision = "64fd852"
+	replicationGoldenRevision = "20afbca"
 	replicationGoldenDir      = "testdata/replication-" + replicationGoldenRevision
 )
 
