@@ -84,6 +84,38 @@ func TestAuthWithoutAPassword(t *testing.T) {
 	require.Equal(t, byte('%'), runOnce(t, c, sent("HELLO", "3", "AUTH", "default", "x"))[0])
 }
 
+// TestRequirepassChangesWhileTheServerRuns: CONFIG SET requirepass changes
+// the server's password for every connection, as Redis changes its default
+// user's: new connections and AUTH use the new one, a connection that logged
+// in stays logged in, and so does one made while no password was needed.
+func TestRequirepassChangesWhileTheServerRuns(t *testing.T) {
+	e := newTestEngine(t, core.Options{})
+	pass := newServerPassword("")
+	e.SetServerInfo(&core.ServerInfo{SetRequirePass: pass.set})
+	connect := func() *client { return &client{fd: -1, serverPass: pass, authenticated: pass.get() == "", engine: e} }
+	early := connect()
+	require.Equal(t, "+OK\r\n", runOnce(t, early, sent("CONFIG", "SET", "requirepass", "secret")))
+	require.Equal(t, "secret", pass.get())
+	require.Equal(t, "$-1\r\n", runOnce(t, early, sent("GET", "k")), "made while no password was needed")
+
+	late := connect()
+	require.Equal(t, "-NOAUTH Authentication required.\r\n", runOnce(t, late, sent("GET", "k")))
+	require.Equal(t, "-WRONGPASS invalid username-password pair or user is disabled.\r\n", runOnce(t, late, sent("AUTH", "wrong")))
+	require.Equal(t, "+OK\r\n", runOnce(t, late, sent("AUTH", "secret")))
+
+	require.Equal(t, "+OK\r\n", runOnce(t, late, sent("CONFIG", "SET", "requirepass", "other")))
+	require.Equal(t, "$-1\r\n", runOnce(t, late, sent("GET", "k")), "logged in stays logged in")
+	waiting := connect()
+	require.Equal(t, "-WRONGPASS invalid username-password pair or user is disabled.\r\n", runOnce(t, waiting, sent("AUTH", "secret")))
+	require.Equal(t, "+OK\r\n", runOnce(t, waiting, sent("AUTH", "other")))
+
+	require.Equal(t, "+OK\r\n", runOnce(t, waiting, sent("CONFIG", "SET", "requirepass", "")))
+	stranger := &client{fd: -1, serverPass: pass, engine: e}
+	require.Equal(t, "$-1\r\n", runOnce(t, stranger, sent("GET", "k")), "no password, no login needed")
+	require.Equal(t, "-ERR AUTH <password> called without any password configured for the default user. "+
+		"Are you sure your configuration is correct?\r\n", runOnce(t, stranger, sent("AUTH", "x")))
+}
+
 // TestClientHelpAndSubcommandErrors: the subcommands are looked up as Redis
 // looks them up, and HELP lists the ones there are.
 func TestClientHelpAndSubcommandErrors(t *testing.T) {
