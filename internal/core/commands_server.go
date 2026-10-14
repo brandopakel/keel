@@ -62,11 +62,19 @@ var memoryHelp = HelpReply("MEMORY",
 // and a sorted set in another; the first match wins, which is the same order
 // the command tables resolve in. Looking only in the string dictionary - as
 // this did at first - reported nil for every set, sketch and filter.
+//
+// A key whose TTL has passed is found too, and left: Redis's MEMORY USAGE
+// finds its key with dbFind, which neither removes such a key nor hides it
+// (object.c), so it reports what the key holds until something removes it.
 func (e *Engine) entryBytesAnywhere(key string) (uint64, bool) {
-	if owner, ok := e.space.OwnerOf(key); ok {
-		return owner.EntryBytes(key)
-	}
-	return 0, false
+	var bytes uint64
+	found := false
+	e.space.EachKeyspace(func(ks data_structure.Keyspace) {
+		if !found {
+			bytes, found = ks.EntryBytes(key)
+		}
+	})
+	return bytes, found
 }
 
 // humanBytes renders a byte count the way redis-cli's INFO output does.

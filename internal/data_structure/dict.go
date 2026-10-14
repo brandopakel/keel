@@ -140,6 +140,7 @@ func (d *Dict) Get(k string) *Obj {
 		// the key comes back on replay carrying an expiry that has already
 		// gone by, and lives until something next reads it.
 		d.space.noteRemoval(d, k)
+		d.space.NoteExpired()
 		return nil
 	}
 	d.space.Touch(&obj.Access)
@@ -182,6 +183,7 @@ func (d *Dict) Has(k string) bool {
 	if d.HasExpired(k) {
 		d.Del(k)
 		d.space.noteRemoval(d, k)
+		d.space.NoteExpired()
 		return false
 	}
 	return true

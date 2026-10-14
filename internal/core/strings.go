@@ -97,9 +97,10 @@ type setRequest struct {
 	nx, xx bool
 	// keepTTL keeps the expiry the name has, a key of another type's too.
 	keepTTL bool
-	// expires sets the expiry at, in Unix milliseconds.
-	expires bool
-	at      int64
+	// expires sets the expiry at, in Unix milliseconds, which absolute says
+	// was given as an instant (EXAT, PXAT), and so may have passed.
+	expires, absolute bool
+	at                int64
 }
 
 // opSet stores value at key, as SET does, given what setTarget found there,
@@ -111,6 +112,23 @@ func (e *Engine) opSet(t stringTarget, key, value string, req setRequest) bool {
 	exists := t.exists()
 	if (req.nx && exists) || (req.xx && !exists) {
 		return false
+	}
+	if req.expires && req.absolute && req.at <= e.commandClock() && !e.aof.replaying && !e.replicaApplying {
+		// An instant that has passed stores nothing, as in Redis's
+		// setGenericCommand: the key there is deleted, recorded as DEL, and
+		// the key is counted as expired, as if stored and expired at once
+		// (t_string.c). A log's replay and a replica store what they are
+		// given, as Redis's checkAlreadyExpired does while loading or on a
+		// replica.
+		switch {
+		case t.other != nil:
+			e.dropOtherType(t.other, key)
+		case t.obj != nil:
+			e.dictStore.Delete(key)
+			e.aofRecord("DEL", key)
+		}
+		e.space.NoteExpired()
+		return true
 	}
 	at, expires := req.at, req.expires
 	if req.keepTTL && exists {

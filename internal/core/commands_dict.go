@@ -148,7 +148,7 @@ func (e *Engine) setArguments(name string, opts []string) (req setRequest, get b
 		if req.at, err = e.expiryArgument(name, unit, expire); err != nil {
 			return req, false, err
 		}
-		req.expires = true
+		req.expires, req.absolute = true, unit == "EXAT" || unit == "PXAT"
 	}
 	return req, get, nil
 }

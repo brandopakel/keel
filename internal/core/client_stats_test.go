@@ -33,7 +33,9 @@ func TestINFOClientBuffersHasExplicitScopeAndStableValues(t *testing.T) {
 		"total_commands_processed:0\r\ninstantaneous_ops_per_sec:0\r\n"+
 		"total_net_input_bytes:0\r\ntotal_net_output_bytes:0\r\ntotal_net_repl_input_bytes:0\r\ntotal_net_repl_output_bytes:0\r\n"+
 		"instantaneous_input_kbps:0.00\r\ninstantaneous_output_kbps:0.00\r\ninstantaneous_input_repl_kbps:0.00\r\ninstantaneous_output_repl_kbps:0.00\r\n"+
-		"rejected_connections:12\r\nsync_full:0\r\nexpired_keys:0\r\nevicted_keys:0\r\n")
+		"rejected_connections:12\r\nsync_full:0\r\nexpired_subkeys:0\r\nexpired_subkeys_active:0\r\nexpired_keys:0\r\n"+
+		"expired_keys_active:0\r\nexpired_stale_perc:0.00\r\nexpired_time_cap_reached_count:0\r\nexpire_cycle_cpu_milliseconds:0\r\n"+
+		"evicted_keys:0\r\n")
 	assert.NotContains(t, string(e.cmdINFO([]string{"memory"})), "connected_clients")
 	assert.Contains(t, string(e.cmdINFO([]string{"memory"})), "maxmemory_policy:allkeys-lru\r\n"+
 		"mem_clients_slaves:16\r\nmem_clients_normal:15\r\nmem_clients_normal_shared:0\r\nmem_clients_normal_unshared:0\r\n"+

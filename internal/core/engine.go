@@ -67,9 +67,10 @@ type Engine struct {
 	hllStore    *data_structure.Keyed[*data_structure.HLL]
 	cfStore     *data_structure.Keyed[*data_structure.CuckooFilter]
 
-	// expiredKeys counts what active expiry has reclaimed, for INFO. Keys
-	// reaped lazily by a read are not counted here, because the number is here
-	// to answer whether the cycle is keeping up. It describes the stores, so
+	// expiredKeys counts what active expiry has reclaimed, INFO's
+	// expired_keys_active, which answers whether the cycle is keeping up.
+	// expired_keys counts every key a TTL removed, reaped by a read too, and
+	// the space keeps it (Space.Expired). It describes the stores, so
 	// resetStores clears it with them.
 	expiredKeys uint64
 	// expireCursor and memoryCursor are where the expiry cycle and memory
@@ -282,6 +283,14 @@ type Engine struct {
 	// expiry cycle keeps (foldAvgTTL). Like expiredKeys it describes the
 	// stores, so resetStores clears it.
 	avgTTL int64
+	// expireStalePerc, expireCapReached and expireCycleUsec are INFO's
+	// expired_stale_perc, as a fraction, expired_time_cap_reached_count and
+	// expire_cycle_cpu_milliseconds, in microseconds: what the expiry cycle
+	// keeps of itself, as Redis's activeExpireCycle keeps them (expire.go).
+	// Only the cycle and INFO read them, so they go with avgTTL.
+	expireStalePerc  float64
+	expireCapReached uint64
+	expireCycleUsec  uint64
 
 	// mu is e's lock, which Lock and Unlock take and release. No command
 	// reads it, so it goes last, and every field a command reads keeps its

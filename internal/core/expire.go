@@ -23,16 +23,20 @@ func (e *Engine) ExpireCycle() int {
 		return 0
 	}
 	if e.KeysWithExpiry() == 0 {
-		// Redis zeroes a database's avg_ttl when nothing in it expires.
+		// Redis zeroes a database's avg_ttl when nothing in it expires, and
+		// its cycle, sampling nothing, folds a sample with nothing stale into
+		// expired_stale_perc.
 		e.avgTTL = 0
+		e.expireStalePerc *= 1 - staleSampleWeight
 		return 0
 	}
 
+	start := nanotime()
 	e.aofBegin("")
 	defer e.aofEnd()
 	// What active expiry noted outside a cycle is not this cycle's sample.
 	e.space.TakeTTLSamples()
-	total := 0
+	total, sampled := 0, 0
 	// The time left to the keys found not yet due, over the rounds since
 	// avg_ttl last took them, and how many of those rounds found any.
 	var ttlSum, ttlSamples uint64
@@ -47,6 +51,7 @@ func (e *Engine) ExpireCycle() int {
 			}
 		})
 		total += expired
+		sampled += examined
 		if sum, n := e.space.TakeTTLSamples(); n > 0 {
 			ttlSum, ttlSamples = ttlSum+sum, ttlSamples+n
 			updates++
@@ -55,7 +60,15 @@ func (e *Engine) ExpireCycle() int {
 		// threshold is what stops this being a full scan on a keyspace where
 		// nothing has fallen due, and what makes it one on a keyspace where
 		// everything has.
-		last := examined == 0 || expired*100 < examined*e.settings.expirePercent || round == e.settings.expireRounds-1
+		done := examined == 0 || expired*100 < examined*e.settings.expirePercent
+		// A cycle that would go on, but has drawn all the rounds it may, stops
+		// at its cap: Redis's expired_time_cap_reached_count, whose cap is
+		// time where Keel's is rounds.
+		capped := !done && round == e.settings.expireRounds-1
+		if capped {
+			e.expireCapReached++
+		}
+		last := done || capped
 		// Redis folds its sample into avg_ttl every 16 rounds and as it stops.
 		if (round+1)%16 == 0 || last {
 			e.foldAvgTTL(ttlSum, ttlSamples, updates)
@@ -69,8 +82,23 @@ func (e *Engine) ExpireCycle() int {
 	if total > 0 {
 		e.expiredKeys += uint64(total)
 	}
+	// Redis's estimate of the keys with a TTL that have fallen due and are
+	// not yet removed: what this cycle found expired of what it sampled,
+	// folded into a running average (expire.c, activeExpireCycle).
+	stale := 0.0
+	if sampled > 0 {
+		stale = float64(total) / float64(sampled)
+	}
+	e.expireStalePerc = stale*staleSampleWeight + e.expireStalePerc*(1-staleSampleWeight)
+	// The time the cycle took, rounded as commandstats rounds a command's.
+	e.expireCycleUsec += microsBetween(start, nanotime())
 	return total
 }
+
+// staleSampleWeight is the weight Redis's activeExpireCycle gives a cycle's
+// sample in expired_stale_perc's running average, the old estimate keeping
+// the rest.
+const staleSampleWeight = 0.05
 
 // avgTTLFactor is Redis's avg_ttl_factor (expire.c): 0.98 to the power of
 // 1 to 16.
@@ -93,8 +121,14 @@ func (e *Engine) foldAvgTTL(sum, samples uint64, updates int) {
 	e.avgTTL = int64(float64(mean) + float64(e.avgTTL-mean)*avgTTLFactor[updates-1])
 }
 
-// ExpiredKeys reports how many keys e's cycle has removed.
-func (e *Engine) ExpiredKeys() uint64 { return e.expiredKeys }
+// ExpiredKeys reports how many of e's keys have been removed because their
+// TTL had passed, by a read that found them so or by the cycle: INFO's
+// expired_keys.
+func (e *Engine) ExpiredKeys() uint64 { return e.space.Expired() }
+
+// ActiveExpiredKeys reports how many keys e's cycle has removed: INFO's
+// expired_keys_active.
+func (e *Engine) ActiveExpiredKeys() uint64 { return e.expiredKeys }
 
 // KeysWithExpiry reports how many of e's keys carry a TTL.
 func (e *Engine) KeysWithExpiry() int {

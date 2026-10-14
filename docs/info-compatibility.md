@@ -195,7 +195,9 @@ blank line today, so they fall outside any section. (a) moves them inside.
 | Redis field | Keel today | Plan |
 | --- | --- | --- |
 | `total_connections_received` | yes | Stays |
-| `evicted_keys`, `expired_keys` | yes | Stays |
+| `evicted_keys` | yes | Stays |
+| `expired_keys` | yes, the expiry cycle's removals only | (h), done. Every key removed because its TTL had passed, whatever found it so, as Redis's `stat_expiredkeys` counts in `deleteExpiredKeyAndPropagate` (db.c): a lookup, the expiry cycle, or a restart's pass over what its replay holds. A `SET` whose `EXAT` or `PXAT` has passed counts too and stores nothing (see below). |
+| `expired_keys_active` | - | (h), done. The expiry cycle's share, which `expired_keys` used to be: the number that says whether the cycle keeps up. A restart's pass counts here too, as Redis's cycle removes those keys after its load. |
 | `total_commands_processed`, `instantaneous_ops_per_sec` | - | (c1), done. A command counts once it has run, as Redis's `call()` counts it (see below). Ops per second is the mean of the last 16 samples, taken every 100 ms, as Redis takes them. |
 | `keyspace_hits`, `keyspace_misses` | - | (c2), done. Each key a command looks up to read, as Redis's `lookupKeyRead` counts it (see below) |
 | `total_error_replies` | - | (c1), done. Every error reply, refusals included, inside `EXEC`'s reply too |
@@ -209,9 +211,46 @@ blank line today, so they fall outside any section. (a) moves them inside.
 | `total_forks`, `latest_fork_usec` | - | (a) `0`: Keel never forks |
 | `sync_full` | - | (e). The full syncs a primary has served |
 | `sync_partial_ok`, `sync_partial_err` | - | Left out: Redis counts a replica's reconnection that resumes, and a Keel replica pulls again every 100 ms (see Replication) |
-| `expired_subkeys*`, `expired_keys_active`, `expired_stale_perc`, `expired_time_cap_reached_count`, `expire_cycle_cpu_milliseconds`, `total_eviction_exceeded_time`, `current_eviction_exceeded_time` | - | Left out for now. Each is an expiry or eviction internal that needs its own measurement. |
+| `expired_stale_perc` | - | (h), done. Redis's estimate of the keys with a TTL that have fallen due and are not yet removed: what each cycle found expired of what it sampled, folded into a running average with a weight of 5%, as `activeExpireCycle` keeps it (expire.c). A cycle with no TTL to sample folds in nothing stale, as Redis's does. |
+| `expired_time_cap_reached_count` | - | (h), done. The cycles that stopped at their cap while the sample still came up expired. **Differs from Redis:** Redis's cap is time (a quarter of a cron tick, or a millisecond for its fast cycle, expire.c); Keel's is rounds (16, the engine's `ActiveExpireRounds`), so this counts the cycles that drew every round they may. Each says the same thing, that the cycle had more to do than it was allowed. |
+| `expire_cycle_cpu_milliseconds` | - | (h), done. The time the cycles took, each rounded as commandstats rounds a command's, in milliseconds, as Redis sums each cycle's `ustime()` difference. A turn whose cycle has no key with a TTL to look at returns at once and is not timed. |
+| `expired_subkeys`, `expired_subkeys_active` | - | (h), `0`: Keel has no hash field expiry yet. The `HEXPIRE` family counts them when it lands, as `t_hash.c` does, and `RESTORE` with an `ABSTTL` that has passed counts in `expired_keys` (cluster.c). |
+| `total_eviction_exceeded_time`, `current_eviction_exceeded_time` | - | Left out. Redis times how long `used_memory` stays over `maxmemory` while its eviction, bounded in time per command, catches up, or under `noeviction`. Keel evicts within the write that crosses the bound and has no `noeviction`, so it is over only when nothing is left to evict, and that is not the same measure. |
 | `io_threaded_reads_processed`, `io_threaded_writes_processed` | - | (j), done. The reads and writes the I/O threads other than the loop's made, as Redis sums its threads but the main one (server.c); the Threads section has each thread's. |
 | `active_defrag_*`, `io_threaded_total_prefetch_*`, `eventloop_*`, `avg_pipeline_length*`, `client_*_buffer_limit_disconnections`, `reply_buffer_*`, `unexpected_error_replies`, `dump_payload_sanitizations`, `hash_template*`, `acl_access_denied_*`, `migrate_cached_sockets`, `slave_expires_tracked_keys` | - | Left out (rule 3), or until Keel has the feature |
+
+**Expiry (h).** Redis 8.10.1 counts in `expired_keys` every key removed
+because its TTL had passed. Keel counted only what its expiry cycle removed,
+so a key read after its TTL went uncounted and `redis_expired_keys_total`
+ran low. It now counts as Redis does, and `scripts/stats-parity.py` holds it
+to Redis's count command by command: its expiry cases run on a Keel and a
+Redis whose cycles are off, so each key is removed only by the command the
+case sends. They cover the reads and writes of each type, `SCAN`, `KEYS`,
+`DBSIZE`, `MEMORY USAGE` and a `GET` inside `MULTI`. Three commands changed
+to match:
+
+- **`SET` with an `EXAT` or `PXAT` that has passed** stores nothing, as
+  Redis's `setGenericCommand` (t_string.c): the key is deleted if there is
+  one, recorded as `DEL`, and counted as expired, as if stored and expired at
+  once. `NX` and `XX` decide first, and `GET` still answers the old value. A
+  log's replay and a replica store what they are given, as Redis's
+  `checkAlreadyExpired` does while loading or on a replica. Keel used to
+  store the key with its passed expiry, for a lookup or the cycle to remove.
+  `EXPIRE` and `GETEX` with a passed instant delete without counting, in
+  both.
+- **`SCAN` removes the keys it walks whose TTL has passed**, each that matches
+  its pattern whatever its type, as Redis's `scanCallback` expires a key
+  before it looks at the type (db.c). It used to leave them out of its reply
+  and in the keyspace. `KEYS` and `DBSIZE` leave them in the keyspace, in
+  both.
+- **`MEMORY USAGE` reports a key whose TTL has passed**, and leaves it, as
+  Redis 8's `dbFind` finds a key (object.c), until something that looks the
+  key up removes it. Keel used to remove the key and answer nil.
+
+The cycle's own statistics are Redis's, kept as `activeExpireCycle` keeps
+them, with one difference of cadence: Keel's cycle runs once a turn of the
+event loop rather than ten times a second, so `expired_stale_perc` folds in
+more samples, each of fewer stale keys, and moves faster than Redis's.
 
 ## Replication
 
@@ -494,7 +533,7 @@ General validation runs it against Redis 8.10.1 and RedisBloom.
 | `CONFIG SET parameter value [parameter value ...]` | Done (S1). Redis's `configSetCommand`, all pairs or none: see "CONFIG SET" below. |
 | `CONFIG REWRITE` | (b), done. `The server is running without a config file`, Redis's answer when it was started without one: Keel takes flags. |
 | `COMMAND`, `COMMAND COUNT`, `INFO`, `LIST`, `DOCS`, `GETKEYS`, `GETKEYSANDFLAGS`, `HELP` | Done (S3). Answered from what Redis 8.10.1 declares of each command Keel has (`src/commands/*.json`, generated into `internal/core/command_specs.go`) and what Keel declares of its own: see "COMMAND" below. |
-| `CONFIG RESETSTAT` | (c1), done. Resets what Redis's `resetServerStats` resets that Keel reports: `total_commands_processed` and the ops-per-second samples, `total_error_replies` and errorstats, `total_connections_received` and `rejected_connections` (client ids keep growing, as Redis's do), `expired_keys`, `evicted_keys`, `keyspace_hits`, `keyspace_misses`, commandstats, latencystats, the slow log's counts (not its entries, which `SLOWLOG RESET` clears), `aof_rewrites`, `aof_rewrites_consecutive_failures`, and the network bytes and reads and writes (d). `used_memory_peak` stays, as Redis keeps it. Keel's own fields keep counting. |
+| `CONFIG RESETSTAT` | (c1), done. Resets what Redis's `resetServerStats` resets that Keel reports: `total_commands_processed` and the ops-per-second samples, `total_error_replies` and errorstats, `total_connections_received` and `rejected_connections` (client ids keep growing, as Redis's do), `expired_keys` and the expiry cycle's statistics (h), `evicted_keys`, `keyspace_hits`, `keyspace_misses`, commandstats, latencystats, the slow log's counts (not its entries, which `SLOWLOG RESET` clears), `aof_rewrites`, `aof_rewrites_consecutive_failures`, and the network bytes and reads and writes (d). `used_memory_peak` stays, as Redis keeps it. Keel's own fields keep counting. |
 | `SLOWLOG GET [count]`, `LEN`, `RESET`, `HELP` | (c3c), done. The commands that took `slowlog-log-slower-than` microseconds or more (10000), newest first, at most `slowlog-max-len` (128). Each entry has Redis 8.10's seven fields: id, Unix time, duration in µs, the arguments (at most `slowlog-entry-max-argc`, 32, the last place saying how many more; each cut at `slowlog-entry-max-string-len`, 128 bytes, saying how many more), the client's address (`ip:port`, `[ip]:port` for IPv6, as Redis writes it) and name, and how many arguments the command really had. `EXEC` is not logged, as in Redis; what it runs is. `GET`'s count is read as Redis reads it, `-1` meaning all. The four settings are Redis's defaults, which `CONFIG GET` reports. `CONFIG RESETSTAT` clears the counts and keeps the entries, and the log's replay adds none. |
 | `LATENCY LATEST`, `HISTORY`, `RESET`, `GRAPH`, `DOCTOR`, `HELP` | (c3b), done. Redis's latency monitor is off by default (`latency-monitor-threshold 0`, which `CONFIG GET` reports), and Keel has none, so these answer as Redis's do when it has never been on: `LATEST` and `HISTORY` an empty array, `RESET` `0`, `GRAPH` Redis's `No samples available for event` error, and `DOCTOR` its report that monitoring is disabled. Each subcommand has Redis's count. |
 | `LATENCY HISTOGRAM [command ...]` | (c3b), done. Each command that has run, or each named (a container brings its subcommands, `config|get` names one, an unknown name nothing): its `calls` and its `histogram_usec`, the cumulative count at each power of two microseconds from 1, as Redis's `fillCommandCDF` walks its histogram. The exporter reads it for `redis_commands_latencies_usec`. |
