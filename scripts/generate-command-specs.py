@@ -10,9 +10,13 @@ for the commands Keel has: internal/core/command_specs.go. Keel's own commands
 (KEEL.*, MEMKV.*, MORRIS.*, SRAND) and RedisBloom's (BF.*, CF.*, CMS.*), which
 Redis's specs do not hold, keep descriptors written by hand.
 
-Only facts are copied - names, numbers and flags - and none of the text
-Redis's specs carry (summaries, histories, argument documentation), which is
-Redis's under its license where the numbers are not anyone's.
+Only facts are copied - names, numbers and flags, and for COMMAND INFO and
+DOCS the tips, the versions a command or argument appeared or was deprecated
+in, the arguments' names, types, tokens and flags, and the name of the
+function that finds a command's keys - and none of the text Redis's specs
+carry (summaries, complexity, histories, replacements, argument summaries,
+key spec notes), which is Redis's under its license where the numbers are
+not anyone's.
 
 Which commands Keel has is read from internal/core/command_check.go: the
 names in commandArity, and the subcommands of each container. A name Redis
@@ -133,8 +137,73 @@ def collect(redis_src, names):
             'flags': spec.get('command_flags') or [],
             'acl': spec.get('acl_categories') or [],
             'keys': [key_spec(ks) for ks in spec.get('key_specs') or []],
+            # What COMMAND INFO and DOCS report besides, as Redis's own
+            # generator (utils/generate-command-code.py) writes it: tips in
+            # lower case, the version a command or argument appeared in or
+            # was deprecated in, and the arguments' structure. Their text -
+            # summaries, complexity, history, a key spec's notes - is not
+            # copied.
+            'tips': [tip.lower() for tip in spec.get('command_tips') or []],
+            'since': spec.get('since', ''),
+            'doc_flags': spec.get('doc_flags') or [],
+            'deprecated_since': spec.get('deprecated_since', ''),
+            'args': [argument(a) for a in spec.get('arguments') or []],
+            # The function Redis finds keys with where its key specs cannot
+            # say (SET's, whose flags depend on GET): Keel has its own of each.
+            'getkeys': spec.get('get_keys_function', ''),
         }
     return specs
+
+
+def argument(desc):
+    """One argument as Redis's generator holds it: its name in lower case,
+    its type, its display name in lower case if it has one, the key spec it
+    names, its token in upper case, the versions, its flags, and a oneof's or
+    block's arguments."""
+    flags = [f for f in ('optional', 'multiple', 'multiple_token') if desc.get(f)]
+    return {'name': desc['name'].lower(), 'type': desc['type'], 'display': (desc.get('display') or '').lower(),
+            'key_spec': desc.get('key_spec_index', -1), 'token': (desc.get('token') or '').upper(),
+            'since': desc.get('since', ''), 'deprecated_since': desc.get('deprecated_since', ''), 'flags': flags,
+            'args': [argument(a) for a in desc.get('arguments') or []] if desc['type'] in ('oneof', 'block') else []}
+
+
+def go_arguments(args):
+    """Arguments as a Go []commandArg literal."""
+    if not args:
+        return 'nil'
+    parts = []
+    for a in args:
+        fields = [f'name: {json.dumps(a["name"])}', f'typ: {json.dumps(a["type"])}']
+        if a['display']:
+            fields.append(f'display: {json.dumps(a["display"])}')
+        fields.append(f'keySpec: {a["key_spec"]}')
+        for field, key in (('token', 'token'), ('since', 'since'), ('deprecatedSince', 'deprecated_since')):
+            if a[key]:
+                fields.append(f'{field}: {json.dumps(a[key])}')
+        if a['flags']:
+            fields.append(f'flags: {go_strings(a["flags"])}')
+        if a['args']:
+            fields.append(f'args: {go_arguments(a["args"])}')
+        parts.append('{' + ', '.join(fields) + '}')
+    return '[]commandArg{' + ', '.join(parts) + '}'
+
+
+def go_facts(name, s):
+    """One entry of redisCommandFacts: the name, then each fact it has."""
+    fields = [f'name: {json.dumps(name)}']
+    if s['tips']:
+        fields.append(f'tips: {go_strings(s["tips"])}')
+    if s['since']:
+        fields.append(f'since: {json.dumps(s["since"])}')
+    if s['doc_flags']:
+        fields.append(f'docFlags: {go_strings(s["doc_flags"])}')
+    if s['deprecated_since']:
+        fields.append(f'deprecatedSince: {json.dumps(s["deprecated_since"])}')
+    if s['args']:
+        fields.append(f'args: {go_arguments(s["args"])}')
+    if s['getkeys']:
+        fields.append(f'getKeys: {json.dumps(s["getkeys"])}')
+    return '\t{' + ', '.join(fields) + '},'
 
 
 def go_strings(values):
@@ -177,6 +246,19 @@ def render(specs):
             keys = '[]keySpec{' + ', '.join(parts) + '}'
         lines.append('\t{name: %s, spec: commandSpec{arity: %d, group: %s, flags: %s, acl: %s, keys: %s}},'
                      % (json.dumps(name), s['arity'], json.dumps(s['group']), go_strings(s['flags']), go_strings(s['acl']), keys))
+    lines += [
+        '}',
+        '',
+        f'// redisCommandFacts is what else Redis {REDIS_VERSION} declares of each command in',
+        '// redisCommandSpecs, for COMMAND INFO and DOCS: its tips, the version it',
+        '// appeared in, its doc flags, the version it was deprecated in, its',
+        '// arguments\' structure and the function that finds its keys where its key',
+        '// specs cannot say, none of Redis\'s text. It is an array in name order',
+        '// rather than a map, so that the compiler lays it out as data and adds',
+        '// nothing to the package\'s init; commandFactsOf finds an entry.',
+        'var redisCommandFacts = [...]commandFacts{',
+    ]
+    lines += [go_facts(name, specs[name]) for name in sorted(specs)]
     lines += ['}', '']
     return gofmt('\n'.join(lines))
 

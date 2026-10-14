@@ -35,6 +35,40 @@ type commandSpec struct {
 	keys []keySpec
 }
 
+// commandFacts is what else Redis declares of a command, for COMMAND INFO
+// and DOCS (vocabulary.go), none of it Redis's text: tips are Redis's command
+// tips, in lower case; since is the version the command appeared in;
+// docFlags are DEPRECATED and SYSCMD; deprecatedSince the version it was
+// deprecated in; args its arguments' structure; and getKeys names the
+// function Redis finds its keys with where its key specs cannot say, which
+// Keel has its own of (getKeysProc). They are kept apart from commandSpec,
+// which the command table is built from, in a table the compiler lays out as
+// data (redisCommandFacts).
+type commandFacts struct {
+	name            string
+	tips            []string
+	since           string
+	docFlags        []string
+	deprecatedSince string
+	args            []commandArg
+	getKeys         string
+}
+
+// commandArg is one of a command's arguments, as COMMAND DOCS reports it:
+// its name, its type (string, integer, double, key, pattern, unix-time,
+// pure-token, oneof, block), the name it is displayed by if not its own, the
+// key spec it names (-1, none), its token, the versions it appeared and was
+// deprecated in, its flags (optional, multiple, multiple_token), and a oneof's
+// or block's own arguments.
+type commandArg struct {
+	name, typ, display string
+	keySpec            int
+	token, since       string
+	deprecatedSince    string
+	flags              []string
+	args               []commandArg
+}
+
 // keySpec is one of Redis's key specs: how to find a group of keys among a
 // command's arguments, and what the command does with them.
 type keySpec struct {
