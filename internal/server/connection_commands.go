@@ -257,6 +257,11 @@ func (c *client) clientCommand(cmd *core.Command, w io.Writer) {
 	case "INFO":
 		w.Write(c.encode(core.ReplyVerbatim(fmt.Sprintf("id=%d fd=%d name=%s db=0 resp=%d lib-name=%s lib-ver=%s\n",
 			c.id, c.fd, c.name, c.protocol(), c.libName, c.libVersion)), false))
+	case "PAUSE":
+		clientPauseCommand(args, w, c.encode)
+	case "UNPAUSE":
+		unpauseClients()
+		w.Write(c.encode("OK", true))
 	case "HELP":
 		w.Write(clientHelp)
 	}
@@ -270,6 +275,10 @@ var clientHelp = core.HelpReply("CLIENT",
 	"    Return the ID of the current connection.",
 	"INFO",
 	"    Return information about the current client connection.",
+	"UNPAUSE",
+	"    Stop the current client pause, resuming traffic.",
+	"PAUSE <timeout> [WRITE|ALL]",
+	"    Suspend all, or just write, clients for <timeout> milliseconds.",
 	"SETNAME <name>",
 	"    Assign the name <name> to the current connection.",
 	"SETINFO <option> <value>",
