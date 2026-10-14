@@ -1,5 +1,5 @@
 {
-  "source_revision": "128315d",
+  "source_revision": "d7177ad",
   "captured": "2026-10-14",
   "note": "Every command's RESP2 and RESP3 replies and log records on develop, before phase 4 of the embedding plan; see command_golden_test.go.",
   "files": {
@@ -64,9 +64,9 @@
       "records": 3
     },
     "server.txt": {
-      "sha256": "80d3dad3ad722a76935dc385657d7a0614ee171c8af9074870fff37207c82b98",
+      "sha256": "fdb4b4ca83de4ff26c7afb8dfe4d2dc31774ebb3b487539e661837cde934ca85",
       "cases": 10,
-      "commands": 187,
+      "commands": 190,
       "records": 21
     },
     "sets.txt": {

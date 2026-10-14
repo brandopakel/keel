@@ -1510,8 +1510,15 @@ var goldenServer = []commandGoldenCase{
 		send("CONFIG", "SET", "databases", "1", "nosuch", "1"),
 		send("CONFIG", "SET", "maxmemory", "1", "MAXMEMORY", "2"),
 		send("CONFIG", "SET", "hash-max-listpack-entries", "1", "hash-max-ziplist-entries", "2"),
+		// A value that does not read fails the command before anything is
+		// set: maxmemory keeps the 2mb set before it. (A change that fails
+		// after others were made needs a transport's maxclients; config_test.go
+		// has that one.)
+		send("CONFIG", "SET", "maxmemory", "2mb"),
 		send("CONFIG", "SET", "maxmemory", "1mb", "maxmemory-samples", "100"),
 		send("CONFIG", "GET", "maxmemory"),
+		send("CONFIG", "SET", "maxmemory", "0"),
+		send("CONFIG", "SET", "req-res-logfile", "x"),
 		send("CONFIG", "SET", "timeout", "10"),
 	}},
 	{family: "server", name: "bgrewriteaof", noRecords: true, steps: []goldenStep{
