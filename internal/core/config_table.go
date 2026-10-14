@@ -95,12 +95,12 @@ type configSpec struct {
 	valid, apply, condition string
 }
 
-// configLookup is every directive by its name and its alias, in lower case:
-// Redis's configs dictionary, which matches without regard to case. A
-// directive declared under a build option Redis's default build leaves out
-// (#ifdef LOG_REQ_RES, #ifdef USE_COMPRESSION) is not in it, as it is not in
-// the Redis CI builds and Keel follows.
-var configLookup = func() map[string]*configSpec {
+// configLookupTable builds configLookup: every directive by its name and its
+// alias, in lower case, as Redis's configs dictionary matches without regard
+// to case. A directive declared under a build option Redis's default build
+// leaves out (#ifdef LOG_REQ_RES, #ifdef USE_COMPRESSION) is not in it, as it
+// is not in the Redis CI builds and Keel follows.
+func configLookupTable() map[string]*configSpec {
 	m := make(map[string]*configSpec, 2*len(redisConfigSpecs))
 	for i := range redisConfigSpecs {
 		s := &redisConfigSpecs[i]
@@ -113,7 +113,7 @@ var configLookup = func() map[string]*configSpec {
 		}
 	}
 	return m
-}()
+}
 
 // built reports whether Redis's default build declares s: one under an
 // #ifdef of a build option it is not, and one under the #else of such an
@@ -123,6 +123,7 @@ func (s *configSpec) built() bool { return !strings.HasPrefix(s.condition, "#ifd
 // lookupConfig is Redis's lookupConfig: the directive name is, or its alias,
 // in any case.
 func lookupConfig(name string) *configSpec {
+	configTables()
 	if s, ok := configLookup[name]; ok {
 		return s
 	}
