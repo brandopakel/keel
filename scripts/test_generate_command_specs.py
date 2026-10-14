@@ -87,7 +87,7 @@ class Specs(unittest.TestCase):
             self.assertIn('find: keyFind{kind: "range", lastKey: -1, step: 2, limit: 0}}}}}', text)
             self.assertIn('var redisCommandSpecTable = [...]namedCommandSpec{', text, 'an array, laid out as data')
             self.assertNotIn('map[string]commandSpec', text, 'no map literal, whose initializer is code')
-            names = [line.split('"')[1] for line in text.splitlines() if line.startswith('\t{name: ')]
+            names = [line.split('"')[1] for line in text.splitlines() if line.startswith('\t{name: ') and 'spec: commandSpec' in line]
             self.assertEqual(names, sorted(names), 'in name order')
             self.assertNotIn('text that is not copied', text)
             with self.assertRaises(ValueError):
@@ -120,7 +120,7 @@ class Specs(unittest.TestCase):
                                         'since': '', 'deprecated_since': '7.0.0', 'flags': ['multiple', 'multiple_token'], 'args': []})
         self.assertIn('\t{name: "SET", tips: []string{"nondeterministic_output"}, since: "1.0.0", args: ', text)
         self.assertIn('getKeys: "setGetKeys"},', text)
-        self.assertIn('"SET": {arity: -3, group: "string", flags: []string{"WRITE"}, acl: []string{"STRING"}, keys: ', text)
+        self.assertIn('{name: "SET", spec: commandSpec{arity: -3, group: "string", flags: []string{"WRITE"}, acl: []string{"STRING"}, keys: ', text)
         self.assertIn('tips: []string{"nondeterministic_output"}', text)
         self.assertIn('{name: "condition", typ: "oneof", keySpec: -1, since: "2.6.12", flags: []string{"optional"}, args: []commandArg{', text)
         self.assertNotIn('not copied', text)
