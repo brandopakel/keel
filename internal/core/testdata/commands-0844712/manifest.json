@@ -1,6 +1,6 @@
 {
-  "source_revision": "5ae6dbf",
-  "captured": "2026-10-13",
+  "source_revision": "0844712",
+  "captured": "2026-10-14",
   "note": "Every command's RESP2 and RESP3 replies and log records on develop, before phase 4 of the embedding plan; see command_golden_test.go.",
   "files": {
     "bloom.txt": {
