@@ -1,109 +1,109 @@
 run_id,time,branch,framework,command,calls,keel
-38519701424,2026-10-14T06:00:20Z,develop,Rails cache store,client|setinfo,4,present
-38519701424,2026-10-14T06:00:20Z,develop,Rails cache store,expire,1,present
-38519701424,2026-10-14T06:00:20Z,develop,Rails cache store,get,6,present
-38519701424,2026-10-14T06:00:20Z,develop,Rails cache store,hello,1,present
-38519701424,2026-10-14T06:00:20Z,develop,Rails cache store,incrby,2,present
-38519701424,2026-10-14T06:00:20Z,develop,Rails cache store,info,1,present
-38519701424,2026-10-14T06:00:20Z,develop,Rails cache store,mget,3,present
-38519701424,2026-10-14T06:00:20Z,develop,Rails cache store,scan,3,present
-38519701424,2026-10-14T06:00:20Z,develop,Rails cache store,set,8,present
-38519701424,2026-10-14T06:00:20Z,develop,Rails cache store,unlink,3,present
-38519701424,2026-10-14T06:00:20Z,develop,ActionCable,client|setinfo,8,present
-38519701424,2026-10-14T06:00:20Z,develop,ActionCable,client|setname,2,present
-38519701424,2026-10-14T06:00:20Z,develop,ActionCable,hello,2,present
-38519701424,2026-10-14T06:00:20Z,develop,ActionCable,publish,1,missing
-38519701424,2026-10-14T06:00:20Z,develop,ActionCable,subscribe,2,missing
-38519701424,2026-10-14T06:00:20Z,develop,ActionCable,unsubscribe,1,missing
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,bitfield,3,missing
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,brpop,27,missing
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,client|setinfo,8,present
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,del,1,present
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,evalsha,3,missing
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,exec,4,present
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,exists,2,present
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,expire,15,present
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,get,74,present
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,hello,4,present
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,hget,1,present
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,hincrby,12,present
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,hset,2,present
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,incrby,19,present
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,info,1,present
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,lpush,11,present
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,multi,4,present
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,ping,2,present
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,rpop,2,present
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,sadd,13,present
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,scard,1,present
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,script|load,1,missing
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,set,1,present
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,srem,1,present
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,sscan,1,missing
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,unlink,3,present
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,zadd,1,present
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,zrange,3,present
-38519701424,2026-10-14T06:00:20Z,develop,Sidekiq,zrem,1,present
-38519701424,2026-10-14T06:00:20Z,develop,Celery,brpop,9,missing
-38519701424,2026-10-14T06:00:20Z,develop,Celery,client|setinfo,22,present
-38519701424,2026-10-14T06:00:20Z,develop,Celery,del,5,present
-38519701424,2026-10-14T06:00:20Z,develop,Celery,evalsha,2,missing
-38519701424,2026-10-14T06:00:20Z,develop,Celery,exec,25,present
-38519701424,2026-10-14T06:00:20Z,develop,Celery,get,10,present
-38519701424,2026-10-14T06:00:20Z,develop,Celery,hdel,7,present
-38519701424,2026-10-14T06:00:20Z,develop,Celery,hset,7,present
-38519701424,2026-10-14T06:00:20Z,develop,Celery,llen,12,present
-38519701424,2026-10-14T06:00:20Z,develop,Celery,lpush,7,present
-38519701424,2026-10-14T06:00:20Z,develop,Celery,mget,1,present
-38519701424,2026-10-14T06:00:20Z,develop,Celery,multi,25,present
-38519701424,2026-10-14T06:00:20Z,develop,Celery,ping,12,present
-38519701424,2026-10-14T06:00:20Z,develop,Celery,psubscribe,1,missing
-38519701424,2026-10-14T06:00:20Z,develop,Celery,publish,7,missing
-38519701424,2026-10-14T06:00:20Z,develop,Celery,sadd,3,present
-38519701424,2026-10-14T06:00:20Z,develop,Celery,script|load,1,missing
-38519701424,2026-10-14T06:00:20Z,develop,Celery,set,1,present
-38519701424,2026-10-14T06:00:20Z,develop,Celery,setex,7,present
-38519701424,2026-10-14T06:00:20Z,develop,Celery,srem,1,present
-38519701424,2026-10-14T06:00:20Z,develop,Celery,subscribe,12,missing
-38519701424,2026-10-14T06:00:20Z,develop,Celery,unsubscribe,24,missing
-38519701424,2026-10-14T06:00:20Z,develop,Celery,zadd,7,present
-38519701424,2026-10-14T06:00:20Z,develop,Celery,zrem,7,present
-38519701424,2026-10-14T06:00:20Z,develop,Celery,zrevrangebyscore,1,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,bzpopmin,3,missing
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,client|setinfo,8,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,client|setname,2,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,del,5,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,eval,6,missing
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,evalsha,4,missing
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,exists,5,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,get,2,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,hello,4,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,hget,6,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,hgetall,2,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,hincrby,4,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,hmget,8,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,hmset,4,missing
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,hset,4,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,incr,2,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,info,8,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,llen,4,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,lpush,2,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,lrange,1,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,lrem,2,missing
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,quit,2,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,rpoplpush,5,missing
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,scard,2,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,set,3,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,smembers,1,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,srem,2,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,xadd,11,missing
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,xread,5,missing
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,xtrim,3,missing
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,zadd,8,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,zcard,4,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,zpopmin,3,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,zrange,4,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,zrangebyscore,5,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,zrem,1,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,zrevrangebyscore,1,present
-38519701424,2026-10-14T06:00:20Z,develop,BullMQ,zscore,4,present
+38633789487,2026-10-14T20:38:34Z,develop,Rails cache store,client|setinfo,4,present
+38633789487,2026-10-14T20:38:34Z,develop,Rails cache store,expire,1,present
+38633789487,2026-10-14T20:38:34Z,develop,Rails cache store,get,6,present
+38633789487,2026-10-14T20:38:34Z,develop,Rails cache store,hello,1,present
+38633789487,2026-10-14T20:38:34Z,develop,Rails cache store,incrby,2,present
+38633789487,2026-10-14T20:38:34Z,develop,Rails cache store,info,1,present
+38633789487,2026-10-14T20:38:34Z,develop,Rails cache store,mget,3,present
+38633789487,2026-10-14T20:38:34Z,develop,Rails cache store,scan,3,present
+38633789487,2026-10-14T20:38:34Z,develop,Rails cache store,set,8,present
+38633789487,2026-10-14T20:38:34Z,develop,Rails cache store,unlink,3,present
+38633789487,2026-10-14T20:38:34Z,develop,ActionCable,client|setinfo,8,present
+38633789487,2026-10-14T20:38:34Z,develop,ActionCable,client|setname,2,present
+38633789487,2026-10-14T20:38:34Z,develop,ActionCable,hello,2,present
+38633789487,2026-10-14T20:38:34Z,develop,ActionCable,publish,1,missing
+38633789487,2026-10-14T20:38:34Z,develop,ActionCable,subscribe,2,missing
+38633789487,2026-10-14T20:38:34Z,develop,ActionCable,unsubscribe,1,missing
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,bitfield,3,missing
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,brpop,25,missing
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,client|setinfo,8,present
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,del,1,present
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,evalsha,3,missing
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,exec,4,present
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,exists,2,present
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,expire,15,present
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,get,68,present
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,hello,4,present
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,hget,1,present
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,hincrby,12,present
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,hset,2,present
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,incrby,19,present
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,info,1,present
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,lpush,11,present
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,multi,4,present
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,ping,2,present
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,rpop,2,present
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,sadd,13,present
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,scard,1,present
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,script|load,1,missing
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,set,1,present
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,srem,1,present
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,sscan,1,missing
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,unlink,3,present
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,zadd,1,present
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,zrange,3,present
+38633789487,2026-10-14T20:38:34Z,develop,Sidekiq,zrem,1,present
+38633789487,2026-10-14T20:38:34Z,develop,Celery,brpop,9,missing
+38633789487,2026-10-14T20:38:34Z,develop,Celery,client|setinfo,22,present
+38633789487,2026-10-14T20:38:34Z,develop,Celery,del,5,present
+38633789487,2026-10-14T20:38:34Z,develop,Celery,evalsha,2,missing
+38633789487,2026-10-14T20:38:34Z,develop,Celery,exec,25,present
+38633789487,2026-10-14T20:38:34Z,develop,Celery,get,10,present
+38633789487,2026-10-14T20:38:34Z,develop,Celery,hdel,7,present
+38633789487,2026-10-14T20:38:34Z,develop,Celery,hset,7,present
+38633789487,2026-10-14T20:38:34Z,develop,Celery,llen,12,present
+38633789487,2026-10-14T20:38:34Z,develop,Celery,lpush,7,present
+38633789487,2026-10-14T20:38:34Z,develop,Celery,mget,1,present
+38633789487,2026-10-14T20:38:34Z,develop,Celery,multi,25,present
+38633789487,2026-10-14T20:38:34Z,develop,Celery,ping,12,present
+38633789487,2026-10-14T20:38:34Z,develop,Celery,psubscribe,1,missing
+38633789487,2026-10-14T20:38:34Z,develop,Celery,publish,7,missing
+38633789487,2026-10-14T20:38:34Z,develop,Celery,sadd,3,present
+38633789487,2026-10-14T20:38:34Z,develop,Celery,script|load,1,missing
+38633789487,2026-10-14T20:38:34Z,develop,Celery,set,1,present
+38633789487,2026-10-14T20:38:34Z,develop,Celery,setex,7,present
+38633789487,2026-10-14T20:38:34Z,develop,Celery,srem,1,present
+38633789487,2026-10-14T20:38:34Z,develop,Celery,subscribe,12,missing
+38633789487,2026-10-14T20:38:34Z,develop,Celery,unsubscribe,25,missing
+38633789487,2026-10-14T20:38:34Z,develop,Celery,zadd,7,present
+38633789487,2026-10-14T20:38:34Z,develop,Celery,zrem,7,present
+38633789487,2026-10-14T20:38:34Z,develop,Celery,zrevrangebyscore,1,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,bzpopmin,3,missing
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,client|setinfo,8,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,client|setname,2,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,del,5,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,eval,6,missing
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,evalsha,4,missing
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,exists,5,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,get,2,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,hello,4,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,hget,6,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,hgetall,2,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,hincrby,4,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,hmget,8,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,hmset,4,missing
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,hset,4,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,incr,2,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,info,8,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,llen,4,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,lpush,2,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,lrange,1,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,lrem,2,missing
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,quit,2,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,rpoplpush,5,missing
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,scard,2,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,set,3,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,smembers,1,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,srem,2,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,xadd,11,missing
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,xread,5,missing
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,xtrim,3,missing
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,zadd,8,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,zcard,4,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,zpopmin,3,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,zrange,4,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,zrangebyscore,5,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,zrem,1,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,zrevrangebyscore,1,present
+38633789487,2026-10-14T20:38:34Z,develop,BullMQ,zscore,4,present
