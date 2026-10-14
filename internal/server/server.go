@@ -1348,9 +1348,6 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 	}
 	// The slow log reads who sent a command only if the command was slow.
 	cmd.Client = c
-	if !c.replica && isReplicationPull(cmd.Cmd) {
-		c.replica = true
-	}
 	// What the engine and the transaction answer they count themselves; what
 	// is answered here is counted here: as it runs, with its time, and as
 	// its errors are written (countedReplies), or as refused.
@@ -1401,6 +1398,17 @@ func (c *client) respond(cmd *core.Command, w io.ReadWriter) {
 	// Set as the command runs rather than as it was parsed: a HELLO earlier
 	// in the same pipeline has already changed it.
 	cmd.RESP3 = c.resp3
+	if !c.replica && isReplicationPull(cmd.Cmd) {
+		// A pull the engine accepts makes this a replica's connection, as
+		// Redis makes a client a replica only once its SYNC is accepted
+		// (CLIENT_SLAVE, set in syncCommand after its checks): what it is sent
+		// from then on, this reply included, is replication output. A pull
+		// refused, for want of a login or as invalid, leaves it a client.
+		reply := &firstByte{ReadWriter: w}
+		responseRw(c.engine, cmd, reply)
+		c.replica = reply.b != 0 && reply.b != '-'
+		return
+	}
 	responseRw(c.engine, cmd, w)
 }
 

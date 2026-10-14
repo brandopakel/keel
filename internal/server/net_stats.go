@@ -1,6 +1,7 @@
 package server
 
 import (
+	"io"
 	"net"
 	"sync/atomic"
 )
@@ -30,6 +31,20 @@ func resetNetStats() {
 // Redis sends a client it has made a replica (CLIENT_SLAVE) is.
 func isReplicationPull(name string) bool {
 	return name == "KEEL.REPL.PULL" || name == "KEEL.REPL.PULL2"
+}
+
+// firstByte passes a reply through and keeps its first byte, which is '-'
+// when the reply is an error.
+type firstByte struct {
+	io.ReadWriter
+	b byte
+}
+
+func (f *firstByte) Write(p []byte) (int, error) {
+	if f.b == 0 && len(p) > 0 {
+		f.b = p[0]
+	}
+	return f.ReadWriter.Write(p)
 }
 
 // replicaConn is a replica's connection to its primary, counted as Redis

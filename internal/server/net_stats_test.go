@@ -1,9 +1,13 @@
 package server
 
 import (
+	"bytes"
 	"net"
+	"strings"
 	"testing"
 
+	"github.com/brandopakel/keel/internal/core"
+	"github.com/brandopakel/keel/internal/resp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -51,4 +55,28 @@ func TestNetworkBytesAreCountedAsRedisCountsThem(t *testing.T) {
 	resetNetStats()
 	assert.Zero(t, netInputBytes.Load()+netOutputBytes.Load()+netReplInputBytes.Load()+netReplOutputBytes.Load()+
 		readsProcessed.Load()+writesProcessed.Load())
+}
+
+// TestOnlyAnAcceptedPullMakesAReplica: a connection becomes a replica's, its
+// output replication output, only once the engine accepts its pull, as Redis
+// makes a client a replica only once its SYNC is accepted. A pull refused for
+// want of a login, or as invalid, leaves it a client.
+func TestOnlyAnAcceptedPullMakesAReplica(t *testing.T) {
+	e := newTestEngine(t, core.Options{ReplicationFeed: true})
+	c := &client{engine: e, password: "secret"}
+	var out bytes.Buffer
+	c.respond(resp.ParsedCommand("KEEL.REPL.PULL", []string{"epoch", "0"}), &out)
+	assert.Contains(t, out.String(), "NOAUTH")
+	assert.False(t, c.replica, "refused before a login")
+
+	c.authenticated = true
+	out.Reset()
+	c.respond(resp.ParsedCommand("KEEL.REPL.PULL", []string{"epoch", "x"}), &out)
+	assert.True(t, strings.HasPrefix(out.String(), "-"), out.String())
+	assert.False(t, c.replica, "refused as invalid")
+
+	out.Reset()
+	c.respond(resp.ParsedCommand("KEEL.REPL.PULL", []string{"epoch", "0"}), &out)
+	assert.False(t, strings.HasPrefix(out.String(), "-"), out.String())
+	assert.True(t, c.replica, "accepted")
 }
