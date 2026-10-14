@@ -444,6 +444,9 @@ CONFIG_SET = [
 # errors, LIST's filters where one command matches, HELP and the subcommand
 # errors. COMMAND INFO of every command Keel has is added in build_cases.
 COMMAND_CASES = [
+    ['COMMAND', 'GETKEYS', 'lmpop', '2', 'a', 'b', 'left'], ['COMMAND', 'GETKEYSANDFLAGS', 'lmpop', '2', 'a', 'b', 'left'],
+    ['COMMAND', 'GETKEYS', 'lmpop', '0', 'a', 'left'], ['COMMAND', 'GETKEYS', 'lmpop', '2x', 'a', 'b', 'left'],
+    ['COMMAND', 'GETKEYSANDFLAGS', 'lmpop', '5', 'a', 'left'],
     ['COMMAND', 'GETKEYS', 'set', 'k', 'v'], ['COMMAND', 'GETKEYSANDFLAGS', 'set', 'k', 'v', 'GET'],
     ['COMMAND', 'GETKEYSANDFLAGS', 'set', 'k', 'v', 'ifeq', 'x'], ['COMMAND', 'GETKEYSANDFLAGS', 'set', 'k', 'v'],
     ['COMMAND', 'GETKEYS', 'mset', 'a', '1', 'b', '2'], ['COMMAND', 'GETKEYS', 'mset', 'a', '1', 'b'],

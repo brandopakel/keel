@@ -779,8 +779,61 @@ func getKeysProc(name string) func(argv []string) []foundKey {
 		return setGetKeys
 	case "pfmergeGetKeys":
 		return pfmergeGetKeys
+	case "lmpopGetKeys":
+		return lmpopGetKeys
 	}
 	return nil
+}
+
+// lmpopGetKeys: LMPOP's numkeys keys, after the count, when its key spec
+// cannot be followed.
+func lmpopGetKeys(argv []string) []foundKey { return genericGetKeys(0, 1, 2, 1, argv) }
+
+// genericGetKeys is Redis's: a count at keyCountOfs read as C's atoi reads
+// it, then that many keys from firstKeyOfs, keyStep apart, and the store key
+// at storeKeyOfs if there is one, every flag left empty. A count that does
+// not fit the arguments finds none.
+func genericGetKeys(storeKeyOfs, keyCountOfs, firstKeyOfs, keyStep int, argv []string) []foundKey {
+	if keyCountOfs >= len(argv) {
+		return nil
+	}
+	num := atoi(argv[keyCountOfs])
+	if num < 1 || num > int64((len(argv)-firstKeyOfs)/keyStep) {
+		return nil
+	}
+	keys := make([]foundKey, 0, num+1)
+	for i := int64(0); i < num; i++ {
+		keys = append(keys, foundKey{pos: firstKeyOfs + int(i)*keyStep, flags: []string{}})
+	}
+	if storeKeyOfs != 0 {
+		keys = append(keys, foundKey{pos: storeKeyOfs, flags: []string{}})
+	}
+	return keys
+}
+
+// atoi reads s as C's atoi does: spaces skipped, a sign, then digits up to
+// the first that is not one; nothing read is 0.
+func atoi(s string) int64 {
+	i := 0
+	for i < len(s) && (s[i] == ' ' || (s[i] >= '\t' && s[i] <= '\r')) {
+		i++
+	}
+	neg := false
+	if i < len(s) && (s[i] == '+' || s[i] == '-') {
+		neg = s[i] == '-'
+		i++
+	}
+	var n int64
+	for ; i < len(s) && s[i] >= '0' && s[i] <= '9'; i++ {
+		if n > (1<<62)/10 {
+			break
+		}
+		n = n*10 + int64(s[i]-'0')
+	}
+	if neg {
+		return -n
+	}
+	return n
 }
 
 // setGetKeys: SET's key is overwritten, or read and written with GET or a
