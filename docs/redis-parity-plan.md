@@ -175,16 +175,58 @@ workflow's `config.md`; every run's counts go to `census/config-runs.csv` on
 The **Redis tests** workflow (`.github/workflows/redis-tests.yml`, weekly,
 on dispatch and on a pull request that changes it) runs Redis 8.10.1's own
 test suite against Keel and against Redis, unit by unit. Its first baseline
-(runs 38335449455 and 38337899874, October 13, 2026, the same unit by unit)
+(October 13, 2026: runs 38335449455, 38337899874 and 38343833581 on its pull
+request, and 38352790820, the first on `develop`, the same unit by unit)
 found Keel passing **206 of the 3,194 tests Redis passes (6.4%)**, with
 1,241 failing and 1,663 never reached. Most failures are commands Keel
-lacks: 1,006 of the 1,241, led by `XADD`, `FUNCTION`, the array commands,
+lacks: 1,008 of the 1,241, led by `XADD`, `FUNCTION`, the array commands,
 `INCREX`, `FLUSHALL` and `COMMAND`. Most of the tests never reached sit in
-17 units whose setup runs a `CONFIG SET` Keel refuses: 1,129 tests, where
-Redis passes 1,780. Encoding thresholds such as `hash-max-listpack-entries`
-and `list-max-ziplist-size` lead. Accepting those settings, without acting
-on them, would let those units run; that is a decision of its own. Every run
-goes to `census/redis-tests.csv` on `bench-history`.
+17 units whose setup runs a `CONFIG SET` Keel refuses. Redis passes 1,780
+tests in those units, and Keel reaches 333 of them before the refusal. Every
+run goes to `census/redis-tests.csv` on `bench-history`.
+
+**What the tests rank.** Each failing test is counted once, under the first
+thing Keel lacked in its error. A test may need more than that, so each
+count is an upper bound on what that step alone unlocks, not a forecast.
+The counts are from run 38352790820 on `develop` (38343833581 gives the
+same), by Redis's command groups (`src/commands/*.json`).
+
+| Step | Tests behind it | Detail |
+| --- | --- | --- |
+| `CONFIG SET` accepts what the units set | 1,447 never reached, 72 failing | See below. |
+| `FLUSHALL` | 48 failing | In 10 units. The harness's own setup also calls it; the workflow adapts that. |
+| `COMMAND` | 40 failing | `INFO` 20, `GETKEYS` 10, `LIST` 6, `GETKEYSANDFLAGS` 3, `COUNT` 1. |
+| `CLIENT` subcommands | 37 failing | `PAUSE` 13, `LIST` 9, `REPLY` 5, `NO-TOUCH` 3, `KILL` 2, tracking 5. `unit/pause` also stops at `CLIENT UNPAUSE`. |
+| `DEBUG` | 23 failing | `SET-ACTIVE-EXPIRE` 16, `RELOAD` 3, `PROTOCOL` 2, `SLEEP` 1, `REPLYBUFFER` 1. |
+| Other server and connection commands | 14 failing | `MONITOR` 6, `SAVE` 3, `TIME` 2, `RESET` 2, `ACL SETUSER` 1. |
+
+`CONFIG SET` is the largest step by far. Redis passes 1,780 tests in the 17
+units, and Keel reaches 333 of them before the refusal. Each unit stops at
+the first setting Keel refuses. Ranked by Redis's passes in the units each
+one stops:
+
+- `appendonly` 363;
+- `zset-max-ziplist-entries` 300;
+- `save` 288;
+- `hash-min-template-entries` 222;
+- `hash-max-listpack-entries` 179;
+- `set-max-intset-entries` 152;
+- `hash-max-listpack-value` 91;
+- `list-max-ziplist-size` 90;
+- `list-max-listpack-size` 47;
+- `slowlog-log-slower-than` 32;
+- `latency-monitor-threshold` 16.
+
+Past its first refusal, a unit may need more: the 17 units set 54 settings
+in all, read from their files. Inside tests that run, a refused `CONFIG SET`
+fails 72 more: `notify-keyspace-events` 26, `maxmemory` 19, and 27 others.
+
+By family, the failing tests are: streams 229, strings 184, scripting
+162, arrays 129, bitmaps 74, generic 36, geo 29 and Pub/Sub 16. Pub/Sub
+also stops `unit/tracking` at `SUBSCRIBE`, where Redis passes 62. Hashes
+(7), sets (6), sorted sets (6) and lists (1) look small only because their
+own units are among the 17 that never get past `CONFIG SET`. Their real
+counts appear once it accepts those settings.
 
 ## How priorities are set
 
@@ -225,11 +267,20 @@ schedule them.
    string, list, hash, set, sorted-set, generic, geo and bitmap families.
    This tier also brings:
    - **`WATCH`**;
-   - **server and connection commands:** `COMMAND` (with `COUNT`, `DOCS`,
-     `INFO`, `LIST` and `GETKEYS`, which client libraries call at
-     connect), `TIME`, `ROLE`, `FLUSHALL`, `RESET`, `MONITOR`, the remaining
-     `CLIENT` subcommands, and `CONFIG GET` and `SLOWLOG` from the monitoring
-     work;
+   - **server and connection commands,** ordered by how many of Redis's
+     tests each unlocks (see "What the tests rank"):
+     1. `CONFIG SET` for the settings Redis's tests set. How far each one
+        acts is the owner's decision; Keel has no encodings for the
+        encoding thresholds to tune, for example.
+     2. `FLUSHALL`.
+     3. `COMMAND`, with `COUNT`, `DOCS`, `INFO`, `LIST` and `GETKEYS`.
+        Client libraries also call it at connect.
+     4. The remaining `CLIENT` subcommands, `PAUSE` and `UNPAUSE` first.
+     5. `MONITOR`, `TIME`, `RESET` and `ROLE`, and `SLOWLOG` from the
+        monitoring work.
+
+     `CONFIG GET` is done (#156). `DEBUG SET-ACTIVE-EXPIRE` is a test hook
+     that 16 tests use; adding it is the owner's choice;
    - **server settings Redis has and Keel ties to others:** for example the
      listen backlog. Keel used `-maxclients` as its backlog. Redis has
      `tcp-backlog`, 511 by default and capped by the kernel's `somaxconn`,
@@ -394,6 +445,9 @@ count too.
 - **The census count rises** by the commands the change adds, and
   `census.json` names them.
 - **The framework checks** that needed the piece start to pass.
+- **Redis's own tests** (the Redis tests workflow, dispatched on the pull
+  request) pass more in the units the piece touches, and none fewer
+  anywhere.
 - **On the command path**, the paired command-path job's 0.98 rule and no
   new allocations, the embedding plan's verification for hot-path steps.
   Every family's tier 1 work is command-path code, so every tier 1 pull
