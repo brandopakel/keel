@@ -65,6 +65,12 @@ CASES = [[c] for c in [
     ['GETDEL', 'hash'], ['GETSET', 'str', 'x'], ['GETSET', 'missing', 'x'], ['APPEND', 'str', 'x'],
     ['APPEND', 'missing', 'x'], ['SETRANGE', 'str', '0', 'x'], ['INCRBYFLOAT', 'num', '1.5'],
     ['INCRBYFLOAT', 'missing', '1.5'], ['MSETNX', 'str', '1', 'n2', '2'], ['MSETNX', 'n3', '1', 'n4', '2'],
+    ['DIGEST', 'str'], ['DIGEST', 'missing'], ['DIGEST', 'hash'], ['DELEX', 'str'], ['DELEX', 'missing'],
+    ['DELEX', 'str', 'IFEQ', 'abc'], ['DELEX', 'str', 'IFNE', 'abc'], ['DELEX', 'missing', 'IFEQ', 'x'],
+    ['DELEX', 'hash', 'IFEQ', 'x'], ['SET', 'str', 'x', 'IFEQ', 'abc'], ['SET', 'str', 'x', 'IFEQ', 'nomatch'],
+    ['SET', 'missing', 'x', 'IFEQ', 'y'], ['SET', 'missing', 'x', 'IFNE', 'y'], ['SET', 'str', 'x', 'GET', 'IFEQ', 'abc'],
+    ['SET', 'hash', 'x', 'IFEQ', 'y'], ['MSETEX', '1', 'str', 'y', 'EX', '100'], ['MSETEX', '2', 'str', 'y', 'n5', 'z', 'NX'],
+    ['INCREX', 'num'], ['INCREX', 'missing', 'BYFLOAT', '1.5'], ['INCREX', 'hash'],
     # The keyspace.
     ['DEL', 'str', 'missing'], ['UNLINK', 'str'], ['EXISTS', 'str', 'missing', 'str'], ['TYPE', 'str'],
     ['TYPE', 'missing'], ['KEYS', '*'], ['SCAN', '0'], ['TTL', 'str'], ['TTL', 'missing'], ['PTTL', 'str'],
@@ -168,12 +174,22 @@ EXPIRY_CASES = [expired(keys, *commands) for keys, *commands in [
     (['hll'], ['PFCOUNT', 'hll']), (['hll'], ['PFADD', 'hll', 'z']), (['hll'], ['PFMERGE', 'dest', 'hll']),
     (['geo'], ['GEOPOS', 'geo', 'palermo']), (['geo'], ['GEOADD', 'geo', '1', '1', 'x']),
     (['str'], ['MULTI'], ['GET', 'str'], ['EXEC']),
+    (['str'], ['DIGEST', 'str']), (['str'], ['DELEX', 'str']), (['str'], ['DELEX', 'str', 'IFEQ', 'abc']),
+    (['str'], ['SET', 'str', 'x', 'IFEQ', 'abc']), (['num'], ['INCREX', 'num', 'BYINT', '1']),
+    (['str'], ['MSETEX', '1', 'str', 'x']),
 ]] + [
     [['SET', 'absent', 'v', 'PXAT', '1']], [['SET', 'str', 'v', 'PXAT', '1']], [['SET', 'str', 'v', 'EXAT', '1', 'GET']],
     [['SET', 'hash', 'v', 'PXAT', '1']], [['SET', 'str', 'v', 'NX', 'PXAT', '1']],
     [['SET', 'absent', 'v', 'XX', 'PXAT', '1']], [['SET', 'absent', 'v', 'NX', 'PXAT', '1']],
     [['PEXPIREAT', 'str', '1']], [['EXPIREAT', 'hash', '1']], [['GETEX', 'str', 'PXAT', '1']],
     [['SET', 'k', 'v', 'PXAT', '1'], ['GET', 'k']],
+    # Redis 8's string writes with an instant already past: SET's conditions
+    # and INCREX delete the key and count it as expired, as SET does; MSETEX
+    # stores its keys with the passed expiry, which their next lookup counts.
+    [['SET', 'str', 'x', 'IFEQ', 'abc', 'PXAT', '1']], [['SET', 'str', 'x', 'IFEQ', 'no', 'PXAT', '1']],
+    [['INCREX', 'num', 'BYINT', '1', 'PXAT', '1']], [['INCREX', 'absent', 'BYINT', '1', 'PXAT', '1']],
+    [['INCREX', 'num', 'BYINT', '1', 'PXAT', '1', 'ENX']],
+    [['MSETEX', '1', 'k', 'v', 'PXAT', '1']], [['MSETEX', '2', 'k', 'v', 'str', 'w', 'PXAT', '1'], ['GET', 'k'], ['EXISTS', 'str']],
 ]
 MODULE_CASES = [[c] for c in [
     ['BF.ADD', 'bf', 'b'], ['BF.EXISTS', 'bf', 'a'], ['BF.EXISTS', 'missing', 'a'], ['BF.MADD', 'bf', 'c', 'd'],
