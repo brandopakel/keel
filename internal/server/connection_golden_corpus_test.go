@@ -36,6 +36,23 @@ var connectionGoldenCorpus = []connectionGoldenCase{
 		{"CLIENT", "GETNAME"},
 		{"HELLO"},
 	}},
+	{name: "client-pause", commands: [][]string{
+		// A pause that holds nothing, its errors, and UNPAUSE: a pause that
+		// held commands would hold the corpus's own, which a single
+		// connection cannot show (pause_test.go runs the loop for that).
+		{"CLIENT", "PAUSE", "0"},
+		{"CLIENT", "PAUSE", "0", "write"},
+		{"CLIENT", "PAUSE", "0", "ALL"},
+		{"CLIENT", "UNPAUSE"},
+		{"CLIENT", "PAUSE", "x"},
+		{"CLIENT", "PAUSE", "+10"},
+		{"CLIENT", "PAUSE", "-1"},
+		{"CLIENT", "PAUSE", "9223372036854775807"},
+		{"CLIENT", "PAUSE", "10", "NONE"},
+		{"CLIENT", "pause", "1", "ALL", "x"},
+		{"CLIENT", "PAUSE"},
+		{"CLIENT", "UNPAUSE", "x"},
+	}},
 	{name: "client", commands: [][]string{
 		{"CLIENT", "ID"},
 		{"client", "id"},

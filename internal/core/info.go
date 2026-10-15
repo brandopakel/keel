@@ -156,9 +156,12 @@ func (e *Engine) clientsInfo(b *strings.Builder) {
 			fmt.Fprintf(b, "maxclients:%d\r\n", s.MaxClients)
 		}
 		fmt.Fprintf(b, "client_recent_max_input_buffer:%d\r\nclient_recent_max_output_buffer:%d\r\n", stats.RecentMaxInput, stats.RecentMaxReply)
-		// Keel has no blocking commands, client tracking, Pub/Sub or WATCH (the
-		// README's integration contract), so Redis's counts of them are zero.
-		b.WriteString("blocked_clients:0\r\ntracking_clients:0\r\npubsub_clients:0\r\nwatching_clients:0\r\n" +
+		// The only clients Keel blocks are those CLIENT PAUSE postpones, which
+		// Redis counts as blocked too. Keel has no blocking commands, client
+		// tracking, Pub/Sub or WATCH (the README's integration contract), so
+		// Redis's counts of them are zero.
+		fmt.Fprintf(b, "blocked_clients:%d\r\n", stats.Blocked)
+		b.WriteString("tracking_clients:0\r\npubsub_clients:0\r\nwatching_clients:0\r\n" +
 			"total_watched_keys:0\r\ntotal_blocking_keys:0\r\ntotal_blocking_keys_on_nokey:0\r\n")
 		fmt.Fprintf(b, "retained_input_bytes:%d\r\nretained_reply_bytes:%d\r\nretained_client_bytes:%d\r\n", stats.InputBytes, stats.ReplyBytes, stats.TotalBytes)
 		fmt.Fprintf(b, "request_allocation_peak_bytes:%d\r\nrequest_allocation_refusals:%d\r\n", stats.RequestAllocationPeak, stats.RequestAllocationRefusals)

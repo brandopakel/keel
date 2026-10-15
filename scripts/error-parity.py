@@ -390,6 +390,10 @@ SUBCOMMANDS = [
     ['client', 'nosuch'], ['CLIENT', 'nosuch', 'x'], ['client'], ['client', 'id', 'x'], ['CLIENT', 'GETNAME', 'x'],
     ['client', 'setname'], ['client', 'SetInfo', 'lib-name'], ['client', 'info', 'x'], ['client', 'x' * 200],
     ['client', b'a\x00b'], ['client', 'a\r\nb'], ['client', 'é' * 70], ['client', 'kill', 'x', 'y'],
+    ['client', 'pause', 'x'], ['CLIENT', 'PAUSE', '-1'], ['client', 'pause', '+10'], ['client', 'pause', '10', 'NONE'],
+    ['client', 'pause'], ['CLIENT', 'pause', '1', 'ALL', 'x'], ['client', 'unpause', 'x'],
+    ['client', 'pause', '9223372036854775807'], ['CLIENT', 'PAUSE', '0'], ['CLIENT', 'PAUSE', '0', 'write'],
+    ['CLIENT', 'UNPAUSE'],
     ['memory', 'nosuch'], ['MEMORY', 'Nosuch', 'x'], ['memory'], ['memory', 'usage'], ['Memory', 'UsAge'],
     ['memory', 'stats', 'x'], ['MEMORY', 'x' * 200],
     ['config', 'get', 'x'], ['CONFIG', 'GET', 'nosuch', 'x*'], ['config', 'nosuch'], ['Config', 'get'],
@@ -465,6 +469,7 @@ COMMAND_CASES = [
 ]
 # The subcommands Keel has, each of which COMMAND INFO describes.
 KEEL_SUBCOMMANDS = ['client|id', 'client|setname', 'client|getname', 'client|setinfo', 'client|info', 'client|help',
+                    'client|pause', 'client|unpause',
                     'memory|stats', 'memory|usage', 'memory|help', 'config|get', 'config|set', 'config|resetstat',
                     'config|rewrite', 'config|help', 'command|count', 'command|docs', 'command|getkeys',
                     'command|getkeysandflags', 'command|help', 'command|info', 'command|list', 'latency|doctor',

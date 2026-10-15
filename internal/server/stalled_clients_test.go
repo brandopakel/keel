@@ -45,6 +45,7 @@ func TestSweepClosesEveryStalledStateAndNamesTheUnansweredOnes(t *testing.T) {
 		{"deferred run", &client{lastProgress: stale, cmds: parsed, appendDeferred: true}, true, true},
 		{"queued continuation", &client{lastProgress: stale, cmds: parsed, readQueued: true}, true, true},
 		{"recent parsed run", &client{lastProgress: fresh, cmds: parsed}, false, false},
+		{"held by CLIENT PAUSE", &client{lastProgress: stale, cmds: parsed, postponed: true}, false, false},
 		{"recent slow reader", &client{lastProgress: fresh, out: []byte("+OK\r\n")}, false, false},
 	}
 	for i := range cases {

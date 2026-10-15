@@ -152,7 +152,8 @@ where the plan's phase 6 wants server state.
 | --- | --- | --- |
 | `connected_clients` | yes, every connection | (i), done. The connections that are not replicas, as Redis's counts `server.clients` less `server.slaves` (server.c). A connection is a replica's once the primary has accepted its pull (`KEEL.REPL.PULL`), as part (d) marks it. |
 | `maxclients` | - | (a) `-maxclients` |
-| `blocked_clients`, `total_blocking_keys`, `total_blocking_keys_on_nokey` | - | (a) `0`: no blocking commands |
+| `blocked_clients` | - | The connections a `CLIENT PAUSE` holds, which Redis counts as blocked; otherwise `0`: Keel has no blocking commands |
+| `total_blocking_keys`, `total_blocking_keys_on_nokey` | - | (a) `0`: no blocking commands |
 | `pubsub_clients` | - | (a) `0`: no pub/sub |
 | `tracking_clients` | - | (a) `0`: no client tracking |
 | `cluster_connections` | - | (a) `0`: no cluster |
@@ -629,6 +630,33 @@ and RedisBloom's (`command_specs_keel.go`).
   repository or binary, and no loading of it at run time for now (the
   embedding plan's Decisions).
 - **`COMMAND HELP`** is Redis's text, as every `HELP` of Keel's is.
+
+## CLIENT PAUSE
+
+`CLIENT PAUSE timeout [WRITE|ALL]` and `CLIENT UNPAUSE` are Redis 8.10.1's
+(`networking.c`, `pauseClientsByClient`; `server.c`, `processCommand`):
+
+- **What waits.** Under `ALL`, every command waits, `CLIENT`'s own included.
+  Under `WRITE`, the commands whose spec declares `WRITE` or `MAY_REPLICATE`
+  wait: an `EXEC` whose queue holds one, and a write sent inside `MULTI`,
+  which Redis holds before it queues it.
+- **What does not wait.** A command Redis refuses before it would run (one it
+  does not have, the wrong number of arguments, `NOAUTH`) is answered at once.
+  A replica's pull (`KEEL.REPL.PULL`) never waits, as Redis never pauses its
+  replicas.
+- **A connection that waits.** Its waiting command and everything sent after
+  it run once the pause ends or `UNPAUSE` lifts it, in order. Its input is not
+  read meanwhile, and it counts in `INFO`'s `blocked_clients`.
+- **Combining pauses.** A new pause keeps `ALL` while `ALL` holds, and keeps
+  the later end. A timeout of `0` pauses nothing.
+- **Expiry.** Active expiry pauses with it, as Redis's does. Redis also stops
+  a read from deleting a key whose expiry has passed: the key reads as gone
+  but stays until the pause ends. Keel still deletes such a key on a read,
+  which is a difference.
+- **Errors.** Redis's: `CLIENT PAUSE mode must be WRITE or ALL`, `timeout is
+  not an integer or out of range`, `timeout is negative`, `timeout is out of
+  range`, and a `PAUSE` of any other count is `unknown subcommand or wrong
+  number of arguments for 'pause'`.
 
 ## What each part should show in Grafana
 
