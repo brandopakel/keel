@@ -67,3 +67,4 @@ artifact_id,run_id,time,event,branch,pr,conclusion,redis_version,commands,comman
 11948342217,38680356689,2026-10-15T04:13:38Z,push,develop,214,failure,8.10.1,401,130,148,34,https://github.com/brandopakel/keel/actions/runs/38680356689
 11950800012,38683257301,2026-10-15T04:46:49Z,push,develop,212,failure,8.10.1,401,130,148,34,https://github.com/brandopakel/keel/actions/runs/38683257301
 11950246334,38683619785,2026-10-15T04:50:57Z,push,develop,210,failure,8.10.1,401,130,148,34,https://github.com/brandopakel/keel/actions/runs/38683619785
+11950128096,38686118111,2026-10-15T05:18:56Z,pull_request,ci/setup-go-v6.4.0,,failure,8.10.1,401,130,148,34,https://github.com/brandopakel/keel/actions/runs/38686118111
