@@ -171,6 +171,7 @@ func (e *Engine) SampleCommandRate() {
 // count, such as used_memory_peak, which Redis keeps too, is left alone.
 func (e *Engine) resetStats() {
 	e.totals = commandTotals{}
+	e.syncFull = 0
 	clear(e.cmdStats)
 	clear(e.latency)
 	// The slow log's counts, not its entries, which SLOWLOG RESET clears.

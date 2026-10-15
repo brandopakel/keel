@@ -249,6 +249,9 @@ func (e *Engine) cmdReplicationPull(args []string) []byte {
 	if err != nil {
 		return e.encode(err, false)
 	}
+	if full {
+		e.syncFull++
+	}
 	return e.encode(string(encoded), false)
 }
 

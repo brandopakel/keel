@@ -38,6 +38,7 @@ import base64
 import importlib.util
 import json
 import platform
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -57,8 +58,21 @@ Error, call = compat.Error, compat.call
 PROTOCOLS = [1, 2]
 SIDES = ['baseline', 'candidate']
 # Fields INFO replication reports that are random or are ages.
-INFO_RANDOM = {'primary_epoch', 'replica_epoch'}
-INFO_AGES = {'replica_last_update_ms', 'replication_acked_age_ms'}
+INFO_RANDOM = {'primary_epoch', 'replica_epoch', 'master_replid'}
+INFO_AGES = {'replica_last_update_ms', 'replication_acked_age_ms', 'master_last_io_seconds_ago',
+             'master_link_up_since_seconds', 'master_link_down_since_seconds', 'total_disconnect_time_sec'}
+# Redis's fields, which INFO replication reports before Keel's own since part
+# (e) of docs/info-compatibility.md: a baseline from before it has none of
+# them, and only these may be missing from one side. Keel's own role line,
+# role:primary or role:replica, became Redis's role:master or role:slave.
+REDIS_REPLICATION_FIELDS = {
+    'master_host', 'master_port', 'master_link_status', 'master_sync_in_progress',
+    'slave_read_repl_offset', 'slave_repl_offset', 'replica_full_sync_buffer_size',
+    'replica_full_sync_buffer_peak', 'master_current_sync_attempts', 'master_total_sync_attempts',
+    'master_client_io_thread', 'slave_read_only', 'connected_slaves', 'master_failover_state',
+    'master_replid', 'master_replid2', 'master_repl_offset', 'second_repl_offset', 'repl_backlog_active',
+    'repl_backlog_size', 'repl_backlog_first_byte_offset', 'repl_backlog_histlen'}
+REDIS_ROLE = {'primary': 'master', 'replica': 'slave'}
 OPAQUE = (b'KEEL.RESTORE',)
 
 
@@ -296,8 +310,23 @@ def info_fields(client, names):
     for k, v in info(client, 'replication').items():
         if k in INFO_AGES:
             continue
+        if k == 'role':
+            v = REDIS_ROLE.get(v, v)
+        elif re.fullmatch(r'slave\d+', k):
+            # The replica's connection's port is the kernel's, and its lag an age.
+            v = ','.join(p for p in v.split(',') if not p.startswith(('port=', 'lag=')))
         out[k] = names('epoch', v) if k in INFO_RANDOM else v
     return out
+
+
+def same_info(a, b):
+    """The INFO replication fields a and b report differ only where one is a
+    build from before Redis's fields, which has none of them."""
+    if set(a) != set(b):
+        extra = {k for k in set(a) ^ set(b) if k not in REDIS_REPLICATION_FIELDS and not re.fullmatch(r'slave\d+', k)}
+        if extra or not (set(a) <= set(b) or set(b) <= set(a)):
+            return False
+    return all(a[k] == b[k] for k in set(a) & set(b))
 
 
 def dumps(c):
@@ -387,7 +416,10 @@ def compare_wire(a, b, what):
     for i, ((kind, x), (_, y)) in enumerate(zip(a['bodies'], b['bodies'])):
         if x != y:
             raise AssertionError(f'{what}: body {i} ({kind}) differs: {compat.first_difference(x, y)}')
-    for field in ['info', 'replies', 'dumps']:
+    if len(a['info']) != len(b['info']) or not all(same_info(x, y) for x, y in zip(a['info'], b['info'])):
+        diff = [sorted(k for k in set(x) | set(y) if x.get(k) != y.get(k)) for x, y in zip(a['info'], b['info'])]
+        raise AssertionError(f'{what}: info differ: {diff[:3]}')
+    for field in ['replies', 'dumps']:
         if a[field] != b[field]:
             if isinstance(a[field], dict):
                 diff = sorted(k for k in set(a[field]) | set(b[field]) if a[field].get(k) != b[field].get(k))

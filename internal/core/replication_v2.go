@@ -320,5 +320,9 @@ func (e *Engine) cmdReplicationPullV2(args []string) []byte {
 	frame.SnapshotOffset = part
 	frame.SnapshotBytes = uint64(e.replicationV2.snapshotBytes)
 	frame.SnapshotDone = part+uint64(n) == frame.SnapshotBytes
+	if part == 0 {
+		// A snapshot's first part starts a full sync, which sync_full counts.
+		e.syncFull++
+	}
 	return encodeReplicationFrame(frame)
 }

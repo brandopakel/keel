@@ -38,11 +38,16 @@ import (
 //   - the keyspace, which the replica must share with its primary after each
 //     frame that brings it level.
 //
-// testdata/replication-9736d8d/ holds the transcripts develop at 9736d8d
-// wrote, captured with
+// testdata/replication-<replicationGoldenRevision>/ holds the transcripts
+// that revision wrote, captured with
 //
-//	KEEL_CAPTURE_REPLICATION_GOLDEN=$PWD/testdata/replication-9736d8d \
+//	KEEL_CAPTURE_REPLICATION_GOLDEN=$PWD/testdata/replication-<revision> \
 //	  go test ./internal/core -run '^TestReplicationGoldenCapture$'
+//
+// They were first captured at 9736d8d, before step 2.4 moved replication into
+// the engine, and recaptured at 6c4a916, INFO part (e), which put Redis's
+// fields first in INFO replication; that recapture changed only the info
+// lines.
 //
 // and every run since must write the same transcript, line for line, under
 // every fsync policy with synchronous and worker appends. With
@@ -72,7 +77,10 @@ import (
 //
 // Every opaque command here changes one key, so the record order of each
 // protocol 2 frame is the order the primary published it in, and is kept.
-const replicationGoldenDir = "testdata/replication-9736d8d"
+const (
+	replicationGoldenRevision = "6c4a916"
+	replicationGoldenDir      = "testdata/replication-" + replicationGoldenRevision
+)
 
 // goldenPrimary is what a golden replica names as its primary.
 const goldenPrimary = "primary.golden:6379"
@@ -369,8 +377,11 @@ func (g *replicationGolden) info(what string) {
 		switch k {
 		case "replica_last_update_ms", "replication_acked_age_ms":
 			v = "-" // an age, not the same twice
-		case "primary_epoch", "replica_epoch":
+		case "primary_epoch", "replica_epoch", "master_replid":
 			v = g.id("epoch", v)
+		case "master_last_io_seconds_ago", "master_link_up_since_seconds", "master_link_down_since_seconds",
+			"total_disconnect_time_sec":
+			v = "-" // ages, which the engine reports only with a transport
 		}
 		fmt.Fprintf(&line, " %s:%s", k, v)
 	}
@@ -812,7 +823,8 @@ func goldenTerms(g *replicationGolden) {
 }
 
 // TestReplicationGoldenCapture writes the fixture when asked to, and is
-// skipped otherwise. It was run once, on develop at 9736d8d. Every mode must
+// skipped otherwise. It was run on develop at 9736d8d, and again at the
+// revision it names now (replicationGoldenRevision). Every mode must
 // write the same transcript before anything is written.
 func TestReplicationGoldenCapture(t *testing.T) {
 	t.Parallel()
@@ -822,8 +834,8 @@ func TestReplicationGoldenCapture(t *testing.T) {
 	}
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	manifest := map[string]any{
-		"source_revision": "9736d8d",
-		"note":            "Captured before step 2.4 of the embedding plan moved replication and failover into core.Engine; see replication_golden_test.go.",
+		"source_revision": replicationGoldenRevision,
+		"note":            "First captured at 9736d8d, before step 2.4 of the embedding plan moved replication and failover into core.Engine; recaptured when INFO replication put Redis's fields first. See replication_golden_test.go.",
 	}
 	sums := map[string]string{}
 	for _, scenario := range replicationGoldenScenarios {
