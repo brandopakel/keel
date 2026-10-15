@@ -449,4 +449,9 @@ artifact_id,run_id,time,event,branch,pr,conclusion,exit_code,suite_seconds,peak_
 11946140498,38674420638,2026-10-15T03:05:17Z,pull_request,feat/info-sections,214,success,0,25.7,112202484,85005924,167772160,0,https://github.com/brandopakel/keel/actions/runs/38674420638
 11945995587,38674553229,2026-10-15T03:06:45Z,pull_request,feat/volatile-eviction,212,success,0,26.0,113428212,95488798,167772160,0,https://github.com/brandopakel/keel/actions/runs/38674553229
 11947601877,38678665532,2026-10-15T03:54:15Z,push,develop,219,cancelled,0,26.4,114316023,84942863,167772160,0,https://github.com/brandopakel/keel/actions/runs/38678665532
+11948273112,38680069589,2026-10-15T04:10:27Z,pull_request,feat/phase4-string-8x,,success,0,23.5,135146464,98908107,167772160,0,https://github.com/brandopakel/keel/actions/runs/38680069589
 11948506688,38680356713,2026-10-15T04:13:38Z,push,develop,214,success,0,25.5,112085748,95056682,167772160,0,https://github.com/brandopakel/keel/actions/runs/38680356713
+11948229690,38680638073,2026-10-15T04:16:51Z,pull_request,feat/client-list,202,success,0,23.4,123964963,85682633,167772160,0,https://github.com/brandopakel/keel/actions/runs/38680638073
+11948911358,38680656782,2026-10-15T04:17:04Z,pull_request,feat/info-expiry-stats,210,success,0,23.2,113577780,85461063,167772160,0,https://github.com/brandopakel/keel/actions/runs/38680656782
+11948732885,38681011596,2026-10-15T04:21:14Z,pull_request,feat/phase4-sketch-commands,,cancelled,0,23.4,113577780,90907376,167772160,0,https://github.com/brandopakel/keel/actions/runs/38681011596
+11949266030,38683378153,2026-10-15T04:48:12Z,pull_request,feat/eviction-exceeded-time,,cancelled,0,22.6,120580415,82097305,167772160,0,https://github.com/brandopakel/keel/actions/runs/38683378153
