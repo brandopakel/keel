@@ -497,6 +497,15 @@ var goldenStrings = []commandGoldenCase{
 		send("SET", "m1", "v", "IFNE", "x"),
 		send("SET", "m2", "v", "IFDEQ", "0000000000000000"),
 		send("SET", "m3", "v", "IFDNE", "0000000000000000"),
+		// A condition met with an instant already past deletes the key, as
+		// SET does (#210); one not met changes nothing.
+		send("SET", "cp", "v"),
+		send("SET", "cp", "w", "IFEQ", "no", "PXAT", "1"),
+		send("EXISTS", "cp"),
+		send("SET", "cp", "w", "IFEQ", "v", "PXAT", "1"),
+		send("EXISTS", "cp"),
+		send("SET", "cp2", "w", "IFNE", "x", "EXAT", "1000"),
+		send("EXISTS", "cp2"),
 		send("SET", "k", "v4", "IFDEQ", stringDigest("v3")),
 		send("GET", "k"),
 		send("SET", "k", "v5", "IFDEQ", stringDigest("v3")),
