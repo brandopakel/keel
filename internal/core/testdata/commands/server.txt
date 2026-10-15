@@ -426,8 +426,8 @@ case server/config-set
 
 case server/command
 > "COMMAND" "COUNT"
-2 ":144\r\n"
-3 ":144\r\n"
+2 ":151\r\n"
+3 ":151\r\n"
 > "COMMAND" @masked
 2 "*"
 3 "*"
@@ -444,8 +444,8 @@ case server/command
 2 "*3\r\n$5\r\npfadd\r\n$7\r\npfcount\r\n$7\r\npfmerge\r\n"
 3 "*3\r\n$5\r\npfadd\r\n$7\r\npfcount\r\n$7\r\npfmerge\r\n"
 > "COMMAND" "LIST" "FILTERBY" "MODULE" "bf" @sorted
-2 "*18\r\n$10\r\nbf.mexists\r\n$10\r\nbf.reserve\r\n$10\r\ncf.mexists\r\n$10\r\ncf.reserve\r\n$10\r\ncms.incrby\r\n$13\r\ncms.initbydim\r\n$14\r\ncms.initbyprob\r\n$6\r\nbf.add\r\n$6\r\ncf.add\r\n$6\r\ncf.del\r\n$7\r\nbf.info\r\n$7\r\nbf.madd\r\n$7\r\ncf.info\r\n$8\r\ncf.addnx\r\n$8\r\ncf.count\r\n$9\r\nbf.exists\r\n$9\r\ncf.exists\r\n$9\r\ncms.query\r\n"
-3 "*18\r\n$10\r\nbf.mexists\r\n$10\r\nbf.reserve\r\n$10\r\ncf.mexists\r\n$10\r\ncf.reserve\r\n$10\r\ncms.incrby\r\n$13\r\ncms.initbydim\r\n$14\r\ncms.initbyprob\r\n$6\r\nbf.add\r\n$6\r\ncf.add\r\n$6\r\ncf.del\r\n$7\r\nbf.info\r\n$7\r\nbf.madd\r\n$7\r\ncf.info\r\n$8\r\ncf.addnx\r\n$8\r\ncf.count\r\n$9\r\nbf.exists\r\n$9\r\ncf.exists\r\n$9\r\ncms.query\r\n"
+2 "*25\r\n$10\r\nbf.mexists\r\n$10\r\nbf.reserve\r\n$10\r\ncf.compact\r\n$10\r\ncf.mexists\r\n$10\r\ncf.reserve\r\n$10\r\ncms.incrby\r\n$11\r\ncf.insertnx\r\n$13\r\ncms.initbydim\r\n$14\r\ncms.initbyprob\r\n$6\r\nbf.add\r\n$6\r\ncf.add\r\n$6\r\ncf.del\r\n$7\r\nbf.card\r\n$7\r\nbf.info\r\n$7\r\nbf.madd\r\n$7\r\ncf.info\r\n$8\r\ncf.addnx\r\n$8\r\ncf.count\r\n$8\r\ncms.info\r\n$9\r\nbf.exists\r\n$9\r\nbf.insert\r\n$9\r\ncf.exists\r\n$9\r\ncf.insert\r\n$9\r\ncms.merge\r\n$9\r\ncms.query\r\n"
+3 "*25\r\n$10\r\nbf.mexists\r\n$10\r\nbf.reserve\r\n$10\r\ncf.compact\r\n$10\r\ncf.mexists\r\n$10\r\ncf.reserve\r\n$10\r\ncms.incrby\r\n$11\r\ncf.insertnx\r\n$13\r\ncms.initbydim\r\n$14\r\ncms.initbyprob\r\n$6\r\nbf.add\r\n$6\r\ncf.add\r\n$6\r\ncf.del\r\n$7\r\nbf.card\r\n$7\r\nbf.info\r\n$7\r\nbf.madd\r\n$7\r\ncf.info\r\n$8\r\ncf.addnx\r\n$8\r\ncf.count\r\n$8\r\ncms.info\r\n$9\r\nbf.exists\r\n$9\r\nbf.insert\r\n$9\r\ncf.exists\r\n$9\r\ncf.insert\r\n$9\r\ncms.merge\r\n$9\r\ncms.query\r\n"
 > "COMMAND" "LIST" "FILTERBY" "ACLCAT" "nosuch"
 2 "*0\r\n"
 3 "*0\r\n"
