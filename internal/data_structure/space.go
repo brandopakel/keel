@@ -74,6 +74,12 @@ type Space struct {
 	// for INFO's avg_ttl (TakeTTLSamples). Only that cycle reads them, so they
 	// go last, after everything an access reads.
 	ttlSum, ttlSamples uint64
+
+	// ExpiryClock, when set, is the clock in Unix milliseconds every expiry is
+	// compared against, in place of the wall clock: a test sets it to make a
+	// TTL fall due between two lookups of one command. It is last, so that no
+	// field an access reads moves.
+	ExpiryClock func() uint64
 }
 
 // EvictionPolicy is how a space that is over one of its bounds chooses the
