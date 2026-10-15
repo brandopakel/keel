@@ -4569,6 +4569,16 @@ artifact_id,run_id,time,branch,test,package,peak_bytes,peak_file_bytes
 11949266030,38683378153,2026-10-15T04:48:12Z,feat/eviction-exceeded-time,TestRewriteRetainsBoundedNameBatches,internal/core,22377780,11188890
 11949266030,38683378153,2026-10-15T04:48:12Z,feat/eviction-exceeded-time,TestReplicationV2LargeSnapshotOperationsAndFrozenFile,internal/core,21691784,10846052
 11949266030,38683378153,2026-10-15T04:48:12Z,feat/eviction-exceeded-time,TestReplicasThroughAFailedRewriteprotocol-,cmd/keel,21568725,21568061
+11949253928,38683619687,2026-10-15T04:50:57Z,develop,TestRewriteStallProfile,internal/core,113577780,56788890
+11949253928,38683619687,2026-10-15T04:50:57Z,develop,"TestEveryAcknowledgedWriteSurvivesAKilleverysec,_during_a_faile",internal/core,93915787,89459118
+11949253928,38683619687,2026-10-15T04:50:57Z,develop,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierzse,cmd/keel,68160485,68160485
+11949253928,38683619687,2026-10-15T04:50:57Z,develop,TestRejectedCollectionPopsPreservePipelineAndRestartconcurrent,cmd/keel,68160485,68160485
+11949253928,38683619687,2026-10-15T04:50:57Z,develop,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierlis,cmd/keel,68160040,68160040
+11949253928,38683619687,2026-10-15T04:50:57Z,develop,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierset,cmd/keel,68159910,68159910
+11949253928,38683619687,2026-10-15T04:50:57Z,develop,TestStagedRecordsAreTheBytesAppendAOFCommandWrites,internal/core,68159664,4259925
+11949253928,38683619687,2026-10-15T04:50:57Z,develop,TestAShortWriteInTheMiddleOfARecordStays,internal/core,23691432,8650820
+11949253928,38683619687,2026-10-15T04:50:57Z,develop,TestRewriteSlicesObeyKeyBudgetAndReplay,internal/core,22362420,12888890
+11949253928,38683619687,2026-10-15T04:50:57Z,develop,TestReplicationV2LargeSnapshotOperationsAndFrozenFile,internal/core,21952673,11106903
 11948839348,38683907190,2026-10-15T04:54:12Z,feat/eviction-exceeded-time,TestRewriteStallProfile,internal/core,113194740,56788890
 11948839348,38683907190,2026-10-15T04:54:12Z,feat/eviction-exceeded-time,"TestEveryAcknowledgedWriteSurvivesAKilleverysec,_during_a_faile",internal/core,83167255,80939031
 11948839348,38683907190,2026-10-15T04:54:12Z,feat/eviction-exceeded-time,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierzse,cmd/keel,68160485,68160485
