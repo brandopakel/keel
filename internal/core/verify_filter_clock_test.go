@@ -105,3 +105,56 @@ func setExpiry(t *testing.T, ks data_structure.Keyspace, key string, at uint64) 
 		t.Fatalf("no expiry setter for %T", ks)
 	}
 }
+
+// TestAFilterReapedOnLookupCountsAsExpired: a filter whose TTL has passed is
+// removed by the command that looks it up, and counted once in expired_keys,
+// as Redis counts a key a read finds expired (#210): through Get for a
+// command that uses the filter, and through the status check after Peek for
+// INFO and CARD, which do not count a use. Each answers as for a key that
+// holds nothing.
+func TestAFilterReapedOnLookupCountsAsExpired(t *testing.T) {
+	t.Parallel()
+	const due = 1_000_000
+	for _, tc := range []struct {
+		name string
+		seed func(e *Engine, key string)
+		op   func(t *testing.T, e *Engine, key string)
+	}{
+		{"CF.COMPACT", seedCuckoo, func(t *testing.T, e *Engine, key string) {
+			assert.Equal(t, errCFCompactNotFound, e.opCFCompact(key))
+		}},
+		{"CF.INFO", seedCuckoo, func(t *testing.T, e *Engine, key string) {
+			_, err := e.opCFInfo(key)
+			assert.Equal(t, errFilterNotFound, err)
+		}},
+		{"CF.COUNT", seedCuckoo, func(t *testing.T, e *Engine, key string) {
+			assert.Zero(t, e.opCFCount(key, "a"))
+		}},
+		{"BF.INFO", seedBloom, func(t *testing.T, e *Engine, key string) {
+			_, err := e.opBFInfo(key)
+			assert.Equal(t, errFilterNotFound, err)
+		}},
+		{"BF.CARD", seedBloom, func(t *testing.T, e *Engine, key string) {
+			n, err := e.opBFCard(key)
+			assert.NoError(t, err)
+			assert.Zero(t, n)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newTestEngine(t, Options{})
+			const key = "filter"
+			tc.seed(e, key)
+			ks, held := e.space.OwnerOf(key)
+			require.True(t, held)
+			setExpiry(t, ks, key, due)
+			e.space.ExpiryClock = func() uint64 { return due }
+			defer func() { e.space.ExpiryClock = nil }()
+			before := e.ExpiredKeys()
+			tc.op(t, e, key)
+			assert.Equal(t, before+1, e.ExpiredKeys(), "the reap is counted once")
+			e.space.ExpiryClock = nil
+			_, held = e.space.OwnerOf(key)
+			assert.False(t, held, "and the filter is gone")
+		})
+	}
+}
