@@ -239,3 +239,8 @@ artifact_id,run_id,time,event,branch,pr,conclusion,framework,redis_passed,keel_p
 11949083031,38683257353,2026-10-15T04:46:49Z,push,develop,212,success,Sidekiq,yes,no,brpop,30.5,29,bitfield brpop evalsha script|load sscan,https://github.com/brandopakel/keel/actions/runs/38683257353
 11949083031,38683257353,2026-10-15T04:46:49Z,push,develop,212,success,Celery,yes,no,evalsha,60.1,25,brpop evalsha psubscribe publish script|load subscribe unsubscribe,https://github.com/brandopakel/keel/actions/runs/38683257353
 11949083031,38683257353,2026-10-15T04:46:49Z,push,develop,212,success,BullMQ,yes,no,eval,0.2,38,bzpopmin eval evalsha hmset xadd xread xtrim,https://github.com/brandopakel/keel/actions/runs/38683257353
+11949142533,38683619680,2026-10-15T04:50:57Z,push,develop,210,success,Rails cache store,yes,yes,,1.6,10,,https://github.com/brandopakel/keel/actions/runs/38683619680
+11949142533,38683619680,2026-10-15T04:50:57Z,push,develop,210,success,ActionCable,yes,no,subscribe,0.4,6,publish subscribe unsubscribe,https://github.com/brandopakel/keel/actions/runs/38683619680
+11949142533,38683619680,2026-10-15T04:50:57Z,push,develop,210,success,Sidekiq,yes,no,brpop,30.4,29,bitfield brpop evalsha script|load sscan,https://github.com/brandopakel/keel/actions/runs/38683619680
+11949142533,38683619680,2026-10-15T04:50:57Z,push,develop,210,success,Celery,yes,no,evalsha,60.1,25,brpop evalsha psubscribe publish script|load subscribe unsubscribe,https://github.com/brandopakel/keel/actions/runs/38683619680
+11949142533,38683619680,2026-10-15T04:50:57Z,push,develop,210,success,BullMQ,yes,no,eval,0.1,38,bzpopmin eval evalsha hmset xadd xread xtrim,https://github.com/brandopakel/keel/actions/runs/38683619680
