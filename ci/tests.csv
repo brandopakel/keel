@@ -4249,6 +4249,16 @@ artifact_id,run_id,time,branch,test,package,peak_bytes,peak_file_bytes
 11936995760,38655195401,2026-10-14T23:37:12Z,feat/info-sections,TestReplicationV2LargeSnapshotOperationsAndFrozenFile,internal/core,21691879,11106903
 11936995760,38655195401,2026-10-14T23:37:12Z,feat/info-sections,TestReplicasThroughAFailedRewriteprotocol-,cmd/keel,21568684,21567977
 11936995760,38655195401,2026-10-14T23:37:12Z,feat/info-sections,TestRewriteRetainsBoundedNameBatches,internal/core,20550132,11188890
+11937046745,38655283232,2026-10-14T23:38:06Z,feat/client-pause,TestRewriteStallProfile,internal/core,113577780,56788890
+11937046745,38655283232,2026-10-14T23:38:06Z,feat/client-pause,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierzse,cmd/keel,68160485,68160485
+11937046745,38655283232,2026-10-14T23:38:06Z,feat/client-pause,TestRejectedCollectionPopsPreservePipelineAndRestartconcurrent,cmd/keel,68160485,68160485
+11937046745,38655283232,2026-10-14T23:38:06Z,feat/client-pause,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierset,cmd/keel,68159910,68159910
+11937046745,38655283232,2026-10-14T23:38:06Z,feat/client-pause,TestStagedRecordsAreTheBytesAppendAOFCommandWrites,internal/core,68159774,4259925
+11937046745,38655283232,2026-10-14T23:38:06Z,feat/client-pause,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierlis,cmd/keel,67111424,67111424
+11937046745,38655283232,2026-10-14T23:38:06Z,feat/client-pause,"TestEveryAcknowledgedWriteSurvivesAKilleverysec,_during_a_faile",internal/core,59638944,59638944
+11937046745,38655283232,2026-10-14T23:38:06Z,feat/client-pause,TestRewriteSlicesObeyKeyBudgetAndReplay,internal/core,25777780,12888890
+11937046745,38655283232,2026-10-14T23:38:06Z,feat/client-pause,TestRewriteRetainsBoundedNameBatches,internal/core,22377780,11188890
+11937046745,38655283232,2026-10-14T23:38:06Z,feat/client-pause,TestReplicationV2LargeSnapshotOperationsAndFrozenFile,internal/core,21952673,11106903
 11937112223,38656406909,2026-10-14T23:49:28Z,feat/info-replication,TestRewriteStallProfile,internal/core,113577780,56788890
 11937112223,38656406909,2026-10-14T23:49:28Z,feat/info-replication,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierzse,cmd/keel,68160485,68160485
 11937112223,38656406909,2026-10-14T23:49:28Z,feat/info-replication,TestRejectedCollectionPopsPreservePipelineAndRestartconcurrent,cmd/keel,68160485,68160485

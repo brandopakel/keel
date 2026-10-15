@@ -1,276 +1,276 @@
 run_id,time,branch,command,area,form,since,sent,class,detail,keel,redis
-38656876608,2026-10-14T23:54:13Z,develop,append,string,base,2.0.0,APPEND str v,accepted,,:4,:4
-38656876608,2026-10-14T23:54:13Z,develop,auth,connection,base,1.0.0,AUTH <password>,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,auth,connection,username,6.0.0,AUTH default <password>,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,bgrewriteaof,server,base,1.0.0,BGREWRITEAOF,accepted,,+Background append only file rewriting started,+Background append only file rewriting started
-38656876608,2026-10-14T23:54:13Z,develop,client|getname,connection,base,2.6.9,CLIENT GETNAME,accepted,,$-1,$-1
-38656876608,2026-10-14T23:54:13Z,develop,client|help,connection,base,5.0.0,CLIENT HELP,accepted,same kind of reply,*[+CLIENT <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +GETNAME +    Return the name of the current connection. +ID +    Return the ID of the current connection. +INFO +    Return information about the current client connection. +SETNAME <name> +    Assign the name <name> to the current connection. +SETINFO <option> <value> +    Set client meta attr. Options are: +    * LIB-NAME: th...,*[+CLIENT <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +CACHING (YES|NO) +    Enable/disable tracking of the keys for next command in OPTIN/OPTOUT modes. +GETREDIR +    Return the client ID we are redirecting to when tracking is enabled. +GETNAME +    Return the name of the current connection. +ID +    Return the ID of the current connection. +INFO +    Return information about the ...
-38656876608,2026-10-14T23:54:13Z,develop,client|id,connection,base,5.0.0,CLIENT ID,accepted,same kind of reply,:422,:427
-38656876608,2026-10-14T23:54:13Z,develop,client|info,connection,base,6.2.0,CLIENT INFO,accepted,same kind of reply,$id=423 fd=12 name= db=0 resp=2 lib-name= lib-ver=\n,$id=428 addr=127.0.0.1:49164 laddr=127.0.0.1:58915 fd=12 name= age=0 idle=0 flags=N db=0 sub=0 psub=0 ssub=0 multi=-1 watch=0 qbuf=26 qbuf-free=20448 argv-mem=10 multi-mem=0 rbs=16384 rbp=16384 obl=0 oll=0 omem=0 omem-shared=0 omem-unshared=0 tot-mem=38170 events=r cmd=client|info user=default redir=-1 resp=2 lib-name= lib-ver= io-thread=0 tot-net-in=79 tot-net-out=5 tot-cmds=1 read-events=2 av...
-38656876608,2026-10-14T23:54:13Z,develop,client|setinfo,connection,base,7.2.0,CLIENT SETINFO lib-name lib,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,client|setinfo,connection,lib-ver,7.2.0,CLIENT SETINFO lib-ver 1.0,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,client|setname,connection,base,2.6.9,CLIENT SETNAME c1,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,config|get,server,base,2.0.0,CONFIG GET maxmemory,accepted,,*[$maxmemory $0],*[$maxmemory $0]
-38656876608,2026-10-14T23:54:13Z,develop,config|get,server,parameter*2,2.0.0,CONFIG GET maxmemory maxclients,accepted,same kind of reply,*[$maxmemory $0 $maxclients $20000],*[$maxmemory $0 $maxclients $10000]
-38656876608,2026-10-14T23:54:13Z,develop,config|help,server,base,5.0.0,CONFIG HELP,accepted,,*[+CONFIG <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +GET <pattern> +    Return parameters matching the glob-like <pattern> and their values. +SET <directive> <value> +    Set the configuration <directive> to <value>. +RESETSTAT +    Reset statistics reported by the INFO command. +REWRITE +    Rewrite the configuration file. +HELP +    Print this help.],*[+CONFIG <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +GET <pattern> +    Return parameters matching the glob-like <pattern> and their values. +SET <directive> <value> +    Set the configuration <directive> to <value>. +RESETSTAT +    Reset statistics reported by the INFO command. +REWRITE +    Rewrite the configuration file. +HELP +    Print this help.]
-38656876608,2026-10-14T23:54:13Z,develop,config|resetstat,server,base,2.0.0,CONFIG RESETSTAT,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,config|rewrite,server,base,2.8.0,CONFIG REWRITE,accepted,the documented reply is this error,-ERR The server is running without a config file,-ERR The server is running without a config file
-38656876608,2026-10-14T23:54:13Z,develop,config|set,server,base,2.0.0,CONFIG SET maxmemory-samples 5,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,config|set,server,data*2,2.0.0,CONFIG SET maxmemory-samples 5 lfu-log-factor 10,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,dbsize,server,base,1.0.0,DBSIZE,accepted,,:24,:24
-38656876608,2026-10-14T23:54:13Z,develop,decr,string,base,1.0.0,DECR num,accepted,,:9,:9
-38656876608,2026-10-14T23:54:13Z,develop,decrby,string,base,1.0.0,DECRBY num 1,accepted,,:9,:9
-38656876608,2026-10-14T23:54:13Z,develop,del,generic,base,1.0.0,DEL str,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,del,generic,key*2,1.0.0,DEL str str2,accepted,,:2,:2
-38656876608,2026-10-14T23:54:13Z,develop,discard,transactions,base,2.0.0,DISCARD,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,echo,connection,base,1.0.0,ECHO hi,accepted,,$hi,$hi
-38656876608,2026-10-14T23:54:13Z,develop,exec,transactions,base,1.2.0,EXEC,accepted,,*[+PONG],*[+PONG]
-38656876608,2026-10-14T23:54:13Z,develop,exists,generic,base,1.0.0,EXISTS str,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,exists,generic,key*2,1.0.0,EXISTS str str2,accepted,,:2,:2
-38656876608,2026-10-14T23:54:13Z,develop,expire,generic,base,1.0.0,EXPIRE str 100,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,expire,generic,NX,7.0.0,EXPIRE str 100 NX,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,expire,generic,XX,7.0.0,EXPIRE str 100 XX,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,expire,generic,GT,7.0.0,EXPIRE str 100 GT,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,expire,generic,LT,7.0.0,EXPIRE str 100 LT,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,expireat,generic,base,1.2.0,EXPIREAT str 4102444800,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,expireat,generic,NX,7.0.0,EXPIREAT str 4102444800 NX,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,expireat,generic,XX,7.0.0,EXPIREAT str 4102444800 XX,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,expireat,generic,GT,7.0.0,EXPIREAT str 4102444800 GT,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,expireat,generic,LT,7.0.0,EXPIREAT str 4102444800 LT,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,flushdb,server,base,1.0.0,FLUSHDB,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,flushdb,server,ASYNC,4.0.0,FLUSHDB ASYNC,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,flushdb,server,SYNC,6.2.0,FLUSHDB SYNC,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,geoadd,geo,base,3.2.0,GEOADD geo 13.361389 38.115556 Palermo,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,geoadd,geo,NX,6.2.0,GEOADD geo NX 13.361389 38.115556 Palermo,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,geoadd,geo,XX,6.2.0,GEOADD geo XX 13.361389 38.115556 Palermo,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,geoadd,geo,CH,6.2.0,GEOADD geo CH 13.361389 38.115556 Palermo,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,geoadd,geo,data*2,3.2.0,GEOADD geo 13.361389 38.115556 Palermo 15.087269 37.502669 Catania,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,geodist,geo,base,3.2.0,GEODIST geo Palermo Catania,accepted,,$166274.1516,$166274.1516
-38656876608,2026-10-14T23:54:13Z,develop,geodist,geo,m,3.2.0,GEODIST geo Palermo Catania m,accepted,,$166274.1516,$166274.1516
-38656876608,2026-10-14T23:54:13Z,develop,geodist,geo,km,3.2.0,GEODIST geo Palermo Catania km,accepted,,$166.2742,$166.2742
-38656876608,2026-10-14T23:54:13Z,develop,geodist,geo,ft,3.2.0,GEODIST geo Palermo Catania ft,accepted,,$545518.8700,$545518.8700
-38656876608,2026-10-14T23:54:13Z,develop,geodist,geo,mi,3.2.0,GEODIST geo Palermo Catania mi,accepted,,$103.3182,$103.3182
-38656876608,2026-10-14T23:54:13Z,develop,geohash,geo,base,3.2.0,GEOHASH geo,accepted,,*[],*[]
-38656876608,2026-10-14T23:54:13Z,develop,geohash,geo,member,3.2.0,GEOHASH geo Palermo,accepted,,*[$sqc8b49rny0],*[$sqc8b49rny0]
-38656876608,2026-10-14T23:54:13Z,develop,geohash,geo,member member*2,3.2.0,GEOHASH geo Palermo Catania,accepted,,*[$sqc8b49rny0 $sqdtr74hyu0],*[$sqc8b49rny0 $sqdtr74hyu0]
-38656876608,2026-10-14T23:54:13Z,develop,geopos,geo,base,3.2.0,GEOPOS geo,accepted,,*[],*[]
-38656876608,2026-10-14T23:54:13Z,develop,geopos,geo,member,3.2.0,GEOPOS geo Palermo,accepted,,*[*[$13.361389338970184 $38.1155563954963]],*[*[$13.361389338970184 $38.1155563954963]]
-38656876608,2026-10-14T23:54:13Z,develop,geopos,geo,member member*2,3.2.0,GEOPOS geo Palermo Catania,accepted,,*[*[$13.361389338970184 $38.1155563954963] *[$15.087267458438873 $37.50266842333162]],*[*[$13.361389338970184 $38.1155563954963] *[$15.087267458438873 $37.50266842333162]]
-38656876608,2026-10-14T23:54:13Z,develop,geosearch,geo,base,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m,accepted,,*[$Palermo $Catania],*[$Palermo $Catania]
-38656876608,2026-10-14T23:54:13Z,develop,geosearch,geo,FROMLONLAT,6.2.0,GEOSEARCH geo FROMLONLAT 13.361389 38.115556 BYRADIUS 200000 m,accepted,,*[$Palermo $Catania],*[$Palermo $Catania]
-38656876608,2026-10-14T23:54:13Z,develop,geosearch,geo,BYRADIUS km,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 km,accepted,,*[$Palermo $Catania],*[$Palermo $Catania]
-38656876608,2026-10-14T23:54:13Z,develop,geosearch,geo,BYRADIUS ft,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 ft,accepted,,*[$Palermo],*[$Palermo]
-38656876608,2026-10-14T23:54:13Z,develop,geosearch,geo,BYRADIUS mi,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 mi,accepted,,*[$Palermo $Catania],*[$Palermo $Catania]
-38656876608,2026-10-14T23:54:13Z,develop,geosearch,geo,BYBOX,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYBOX 400000 400000 m,accepted,,*[$Palermo $Catania],*[$Palermo $Catania]
-38656876608,2026-10-14T23:54:13Z,develop,geosearch,geo,BYBOX km,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYBOX 400000 400000 km,accepted,,*[$Palermo $Catania],*[$Palermo $Catania]
-38656876608,2026-10-14T23:54:13Z,develop,geosearch,geo,BYBOX ft,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYBOX 400000 400000 ft,accepted,,*[$Palermo],*[$Palermo]
-38656876608,2026-10-14T23:54:13Z,develop,geosearch,geo,BYBOX mi,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYBOX 400000 400000 mi,accepted,,*[$Palermo $Catania],*[$Palermo $Catania]
-38656876608,2026-10-14T23:54:13Z,develop,geosearch,geo,ASC,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m ASC,accepted,,*[$Palermo $Catania],*[$Palermo $Catania]
-38656876608,2026-10-14T23:54:13Z,develop,geosearch,geo,DESC,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m DESC,accepted,,*[$Catania $Palermo],*[$Catania $Palermo]
-38656876608,2026-10-14T23:54:13Z,develop,geosearch,geo,COUNT,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m COUNT 1,accepted,,*[$Palermo],*[$Palermo]
-38656876608,2026-10-14T23:54:13Z,develop,geosearch,geo,COUNT ANY,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m COUNT 1 ANY,accepted,,*[$Palermo],*[$Palermo]
-38656876608,2026-10-14T23:54:13Z,develop,geosearch,geo,WITHCOORD,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m WITHCOORD,accepted,,*[*[$Palermo *[$13.361389338970184 $38.1155563954963]] *[$Catania *[$15.087267458438873 $37.50266842333162]]],*[*[$Palermo *[$13.361389338970184 $38.1155563954963]] *[$Catania *[$15.087267458438873 $37.50266842333162]]]
-38656876608,2026-10-14T23:54:13Z,develop,geosearch,geo,WITHDIST,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m WITHDIST,accepted,,*[*[$Palermo $0.0000] *[$Catania $166274.1516]],*[*[$Palermo $0.0000] *[$Catania $166274.1516]]
-38656876608,2026-10-14T23:54:13Z,develop,geosearch,geo,WITHHASH,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m WITHHASH,accepted,,*[*[$Palermo :3479099956230698] *[$Catania :3479447370796909]],*[*[$Palermo :3479099956230698] *[$Catania :3479447370796909]]
-38656876608,2026-10-14T23:54:13Z,develop,get,string,base,1.0.0,GET str,accepted,,$abc,$abc
-38656876608,2026-10-14T23:54:13Z,develop,getdel,string,base,6.2.0,GETDEL str,accepted,,$abc,$abc
-38656876608,2026-10-14T23:54:13Z,develop,getex,string,base,6.2.0,GETEX str,accepted,,$abc,$abc
-38656876608,2026-10-14T23:54:13Z,develop,getex,string,EX,6.2.0,GETEX str EX 100,accepted,,$abc,$abc
-38656876608,2026-10-14T23:54:13Z,develop,getex,string,PX,6.2.0,GETEX str PX 100000,accepted,,$abc,$abc
-38656876608,2026-10-14T23:54:13Z,develop,getex,string,EXAT,6.2.0,GETEX str EXAT 4102444800,accepted,,$abc,$abc
-38656876608,2026-10-14T23:54:13Z,develop,getex,string,PXAT,6.2.0,GETEX str PXAT 4102444800000,accepted,,$abc,$abc
-38656876608,2026-10-14T23:54:13Z,develop,getex,string,PERSIST,6.2.0,GETEX str PERSIST,accepted,,$abc,$abc
-38656876608,2026-10-14T23:54:13Z,develop,getrange,string,base,2.4.0,GETRANGE str 0 -1,accepted,,$abc,$abc
-38656876608,2026-10-14T23:54:13Z,develop,getset,string,base,1.0.0,GETSET str v,accepted,,$abc,$abc
-38656876608,2026-10-14T23:54:13Z,develop,hdel,hash,base,2.0.0,HDEL hash f,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,hdel,hash,field*2,2.0.0,HDEL hash f n,accepted,,:2,:2
-38656876608,2026-10-14T23:54:13Z,develop,hello,connection,base,6.0.0,HELLO,accepted,same kind of reply,*[$server $keel $version $7.0.0 $proto :2 $id :501 $mode $standalone $role $master $modules *[]],*[$server $redis $version $8.10.1 $proto :2 $id :506 $mode $standalone $role $master $modules *[*[$name $vectorset $ver :1 $path $ $args *[]]]]
-38656876608,2026-10-14T23:54:13Z,develop,hello,connection,protover,6.0.0,HELLO 3,accepted,same kind of reply,%{$server: $keel $version: $7.0.0 $proto: :3 $id: :502 $mode: $standalone $role: $master $modules: *[]},%{$server: $redis $version: $8.10.1 $proto: :3 $id: :507 $mode: $standalone $role: $master $modules: *[%{$name: $vectorset $ver: :1 $path: $ $args: *[]}]}
-38656876608,2026-10-14T23:54:13Z,develop,hello,connection,protover AUTH,6.0.0,HELLO 3 AUTH default <password>,accepted,same kind of reply,%{$server: $keel $version: $7.0.0 $proto: :3 $id: :503 $mode: $standalone $role: $master $modules: *[]},%{$server: $redis $version: $8.10.1 $proto: :3 $id: :508 $mode: $standalone $role: $master $modules: *[%{$name: $vectorset $ver: :1 $path: $ $args: *[]}]}
-38656876608,2026-10-14T23:54:13Z,develop,hello,connection,protover SETNAME,6.0.0,HELLO 3 SETNAME c1,accepted,same kind of reply,%{$server: $keel $version: $7.0.0 $proto: :3 $id: :504 $mode: $standalone $role: $master $modules: *[]},%{$server: $redis $version: $8.10.1 $proto: :3 $id: :509 $mode: $standalone $role: $master $modules: *[%{$name: $vectorset $ver: :1 $path: $ $args: *[]}]}
-38656876608,2026-10-14T23:54:13Z,develop,hexists,hash,base,2.0.0,HEXISTS hash f,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,hget,hash,base,2.0.0,HGET hash f,accepted,,$v,$v
-38656876608,2026-10-14T23:54:13Z,develop,hgetall,hash,base,2.0.0,HGETALL hash,accepted,,*[$f $v $n $5],*[$f $v $n $5]
-38656876608,2026-10-14T23:54:13Z,develop,hincrby,hash,base,2.0.0,HINCRBY hash n 1,accepted,,:6,:6
-38656876608,2026-10-14T23:54:13Z,develop,hkeys,hash,base,2.0.0,HKEYS hash,accepted,,*[$f $n],*[$f $n]
-38656876608,2026-10-14T23:54:13Z,develop,hlen,hash,base,2.0.0,HLEN hash,accepted,,:2,:2
-38656876608,2026-10-14T23:54:13Z,develop,hmget,hash,base,2.0.0,HMGET hash f,accepted,,*[$v],*[$v]
-38656876608,2026-10-14T23:54:13Z,develop,hmget,hash,field*2,2.0.0,HMGET hash f n,accepted,,*[$v $5],*[$v $5]
-38656876608,2026-10-14T23:54:13Z,develop,hset,hash,base,2.0.0,HSET hash f v,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,hset,hash,data*2,2.0.0,HSET hash f v n w,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,hsetnx,hash,base,2.0.0,HSETNX hash f v,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,hvals,hash,base,2.0.0,HVALS hash,accepted,,*[$5 $v],*[$v $5]
-38656876608,2026-10-14T23:54:13Z,develop,incr,string,base,1.0.0,INCR num,accepted,,:11,:11
-38656876608,2026-10-14T23:54:13Z,develop,incrby,string,base,1.0.0,INCRBY num 1,accepted,,:11,:11
-38656876608,2026-10-14T23:54:13Z,develop,incrbyfloat,string,base,2.6.0,INCRBYFLOAT num 1,accepted,,$11,$11
-38656876608,2026-10-14T23:54:13Z,develop,info,server,base,1.0.0,INFO,accepted,same kind of reply,$# Server\r\nkeel_version:v0.0.0-20261014235410-12ff9caa6c9b\r\nredis_version:7.0.0\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmultiplexing_api:epoll\r\nprocess_id:22569\r\nprocess_supervised:no\r\nrun_id:abec18637bfe71303c1e46eeca8530d2010fb5e9\r\ntcp_port:37693\r\nserver_time_usec:1792022322544257\r\nuptime_in_seconds:1\r\nuptime_in_days:0\r\nhz:10\r\ncon...,$# Server\r\nredis_version:8.10.1\r\nredis_git_sha1:00000000\r\nredis_git_dirty:1\r\nredis_build_id:effb75c2242a278d\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmonotonic_clock:POSIX clock_gettime\r\nmultiplexing_api:epoll\r\natomicvar_api:c11-builtin\r\ngcc_version:13.3.0\r\nprocess_id:22577\r\nprocess_supervised:no\r\nrun_id:778a8eeccf3587796b01f721bc67758...
-38656876608,2026-10-14T23:54:13Z,develop,info,server,section,1.0.0,INFO server,accepted,same kind of reply,$# Server\r\nkeel_version:v0.0.0-20261014235410-12ff9caa6c9b\r\nredis_version:7.0.0\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmultiplexing_api:epoll\r\nprocess_id:22569\r\nprocess_supervised:no\r\nrun_id:abec18637bfe71303c1e46eeca8530d2010fb5e9\r\ntcp_port:37693\r\nserver_time_usec:1792022322546943\r\nuptime_in_seconds:1\r\nuptime_in_days:0\r\nhz:10\r\ncon...,$# Server\r\nredis_version:8.10.1\r\nredis_git_sha1:00000000\r\nredis_git_dirty:1\r\nredis_build_id:effb75c2242a278d\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmonotonic_clock:POSIX clock_gettime\r\nmultiplexing_api:epoll\r\natomicvar_api:c11-builtin\r\ngcc_version:13.3.0\r\nprocess_id:22577\r\nprocess_supervised:no\r\nrun_id:778a8eeccf3587796b01f721bc67758...
-38656876608,2026-10-14T23:54:13Z,develop,info,server,section section*2,1.0.0,INFO server clients,accepted,same kind of reply,$# Server\r\nkeel_version:v0.0.0-20261014235410-12ff9caa6c9b\r\nredis_version:7.0.0\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmultiplexing_api:epoll\r\nprocess_id:22569\r\nprocess_supervised:no\r\nrun_id:abec18637bfe71303c1e46eeca8530d2010fb5e9\r\ntcp_port:37693\r\nserver_time_usec:1792022322549338\r\nuptime_in_seconds:1\r\nuptime_in_days:0\r\nhz:10\r\ncon...,$# Server\r\nredis_version:8.10.1\r\nredis_git_sha1:00000000\r\nredis_git_dirty:1\r\nredis_build_id:effb75c2242a278d\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmonotonic_clock:POSIX clock_gettime\r\nmultiplexing_api:epoll\r\natomicvar_api:c11-builtin\r\ngcc_version:13.3.0\r\nprocess_id:22577\r\nprocess_supervised:no\r\nrun_id:778a8eeccf3587796b01f721bc67758...
-38656876608,2026-10-14T23:54:13Z,develop,keys,generic,base,1.0.0,KEYS *,accepted,,*[$str $str2 $str3 $num $num2 $num3 $zset $zset2 $zset3 $geo $geo2 $geo3 $set $set2 $set3 $hash $hash2 $hash3 $list $list2 $list3 $hll $hll2 $hll3],*[$hll2 $zset $str $list3 $set3 $set2 $hll $zset3 $list2 $num2 $geo $list $num $geo2 $str3 $hash2 $hash3 $set $geo3 $str2 $hll3 $hash $num3 $zset2]
-38656876608,2026-10-14T23:54:13Z,develop,latency|doctor,server,base,2.8.13,LATENCY DOCTOR,accepted,,"$I'm sorry, Dave, I can't do that. Latency monitoring is disabled in this Redis instance. You may use ""CONFIG SET latency-monitor-threshold <milliseconds>."" in order to enable it. If we weren't in a deep space mission I'd suggest to take a look at https://redis.io/docs/latest/operate/oss_and_stack/management/optimization/latency-monitor.\n","$I'm sorry, Dave, I can't do that. Latency monitoring is disabled in this Redis instance. You may use ""CONFIG SET latency-monitor-threshold <milliseconds>."" in order to enable it. If we weren't in a deep space mission I'd suggest to take a look at https://redis.io/docs/latest/operate/oss_and_stack/management/optimization/latency-monitor.\n"
-38656876608,2026-10-14T23:54:13Z,develop,latency|graph,server,base,2.8.13,LATENCY GRAPH command,control,"Redis refused the form, and so did Keel",-ERR No samples available for event 'command',-ERR No samples available for event 'command'
-38656876608,2026-10-14T23:54:13Z,develop,latency|help,server,base,2.8.13,LATENCY HELP,accepted,,*[+LATENCY <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +DOCTOR +    Return a human readable latency analysis report. +GRAPH <event> +    Return an ASCII latency graph for the <event> class. +HISTORY <event> +    Return time-latency samples for the <event> class. +LATEST +    Return the latest latency samples for all events. +RESET [<event> ...] +    Reset latency data of one or mor...,*[+LATENCY <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +DOCTOR +    Return a human readable latency analysis report. +GRAPH <event> +    Return an ASCII latency graph for the <event> class. +HISTORY <event> +    Return time-latency samples for the <event> class. +LATEST +    Return the latest latency samples for all events. +RESET [<event> ...] +    Reset latency data of one or mor...
-38656876608,2026-10-14T23:54:13Z,develop,latency|histogram,server,base,7.0.0,LATENCY HISTOGRAM,accepted,same kind of reply,*[$auth *[$calls :97 $histogram_usec *[:1 :71 :2 :97]] $config|resetstat *[$calls :1 $histogram_usec *[:2 :1]] $config|rewrite *[$calls :1 $histogram_usec *[:4 :1]] $config|set *[$calls :2 $histogram_usec *[:8 :1 :16 :2]] $dbsize *[$calls :1 $histogram_usec *[:2 :1]] $decr *[$calls :1 $histogram_usec *[:4 :1]] $decrby *[$calls :1 $histogram_usec *[:2 :1]] $del *[$calls :2 $histogram_usec *[:1 :...,*[$hgetall *[$calls :1 $histogram_usec *[:4 :1]] $getrange *[$calls :1 $histogram_usec *[:1 :1]] $config|set *[$calls :2 $histogram_usec *[:2 :1 :4 :2]] $config|resetstat *[$calls :1 $histogram_usec *[:132 :1]] $config|rewrite *[$calls :1 $histogram_usec *[:4 :1]] $decrby *[$calls :1 $histogram_usec *[:1 :1]] $getex *[$calls :6 $histogram_usec *[:1 :2 :2 :3 :4 :6]] $geopos *[$calls :3 $histogra...
-38656876608,2026-10-14T23:54:13Z,develop,latency|histogram,server,COMMAND,7.0.0,LATENCY HISTOGRAM s,accepted,,*[],*[]
-38656876608,2026-10-14T23:54:13Z,develop,latency|histogram,server,COMMAND COMMAND*2,7.0.0,LATENCY HISTOGRAM s t,accepted,,*[],*[]
-38656876608,2026-10-14T23:54:13Z,develop,latency|history,server,base,2.8.13,LATENCY HISTORY command,accepted,,*[],*[]
-38656876608,2026-10-14T23:54:13Z,develop,latency|latest,server,base,2.8.13,LATENCY LATEST,accepted,,*[],*[]
-38656876608,2026-10-14T23:54:13Z,develop,latency|reset,server,base,2.8.13,LATENCY RESET,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,latency|reset,server,event,2.8.13,LATENCY RESET command,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,latency|reset,server,event event*2,2.8.13,LATENCY RESET command command,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,lcs,string,base,7.0.0,LCS str str2,accepted,,$ab,$ab
-38656876608,2026-10-14T23:54:13Z,develop,lcs,string,LEN,7.0.0,LCS str str2 LEN,accepted,,:2,:2
-38656876608,2026-10-14T23:54:13Z,develop,lcs,string,IDX,7.0.0,LCS str str2 IDX,accepted,,*[$matches *[*[*[:0 :1] *[:0 :1]]] $len :2],*[$matches *[*[*[:0 :1] *[:0 :1]]] $len :2]
-38656876608,2026-10-14T23:54:13Z,develop,lcs,string,MINMATCHLEN,7.0.0,LCS str str2 MINMATCHLEN 1,accepted,,$ab,$ab
-38656876608,2026-10-14T23:54:13Z,develop,lcs,string,WITHMATCHLEN,7.0.0,LCS str str2 WITHMATCHLEN,accepted,,$ab,$ab
-38656876608,2026-10-14T23:54:13Z,develop,lindex,list,base,1.0.0,LINDEX list 0,accepted,,$a,$a
-38656876608,2026-10-14T23:54:13Z,develop,linsert,list,base,2.2.0,LINSERT list BEFORE a x,accepted,,:4,:4
-38656876608,2026-10-14T23:54:13Z,develop,linsert,list,AFTER,2.2.0,LINSERT list AFTER a x,accepted,,:4,:4
-38656876608,2026-10-14T23:54:13Z,develop,llen,list,base,1.0.0,LLEN list,accepted,,:3,:3
-38656876608,2026-10-14T23:54:13Z,develop,lmove,list,base,6.2.0,LMOVE list list2 LEFT LEFT,accepted,,$a,$a
-38656876608,2026-10-14T23:54:13Z,develop,lmove,list,RIGHT,6.2.0,LMOVE list list2 RIGHT LEFT,accepted,,$c,$c
-38656876608,2026-10-14T23:54:13Z,develop,lmove,list,RIGHT,6.2.0,LMOVE list list2 LEFT RIGHT,accepted,,$a,$a
-38656876608,2026-10-14T23:54:13Z,develop,lmovem,list,base,8.10.0,LMOVEM list list2 LEFT LEFT,accepted,,*[$a],*[$a]
-38656876608,2026-10-14T23:54:13Z,develop,lmovem,list,RIGHT,8.10.0,LMOVEM list list2 RIGHT LEFT,accepted,,*[$c],*[$c]
-38656876608,2026-10-14T23:54:13Z,develop,lmovem,list,RIGHT,8.10.0,LMOVEM list list2 LEFT RIGHT,accepted,,*[$a],*[$a]
-38656876608,2026-10-14T23:54:13Z,develop,lmovem,list,COUNT,8.10.0,LMOVEM list list2 LEFT LEFT COUNT 1 OBO,accepted,,*[$a],*[$a]
-38656876608,2026-10-14T23:54:13Z,develop,lmovem,list,COUNT EXACTLY,8.10.0,LMOVEM list list2 LEFT LEFT EXACTLY 1 OBO,accepted,,*[$a],*[$a]
-38656876608,2026-10-14T23:54:13Z,develop,lmovem,list,COUNT BULK,8.10.0,LMOVEM list list2 LEFT LEFT COUNT 1 BULK,accepted,,*[$a],*[$a]
-38656876608,2026-10-14T23:54:13Z,develop,lmpop,list,base,7.0.0,LMPOP 1 list LEFT,accepted,,*[$list *[$a]],*[$list *[$a]]
-38656876608,2026-10-14T23:54:13Z,develop,lmpop,list,key*2,7.0.0,LMPOP 2 list list2 LEFT,accepted,,*[$list *[$a]],*[$list *[$a]]
-38656876608,2026-10-14T23:54:13Z,develop,lmpop,list,RIGHT,7.0.0,LMPOP 1 list RIGHT,accepted,,*[$list *[$c]],*[$list *[$c]]
-38656876608,2026-10-14T23:54:13Z,develop,lmpop,list,COUNT,7.0.0,LMPOP 1 list LEFT COUNT 1,accepted,,*[$list *[$a]],*[$list *[$a]]
-38656876608,2026-10-14T23:54:13Z,develop,lpop,list,base,1.0.0,LPOP list,accepted,,$a,$a
-38656876608,2026-10-14T23:54:13Z,develop,lpop,list,count,6.2.0,LPOP list 1,accepted,,*[$a],*[$a]
-38656876608,2026-10-14T23:54:13Z,develop,lpos,list,base,6.0.6,LPOS list a,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,lpos,list,RANK,6.0.6,LPOS list a RANK 1,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,lpos,list,COUNT,6.0.6,LPOS list a COUNT 1,accepted,,*[:0],*[:0]
-38656876608,2026-10-14T23:54:13Z,develop,lpos,list,MAXLEN,6.0.6,LPOS list a MAXLEN 0,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,lpush,list,base,1.0.0,LPUSH list a,accepted,,:4,:4
-38656876608,2026-10-14T23:54:13Z,develop,lpush,list,element*2,1.0.0,LPUSH list a b,accepted,,:5,:5
-38656876608,2026-10-14T23:54:13Z,develop,lpushx,list,base,2.2.0,LPUSHX list a,accepted,,:4,:4
-38656876608,2026-10-14T23:54:13Z,develop,lpushx,list,element*2,2.2.0,LPUSHX list a b,accepted,,:5,:5
-38656876608,2026-10-14T23:54:13Z,develop,lrange,list,base,1.0.0,LRANGE list 0 -1,accepted,,*[$a $b $c],*[$a $b $c]
-38656876608,2026-10-14T23:54:13Z,develop,lrem,list,base,1.0.0,LREM list 0 a,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,lset,list,base,1.0.0,LSET list 0 x,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,ltrim,list,base,1.0.0,LTRIM list 0 -1,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,memory|help,server,base,4.0.0,MEMORY HELP,accepted,same kind of reply,"*[+MEMORY <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +STATS +    Return information about the memory usage of the server. +USAGE <key> [SAMPLES <count>] +    Return memory in bytes used by <key> and its value, as this server +    estimates it. SAMPLES is accepted, and the estimate is not sampled. +HELP +    Print this help.]",*[+MEMORY <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +DOCTOR +    Return memory problems reports. +MALLOC-STATS +    Return internal statistics report from the memory allocator. +PURGE +    Attempt to purge dirty pages for reclamation by the allocator. +STATS +    Return information about the memory usage of the server. +USAGE <key> [SAMPLES <count>] +    Return memory in bytes us...
-38656876608,2026-10-14T23:54:13Z,develop,memory|stats,server,base,4.0.0,MEMORY STATS,accepted,same kind of reply,*[$keyspace.bytes :10103 $keys.count :24 $keys.expires :0 $string.bytes :493 $zset.bytes :6257 $set.bytes :1148 $hash.bytes :902 $list.bytes :752 $bloom.bytes :0 $cms.bytes :0 $morris.bytes :0 $hll.bytes :551 $cuckoo.bytes :0],*[$peak.allocated :2894016 $total.allocated :2537232 $startup.allocated :714648 $replication.backlog :0 $replica.fullsync.buffer :0 $clients.slaves :0 $clients.normal :2304 $clients.normal.shared :0 $clients.normal.unshared :0 $cluster.links :0 $aof.buffer :224 $lua.caches :0 $functions.caches :296 $script.VMs :67584 $hash.templates :72 $db.0 *[$overhead.hashtable.main :1352 $overhead.hashtable...
-38656876608,2026-10-14T23:54:13Z,develop,memory|usage,server,base,4.0.0,MEMORY USAGE str,accepted,same kind of reply,:82,:32
-38656876608,2026-10-14T23:54:13Z,develop,memory|usage,server,SAMPLES,4.0.0,MEMORY USAGE str SAMPLES 1,accepted,same kind of reply,:82,:32
-38656876608,2026-10-14T23:54:13Z,develop,mget,string,base,1.0.0,MGET str,accepted,,*[$abc],*[$abc]
-38656876608,2026-10-14T23:54:13Z,develop,mget,string,key*2,1.0.0,MGET str str2,accepted,,*[$abc $abd],*[$abc $abd]
-38656876608,2026-10-14T23:54:13Z,develop,mset,string,base,1.0.1,MSET dest v,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,mset,string,data*2,1.0.1,MSET dest v dest2 w,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,msetnx,string,base,1.0.1,MSETNX dest v,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,msetnx,string,data*2,1.0.1,MSETNX dest v dest2 w,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,multi,transactions,base,1.2.0,MULTI,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,persist,generic,base,2.2.0,PERSIST str,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,pexpire,generic,base,2.6.0,PEXPIRE str 100000,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,pexpire,generic,NX,7.0.0,PEXPIRE str 100000 NX,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,pexpire,generic,XX,7.0.0,PEXPIRE str 100000 XX,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,pexpire,generic,GT,7.0.0,PEXPIRE str 100000 GT,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,pexpire,generic,LT,7.0.0,PEXPIRE str 100000 LT,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,pexpireat,generic,base,2.6.0,PEXPIREAT str 4102444800000,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,pexpireat,generic,NX,7.0.0,PEXPIREAT str 4102444800000 NX,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,pexpireat,generic,XX,7.0.0,PEXPIREAT str 4102444800000 XX,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,pexpireat,generic,GT,7.0.0,PEXPIREAT str 4102444800000 GT,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,pexpireat,generic,LT,7.0.0,PEXPIREAT str 4102444800000 LT,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,pfadd,hyperloglog,base,2.8.9,PFADD hll,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,pfadd,hyperloglog,element,2.8.9,PFADD hll a,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,pfadd,hyperloglog,element element*2,2.8.9,PFADD hll a b,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,pfcount,hyperloglog,base,2.8.9,PFCOUNT hll,accepted,,:3,:3
-38656876608,2026-10-14T23:54:13Z,develop,pfcount,hyperloglog,key*2,2.8.9,PFCOUNT hll hll2,accepted,,:4,:4
-38656876608,2026-10-14T23:54:13Z,develop,pfmerge,hyperloglog,base,2.8.9,PFMERGE hll,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,pfmerge,hyperloglog,sourcekey,2.8.9,PFMERGE hll hll2,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,pfmerge,hyperloglog,sourcekey sourcekey*2,2.8.9,PFMERGE hll hll2 hll3,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,ping,connection,base,1.0.0,PING,accepted,,+PONG,+PONG
-38656876608,2026-10-14T23:54:13Z,develop,ping,connection,message,1.0.0,PING hi,accepted,,$hi,$hi
-38656876608,2026-10-14T23:54:13Z,develop,psetex,string,base,2.6.0,PSETEX dest 100000 v,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,pttl,generic,base,2.6.0,PTTL str,accepted,,:-1,:-1
-38656876608,2026-10-14T23:54:13Z,develop,quit,connection,base,1.0.0,QUIT,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,rpop,list,base,1.0.0,RPOP list,accepted,,$c,$c
-38656876608,2026-10-14T23:54:13Z,develop,rpop,list,count,6.2.0,RPOP list 1,accepted,,*[$c],*[$c]
-38656876608,2026-10-14T23:54:13Z,develop,rpoplpush,list,base,1.2.0,RPOPLPUSH list list2,accepted,,$c,$c
-38656876608,2026-10-14T23:54:13Z,develop,rpush,list,base,1.0.0,RPUSH list a,accepted,,:4,:4
-38656876608,2026-10-14T23:54:13Z,develop,rpush,list,element*2,1.0.0,RPUSH list a b,accepted,,:5,:5
-38656876608,2026-10-14T23:54:13Z,develop,rpushx,list,base,2.2.0,RPUSHX list a,accepted,,:4,:4
-38656876608,2026-10-14T23:54:13Z,develop,rpushx,list,element*2,2.2.0,RPUSHX list a b,accepted,,:5,:5
-38656876608,2026-10-14T23:54:13Z,develop,sadd,set,base,1.0.0,SADD set a,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,sadd,set,member*2,1.0.0,SADD set a b,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,scan,generic,base,2.8.0,SCAN 0,accepted,same kind of reply,*[$281474976710656 *[$str $str2 $str3 $num $num2 $num3]],*[$14 *[$geo $list $set $list2 $num2 $num3 $hll $str2 $list3 $str3 $hash2 $hash3]]
-38656876608,2026-10-14T23:54:13Z,develop,scan,generic,MATCH,2.8.0,SCAN 0 MATCH *,accepted,same kind of reply,*[$281474976710656 *[$str $str2 $str3 $num $num2 $num3]],*[$14 *[$geo $list $set $list2 $num2 $num3 $hll $str2 $list3 $str3 $hash2 $hash3]]
-38656876608,2026-10-14T23:54:13Z,develop,scan,generic,COUNT,2.8.0,SCAN 0 COUNT 10,accepted,same kind of reply,*[$281474976710656 *[$str $str2 $str3 $num $num2 $num3]],*[$14 *[$geo $list $set $list2 $num2 $num3 $hll $str2 $list3 $str3 $hash2 $hash3]]
-38656876608,2026-10-14T23:54:13Z,develop,scan,generic,TYPE,6.0.0,SCAN 0 TYPE string,accepted,same kind of reply,*[$281474976710656 *[$str $str2 $str3 $num $num2 $num3]],*[$14 *[$num2 $num3 $hll $str2 $str3]]
-38656876608,2026-10-14T23:54:13Z,develop,scard,set,base,1.0.0,SCARD set,accepted,,:3,:3
-38656876608,2026-10-14T23:54:13Z,develop,select,connection,base,1.0.0,SELECT 0,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,set,string,base,1.0.0,SET str v,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,set,string,NX,2.6.12,SET str v NX,accepted,,$-1,$-1
-38656876608,2026-10-14T23:54:13Z,develop,set,string,XX,2.6.12,SET str v XX,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,set,string,IFEQ,8.4.0,SET str v IFEQ s,refused,not parsed,-ERR syntax error,$-1
-38656876608,2026-10-14T23:54:13Z,develop,set,string,IFNE,8.4.0,SET str v IFNE s,refused,not parsed,-ERR syntax error,+OK
-38656876608,2026-10-14T23:54:13Z,develop,set,string,IFDEQ,8.4.0,SET str v IFDEQ 0123456789abcdef,refused,not parsed,-ERR syntax error,$-1
-38656876608,2026-10-14T23:54:13Z,develop,set,string,IFDNE,8.4.0,SET str v IFDNE 0123456789abcdef,refused,not parsed,-ERR syntax error,+OK
-38656876608,2026-10-14T23:54:13Z,develop,set,string,GET,6.2.0,SET str v GET,accepted,,$abc,$abc
-38656876608,2026-10-14T23:54:13Z,develop,set,string,EX,2.6.12,SET str v EX 100,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,set,string,PX,2.6.12,SET str v PX 100000,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,set,string,EXAT,6.2.0,SET str v EXAT 4102444800,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,set,string,PXAT,6.2.0,SET str v PXAT 4102444800000,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,set,string,KEEPTTL,6.0.0,SET str v KEEPTTL,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,setex,string,base,2.0.0,SETEX dest 100 v,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,setnx,string,base,1.0.0,SETNX dest v,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,setrange,string,base,2.2.0,SETRANGE str 0 v,accepted,,:3,:3
-38656876608,2026-10-14T23:54:13Z,develop,sismember,set,base,1.0.0,SISMEMBER set a,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,slowlog|get,server,base,2.2.12,SLOWLOG GET,accepted,,*[],*[]
-38656876608,2026-10-14T23:54:13Z,develop,slowlog|get,server,count,2.2.12,SLOWLOG GET 1,accepted,,*[],*[]
-38656876608,2026-10-14T23:54:13Z,develop,slowlog|help,server,base,6.2.0,SLOWLOG HELP,accepted,,"*[+SLOWLOG <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +GET [<count>] +    Return top <count> entries from the slowlog (default: 10, -1 mean all). +    Entries are made of: +    id, timestamp, time in microseconds, arguments array, client IP and port, +    client name +LEN +    Return the length of the slowlog. +RESET +    Reset the slowlog. +HELP +    Print this help.]","*[+SLOWLOG <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +GET [<count>] +    Return top <count> entries from the slowlog (default: 10, -1 mean all). +    Entries are made of: +    id, timestamp, time in microseconds, arguments array, client IP and port, +    client name +LEN +    Return the length of the slowlog. +RESET +    Reset the slowlog. +HELP +    Print this help.]"
-38656876608,2026-10-14T23:54:13Z,develop,slowlog|len,server,base,2.2.12,SLOWLOG LEN,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,slowlog|reset,server,base,2.2.12,SLOWLOG RESET,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,smembers,set,base,1.0.0,SMEMBERS set,accepted,,*[$a $b $c],*[$a $b $c]
-38656876608,2026-10-14T23:54:13Z,develop,smismember,set,base,6.2.0,SMISMEMBER set a,accepted,,*[:1],*[:1]
-38656876608,2026-10-14T23:54:13Z,develop,smismember,set,member*2,6.2.0,SMISMEMBER set a b,accepted,,*[:1 :1],*[:1 :1]
-38656876608,2026-10-14T23:54:13Z,develop,spop,set,base,1.0.0,SPOP set,accepted,same kind of reply,$c,$a
-38656876608,2026-10-14T23:54:13Z,develop,spop,set,count,3.2.0,SPOP set 1,accepted,,*[$b],*[$b]
-38656876608,2026-10-14T23:54:13Z,develop,srandmember,set,base,1.0.0,SRANDMEMBER set,accepted,,$a,$a
-38656876608,2026-10-14T23:54:13Z,develop,srandmember,set,count,2.6.0,SRANDMEMBER set 1,accepted,same kind of reply,*[$b],*[$c]
-38656876608,2026-10-14T23:54:13Z,develop,srem,set,base,1.0.0,SREM set a,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,srem,set,member*2,1.0.0,SREM set a b,accepted,,:2,:2
-38656876608,2026-10-14T23:54:13Z,develop,strlen,string,base,2.2.0,STRLEN str,accepted,,:3,:3
-38656876608,2026-10-14T23:54:13Z,develop,substr,string,base,1.0.0,SUBSTR str 0 -1,accepted,,$abc,$abc
-38656876608,2026-10-14T23:54:13Z,develop,ttl,generic,base,1.0.0,TTL str,accepted,,:-1,:-1
-38656876608,2026-10-14T23:54:13Z,develop,type,generic,base,1.0.0,TYPE str,accepted,,+string,+string
-38656876608,2026-10-14T23:54:13Z,develop,unlink,generic,base,4.0.0,UNLINK str,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,unlink,generic,key*2,4.0.0,UNLINK str str2,accepted,,:2,:2
-38656876608,2026-10-14T23:54:13Z,develop,unwatch,transactions,base,2.2.0,UNWATCH,accepted,,+OK,+OK
-38656876608,2026-10-14T23:54:13Z,develop,zadd,sorted_set,base,1.2.0,ZADD zset 1.5 a,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,zadd,sorted_set,NX,3.0.2,ZADD zset NX 1.5 a,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,zadd,sorted_set,XX,3.0.2,ZADD zset XX 1.5 a,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,zadd,sorted_set,GT,6.2.0,ZADD zset GT 1.5 a,refused,not parsed,-ERR syntax error,:0
-38656876608,2026-10-14T23:54:13Z,develop,zadd,sorted_set,LT,6.2.0,ZADD zset LT 1.5 a,refused,not parsed,-ERR syntax error,:0
-38656876608,2026-10-14T23:54:13Z,develop,zadd,sorted_set,CH,3.0.2,ZADD zset CH 1.5 a,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,zadd,sorted_set,INCR,3.0.2,ZADD zset INCR 1.5 a,refused,not parsed,-ERR syntax error,$2.5
-38656876608,2026-10-14T23:54:13Z,develop,zadd,sorted_set,data*2,1.2.0,ZADD zset 1.5 a 2.5 b,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,zcard,sorted_set,base,1.2.0,ZCARD zset,accepted,,:3,:3
-38656876608,2026-10-14T23:54:13Z,develop,zcount,sorted_set,base,2.0.0,ZCOUNT zset -inf +inf,accepted,,:3,:3
-38656876608,2026-10-14T23:54:13Z,develop,zincrby,sorted_set,base,1.2.0,ZINCRBY zset 1 a,accepted,,$2,$2
-38656876608,2026-10-14T23:54:13Z,develop,zpopmax,sorted_set,base,5.0.0,ZPOPMAX zset,accepted,,*[$c $3],*[$c $3]
-38656876608,2026-10-14T23:54:13Z,develop,zpopmax,sorted_set,count,5.0.0,ZPOPMAX zset 1,accepted,,*[$c $3],*[$c $3]
-38656876608,2026-10-14T23:54:13Z,develop,zpopmin,sorted_set,base,5.0.0,ZPOPMIN zset,accepted,,*[$a $1],*[$a $1]
-38656876608,2026-10-14T23:54:13Z,develop,zpopmin,sorted_set,count,5.0.0,ZPOPMIN zset 1,accepted,,*[$a $1],*[$a $1]
-38656876608,2026-10-14T23:54:13Z,develop,zrange,sorted_set,base,1.2.0,ZRANGE zset 0 -1,accepted,,*[$a $b $c],*[$a $b $c]
-38656876608,2026-10-14T23:54:13Z,develop,zrange,sorted_set,BYSCORE,6.2.0,ZRANGE zset -inf +inf BYSCORE,accepted,,*[$a $b $c],*[$a $b $c]
-38656876608,2026-10-14T23:54:13Z,develop,zrange,sorted_set,BYLEX,6.2.0,ZRANGE zset - + BYLEX,refused,not parsed,-ERR syntax error,*[$a $b $c]
-38656876608,2026-10-14T23:54:13Z,develop,zrange,sorted_set,REV,6.2.0,ZRANGE zset 0 -1 REV,accepted,,*[$c $b $a],*[$c $b $a]
-38656876608,2026-10-14T23:54:13Z,develop,zrange,sorted_set,LIMIT,6.2.0,ZRANGE zset -inf +inf BYSCORE LIMIT 0 1,accepted,,*[$a],*[$a]
-38656876608,2026-10-14T23:54:13Z,develop,zrange,sorted_set,WITHSCORES,1.2.0,ZRANGE zset 0 -1 WITHSCORES,accepted,,*[$a $1 $b $2 $c $3],*[$a $1 $b $2 $c $3]
-38656876608,2026-10-14T23:54:13Z,develop,zrangebyscore,sorted_set,base,1.0.5,ZRANGEBYSCORE zset -inf +inf,accepted,,*[$a $b $c],*[$a $b $c]
-38656876608,2026-10-14T23:54:13Z,develop,zrangebyscore,sorted_set,WITHSCORES,2.0.0,ZRANGEBYSCORE zset -inf +inf WITHSCORES,accepted,,*[$a $1 $b $2 $c $3],*[$a $1 $b $2 $c $3]
-38656876608,2026-10-14T23:54:13Z,develop,zrangebyscore,sorted_set,LIMIT,1.0.5,ZRANGEBYSCORE zset -inf +inf LIMIT 0 1,accepted,,*[$a],*[$a]
-38656876608,2026-10-14T23:54:13Z,develop,zrank,sorted_set,base,2.0.0,ZRANK zset a,accepted,,:0,:0
-38656876608,2026-10-14T23:54:13Z,develop,zrank,sorted_set,WITHSCORE,2.0.0,ZRANK zset a WITHSCORE,accepted,,*[:0 $1],*[:0 $1]
-38656876608,2026-10-14T23:54:13Z,develop,zrem,sorted_set,base,1.2.0,ZREM zset a,accepted,,:1,:1
-38656876608,2026-10-14T23:54:13Z,develop,zrem,sorted_set,member*2,1.2.0,ZREM zset a b,accepted,,:2,:2
-38656876608,2026-10-14T23:54:13Z,develop,zrevrangebyscore,sorted_set,base,2.2.0,ZREVRANGEBYSCORE zset +inf -inf,accepted,,*[$c $b $a],*[$c $b $a]
-38656876608,2026-10-14T23:54:13Z,develop,zrevrangebyscore,sorted_set,WITHSCORES,2.2.0,ZREVRANGEBYSCORE zset +inf -inf WITHSCORES,accepted,,*[$c $3 $b $2 $a $1],*[$c $3 $b $2 $a $1]
-38656876608,2026-10-14T23:54:13Z,develop,zrevrangebyscore,sorted_set,LIMIT,2.2.0,ZREVRANGEBYSCORE zset +inf -inf LIMIT 0 1,accepted,,*[$c],*[$c]
-38656876608,2026-10-14T23:54:13Z,develop,zscore,sorted_set,base,1.2.0,ZSCORE zset a,accepted,,$1,$1
+38663693019,2026-10-15T01:05:14Z,develop,append,string,base,2.0.0,APPEND str v,accepted,,:4,:4
+38663693019,2026-10-15T01:05:14Z,develop,auth,connection,base,1.0.0,AUTH <password>,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,auth,connection,username,6.0.0,AUTH default <password>,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,bgrewriteaof,server,base,1.0.0,BGREWRITEAOF,accepted,,+Background append only file rewriting started,+Background append only file rewriting started
+38663693019,2026-10-15T01:05:14Z,develop,client|getname,connection,base,2.6.9,CLIENT GETNAME,accepted,,$-1,$-1
+38663693019,2026-10-15T01:05:14Z,develop,client|help,connection,base,5.0.0,CLIENT HELP,accepted,same kind of reply,*[+CLIENT <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +GETNAME +    Return the name of the current connection. +ID +    Return the ID of the current connection. +INFO +    Return information about the current client connection. +SETNAME <name> +    Assign the name <name> to the current connection. +SETINFO <option> <value> +    Set client meta attr. Options are: +    * LIB-NAME: th...,*[+CLIENT <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +CACHING (YES|NO) +    Enable/disable tracking of the keys for next command in OPTIN/OPTOUT modes. +GETREDIR +    Return the client ID we are redirecting to when tracking is enabled. +GETNAME +    Return the name of the current connection. +ID +    Return the ID of the current connection. +INFO +    Return information about the ...
+38663693019,2026-10-15T01:05:14Z,develop,client|id,connection,base,5.0.0,CLIENT ID,accepted,same kind of reply,:422,:427
+38663693019,2026-10-15T01:05:14Z,develop,client|info,connection,base,6.2.0,CLIENT INFO,accepted,same kind of reply,$id=423 fd=12 name= db=0 resp=2 lib-name= lib-ver=\n,$id=428 addr=127.0.0.1:38996 laddr=127.0.0.1:48025 fd=12 name= age=0 idle=0 flags=N db=0 sub=0 psub=0 ssub=0 multi=-1 watch=0 qbuf=26 qbuf-free=20448 argv-mem=10 multi-mem=0 rbs=16384 rbp=16384 obl=0 oll=0 omem=0 omem-shared=0 omem-unshared=0 tot-mem=38170 events=r cmd=client|info user=default redir=-1 resp=2 lib-name= lib-ver= io-thread=0 tot-net-in=79 tot-net-out=5 tot-cmds=1 read-events=2 av...
+38663693019,2026-10-15T01:05:14Z,develop,client|setinfo,connection,base,7.2.0,CLIENT SETINFO lib-name lib,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,client|setinfo,connection,lib-ver,7.2.0,CLIENT SETINFO lib-ver 1.0,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,client|setname,connection,base,2.6.9,CLIENT SETNAME c1,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,config|get,server,base,2.0.0,CONFIG GET maxmemory,accepted,,*[$maxmemory $0],*[$maxmemory $0]
+38663693019,2026-10-15T01:05:14Z,develop,config|get,server,parameter*2,2.0.0,CONFIG GET maxmemory maxclients,accepted,same kind of reply,*[$maxmemory $0 $maxclients $20000],*[$maxclients $10000 $maxmemory $0]
+38663693019,2026-10-15T01:05:14Z,develop,config|help,server,base,5.0.0,CONFIG HELP,accepted,,*[+CONFIG <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +GET <pattern> +    Return parameters matching the glob-like <pattern> and their values. +SET <directive> <value> +    Set the configuration <directive> to <value>. +RESETSTAT +    Reset statistics reported by the INFO command. +REWRITE +    Rewrite the configuration file. +HELP +    Print this help.],*[+CONFIG <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +GET <pattern> +    Return parameters matching the glob-like <pattern> and their values. +SET <directive> <value> +    Set the configuration <directive> to <value>. +RESETSTAT +    Reset statistics reported by the INFO command. +REWRITE +    Rewrite the configuration file. +HELP +    Print this help.]
+38663693019,2026-10-15T01:05:14Z,develop,config|resetstat,server,base,2.0.0,CONFIG RESETSTAT,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,config|rewrite,server,base,2.8.0,CONFIG REWRITE,accepted,the documented reply is this error,-ERR The server is running without a config file,-ERR The server is running without a config file
+38663693019,2026-10-15T01:05:14Z,develop,config|set,server,base,2.0.0,CONFIG SET maxmemory-samples 5,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,config|set,server,data*2,2.0.0,CONFIG SET maxmemory-samples 5 lfu-log-factor 10,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,dbsize,server,base,1.0.0,DBSIZE,accepted,,:24,:24
+38663693019,2026-10-15T01:05:14Z,develop,decr,string,base,1.0.0,DECR num,accepted,,:9,:9
+38663693019,2026-10-15T01:05:14Z,develop,decrby,string,base,1.0.0,DECRBY num 1,accepted,,:9,:9
+38663693019,2026-10-15T01:05:14Z,develop,del,generic,base,1.0.0,DEL str,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,del,generic,key*2,1.0.0,DEL str str2,accepted,,:2,:2
+38663693019,2026-10-15T01:05:14Z,develop,discard,transactions,base,2.0.0,DISCARD,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,echo,connection,base,1.0.0,ECHO hi,accepted,,$hi,$hi
+38663693019,2026-10-15T01:05:14Z,develop,exec,transactions,base,1.2.0,EXEC,accepted,,*[+PONG],*[+PONG]
+38663693019,2026-10-15T01:05:14Z,develop,exists,generic,base,1.0.0,EXISTS str,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,exists,generic,key*2,1.0.0,EXISTS str str2,accepted,,:2,:2
+38663693019,2026-10-15T01:05:14Z,develop,expire,generic,base,1.0.0,EXPIRE str 100,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,expire,generic,NX,7.0.0,EXPIRE str 100 NX,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,expire,generic,XX,7.0.0,EXPIRE str 100 XX,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,expire,generic,GT,7.0.0,EXPIRE str 100 GT,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,expire,generic,LT,7.0.0,EXPIRE str 100 LT,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,expireat,generic,base,1.2.0,EXPIREAT str 4102444800,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,expireat,generic,NX,7.0.0,EXPIREAT str 4102444800 NX,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,expireat,generic,XX,7.0.0,EXPIREAT str 4102444800 XX,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,expireat,generic,GT,7.0.0,EXPIREAT str 4102444800 GT,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,expireat,generic,LT,7.0.0,EXPIREAT str 4102444800 LT,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,flushdb,server,base,1.0.0,FLUSHDB,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,flushdb,server,ASYNC,4.0.0,FLUSHDB ASYNC,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,flushdb,server,SYNC,6.2.0,FLUSHDB SYNC,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,geoadd,geo,base,3.2.0,GEOADD geo 13.361389 38.115556 Palermo,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,geoadd,geo,NX,6.2.0,GEOADD geo NX 13.361389 38.115556 Palermo,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,geoadd,geo,XX,6.2.0,GEOADD geo XX 13.361389 38.115556 Palermo,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,geoadd,geo,CH,6.2.0,GEOADD geo CH 13.361389 38.115556 Palermo,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,geoadd,geo,data*2,3.2.0,GEOADD geo 13.361389 38.115556 Palermo 15.087269 37.502669 Catania,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,geodist,geo,base,3.2.0,GEODIST geo Palermo Catania,accepted,,$166274.1516,$166274.1516
+38663693019,2026-10-15T01:05:14Z,develop,geodist,geo,m,3.2.0,GEODIST geo Palermo Catania m,accepted,,$166274.1516,$166274.1516
+38663693019,2026-10-15T01:05:14Z,develop,geodist,geo,km,3.2.0,GEODIST geo Palermo Catania km,accepted,,$166.2742,$166.2742
+38663693019,2026-10-15T01:05:14Z,develop,geodist,geo,ft,3.2.0,GEODIST geo Palermo Catania ft,accepted,,$545518.8700,$545518.8700
+38663693019,2026-10-15T01:05:14Z,develop,geodist,geo,mi,3.2.0,GEODIST geo Palermo Catania mi,accepted,,$103.3182,$103.3182
+38663693019,2026-10-15T01:05:14Z,develop,geohash,geo,base,3.2.0,GEOHASH geo,accepted,,*[],*[]
+38663693019,2026-10-15T01:05:14Z,develop,geohash,geo,member,3.2.0,GEOHASH geo Palermo,accepted,,*[$sqc8b49rny0],*[$sqc8b49rny0]
+38663693019,2026-10-15T01:05:14Z,develop,geohash,geo,member member*2,3.2.0,GEOHASH geo Palermo Catania,accepted,,*[$sqc8b49rny0 $sqdtr74hyu0],*[$sqc8b49rny0 $sqdtr74hyu0]
+38663693019,2026-10-15T01:05:14Z,develop,geopos,geo,base,3.2.0,GEOPOS geo,accepted,,*[],*[]
+38663693019,2026-10-15T01:05:14Z,develop,geopos,geo,member,3.2.0,GEOPOS geo Palermo,accepted,,*[*[$13.361389338970184 $38.1155563954963]],*[*[$13.361389338970184 $38.1155563954963]]
+38663693019,2026-10-15T01:05:14Z,develop,geopos,geo,member member*2,3.2.0,GEOPOS geo Palermo Catania,accepted,,*[*[$13.361389338970184 $38.1155563954963] *[$15.087267458438873 $37.50266842333162]],*[*[$13.361389338970184 $38.1155563954963] *[$15.087267458438873 $37.50266842333162]]
+38663693019,2026-10-15T01:05:14Z,develop,geosearch,geo,base,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m,accepted,,*[$Palermo $Catania],*[$Palermo $Catania]
+38663693019,2026-10-15T01:05:14Z,develop,geosearch,geo,FROMLONLAT,6.2.0,GEOSEARCH geo FROMLONLAT 13.361389 38.115556 BYRADIUS 200000 m,accepted,,*[$Palermo $Catania],*[$Palermo $Catania]
+38663693019,2026-10-15T01:05:14Z,develop,geosearch,geo,BYRADIUS km,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 km,accepted,,*[$Palermo $Catania],*[$Palermo $Catania]
+38663693019,2026-10-15T01:05:14Z,develop,geosearch,geo,BYRADIUS ft,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 ft,accepted,,*[$Palermo],*[$Palermo]
+38663693019,2026-10-15T01:05:14Z,develop,geosearch,geo,BYRADIUS mi,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 mi,accepted,,*[$Palermo $Catania],*[$Palermo $Catania]
+38663693019,2026-10-15T01:05:14Z,develop,geosearch,geo,BYBOX,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYBOX 400000 400000 m,accepted,,*[$Palermo $Catania],*[$Palermo $Catania]
+38663693019,2026-10-15T01:05:14Z,develop,geosearch,geo,BYBOX km,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYBOX 400000 400000 km,accepted,,*[$Palermo $Catania],*[$Palermo $Catania]
+38663693019,2026-10-15T01:05:14Z,develop,geosearch,geo,BYBOX ft,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYBOX 400000 400000 ft,accepted,,*[$Palermo],*[$Palermo]
+38663693019,2026-10-15T01:05:14Z,develop,geosearch,geo,BYBOX mi,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYBOX 400000 400000 mi,accepted,,*[$Palermo $Catania],*[$Palermo $Catania]
+38663693019,2026-10-15T01:05:14Z,develop,geosearch,geo,ASC,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m ASC,accepted,,*[$Palermo $Catania],*[$Palermo $Catania]
+38663693019,2026-10-15T01:05:14Z,develop,geosearch,geo,DESC,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m DESC,accepted,,*[$Catania $Palermo],*[$Catania $Palermo]
+38663693019,2026-10-15T01:05:14Z,develop,geosearch,geo,COUNT,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m COUNT 1,accepted,,*[$Palermo],*[$Palermo]
+38663693019,2026-10-15T01:05:14Z,develop,geosearch,geo,COUNT ANY,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m COUNT 1 ANY,accepted,,*[$Palermo],*[$Palermo]
+38663693019,2026-10-15T01:05:14Z,develop,geosearch,geo,WITHCOORD,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m WITHCOORD,accepted,,*[*[$Palermo *[$13.361389338970184 $38.1155563954963]] *[$Catania *[$15.087267458438873 $37.50266842333162]]],*[*[$Palermo *[$13.361389338970184 $38.1155563954963]] *[$Catania *[$15.087267458438873 $37.50266842333162]]]
+38663693019,2026-10-15T01:05:14Z,develop,geosearch,geo,WITHDIST,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m WITHDIST,accepted,,*[*[$Palermo $0.0000] *[$Catania $166274.1516]],*[*[$Palermo $0.0000] *[$Catania $166274.1516]]
+38663693019,2026-10-15T01:05:14Z,develop,geosearch,geo,WITHHASH,6.2.0,GEOSEARCH geo FROMMEMBER Palermo BYRADIUS 200000 m WITHHASH,accepted,,*[*[$Palermo :3479099956230698] *[$Catania :3479447370796909]],*[*[$Palermo :3479099956230698] *[$Catania :3479447370796909]]
+38663693019,2026-10-15T01:05:14Z,develop,get,string,base,1.0.0,GET str,accepted,,$abc,$abc
+38663693019,2026-10-15T01:05:14Z,develop,getdel,string,base,6.2.0,GETDEL str,accepted,,$abc,$abc
+38663693019,2026-10-15T01:05:14Z,develop,getex,string,base,6.2.0,GETEX str,accepted,,$abc,$abc
+38663693019,2026-10-15T01:05:14Z,develop,getex,string,EX,6.2.0,GETEX str EX 100,accepted,,$abc,$abc
+38663693019,2026-10-15T01:05:14Z,develop,getex,string,PX,6.2.0,GETEX str PX 100000,accepted,,$abc,$abc
+38663693019,2026-10-15T01:05:14Z,develop,getex,string,EXAT,6.2.0,GETEX str EXAT 4102444800,accepted,,$abc,$abc
+38663693019,2026-10-15T01:05:14Z,develop,getex,string,PXAT,6.2.0,GETEX str PXAT 4102444800000,accepted,,$abc,$abc
+38663693019,2026-10-15T01:05:14Z,develop,getex,string,PERSIST,6.2.0,GETEX str PERSIST,accepted,,$abc,$abc
+38663693019,2026-10-15T01:05:14Z,develop,getrange,string,base,2.4.0,GETRANGE str 0 -1,accepted,,$abc,$abc
+38663693019,2026-10-15T01:05:14Z,develop,getset,string,base,1.0.0,GETSET str v,accepted,,$abc,$abc
+38663693019,2026-10-15T01:05:14Z,develop,hdel,hash,base,2.0.0,HDEL hash f,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,hdel,hash,field*2,2.0.0,HDEL hash f n,accepted,,:2,:2
+38663693019,2026-10-15T01:05:14Z,develop,hello,connection,base,6.0.0,HELLO,accepted,same kind of reply,*[$server $keel $version $7.0.0 $proto :2 $id :501 $mode $standalone $role $master $modules *[]],*[$server $redis $version $8.10.1 $proto :2 $id :506 $mode $standalone $role $master $modules *[*[$name $vectorset $ver :1 $path $ $args *[]]]]
+38663693019,2026-10-15T01:05:14Z,develop,hello,connection,protover,6.0.0,HELLO 3,accepted,same kind of reply,%{$server: $keel $version: $7.0.0 $proto: :3 $id: :502 $mode: $standalone $role: $master $modules: *[]},%{$server: $redis $version: $8.10.1 $proto: :3 $id: :507 $mode: $standalone $role: $master $modules: *[%{$name: $vectorset $ver: :1 $path: $ $args: *[]}]}
+38663693019,2026-10-15T01:05:14Z,develop,hello,connection,protover AUTH,6.0.0,HELLO 3 AUTH default <password>,accepted,same kind of reply,%{$server: $keel $version: $7.0.0 $proto: :3 $id: :503 $mode: $standalone $role: $master $modules: *[]},%{$server: $redis $version: $8.10.1 $proto: :3 $id: :508 $mode: $standalone $role: $master $modules: *[%{$name: $vectorset $ver: :1 $path: $ $args: *[]}]}
+38663693019,2026-10-15T01:05:14Z,develop,hello,connection,protover SETNAME,6.0.0,HELLO 3 SETNAME c1,accepted,same kind of reply,%{$server: $keel $version: $7.0.0 $proto: :3 $id: :504 $mode: $standalone $role: $master $modules: *[]},%{$server: $redis $version: $8.10.1 $proto: :3 $id: :509 $mode: $standalone $role: $master $modules: *[%{$name: $vectorset $ver: :1 $path: $ $args: *[]}]}
+38663693019,2026-10-15T01:05:14Z,develop,hexists,hash,base,2.0.0,HEXISTS hash f,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,hget,hash,base,2.0.0,HGET hash f,accepted,,$v,$v
+38663693019,2026-10-15T01:05:14Z,develop,hgetall,hash,base,2.0.0,HGETALL hash,accepted,,*[$f $v $n $5],*[$f $v $n $5]
+38663693019,2026-10-15T01:05:14Z,develop,hincrby,hash,base,2.0.0,HINCRBY hash n 1,accepted,,:6,:6
+38663693019,2026-10-15T01:05:14Z,develop,hkeys,hash,base,2.0.0,HKEYS hash,accepted,,*[$f $n],*[$f $n]
+38663693019,2026-10-15T01:05:14Z,develop,hlen,hash,base,2.0.0,HLEN hash,accepted,,:2,:2
+38663693019,2026-10-15T01:05:14Z,develop,hmget,hash,base,2.0.0,HMGET hash f,accepted,,*[$v],*[$v]
+38663693019,2026-10-15T01:05:14Z,develop,hmget,hash,field*2,2.0.0,HMGET hash f n,accepted,,*[$v $5],*[$v $5]
+38663693019,2026-10-15T01:05:14Z,develop,hset,hash,base,2.0.0,HSET hash f v,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,hset,hash,data*2,2.0.0,HSET hash f v n w,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,hsetnx,hash,base,2.0.0,HSETNX hash f v,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,hvals,hash,base,2.0.0,HVALS hash,accepted,,*[$v $5],*[$v $5]
+38663693019,2026-10-15T01:05:14Z,develop,incr,string,base,1.0.0,INCR num,accepted,,:11,:11
+38663693019,2026-10-15T01:05:14Z,develop,incrby,string,base,1.0.0,INCRBY num 1,accepted,,:11,:11
+38663693019,2026-10-15T01:05:14Z,develop,incrbyfloat,string,base,2.6.0,INCRBYFLOAT num 1,accepted,,$11,$11
+38663693019,2026-10-15T01:05:14Z,develop,info,server,base,1.0.0,INFO,accepted,same kind of reply,$# Server\r\nkeel_version:v0.0.0-20261015010511-114503f3141b\r\nredis_version:7.0.0\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmultiplexing_api:epoll\r\nprocess_id:22386\r\nprocess_supervised:no\r\nrun_id:0a7efab961e6865e5236faefa8da66d0c3922c15\r\ntcp_port:43879\r\nserver_time_usec:1792026882774047\r\nuptime_in_seconds:0\r\nuptime_in_days:0\r\nhz:10\r\ncon...,$# Server\r\nredis_version:8.10.1\r\nredis_git_sha1:00000000\r\nredis_git_dirty:1\r\nredis_build_id:d403c34874934f5c\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmonotonic_clock:POSIX clock_gettime\r\nmultiplexing_api:epoll\r\natomicvar_api:c11-builtin\r\ngcc_version:13.3.0\r\nprocess_id:22394\r\nprocess_supervised:no\r\nrun_id:da28f7ff5f9a91bf1d6f26365ff8bbf...
+38663693019,2026-10-15T01:05:14Z,develop,info,server,section,1.0.0,INFO server,accepted,same kind of reply,$# Server\r\nkeel_version:v0.0.0-20261015010511-114503f3141b\r\nredis_version:7.0.0\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmultiplexing_api:epoll\r\nprocess_id:22386\r\nprocess_supervised:no\r\nrun_id:0a7efab961e6865e5236faefa8da66d0c3922c15\r\ntcp_port:43879\r\nserver_time_usec:1792026882776446\r\nuptime_in_seconds:0\r\nuptime_in_days:0\r\nhz:10\r\ncon...,$# Server\r\nredis_version:8.10.1\r\nredis_git_sha1:00000000\r\nredis_git_dirty:1\r\nredis_build_id:d403c34874934f5c\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmonotonic_clock:POSIX clock_gettime\r\nmultiplexing_api:epoll\r\natomicvar_api:c11-builtin\r\ngcc_version:13.3.0\r\nprocess_id:22394\r\nprocess_supervised:no\r\nrun_id:da28f7ff5f9a91bf1d6f26365ff8bbf...
+38663693019,2026-10-15T01:05:14Z,develop,info,server,section section*2,1.0.0,INFO server clients,accepted,same kind of reply,$# Server\r\nkeel_version:v0.0.0-20261015010511-114503f3141b\r\nredis_version:7.0.0\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmultiplexing_api:epoll\r\nprocess_id:22386\r\nprocess_supervised:no\r\nrun_id:0a7efab961e6865e5236faefa8da66d0c3922c15\r\ntcp_port:43879\r\nserver_time_usec:1792026882778599\r\nuptime_in_seconds:0\r\nuptime_in_days:0\r\nhz:10\r\ncon...,$# Server\r\nredis_version:8.10.1\r\nredis_git_sha1:00000000\r\nredis_git_dirty:1\r\nredis_build_id:d403c34874934f5c\r\nredis_mode:standalone\r\nos:Linux 6.17.0-1022-azure x86_64\r\narch_bits:64\r\nmonotonic_clock:POSIX clock_gettime\r\nmultiplexing_api:epoll\r\natomicvar_api:c11-builtin\r\ngcc_version:13.3.0\r\nprocess_id:22394\r\nprocess_supervised:no\r\nrun_id:da28f7ff5f9a91bf1d6f26365ff8bbf...
+38663693019,2026-10-15T01:05:14Z,develop,keys,generic,base,1.0.0,KEYS *,accepted,,*[$str $str2 $str3 $num $num2 $num3 $zset $zset2 $zset3 $geo $geo2 $geo3 $set $set2 $set3 $hash $hash2 $hash3 $list $list2 $list3 $hll $hll2 $hll3],*[$geo2 $geo $num3 $num $hll2 $num2 $str2 $str $set2 $hash3 $geo3 $set3 $zset $list $hll3 $hll $hash $list2 $zset2 $str3 $hash2 $zset3 $set $list3]
+38663693019,2026-10-15T01:05:14Z,develop,latency|doctor,server,base,2.8.13,LATENCY DOCTOR,accepted,,"$I'm sorry, Dave, I can't do that. Latency monitoring is disabled in this Redis instance. You may use ""CONFIG SET latency-monitor-threshold <milliseconds>."" in order to enable it. If we weren't in a deep space mission I'd suggest to take a look at https://redis.io/docs/latest/operate/oss_and_stack/management/optimization/latency-monitor.\n","$I'm sorry, Dave, I can't do that. Latency monitoring is disabled in this Redis instance. You may use ""CONFIG SET latency-monitor-threshold <milliseconds>."" in order to enable it. If we weren't in a deep space mission I'd suggest to take a look at https://redis.io/docs/latest/operate/oss_and_stack/management/optimization/latency-monitor.\n"
+38663693019,2026-10-15T01:05:14Z,develop,latency|graph,server,base,2.8.13,LATENCY GRAPH command,control,"Redis refused the form, and so did Keel",-ERR No samples available for event 'command',-ERR No samples available for event 'command'
+38663693019,2026-10-15T01:05:14Z,develop,latency|help,server,base,2.8.13,LATENCY HELP,accepted,,*[+LATENCY <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +DOCTOR +    Return a human readable latency analysis report. +GRAPH <event> +    Return an ASCII latency graph for the <event> class. +HISTORY <event> +    Return time-latency samples for the <event> class. +LATEST +    Return the latest latency samples for all events. +RESET [<event> ...] +    Reset latency data of one or mor...,*[+LATENCY <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +DOCTOR +    Return a human readable latency analysis report. +GRAPH <event> +    Return an ASCII latency graph for the <event> class. +HISTORY <event> +    Return time-latency samples for the <event> class. +LATEST +    Return the latest latency samples for all events. +RESET [<event> ...] +    Reset latency data of one or mor...
+38663693019,2026-10-15T01:05:14Z,develop,latency|histogram,server,base,7.0.0,LATENCY HISTOGRAM,accepted,same kind of reply,*[$auth *[$calls :97 $histogram_usec *[:1 :80 :2 :95 :16 :96 :33 :97]] $config|resetstat *[$calls :1 $histogram_usec *[:1 :1]] $config|rewrite *[$calls :1 $histogram_usec *[:2 :1]] $config|set *[$calls :2 $histogram_usec *[:4 :1 :16 :2]] $dbsize *[$calls :1 $histogram_usec *[:1 :1]] $decr *[$calls :1 $histogram_usec *[:2 :1]] $decrby *[$calls :1 $histogram_usec *[:2 :1]] $del *[$calls :2 $histo...,*[$geodist *[$calls :5 $histogram_usec *[:2 :3 :4 :5]] $hget *[$calls :1 $histogram_usec *[:2 :1]] $set *[$calls :582 $histogram_usec *[:1 :496 :2 :577 :4 :582]] $auth *[$calls :97 $histogram_usec *[:1 :48 :2 :95 :4 :97]] $info *[$calls :100 $histogram_usec *[:8 :98 :16 :99 :66 :100]] $incrby *[$calls :1 $histogram_usec *[:1 :1]] $flushdb *[$calls :100 $histogram_usec *[:16 :1 :33 :4 :66 :96 :1...
+38663693019,2026-10-15T01:05:14Z,develop,latency|histogram,server,COMMAND,7.0.0,LATENCY HISTOGRAM s,accepted,,*[],*[]
+38663693019,2026-10-15T01:05:14Z,develop,latency|histogram,server,COMMAND COMMAND*2,7.0.0,LATENCY HISTOGRAM s t,accepted,,*[],*[]
+38663693019,2026-10-15T01:05:14Z,develop,latency|history,server,base,2.8.13,LATENCY HISTORY command,accepted,,*[],*[]
+38663693019,2026-10-15T01:05:14Z,develop,latency|latest,server,base,2.8.13,LATENCY LATEST,accepted,,*[],*[]
+38663693019,2026-10-15T01:05:14Z,develop,latency|reset,server,base,2.8.13,LATENCY RESET,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,latency|reset,server,event,2.8.13,LATENCY RESET command,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,latency|reset,server,event event*2,2.8.13,LATENCY RESET command command,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,lcs,string,base,7.0.0,LCS str str2,accepted,,$ab,$ab
+38663693019,2026-10-15T01:05:14Z,develop,lcs,string,LEN,7.0.0,LCS str str2 LEN,accepted,,:2,:2
+38663693019,2026-10-15T01:05:14Z,develop,lcs,string,IDX,7.0.0,LCS str str2 IDX,accepted,,*[$matches *[*[*[:0 :1] *[:0 :1]]] $len :2],*[$matches *[*[*[:0 :1] *[:0 :1]]] $len :2]
+38663693019,2026-10-15T01:05:14Z,develop,lcs,string,MINMATCHLEN,7.0.0,LCS str str2 MINMATCHLEN 1,accepted,,$ab,$ab
+38663693019,2026-10-15T01:05:14Z,develop,lcs,string,WITHMATCHLEN,7.0.0,LCS str str2 WITHMATCHLEN,accepted,,$ab,$ab
+38663693019,2026-10-15T01:05:14Z,develop,lindex,list,base,1.0.0,LINDEX list 0,accepted,,$a,$a
+38663693019,2026-10-15T01:05:14Z,develop,linsert,list,base,2.2.0,LINSERT list BEFORE a x,accepted,,:4,:4
+38663693019,2026-10-15T01:05:14Z,develop,linsert,list,AFTER,2.2.0,LINSERT list AFTER a x,accepted,,:4,:4
+38663693019,2026-10-15T01:05:14Z,develop,llen,list,base,1.0.0,LLEN list,accepted,,:3,:3
+38663693019,2026-10-15T01:05:14Z,develop,lmove,list,base,6.2.0,LMOVE list list2 LEFT LEFT,accepted,,$a,$a
+38663693019,2026-10-15T01:05:14Z,develop,lmove,list,RIGHT,6.2.0,LMOVE list list2 RIGHT LEFT,accepted,,$c,$c
+38663693019,2026-10-15T01:05:14Z,develop,lmove,list,RIGHT,6.2.0,LMOVE list list2 LEFT RIGHT,accepted,,$a,$a
+38663693019,2026-10-15T01:05:14Z,develop,lmovem,list,base,8.10.0,LMOVEM list list2 LEFT LEFT,accepted,,*[$a],*[$a]
+38663693019,2026-10-15T01:05:14Z,develop,lmovem,list,RIGHT,8.10.0,LMOVEM list list2 RIGHT LEFT,accepted,,*[$c],*[$c]
+38663693019,2026-10-15T01:05:14Z,develop,lmovem,list,RIGHT,8.10.0,LMOVEM list list2 LEFT RIGHT,accepted,,*[$a],*[$a]
+38663693019,2026-10-15T01:05:14Z,develop,lmovem,list,COUNT,8.10.0,LMOVEM list list2 LEFT LEFT COUNT 1 OBO,accepted,,*[$a],*[$a]
+38663693019,2026-10-15T01:05:14Z,develop,lmovem,list,COUNT EXACTLY,8.10.0,LMOVEM list list2 LEFT LEFT EXACTLY 1 OBO,accepted,,*[$a],*[$a]
+38663693019,2026-10-15T01:05:14Z,develop,lmovem,list,COUNT BULK,8.10.0,LMOVEM list list2 LEFT LEFT COUNT 1 BULK,accepted,,*[$a],*[$a]
+38663693019,2026-10-15T01:05:14Z,develop,lmpop,list,base,7.0.0,LMPOP 1 list LEFT,accepted,,*[$list *[$a]],*[$list *[$a]]
+38663693019,2026-10-15T01:05:14Z,develop,lmpop,list,key*2,7.0.0,LMPOP 2 list list2 LEFT,accepted,,*[$list *[$a]],*[$list *[$a]]
+38663693019,2026-10-15T01:05:14Z,develop,lmpop,list,RIGHT,7.0.0,LMPOP 1 list RIGHT,accepted,,*[$list *[$c]],*[$list *[$c]]
+38663693019,2026-10-15T01:05:14Z,develop,lmpop,list,COUNT,7.0.0,LMPOP 1 list LEFT COUNT 1,accepted,,*[$list *[$a]],*[$list *[$a]]
+38663693019,2026-10-15T01:05:14Z,develop,lpop,list,base,1.0.0,LPOP list,accepted,,$a,$a
+38663693019,2026-10-15T01:05:14Z,develop,lpop,list,count,6.2.0,LPOP list 1,accepted,,*[$a],*[$a]
+38663693019,2026-10-15T01:05:14Z,develop,lpos,list,base,6.0.6,LPOS list a,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,lpos,list,RANK,6.0.6,LPOS list a RANK 1,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,lpos,list,COUNT,6.0.6,LPOS list a COUNT 1,accepted,,*[:0],*[:0]
+38663693019,2026-10-15T01:05:14Z,develop,lpos,list,MAXLEN,6.0.6,LPOS list a MAXLEN 0,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,lpush,list,base,1.0.0,LPUSH list a,accepted,,:4,:4
+38663693019,2026-10-15T01:05:14Z,develop,lpush,list,element*2,1.0.0,LPUSH list a b,accepted,,:5,:5
+38663693019,2026-10-15T01:05:14Z,develop,lpushx,list,base,2.2.0,LPUSHX list a,accepted,,:4,:4
+38663693019,2026-10-15T01:05:14Z,develop,lpushx,list,element*2,2.2.0,LPUSHX list a b,accepted,,:5,:5
+38663693019,2026-10-15T01:05:14Z,develop,lrange,list,base,1.0.0,LRANGE list 0 -1,accepted,,*[$a $b $c],*[$a $b $c]
+38663693019,2026-10-15T01:05:14Z,develop,lrem,list,base,1.0.0,LREM list 0 a,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,lset,list,base,1.0.0,LSET list 0 x,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,ltrim,list,base,1.0.0,LTRIM list 0 -1,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,memory|help,server,base,4.0.0,MEMORY HELP,accepted,same kind of reply,"*[+MEMORY <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +STATS +    Return information about the memory usage of the server. +USAGE <key> [SAMPLES <count>] +    Return memory in bytes used by <key> and its value, as this server +    estimates it. SAMPLES is accepted, and the estimate is not sampled. +HELP +    Print this help.]",*[+MEMORY <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +DOCTOR +    Return memory problems reports. +MALLOC-STATS +    Return internal statistics report from the memory allocator. +PURGE +    Attempt to purge dirty pages for reclamation by the allocator. +STATS +    Return information about the memory usage of the server. +USAGE <key> [SAMPLES <count>] +    Return memory in bytes us...
+38663693019,2026-10-15T01:05:14Z,develop,memory|stats,server,base,4.0.0,MEMORY STATS,accepted,same kind of reply,*[$keyspace.bytes :10103 $keys.count :24 $keys.expires :0 $string.bytes :493 $zset.bytes :6257 $set.bytes :1148 $hash.bytes :902 $list.bytes :752 $bloom.bytes :0 $cms.bytes :0 $morris.bytes :0 $hll.bytes :551 $cuckoo.bytes :0],*[$peak.allocated :2894000 $total.allocated :2537216 $startup.allocated :714648 $replication.backlog :0 $replica.fullsync.buffer :0 $clients.slaves :0 $clients.normal :2304 $clients.normal.shared :0 $clients.normal.unshared :0 $cluster.links :0 $aof.buffer :224 $lua.caches :0 $functions.caches :296 $script.VMs :67584 $hash.templates :72 $db.0 *[$overhead.hashtable.main :1352 $overhead.hashtable...
+38663693019,2026-10-15T01:05:14Z,develop,memory|usage,server,base,4.0.0,MEMORY USAGE str,accepted,same kind of reply,:82,:32
+38663693019,2026-10-15T01:05:14Z,develop,memory|usage,server,SAMPLES,4.0.0,MEMORY USAGE str SAMPLES 1,accepted,same kind of reply,:82,:32
+38663693019,2026-10-15T01:05:14Z,develop,mget,string,base,1.0.0,MGET str,accepted,,*[$abc],*[$abc]
+38663693019,2026-10-15T01:05:14Z,develop,mget,string,key*2,1.0.0,MGET str str2,accepted,,*[$abc $abd],*[$abc $abd]
+38663693019,2026-10-15T01:05:14Z,develop,mset,string,base,1.0.1,MSET dest v,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,mset,string,data*2,1.0.1,MSET dest v dest2 w,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,msetnx,string,base,1.0.1,MSETNX dest v,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,msetnx,string,data*2,1.0.1,MSETNX dest v dest2 w,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,multi,transactions,base,1.2.0,MULTI,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,persist,generic,base,2.2.0,PERSIST str,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,pexpire,generic,base,2.6.0,PEXPIRE str 100000,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,pexpire,generic,NX,7.0.0,PEXPIRE str 100000 NX,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,pexpire,generic,XX,7.0.0,PEXPIRE str 100000 XX,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,pexpire,generic,GT,7.0.0,PEXPIRE str 100000 GT,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,pexpire,generic,LT,7.0.0,PEXPIRE str 100000 LT,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,pexpireat,generic,base,2.6.0,PEXPIREAT str 4102444800000,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,pexpireat,generic,NX,7.0.0,PEXPIREAT str 4102444800000 NX,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,pexpireat,generic,XX,7.0.0,PEXPIREAT str 4102444800000 XX,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,pexpireat,generic,GT,7.0.0,PEXPIREAT str 4102444800000 GT,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,pexpireat,generic,LT,7.0.0,PEXPIREAT str 4102444800000 LT,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,pfadd,hyperloglog,base,2.8.9,PFADD hll,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,pfadd,hyperloglog,element,2.8.9,PFADD hll a,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,pfadd,hyperloglog,element element*2,2.8.9,PFADD hll a b,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,pfcount,hyperloglog,base,2.8.9,PFCOUNT hll,accepted,,:3,:3
+38663693019,2026-10-15T01:05:14Z,develop,pfcount,hyperloglog,key*2,2.8.9,PFCOUNT hll hll2,accepted,,:4,:4
+38663693019,2026-10-15T01:05:14Z,develop,pfmerge,hyperloglog,base,2.8.9,PFMERGE hll,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,pfmerge,hyperloglog,sourcekey,2.8.9,PFMERGE hll hll2,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,pfmerge,hyperloglog,sourcekey sourcekey*2,2.8.9,PFMERGE hll hll2 hll3,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,ping,connection,base,1.0.0,PING,accepted,,+PONG,+PONG
+38663693019,2026-10-15T01:05:14Z,develop,ping,connection,message,1.0.0,PING hi,accepted,,$hi,$hi
+38663693019,2026-10-15T01:05:14Z,develop,psetex,string,base,2.6.0,PSETEX dest 100000 v,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,pttl,generic,base,2.6.0,PTTL str,accepted,,:-1,:-1
+38663693019,2026-10-15T01:05:14Z,develop,quit,connection,base,1.0.0,QUIT,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,rpop,list,base,1.0.0,RPOP list,accepted,,$c,$c
+38663693019,2026-10-15T01:05:14Z,develop,rpop,list,count,6.2.0,RPOP list 1,accepted,,*[$c],*[$c]
+38663693019,2026-10-15T01:05:14Z,develop,rpoplpush,list,base,1.2.0,RPOPLPUSH list list2,accepted,,$c,$c
+38663693019,2026-10-15T01:05:14Z,develop,rpush,list,base,1.0.0,RPUSH list a,accepted,,:4,:4
+38663693019,2026-10-15T01:05:14Z,develop,rpush,list,element*2,1.0.0,RPUSH list a b,accepted,,:5,:5
+38663693019,2026-10-15T01:05:14Z,develop,rpushx,list,base,2.2.0,RPUSHX list a,accepted,,:4,:4
+38663693019,2026-10-15T01:05:14Z,develop,rpushx,list,element*2,2.2.0,RPUSHX list a b,accepted,,:5,:5
+38663693019,2026-10-15T01:05:14Z,develop,sadd,set,base,1.0.0,SADD set a,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,sadd,set,member*2,1.0.0,SADD set a b,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,scan,generic,base,2.8.0,SCAN 0,accepted,same kind of reply,*[$281474976710656 *[$str $str2 $str3 $num $num2 $num3]],*[$14 *[$set2 $hll2 $list $set $geo $hash3 $str3 $hash2 $str2 $hll $hash]]
+38663693019,2026-10-15T01:05:14Z,develop,scan,generic,MATCH,2.8.0,SCAN 0 MATCH *,accepted,same kind of reply,*[$281474976710656 *[$str $str2 $str3 $num $num2 $num3]],*[$14 *[$set2 $hll2 $list $set $geo $hash3 $str3 $hash2 $str2 $hll $hash]]
+38663693019,2026-10-15T01:05:14Z,develop,scan,generic,COUNT,2.8.0,SCAN 0 COUNT 10,accepted,same kind of reply,*[$281474976710656 *[$str $str2 $str3 $num $num2 $num3]],*[$14 *[$set2 $hll2 $list $set $geo $hash3 $str3 $hash2 $str2 $hll $hash]]
+38663693019,2026-10-15T01:05:14Z,develop,scan,generic,TYPE,6.0.0,SCAN 0 TYPE string,accepted,same kind of reply,*[$281474976710656 *[$str $str2 $str3 $num $num2 $num3]],*[$14 *[$hll2 $str3 $str2 $hll]]
+38663693019,2026-10-15T01:05:14Z,develop,scard,set,base,1.0.0,SCARD set,accepted,,:3,:3
+38663693019,2026-10-15T01:05:14Z,develop,select,connection,base,1.0.0,SELECT 0,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,set,string,base,1.0.0,SET str v,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,set,string,NX,2.6.12,SET str v NX,accepted,,$-1,$-1
+38663693019,2026-10-15T01:05:14Z,develop,set,string,XX,2.6.12,SET str v XX,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,set,string,IFEQ,8.4.0,SET str v IFEQ s,refused,not parsed,-ERR syntax error,$-1
+38663693019,2026-10-15T01:05:14Z,develop,set,string,IFNE,8.4.0,SET str v IFNE s,refused,not parsed,-ERR syntax error,+OK
+38663693019,2026-10-15T01:05:14Z,develop,set,string,IFDEQ,8.4.0,SET str v IFDEQ 0123456789abcdef,refused,not parsed,-ERR syntax error,$-1
+38663693019,2026-10-15T01:05:14Z,develop,set,string,IFDNE,8.4.0,SET str v IFDNE 0123456789abcdef,refused,not parsed,-ERR syntax error,+OK
+38663693019,2026-10-15T01:05:14Z,develop,set,string,GET,6.2.0,SET str v GET,accepted,,$abc,$abc
+38663693019,2026-10-15T01:05:14Z,develop,set,string,EX,2.6.12,SET str v EX 100,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,set,string,PX,2.6.12,SET str v PX 100000,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,set,string,EXAT,6.2.0,SET str v EXAT 4102444800,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,set,string,PXAT,6.2.0,SET str v PXAT 4102444800000,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,set,string,KEEPTTL,6.0.0,SET str v KEEPTTL,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,setex,string,base,2.0.0,SETEX dest 100 v,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,setnx,string,base,1.0.0,SETNX dest v,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,setrange,string,base,2.2.0,SETRANGE str 0 v,accepted,,:3,:3
+38663693019,2026-10-15T01:05:14Z,develop,sismember,set,base,1.0.0,SISMEMBER set a,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,slowlog|get,server,base,2.2.12,SLOWLOG GET,accepted,,*[],*[]
+38663693019,2026-10-15T01:05:14Z,develop,slowlog|get,server,count,2.2.12,SLOWLOG GET 1,accepted,,*[],*[]
+38663693019,2026-10-15T01:05:14Z,develop,slowlog|help,server,base,6.2.0,SLOWLOG HELP,accepted,,"*[+SLOWLOG <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +GET [<count>] +    Return top <count> entries from the slowlog (default: 10, -1 mean all). +    Entries are made of: +    id, timestamp, time in microseconds, arguments array, client IP and port, +    client name +LEN +    Return the length of the slowlog. +RESET +    Reset the slowlog. +HELP +    Print this help.]","*[+SLOWLOG <subcommand> [<arg> [value] [opt] ...]. Subcommands are: +GET [<count>] +    Return top <count> entries from the slowlog (default: 10, -1 mean all). +    Entries are made of: +    id, timestamp, time in microseconds, arguments array, client IP and port, +    client name +LEN +    Return the length of the slowlog. +RESET +    Reset the slowlog. +HELP +    Print this help.]"
+38663693019,2026-10-15T01:05:14Z,develop,slowlog|len,server,base,2.2.12,SLOWLOG LEN,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,slowlog|reset,server,base,2.2.12,SLOWLOG RESET,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,smembers,set,base,1.0.0,SMEMBERS set,accepted,,*[$a $b $c],*[$a $b $c]
+38663693019,2026-10-15T01:05:14Z,develop,smismember,set,base,6.2.0,SMISMEMBER set a,accepted,,*[:1],*[:1]
+38663693019,2026-10-15T01:05:14Z,develop,smismember,set,member*2,6.2.0,SMISMEMBER set a b,accepted,,*[:1 :1],*[:1 :1]
+38663693019,2026-10-15T01:05:14Z,develop,spop,set,base,1.0.0,SPOP set,accepted,same kind of reply,$b,$c
+38663693019,2026-10-15T01:05:14Z,develop,spop,set,count,3.2.0,SPOP set 1,accepted,same kind of reply,*[$b],*[$c]
+38663693019,2026-10-15T01:05:14Z,develop,srandmember,set,base,1.0.0,SRANDMEMBER set,accepted,same kind of reply,$c,$b
+38663693019,2026-10-15T01:05:14Z,develop,srandmember,set,count,2.6.0,SRANDMEMBER set 1,accepted,same kind of reply,*[$b],*[$a]
+38663693019,2026-10-15T01:05:14Z,develop,srem,set,base,1.0.0,SREM set a,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,srem,set,member*2,1.0.0,SREM set a b,accepted,,:2,:2
+38663693019,2026-10-15T01:05:14Z,develop,strlen,string,base,2.2.0,STRLEN str,accepted,,:3,:3
+38663693019,2026-10-15T01:05:14Z,develop,substr,string,base,1.0.0,SUBSTR str 0 -1,accepted,,$abc,$abc
+38663693019,2026-10-15T01:05:14Z,develop,ttl,generic,base,1.0.0,TTL str,accepted,,:-1,:-1
+38663693019,2026-10-15T01:05:14Z,develop,type,generic,base,1.0.0,TYPE str,accepted,,+string,+string
+38663693019,2026-10-15T01:05:14Z,develop,unlink,generic,base,4.0.0,UNLINK str,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,unlink,generic,key*2,4.0.0,UNLINK str str2,accepted,,:2,:2
+38663693019,2026-10-15T01:05:14Z,develop,unwatch,transactions,base,2.2.0,UNWATCH,accepted,,+OK,+OK
+38663693019,2026-10-15T01:05:14Z,develop,zadd,sorted_set,base,1.2.0,ZADD zset 1.5 a,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,zadd,sorted_set,NX,3.0.2,ZADD zset NX 1.5 a,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,zadd,sorted_set,XX,3.0.2,ZADD zset XX 1.5 a,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,zadd,sorted_set,GT,6.2.0,ZADD zset GT 1.5 a,refused,not parsed,-ERR syntax error,:0
+38663693019,2026-10-15T01:05:14Z,develop,zadd,sorted_set,LT,6.2.0,ZADD zset LT 1.5 a,refused,not parsed,-ERR syntax error,:0
+38663693019,2026-10-15T01:05:14Z,develop,zadd,sorted_set,CH,3.0.2,ZADD zset CH 1.5 a,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,zadd,sorted_set,INCR,3.0.2,ZADD zset INCR 1.5 a,refused,not parsed,-ERR syntax error,$2.5
+38663693019,2026-10-15T01:05:14Z,develop,zadd,sorted_set,data*2,1.2.0,ZADD zset 1.5 a 2.5 b,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,zcard,sorted_set,base,1.2.0,ZCARD zset,accepted,,:3,:3
+38663693019,2026-10-15T01:05:14Z,develop,zcount,sorted_set,base,2.0.0,ZCOUNT zset -inf +inf,accepted,,:3,:3
+38663693019,2026-10-15T01:05:14Z,develop,zincrby,sorted_set,base,1.2.0,ZINCRBY zset 1 a,accepted,,$2,$2
+38663693019,2026-10-15T01:05:14Z,develop,zpopmax,sorted_set,base,5.0.0,ZPOPMAX zset,accepted,,*[$c $3],*[$c $3]
+38663693019,2026-10-15T01:05:14Z,develop,zpopmax,sorted_set,count,5.0.0,ZPOPMAX zset 1,accepted,,*[$c $3],*[$c $3]
+38663693019,2026-10-15T01:05:14Z,develop,zpopmin,sorted_set,base,5.0.0,ZPOPMIN zset,accepted,,*[$a $1],*[$a $1]
+38663693019,2026-10-15T01:05:14Z,develop,zpopmin,sorted_set,count,5.0.0,ZPOPMIN zset 1,accepted,,*[$a $1],*[$a $1]
+38663693019,2026-10-15T01:05:14Z,develop,zrange,sorted_set,base,1.2.0,ZRANGE zset 0 -1,accepted,,*[$a $b $c],*[$a $b $c]
+38663693019,2026-10-15T01:05:14Z,develop,zrange,sorted_set,BYSCORE,6.2.0,ZRANGE zset -inf +inf BYSCORE,accepted,,*[$a $b $c],*[$a $b $c]
+38663693019,2026-10-15T01:05:14Z,develop,zrange,sorted_set,BYLEX,6.2.0,ZRANGE zset - + BYLEX,refused,not parsed,-ERR syntax error,*[$a $b $c]
+38663693019,2026-10-15T01:05:14Z,develop,zrange,sorted_set,REV,6.2.0,ZRANGE zset 0 -1 REV,accepted,,*[$c $b $a],*[$c $b $a]
+38663693019,2026-10-15T01:05:14Z,develop,zrange,sorted_set,LIMIT,6.2.0,ZRANGE zset -inf +inf BYSCORE LIMIT 0 1,accepted,,*[$a],*[$a]
+38663693019,2026-10-15T01:05:14Z,develop,zrange,sorted_set,WITHSCORES,1.2.0,ZRANGE zset 0 -1 WITHSCORES,accepted,,*[$a $1 $b $2 $c $3],*[$a $1 $b $2 $c $3]
+38663693019,2026-10-15T01:05:14Z,develop,zrangebyscore,sorted_set,base,1.0.5,ZRANGEBYSCORE zset -inf +inf,accepted,,*[$a $b $c],*[$a $b $c]
+38663693019,2026-10-15T01:05:14Z,develop,zrangebyscore,sorted_set,WITHSCORES,2.0.0,ZRANGEBYSCORE zset -inf +inf WITHSCORES,accepted,,*[$a $1 $b $2 $c $3],*[$a $1 $b $2 $c $3]
+38663693019,2026-10-15T01:05:14Z,develop,zrangebyscore,sorted_set,LIMIT,1.0.5,ZRANGEBYSCORE zset -inf +inf LIMIT 0 1,accepted,,*[$a],*[$a]
+38663693019,2026-10-15T01:05:14Z,develop,zrank,sorted_set,base,2.0.0,ZRANK zset a,accepted,,:0,:0
+38663693019,2026-10-15T01:05:14Z,develop,zrank,sorted_set,WITHSCORE,2.0.0,ZRANK zset a WITHSCORE,accepted,,*[:0 $1],*[:0 $1]
+38663693019,2026-10-15T01:05:14Z,develop,zrem,sorted_set,base,1.2.0,ZREM zset a,accepted,,:1,:1
+38663693019,2026-10-15T01:05:14Z,develop,zrem,sorted_set,member*2,1.2.0,ZREM zset a b,accepted,,:2,:2
+38663693019,2026-10-15T01:05:14Z,develop,zrevrangebyscore,sorted_set,base,2.2.0,ZREVRANGEBYSCORE zset +inf -inf,accepted,,*[$c $b $a],*[$c $b $a]
+38663693019,2026-10-15T01:05:14Z,develop,zrevrangebyscore,sorted_set,WITHSCORES,2.2.0,ZREVRANGEBYSCORE zset +inf -inf WITHSCORES,accepted,,*[$c $3 $b $2 $a $1],*[$c $3 $b $2 $a $1]
+38663693019,2026-10-15T01:05:14Z,develop,zrevrangebyscore,sorted_set,LIMIT,2.2.0,ZREVRANGEBYSCORE zset +inf -inf LIMIT 0 1,accepted,,*[$c],*[$c]
+38663693019,2026-10-15T01:05:14Z,develop,zscore,sorted_set,base,1.2.0,ZSCORE zset a,accepted,,$1,$1
