@@ -40,6 +40,7 @@ func (e *Engine) resetStores() {
 	// open would record as deleted from it.
 	e.expiredKeys = 0
 	e.avgTTL = 0
+	e.expireStalePerc, e.expireCapReached, e.expireCycleUsec = 0, 0, 0
 	e.aof.recovered = nil
 
 	e.dictStore = data_structure.CreateDict(space)

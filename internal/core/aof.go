@@ -605,7 +605,12 @@ func (e *Engine) loadAOF(ctx context.Context, path string) (int, error) {
 			return // preserve the exact primary-decided prefix for checkpoints
 		}
 		e.space.SuspendExpiry = false
-		e.space.EachKeyspace(func(ks data_structure.Keyspace) { ks.ActiveExpire(ks.KeysWithExpiry()) })
+		// The keys whose TTL passed while the server was down, which Redis's
+		// expiry cycle would remove after its load, and count, as this does.
+		e.space.EachKeyspace(func(ks data_structure.Keyspace) {
+			_, expired := ks.ActiveExpire(ks.KeysWithExpiry())
+			e.expiredKeys += uint64(expired)
+		})
 		e.aof.replaying = false
 		e.space.SuspendEviction = false
 		e.space.EnforceLimits()

@@ -5,10 +5,16 @@ Each case runs on both servers the same way, on one connection: FLUSHDB, the
 same base keys, CONFIG RESETSTAT, the case's commands, then INFO stats and
 errorstats. What the case moved is compared field by field:
 total_commands_processed, total_error_replies, keyspace_hits,
-keyspace_misses, every errorstat_ line, and each cmdstat_ line's calls,
-rejected_calls and failed_calls (docs/info-compatibility.md, part c). The
-time a command took is not compared, being the time it took; replies are
-not compared either: scripts/error-parity.py does that.
+keyspace_misses, expired_keys, every errorstat_ line, and each cmdstat_
+line's calls, rejected_calls and failed_calls (docs/info-compatibility.md,
+parts c and h). The time a command took is not compared, being the time it
+took; replies are not compared either: scripts/error-parity.py does that.
+
+The expiry cases run on a second pair of servers whose expiry cycle is off,
+Keel's by -active-expire-samples 0 and Redis's by DEBUG SET-ACTIVE-EXPIRE 0,
+so that a key whose TTL has passed is removed only by the command the case
+sends, and each server counts the same removals whenever its cycle would
+have run. A case's ['SLEEP', ms] waits instead of sending anything.
 
 A field Keel does not report yet is listed under not_reported rather than as
 a mismatch, so the script can run ahead of the part that adds the field.
@@ -25,13 +31,14 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import time
 
 HERE = Path(__file__).resolve().parent
 _spec = importlib.util.spec_from_file_location('error_parity', HERE / 'error-parity.py')
 parity = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(parity)
 
-FIELDS = ('total_commands_processed', 'total_error_replies', 'keyspace_hits', 'keyspace_misses')
+FIELDS = ('total_commands_processed', 'total_error_replies', 'keyspace_hits', 'keyspace_misses', 'expired_keys')
 
 BASE = [['SET', 'str', 'abc'], ['SET', 'num', '10'], ['SET', 'other', 'abd'], ['HSET', 'hash', 'f', 'v', 'n', '1'],
         ['RPUSH', 'list', 'a', 'b', 'c'], ['SADD', 'set', 'a', 'b'], ['ZADD', 'zset', '1', 'a', '2', 'b'],
@@ -123,6 +130,51 @@ CASES = [[c] for c in [
     [['GET', 'str'], ['GET', 'missing'], ['HGET', 'hash', 'f'], ['NOSUCH']],
     [['MGET', 'str', 'missing'], ['SET', 'str', 'y', 'GET'], ['EXISTS', 'hash', 'missing'], ['TTL', 'list']],
 ]
+
+
+def expired(keys, *commands):
+    """A case that gives keys a TTL of a millisecond, lets it pass, then
+    sends commands."""
+    return [*(['PEXPIRE', key, '1'] for key in keys), ['SLEEP', '5'], *commands]
+
+
+# Each is a case on the servers whose expiry cycle is off: which commands
+# remove a key whose TTL has passed, and count it in expired_keys, as Redis's
+# lookups do (db.c, expireIfNeeded), and which only report it as gone (KEYS,
+# DBSIZE). SET with an instant already past stores nothing and counts the key
+# as expired; EXPIRE and GETEX with one delete the key and count nothing
+# (t_string.c, expire.c).
+EXPIRY_CASES = [expired(keys, *commands) for keys, *commands in [
+    (['str'], ['GET', 'str']), (['str'], ['EXISTS', 'str']), (['str'], ['TYPE', 'str']), (['str'], ['TTL', 'str']),
+    (['str'], ['PTTL', 'str']), (['str'], ['STRLEN', 'str']), (['str'], ['GETRANGE', 'str', '0', '1']),
+    (['str'], ['APPEND', 'str', 'x']), (['str'], ['SET', 'str', 'x']), (['str'], ['SET', 'str', 'x', 'NX']),
+    (['str'], ['SET', 'str', 'x', 'XX']), (['str'], ['SETNX', 'str', 'x']), (['num'], ['INCR', 'num']),
+    (['str'], ['GETDEL', 'str']), (['str'], ['GETEX', 'str']), (['str'], ['GETSET', 'str', 'x']),
+    (['str'], ['DEL', 'str']), (['str'], ['UNLINK', 'str']), (['str'], ['EXPIRE', 'str', '100']),
+    (['str'], ['PERSIST', 'str']), (['str'], ['MEMORY', 'USAGE', 'str']), (['str'], ['SADD', 'str', 'a']),
+    (['str', 'num'], ['MGET', 'str', 'num', 'other']), (['str', 'num'], ['EXISTS', 'str', 'num']),
+    (['str', 'num'], ['DEL', 'str', 'num', 'other']), (['str'], ['MSET', 'str', '1', 'n2', '2']),
+    (['str'], ['MSETNX', 'str', '1', 'n2', '2']), (['str'], ['LCS', 'str', 'other']),
+    (['str'], ['DBSIZE']), (['str'], ['KEYS', '*']), (['str'], ['SCAN', '0']), (['str'], ['SCAN', '0', 'TYPE', 'string']),
+    (['hash'], ['HGET', 'hash', 'f']), (['hash'], ['HLEN', 'hash']), (['hash'], ['HSET', 'hash', 'g', '1']),
+    (['hash'], ['HGETALL', 'hash']), (['hash'], ['HEXISTS', 'hash', 'f']), (['hash'], ['HDEL', 'hash', 'f']),
+    (['hash'], ['SET', 'hash', 'x']), (['hash'], ['TYPE', 'hash']),
+    (['list'], ['LLEN', 'list']), (['list'], ['LRANGE', 'list', '0', '-1']), (['list'], ['LPUSH', 'list', 'x']),
+    (['list'], ['LPOP', 'list']), (['list'], ['LINDEX', 'list', '0']),
+    (['set'], ['SCARD', 'set']), (['set'], ['SISMEMBER', 'set', 'a']), (['set'], ['SADD', 'set', 'z']),
+    (['set'], ['SMEMBERS', 'set']), (['set'], ['SPOP', 'set']),
+    (['zset'], ['ZCARD', 'zset']), (['zset'], ['ZSCORE', 'zset', 'a']), (['zset'], ['ZADD', 'zset', '3', 'c']),
+    (['zset'], ['ZRANGE', 'zset', '0', '-1']), (['zset'], ['ZINCRBY', 'zset', '1', 'a']),
+    (['hll'], ['PFCOUNT', 'hll']), (['hll'], ['PFADD', 'hll', 'z']), (['hll'], ['PFMERGE', 'dest', 'hll']),
+    (['geo'], ['GEOPOS', 'geo', 'palermo']), (['geo'], ['GEOADD', 'geo', '1', '1', 'x']),
+    (['str'], ['MULTI'], ['GET', 'str'], ['EXEC']),
+]] + [
+    [['SET', 'absent', 'v', 'PXAT', '1']], [['SET', 'str', 'v', 'PXAT', '1']], [['SET', 'str', 'v', 'EXAT', '1', 'GET']],
+    [['SET', 'hash', 'v', 'PXAT', '1']], [['SET', 'str', 'v', 'NX', 'PXAT', '1']],
+    [['SET', 'absent', 'v', 'XX', 'PXAT', '1']], [['SET', 'absent', 'v', 'NX', 'PXAT', '1']],
+    [['PEXPIREAT', 'str', '1']], [['EXPIREAT', 'hash', '1']], [['GETEX', 'str', 'PXAT', '1']],
+    [['SET', 'k', 'v', 'PXAT', '1'], ['GET', 'k']],
+]
 MODULE_CASES = [[c] for c in [
     ['BF.ADD', 'bf', 'b'], ['BF.EXISTS', 'bf', 'a'], ['BF.EXISTS', 'missing', 'a'], ['BF.MADD', 'bf', 'c', 'd'],
     ['BF.MEXISTS', 'bf', 'a', 'z'], ['BF.INFO', 'bf'], ['CF.ADD', 'cf', 'b'], ['CF.ADDNX', 'cf', 'a'],
@@ -169,7 +221,10 @@ def run_case(port, base, case):
             session.call(*command)
         session.call('CONFIG', 'RESETSTAT')
         for command in case:
-            session.call(*command)
+            if command[0] == 'SLEEP':
+                time.sleep(int(command[1]) / 1000)
+            else:
+                session.call(*command)
         return counters(session.call('INFO', 'stats', 'errorstats', 'commandstats'))
     finally:
         session.close()
@@ -204,14 +259,22 @@ def main(argv=None):
         try:
             keel = servers.start_keel('keel', password=False)
             redis = servers.start_redis('redis', password=False)
+            lazy_keel = servers.start_keel('keel-lazy', '-active-expire-samples', '0', password=False)
+            lazy_redis = servers.start_redis('redis-lazy', 'enable-debug-command local', password=False)
+            session = parity.Session(lazy_redis, auth=False, protocol=2)
+            try:
+                session.call('DEBUG', 'SET-ACTIVE-EXPIRE', '0')
+            finally:
+                session.close()
             base, cases = BASE, CASES
             if args.redis_module:
                 base, cases = BASE + MODULE_BASE, CASES + MODULE_CASES
             results = []
-            for case in cases:
-                got = {'keel': run_case(keel, base, case), 'redis': run_case(redis, base, case)}
-                mismatched, not_reported = compare(got['keel'], got['redis'])
-                results.append({'commands': case, **got, 'mismatched': mismatched, 'not_reported': not_reported})
+            for pair, pair_cases in (((keel, redis), cases), ((lazy_keel, lazy_redis), EXPIRY_CASES)):
+                for case in pair_cases:
+                    got = {'keel': run_case(pair[0], base, case), 'redis': run_case(pair[1], base, case)}
+                    mismatched, not_reported = compare(got['keel'], got['redis'])
+                    results.append({'commands': case, **got, 'mismatched': mismatched, 'not_reported': not_reported})
         finally:
             servers.stop()
     failed = [r for r in results if r['mismatched']]

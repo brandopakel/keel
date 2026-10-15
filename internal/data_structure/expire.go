@@ -61,6 +61,7 @@ func (d *Dict) ActiveExpire(samples int) (examined, expired int) {
 		if d.Del(key) {
 			expired++
 			d.space.noteRemoval(d, key)
+			d.space.NoteExpired()
 		}
 	}
 	return examined, expired

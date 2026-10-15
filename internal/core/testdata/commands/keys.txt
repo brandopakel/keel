@@ -458,6 +458,22 @@ case keys/lazy-expiry
 > "DBSIZE"
 2 ":2\r\n"
 3 ":2\r\n"
+> "SET" "brief7" "v" "PX" "1"
+2 "+OK\r\n"
+3 "+OK\r\n"
+~ "SET" "brief7" "v"
+~ "PEXPIREAT" "brief7" "4000000000000"
+! sleep 5ms
+> "MEMORY" "USAGE" "brief7" @masked
+2 ":"
+3 ":"
+> "EXISTS" "brief7"
+2 ":0\r\n"
+3 ":0\r\n"
+~ "DEL" "brief7"
+> "MEMORY" "USAGE" "brief7"
+2 "$-1\r\n"
+3 "_\r\n"
 
 case keys/active-expiry
 > "SET" "brief" "v" "PX" "1"
@@ -581,6 +597,7 @@ case keys/scan
 > "SCAN" "0" "MATCH" "brief" "COUNT" "1000"
 2 "*2\r\n$15\r\n844424930131968\r\n*0\r\n"
 3 "*2\r\n$15\r\n844424930131968\r\n*0\r\n"
+~ "DEL" "brief"
 > "SCAN" "x"
 2 "-ERR invalid cursor\r\n"
 3 "-ERR invalid cursor\r\n"

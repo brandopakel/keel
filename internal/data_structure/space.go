@@ -74,6 +74,10 @@ type Space struct {
 	// for INFO's avg_ttl (TakeTTLSamples). Only that cycle reads them, so they
 	// go last, after everything an access reads.
 	ttlSum, ttlSamples uint64
+	// expired counts the keys removed because their TTL had passed, by a read
+	// that found them so or by active expiry, for INFO's expired_keys
+	// (NoteExpired). Only a removal writes it, so it goes last too.
+	expired uint64
 }
 
 // EvictionPolicy is how a space that is over one of its bounds chooses the

@@ -276,7 +276,11 @@ func (e *Engine) statsInfo(b *strings.Builder) {
 		fmt.Fprintf(b, "rejected_connections:%d\r\n", stats.ConnectionsRejected)
 	}
 	fmt.Fprintf(b, "sync_full:%d\r\n", e.syncFull)
-	fmt.Fprintf(b, "expired_keys:%d\r\nevicted_keys:%d\r\n", e.ExpiredKeys(), e.space.Evicted())
+	// Keel has no expiry of a hash's fields yet, so none has expired.
+	b.WriteString("expired_subkeys:0\r\nexpired_subkeys_active:0\r\n")
+	fmt.Fprintf(b, "expired_keys:%d\r\nexpired_keys_active:%d\r\nexpired_stale_perc:%.2f\r\n", e.ExpiredKeys(), e.ActiveExpiredKeys(), e.expireStalePerc*100)
+	fmt.Fprintf(b, "expired_time_cap_reached_count:%d\r\nexpire_cycle_cpu_milliseconds:%d\r\n", e.expireCapReached, e.expireCycleUsec/1000)
+	fmt.Fprintf(b, "evicted_keys:%d\r\n", e.space.Evicted())
 	// Keel evicts no clients and has no scripts, Pub/Sub or client tracking,
 	// and it never forks.
 	b.WriteString("evicted_clients:0\r\nevicted_scripts:0\r\n")

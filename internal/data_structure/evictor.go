@@ -75,6 +75,7 @@ func (s *Space) ResetKeyspaces() {
 	s.pool = nil
 	s.clock = 0
 	s.evicted = 0
+	s.expired = 0
 }
 
 // OwnerOf reports which keyspace holds a key.
@@ -145,6 +146,21 @@ func (s *Space) Evicted() uint64 { return s.evicted }
 
 // ResetEvicted starts Evicted's count again from zero, for CONFIG RESETSTAT.
 func (s *Space) ResetEvicted() { s.evicted = 0 }
+
+// NoteExpired counts a key removed because its TTL had passed. A read that
+// finds a key so and active expiry count it here; so does a write that gives
+// a key an expiry already past and so stores nothing, as Redis's SET counts
+// it (t_string.c, setGenericCommand).
+func (s *Space) NoteExpired() { s.expired++ }
+
+// Expired reports how many keys have been removed because their TTL had
+// passed, by whatever found them so: Redis's stat_expiredkeys, which it
+// counts in deleteExpiredKeyAndPropagate (db.c) for a lookup and for active
+// expiry alike.
+func (s *Space) Expired() uint64 { return s.expired }
+
+// ResetExpired starts Expired's count again from zero, for CONFIG RESETSTAT.
+func (s *Space) ResetExpired() { s.expired = 0 }
 
 func (s *Space) nextRand() uint64 {
 	s.rng ^= s.rng << 13

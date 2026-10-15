@@ -177,6 +177,8 @@ func (e *Engine) resetStats() {
 	// The slow log's counts, not its entries, which SLOWLOG RESET clears.
 	e.slowlog.count, e.slowlog.usecSum, e.slowlog.usecMax = 0, 0, 0
 	e.expiredKeys = 0
+	e.space.ResetExpired()
+	e.expireStalePerc, e.expireCapReached, e.expireCycleUsec = 0, 0, 0
 	e.space.ResetEvicted()
 	e.aof.rewrites = 0
 	e.rewriteOutcome.failures = 0

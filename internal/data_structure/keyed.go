@@ -52,6 +52,7 @@ func (k *Keyed[T]) Get(key string) (T, bool) {
 	if ok && k.expired(key) {
 		k.Delete(key)
 		k.space.noteRemoval(k, key)
+		k.space.NoteExpired()
 		ok = false
 	}
 	if !ok {
@@ -79,6 +80,7 @@ func (k *Keyed[T]) Exists(key string) bool {
 	if ok && k.expired(key) {
 		k.Delete(key)
 		k.space.noteRemoval(k, key)
+		k.space.NoteExpired()
 		return false
 	}
 	return ok
@@ -251,6 +253,7 @@ func (k *Keyed[T]) ActiveExpire(samples int) (examined, expired int) {
 		if at <= now {
 			k.Delete(key)
 			k.space.noteRemoval(k, key)
+			k.space.NoteExpired()
 			expired++
 		} else {
 			k.space.noteTTL(at - now)

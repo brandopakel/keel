@@ -84,12 +84,12 @@ func (e *Engine) cmdSCAN(args []string) []byte {
 
 	remainingMatchWork := scanMatchWork
 	matchExhausted := false
+	now := uint64(time.Now().UnixMilli())
+	// The keys the walk finds with their TTL passed, which it removes once it
+	// is done, as a lookup would: Redis's scanCallback expires each key that
+	// matches the pattern, before it looks at the key's type (db.c).
+	var expired []scannedKey
 	keep := func(ks data_structure.Keyspace, key string) bool {
-		// Cheapest test first, and rejecting by store name skips whole
-		// keyspaces rather than asking each of their keys.
-		if typeSet && ks.KeyspaceName() != keyspace {
-			return false
-		}
 		if matchSet {
 			if matchExhausted {
 				return false
@@ -100,16 +100,26 @@ func (e *Engine) cmdSCAN(args []string) []byte {
 				return false
 			}
 		}
-		// The slot already establishes presence. Check expiry without a
-		// second key lookup or mutation; active/lazy expiry handles removal.
-		at, expires := ks.GetExpiry(key)
-		return !expires || at > uint64(time.Now().UnixMilli())
+		// The slot already establishes presence, so the expiry is read
+		// without a second lookup, and the key is not removed while the walk
+		// is over its table.
+		if at, expires := ks.GetExpiry(key); expires && at <= now {
+			expired = append(expired, scannedKey{ks, key})
+			return false
+		}
+		return !typeSet || ks.KeyspaceName() == keyspace
 	}
 
 	if !e.reserveCommandMemory(4*min(count, data_structure.ScanMaxWork)*16 + 8192) {
 		return allocationPressure
 	}
 	keys, next := e.space.ScanKeyspaces(cursor, count, keep, nil)
+	for _, k := range expired {
+		// Has removes a key whose TTL has passed, records it and counts it,
+		// as any lookup does; on a replica, whose clock for expiry stands
+		// still, it removes nothing.
+		k.keyspace.Has(k.key)
+	}
 	if matchExhausted {
 		return e.encode(errors.New("ERR SCAN pattern work limit exceeded; use a simpler MATCH or smaller COUNT"), false)
 	}
@@ -136,4 +146,10 @@ func (e *Engine) cmdSCAN(args []string) []byte {
 		out = appendBulkString(out, key)
 	}
 	return out
+}
+
+// scannedKey is a key SCAN's walk found, and the keyspace that holds it.
+type scannedKey struct {
+	keyspace data_structure.Keyspace
+	key      string
 }
