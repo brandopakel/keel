@@ -4309,6 +4309,16 @@ artifact_id,run_id,time,branch,test,package,peak_bytes,peak_file_bytes
 11936424706,38657344503,2026-10-14T23:59:06Z,feat/phase4-string-8x,TestReplicasThroughAFailedRewriteprotocol-,cmd/keel,21568684,21567977
 11936424706,38657344503,2026-10-14T23:59:06Z,feat/phase4-string-8x,TestRewriteSlicesObeyKeyBudgetAndReplay,internal/core,18513876,12888890
 11936424706,38657344503,2026-10-14T23:59:06Z,feat/phase4-string-8x,TestReplicationV2HistoryOverrunAndProtocolMismatch,internal/core,18463790,18463790
+11938221395,38658774395,2026-10-15T00:13:21Z,feat/phase4-string-8x,TestRewriteStallProfile,internal/core,109984500,56788890
+11938221395,38658774395,2026-10-15T00:13:21Z,feat/phase4-string-8x,"TestEveryAcknowledgedWriteSurvivesAKilleverysec,_during_a_faile",internal/core,81594391,76678970
+11938221395,38658774395,2026-10-15T00:13:21Z,feat/phase4-string-8x,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierzse,cmd/keel,68160485,68160485
+11938221395,38658774395,2026-10-15T00:13:21Z,feat/phase4-string-8x,TestRejectedCollectionPopsPreservePipelineAndRestartconcurrent,cmd/keel,68160485,68160485
+11938221395,38658774395,2026-10-15T00:13:21Z,feat/phase4-string-8x,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierlis,cmd/keel,68160040,68160040
+11938221395,38658774395,2026-10-15T00:13:21Z,feat/phase4-string-8x,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierset,cmd/keel,68159910,68159910
+11938221395,38658774395,2026-10-15T00:13:21Z,feat/phase4-string-8x,TestRewriteSlicesObeyKeyBudgetAndReplay,internal/core,25690420,12888890
+11938221395,38658774395,2026-10-15T00:13:21Z,feat/phase4-string-8x,TestReplicasThroughAFailedRewriteprotocol-,cmd/keel,21568684,21567977
+11938221395,38658774395,2026-10-15T00:13:21Z,feat/phase4-string-8x,TestAOFTranscriptMassEvictionKeepsBoundedBuffer,internal/core,16781002,16781002
+11938221395,38658774395,2026-10-15T00:13:21Z,feat/phase4-string-8x,TestAShortWriteInTheMiddleOfARecordStays,internal/core,12779584,6389792
 11937659438,38659610814,2026-10-15T00:22:01Z,feat/volatile-eviction,TestRewriteStallProfile,internal/core,113577780,56788890
 11937659438,38659610814,2026-10-15T00:22:01Z,feat/volatile-eviction,"TestEveryAcknowledgedWriteSurvivesAKilleverysec,_during_a_faile",internal/core,104860780,97979279
 11937659438,38659610814,2026-10-15T00:22:01Z,feat/volatile-eviction,TestStagedRecordsAreTheBytesAppendAOFCommandWrites,internal/core,76679598,4259925
