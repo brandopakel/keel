@@ -2503,6 +2503,17 @@ artifact_id,run_id,time,branch,pr,package,result,seconds
 11936149075,38655055109,2026-10-14T23:35:51Z,develop,211,internal/resp,ok,0.08
 11936149075,38655055109,2026-10-14T23:35:51Z,develop,211,internal/server,ok,0.987
 11936149075,38655055109,2026-10-14T23:35:51Z,develop,211,internal/testlock,ok,0.309
+11937112223,38656406909,2026-10-14T23:49:28Z,feat/info-replication,208,bench/arrival,ok,1.204
+11937112223,38656406909,2026-10-14T23:49:28Z,feat/info-replication,208,cmd/keel,ok,9.322
+11937112223,38656406909,2026-10-14T23:49:28Z,feat/info-replication,208,internal/config,ok,0.355
+11937112223,38656406909,2026-10-14T23:49:28Z,feat/info-replication,208,internal/core,ok,19.104
+11937112223,38656406909,2026-10-14T23:49:28Z,feat/info-replication,208,internal/core/io_multiplexing,ok,0.048
+11937112223,38656406909,2026-10-14T23:49:28Z,feat/info-replication,208,internal/data_structure,ok,13.002
+11937112223,38656406909,2026-10-14T23:49:28Z,feat/info-replication,208,internal/golden,ok,0.011
+11937112223,38656406909,2026-10-14T23:49:28Z,feat/info-replication,208,internal/procinfo,ok,0.026
+11937112223,38656406909,2026-10-14T23:49:28Z,feat/info-replication,208,internal/resp,ok,0.093
+11937112223,38656406909,2026-10-14T23:49:28Z,feat/info-replication,208,internal/server,ok,1.374
+11937112223,38656406909,2026-10-14T23:49:28Z,feat/info-replication,208,internal/testlock,ok,0.341
 11936424706,38657344503,2026-10-14T23:59:06Z,feat/phase4-string-8x,194,bench/arrival,ok,1.276
 11936424706,38657344503,2026-10-14T23:59:06Z,feat/phase4-string-8x,194,cmd/keel,ok,14.818
 11936424706,38657344503,2026-10-14T23:59:06Z,feat/phase4-string-8x,194,internal/config,ok,0.304
