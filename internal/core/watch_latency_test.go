@@ -55,6 +55,7 @@ func TestLatencyCommandsAnswerAsRedis(t *testing.T) {
 		[]interface{}{int64(1000), int64(300)}, []interface{}{int64(1002), int64(500)}, []interface{}{int64(1003), int64(400)},
 	}, runOn(t, e, "LATENCY", "HISTORY", "command"))
 	assert.Equal(t, "*0\r\n", string(rawReplyOn(t, e, "LATENCY", "HISTORY", "COMMAND")), "HISTORY's name is exact")
+	assert.Equal(t, "*0\r\n", string(rawReplyOn(t, e, "LATENCY", "HISTORY", "nosuch")))
 	assert.Equal(t, "-ERR No samples available for event 'COMMAND'\r\n", string(rawReplyOn(t, e, "LATENCY", "GRAPH", "COMMAND")))
 
 	assert.EqualValues(t, 0, runOn(t, e, "LATENCY", "RESET", "blabla"))
