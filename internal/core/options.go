@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/brandopakel/keel/internal/data_structure"
 )
@@ -133,13 +134,54 @@ type Options struct {
 // evict.
 type EvictionPolicy = data_structure.EvictionPolicy
 
-// The eviction policies, as INFO names them: allkeys-lru, allkeys-lfu and
-// allkeys-random.
+// The eviction policies, which INFO names as Redis does
+// (EvictionPolicyNamed): allkeys-lru, allkeys-lfu and allkeys-random choose
+// among every key; volatile-lru, volatile-lfu, volatile-random and
+// volatile-ttl among the keys that carry a TTL; noeviction evicts nothing.
 const (
-	EvictLRU    = data_structure.EvictLRU
-	EvictLFU    = data_structure.EvictLFU
-	EvictRandom = data_structure.EvictRandom
+	EvictLRU            = data_structure.EvictLRU
+	EvictLFU            = data_structure.EvictLFU
+	EvictRandom         = data_structure.EvictRandom
+	EvictVolatileLRU    = data_structure.EvictVolatileLRU
+	EvictVolatileLFU    = data_structure.EvictVolatileLFU
+	EvictVolatileRandom = data_structure.EvictVolatileRandom
+	EvictVolatileTTL    = data_structure.EvictVolatileTTL
+	EvictNone           = data_structure.EvictNone
 )
+
+// evictionPolicies are Keel's eviction policies by Redis's names, in the order
+// Redis's maxmemory-policy lists them (config.c), less volatile-lrm and
+// allkeys-lrm, which Keel does not have.
+var evictionPolicies = [...]struct {
+	name   string
+	policy EvictionPolicy
+}{
+	{"volatile-lru", EvictVolatileLRU}, {"volatile-lfu", EvictVolatileLFU}, {"volatile-random", EvictVolatileRandom},
+	{"volatile-ttl", EvictVolatileTTL}, {"allkeys-lru", EvictLRU}, {"allkeys-lfu", EvictLFU},
+	{"allkeys-random", EvictRandom}, {"noeviction", EvictNone},
+}
+
+// evictionPolicyNames are Keel's policies' names, in Redis's order, as
+// Redis lists an enum's values when it refuses one.
+func evictionPolicyNames() string {
+	names := make([]string, len(evictionPolicies))
+	for i, p := range evictionPolicies {
+		names[i] = p.name
+	}
+	return strings.Join(names, ", ")
+}
+
+// EvictionPolicyNamed is the policy Redis names name, as maxmemory-policy
+// takes it, and false for a name Keel has no policy for. Case does not
+// matter, as it does not to Redis.
+func EvictionPolicyNamed(name string) (EvictionPolicy, bool) {
+	for _, p := range evictionPolicies {
+		if strings.EqualFold(p.name, name) {
+			return p.policy, true
+		}
+	}
+	return 0, false
+}
 
 // FsyncPolicy is how often the log is flushed to disk.
 //
@@ -218,7 +260,7 @@ func (o Options) validate() error {
 	switch {
 	case o.MaxKeys < 0:
 		return fmt.Errorf("MaxKeys must not be negative, got %d", o.MaxKeys)
-	case o.Eviction != EvictLRU && o.Eviction != EvictLFU && o.Eviction != EvictRandom:
+	case evictionPolicyName(o.Eviction) == "":
 		return fmt.Errorf("unknown Eviction policy %d", o.Eviction)
 	case o.EvictionSamples < 0:
 		return fmt.Errorf("EvictionSamples must not be negative, got %d", o.EvictionSamples)

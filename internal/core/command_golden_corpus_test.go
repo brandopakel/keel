@@ -2261,6 +2261,47 @@ var goldenReplication = []commandGoldenCase{
 		send("KEEL.REPL.PULL", "epoch"),
 		send("KEEL.REPL.PULL2", "epoch", "0"),
 	}},
+	// Under noeviction a keyspace over its bound stays over it: a DENYOOM
+	// command is refused, run or queued, and its transaction with it, as
+	// Redis's processCommand refuses it; reads and deletes run, and once a
+	// delete brings the keyspace back inside its bound, writes run again.
+	{family: "eviction", name: "noeviction", options: func(o *Options) { o.MaxMemory, o.Eviction = 1, EvictNone }, steps: []goldenStep{
+		send("SET", "a", "v"),
+		send("SET", "b", "v"),
+		send("APPEND", "a", "x"),
+		send("GET", "a"),
+		send("MULTI"),
+		send("SET", "b", "v"),
+		send("GET", "a"),
+		send("EXEC"),
+		send("DEL", "a"),
+		send("SET", "b", "v"),
+		send("CONFIG", "GET", "maxmemory-policy"),
+	}},
+	// A volatile policy evicts only keys that carry a TTL; with none left,
+	// it refuses as noeviction does.
+	{family: "eviction", name: "volatile-lru", options: func(o *Options) { o.MaxMemory, o.Eviction = 1, EvictVolatileLRU }, steps: []goldenStep{
+		send("SET", "volatile", "v", "EX", hoursS(1)),
+		send("EXISTS", "volatile"),
+		send("SET", "kept", "v"),
+		send("SET", "refused", "v"),
+		send("EXISTS", "kept"),
+		send("CONFIG", "GET", "maxmemory-policy"),
+	}},
+	// volatile-ttl evicts the key due soonest, here at Keel's key bound.
+	{family: "eviction", name: "volatile-ttl", options: func(o *Options) { o.MaxKeys, o.EvictionSamples, o.Eviction = 2, 10, EvictVolatileTTL }, steps: []goldenStep{
+		send("SET", "later", "v", "EX", hoursS(3)),
+		send("SET", "sooner", "v", "EX", hoursS(1)),
+		send("SET", "middle", "v", "EX", hoursS(2)),
+		send("EXISTS", "later", "sooner", "middle"),
+		send("SET", "plain", "v"),
+		send("EXISTS", "later", "middle", "plain"),
+		send("SET", "plain2", "v"),
+		send("EXISTS", "later", "plain", "plain2"),
+		send("SET", "plain3", "v"),
+		send("SET", "plain4", "v"),
+		send("CONFIG", "GET", "maxmemory-policy"),
+	}},
 	{family: "replication", name: "pull-protocol-1", options: func(o *Options) { o.ReplicationFeed = true }, steps: []goldenStep{
 		send("SET", "k", "v"),
 		send("KEEL.REPL.PULL", "epoch", "0").norm(golden.FlagMasked),

@@ -258,6 +258,28 @@ func (d *Dict) SampleKeys(dst []Candidate, n int) []Candidate {
 	return dst
 }
 
+// SampleExpiringKeys draws up to n of the keys that carry a TTL, at random as
+// SampleKeys draws, from the expiry table, for a volatile policy: scored by
+// the instant each falls due if byTTL, by its access word otherwise.
+func (d *Dict) SampleExpiringKeys(dst []Candidate, n int, byTTL bool) []Candidate {
+	for key, at := range d.expiredDictStore {
+		if n <= 0 {
+			break
+		}
+		score := at
+		if !byTTL {
+			obj, ok := d.dictStore.getPtr(key)
+			if !ok {
+				continue
+			}
+			score = d.space.Score(obj.Access)
+		}
+		dst = append(dst, Candidate{Keyspace: d, Key: key, Score: score})
+		n--
+	}
+	return dst
+}
+
 func (d *Dict) Delete(key string) bool { return d.Del(key) }
 
 // UpdateValue accounts an in-place value change while preserving its expiry.

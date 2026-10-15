@@ -37,6 +37,10 @@ type Keyspace interface {
 	ScanUntil(cursor, end uint64, budget int, keep func(string) bool, dst []string) ([]string, int, uint64)
 	// SampleKeys appends up to n randomly chosen candidates.
 	SampleKeys(dst []Candidate, n int) []Candidate
+	// SampleExpiringKeys appends up to n randomly chosen candidates among the
+	// keys that carry a TTL, scored by when each falls due if byTTL, by its
+	// access word otherwise.
+	SampleExpiringKeys(dst []Candidate, n int, byTTL bool) []Candidate
 	// ScoreOf reports a key's current score and whether it is still present.
 	ScoreOf(key string) (uint64, bool)
 	Delete(key string) bool
@@ -151,7 +155,7 @@ func (s *Space) nextRand() uint64 {
 
 // NewAccess is the access word a newly created key starts with.
 func (s *Space) NewAccess() uint64 {
-	if s.limits.Eviction == EvictLFU {
+	if s.limits.Eviction&evictByFrequency != 0 {
 		// A new key needs frequency credit or it is, by definition, the least
 		// frequently used thing present and is evicted before it can show
 		// otherwise.
@@ -164,7 +168,7 @@ func (s *Space) NewAccess() uint64 {
 // to know when, LFU how often.
 func (s *Space) Touch(access *uint64) {
 	s.clock++
-	if s.limits.Eviction == EvictLFU {
+	if s.limits.Eviction&evictByFrequency != 0 {
 		s.touchLFU(access)
 		return
 	}
@@ -173,11 +177,16 @@ func (s *Space) Touch(access *uint64) {
 
 // Score ranks an access word. The lowest score is evicted first.
 func (s *Space) Score(access uint64) uint64 {
-	if s.limits.Eviction == EvictLFU {
+	if s.limits.Eviction&evictByFrequency != 0 {
 		return uint64(s.decayedFreq(access))
 	}
 	return access
 }
+
+// OverLimit reports whether either bound is exceeded, which, once eviction
+// has done what it can, is whether the engine refuses a command that would
+// grow the keyspace. A space with neither bound counts nothing.
+func (s *Space) OverLimit() bool { return s.overLimit() }
 
 // overLimit reports whether either bound is exceeded. A space with neither
 // counts nothing.
@@ -196,9 +205,11 @@ func (s *Space) overLimit() bool {
 // when nothing can be evicted: a value larger than the whole budget would
 // otherwise clear every keyspace and still not fit, and destroying everything
 // to fail anyway helps nobody. The write stands, over budget, as it does in
-// Redis under an allkeys policy.
+// Redis under an allkeys policy. Under noeviction nothing is evicted, and
+// under a volatile policy only keys that carry a TTL are, so the space may stay
+// over its bound: the engine then refuses what would grow it, as Redis does.
 func (s *Space) EnforceLimits() {
-	if s.SuspendEviction {
+	if s.SuspendEviction || !s.limits.Eviction.Evicts() {
 		return
 	}
 	for s.overLimit() {
@@ -213,7 +224,7 @@ func (s *Space) evictOne() bool {
 	// EvictRandom consults nothing: it takes whatever comes to hand. Falling
 	// through to the sampling path would silently turn it into LRU, since the
 	// access word a non-LFU policy stores is a clock reading.
-	if s.limits.Eviction == EvictRandom {
+	if s.limits.Eviction&evictAtRandom != 0 {
 		return s.evictArbitrary()
 	}
 
@@ -223,15 +234,16 @@ func (s *Space) evictOne() bool {
 		candidate := s.pool[0]
 		s.pool = s.pool[1:]
 
-		score, exists := candidate.Keyspace.ScoreOf(candidate.Key)
+		score, exists := s.scoreOf(candidate.Keyspace, candidate.Key)
 		if !exists {
-			continue // deleted or expired since it was sampled
+			continue // deleted, expired or persisted since it was sampled
 		}
 		if score > candidate.Score {
 			// Improved since sampling - read again under LRU, accessed again
-			// under LFU - so it is no longer a good candidate. Only a rise
-			// disqualifies it: a fallen score, which happens on every LFU
-			// decay, makes it a better candidate than when it was pooled.
+			// under LFU, given a later TTL under volatile-ttl - so it is no
+			// longer a good candidate. Only a rise disqualifies it: a fallen
+			// score, which happens on every LFU decay, makes it a better
+			// candidate than when it was pooled.
 			continue
 		}
 		if candidate.Keyspace.Delete(candidate.Key) {
@@ -246,14 +258,54 @@ func (s *Space) evictOne() bool {
 	return s.evictArbitrary()
 }
 
+// scoreOf is a key's score now under s's policy, and whether it is still a
+// candidate: present, and under a volatile policy carrying a TTL. Under
+// volatile-ttl the score is the instant the key falls due, so the soonest goes
+// first, as Redis's evictionPoolPopulate ranks it (evict.c).
+func (s *Space) scoreOf(ks Keyspace, key string) (uint64, bool) {
+	if s.limits.Eviction.Volatile() {
+		at, ok := ks.GetExpiry(key)
+		if !ok {
+			return 0, false
+		}
+		if s.limits.Eviction&evictByTTL != 0 {
+			return at, ks.Has(key)
+		}
+	}
+	return ks.ScoreOf(key)
+}
+
+// candidates is how many keys a keyspace offers s's policy: under a volatile
+// one, those that carry a TTL, as Redis samples a database's expires rather
+// than its keys.
+func (s *Space) candidates(ks Keyspace) int {
+	if s.limits.Eviction.Volatile() {
+		return ks.KeysWithExpiry()
+	}
+	return ks.Len()
+}
+
+// sample appends up to n of ks's keys, chosen at random, from those s's
+// policy may evict.
+func (s *Space) sample(ks Keyspace, dst []Candidate, n int) []Candidate {
+	if s.limits.Eviction.Volatile() {
+		return ks.SampleExpiringKeys(dst, n, s.limits.Eviction&evictByTTL != 0)
+	}
+	return ks.SampleKeys(dst, n)
+}
+
 // samplePool draws a fresh sample and merges it into the pool.
 //
 // Samples are spread across keyspaces in proportion to how many keys each
 // holds, so a keyspace with a thousand keys is examined more often than one
 // with three - without which a large string keyspace could be starved by a
-// handful of sketches.
+// handful of sketches. Under a volatile policy the keys counted and drawn are
+// those that carry a TTL.
 func (s *Space) samplePool() {
-	total := s.TotalKeys()
+	total := 0
+	for _, ks := range s.keyspaces {
+		total += s.candidates(ks)
+	}
 	if total == 0 {
 		return
 	}
@@ -263,7 +315,7 @@ func (s *Space) samplePool() {
 	}
 
 	for _, ks := range s.keyspaces {
-		n := ks.Len()
+		n := s.candidates(ks)
 		if n == 0 {
 			continue
 		}
@@ -273,27 +325,32 @@ func (s *Space) samplePool() {
 			// single 12KB sketch may be the best thing to evict.
 			share = 1
 		}
-		for _, c := range ks.SampleKeys(nil, share) {
+		for _, c := range s.sample(ks, nil, share) {
 			s.poolInsert(c)
 		}
 	}
 }
 
-// evictArbitrary removes a key without regard to recency or frequency.
+// evictArbitrary removes a key without regard to recency or frequency; under
+// a volatile policy, a key that carries a TTL.
 //
 // The keyspace is chosen in proportion to how many keys it holds, so this is
 // uniform over keys rather than over keyspaces - otherwise a store with three
 // sketches would be raided as often as one with a million strings.
 func (s *Space) evictArbitrary() bool {
-	total := s.TotalKeys()
+	total := 0
+	for _, ks := range s.keyspaces {
+		total += s.candidates(ks)
+	}
 	if total == 0 {
 		return false
 	}
 
 	pick := int(s.nextRand() % uint64(total))
 	for _, ks := range s.keyspaces {
-		if pick < ks.Len() {
-			for _, c := range ks.SampleKeys(nil, 1) {
+		n := s.candidates(ks)
+		if pick < n {
+			for _, c := range s.sample(ks, nil, 1) {
 				if ks.Delete(c.Key) {
 					s.evicted++
 					s.noteRemoval(ks, c.Key)
@@ -302,7 +359,7 @@ func (s *Space) evictArbitrary() bool {
 			}
 			return false
 		}
-		pick -= ks.Len()
+		pick -= n
 	}
 	return false
 }

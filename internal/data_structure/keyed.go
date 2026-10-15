@@ -163,6 +163,28 @@ func (k *Keyed[T]) SampleKeys(dst []Candidate, n int) []Candidate {
 	return dst
 }
 
+// SampleExpiringKeys appends up to n of the keys that carry a TTL, chosen at
+// random from the expiry table, for a volatile policy: scored by the instant
+// each falls due if byTTL, by its access word otherwise.
+func (k *Keyed[T]) SampleExpiringKeys(dst []Candidate, n int, byTTL bool) []Candidate {
+	for key, at := range k.expiries {
+		if n <= 0 {
+			break
+		}
+		score := at
+		if !byTTL {
+			e, ok := k.items.getPtr(key)
+			if !ok {
+				continue
+			}
+			score = k.space.Score(e.access)
+		}
+		dst = append(dst, Candidate{Keyspace: k, Key: key, Score: score})
+		n--
+	}
+	return dst
+}
+
 // EntryBytes reports what one key costs, for MEMORY USAGE.
 func (k *Keyed[T]) EntryBytes(key string) (uint64, bool) {
 	e, ok := k.items.getPtr(key)

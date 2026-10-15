@@ -198,6 +198,11 @@ docker run --rm -p 127.0.0.1:8081:8081 -v keel-data:/data \
 Container arguments replace the image's defaults, so retain `-host 0.0.0.0` when
 passing custom arguments. The image runs as UID 65534; bind-mounted directories
 must be writable by that UID. Leave memory above `-maxmemory` for process overhead.
+`-evict` chooses what goes at the bound, by Redis's `maxmemory-policy` names:
+`allkeys-lru` (the default), `allkeys-lfu`, `allkeys-random`, the `volatile-*`
+policies, which take only keys that carry a TTL, or `noeviction`, which refuses
+writes with Redis's `OOM` error instead, as job queues such as Sidekiq and BullMQ
+want ([docs/eviction-policies.md](docs/eviction-policies.md)).
 Use `INFO` and `MEMORY STATS` to inspect keyspace memory, expiry, eviction, and AOF
 state; also monitor process RSS, storage space, restart counts, and client latency.
 

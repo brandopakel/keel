@@ -84,6 +84,15 @@ func TestFlagsReachTheEngine(t *testing.T) {
 		t.Fatalf("zero flags hold the engine to %+v, want %+v", got, want)
 	}
 
+	// -evict takes Redis's maxmemory-policy names too, whatever their case.
+	for name, policy := range map[string]data_structure.EvictionPolicy{"allkeys-lfu": data_structure.EvictLFU,
+		"volatile-lru": data_structure.EvictVolatileLRU, "VOLATILE-TTL": data_structure.EvictVolatileTTL,
+		"volatile-random": data_structure.EvictVolatileRandom, "noeviction": data_structure.EvictNone} {
+		if got := engineFrom(t, "-evict", name).Limits().Eviction; got != policy {
+			t.Fatalf("-evict %s holds the engine to policy %d, want %d", name, got, policy)
+		}
+	}
+
 	got = engineFrom(t, "-lcs-max-cells", "18446744073709551615").Limits()
 	if got.LCSMaxCells != 0 {
 		t.Fatalf("an LCS bound past 2^63 holds the engine to %d cells, want no bound", got.LCSMaxCells)
