@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/brandopakel/keel/internal/constant"
 	"github.com/brandopakel/keel/internal/data_structure"
 )
 
@@ -103,11 +102,13 @@ func parseLegacyCFReserve(args []string) (uint64, bool) {
 	return capacity, err == nil && capacity >= 1
 }
 
+// cmdCFRESERVE implements CF.RESERVE key capacity [BUCKETSIZE n]
+// [MAXITERATIONS n] [EXPANSION n]; see opCFReserve.
 func (e *Engine) cmdCFRESERVE(args []string) []byte {
+	e.recordsItself()
 	if len(args) < 2 || len(args)%2 == 1 {
 		return e.encode(wrongArguments("CF.RESERVE"), false)
 	}
-	key := args[0]
 	// A form the earlier build accepted, replayed, means what it meant to
 	// that build - see replayingFilterLog. That includes a key named after an
 	// option, CF.RESERVE expansion 1000, which RedisBloom reads as the option.
@@ -121,131 +122,78 @@ func (e *Engine) cmdCFRESERVE(args []string) []byte {
 			return e.encode(err, false)
 		}
 	}
-	switch e.filterKeyStatus(key, e.cfStore) {
-	case filterHeld:
-		return e.encode(errFilterExists, false)
-	case filterOtherType:
-		return e.encode(errWrongType, false)
+	r := e.reply()
+	if err := e.opCFReserve(args[0], capacity, foreign, args[1:]); err != nil {
+		return r.Error(err).Bytes()
 	}
-	if foreign {
-		return e.encode(errCFGeometry, false)
-	}
-	if capacity > maxStructureBytes/4 {
-		return e.encode(errTooLargeForOneKey, false)
-	}
-	cfBytes := data_structure.CuckooBytesFor(capacity)
-	if err := e.affordable(cfBytes); err != nil {
-		return e.encode(err, false)
-	}
-	e.cfStore.Put(key, data_structure.CreateCuckooFilter(capacity))
-	return constant.RespOk
-}
-
-// cfFor returns the filter at key, creating a default-sized one if absent.
-func (e *Engine) cfFor(key string) *data_structure.CuckooFilter {
-	cf, exist := e.cfStore.Get(key)
-	if !exist {
-		cf = data_structure.CreateCuckooFilter(data_structure.CfDefaultCapacity)
-		e.cfStore.Put(key, cf)
-	}
-	return cf
-}
-
-// cfForRead is the filter a read asks about: RedisBloom's CF.EXISTS,
-// CF.MEXISTS and CF.COUNT answer no, and 0, for a key that holds anything else.
-func (e *Engine) cfForRead(key string) (*data_structure.CuckooFilter, bool) {
-	if e.filterKeyRead(key, e.cfStore) != filterHeld {
-		return nil, false
-	}
-	return e.cfStore.Get(key)
+	return r.Status("OK").Bytes()
 }
 
 func (e *Engine) cmdCFADD(args []string) []byte {
+	e.recordsItself()
 	if len(args) != 2 {
 		return e.encode(wrongArguments("CF.ADD"), false)
 	}
-	if e.filterKeyStatus(args[0], e.cfStore) == filterOtherType {
-		return e.encode(errWrongType, false)
+	r := e.reply()
+	if err := e.opCFAdd(args[0], args[1]); err != nil {
+		return r.Error(err).Bytes()
 	}
-	if e.cfFor(args[0]).Insert(args[1]) {
-		return e.boolReply(true)
-	}
-	// The filter is too full to take another fingerprint. Unlike a Bloom
-	// filter, which degrades by growing less accurate, a cuckoo filter refuses.
-	return e.encode(errCFFull, false)
+	return r.Bool(true).Bytes()
 }
 
-// cmdCFADDNX adds only if the item appears to be absent.
-//
-// "Appears" is doing real work: the check is a filter lookup, so a false
-// positive means a genuinely new item is reported as already present and is not
-// added. CF.ADD has no such failure mode.
+// cmdCFADDNX adds only if the item appears to be absent; see opCFAddNX.
 func (e *Engine) cmdCFADDNX(args []string) []byte {
+	e.recordsItself()
 	if len(args) != 2 {
 		return e.encode(wrongArguments("CF.ADDNX"), false)
 	}
-	if e.filterKeyStatus(args[0], e.cfStore) == filterOtherType {
-		return e.encode(errWrongType, false)
+	r := e.reply()
+	added, err := e.opCFAddNX(args[0], args[1])
+	if err != nil {
+		return r.Error(err).Bytes()
 	}
-	cf := e.cfFor(args[0])
-	if cf.Lookup(args[1]) {
-		return e.boolReply(false)
-	}
-	if cf.Insert(args[1]) {
-		return e.boolReply(true)
-	}
-	return e.encode(errCFFull, false)
+	return r.Bool(added).Bytes()
 }
 
 func (e *Engine) cmdCFEXISTS(args []string) []byte {
 	if len(args) != 2 {
 		return e.encode(wrongArguments("CF.EXISTS"), false)
 	}
-	cf, exist := e.cfForRead(args[0])
-	return e.boolReply(exist && cf.Lookup(args[1]))
+	r := e.reply()
+	e.opCFExists(args[0], args[1:], func(exists bool) { r.Bool(exists) })
+	return r.Bytes()
 }
 
 func (e *Engine) cmdCFMEXISTS(args []string) []byte {
 	if len(args) < 2 {
 		return e.encode(wrongArguments("CF.MEXISTS"), false)
 	}
-	cf, exist := e.cfForRead(args[0])
-	res := make([]interface{}, 0, len(args)-1)
-	for _, item := range args[1:] {
-		res = append(res, ReplyBool(exist && cf.Lookup(item)))
-	}
-	return e.encode(res, false)
+	r := e.reply()
+	r.Array(len(args) - 1)
+	e.opCFExists(args[0], args[1:], func(exists bool) { r.Bool(exists) })
+	return r.Bytes()
 }
 
-// cmdCFDEL removes one copy of an item. A key that holds no cuckoo filter -
-// nothing, or something else - is RedisBloom's "Not found".
+// cmdCFDEL removes one copy of an item; see opCFDel.
 func (e *Engine) cmdCFDEL(args []string) []byte {
+	e.recordsItself()
 	if len(args) != 2 {
 		return e.encode(wrongArguments("CF.DEL"), false)
 	}
-	switch e.filterKeyStatus(args[0], e.cfStore) {
-	case filterMissing:
-		if e.replayingFilterLog() {
-			// The build before answered 0 here, so its log records this.
-			return constant.RespZero
-		}
-		return e.encode(errCFDelNotFound, false)
-	case filterOtherType:
-		return e.encode(errCFDelNotFound, false)
+	r := e.reply()
+	deleted, err := e.opCFDel(args[0], args[1])
+	if err != nil {
+		return r.Error(err).Bytes()
 	}
-	cf, _ := e.cfStore.Get(args[0])
-	return e.boolReply(cf.Delete(args[1]))
+	return r.Bool(deleted).Bytes()
 }
 
 func (e *Engine) cmdCFCOUNT(args []string) []byte {
 	if len(args) != 2 {
 		return e.encode(wrongArguments("CF.COUNT"), false)
 	}
-	cf, exist := e.cfForRead(args[0])
-	if !exist {
-		return constant.RespZero
-	}
-	return e.encode(int64(cf.Count(args[1])), false)
+	r := e.reply()
+	return r.Int(e.opCFCount(args[0], args[1])).Bytes()
 }
 
 // cmdCFINFO implements CF.INFO key with RedisBloom's fields, in its order.
@@ -255,20 +203,16 @@ func (e *Engine) cmdCFINFO(args []string) []byte {
 	if len(args) != 1 {
 		return e.encode(wrongArguments("CF.INFO"), false)
 	}
-	key := args[0]
-	switch e.filterKeyRead(key, e.cfStore) {
-	case filterMissing:
-		return e.encode(errFilterNotFound, false)
-	case filterOtherType:
-		return e.encode(errWrongType, false)
+	info, err := e.opCFInfo(args[0])
+	if err != nil {
+		return e.encode(err, false)
 	}
-	cf, _ := e.cfStore.Peek(key)
 	return e.infoReply([]infoEntry{
-		{"Size", int64(cf.MemUsage())},
-		{"Number of buckets", int64(cf.NumBuckets())},
+		{"Size", int64(info.size)},
+		{"Number of buckets", int64(info.buckets)},
 		{"Number of filters", int64(1)},
-		{"Number of items inserted", int64(cf.Size())},
-		{"Number of items deleted", int64(cf.Deleted())},
+		{"Number of items inserted", int64(info.inserted)},
+		{"Number of items deleted", int64(info.deleted)},
 		{"Bucket size", int64(data_structure.CuckooBucketSize)},
 		{"Expansion rate", int64(0)},
 		{"Max iterations", int64(data_structure.CuckooMaxKicks)},

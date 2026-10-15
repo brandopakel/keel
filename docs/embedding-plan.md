@@ -217,7 +217,11 @@ How each step is verified:
   single benchmark. But code layout alone moved that median by up to 3.5% and
   a single benchmark by up to 9.5%. So the 0.98 rule reads the median across
   benchmarks, and a result near the budget, or a single family over it, is
-  repeated before it counts. The job's header has the runs.
+  repeated before it counts. The job's header has the runs. The
+  `WithReplica` rows are mostly the log's write syscalls (`EvalAndResponse`
+  is about 4% of that benchmark's CPU), and a placement-only control moved
+  `WithReplica/SADD` by 4.5% on EPYC 7763 (#204), so a reading over 1.04
+  there needs a repeat and a control before it counts.
 - **Phase 4:** byte-identical reply and transcript goldens.
 - **Persistence steps:** restart, upgrade and rollback checks.
 - **Phase 5:** two-instance isolation and contention stress tests under
@@ -2426,6 +2430,35 @@ error-parity harnesses. The blocking forms stay in tier 2 of the parity plan.
   so a reply the output limit refuses leaves the lists as they were.
 - **The ring** gains `Insert` and `Remove`, O(n) as Redis's quicklist
   operations are once the pivot or the matches have been found.
+
+#### The sketches: HyperLogLog, Bloom, cuckoo, Count-Min and Morris
+
+**The conversion.** `hll.go`, `bloom.go`, `cuckoo.go`, `cms.go` and
+`morris.go` hold each family's typed operations, and `commands_hll.go`,
+`commands_bf.go`, `commands_cf.go`, `commands_cms.go` and
+`commands_morris.go` their command languages.
+
+- **Records are the command as Redis or RedisBloom propagates it.** Redis
+  propagates PFADD and PFMERGE as they arrive, and RedisBloom replicates
+  every command verbatim (`RedisModule_ReplicateVerbatim`), so each write
+  stages its name, its key and its arguments as the client wrote them. A
+  number has more than one spelling - `0.01` and `1e-2`, `7` and `007` where
+  Keel's parser takes both - so an operation is handed the client's text for
+  its record, and a Go caller, which has none, gets a record written from the
+  values. BF.RESERVE keeps the one record it has always rewritten, a key
+  named NONSCALING's. The no-op records develop logs (PFADD that changes
+  nothing, CF.ADDNX of an item that appears present, CF.DEL of one that is
+  not there) are staged byte for byte, for the sketches' missing-commands PR
+  to drop.
+- **Types are checked where RedisBloom checks them**, by the filter
+  operations themselves (`filterKeyStatus`), as the handlers did.
+- **Replies** go through the reply sink, but for PFADD's and BF.ADD's, which
+  are shared constants answered by reference (building a Reply for one cost a
+  few nanoseconds locally, as it cost GET), and the INFO replies, which stay
+  on `infoReply`. The Morris errors that never vary are package sentinels
+  now rather than built on every call.
+- **Measured**: allocations per operation stay at 1 on PFADD and 2 on BF.ADD;
+  locally PFADD read 1.008 and BF.ADD 1.000 against the lists.
 
 ## Risks, in order
 
