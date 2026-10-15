@@ -2881,3 +2881,14 @@ artifact_id,run_id,time,branch,pr,package,result,seconds
 11949266030,38683378153,2026-10-15T04:48:12Z,feat/eviction-exceeded-time,,internal/resp,ok,0.056
 11949266030,38683378153,2026-10-15T04:48:12Z,feat/eviction-exceeded-time,,internal/server,ok,1.966
 11949266030,38683378153,2026-10-15T04:48:12Z,feat/eviction-exceeded-time,,internal/testlock,ok,0.31
+11948839348,38683907190,2026-10-15T04:54:12Z,feat/eviction-exceeded-time,215,bench/arrival,ok,1.265
+11948839348,38683907190,2026-10-15T04:54:12Z,feat/eviction-exceeded-time,215,cmd/keel,ok,9.287
+11948839348,38683907190,2026-10-15T04:54:12Z,feat/eviction-exceeded-time,215,internal/config,ok,0.528
+11948839348,38683907190,2026-10-15T04:54:12Z,feat/eviction-exceeded-time,215,internal/core,ok,14.442
+11948839348,38683907190,2026-10-15T04:54:12Z,feat/eviction-exceeded-time,215,internal/core/io_multiplexing,ok,0.052
+11948839348,38683907190,2026-10-15T04:54:12Z,feat/eviction-exceeded-time,215,internal/data_structure,ok,15.922
+11948839348,38683907190,2026-10-15T04:54:12Z,feat/eviction-exceeded-time,215,internal/golden,ok,0.007
+11948839348,38683907190,2026-10-15T04:54:12Z,feat/eviction-exceeded-time,215,internal/procinfo,ok,0.024
+11948839348,38683907190,2026-10-15T04:54:12Z,feat/eviction-exceeded-time,215,internal/resp,ok,0.138
+11948839348,38683907190,2026-10-15T04:54:12Z,feat/eviction-exceeded-time,215,internal/server,ok,2.025
+11948839348,38683907190,2026-10-15T04:54:12Z,feat/eviction-exceeded-time,215,internal/testlock,ok,0.315
