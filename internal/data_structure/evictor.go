@@ -180,15 +180,39 @@ func (s *Space) NewAccess() uint64 {
 	return s.clock
 }
 
-// Touch records an access. What that means is the policy's business: LRU wants
-// to know when, LFU how often.
+// Touch records a read of a key. What that means is the policy's business:
+// LRU wants to know when, LFU how often, and LRM nothing, since only a
+// modification counts (TouchModified), as Redis's lookupKey leaves the key
+// alone under an LRM policy (db.c).
 func (s *Space) Touch(access *uint64) {
+	s.clock++
+	if s.limits.Eviction&(evictByFrequency|evictByModification) != 0 {
+		s.touchLFU(access)
+		return
+	}
+	*access = s.clock
+}
+
+// TouchModified records a modification of a key: an access, as Touch, and
+// under LRM the one thing that counts, as Redis's keyModified records it
+// (updateLRM).
+func (s *Space) TouchModified(access *uint64) {
 	s.clock++
 	if s.limits.Eviction&evictByFrequency != 0 {
 		s.touchLFU(access)
 		return
 	}
 	*access = s.clock
+}
+
+// NoteModified records a modification made in place, which the command's
+// own lookup has already counted as an access: nothing more, but under LRM,
+// where only a modification counts.
+func (s *Space) NoteModified(access *uint64) {
+	if s.limits.Eviction&evictByModification != 0 {
+		s.clock++
+		*access = s.clock
+	}
 }
 
 // Score ranks an access word. The lowest score is evicted first.

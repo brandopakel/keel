@@ -70,6 +70,7 @@ func (e *Engine) opCFAdd(key, item string) error {
 	if !e.cfFor(key).Insert(item) {
 		return errCFFull
 	}
+	e.cfStore.Modified(key)
 	e.aofRecord("CF.ADD", key, item)
 	return nil
 }
@@ -94,6 +95,7 @@ func (e *Engine) opCFAddNX(key, item string) (bool, error) {
 	if !cf.Insert(item) {
 		return false, errCFFull
 	}
+	e.cfStore.Modified(key)
 	e.aofRecord("CF.ADDNX", key, item)
 	return true, nil
 }
@@ -126,6 +128,7 @@ func (e *Engine) opCFDel(key, item string) (bool, error) {
 	}
 	cf, _ := e.cfStore.Get(key)
 	deleted := cf.Delete(item)
+	e.cfStore.Modified(key)
 	e.aofRecord("CF.DEL", key, item)
 	return deleted, nil
 }

@@ -39,8 +39,12 @@ func packLFU(decayAt uint64, freq uint8) uint64 { return decayAt<<8 | uint64(fre
 func lfuFreqOf(access uint64) uint8             { return uint8(access) }
 func lfuDecayAtOf(access uint64) uint64         { return access >> 8 }
 
-// touchLFU applies any decay owed and then attempts to increment.
+// touchLFU applies any decay owed and then attempts to increment. Touch also
+// sends an LRM policy's reads here, which change nothing.
 func (s *Space) touchLFU(access *uint64) {
+	if s.limits.Eviction&evictByFrequency == 0 {
+		return
+	}
 	freq := s.decayedFreq(*access)
 	*access = packLFU(s.clock, s.lfuLogIncr(freq))
 }

@@ -86,9 +86,12 @@ func (d *Dict) SetExpiry(k string, ttlMs int64) {
 // epoch. Persistence needs this: a relative TTL written to a log becomes a new
 // TTL every time the log is replayed.
 func (d *Dict) SetExpiryAt(k string, atMs uint64) {
-	if _, ok := d.dictStore.getPtr(k); !ok {
+	obj, ok := d.dictStore.getPtr(k)
+	if !ok {
 		return
 	}
+	// A new expiry modifies the key, as Redis's EXPIRE records it.
+	d.space.NoteModified(&obj.Access)
 	// Giving a key an expiry costs a second map entry, and entryBytes charges
 	// for it - so the charge has to be made here, when the entry appears.
 	//
@@ -160,7 +163,7 @@ func (d *Dict) Put(k string, obj *Obj) {
 	// expiry table growing an entry per overwrite.
 	d.dropExpiry(k)
 
-	d.space.Touch(&obj.Access)
+	d.space.TouchModified(&obj.Access)
 	d.dictStore.set(k, *obj)
 	d.memUsed += d.entryBytes(k, obj)
 
@@ -293,12 +296,24 @@ func (d *Dict) UpdateValue(key string, value string) {
 	d.memUsed -= d.entryBytes(key, obj)
 	obj.Value = value
 	d.memUsed += d.entryBytes(key, obj)
+	d.space.NoteModified(&obj.Access)
 	d.space.EnforceLimits()
+}
+
+// Modified records that the value at key was modified in place by a command
+// that did not store it again: under an LRM policy, a use (NoteModified).
+func (d *Dict) Modified(key string) {
+	if obj, ok := d.dictStore.getPtr(key); ok && obj != nil {
+		d.space.NoteModified(&obj.Access)
+	}
 }
 
 func (d *Dict) ClearExpiry(key string) bool {
 	if _, ok := d.expiredDictStore[key]; !ok {
 		return false
+	}
+	if obj, ok := d.dictStore.getPtr(key); ok {
+		d.space.NoteModified(&obj.Access)
 	}
 	d.dropExpiry(key)
 	d.memUsed -= expiryOverhead

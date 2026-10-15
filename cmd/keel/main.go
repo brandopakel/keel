@@ -97,8 +97,9 @@ func parseFlags() {
 		"evict once the keyspace reaches this many keys; 0 is unbounded, as in Redis")
 	flag.StringVar(&evictPolicy, "evict", "lru",
 		"eviction policy when -maxkeys or -maxmemory is reached, by Redis's maxmemory-policy names: "+
-			"allkeys-lru | allkeys-lfu | allkeys-random | volatile-lru | volatile-lfu | volatile-random | "+
-			"volatile-ttl | noeviction; lru, lfu and random are allkeys-lru, -lfu and -random")
+			"allkeys-lru | allkeys-lfu | allkeys-random | allkeys-lrm | volatile-lru | volatile-lfu | "+
+			"volatile-random | volatile-ttl | volatile-lrm | noeviction; lru, lfu and random are allkeys-lru, "+
+			"-lfu and -random")
 	flag.IntVar(&lruSamples, "lru-samples", 5,
 		"keys sampled per eviction; more is more accurate and slower")
 	flag.IntVar(&lfuLogFactor, "lfu-log-factor", 10,
