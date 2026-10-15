@@ -427,7 +427,10 @@ artifact_id,run_id,time,event,branch,pr,conclusion,exit_code,suite_seconds,peak_
 11937046745,38655283232,2026-10-14T23:38:06Z,pull_request,feat/client-pause,198,success,0,21.5,113577780,83221436,167772160,0,https://github.com/brandopakel/keel/actions/runs/38655283232
 11937112223,38656406909,2026-10-14T23:49:28Z,pull_request,feat/info-replication,208,success,0,27.3,113577780,88804580,167772160,0,https://github.com/brandopakel/keel/actions/runs/38656406909
 11936748551,38656876519,2026-10-14T23:54:13Z,push,develop,204,cancelled,0,25.8,112844532,83741661,167772160,0,https://github.com/brandopakel/keel/actions/runs/38656876519
+11937412620,38657288842,2026-10-14T23:58:29Z,pull_request,feat/command,197,success,0,26.1,118537046,89917747,167772160,0,https://github.com/brandopakel/keel/actions/runs/38657288842
 11938115567,38657333069,2026-10-14T23:58:59Z,pull_request,feat/phase4-sketches,216,cancelled,0,25.8,110042868,93525079,167772160,0,https://github.com/brandopakel/keel/actions/runs/38657333069
 11936424706,38657344503,2026-10-14T23:59:06Z,pull_request,feat/phase4-string-8x,194,cancelled,0,24.7,116725120,80926228,167772160,0,https://github.com/brandopakel/keel/actions/runs/38657344503
 11937659438,38659610814,2026-10-15T00:22:01Z,pull_request,feat/volatile-eviction,212,success,0,25.5,113577780,84451063,167772160,0,https://github.com/brandopakel/keel/actions/runs/38659610814
 11937909804,38660334041,2026-10-15T00:29:42Z,push,develop,213,cancelled,0,25.3,111502068,83737123,167772160,0,https://github.com/brandopakel/keel/actions/runs/38660334041
+11940113388,38663692979,2026-10-15T01:05:14Z,push,develop,208,cancelled,0,25.4,111910644,93500157,167772160,0,https://github.com/brandopakel/keel/actions/runs/38663692979
+11940883753,38666064298,2026-10-15T01:30:55Z,pull_request,feat/client-pause,,cancelled,0,26.0,126368995,83914981,167772160,0,https://github.com/brandopakel/keel/actions/runs/38666064298
