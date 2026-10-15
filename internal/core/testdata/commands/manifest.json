@@ -90,11 +90,11 @@
       "captured": "2026-10-14"
     },
     "server.txt": {
-      "sha256": "3722ca9f00c53d6e560e56c19d0f1f746af243d36c778fd6bf5753330bc93b4b",
-      "cases": 13,
-      "commands": 255,
-      "records": 23,
-      "source_revision": "f47ff09",
+      "sha256": "8149413970d4930a2d0cfdad4f0f213a085c85e0f8b38770b19fd8db5f324464",
+      "cases": 14,
+      "commands": 265,
+      "records": 24,
+      "source_revision": "8e7e7aa",
       "captured": "2026-10-15"
     },
     "sets.txt": {
