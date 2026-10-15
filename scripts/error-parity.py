@@ -543,11 +543,13 @@ OOM_REFUSED = [['SET', 'k', 'v'], ['SETNX', 'k', 'v'], ['APPEND', 'k', 'v'], ['I
                ['SETEX', 'k', '10', 'v'], ['GETSET', 'k', 'v'], ['HSET', 'h', 'f', 'v'], ['HINCRBY', 'h', 'f', '1'],
                ['LPUSH', 'l', 'a'], ['RPUSH', 'l', 'a'], ['LSET', 'l', '0', 'a'], ['SADD', 's', 'm'],
                ['ZADD', 'z', '1', 'm'], ['ZINCRBY', 'z', '1', 'm'], ['PFADD', 'p', 'a'], ['PFMERGE', 'p', 'q'],
-               ['GEOADD', 'g', '1', '1', 'm']]
+               ['GEOADD', 'g', '1', '1', 'm'], ['MSETEX', '1', 'k', 'v', 'EX', '10'], ['INCREX', 'n', 'BYINT', '1'],
+               ['SET', 'k', 'v', 'IFEQ', 'x']]
 # Sessions over maxmemory whose commands are not DENYOOM, or are queued with
 # one: reads, deletes and expiry run; a refused command spoils its
 # transaction, and one of reads runs.
 OOM_ANSWERED = [[['GET', 'k']], [['DEL', 'k']], [['EXPIRE', 'k', '10']], [['EXISTS', 'k']],
+                [['DELEX', 'k']], [['DELEX', 'k', 'IFEQ', 'v']], [['DIGEST', 'k']],
                 [['CONFIG', 'GET', 'maxmemory-policy']], [['PING']],
                 [['MULTI'], ['SET', 'k', 'v'], ['GET', 'k'], ['EXEC']],
                 [['MULTI'], ['GET', 'k'], ['TTL', 'k'], ['EXEC']]]

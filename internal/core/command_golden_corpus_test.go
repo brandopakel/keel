@@ -2624,6 +2624,12 @@ var goldenReplication = []commandGoldenCase{
 		send("EXEC"),
 		send("DEL", "a"),
 		send("SET", "b", "v"),
+		// Redis 8's string writes: MSETEX and INCREX are DENYOOM, DELEX
+		// is not.
+		send("MSETEX", "1", "m", "v"),
+		send("INCREX", "n", "BYINT", "1"),
+		send("SET", "b", "v", "IFEQ", "x"),
+		send("DELEX", "b", "IFEQ", "v"),
 		send("CONFIG", "GET", "maxmemory-policy"),
 	}},
 	// A volatile policy evicts only keys that carry a TTL; with none left,
