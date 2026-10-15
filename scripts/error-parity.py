@@ -492,7 +492,8 @@ COMMAND_CASES = [
 ]
 # The subcommands Keel has, each of which COMMAND INFO describes.
 KEEL_SUBCOMMANDS = ['client|id', 'client|setname', 'client|getname', 'client|setinfo', 'client|info', 'client|help',
-                    'client|pause', 'client|unpause',
+                    'client|pause', 'client|unpause', 'client|list', 'client|kill', 'client|reply', 'client|no-evict',
+                    'client|no-touch', 'client|unblock', 'client|getredir', 'client|trackinginfo',
                     'memory|stats', 'memory|usage', 'memory|help', 'config|get', 'config|set', 'config|resetstat',
                     'config|rewrite', 'config|help', 'command|count', 'command|docs', 'command|getkeys',
                     'command|getkeysandflags', 'command|help', 'command|info', 'command|list', 'latency|doctor',
