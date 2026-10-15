@@ -193,8 +193,12 @@ func TestEvictionExceededTimeIsRedis(t *testing.T) {
 	require.Equal(t, "+OK\r\n", s.send("SET", "b", "v"))
 	s.send("PING")
 	require.NotZero(t, e.evictionExceededSince)
-	reconfigure(t, e, func(o *Options) { o.Eviction = EvictLRU })
+	require.Equal(t, "+OK\r\n", s.send("CONFIG", "SET", "maxmemory-policy", "allkeys-lru"))
 	assert.Zero(t, e.evictionExceededSince, "an allkeys policy ends it")
+	waitPast(10)
+	total, current = exceeded()
+	assert.Zero(t, current, "and nothing starts it again")
+	assert.GreaterOrEqual(t, total, 30, "the time it ended is kept")
 
 	runOn(t, e, "CONFIG", "RESETSTAT")
 	total, current = exceeded()
