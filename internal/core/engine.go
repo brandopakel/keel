@@ -331,6 +331,13 @@ type Engine struct {
 	expireStalePerc  float64
 	expireCapReached uint64
 	expireCycleUsec  uint64
+	// evictionExceededSince is when the keyspace last went over its bound
+	// with nothing its policy may evict, by nanotime, or 0 while it is not;
+	// evictionExceededNanos is the time it was so before that: Redis's
+	// stat_last_eviction_exceeded_time and stat_total_eviction_exceeded_time
+	// (evict.c), which INFO reports. Last, so that adding them moved no field
+	// before them.
+	evictionExceededSince, evictionExceededNanos int64
 }
 
 // Lock takes e's lock, waiting until whoever holds it lets go. Its holder is
