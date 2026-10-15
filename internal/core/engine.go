@@ -283,14 +283,6 @@ type Engine struct {
 	// expiry cycle keeps (foldAvgTTL). Like expiredKeys it describes the
 	// stores, so resetStores clears it.
 	avgTTL int64
-	// expireStalePerc, expireCapReached and expireCycleUsec are INFO's
-	// expired_stale_perc, as a fraction, expired_time_cap_reached_count and
-	// expire_cycle_cpu_milliseconds, in microseconds: what the expiry cycle
-	// keeps of itself, as Redis's activeExpireCycle keeps them (expire.go).
-	// Only the cycle and INFO read them, so they go with avgTTL.
-	expireStalePerc  float64
-	expireCapReached uint64
-	expireCycleUsec  uint64
 
 	// mu is e's lock, which Lock and Unlock take and release. No command
 	// reads it, so it goes last, and every field a command reads keeps its
@@ -331,6 +323,14 @@ type Engine struct {
 	// with SetIOThreads; nil, there is none (transport_info.go). Last, so that
 	// adding it moved no field before it.
 	ioThreads func() []IOThreadStats
+	// expireStalePerc, expireCapReached and expireCycleUsec are INFO's
+	// expired_stale_perc, as a fraction, expired_time_cap_reached_count and
+	// expire_cycle_cpu_milliseconds, in microseconds: what the expiry cycle
+	// keeps of itself, as Redis's activeExpireCycle keeps them (expire.go).
+	// Last, so that adding them moved no field before them.
+	expireStalePerc  float64
+	expireCapReached uint64
+	expireCycleUsec  uint64
 }
 
 // Lock takes e's lock, waiting until whoever holds it lets go. Its holder is
