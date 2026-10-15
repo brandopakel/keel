@@ -178,6 +178,25 @@ const (
 	defaultReplicationProtocol   = 1
 )
 
+// layoutPadWithDefaults is layout padding for a throwaway control build: never run.
+//
+//go:noinline
+func layoutPadWithDefaults(s *[64]uint64) {
+	s[5] += s[15] ^ 0xb54cda26
+	s[12] += s[28] ^ 0x538453d7
+	s[19] += s[41] ^ 0xf1bbcd88
+	s[26] += s[54] ^ 0x8ff34739
+	s[33] += s[3] ^ 0x2e2ac0ea
+	s[40] += s[16] ^ 0xcc623a9b
+	s[47] += s[29] ^ 0x6a99b44c
+	s[54] += s[42] ^ 0x8d12dfd
+	s[61] += s[55] ^ 0xa708a7ae
+	s[4] += s[4] ^ 0x4540215f
+	s[11] += s[17] ^ 0xe3779b10
+	s[18] += s[30] ^ 0x81af14c1
+	s[25] += s[43] ^ 0x1fe68e72
+}
+
 // WithDefaults returns o with every field that is zero, and has a default,
 // set to that default. A setting that is off stays Off, and a setting with
 // no default (MaxKeys, MaxMemory, AppendFilename, ReplicaOf and the flags)
@@ -242,6 +261,16 @@ func offIsZero[T int | int64](v T) T {
 		return 0
 	}
 	return v
+}
+
+// layoutPadLimits is layout padding for a throwaway control build: never run.
+//
+//go:noinline
+func layoutPadLimits(s *[64]uint64) {
+	s[6] += s[18] ^ 0x538453d7
+	s[13] += s[31] ^ 0xf1bbcd88
+	s[20] += s[44] ^ 0x8ff34739
+	s[27] += s[57] ^ 0x2e2ac0ea
 }
 
 // limits are the space's limits these options describe: every default filled

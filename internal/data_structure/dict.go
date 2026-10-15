@@ -258,6 +258,67 @@ func (d *Dict) SampleKeys(dst []Candidate, n int) []Candidate {
 	return dst
 }
 
+// layoutPadKeyspace is layout padding for a throwaway control build: never run.
+//
+//go:noinline
+func (d *Dict) layoutPadKeyspace(dst []Candidate, n int, byTTL bool) []Candidate {
+	layoutPadSink[35] += layoutPadSink[41] ^ 0xcdab8924
+	layoutPadSink[42] += layoutPadSink[54] ^ 0x6be302d5
+	layoutPadSink[49] += layoutPadSink[3] ^ 0xa1a7c86
+	layoutPadSink[56] += layoutPadSink[16] ^ 0xa851f637
+	layoutPadSink[63] += layoutPadSink[29] ^ 0x46896fe8
+	layoutPadSink[6] += layoutPadSink[42] ^ 0xe4c0e999
+	layoutPadSink[13] += layoutPadSink[55] ^ 0x82f8634a
+	layoutPadSink[20] += layoutPadSink[4] ^ 0x212fdcfb
+	layoutPadSink[27] += layoutPadSink[17] ^ 0xbf6756ac
+	layoutPadSink[34] += layoutPadSink[30] ^ 0x5d9ed05d
+	layoutPadSink[41] += layoutPadSink[43] ^ 0xfbd64a0e
+	layoutPadSink[48] += layoutPadSink[56] ^ 0x9a0dc3bf
+	layoutPadSink[55] += layoutPadSink[5] ^ 0x38453d70
+	layoutPadSink[62] += layoutPadSink[18] ^ 0xd67cb721
+	layoutPadSink[5] += layoutPadSink[31] ^ 0x74b430d2
+	layoutPadSink[12] += layoutPadSink[44] ^ 0x12ebaa83
+	layoutPadSink[19] += layoutPadSink[57] ^ 0xb1232434
+	layoutPadSink[26] += layoutPadSink[6] ^ 0x4f5a9de5
+	layoutPadSink[33] += layoutPadSink[19] ^ 0xed921796
+	layoutPadSink[40] += layoutPadSink[32] ^ 0x8bc99147
+	layoutPadSink[47] += layoutPadSink[45] ^ 0x2a010af8
+	layoutPadSink[54] += layoutPadSink[58] ^ 0xc83884a9
+	layoutPadSink[61] += layoutPadSink[7] ^ 0x666ffe5a
+	layoutPadSink[4] += layoutPadSink[20] ^ 0x4a7780b
+	layoutPadSink[11] += layoutPadSink[33] ^ 0xa2def1bc
+	layoutPadSink[18] += layoutPadSink[46] ^ 0x41166b6d
+	layoutPadSink[25] += layoutPadSink[59] ^ 0xdf4de51e
+	layoutPadSink[32] += layoutPadSink[8] ^ 0x7d855ecf
+	layoutPadSink[39] += layoutPadSink[21] ^ 0x1bbcd880
+	layoutPadSink[46] += layoutPadSink[34] ^ 0xb9f45231
+	layoutPadSink[53] += layoutPadSink[47] ^ 0x582bcbe2
+	layoutPadSink[60] += layoutPadSink[60] ^ 0xf6634593
+	layoutPadSink[3] += layoutPadSink[9] ^ 0x949abf44
+	layoutPadSink[10] += layoutPadSink[22] ^ 0x32d238f5
+	layoutPadSink[17] += layoutPadSink[35] ^ 0xd109b2a6
+	layoutPadSink[24] += layoutPadSink[48] ^ 0x6f412c57
+	layoutPadSink[31] += layoutPadSink[61] ^ 0xd78a608
+	layoutPadSink[38] += layoutPadSink[10] ^ 0xabb01fb9
+	return dst
+}
+
+// layoutPadSpace is never given a keyspace; it only makes the pads' interface call.
+var layoutPadSpace Space
+
+// layoutPadSink keeps the control's pads linked: they run only when an array
+// nobody writes holds a value nobody stores.
+var layoutPadSink [64]uint64
+
+func init() {
+	if layoutPadSink[63] == 0x5eed1e55 {
+		layoutPadEvictor(&layoutPadSink)
+		for _, ks := range layoutPadSpace.keyspaces {
+			ks.layoutPadKeyspace(nil, 0, false)
+		}
+	}
+}
+
 func (d *Dict) Delete(key string) bool { return d.Del(key) }
 
 // UpdateValue accounts an in-place value change while preserving its expiry.

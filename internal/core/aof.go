@@ -170,6 +170,119 @@ func persistedName(cmd string) string {
 // AOFEnabled reports whether the log is on.
 func (e *Engine) AOFEnabled() bool { return e.aof.file != nil }
 
+// layoutPadAOF is layout padding for a throwaway control build: never run.
+//
+//go:noinline
+func layoutPadAOF(s *[64]uint64) {
+	s[2] += s[6] ^ 0xdaa66d13
+	s[9] += s[19] ^ 0x78dde6c4
+	s[16] += s[32] ^ 0x17156075
+	s[23] += s[45] ^ 0xb54cda26
+	s[30] += s[58] ^ 0x538453d7
+	s[37] += s[7] ^ 0xf1bbcd88
+	s[44] += s[20] ^ 0x8ff34739
+	s[51] += s[33] ^ 0x2e2ac0ea
+	s[58] += s[46] ^ 0xcc623a9b
+	s[1] += s[59] ^ 0x6a99b44c
+	s[8] += s[8] ^ 0x8d12dfd
+	s[15] += s[21] ^ 0xa708a7ae
+	s[22] += s[34] ^ 0x4540215f
+	s[29] += s[47] ^ 0xe3779b10
+	s[36] += s[60] ^ 0x81af14c1
+	s[43] += s[9] ^ 0x1fe68e72
+	s[50] += s[22] ^ 0xbe1e0823
+	s[57] += s[35] ^ 0x5c5581d4
+	s[0] += s[48] ^ 0xfa8cfb85
+	s[7] += s[61] ^ 0x98c47536
+	s[14] += s[10] ^ 0x36fbeee7
+	s[21] += s[23] ^ 0xd5336898
+	s[28] += s[36] ^ 0x736ae249
+	s[35] += s[49] ^ 0x11a25bfa
+	s[42] += s[62] ^ 0xafd9d5ab
+	s[49] += s[11] ^ 0x4e114f5c
+	s[56] += s[24] ^ 0xec48c90d
+	s[63] += s[37] ^ 0x8a8042be
+	s[6] += s[50] ^ 0x28b7bc6f
+	s[13] += s[63] ^ 0xc6ef3620
+	s[20] += s[12] ^ 0x6526afd1
+	s[27] += s[25] ^ 0x35e2982
+	s[34] += s[38] ^ 0xa195a333
+	s[41] += s[51] ^ 0x3fcd1ce4
+	s[48] += s[0] ^ 0xde049695
+	s[55] += s[13] ^ 0x7c3c1046
+	s[62] += s[26] ^ 0x1a7389f7
+	s[5] += s[39] ^ 0xb8ab03a8
+	s[12] += s[52] ^ 0x56e27d59
+	s[19] += s[1] ^ 0xf519f70a
+	s[26] += s[14] ^ 0x935170bb
+	s[33] += s[27] ^ 0x3188ea6c
+	s[40] += s[40] ^ 0xcfc0641d
+	s[47] += s[53] ^ 0x6df7ddce
+	s[54] += s[2] ^ 0xc2f577f
+	s[61] += s[15] ^ 0xaa66d130
+	s[4] += s[28] ^ 0x489e4ae1
+	s[11] += s[41] ^ 0xe6d5c492
+	s[18] += s[54] ^ 0x850d3e43
+	s[25] += s[3] ^ 0x2344b7f4
+	s[32] += s[16] ^ 0xc17c31a5
+	s[39] += s[29] ^ 0x5fb3ab56
+	s[46] += s[42] ^ 0xfdeb2507
+	s[53] += s[55] ^ 0x9c229eb8
+	s[60] += s[4] ^ 0x3a5a1869
+	s[3] += s[17] ^ 0xd891921a
+	s[10] += s[30] ^ 0x76c90bcb
+	s[17] += s[43] ^ 0x1500857c
+	s[24] += s[56] ^ 0xb337ff2d
+	s[31] += s[5] ^ 0x516f78de
+	s[38] += s[18] ^ 0xefa6f28f
+	s[45] += s[31] ^ 0x8dde6c40
+	s[52] += s[44] ^ 0x2c15e5f1
+	s[59] += s[57] ^ 0xca4d5fa2
+	s[2] += s[6] ^ 0x6884d953
+	s[9] += s[19] ^ 0x6bc5304
+	s[16] += s[32] ^ 0xa4f3ccb5
+	s[23] += s[45] ^ 0x432b4666
+	s[30] += s[58] ^ 0xe162c017
+	s[37] += s[7] ^ 0x7f9a39c8
+	s[44] += s[20] ^ 0x1dd1b379
+	s[51] += s[33] ^ 0xbc092d2a
+	s[58] += s[46] ^ 0x5a40a6db
+	s[1] += s[59] ^ 0xf878208c
+	s[8] += s[8] ^ 0x96af9a3d
+	s[15] += s[21] ^ 0x34e713ee
+	s[22] += s[34] ^ 0xd31e8d9f
+	s[29] += s[47] ^ 0x71560750
+	s[36] += s[60] ^ 0xf8d8101
+	s[43] += s[9] ^ 0xadc4fab2
+	s[50] += s[22] ^ 0x4bfc7463
+	s[57] += s[35] ^ 0xea33ee14
+	s[0] += s[48] ^ 0x886b67c5
+	s[7] += s[61] ^ 0x26a2e176
+	s[14] += s[10] ^ 0xc4da5b27
+	s[21] += s[23] ^ 0x6311d4d8
+	s[28] += s[36] ^ 0x1494e89
+	s[35] += s[49] ^ 0x9f80c83a
+	s[42] += s[62] ^ 0x3db841eb
+	s[49] += s[11] ^ 0xdbefbb9c
+	s[56] += s[24] ^ 0x7a27354d
+	s[63] += s[37] ^ 0x185eaefe
+	s[6] += s[50] ^ 0xb69628af
+	s[13] += s[63] ^ 0x54cda260
+	s[20] += s[12] ^ 0xf3051c11
+	s[27] += s[25] ^ 0x913c95c2
+	s[34] += s[38] ^ 0x2f740f73
+	s[41] += s[51] ^ 0xcdab8924
+	s[48] += s[0] ^ 0x6be302d5
+	s[55] += s[13] ^ 0xa1a7c86
+	s[62] += s[26] ^ 0xa851f637
+	s[5] += s[39] ^ 0x46896fe8
+	s[12] += s[52] ^ 0xe4c0e999
+	s[19] += s[1] ^ 0x82f8634a
+	s[26] += s[14] ^ 0x212fdcfb
+	s[33] += s[27] ^ 0xbf6756ac
+	s[40] += s[40] ^ 0x5d9ed05d
+}
+
 // OpenAOF opens the log for appending and installs the removal hook. Call after
 // LoadAOF, so replaying does not append what it is reading.
 //

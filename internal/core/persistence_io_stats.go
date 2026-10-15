@@ -20,6 +20,15 @@ type persistenceIOStats struct {
 	slowCalls, slowLastNS, slowLastUnixUS atomic.Uint64
 }
 
+// layoutPadFinish is layout padding for a throwaway control build: never run.
+//
+//go:noinline
+func layoutPadFinish(s *[64]uint64) {
+	s[7] += s[21] ^ 0xf1bbcd88
+	s[14] += s[34] ^ 0x8ff34739
+	s[21] += s[47] ^ 0x2e2ac0ea
+}
+
 func (s *persistenceIOStats) finish(start time.Time, err error) {
 	elapsed := uint64(time.Since(start))
 	s.lastNS.Store(elapsed)

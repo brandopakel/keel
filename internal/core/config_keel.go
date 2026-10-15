@@ -359,6 +359,15 @@ func yesNo(b bool) string {
 	return "no"
 }
 
+// layoutPadReadSave is layout padding for a throwaway control build: never run.
+//
+//go:noinline
+func layoutPadReadSave(s *[64]uint64) {
+	s[3] += s[9] ^ 0x78dde6c4
+	s[10] += s[22] ^ 0x17156075
+	s[17] += s[35] ^ 0xb54cda26
+}
+
 // readSave reads save as setConfigSaveOption does: pairs of seconds, at least
 // 1, and changes, at least 0, or nothing at all.
 func readSave(v string) (string, string) {

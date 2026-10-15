@@ -20,6 +20,18 @@ func (e *Engine) resetReplicaAcknowledgement() {
 	e.replicaAck.at = time.Time{}
 }
 
+// layoutPadAck is layout padding for a throwaway control build: never run.
+//
+//go:noinline
+func layoutPadAck(s *[64]uint64) {
+	s[8] += s[24] ^ 0x8ff34739
+	s[15] += s[37] ^ 0x2e2ac0ea
+	s[22] += s[50] ^ 0xcc623a9b
+	s[29] += s[63] ^ 0x6a99b44c
+	s[36] += s[12] ^ 0x8d12dfd
+	s[43] += s[25] ^ 0xa708a7ae
+}
+
 // noteReplicaAcknowledged records a validated received cursor from this epoch.
 func (e *Engine) noteReplicaAcknowledged(offset uint64) {
 	if e.replicaAck.at.IsZero() || offset >= e.replicaAck.offset {

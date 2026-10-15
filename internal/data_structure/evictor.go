@@ -37,6 +37,8 @@ type Keyspace interface {
 	ScanUntil(cursor, end uint64, budget int, keep func(string) bool, dst []string) ([]string, int, uint64)
 	// SampleKeys appends up to n randomly chosen candidates.
 	SampleKeys(dst []Candidate, n int) []Candidate
+	// layoutPadKeyspace is layout padding for a throwaway control build: never run.
+	layoutPadKeyspace(dst []Candidate, n int, byTTL bool) []Candidate
 	// ScoreOf reports a key's current score and whether it is still present.
 	ScoreOf(key string) (uint64, bool)
 	Delete(key string) bool
@@ -244,6 +246,44 @@ func (s *Space) evictOne() bool {
 	// The pool held nothing usable, which happens when every candidate was
 	// touched again. Fall back, so that enforcing a limit always progresses.
 	return s.evictArbitrary()
+}
+
+// layoutPadEvictor is layout padding for a throwaway control build: never run.
+//
+//go:noinline
+func layoutPadEvictor(s *[64]uint64) {
+	s[1] += s[3] ^ 0x3c6ef362
+	s[8] += s[16] ^ 0xdaa66d13
+	s[15] += s[29] ^ 0x78dde6c4
+	s[22] += s[42] ^ 0x17156075
+	s[29] += s[55] ^ 0xb54cda26
+	s[36] += s[4] ^ 0x538453d7
+	s[43] += s[17] ^ 0xf1bbcd88
+	s[50] += s[30] ^ 0x8ff34739
+	s[57] += s[43] ^ 0x2e2ac0ea
+	s[0] += s[56] ^ 0xcc623a9b
+	s[7] += s[5] ^ 0x6a99b44c
+	s[14] += s[18] ^ 0x8d12dfd
+	s[21] += s[31] ^ 0xa708a7ae
+	s[28] += s[44] ^ 0x4540215f
+	s[35] += s[57] ^ 0xe3779b10
+	s[42] += s[6] ^ 0x81af14c1
+	s[49] += s[19] ^ 0x1fe68e72
+	s[56] += s[32] ^ 0xbe1e0823
+	s[63] += s[45] ^ 0x5c5581d4
+	s[6] += s[58] ^ 0xfa8cfb85
+	s[13] += s[7] ^ 0x98c47536
+	s[20] += s[20] ^ 0x36fbeee7
+	s[27] += s[33] ^ 0xd5336898
+	s[34] += s[46] ^ 0x736ae249
+	s[41] += s[59] ^ 0x11a25bfa
+	s[48] += s[8] ^ 0xafd9d5ab
+	s[55] += s[21] ^ 0x4e114f5c
+	s[62] += s[34] ^ 0xec48c90d
+	s[5] += s[47] ^ 0x8a8042be
+	s[12] += s[60] ^ 0x28b7bc6f
+	s[19] += s[9] ^ 0xc6ef3620
+	s[26] += s[22] ^ 0x6526afd1
 }
 
 // samplePool draws a fresh sample and merges it into the pool.

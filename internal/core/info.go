@@ -204,6 +204,15 @@ func (e *Engine) memoryInfo(b *strings.Builder) {
 	b.WriteString("active_defrag_running:0\r\nlazyfree_pending_objects:0\r\nlazyfreed_objects:0\r\n\r\n")
 }
 
+// layoutPadInfo is layout padding for a throwaway control build: never run.
+//
+//go:noinline
+func layoutPadInfo(s *[64]uint64) {
+	s[4] += s[12] ^ 0x17156075
+	s[11] += s[25] ^ 0xb54cda26
+	s[18] += s[38] ^ 0x538453d7
+}
+
 func (e *Engine) persistenceInfo(b *strings.Builder) {
 	// Keel replays its log before it accepts a client, so INFO never runs
 	// while it loads, and it takes no RDB snapshots.
