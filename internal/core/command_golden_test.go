@@ -132,6 +132,7 @@ func budgetStep(n int) goldenStep {
 func slowlogStep(n int) goldenStep {
 	return goldenStep{directive: "slowlog-log-slower-than " + strconv.Itoa(n), do: func(r *commandGoldenRun) {
 		r.e.slowlog.slowerThan = int64(n)
+		r.e.watchLongCommands()
 	}}
 }
 
