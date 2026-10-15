@@ -248,7 +248,16 @@ func TestServerRetriesAFailedWorkerBatch(t *testing.T) {
 			}
 			expectCall(t, c, r, "$-1", "GET", "k"+strconv.Itoa(acked))
 			s.stop(t)
-			if logged := s.log.String(); strings.Contains(logged, "truncated final command") {
+			// A stop cuts the held write back, so the log reopens whole. A kill
+			// may not: the worker retries the batch each tick, and each retry's
+			// short write is cut back right after it, as Redis truncates right
+			// after its write (aof.c 1515-1526), so a kill between the two
+			// leaves the held record torn, which the reopen repairs, as Redis's
+			// aof-load-truncated does. The GETs above show what a kill must
+			// keep: every acknowledged write, and not the held one. That the
+			// cut follows the short write at once is the worker's own test
+			// (TestAFailedWorkerBatchIsRetriedFromTheFrontOfTheBuffer).
+			if logged := s.log.String(); end == "stop" && strings.Contains(logged, "truncated final command") {
 				t.Fatalf("the log needed a repair:\n%s", logged)
 			}
 		})
