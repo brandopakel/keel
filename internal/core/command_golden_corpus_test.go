@@ -1999,6 +1999,22 @@ var goldenServer = []commandGoldenCase{
 		send("LATENCY", "nosuch"),
 		send("LATENCY"),
 	}},
+	// The latency monitor turned on, at a threshold no command here comes
+	// near, so that what it holds does not depend on how long one took; and
+	// off again. DOCTOR is left out: on Linux its report can add advice on
+	// the process's huge pages.
+	{family: "server", name: "latency-monitor", steps: []goldenStep{
+		send("CONFIG", "SET", "latency-monitor-threshold", "100000"),
+		send("CONFIG", "GET", "latency-monitor-threshold"),
+		send("SET", "k", "v"),
+		send("LATENCY", "LATEST"),
+		send("LATENCY", "HISTORY", "command"),
+		send("LATENCY", "GRAPH", "command"),
+		send("LATENCY", "RESET"),
+		send("CONFIG", "SET", "latency-monitor-threshold", "-1"),
+		send("CONFIG", "SET", "latency-monitor-threshold", "0"),
+		send("CONFIG", "GET", "latency-monitor-threshold"),
+	}},
 	// The slow log's entries hold the time a command ran and took, so a
 	// GET that returns them is held to its type. Its threshold is set, so
 	// that what it holds is the commands run, not how long they took.
