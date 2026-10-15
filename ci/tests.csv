@@ -4159,6 +4159,16 @@ artifact_id,run_id,time,branch,test,package,peak_bytes,peak_file_bytes
 11934334318,38651311559,2026-10-14T22:59:54Z,feat/client-pause,TestAOFTranscriptMassEvictionKeepsBoundedBuffer,internal/core,16781002,16781002
 11934334318,38651311559,2026-10-14T22:59:54Z,feat/client-pause,TestRewriteSlicesObeyKeyBudgetAndReplay,internal/core,14778324,12888890
 11934334318,38651311559,2026-10-14T22:59:54Z,feat/client-pause,TestStagedRecordsAreTheBytesAppendAOFCommandWrites,internal/core,12780115,4259906
+11935371541,38651560114,2026-10-14T23:02:09Z,feat/volatile-eviction,TestRewriteStallProfile,internal/core,113577780,56788890
+11935371541,38651560114,2026-10-14T23:02:09Z,feat/volatile-eviction,"TestEveryAcknowledgedWriteSurvivesAKilleverysec,_during_a_faile",internal/core,94519333,89459119
+11935371541,38651560114,2026-10-14T23:02:09Z,feat/volatile-eviction,TestRejectedCollectionPopsPreservePipelineAndRestartconcurrent,cmd/keel,68160485,68160485
+11935371541,38651560114,2026-10-14T23:02:09Z,feat/volatile-eviction,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierlis,cmd/keel,68160040,68160040
+11935371541,38651560114,2026-10-14T23:02:09Z,feat/volatile-eviction,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierset,cmd/keel,68159910,68159910
+11935371541,38651560114,2026-10-14T23:02:09Z,feat/volatile-eviction,TestStagedRecordsAreTheBytesAppendAOFCommandWrites,internal/core,68159664,4259925
+11935371541,38651560114,2026-10-14T23:02:09Z,feat/volatile-eviction,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierzse,cmd/keel,67111862,67111862
+11935371541,38651560114,2026-10-14T23:02:09Z,feat/volatile-eviction,TestReplicasThroughAFailedRewriteprotocol-,cmd/keel,22551816,21568061
+11935371541,38651560114,2026-10-14T23:02:09Z,feat/volatile-eviction,TestReplicationV2LargeSnapshotOperationsAndFrozenFile,internal/core,21691674,10845942
+11935371541,38651560114,2026-10-14T23:02:09Z,feat/volatile-eviction,TestRewriteSlicesObeyKeyBudgetAndReplay,internal/core,19633460,12888890
 11935866570,38651581585,2026-10-14T23:02:21Z,feat/command,TestRewriteStallProfile,internal/core,111385332,56788890
 11935866570,38651581585,2026-10-14T23:02:21Z,feat/command,"TestEveryAcknowledgedWriteSurvivesAKilleverysec,_during_a_faile",internal/core,83296293,76679118
 11935866570,38651581585,2026-10-14T23:02:21Z,feat/command,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierzse,cmd/keel,68160485,68160485

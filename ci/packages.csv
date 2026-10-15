@@ -2425,6 +2425,17 @@ artifact_id,run_id,time,branch,pr,package,result,seconds
 11934334318,38651311559,2026-10-14T22:59:54Z,feat/client-pause,,internal/resp,ok,0.116
 11934334318,38651311559,2026-10-14T22:59:54Z,feat/client-pause,,internal/server,ok,1.946
 11934334318,38651311559,2026-10-14T22:59:54Z,feat/client-pause,,internal/testlock,ok,0.31
+11935371541,38651560114,2026-10-14T23:02:09Z,feat/volatile-eviction,212,bench/arrival,ok,1.203
+11935371541,38651560114,2026-10-14T23:02:09Z,feat/volatile-eviction,212,cmd/keel,ok,7.551
+11935371541,38651560114,2026-10-14T23:02:09Z,feat/volatile-eviction,212,internal/config,ok,0.217
+11935371541,38651560114,2026-10-14T23:02:09Z,feat/volatile-eviction,212,internal/core,ok,14.793
+11935371541,38651560114,2026-10-14T23:02:09Z,feat/volatile-eviction,212,internal/core/io_multiplexing,ok,0.05
+11935371541,38651560114,2026-10-14T23:02:09Z,feat/volatile-eviction,212,internal/data_structure,ok,8.866
+11935371541,38651560114,2026-10-14T23:02:09Z,feat/volatile-eviction,212,internal/golden,ok,0.004
+11935371541,38651560114,2026-10-14T23:02:09Z,feat/volatile-eviction,212,internal/procinfo,ok,0.022
+11935371541,38651560114,2026-10-14T23:02:09Z,feat/volatile-eviction,212,internal/resp,ok,0.041
+11935371541,38651560114,2026-10-14T23:02:09Z,feat/volatile-eviction,212,internal/server,ok,0.915
+11935371541,38651560114,2026-10-14T23:02:09Z,feat/volatile-eviction,212,internal/testlock,ok,0.312
 11935866570,38651581585,2026-10-14T23:02:21Z,feat/command,,bench/arrival,ok,1.234
 11935866570,38651581585,2026-10-14T23:02:21Z,feat/command,,cmd/keel,ok,9.717
 11935866570,38651581585,2026-10-14T23:02:21Z,feat/command,,internal/config,ok,0.57
