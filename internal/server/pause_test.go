@@ -145,7 +145,9 @@ func TestClientPauseAllHoldsEveryCommandUntilItEnds(t *testing.T) {
 	other.send("PING")
 	require.Equal(t, "", other.line(100*time.Millisecond), "a read waits under ALL")
 	require.Equal(t, "+OK\r\n", admin.do("CLIENT", "PAUSE", "10", "WRITE"), "and so does CLIENT")
-	require.Greater(t, time.Since(start), 250*time.Millisecond)
+	// Unheld, CLIENT would answer about 100 ms in, after the read's wait; held,
+	// about 300 ms in. Halfway leaves each side 100 ms of slack.
+	require.Greater(t, time.Since(start), 200*time.Millisecond, "CLIENT waited out the pause")
 	require.Equal(t, "+PONG\r\n", other.line(2*time.Second), "the read ran once the pause ended")
 }
 
