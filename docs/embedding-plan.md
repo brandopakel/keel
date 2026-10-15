@@ -2518,3 +2518,17 @@ Redis.
   mutable entry in core's census. It moves in a PR of its own after the
   server's (3b), so that the server's measurements stay clean and the move can
   be reverted alone. Phase 6 still moves INFO's rendering into the server.
+- **`COMMAND DOCS` answers with facts only** (October 14, 2026, owner
+  decision, final). Redis 8's `src/commands/*.json` is licensed under RSALv2,
+  SSPLv1 and AGPLv3, and Keel is MIT. So no Redis documentation text goes into
+  Keel's repository or binary, and none is loaded at run time for now.
+  `COMMAND DOCS` leaves out:
+  - `summary`;
+  - `complexity`;
+  - `history`;
+  - `replaced_by`;
+  - each argument's `summary`.
+
+  `COMMAND INFO` leaves out a key spec's `notes`. Everything else `COMMAND`
+  reports is facts copied from the specs: names, numbers, flags, versions,
+  tips, and the arguments' structure (`docs/info-compatibility.md`, "COMMAND").

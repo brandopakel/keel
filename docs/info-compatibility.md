@@ -447,6 +447,7 @@ General validation runs it against Redis 8.10.1 and RedisBloom.
 | `CONFIG GET pattern [pattern ...]` | (b), done; extended by `CONFIG SET` (below). Every directive Keel answers for, from Redis 8.10.1's own table (`internal/core/config_specs.go`), under Redis's names and aliases: Keel's settings read live, the settings that only tune Redis's internals at the value last set (Redis's default until then), and the settings Keel cannot change at Keel's value. `replicaof` is written `host port`, as Redis writes it; `dir` is the working directory, against which relative paths resolve. The transport's (`port`, `bind`, `maxclients`, `tcp-backlog`, `io-threads`, `hz`, `requirepass`) only with the server; Redis gives the password to any client that has logged in. A RESP2 flat array, or a RESP3 map. A name matches without regard to case and comes back as asked; a glob matches names and aliases in Redis's spelling, and never a hidden directive, which only its name finds, as in Redis. The slow log's settings came with (c3c). |
 | `CONFIG SET parameter value [parameter value ...]` | Done (S1). Redis's `configSetCommand`, all pairs or none: see "CONFIG SET" below. |
 | `CONFIG REWRITE` | (b), done. `The server is running without a config file`, Redis's answer when it was started without one: Keel takes flags. |
+| `COMMAND`, `COMMAND COUNT`, `INFO`, `LIST`, `DOCS`, `GETKEYS`, `GETKEYSANDFLAGS`, `HELP` | Done (S3). Answered from what Redis 8.10.1 declares of each command Keel has (`src/commands/*.json`, generated into `internal/core/command_specs.go`) and what Keel declares of its own: see "COMMAND" below. |
 | `CONFIG RESETSTAT` | (c1), done. Resets what Redis's `resetServerStats` resets that Keel reports: `total_commands_processed` and the ops-per-second samples, `total_error_replies` and errorstats, `total_connections_received` and `rejected_connections` (client ids keep growing, as Redis's do), `expired_keys`, `evicted_keys`, `keyspace_hits`, `keyspace_misses`, commandstats, latencystats, the slow log's counts (not its entries, which `SLOWLOG RESET` clears), `aof_rewrites`, `aof_rewrites_consecutive_failures`, and the network bytes and reads and writes (d). `used_memory_peak` stays, as Redis keeps it. Keel's own fields keep counting. |
 | `SLOWLOG GET [count]`, `LEN`, `RESET`, `HELP` | (c3c), done. The commands that took `slowlog-log-slower-than` microseconds or more (10000), newest first, at most `slowlog-max-len` (128). Each entry has Redis 8.10's seven fields: id, Unix time, duration in µs, the arguments (at most `slowlog-entry-max-argc`, 32, the last place saying how many more; each cut at `slowlog-entry-max-string-len`, 128 bytes, saying how many more), the client's address (`ip:port`, `[ip]:port` for IPv6, as Redis writes it) and name, and how many arguments the command really had. `EXEC` is not logged, as in Redis; what it runs is. `GET`'s count is read as Redis reads it, `-1` meaning all. The four settings are Redis's defaults, which `CONFIG GET` reports. `CONFIG RESETSTAT` clears the counts and keeps the entries, and the log's replay adds none. |
 | `LATENCY LATEST`, `HISTORY`, `RESET`, `GRAPH`, `DOCTOR`, `HELP` | (c3b), done. Redis's latency monitor is off by default (`latency-monitor-threshold 0`, which `CONFIG GET` reports), and Keel has none, so these answer as Redis's do when it has never been on: `LATEST` and `HISTORY` an empty array, `RESET` `0`, `GRAPH` Redis's `No samples available for event` error, and `DOCTOR` its report that monitoring is disabled. Each subcommand has Redis's count. |
@@ -567,6 +568,67 @@ and `repl-timeout`. Keel answers each as a name it does not know, and they
 come one by one, with the features they configure. `CONFIG SET`'s sensitive
 arguments (`requirepass`, `masterauth`) are to be redacted from the slow log
 when it comes (c3c), as Redis's `redactClientCommandArgument` does.
+
+## COMMAND
+
+`COMMAND` describes the commands Keel has, and only those, as Redis 8.10.1
+describes its own (`server.c`, `commandCommand` and the rest). It reads what
+Redis declares of each one in `src/commands/*.json`, which
+`scripts/generate-command-specs.py` writes into `internal/core/command_specs.go`
+(CI checks the file is current), and what Keel declares of its own commands
+and RedisBloom's (`command_specs_keel.go`).
+
+- **`COMMAND INFO`** is Redis's ten fields, derived as Redis derives them:
+  - the flags the spec declares, plus `movablekeys` where the key specs
+    leave the keys' positions to the arguments
+    (`populateCommandLegacyRangeSpec`);
+  - the first key, last key and step that clients without key specs read;
+  - the ACL categories declared, plus those the flags imply
+    (`setImplicitACLCategories`);
+  - the tips, the key specs, and the subcommands Keel has.
+
+  An unknown name is a null, as in Redis. Two of Keel's commands, `SET` and
+  `PFCOUNT`, differ from Redis's reply: each has a key spec with a note,
+  which is Redis's text and is left out. A container (`CLIENT`, `CONFIG`,
+  `MEMORY`, `COMMAND`) lists only the subcommands Keel has. Redis lists its
+  subcommands in no fixed order, and Keel lists them in its own order.
+- **`COMMAND GETKEYS` and `GETKEYSANDFLAGS`** find keys as Redis's
+  `getKeysFromCommandWithSpecs` does. Where the key specs do not say all there
+  is to say, they use Keel's own versions of Redis's functions: `setGetKeys`,
+  whose flags depend on `GET`, and `pfmergeGetKeys`. They give Redis's errors:
+  `Invalid command specified`, `The command has no key arguments`, `Invalid
+  number of arguments specified for command` and `Invalid arguments specified
+  for command`. A test fails when a command Keel has names a key function Keel
+  lacks.
+- **`COMMAND LIST [FILTERBY MODULE name | ACLCAT category | PATTERN
+  pattern]`** names every command and subcommand Keel has, or those the filter
+  keeps. RedisBloom's commands belong to the module `bf`, as Redis loads it.
+  `COMMAND COUNT` counts Keel's commands, and `COMMAND` with no argument
+  describes them all.
+- **`COMMAND DOCS`** reports the facts of each command and leaves out Redis's
+  text, because Redis 8's `src/commands/*.json` is licensed under RSALv2,
+  SSPLv1 and AGPLv3, and Keel is MIT. It reports:
+  - `since`, `group` (`module` for RedisBloom's, with `module` `bf`),
+    `doc_flags` and `deprecated_since`;
+  - the arguments' structure: `name`, `type`, `display_text`,
+    `key_spec_index`, `token`, `since`, `deprecated_since`, `flags` and the
+    nested `arguments`;
+  - the subcommands Keel has.
+
+  It leaves out:
+  - `summary`;
+  - `complexity`;
+  - `history` (the versions are facts, but each change is described in text);
+  - `replaced_by` (written as text: "`SET` with the `NX` argument");
+  - each argument's `summary`;
+  - a key spec's `notes`, in `COMMAND INFO`.
+
+  So every `COMMAND DOCS` reply for a command Redis declares differs from
+  Redis's, because every one has a summary. This is the owner's decision of
+  October 14, 2026, and it is final: no Redis documentation text in Keel's
+  repository or binary, and no loading of it at run time for now (the
+  embedding plan's Decisions).
+- **`COMMAND HELP`** is Redis's text, as every `HELP` of Keel's is.
 
 ## What each part should show in Grafana
 
