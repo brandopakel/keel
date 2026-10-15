@@ -15,9 +15,9 @@ import "github.com/brandopakel/keel/internal/data_structure"
 // whether that changed it: PFADD. Creating the key is itself a change, so
 // PFADD with no items reports true the first time.
 //
-// It is recorded as it was asked for, also when it changed nothing, as the
-// log has always held it. Redis propagates nothing then (hyperloglog.c,
-// pfaddCommand: server.dirty only when a register was updated).
+// It is recorded as it was asked for when it changed the sketch, and not
+// otherwise, as Redis propagates it (hyperloglog.c, pfaddCommand:
+// server.dirty only when a register was updated or the key created).
 func (e *Engine) opPFAdd(key string, items []string) bool {
 	hll, exist := e.hllStore.Get(key)
 	changed := !exist
@@ -31,7 +31,9 @@ func (e *Engine) opPFAdd(key string, items []string) bool {
 		}
 	}
 	e.hllStore.Resize(key)
-	e.aofRecordKeyArgs("PFADD", key, items)
+	if changed {
+		e.aofRecordKeyArgs("PFADD", key, items)
+	}
 	return changed
 }
 

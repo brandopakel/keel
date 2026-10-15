@@ -33,6 +33,7 @@ var packageVars = map[string]string{
 	"alphaInf":            "a constant that Go cannot declare as one, because it calls math.Log",
 	"ErrFilterTooLarge":   "an error sentinel, matched by identity and never reassigned",
 	"ErrNonScalingFull":   "an error sentinel, matched by identity and never reassigned",
+	"ErrCMSMergeOverflow": "an error sentinel, matched by identity and never reassigned",
 	"errShortPayload":     "an error sentinel, matched by identity and never reassigned",
 }
 
