@@ -162,7 +162,7 @@ func keelConfigTable() map[string]keelConfig {
 		// No eviction of clients for their memory: Redis's 0.
 		"maxmemory-clients": {handling: configFixed, get: func(*Engine) string { return "0" }},
 		// Every command's latency is tracked, at Redis's default percentiles
-		// (latency.go), and there is no latency monitor: Redis's 0.
+		// (latency.go).
 		"latency-tracking": {handling: configFixed, get: func(*Engine) string { return "yes" }},
 		"latency-tracking-info-percentiles": {handling: configFixed, get: func(*Engine) string {
 			labels := make([]string, len(latencyPercentiles))
@@ -171,13 +171,22 @@ func keelConfigTable() map[string]keelConfig {
 			}
 			return strings.Join(labels, " ")
 		}, read: readPercentiles},
-		"latency-monitor-threshold": {handling: configFixed, get: func(*Engine) string { return "0" }},
+		// The latency monitor's (watch_latency.go), changed at once, as
+		// Redis's is.
+		"latency-monitor-threshold": {handling: configLive,
+			get: func(e *Engine) string { return strconv.FormatInt(e.latencyMonitor.threshold, 10) },
+			set: func(e *Engine, v string) string {
+				e.latencyMonitor.threshold, _ = strconv.ParseInt(v, 10, 64)
+				e.watchLongCommands()
+				return ""
+			}},
 		// The slow log's (slowlog.go), changed at once, as Redis's are; a
 		// shorter log is cut back when the next entry joins it, as Redis's is.
 		"slowlog-log-slower-than": {handling: configLive,
 			get: func(e *Engine) string { return strconv.FormatInt(e.slowlog.slowerThan, 10) },
 			set: func(e *Engine, v string) string {
 				e.slowlog.slowerThan, _ = strconv.ParseInt(v, 10, 64)
+				e.watchLongCommands()
 				return ""
 			}},
 		"slowlog-max-len": {handling: configLive,

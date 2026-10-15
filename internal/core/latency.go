@@ -23,14 +23,6 @@ var latencyHelp = HelpReply("LATENCY",
 	"    Return a cumulative distribution of latencies in the format of a histogram for the specified command names.",
 	"    If no commands are specified then all histograms are replied.")
 
-// latencyDoctorDisabled is LATENCY DOCTOR's report from a Redis whose latency
-// monitor is off (latency-monitor-threshold 0, its default) and has never
-// been on, which is Keel's: it has no latency monitor.
-const latencyDoctorDisabled = "I'm sorry, Dave, I can't do that. Latency monitoring is disabled in this Redis instance. " +
-	"You may use \"CONFIG SET latency-monitor-threshold <milliseconds>.\" in order to enable it. If we weren't in a deep " +
-	"space mission I'd suggest to take a look at " +
-	"https://redis.io/docs/latest/operate/oss_and_stack/management/optimization/latency-monitor.\n"
-
 // latencyPercentiles are latency-tracking-info-percentiles, Redis's default
 // of 50 99 99.9, as INFO latencystats names them.
 var latencyPercentiles = []struct {
@@ -41,10 +33,7 @@ var latencyPercentiles = []struct {
 // cmdLATENCY implements LATENCY: HISTOGRAM from each command's latency
 // histogram, which every command's time is recorded in as Redis records it
 // with latency-tracking on, its default; and the latency monitor's
-// subcommands as Redis answers them with the monitor off, its default, and
-// no event ever recorded: no samples, nothing to reset, and DOCTOR's report
-// that monitoring is disabled. Keel has no latency monitor
-// (docs/info-compatibility.md).
+// subcommands (watch_latency.go).
 //
 // The subcommand and its count have been checked against the command table by
 // the time this runs; see containerCommands.
@@ -55,16 +44,10 @@ func (e *Engine) cmdLATENCY(args []string) []byte {
 	switch strings.ToLower(args[0]) {
 	case "histogram":
 		return e.encode(e.latencyHistograms(args[1:]), false)
-	case "latest", "history":
-		return e.encode([]interface{}{}, false)
-	case "reset":
-		return e.encode(int64(0), false)
-	case "doctor":
-		return e.encode(ReplyVerbatim(latencyDoctorDisabled), false)
-	case "graph":
-		return e.encode(fmt.Errorf("ERR No samples available for event '%s'", args[1]), false)
+	case "help":
+		return latencyHelp
 	}
-	return latencyHelp
+	return e.encode(e.latencyMonitorReply(args), false)
 }
 
 // latencyHistograms is LATENCY HISTOGRAM's reply: for each command named, or

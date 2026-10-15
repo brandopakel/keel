@@ -491,7 +491,7 @@ func (e *Engine) flushAOF(closing bool) error {
 			e.publishFlushed(syncedOnly)
 			return nil
 		}
-		if err := timedPersistenceSync(&e.appendSyncStats, e.aof.file, e.aofSync); err != nil {
+		if err := e.syncAOFInLine(fsync); err != nil {
 			e.aof.failed = err
 			return err
 		}

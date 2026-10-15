@@ -259,9 +259,9 @@ func TestConfigSetRefusesWhatKeelCannotChange(t *testing.T) {
 		string(rawReplyOn(t, e, "CONFIG", "SET", "latency-tracking-info-percentiles", "50 x")))
 	assert.Equal(t, configError("latency-tracking-info-percentiles", "latency-tracking-info-percentiles parameters should sit between [0.0,100.0]"),
 		string(rawReplyOn(t, e, "CONFIG", "SET", "latency-tracking-info-percentiles", "101")))
-	assert.Equal(t, configError("latency-monitor-threshold", "can't set immutable config"),
-		string(rawReplyOn(t, e, "CONFIG", "SET", "latency-monitor-threshold", "200")))
-	assert.Equal(t, [][2]string{{"latency-tracking", "yes"}, {"latency-tracking-info-percentiles", "50 99 99.9"}, {"latency-monitor-threshold", "0"}},
+	assert.Equal(t, "+OK\r\n", string(rawReplyOn(t, e, "CONFIG", "SET", "latency-monitor-threshold", "200")),
+		"the latency monitor's, live (watch_latency.go)")
+	assert.Equal(t, [][2]string{{"latency-tracking", "yes"}, {"latency-tracking-info-percentiles", "50 99 99.9"}, {"latency-monitor-threshold", "200"}},
 		configPairs(t, e, "latency-tracking", "latency-tracking-info-percentiles", "latency-monitor-threshold"))
 }
 

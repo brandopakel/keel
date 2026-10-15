@@ -39,8 +39,12 @@ type slowlogEntry struct {
 	argc     int
 }
 
+// slowlogSlowerThanDefault is Redis's slowlog-log-slower-than, which is also
+// Engine.longFrom's start while the latency monitor is off.
+const slowlogSlowerThanDefault = 10000
+
 func newSlowlog() slowlog {
-	return slowlog{slowerThan: 10000, maxLen: 128, maxArgc: 32, maxStringLen: 128}
+	return slowlog{slowerThan: slowlogSlowerThanDefault, maxLen: 128, maxArgc: 32, maxStringLen: 128}
 }
 
 // noteSlow is slowlogPushCurrentCommand: cmd, which ran at stat and took

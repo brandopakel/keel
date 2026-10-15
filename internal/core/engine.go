@@ -331,6 +331,12 @@ type Engine struct {
 	expireStalePerc  float64
 	expireCapReached uint64
 	expireCycleUsec  uint64
+	// latencyMonitor is Redis's latency monitor (watch_latency.go); longFrom
+	// is the least time, in microseconds, a command must take for noteRun to
+	// hand it to the monitor and the slow log, which watchLongCommands sets.
+	// Last, so that adding them moved no field before them.
+	latencyMonitor latencyMonitor
+	longFrom       int64
 }
 
 // Lock takes e's lock, waiting until whoever holds it lets go. Its holder is
@@ -365,7 +371,7 @@ func engineIn(space *data_structure.Space) *Engine {
 		started:     now, runID: newRunID(), memoryPeakAt: now,
 		cmdStats: make([]commandStat, len(statNames)),
 		latency:  make([]*latencyHistogram, len(statNames)),
-		slowlog:  newSlowlog(),
+		slowlog:  newSlowlog(), longFrom: slowlogSlowerThanDefault,
 	}
 	return e
 }
