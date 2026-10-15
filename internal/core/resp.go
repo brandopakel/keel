@@ -58,6 +58,12 @@ func ParseCmdReserved(data []byte, reserve func(int) bool) (*Command, int, error
 	return resp.ParseCmdReserved(data, reserve)
 }
 
+// ParseInlineReserved reads the inline request at the front of data, a line
+// of words as Redis reads one; see resp.ParseInlineReserved.
+func ParseInlineReserved(data []byte, reserve func(int) bool) (*Command, int, error) {
+	return resp.ParseInlineReserved(data, reserve)
+}
+
 // FrameShortfall reports how many more bytes must arrive before the command
 // at the front of data can be decoded, or 0 when that is not knowable.
 func FrameShortfall(data []byte) int { return resp.FrameShortfall(data) }

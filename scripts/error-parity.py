@@ -531,9 +531,53 @@ OOM_ANSWERED = [[['GET', 'k']], [['DEL', 'k']], [['EXPIRE', 'k', '10']], [['EXIS
                 [['MULTI'], ['GET', 'k'], ['TTL', 'k'], ['EXEC']]]
 
 
-def case(name, commands, *, server='primary', auth=True, protocols=(2, 3), expect=None, loose=(), setup=()):
+def case(name, commands, *, server='primary', auth=True, protocols=(2, 3), expect=None, loose=(), setup=(),
+         raw=None, marker=True):
     return dict(name=name, commands=[list(c) for c in commands], server=server, auth=auth,
-                protocols=list(protocols), expect=expect, loose=list(loose), setup=[list(c) for c in setup])
+                protocols=list(protocols), expect=expect, loose=list(loose), setup=[list(c) for c in setup],
+                raw=raw, marker=marker)
+
+
+# Inline requests, sent as they are rather than framed as RESP: lines of words
+# that Redis splits with sdssplitargs (networking.c, processInlineBuffer), the
+# lines with none that it skips, and its two inline protocol errors, each of
+# which closes the connection. Each is followed by an ECHO of MARKER, so that
+# the replies read are all the case's and a connection the server closed shows
+# as closed. A line past 64 KiB is sent without one: Redis stops reading at
+# its error, and what it left unread would reset the connection before its
+# reply could be read.
+MARKER = 'end-of-inline-case'
+INLINE = [
+    (b'PING\r\n', {}), (b'ping\n', {}), (b'\r\nPING\r\n', {}), (b'\n\n   \r\n\x0b\x0c\t\r\nPING\r\n', {}),
+    (b'\x0b\x0cPING\r\n', {}),
+    (rb'SET k "a b\x41\x4a\n\t\\\"\q"' + b'\r\nGET k\r\n', {}), (rb"SET k 'it\'s \n'" + b'\r\nGET k\r\n', {}),
+    (b'SET k a"b c"\r\nGET k\r\n', {}), (b"SET k a'b c'\r\nGET k\r\n", {}), (rb'SET k "\x4"' + b'\r\nGET k\r\n', {}),
+    (rb'SET k \x41' + b'\r\nGET k\r\n', {}), (b'SET k a\x0bb\r\nSTRLEN k\r\n', {}), (b'SET k a\rb\r\n', {}),
+    (b'SET\tk\tv\r\nGET k\r\n', {}), (b'SET k ""\r\nSTRLEN k\r\n', {}), (b'SET k "a"\tb\r\n', {}),
+    (b'SET k \xc3\xa9\xff\r\nGET k\r\n', {}), (rb'ECHO "a\r\nb"' + b'\r\n', {}),
+    (b'"" foo\r\n', {}), (b'nosuch a b\r\n', {}), (b'NoSuch\r\n', {}), (b'GET\r\n', {}),
+    (b'MULTI\r\nSET k v\r\n\r\nGET k\r\nEXEC\r\n', {}), (b'MULTI\r\nnosuch\r\nEXEC\r\n', {}),
+    (b'SET a 1\r\n*2\r\n$3\r\nGET\r\n$1\r\na\r\nget a\n', {}),
+    (b'HSET h f v\r\nHGETALL h\r\n', {}), (b'QUIT\r\nPING\r\n', {}),
+    (b'PING\r\n', dict(auth=False, protocols=(2,))), (b'GET k\r\n\r\n', dict(auth=False, protocols=(2,))),
+    # Unbalanced quotes: unclosed, closed against the next character, a
+    # backslash escaping the line's end, and a NUL inside quotes; Redis's own
+    # case (tests/unit/protocol.tcl); and one after a good command, which is
+    # answered first.
+    (b'SET k "unterminated\r\n', {}), (b"SET k 'unterminated\r\n", {}), (b'SET k "a"b\r\n', {}),
+    (b"SET k 'a'b\r\n", {}), (b'SET k "abc\\\r\n', {}),
+    (b'set """test-key""" test-value\r\nping\r\n', {}), (b'PING\r\nSET k "x\r\nPING\r\n', {}),
+    # 64 KiB before the newline, the \r included, is read; a byte more
+    # without a newline is refused.
+    (b'SET k ' + b'x' * (64 * 1024 - 7) + b'\r\nSTRLEN k\r\n', {}),
+    (b'SET k ' + b'x' * (64 * 1024 - 6 + 1), dict(marker=False)),
+    # A NUL byte hides the newline after it, since Redis looks for it with
+    # strchr: the line waits, runs nothing, and is refused once more than
+    # 64 KiB wait, so each case ends past the limit.
+    *((prefix + nul_line + b'x' * (64 * 1024 + 1 - len(nul_line)), dict(marker=False)) for prefix, nul_line in (
+        (b'', b'PING\x00 ignored\r\nPING\r\n'), (b'PING\r\n\r\n', b'\x00junk\r\nPING\r\n'),
+        (b'', b'SET k "a\x00b"\r\n'))),
+]
 
 
 def build_cases(redis_arities, modules):
@@ -626,6 +670,8 @@ def build_cases(redis_arities, modules):
     for commands in OOM_ANSWERED:
         cases.append(case('over maxmemory, volatile-lru with no TTL, answered', commands, server='volatile',
                           setup=FULL_SETUP))
+    for wire, options in INLINE:
+        cases.append(case('inline', [], raw=wire, **options))
     return cases
 
 
@@ -667,6 +713,11 @@ def run_case(servers, side, spec, protocol):
         finally:
             admin.close()
     session = Session(port, auth=spec['auth'], protocol=protocol)
+    if spec['raw'] is not None:
+        try:
+            return run_raw(session, spec)
+        finally:
+            session.close()
     try:
         replies = []
         for command in spec['commands']:
@@ -680,6 +731,28 @@ def run_case(servers, side, spec, protocol):
         return replies
     finally:
         session.close()
+
+
+def run_raw(session, spec):
+    """The replies to bytes sent as they are, up to the reply to the ECHO of
+    MARKER that follows them, or to the server closing the connection."""
+    end = b'$%d\r\n%s\r\n' % (len(MARKER), MARKER.encode())
+    session.socket.sendall(spec['raw'] + (encode(['ECHO', MARKER]) if spec['marker'] else b''))
+    replies = []
+    while True:
+        try:
+            reply = read_raw(session.stream)
+        except TimeoutError:
+            replies.append(b'<no reply within 5 seconds>')
+            return replies
+        except (ConnectionError, ValueError):
+            reply = b''
+        if not reply:
+            replies.append(b'<closed>')
+            return replies
+        if reply == end:
+            return replies
+        replies.append(reply)
 
 
 def show(value):
@@ -720,6 +793,7 @@ def main():
                 report['known_differences'] += known is not None
                 results.append(dict(name=spec['name'], server=spec['server'], auth=spec['auth'], protocol=protocol,
                                     commands=[[show(p) for p in c] for c in spec['commands']],
+                                    **({'raw': show(spec['raw'])} if spec['raw'] is not None else {}),
                                     reference='synthesized' if spec['expect'] else 'redis',
                                     keel=[show(r) for r in keel], redis=[show(r) for r in redis], match=same,
                                     **({'known': known} if known else {})))
