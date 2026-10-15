@@ -464,6 +464,16 @@ it holds an evictable key. No client depends on a write being refused when the
 keyspace can make room, so Keel keeps this behaviour, as a documented
 departure.
 
+**Improvement: the inline limit holds however the line arrives.** Redis
+refuses an inline request longer than 64 KiB (`PROTO_INLINE_MAX_SIZE`), but it
+checks only while the request's newline has not arrived, after each read of up
+to 16 KiB (`processInlineBuffer`, `src/networking.c:3134-3141`;
+`PROTO_IOBUF_LEN`, `src/server.h:190`). A line of 70,000 bytes is accepted
+when its newline comes in the read that crosses 64 KiB, and refused when the
+client pauses before sending it. Keel refuses every line longer than 64 KiB,
+newline or not. No client can depend on a limit that depends on how its bytes
+were split.
+
 A separate, already-stated semantic difference, not an improvement: Keel's
 `maxmemory` bounds the keyspace (the README's integration contract). Redis's
 counts all of `used_memory` except replica output buffers and the AOF buffer
