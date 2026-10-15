@@ -10,6 +10,7 @@ else in this repository is covered by the licence in `LICENSE`.
 | `internal/data_structure/skiplist.go` | `src/t_zset.c` (the `zskiplist` functions) | 2009-2012 Salvatore Sanfilippo, 2009-2012 Pieter Noordhuis |
 | `internal/data_structure/geohash.go` | `src/geohash.c`, `src/geohash_helper.c` | 2013-2014 yinqiwen, 2014 Matt Stancliff, 2015-2016 Salvatore Sanfilippo |
 | `internal/data_structure/geo.go` | `src/geo.c` (search helpers and geohash string encoding) | 2014 Matt Stancliff, 2015-2016 Salvatore Sanfilippo |
+| `internal/core/watch_latency.go` | `src/latency.c` (the latency monitor's samples, `LATENCY DOCTOR`'s report and `LATENCY GRAPH`), `src/sparkline.c` | 2014 Salvatore Sanfilippo (`latency.c`), 2011-2014 Salvatore Sanfilippo (`sparkline.c`) |
 
 `geohash_helper.c` is itself a C conversion of `geohash_helper.cpp` from the
 ardb project by yinqiwen, which is why that name appears in its notice.

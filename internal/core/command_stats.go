@@ -68,8 +68,8 @@ func (e *Engine) noteRun(cmd *Command, stat uint16, started int64, failed bool) 
 	}
 	e.totals.commands++
 	e.recordLatency(stat, micros)
-	if int64(micros) >= e.slowlog.slowerThan {
-		e.noteSlow(cmd, stat, micros)
+	if int64(micros) >= e.longFrom {
+		e.noteLong(cmd, stat, micros)
 	}
 }
 
