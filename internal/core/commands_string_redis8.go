@@ -91,6 +91,12 @@ func (e *Engine) msetexArguments(args []string) ([]string, msetexRequest, error)
 	}
 	req := msetexRequest{nx: set.nx, xx: set.xx, set: set}
 	req.set.nx, req.set.xx = false, false
+	// MSETEX stores each key with its expiry whatever the instant, as
+	// Redis's msetexCommand calls setKey and setExpire with no
+	// checkAlreadyExpired (t_string.c), unlike SET (lines 161-174): a key
+	// whose EXAT or PXAT has passed is stored, and removed, and counted as
+	// expired, when it is next found.
+	req.set.absolute = false
 	return args[1:end], req, nil
 }
 

@@ -5,7 +5,6 @@ import (
 	"math"
 	"math/big"
 	"strconv"
-	"time"
 
 	"github.com/brandopakel/keel/internal/xxh3"
 )
@@ -332,8 +331,9 @@ func subOverflows(a, b int64) (int64, bool) {
 
 // storeIncrex applies what increxSum worked out: the value stored, the key
 // keeping its expiry unless the request sets or removes it. An expiry
-// already past deletes the key instead, recorded as DEL, and a refused
-// increment changes nothing. The write is recorded as Redis propagates
+// already past deletes the key instead, recorded as DEL, and counts a key
+// as expired whether or not there was one, as Redis's increxCommand does
+// (t_string.c, lines 1298-1313); a refused increment changes nothing. The write is recorded as Redis propagates
 // INCREX, as SET with the final value: plain under PERSIST, followed by
 // PEXPIREAT under a new expiry, and with KEEPTTL otherwise.
 func (e *Engine) storeIncrex(key string, req increxRequest, result increxResult) {
@@ -344,10 +344,11 @@ func (e *Engine) storeIncrex(key string, req increxRequest, result increxResult)
 	_, hasExpiry := e.dictStore.GetExpiry(key)
 	hasExpiry = exists && hasExpiry
 	setExpiry := req.expires && (!req.enx || !hasExpiry)
-	if setExpiry && req.at <= time.Now().UnixMilli() && !e.aof.replaying && !e.replicaApplying {
+	if setExpiry && req.at <= e.commandClock() && !e.aof.replaying && !e.replicaApplying {
 		if exists {
 			e.deleteString(key)
 		}
+		e.space.NoteExpired()
 		return
 	}
 	value := result.valueF
