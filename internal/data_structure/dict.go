@@ -62,6 +62,9 @@ func (s *Space) nowMs() uint64 {
 	if s.SuspendExpiry {
 		return 0
 	}
+	if s.ExpiryClock != nil {
+		return s.ExpiryClock()
+	}
 	return uint64(time.Now().UnixMilli())
 }
 

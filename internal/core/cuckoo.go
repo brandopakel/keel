@@ -25,10 +25,8 @@ func (e *Engine) cfFor(key string) *data_structure.CuckooFilter {
 // cfForRead is the filter a read asks about: RedisBloom's CF.EXISTS,
 // CF.MEXISTS and CF.COUNT answer no, and 0, for a key that holds anything else.
 func (e *Engine) cfForRead(key string) (*data_structure.CuckooFilter, bool) {
-	if e.filterKeyRead(key, e.cfStore) != filterHeld {
-		return nil, false
-	}
-	return e.cfStore.Get(key)
+	cf, status := filterRead(e, e.cfStore, key, false)
+	return cf, status == filterHeld
 }
 
 // opCFReserve creates a filter of capacity at key: CF.RESERVE. A key that
@@ -115,7 +113,8 @@ func (e *Engine) opCFExists(key string, items []string, each func(exists bool)) 
 // It is recorded whether it found the item or not, as the log has always
 // held it.
 func (e *Engine) opCFDel(key, item string) (bool, error) {
-	switch e.filterKeyStatus(key, e.cfStore) {
+	cf, status := filterLookup(e, e.cfStore, key, false)
+	switch status {
 	case filterMissing:
 		if e.replayingFilterLog() {
 			return false, nil
@@ -124,7 +123,6 @@ func (e *Engine) opCFDel(key, item string) (bool, error) {
 	case filterOtherType:
 		return false, errCFDelNotFound
 	}
-	cf, _ := e.cfStore.Get(key)
 	deleted := cf.Delete(item)
 	e.aofRecord("CF.DEL", key, item)
 	return deleted, nil
@@ -148,13 +146,13 @@ type cfInfo struct {
 // opCFInfo describes the filter key holds: CF.INFO. A key that holds nothing
 // is errFilterNotFound, and one of another type errWrongType.
 func (e *Engine) opCFInfo(key string) (cfInfo, error) {
-	switch e.filterKeyRead(key, e.cfStore) {
+	cf, status := filterRead(e, e.cfStore, key, true)
+	switch status {
 	case filterMissing:
 		return cfInfo{}, errFilterNotFound
 	case filterOtherType:
 		return cfInfo{}, errWrongType
 	}
-	cf, _ := e.cfStore.Peek(key)
 	return cfInfo{size: cf.MemUsage(), buckets: uint64(cf.NumBuckets()), inserted: uint64(cf.Size()),
 		deleted: uint64(cf.Deleted())}, nil
 }
@@ -191,7 +189,8 @@ const (
 // errWrongType. RedisBloom replicates every one that reaches its items, so
 // every one is recorded.
 func (e *Engine) opCFInsert(key string, req cfInsertRequest, each func(cfInsertResult)) error {
-	switch e.filterKeyStatus(key, e.cfStore) {
+	cf, status := filterLookup(e, e.cfStore, key, false)
+	switch status {
 	case filterOtherType:
 		return errWrongType
 	case filterMissing:
@@ -204,9 +203,9 @@ func (e *Engine) opCFInsert(key string, req cfInsertRequest, each func(cfInsertR
 		if err := e.affordable(data_structure.CuckooBytesFor(req.capacity)); err != nil {
 			return err
 		}
-		e.cfStore.Put(key, data_structure.CreateCuckooFilter(req.capacity))
+		cf = data_structure.CreateCuckooFilter(req.capacity)
+		e.cfStore.Put(key, cf)
 	}
-	cf, _ := e.cfStore.Get(key)
 	for _, item := range req.items {
 		switch {
 		case req.nx && cf.Lookup(item):
@@ -237,10 +236,10 @@ func (e *Engine) opCFInsert(key string, req cfInsertRequest, each func(cfInsertR
 // its count of deletions. A key that holds no cuckoo filter is
 // errCFCompactNotFound. RedisBloom replicates it, so it is recorded.
 func (e *Engine) opCFCompact(key string) error {
-	if e.filterKeyStatus(key, e.cfStore) != filterHeld {
+	cf, status := filterLookup(e, e.cfStore, key, false)
+	if status != filterHeld {
 		return errCFCompactNotFound
 	}
-	cf, _ := e.cfStore.Get(key)
 	cf.Compact()
 	e.aofRecord("CF.COMPACT", key)
 	return nil
