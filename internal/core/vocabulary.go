@@ -781,6 +781,14 @@ func getKeysProc(name string) func(argv []string) []foundKey {
 		return pfmergeGetKeys
 	case "lmpopGetKeys":
 		return lmpopGetKeys
+	case "zunionInterDiffGetKeys":
+		return zunionInterDiffGetKeys
+	case "zunionInterDiffStoreGetKeys":
+		return zunionInterDiffStoreGetKeys
+	case "zmpopGetKeys":
+		return zmpopGetKeys
+	case "georadiusGetKeys":
+		return georadiusGetKeys
 	case "delexGetKeys":
 		return delexGetKeys
 	}
@@ -790,6 +798,36 @@ func getKeysProc(name string) func(argv []string) []foundKey {
 // lmpopGetKeys: LMPOP's numkeys keys, after the count, when its key spec
 // cannot be followed.
 func lmpopGetKeys(argv []string) []foundKey { return genericGetKeys(0, 1, 2, 1, argv) }
+
+// zunionInterDiffGetKeys: ZUNION's, ZINTER's, ZDIFF's and ZINTERCARD's
+// numkeys keys, after the count.
+func zunionInterDiffGetKeys(argv []string) []foundKey { return genericGetKeys(0, 1, 2, 1, argv) }
+
+// zunionInterDiffStoreGetKeys: the STORE forms' destination, then the
+// numkeys keys after the count.
+func zunionInterDiffStoreGetKeys(argv []string) []foundKey { return genericGetKeys(1, 2, 3, 1, argv) }
+
+// zmpopGetKeys: ZMPOP's numkeys keys, after the count.
+func zmpopGetKeys(argv []string) []foundKey { return genericGetKeys(0, 1, 2, 1, argv) }
+
+// georadiusGetKeys: GEORADIUS's and GEORADIUSBYMEMBER's key, read, and the
+// key the last STORE or STOREDIST names, overwritten. Redis looks for the
+// option from the fifth argument for both commands (db.c,
+// georadiusGetKeys), and so does Keel.
+func georadiusGetKeys(argv []string) []foundKey {
+	keys := []foundKey{{pos: 1, flags: []string{"RO", "ACCESS"}}}
+	stored := -1
+	for i := 5; i < len(argv); i++ {
+		if (strings.EqualFold(argv[i], "store") || strings.EqualFold(argv[i], "storedist")) && i+1 < len(argv) {
+			stored = i + 1
+			i++
+		}
+	}
+	if stored != -1 {
+		keys = append(keys, foundKey{pos: stored, flags: []string{"OW", "UPDATE"}})
+	}
+	return keys
+}
 
 // genericGetKeys is Redis's: a count at keyCountOfs read as C's atoi reads
 // it, then that many keys from firstKeyOfs, keyStep apart, and the store key
