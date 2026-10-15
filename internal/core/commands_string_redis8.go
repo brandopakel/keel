@@ -96,10 +96,12 @@ func (e *Engine) msetexArguments(args []string) ([]string, msetexRequest, error)
 
 // msetexKeys are the keys an MSETEX names, for the rewrite's and the
 // replicas' tracking of what a command wrote: none when its count is not
-// one the command accepts.
+// one the command accepts. It runs on dispatch, before MSETEX reads its
+// arguments, so the count is bounded by dividing the arguments rather than
+// by doubling the count, which overflows for a count near the int64 limit.
 func msetexKeys(args []string) []string {
 	n, valid := canonicalInteger(args[0])
-	if !valid || n < 1 || n*2+1 > int64(len(args)) {
+	if !valid || n < 1 || n > int64((len(args)-1)/2) {
 		return nil
 	}
 	keys := make([]string, 0, n)
