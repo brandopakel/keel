@@ -63,3 +63,5 @@ artifact_id,run_id,time,event,branch,pr,conclusion,redis_version,commands,comman
 11942151777,38666612793,2026-10-15T01:37:01Z,push,develop,197,failure,8.10.1,401,130,148,32,https://github.com/brandopakel/keel/actions/runs/38666612793
 11944644651,38671838803,2026-10-15T02:35:58Z,push,develop,,failure,8.10.1,401,130,148,32,https://github.com/brandopakel/keel/actions/runs/38671838803
 11947027269,38678665399,2026-10-15T03:54:15Z,push,develop,219,failure,8.10.1,401,130,148,32,https://github.com/brandopakel/keel/actions/runs/38678665399
+11948366766,38680069955,2026-10-15T04:10:27Z,push,develop,198,failure,8.10.1,401,130,148,34,https://github.com/brandopakel/keel/actions/runs/38680069955
+11948342217,38680356689,2026-10-15T04:13:38Z,push,develop,214,failure,8.10.1,401,130,148,34,https://github.com/brandopakel/keel/actions/runs/38680356689
