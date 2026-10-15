@@ -4229,3 +4229,13 @@ artifact_id,run_id,time,branch,test,package,peak_bytes,peak_file_bytes
 11936149075,38655055109,2026-10-14T23:35:51Z,develop,TestRewriteSlicesObeyKeyBudgetAndReplay,internal/core,25777780,12888890
 11936149075,38655055109,2026-10-14T23:35:51Z,develop,TestRewriteRetainsBoundedNameBatches,internal/core,22377780,11188890
 11936149075,38655055109,2026-10-14T23:35:51Z,develop,TestReplicationV2LargeSnapshotOperationsAndFrozenFile,internal/core,21952673,11106903
+11936424706,38657344503,2026-10-14T23:59:06Z,feat/phase4-string-8x,TestRewriteStallProfile,internal/core,113577780,56788890
+11936424706,38657344503,2026-10-14T23:59:06Z,feat/phase4-string-8x,TestStagedRecordsAreTheBytesAppendAOFCommandWrites,internal/core,76679598,4259925
+11936424706,38657344503,2026-10-14T23:59:06Z,feat/phase4-string-8x,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierzse,cmd/keel,68160485,68160485
+11936424706,38657344503,2026-10-14T23:59:06Z,feat/phase4-string-8x,TestRejectedCollectionPopsPreservePipelineAndRestartconcurrent,cmd/keel,68160485,68160485
+11936424706,38657344503,2026-10-14T23:59:06Z,feat/phase4-string-8x,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierlis,cmd/keel,68160040,68160040
+11936424706,38657344503,2026-10-14T23:59:06Z,feat/phase4-string-8x,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierset,cmd/keel,68159910,68159910
+11936424706,38657344503,2026-10-14T23:59:06Z,feat/phase4-string-8x,TestReplicationV2LargeSnapshotOperationsAndFrozenFile,internal/core,21952673,11106903
+11936424706,38657344503,2026-10-14T23:59:06Z,feat/phase4-string-8x,TestReplicasThroughAFailedRewriteprotocol-,cmd/keel,21568684,21567977
+11936424706,38657344503,2026-10-14T23:59:06Z,feat/phase4-string-8x,TestRewriteSlicesObeyKeyBudgetAndReplay,internal/core,18513876,12888890
+11936424706,38657344503,2026-10-14T23:59:06Z,feat/phase4-string-8x,TestReplicationV2HistoryOverrunAndProtocolMismatch,internal/core,18463790,18463790
