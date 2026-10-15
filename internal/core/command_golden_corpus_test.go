@@ -1917,6 +1917,11 @@ var goldenServer = []commandGoldenCase{
 		send("COMMAND", "HELP"),
 		send("COMMAND", "nosuch"),
 	}},
+	{family: "server", name: "time", noRecords: true, steps: []goldenStep{
+		// The clock's, so only the reply's shape is kept.
+		send("TIME").norm(golden.FlagMasked),
+		send("time", "x"),
+	}},
 	{family: "server", name: "bgrewriteaof", noRecords: true, steps: []goldenStep{
 		send("SET", "k", "v"),
 		send("BGREWRITEAOF"),

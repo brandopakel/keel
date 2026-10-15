@@ -306,9 +306,15 @@ schedule them.
         (`docs/info-compatibility.md`). Client libraries also call it at
         connect.
      4. The remaining `CLIENT` subcommands, `PAUSE` and `UNPAUSE` first:
-        those two are done in S4a.
+        those two are done in S4a. S4b adds `LIST`, `INFO`'s full line,
+        `KILL`, `REPLY`, `NO-EVICT`, `NO-TOUCH`, `UNBLOCK`, `GETREDIR` and
+        `TRACKINGINFO`; `TRACKING` and `CACHING` wait for client tracking.
      5. `MONITOR`, `TIME`, `RESET` and `ROLE`, and `SLOWLOG` from the
-        monitoring work.
+        monitoring work. S4c adds `MONITOR`, `RESET` and `TIME`. `ROLE`
+        waits for the primary to know each replica as Redis does: its
+        listening port and its acknowledged offset. Keel's primary keeps one
+        acknowledged offset for all its replicas, and its replicas announce
+        no port.
 
      `CONFIG GET` is done (#156). `DEBUG SET-ACTIVE-EXPIRE` is a test hook
      that 16 tests use; adding it is the owner's choice;

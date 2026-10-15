@@ -322,6 +322,11 @@ type Engine struct {
 	// with SetIOThreads; nil, there is none (transport_info.go). Last, so that
 	// adding it moved no field before it.
 	ioThreads func() []IOThreadStats
+	// execReplyBytes is what the reply of the EXEC running has come to so
+	// far, set as it hands a command to the connection to answer, for CLIENT
+	// LIST's obl (ExecReplyBytes). Last, so that adding it moved no field
+	// before it.
+	execReplyBytes int
 }
 
 // Lock takes e's lock, waiting until whoever holds it lets go. Its holder is

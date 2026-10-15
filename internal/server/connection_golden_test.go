@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -52,6 +53,10 @@ func runConnectionGoldenCase(t *testing.T, cs connectionGoldenCase) golden.Case 
 		c := &client{fd: -1, password: cs.password, resp3: resp3, engine: newTestEngine(t, core.Options{})}
 		for j, args := range cs.commands {
 			reply := runOnce(t, c, sent(args...))
+			if len(args) > 1 && strings.EqualFold(args[0], "CLIENT") &&
+				(strings.EqualFold(args[1], "INFO") || strings.EqualFold(args[1], "LIST")) {
+				reply = steadyClientLines(reply)
+			}
 			if i == 0 {
 				out.Steps = append(out.Steps, golden.Step{Args: slices.Clone(args)})
 			}
@@ -59,6 +64,24 @@ func runConnectionGoldenCase(t *testing.T, cs connectionGoldenCase) golden.Case 
 		}
 	}
 	return out
+}
+
+// clientLineClock matches the fields of a CLIENT INFO or LIST line that
+// depend on the clock or on the build rather than on the session: how long
+// the connection has been open and idle, and the size of its own record.
+var clientLineClock = regexp.MustCompile(`\b(age|idle|tot-mem)=[0-9]+\b`)
+
+// steadyClientLines is reply, a CLIENT INFO or LIST reply in either protocol,
+// with clientLineClock's fields 0 and the length it is framed with counted
+// again.
+func steadyClientLines(reply string) string {
+	header, body, ok := strings.Cut(reply, "\r\n")
+	if !ok || len(header) < 2 || (header[0] != '$' && header[0] != '=') {
+		return reply
+	}
+	body = strings.TrimSuffix(body, "\r\n")
+	body = clientLineClock.ReplaceAllString(body, "${1}=0")
+	return fmt.Sprintf("%c%d\r\n%s\r\n", header[0], len(body), body)
 }
 
 // connectionGoldenManifest is the fixture's manifest: for each file, its
@@ -209,7 +232,9 @@ func TestConnectionGoldenRepliesAreUnchanged(t *testing.T) {
 
 // uncoveredConnectionErrorTexts are the error texts the server holds that no
 // case of the connection corpus can reach, each with the reason.
-var uncoveredConnectionErrorTexts = map[string]string{}
+var uncoveredConnectionErrorTexts = map[string]string{
+	"ERR can only reset normal client connections": "RESET from a replica's connection, which the corpus's connections never are",
+}
 
 // TestConnectionGoldensCoverEveryErrorText: every error text the server can
 // answer with (golden.ErrorTexts) is answered somewhere in the fixture,

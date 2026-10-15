@@ -199,6 +199,11 @@ func (p *ioPool) serve(c *client, write bool, scratch []byte) uint64 {
 		if len(c.frames) > 0 {
 			part = part[:c.frames[0]]
 		}
+		if len(c.out) == 0 {
+			// Nothing to send: a run CLIENT REPLY silenced. No write is made,
+			// so none is counted.
+			return 0
+		}
 		n, err := syscall.Write(c.fd, part)
 		writesProcessed.Add(1)
 		if n > 0 {
@@ -207,6 +212,7 @@ func (p *ioPool) serve(c *client, write bool, scratch []byte) uint64 {
 			} else {
 				netOutputBytes.Add(uint64(n))
 			}
+			c.conn.netOut += uint64(n)
 			c.out = c.out[n:]
 			if len(c.frames) > 0 {
 				c.frames[0] -= n

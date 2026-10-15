@@ -703,6 +703,100 @@ and RedisBloom's (`command_specs_keel.go`).
   range`, and a `PAUSE` of any other count is `unknown subcommand or wrong
   number of arguments for 'pause'`.
 
+## CLIENT LIST and the other CLIENT subcommands
+
+`CLIENT LIST`, `INFO`, `KILL`, `REPLY`, `NO-EVICT`, `NO-TOUCH`, `UNBLOCK`,
+`GETREDIR` and `TRACKINGINFO` are Redis 8.10.1's (`networking.c`,
+`clientCommand` and `catClientInfoString`). `TRACKING` and `CACHING` are
+not offered, since Keel has no client tracking: they get Redis's answer for a
+subcommand it does not have.
+
+- **The line.** `CLIENT INFO` and each line of `CLIENT LIST` hold Redis's 40
+  fields in Redis's order. `scripts/error-parity.py` compares the line with
+  Redis's after `CLIENT SETNAME`, `SETINFO`, `NO-EVICT` and `NO-TOUCH`, and
+  from inside `EXEC`. Every field matches but those that differ between any
+  two connections or servers: `id`, `addr`, `laddr`, `fd`, `age`, `idle`,
+  `qbuf-free`, `rbs`, `rbp`, `tot-mem` and `tot-net-out`.
+- **The values Keel has its own way.**
+  - Keel has no counterpart for some fields, and writes them as Redis does for
+    a connection without the feature: `db=0`, no subscriptions (`sub`,
+    `psub`, `ssub`), `watch=0`, `redir=-1`, `user=default`.
+  - `io-thread=0`: Keel's I/O threads take whichever connections a turn has,
+    rather than each owning some.
+  - `qbuf` is what the connection sent that has not all run, as Redis's query
+    buffer holds it. `qbuf-free` is the room left in the buffer that holds it.
+  - `obl` is what the connection is owed and has not been sent, including
+    what earlier commands of its run, and of an `EXEC`, have produced.
+  - Keel writes a connection's reply from one buffer. So `oll`, `omem`,
+    `omem-shared` and `omem-unshared` are 0, and `rbs` and `rbp` are that
+    buffer's size now, since Keel keeps no peak.
+  - `tot-mem` is the input and replies the connection holds, and its own
+    record.
+- **Flags.**
+  - `x` in a transaction, `b` while a `CLIENT PAUSE` holds it, `c` when it
+    closes after its reply, `A` once `CLIENT KILL` has killed it, `e` and `T`
+    for `NO-EVICT` and `NO-TOUCH`, `S` for a replica's connection once it
+    pulls the log, and `N` for none.
+  - Keel has no subscriptions, and a replica's link to its primary is not one
+    of the server's connections, so no connection is of type `pubsub` or
+    `master`.
+- **CLIENT KILL.** It kills by `ID`, `ADDR`, `LADDR`, `TYPE`, `USER` and
+  `MAXAGE`, sparing the sender unless `SKIPME no`; Redis's old form, `CLIENT
+  KILL addr`, can kill the sender. Keel has one user, Redis's `default`, and
+  any other name is Redis's `No such user` error. None of a killed
+  connection's commands runs after the kill, and it is sent nothing more. The
+  loop closes it at the end of the turn, and closes the sender once its reply
+  has gone.
+- **CLIENT REPLY.** `OFF` and `SKIP` drop replies as Redis does, their own
+  included. `ON` is answered.
+- **CLIENT NO-TOUCH.** A connection's commands read keys without recording
+  the access that `allkeys-lru` and `allkeys-lfu` rank keys by. Redis exempts
+  `TOUCH`, which Keel does not have.
+- **CLIENT NO-EVICT.** It sets the flag and nothing else, since Keel evicts
+  no connections.
+- **CLIENT UNBLOCK.** It always answers `0`, after Redis's checks of the
+  reason and the ID. Keel has no blocking commands, and Redis never unblocks
+  a connection that `CLIENT PAUSE` holds.
+- **CLIENT GETREDIR and TRACKINGINFO.** They answer as Redis does for a
+  connection without tracking.
+
+## MONITOR, RESET and TIME
+
+`MONITOR`, `RESET` and `TIME` are Redis 8.10.1's (`server.c`,
+`monitorCommand`, `timeCommand` and call's `replicationFeedMonitors`;
+`networking.c`, `resetCommand` and `clearClientConnectionState`).
+
+- **MONITOR.** The connection is sent a line for each command any connection
+  runs, as it runs:
+  - the time, `[0 address]`, and the arguments quoted as Redis's
+    `sdscatrepr` quotes them;
+  - what `EXEC` runs comes before `EXEC` itself;
+  - a command refused before it would run is not sent;
+  - nor is one whose spec marks it `ADMIN` or `SKIP_MONITOR`, such as
+    `CONFIG`, `CLIENT LIST` or `MONITOR` itself.
+
+  `MONITOR` again is answered with nothing, and inside `EXEC` it is Redis's
+  `MONITOR isn't allowed for DENY BLOCKING client`. A monitor's `CLIENT LIST`
+  flag is `O`. The commands a replica applies from its primary are not sent,
+  since Keel's replica applies them below the connections.
+- **RESET.** It answers `RESET` and leaves the connection as it connected,
+  but for its library's name and version. It ends `MONITOR` and discards a
+  transaction; it is not queued inside one. It switches to RESP2, clears the
+  name, and turns off `CLIENT REPLY OFF`, `NO-EVICT` and `NO-TOUCH`. Where the
+  server has a password, the connection needs `AUTH` again. It is answered
+  before `AUTH`, as Redis answers it.
+- **TIME.** The Unix time in seconds and the microseconds past it, as two
+  bulk strings.
+
+### An improvement over Redis
+
+`MONITOR` sends `AUTH`'s arguments, and `HELLO`'s `AUTH` user and
+password, as `(redacted)` whatever the command does. Redis redacts them only
+once the command has read them (`server.c`, `authCommand` and
+`helloCommand` call `redactClientCommandArgument` as they parse). So a
+`HELLO` it refuses before that, for a protocol version it does not speak,
+shows the password to every monitor. No client depends on seeing it.
+
 ## What each part should show in Grafana
 
 These are the exporter metrics each part should turn on for Keel. The

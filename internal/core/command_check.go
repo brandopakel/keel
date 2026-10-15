@@ -44,7 +44,7 @@ var commandArity = map[string]int{
 	"TTL": 2, "PTTL": 2, "EXPIRE": -3, "PEXPIREAT": -3,
 	"PEXPIRE": -3, "EXPIREAT": -3, "PERSIST": 2,
 
-	"DBSIZE": 1, "FLUSHDB": -1, "MEMORY": -2, "INFO": -1, "CONFIG": -2, "LATENCY": -2, "SLOWLOG": -2, "COMMAND": -1, "BGREWRITEAOF": 1,
+	"DBSIZE": 1, "FLUSHDB": -1, "TIME": 1, "MEMORY": -2, "INFO": -1, "CONFIG": -2, "LATENCY": -2, "SLOWLOG": -2, "COMMAND": -1, "BGREWRITEAOF": 1,
 	"KEEL.DUMP": 2, "KEEL.RESTORE": 3, "MEMKV.DUMP": 2, "MEMKV.RESTORE": 3,
 	"KEEL.PROMOTE": 2, "KEEL.FENCE": 2, "KEEL.REPL.PULL": 3, "KEEL.REPL.PULL2": -5,
 
@@ -79,7 +79,7 @@ var commandArity = map[string]int{
 	"CF.COUNT": 3, "CF.INFO": 2,
 
 	// Answered by the transport, not the command table: see connectionCommands.
-	"AUTH": -2, "HELLO": -1, "QUIT": -1, "CLIENT": -2,
+	"AUTH": -2, "HELLO": -1, "QUIT": -1, "CLIENT": -2, "RESET": 1, "MONITOR": 1,
 	// Answered by Transact.
 	"MULTI": 1, "EXEC": 1, "DISCARD": 1,
 }
@@ -88,7 +88,8 @@ var commandArity = map[string]int{
 // transport answers them itself; the command table below this layer knows
 // nothing about connections. A transaction queues them like any other command
 // and hands them back to the transport when EXEC reaches them.
-var connectionCommands = map[string]bool{"AUTH": true, "HELLO": true, "QUIT": true, "CLIENT": true}
+var connectionCommands = map[string]bool{"AUTH": true, "HELLO": true, "QUIT": true, "CLIENT": true, "RESET": true,
+	"MONITOR": true}
 
 // IsConnectionCommand reports whether the transport answers name itself.
 func IsConnectionCommand(name string) bool { return connectionCommands[name] }
@@ -108,7 +109,8 @@ type subcommand struct {
 // listed; any other gets the error Redis gives for one it does not have.
 var (
 	clientSubcommands = []subcommand{{"id", 2}, {"setname", 3}, {"getname", 2}, {"setinfo", 4}, {"info", 2},
-		{"pause", -3}, {"unpause", 2}, {"help", 2}}
+		{"pause", -3}, {"unpause", 2}, {"list", -2}, {"kill", -3}, {"reply", 3}, {"no-evict", 3}, {"no-touch", 3},
+		{"unblock", -3}, {"getredir", 2}, {"trackinginfo", 2}, {"help", 2}}
 	memorySubcommands = []subcommand{{"stats", 2}, {"usage", -3}, {"help", 2}}
 	configSubcommands = []subcommand{{"get", -3}, {"set", -4}, {"resetstat", 2}, {"rewrite", 2}, {"help", 2}}
 	// Redis's LATENCY subcommands, with Redis's counts.

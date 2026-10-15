@@ -426,8 +426,8 @@ case server/config-set
 
 case server/command
 > "COMMAND" "COUNT"
-2 ":144\r\n"
-3 ":144\r\n"
+2 ":147\r\n"
+3 ":147\r\n"
 > "COMMAND" @masked
 2 "*"
 3 "*"
@@ -497,6 +497,14 @@ case server/command
 > "COMMAND" "nosuch"
 2 "-ERR unknown subcommand 'nosuch'. Try COMMAND HELP.\r\n"
 3 "-ERR unknown subcommand 'nosuch'. Try COMMAND HELP.\r\n"
+
+case server/time
+> "TIME" @masked
+2 "*"
+3 "*"
+> "time" "x"
+2 "-ERR wrong number of arguments for 'time' command\r\n"
+3 "-ERR wrong number of arguments for 'time' command\r\n"
 
 case server/bgrewriteaof
 > "SET" "k" "v"
