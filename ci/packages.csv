@@ -2692,3 +2692,14 @@ artifact_id,run_id,time,branch,pr,package,result,seconds
 11942082966,38666612792,2026-10-15T01:37:01Z,develop,197,internal/resp,ok,0.081
 11942082966,38666612792,2026-10-15T01:37:01Z,develop,197,internal/server,ok,1.305
 11942082966,38666612792,2026-10-15T01:37:01Z,develop,197,internal/testlock,ok,0.317
+11942132788,38666836916,2026-10-15T01:39:32Z,feat/client-pause,198,bench/arrival,ok,1.284
+11942132788,38666836916,2026-10-15T01:39:32Z,feat/client-pause,198,cmd/keel,ok,12.329
+11942132788,38666836916,2026-10-15T01:39:32Z,feat/client-pause,198,internal/config,ok,0.323
+11942132788,38666836916,2026-10-15T01:39:32Z,feat/client-pause,198,internal/core,ok,15.757
+11942132788,38666836916,2026-10-15T01:39:32Z,feat/client-pause,198,internal/core/io_multiplexing,ok,0.049
+11942132788,38666836916,2026-10-15T01:39:32Z,feat/client-pause,198,internal/data_structure,ok,11.677
+11942132788,38666836916,2026-10-15T01:39:32Z,feat/client-pause,198,internal/golden,ok,0.003
+11942132788,38666836916,2026-10-15T01:39:32Z,feat/client-pause,198,internal/procinfo,ok,0.022
+11942132788,38666836916,2026-10-15T01:39:32Z,feat/client-pause,198,internal/resp,ok,0.057
+11942132788,38666836916,2026-10-15T01:39:32Z,feat/client-pause,198,internal/server,ok,2.46
+11942132788,38666836916,2026-10-15T01:39:32Z,feat/client-pause,198,internal/testlock,ok,0.316

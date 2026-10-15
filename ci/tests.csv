@@ -4399,3 +4399,13 @@ artifact_id,run_id,time,branch,test,package,peak_bytes,peak_file_bytes
 11942082966,38666612792,2026-10-15T01:37:01Z,develop,TestRewriteSlicesObeyKeyBudgetAndReplay,internal/core,25091380,12888890
 11942082966,38666612792,2026-10-15T01:37:01Z,develop,TestReplicationV2LargeSnapshotOperationsAndFrozenFile,internal/core,21691784,10846052
 11942082966,38666612792,2026-10-15T01:37:01Z,develop,TestReplicasThroughAFailedRewriteprotocol-,cmd/keel,21568684,21567977
+11942132788,38666836916,2026-10-15T01:39:32Z,feat/client-pause,TestRewriteStallProfile,internal/core,113577780,56788890
+11942132788,38666836916,2026-10-15T01:39:32Z,feat/client-pause,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierzse,cmd/keel,68160485,68160485
+11942132788,38666836916,2026-10-15T01:39:32Z,feat/client-pause,TestRejectedCollectionPopsPreservePipelineAndRestartconcurrent,cmd/keel,68160485,68160485
+11942132788,38666836916,2026-10-15T01:39:32Z,feat/client-pause,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierlis,cmd/keel,68160040,68160040
+11942132788,38666836916,2026-10-15T01:39:32Z,feat/client-pause,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierset,cmd/keel,68159910,68159910
+11942132788,38666836916,2026-10-15T01:39:32Z,feat/client-pause,"TestEveryAcknowledgedWriteSurvivesAKilleverysec,_during_a_faile",internal/core,63898969,63898969
+11942132788,38666836916,2026-10-15T01:39:32Z,feat/client-pause,TestStagedRecordsAreTheBytesAppendAOFCommandWrites,internal/core,59639654,4259924
+11942132788,38666836916,2026-10-15T01:39:32Z,feat/client-pause,TestRewriteSlicesObeyKeyBudgetAndReplay,internal/core,23360820,12888890
+11942132788,38666836916,2026-10-15T01:39:32Z,feat/client-pause,TestReplicationV2LargeSnapshotOperationsAndFrozenFile,internal/core,21691674,10846052
+11942132788,38666836916,2026-10-15T01:39:32Z,feat/client-pause,TestReplicasThroughAFailedRewriteprotocol-,cmd/keel,21568715,21568030

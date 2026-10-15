@@ -439,3 +439,4 @@ artifact_id,run_id,time,event,branch,pr,conclusion,exit_code,suite_seconds,peak_
 11940883753,38666064298,2026-10-15T01:30:55Z,pull_request,feat/client-pause,,cancelled,0,26.0,126368995,83914981,167772160,0,https://github.com/brandopakel/keel/actions/runs/38666064298
 11943197252,38666102444,2026-10-15T01:31:20Z,pull_request,fix/differential-missing,,cancelled,0,25.2,110451444,84492361,167772160,0,https://github.com/brandopakel/keel/actions/runs/38666102444
 11942082966,38666612792,2026-10-15T01:37:01Z,push,develop,197,cancelled,0,24.3,125599267,94437445,167772160,0,https://github.com/brandopakel/keel/actions/runs/38666612792
+11942132788,38666836916,2026-10-15T01:39:32Z,pull_request,feat/client-pause,198,success,0,22.4,135146495,81327972,167772160,0,https://github.com/brandopakel/keel/actions/runs/38666836916
