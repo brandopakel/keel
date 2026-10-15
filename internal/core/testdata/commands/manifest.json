@@ -90,12 +90,12 @@
       "captured": "2026-10-14"
     },
     "server.txt": {
-      "sha256": "f02a42510e36e6b3f02ffa32cdbb7624d62c0aae6be4444af334a5ebbeb71546",
+      "sha256": "3722ca9f00c53d6e560e56c19d0f1f746af243d36c778fd6bf5753330bc93b4b",
       "cases": 13,
       "commands": 255,
       "records": 23,
-      "source_revision": "e38c84e",
-      "captured": "2026-10-14"
+      "source_revision": "f47ff09",
+      "captured": "2026-10-15"
     },
     "sets.txt": {
       "sha256": "6391c62bd6c9189a68f838963f95209d6617b79b822ac0ac6dff9ad6f8660f8b",
