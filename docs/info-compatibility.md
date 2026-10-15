@@ -672,6 +672,19 @@ and RedisBloom's (`command_specs_keel.go`).
     (`setImplicitACLCategories`);
   - the tips, the key specs, and the subcommands Keel has.
 
+  RedisBloom's commands are described as the module declares them, and as
+  Redis reports a module's commands. Their flags and ACL categories come from
+  each command's registration (`rebloom.c`, `rm_cms.c`), with no category
+  implied, since Redis implies categories only while it fills its own table.
+  Their key specs and tips come from the module's command info
+  (`src/cmd_info/*.c`): plain `RW` or `RO` on the first argument, and
+  `dont_cache` on `BF.INFO`, `CF.INFO` and `CMS.INFO`. The error-parity
+  script compares each one's `COMMAND INFO` with Redis 8.10.1 running
+  RedisBloom. `CF.COMPACT` differs on purpose: Keel declares it a write, in
+  `@write`, where RedisBloom registers it `readonly` in `@read`. Keel logs and
+  replicates the compaction, so a replica refuses it, and a cluster-aware
+  client routing on `COMMAND` sends it to the primary.
+
   An unknown name is a null, as in Redis. Two of Keel's commands, `SET` and
   `PFCOUNT`, differ from Redis's reply: each has a key spec with a note,
   which is Redis's text and is left out. A container (`CLIENT`, `CONFIG`,

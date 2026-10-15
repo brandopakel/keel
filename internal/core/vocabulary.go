@@ -232,13 +232,26 @@ func (c introspected) commandFlags() []string {
 }
 
 // categories are c's ACL categories, declared and implied by its flags
-// (setImplicitACLCategories), in Redis's order.
+// (setImplicitACLCategories), in Redis's order. A module's command has only
+// those it declares: Redis implies categories while it populates its own
+// commands' table, which a module's commands never pass through, so
+// RedisBloom's BF.ADD is @write @bloom, without the @slow its flags would
+// imply.
 func (c introspected) categories() []string {
 	has := map[string]bool{}
 	for _, a := range c.spec.acl {
 		has[a] = true
 	}
 	s := c.spec
+	if c.isModule() {
+		var out []string
+		for _, a := range aclCategoryOrder {
+			if has[a] {
+				out = append(out, "@"+strings.ToLower(a))
+			}
+		}
+		return out
+	}
 	if s.hasFlag("WRITE") {
 		has["WRITE"] = true
 	}
@@ -766,6 +779,11 @@ func commandFactsOf(name string) commandFacts {
 	i := sort.Search(len(redisCommandFacts), func(i int) bool { return redisCommandFacts[i].name >= name })
 	if i < len(redisCommandFacts) && redisCommandFacts[i].name == name {
 		return redisCommandFacts[i]
+	}
+	for _, f := range moduleCommandFacts {
+		if f.name == name {
+			return f
+		}
 	}
 	return commandFacts{}
 }
