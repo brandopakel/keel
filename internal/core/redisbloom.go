@@ -52,13 +52,43 @@ func (e *Engine) filterKeyStatus(key string, own data_structure.Keyspace) filter
 	return filterOtherType
 }
 
-// filterKeyRead is filterKeyStatus for a command that reads the filter, which
+// filterLookup looks key up once for a filter command that goes on to use
+// the filter: the filter own holds at key, and filterHeld; or no filter, and
+// whether another type holds the key (filterOtherType) or nothing does
+// (filterMissing). peek reads without counting a use, as INFO and CARD do.
+//
+// The filter it answers with is the one its lookup found. A status check
+// followed by a second lookup reads the space's clock twice, and a TTL falling
+// due between the two would leave the command holding no filter, which it
+// would then use: so the filter's own keyspace is asked first, and the others
+// only when it does not hold the key. A key found missing there is not held
+// by own when filterKeyStatus asks again, the TTL being past already; should
+// the wall clock have stepped back meanwhile, it is still answered as missing,
+// since there is no filter to hand back.
+func filterLookup[T data_structure.Sized](e *Engine, own *data_structure.Keyed[T], key string, peek bool) (T, filterStatus) {
+	var v T
+	var ok bool
+	if peek {
+		v, ok = own.Peek(key)
+	} else {
+		v, ok = own.Get(key)
+	}
+	if ok {
+		return v, filterHeld
+	}
+	if e.filterKeyStatus(key, own) == filterOtherType {
+		return v, filterOtherType
+	}
+	return v, filterMissing
+}
+
+// filterRead is filterLookup for a command that reads the filter, which
 // RedisBloom opens with REDISMODULE_READ alone: the key is a keyspace hit or
 // a miss, a key of another type a hit (keyspaceReads).
-func (e *Engine) filterKeyRead(key string, own data_structure.Keyspace) filterStatus {
-	status := e.filterKeyStatus(key, own)
+func filterRead[T data_structure.Sized](e *Engine, own *data_structure.Keyed[T], key string, peek bool) (T, filterStatus) {
+	v, status := filterLookup(e, own, key, peek)
 	e.noteLookup(status != filterMissing)
-	return status
+	return v, status
 }
 
 // moduleArgIndex is RMUtil_ArgIndex: the first argument equal to name, any

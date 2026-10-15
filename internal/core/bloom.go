@@ -14,10 +14,6 @@ import (
 // record: the command as RedisBloom replicates it, verbatim, its arguments
 // as the client wrote them, handed in as text (see cms.go).
 
-func (e *Engine) bloomFor(key string) (*data_structure.SBChain, bool) {
-	return e.sbStore.Get(key)
-}
-
 // bloomForWrite returns the filter at key, creating one with the default sizing
 // if there is none: adding to a filter that was never reserved is how most
 // filters come to exist.
@@ -34,10 +30,8 @@ func (e *Engine) bloomForWrite(key string) *data_structure.SBChain {
 // bloomForRead is the filter a read asks about: RedisBloom's BF.EXISTS and
 // BF.MEXISTS answer no for a key that holds anything else.
 func (e *Engine) bloomForRead(key string) (*data_structure.SBChain, bool) {
-	if e.filterKeyRead(key, e.sbStore) != filterHeld {
-		return nil, false
-	}
-	return e.bloomFor(key)
+	sb, status := filterRead(e, e.sbStore, key, false)
+	return sb, status == filterHeld
 }
 
 // opBFReserve creates the filter r describes at key: BF.RESERVE. A key that
@@ -137,14 +131,14 @@ type bfInfo struct {
 // opBFInfo describes the filter key holds: BF.INFO. A key that holds nothing
 // is errFilterNotFound, and one of another type errWrongType.
 func (e *Engine) opBFInfo(key string) (bfInfo, error) {
-	switch e.filterKeyRead(key, e.sbStore) {
+	// Peek rather than Get: reporting on a key is not using it.
+	sb, status := filterRead(e, e.sbStore, key, true)
+	switch status {
 	case filterMissing:
 		return bfInfo{}, errFilterNotFound
 	case filterOtherType:
 		return bfInfo{}, errWrongType
 	}
-	// Peek rather than Get: reporting on a key is not using it.
-	sb, _ := e.sbStore.Peek(key)
 	return bfInfo{capacity: sb.Capacity(), size: sb.MemUsage(), filters: uint64(sb.Filters()),
 		items: sb.Count(), expansion: uint64(sb.Expansion()), nonScaling: sb.NonScaling()}, nil
 }
@@ -169,7 +163,8 @@ type bfInsertRequest struct {
 // replicates every BF.INSERT that reaches its items, so every one is
 // recorded.
 func (e *Engine) opBFInsert(key string, req bfInsertRequest, each func(added bool, err error)) error {
-	switch e.filterKeyStatus(key, e.sbStore) {
+	sb, status := filterLookup(e, e.sbStore, key, false)
+	switch status {
 	case filterOtherType:
 		return errWrongType
 	case filterMissing:
@@ -183,13 +178,12 @@ func (e *Engine) opBFInsert(key string, req bfInsertRequest, each func(added boo
 		if err := e.affordable(data_structure.BloomBytesFor(r.capacity, r.errorRate)); err != nil {
 			return err
 		}
-		sb := data_structure.CreateSBChain(r.capacity, r.errorRate, r.expansion)
+		sb = data_structure.CreateSBChain(r.capacity, r.errorRate, r.expansion)
 		if sb == nil {
 			return errBFCouldNotCreate
 		}
 		e.sbStore.Put(key, sb)
 	}
-	sb, _ := e.bloomFor(key)
 	for _, item := range req.items {
 		added, err := sb.Add(item)
 		each(added, err)
@@ -219,12 +213,12 @@ func (e *Engine) opBFInsert(key string, req bfInsertRequest, each func(added boo
 // opBFCard is how many items have been added to the filter key holds, zero
 // for a key that holds none: BF.CARD. A key of another type is errWrongType.
 func (e *Engine) opBFCard(key string) (int64, error) {
-	switch e.filterKeyRead(key, e.sbStore) {
+	sb, status := filterRead(e, e.sbStore, key, true)
+	switch status {
 	case filterMissing:
 		return 0, nil
 	case filterOtherType:
 		return 0, errWrongType
 	}
-	sb, _ := e.sbStore.Peek(key)
 	return int64(sb.Count()), nil
 }
