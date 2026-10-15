@@ -27,6 +27,9 @@ type Space struct {
 	// noTouch is set while a command of a connection in CLIENT NO-TOUCH mode
 	// runs: what it reads is left as it was, unaccessed (Touch).
 	noTouch bool
+	// touchSlow is set while an access needs more than the clock, under an
+	// LFU policy or under no-touch: the one test Touch makes (setTouchSlow).
+	touchSlow bool
 
 	// pool carries the best candidates between evictions.
 	pool []Candidate
@@ -234,7 +237,9 @@ const evictionSeed = 0x2545F4914F6CDD1D
 
 // NewSpace returns an empty space held to limits.
 func NewSpace(limits Limits) *Space {
-	return &Space{rng: evictionSeed, limits: limits}
+	s := &Space{rng: evictionSeed, limits: limits}
+	s.setTouchSlow()
+	return s
 }
 
 // Limits reports the limits the space is held to.
@@ -251,6 +256,7 @@ func (s *Space) SetLimits(limits Limits) {
 		s.pool = nil
 	}
 	s.limits = limits
+	s.setTouchSlow()
 }
 
 // EvictionPolicy is how the space chooses the keys it evicts.

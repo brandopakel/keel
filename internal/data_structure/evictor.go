@@ -182,16 +182,35 @@ func (s *Space) NewAccess() uint64 {
 
 // Touch records an access. What that means is the policy's business: LRU wants
 // to know when, LFU how often. Under CLIENT NO-TOUCH it records nothing.
+//
+// An LRU access, the common one, costs Touch one test, of touchSlow, and the
+// rest goes to touchSlowly: that keeps Touch small enough to be inlined into
+// every Get and Put, as it was before no-touch.
 func (s *Space) Touch(access *uint64) {
+	if s.touchSlow {
+		s.touchSlowly(access)
+		return
+	}
+	s.clock++
+	*access = s.clock
+}
+
+// touchSlowly is Touch under an LFU policy or under no-touch. It is kept out
+// of line: inlined, it would make Touch too large to inline in turn.
+//
+//go:noinline
+func (s *Space) touchSlowly(access *uint64) {
 	if s.noTouch {
 		return
 	}
 	s.clock++
-	if s.limits.Eviction&evictByFrequency != 0 {
-		s.touchLFU(access)
-		return
-	}
-	*access = s.clock
+	s.touchLFU(access)
+}
+
+// setTouchSlow keeps touchSlow true exactly when an access needs more than
+// the clock: under an LFU policy, or under no-touch.
+func (s *Space) setTouchSlow() {
+	s.touchSlow = s.noTouch || s.limits.Eviction&evictByFrequency != 0
 }
 
 // Score ranks an access word. The lowest score is evicted first.
@@ -413,4 +432,7 @@ func (s *Space) VisitKeyspacesFrom(start int, fn func(Keyspace) bool) int {
 // SetNoTouch sets whether accesses are recorded: off while a connection in
 // CLIENT NO-TOUCH mode runs a command, as Redis's lookupKey leaves a key's
 // LRU or LFU alone for such a client.
-func (s *Space) SetNoTouch(on bool) { s.noTouch = on }
+func (s *Space) SetNoTouch(on bool) {
+	s.noTouch = on
+	s.setTouchSlow()
+}
