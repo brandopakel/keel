@@ -13,9 +13,9 @@ import (
 func TestINFOThreadsHotkeysAndModules(t *testing.T) {
 	t.Parallel()
 	e := newTestEngine(t, Options{})
-	e.SetClientBuffers(func() ClientBufferStats {
-		return ClientBufferStats{Connected: 2,
-			IOThreads: []IOThreadStats{{Clients: 2, Reads: 5, Writes: 4}, {Reads: 3, Writes: 1}}}
+	e.SetClientBuffers(func() ClientBufferStats { return ClientBufferStats{Connected: 2} })
+	e.SetIOThreads(func() []IOThreadStats {
+		return []IOThreadStats{{Clients: 2, Reads: 5, Writes: 4}, {Reads: 3, Writes: 1}}
 	})
 	info := runOn(t, e, "INFO").(string)
 	assert.Contains(t, info, "# Threads\r\nio_thread_0:clients=2,reads=5,writes=4\r\nio_thread_1:clients=0,reads=3,writes=1\r\n\r\n")

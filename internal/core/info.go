@@ -283,13 +283,7 @@ func (e *Engine) statsInfo(b *strings.Builder) {
 	fmt.Fprintf(b, "total_error_replies:%d\r\n", e.totals.errors)
 	if e.clientBuffers != nil {
 		fmt.Fprintf(b, "total_reads_processed:%d\r\ntotal_writes_processed:%d\r\n", stats.ReadsProcessed, stats.WritesProcessed)
-		// What the I/O threads other than the loop's made, as Redis sums its
-		// threads but the main one.
-		var reads, writes uint64
-		for i := 1; i < len(stats.IOThreads); i++ {
-			reads, writes = reads+stats.IOThreads[i].Reads, writes+stats.IOThreads[i].Writes
-		}
-		fmt.Fprintf(b, "io_threaded_reads_processed:%d\r\nio_threaded_writes_processed:%d\r\n", reads, writes)
+		e.ioThreadedInfo(b)
 	}
 	fmt.Fprintf(b, "slowlog_commands_count:%d\r\nslowlog_commands_time_ms_max:%.2f\r\nslowlog_commands_time_ms_sum:%.2f\r\n\r\n",
 		e.slowlog.count, float64(e.slowlog.usecMax)/1000, float64(e.slowlog.usecSum)/1000)
@@ -312,37 +306,6 @@ func (e *Engine) cpuInfo(b *strings.Builder) {
 func cpuSeconds(d time.Duration) string {
 	us := d.Microseconds()
 	return fmt.Sprintf("%d.%06d", us/1e6, us%1e6)
-}
-
-// threadsInfo is Redis's Threads section: a line for each I/O thread, the
-// loop's own first, with the clients it serves and the reads and writes it
-// made (server.c). Keel's workers take a share of whichever connections are
-// ready at each turn rather than clients of their own, so the loop's line
-// holds every client and the workers' none; their reads and writes are what
-// each made. With no transport there are no threads to report.
-func (e *Engine) threadsInfo(b *strings.Builder) {
-	if e.clientBuffers == nil {
-		return
-	}
-	b.WriteString("# Threads\r\n")
-	for i, t := range e.clientBuffers().IOThreads {
-		fmt.Fprintf(b, "io_thread_%d:clients=%d,reads=%d,writes=%d\r\n", i, t.Clients, t.Reads, t.Writes)
-	}
-	b.WriteString("\r\n")
-}
-
-// hotkeysInfo is Redis's Hotkeys section, which has fields only while HOTKEYS
-// tracking runs (server.c); Keel has no hot key tracking, so it is the header.
-func (e *Engine) hotkeysInfo(b *strings.Builder) {
-	b.WriteString("# Hotkeys\r\n\r\n")
-}
-
-// modulesInfo is Redis's Modules section, a line for each module loaded. Keel
-// loads none: its Bloom, cuckoo and count-min commands are its own, and the
-// owner decided they are not listed as RedisBloom's, which would also commit
-// MODULE LIST to answering for a module (docs/info-compatibility.md).
-func (e *Engine) modulesInfo(b *strings.Builder) {
-	b.WriteString("# Modules\r\n\r\n")
 }
 
 func (e *Engine) clusterInfo(b *strings.Builder) {

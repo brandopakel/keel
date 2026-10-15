@@ -821,10 +821,11 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 			ConnectionsRejected: connectionsRejected,
 			NetInputBytes:       netInputBytes.Load(), NetOutputBytes: netOutputBytes.Load(),
 			NetReplInputBytes: netReplInputBytes.Load(), NetReplOutputBytes: netReplOutputBytes.Load(),
-			ReadsProcessed: readsProcessed.Load(), WritesProcessed: writesProcessed.Load(),
-			IOThreads: pool.threadStats(len(clients))}
+			ReadsProcessed: readsProcessed.Load(), WritesProcessed: writesProcessed.Load()}
 	})
 	defer e.SetClientBuffers(nil)
+	e.SetIOThreads(func() []core.IOThreadStats { return pool.threadStats(len(clients)) })
+	defer e.SetIOThreads(nil)
 	e.SetStatsReset(func() { resetConnectionStats(); resetNetStats(); pool.resetIO() })
 	defer e.SetStatsReset(nil)
 	// The settings CONFIG SET changes while the server runs: the password,

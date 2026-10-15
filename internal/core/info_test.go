@@ -63,6 +63,7 @@ func TestINFOSectionsComeInRedisOrder(t *testing.T) {
 	assert.Equal(t, want, infoSectionNames(runOn(t, e, "INFO").(string)))
 
 	e.SetClientBuffers(func() ClientBufferStats { return ClientBufferStats{Connected: 1} })
+	e.SetIOThreads(func() []IOThreadStats { return []IOThreadStats{{Clients: 1}} })
 	got := infoSectionNames(runOn(t, e, "INFO").(string))
 	assert.Equal(t, append([]string{"Server", "Clients", "Memory", "Persistence", "Threads"}, want[3:]...), got)
 	assert.Equal(t, "cluster_enabled:0", strings.TrimSpace(strings.TrimPrefix(runOn(t, e, "INFO", "cluster").(string), "# Cluster")))
