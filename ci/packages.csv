@@ -2859,6 +2859,17 @@ artifact_id,run_id,time,branch,pr,package,result,seconds
 11948732885,38681011596,2026-10-15T04:21:14Z,feat/phase4-sketch-commands,,internal/resp,ok,0.059
 11948732885,38681011596,2026-10-15T04:21:14Z,feat/phase4-sketch-commands,,internal/server,ok,1.663
 11948732885,38681011596,2026-10-15T04:21:14Z,feat/phase4-sketch-commands,,internal/testlock,ok,0.308
+11949740011,38681114351,2026-10-15T04:22:26Z,feat/server-misc,207,bench/arrival,ok,1.25
+11949740011,38681114351,2026-10-15T04:22:26Z,feat/server-misc,207,cmd/keel,ok,9.811
+11949740011,38681114351,2026-10-15T04:22:26Z,feat/server-misc,207,internal/config,ok,0.571
+11949740011,38681114351,2026-10-15T04:22:26Z,feat/server-misc,207,internal/core,ok,14.754
+11949740011,38681114351,2026-10-15T04:22:26Z,feat/server-misc,207,internal/core/io_multiplexing,ok,0.051
+11949740011,38681114351,2026-10-15T04:22:26Z,feat/server-misc,207,internal/data_structure,ok,16.395
+11949740011,38681114351,2026-10-15T04:22:26Z,feat/server-misc,207,internal/golden,ok,0.005
+11949740011,38681114351,2026-10-15T04:22:26Z,feat/server-misc,207,internal/procinfo,ok,0.025
+11949740011,38681114351,2026-10-15T04:22:26Z,feat/server-misc,207,internal/resp,ok,0.174
+11949740011,38681114351,2026-10-15T04:22:26Z,feat/server-misc,207,internal/server,ok,2.739
+11949740011,38681114351,2026-10-15T04:22:26Z,feat/server-misc,207,internal/testlock,ok,0.311
 11949266030,38683378153,2026-10-15T04:48:12Z,feat/eviction-exceeded-time,,bench/arrival,ok,1.155
 11949266030,38683378153,2026-10-15T04:48:12Z,feat/eviction-exceeded-time,,cmd/keel,ok,9.007
 11949266030,38683378153,2026-10-15T04:48:12Z,feat/eviction-exceeded-time,,internal/config,ok,0.294

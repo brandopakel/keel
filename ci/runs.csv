@@ -454,4 +454,5 @@ artifact_id,run_id,time,event,branch,pr,conclusion,exit_code,suite_seconds,peak_
 11948229690,38680638073,2026-10-15T04:16:51Z,pull_request,feat/client-list,202,success,0,23.4,123964963,85682633,167772160,0,https://github.com/brandopakel/keel/actions/runs/38680638073
 11948911358,38680656782,2026-10-15T04:17:04Z,pull_request,feat/info-expiry-stats,210,success,0,23.2,113577780,85461063,167772160,0,https://github.com/brandopakel/keel/actions/runs/38680656782
 11948732885,38681011596,2026-10-15T04:21:14Z,pull_request,feat/phase4-sketch-commands,,cancelled,0,23.4,113577780,90907376,167772160,0,https://github.com/brandopakel/keel/actions/runs/38681011596
+11949740011,38681114351,2026-10-15T04:22:26Z,pull_request,feat/server-misc,207,success,0,26.0,113544948,85170692,167772160,0,https://github.com/brandopakel/keel/actions/runs/38681114351
 11949266030,38683378153,2026-10-15T04:48:12Z,pull_request,feat/eviction-exceeded-time,,cancelled,0,22.6,120580415,82097305,167772160,0,https://github.com/brandopakel/keel/actions/runs/38683378153
