@@ -102,13 +102,15 @@ type EvictionPolicy int
 
 // What a policy is made of: ranking by frequency rather than recency, taking
 // keys at random, choosing among the keys that carry a TTL only, ranking them
-// by when they fall due, and evicting nothing.
+// by when they fall due, evicting nothing, and ranking by when a key was last
+// modified rather than last used.
 const (
 	evictByFrequency EvictionPolicy = 1 << iota
 	evictAtRandom
 	evictVolatile
 	evictByTTL
 	evictNothing
+	evictByModification
 )
 
 // The eviction policies, by Redis's names, which INFO reports.
@@ -130,6 +132,11 @@ const (
 	// EvictVolatileTTL evicts, of a sample of the keys that carry a TTL, the
 	// one due soonest: volatile-ttl.
 	EvictVolatileTTL = evictVolatile | evictByTTL
+	// EvictLRM evicts the least recently modified key of a sample, a read
+	// not counting as a use: allkeys-lrm. EvictVolatileLRM does so among the
+	// keys that carry a TTL: volatile-lrm.
+	EvictLRM         = evictByModification
+	EvictVolatileLRM = evictVolatile | evictByModification
 	// EvictNone evicts nothing: noeviction. A space over its bound stays
 	// over it, and the engine refuses the commands that would grow it.
 	EvictNone = evictNothing

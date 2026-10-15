@@ -106,7 +106,7 @@ func (k *Keyed[T]) Put(key string, value T) {
 	k.dropExpiry(key)
 	e := &keyedEntry[T]{value: value, access: k.space.NewAccess()}
 	e.bytes = k.entryBytes(key, value)
-	k.space.Touch(&e.access)
+	k.space.TouchModified(&e.access)
 	k.items.set(key, *e)
 	k.memUsed += e.bytes
 
@@ -131,8 +131,17 @@ func (k *Keyed[T]) Resize(key string) {
 	}
 	k.memUsed += e.bytes
 
-	k.space.Touch(&e.access)
+	k.space.TouchModified(&e.access)
 	k.space.EnforceLimits()
+}
+
+// Modified records that the value at key was modified in place by a command
+// that neither stored it again nor resized it: under an LRM policy, a use
+// (NoteModified).
+func (k *Keyed[T]) Modified(key string) {
+	if e, ok := k.items.getPtr(key); ok {
+		k.space.NoteModified(&e.access)
+	}
 }
 
 // Keyed is a Keyspace, so eviction can weigh its keys against every other kind.
@@ -217,6 +226,8 @@ func (k *Keyed[T]) SetExpiryAt(key string, at uint64) {
 	if !ok {
 		return
 	}
+	// A new expiry modifies the key, as Redis's EXPIRE records it.
+	k.space.NoteModified(&e.access)
 	if _, exists := k.expiries[key]; !exists {
 		e.bytes += expiryOverhead
 		k.memUsed += expiryOverhead
@@ -238,6 +249,7 @@ func (k *Keyed[T]) ClearExpiry(key string) bool {
 	k.dropExpiry(key)
 	if e, ok := k.items.getPtr(key); ok {
 		e.bytes -= expiryOverhead
+		k.space.NoteModified(&e.access)
 	}
 	k.memUsed -= expiryOverhead
 	return true

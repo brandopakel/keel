@@ -117,6 +117,7 @@ func (e *Engine) opCMSIncrBy(key string, items []string, by []uint64, text []str
 	for i, item := range items {
 		each(cms.IncrBy(item, by[i]))
 	}
+	e.cmsStore.Modified(key)
 	if text == nil {
 		text = make([]string, 0, 2*len(items))
 		for i, item := range items {

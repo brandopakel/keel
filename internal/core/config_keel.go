@@ -98,13 +98,9 @@ func keelConfigTable() map[string]keelConfig {
 		"maxmemory-policy": {handling: configLive,
 			get: func(e *Engine) string { return evictionPolicyName(e.space.Limits().Eviction) },
 			set: func(e *Engine, v string) string {
-				policy, ok := EvictionPolicyNamed(v)
-				if !ok {
-					// A policy of Redis's that Keel does not have,
-					// volatile-lrm or allkeys-lrm, is refused in Redis's
-					// words, naming the ones Keel has.
-					return "argument(s) must be one of the following: " + evictionPolicyNames()
-				}
+				// The table has taken v as one of Redis's policies, and Keel
+				// has each of them.
+				policy, _ := EvictionPolicyNamed(v)
 				refused := e.setOption(func(o *Options) { o.Eviction = policy })
 				e.settleEvictionExceeded()
 				return refused

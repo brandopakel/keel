@@ -85,6 +85,7 @@ func (e *Engine) opMorrisIncrBy(key string, items []string, by []uint64, text []
 	for i, item := range items {
 		each(m.IncrBy(item, by[i]))
 	}
+	e.morrisStore.Modified(key)
 	if text == nil {
 		text = make([]string, 0, 2*len(items))
 		for i, item := range items {

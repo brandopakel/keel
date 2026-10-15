@@ -9,17 +9,46 @@
 | `allkeys-lru` (the default; also `lru`) | Of a sample of every key, the one least recently used |
 | `allkeys-lfu` (also `lfu`) | Of a sample of every key, the one least frequently used |
 | `allkeys-random` (also `random`) | Any key |
+| `allkeys-lrm` | Of a sample of every key, the one least recently modified |
 | `volatile-lru` | Of a sample of the keys that carry a TTL, the one least recently used |
 | `volatile-lfu` | Of a sample of the keys that carry a TTL, the one least frequently used |
 | `volatile-random` | Any key that carries a TTL |
 | `volatile-ttl` | Of a sample of the keys that carry a TTL, the one due soonest |
+| `volatile-lrm` | Of a sample of the keys that carry a TTL, the one least recently modified |
 | `noeviction` | Nothing |
 
 The default stays `allkeys-lru`, the owner's choice for embedded use
-(`TestOptionsDefaults`), where Redis's is `noeviction`. Redis 8's
-`volatile-lrm` and `allkeys-lrm` (least recently modified) are not here yet:
-they need a key's last write kept apart from its last read, and every read
-and write of every type touches a key the same way today.
+(`TestOptionsDefaults`), where Redis's is `noeviction`.
+
+## Least recently modified
+
+Redis 8's `allkeys-lrm` and `volatile-lrm` rank keys as LRU does, by a
+stamp, but only a modification moves the stamp: a read leaves it where it
+was, as Redis's `lookupKey` does under an LRM policy, and a write moves it,
+as Redis's `keyModified` does (`db.c`). A key that is only read ages out
+before one written since, however often it is read.
+
+What counts as a modification is what Redis stamps:
+
+- storing a value, and changing one in place: each type's writes, which
+  store or resize the key or note the change;
+- giving a key a TTL, changing it, or removing it (`EXPIRE` and its kind,
+  `PERSIST`, `GETEX` with an expiry or `PERSIST`), as `expire.c` calls
+  `keyModified` with the value;
+- a RedisBloom write that succeeds (`CF.ADD`, `CF.ADDNX`, `CF.DEL`,
+  `CMS.INCRBY`, and Keel's `MORRIS.INCRBY`), as a module key opened for
+  writing is stamped when it closes (`module.c`). RedisBloom's failed writes
+  are stamped too, there; Keel stamps only those that succeed.
+
+`TestEveryFamilyCountsItsWritesUnderLRM` runs every case of the command
+corpus under `allkeys-lrm`. It fails on a write that changed a key's value
+or TTL without moving its stamp, and on a read that moved one, so a command
+added later is held to it too.
+
+**Not yet:** Redis's LRM tests (`unit/maxmemory`) read the stamp through
+`OBJECT IDLETIME`, which Keel does not have yet: its stamp counts accesses,
+not seconds. Their eviction test, that keys only read go first, holds
+(`TestLRMEvictsWhatWasOnlyReadFirst`).
 
 ## Sampling
 

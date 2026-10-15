@@ -180,8 +180,10 @@ func (s *Space) NewAccess() uint64 {
 	return s.clock
 }
 
-// Touch records an access. What that means is the policy's business: LRU wants
-// to know when, LFU how often. Under CLIENT NO-TOUCH it records nothing.
+// Touch records a read of a key. What that means is the policy's business:
+// LRU wants to know when, LFU how often, and LRM nothing, since only a
+// modification counts (TouchModified), as Redis's lookupKey leaves the stamp
+// alone under an LRM policy (db.c). Under CLIENT NO-TOUCH it records nothing.
 //
 // An LRU access, the common one, costs Touch one test, of touchSlow, and the
 // rest goes to touchSlowly: that keeps Touch small enough to be inlined into
@@ -195,22 +197,58 @@ func (s *Space) Touch(access *uint64) {
 	*access = s.clock
 }
 
-// touchSlowly is Touch under an LFU policy or under no-touch. It is kept out
-// of line: inlined, it would make Touch too large to inline in turn.
+// TouchModified records a modification of a key, which Put and Resize make:
+// an access, as Touch records one, and under LRM the one thing that counts,
+// as Redis's keyModified stamps it (updateLRM). It costs what Touch costs.
+func (s *Space) TouchModified(access *uint64) {
+	if s.touchSlow {
+		s.touchModifiedSlowly(access)
+		return
+	}
+	s.clock++
+	*access = s.clock
+}
+
+// touchSlowly is Touch under an LFU or LRM policy or under no-touch. It is
+// kept out of line: inlined, it would make Touch too large to inline in turn.
 //
 //go:noinline
 func (s *Space) touchSlowly(access *uint64) {
-	if s.noTouch {
+	if s.noTouch || s.limits.Eviction&evictByModification != 0 {
 		return
 	}
 	s.clock++
 	s.touchLFU(access)
 }
 
+// touchModifiedSlowly is TouchModified where Touch would take touchSlowly.
+// Under LRM it stamps the key, no-touch or not, as Redis's keyModified
+// stamps it whatever the client's mode; otherwise it is Touch.
+//
+//go:noinline
+func (s *Space) touchModifiedSlowly(access *uint64) {
+	if s.limits.Eviction&evictByModification != 0 {
+		s.clock++
+		*access = s.clock
+		return
+	}
+	s.touchSlowly(access)
+}
+
 // setTouchSlow keeps touchSlow true exactly when an access needs more than
-// the clock: under an LFU policy, or under no-touch.
+// the clock: under an LFU or LRM policy, or under no-touch.
 func (s *Space) setTouchSlow() {
-	s.touchSlow = s.noTouch || s.limits.Eviction&evictByFrequency != 0
+	s.touchSlow = s.noTouch || s.limits.Eviction&(evictByFrequency|evictByModification) != 0
+}
+
+// NoteModified records a modification made in place, which the command's
+// own lookup has already counted as an access: nothing more, but under LRM,
+// where only a modification counts.
+func (s *Space) NoteModified(access *uint64) {
+	if s.limits.Eviction&evictByModification != 0 {
+		s.clock++
+		*access = s.clock
+	}
 }
 
 // Score ranks an access word. The lowest score is evicted first.
