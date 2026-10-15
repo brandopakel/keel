@@ -21,6 +21,15 @@ on:
     branches: [develop]
   pull_request:
     branches: [develop]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# A newer push to a pull request supersedes its older runs, so those are
+# cancelled rather than left holding the free macOS runners every pull request
+# queues for. Runs on develop and dispatched runs each get a group of their own
+# and always finish.
+concurrency:
+  group: go-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -33,7 +42,8 @@ jobs:
       fail-fast: false
       matrix:
         go: ['1.26', 'stable']
-        os: [ubuntu-latest, macos-latest]
+        # A draft runs Linux only; marking it ready runs macOS too, before merge.
+        os: ${{ fromJSON(github.event.pull_request.draft && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest"]') }}
     steps:
       # Actions are pinned to commit SHAs rather than tags: a tag is mutable and
       # can be repointed at code this workflow never reviewed. Dependabot bumps
