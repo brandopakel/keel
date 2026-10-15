@@ -210,7 +210,8 @@ blank line today, so they fall outside any section. (a) moves them inside.
 | `sync_full` | - | (e). The full syncs a primary has served |
 | `sync_partial_ok`, `sync_partial_err` | - | Left out: Redis counts a replica's reconnection that resumes, and a Keel replica pulls again every 100 ms (see Replication) |
 | `expired_subkeys*`, `expired_keys_active`, `expired_stale_perc`, `expired_time_cap_reached_count`, `expire_cycle_cpu_milliseconds`, `total_eviction_exceeded_time`, `current_eviction_exceeded_time` | - | Left out for now. Each is an expiry or eviction internal that needs its own measurement. |
-| `active_defrag_*`, `io_threaded_*`, `eventloop_*`, `avg_pipeline_length*`, `client_*_buffer_limit_disconnections`, `reply_buffer_*`, `unexpected_error_replies`, `dump_payload_sanitizations`, `hash_template*`, `acl_access_denied_*`, `migrate_cached_sockets`, `slave_expires_tracked_keys` | - | Left out (rule 3), or until Keel has the feature |
+| `io_threaded_reads_processed`, `io_threaded_writes_processed` | - | (j), done. The reads and writes the I/O threads other than the loop's made, as Redis sums its threads but the main one (server.c); the Threads section has each thread's. |
+| `active_defrag_*`, `io_threaded_total_prefetch_*`, `eventloop_*`, `avg_pipeline_length*`, `client_*_buffer_limit_disconnections`, `reply_buffer_*`, `unexpected_error_replies`, `dump_payload_sanitizations`, `hash_template*`, `acl_access_denied_*`, `migrate_cached_sockets`, `slave_expires_tracked_keys` | - | Left out (rule 3), or until Keel has the feature |
 
 ## Replication
 
@@ -285,6 +286,50 @@ stream stands, which stream it is) and change their unit and form.
 | `used_cpu_sys`, `used_cpu_user` | (a) `getrusage(RUSAGE_SELF)`, in seconds with six decimals, as Redis prints them |
 | `used_cpu_sys_children`, `used_cpu_user_children` | (a) `getrusage(RUSAGE_CHILDREN)`, which is `0.000000` for Keel |
 | `used_cpu_sys_main_thread`, `used_cpu_user_main_thread` | Left out. Redis reports them only where it can read a thread's own usage, and Keel's event loop is a goroutine. |
+
+## Threads, Hotkeys, Modules and Keysizes
+
+Redis 8.10.1's default INFO has four sections more than (a) to (i) wrote,
+in this order: Threads after Persistence; Hotkeys and Modules after CPU;
+Keysizes after Keyspace (`server.c`, `genInfoSectionDict`). Part (j) writes
+the first three. The owner decided on October 14, 2026 that Modules stays
+empty.
+
+- **Threads:** `io_thread_<n>:clients=<n>,reads=<n>,writes=<n>`, a line for
+  each I/O thread, the loop's own first, as Redis writes them.
+  - **Differs from Redis in `clients`:** Redis binds each client to a thread,
+    so each line counts its own. Keel's workers take a share of whichever
+    connections are ready at each turn (`-io-threads`, `iothreads.go`). So
+    the loop's line holds every connection and a worker's holds none.
+  - A worker's reads and writes are those it made, counted after it serves
+    a connection rather than on the command path. The loop's are the rest of
+    `total_reads_processed` and `total_writes_processed`, so the lines add
+    up to them, as Redis's do.
+  - `CONFIG RESETSTAT` starts them again, as Redis's `resetServerStats`
+    zeroes each thread's.
+  - With no transport, an embedded engine, there is no Threads section.
+- **Hotkeys:** the header alone. Redis writes fields only while `HOTKEYS`
+  tracking runs, and Keel has no hot key tracking.
+- **Modules:** the header alone, as a Redis with no module loaded writes it;
+  `INFO modules` and `INFO module_list` ask for it, as in Redis.
+  - Keel's Bloom, cuckoo and count-min commands are its own, and the owner
+    decided on October 14, 2026 that they are not listed as RedisBloom's.
+    Listing them would let module-detecting clients find them, but it would
+    also commit `MODULE LIST` to answering for a module that is not loaded.
+  - Redis 8 builds may list modules of their own; Homebrew's 8.10.2 lists
+    `vectorset`.
+- **Keysizes:** left out. Redis keeps per-database histograms of string sizes
+  and collection lengths, updated on every write. Keel would need a step in
+  every family's write path, or a walk of the keyspace for each INFO.
+  `docs/redis-parity-plan.md` lists it to revisit once phase 4's families
+  are in.
+
+A local run with 50 clients through `redis-benchmark`, against a Keel and a
+Redis 8.10.2 each with four I/O threads, gave the same totals: 40,105 reads
+and 40,002 writes. Over two runs, Keel's loop made about 38,000 of the reads
+and each worker 565 to 779. Redis's main thread made none, since each client
+is pinned to a worker. The exporter reads `io_threaded_reads_processed` from
+both, 2,199 from Keel in the second run.
 
 ## Keyspace
 
@@ -711,3 +756,7 @@ Live telemetry run after each merge confirms them.
   Redis would. With an idle client beside the one asking, both servers
   report 2; `redis_mem_clients_normal` was 2304 from Redis and 95 from Keel,
   for the reason above.
+- **(j):** `redis_io_threaded_reads_processed` and
+  `redis_io_threaded_writes_processed`. `redis_exporter` 1.93.0 makes no metric
+  of the Threads lines or of an empty Modules section, so Threads is for
+  `INFO` readers and dashboards that parse it themselves.

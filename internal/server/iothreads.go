@@ -5,8 +5,11 @@ import (
 	"io"
 	"log"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/brandopakel/keel/internal/core"
 )
 
 // Threaded socket I/O, in the style of Redis's io-threads.
@@ -87,6 +90,18 @@ type ioPool struct {
 	// array for the whole server: one per thread is still not one per
 	// connection, which is the property that matters.
 	mainScratch []byte
+
+	// io is each worker's reads and writes, for INFO's Threads section; the
+	// loop's own share is the rest of readsProcessed and writesProcessed.
+	// Slot 0, the loop's, is unused.
+	io []ioCounters
+}
+
+// ioCounters are one worker's reads and writes, padded to a cache line of
+// their own, since each worker adds to its own while the others add to theirs.
+type ioCounters struct {
+	reads, writes atomic.Uint64
+	_             [48]byte
 }
 
 type ioJob struct {
@@ -102,11 +117,12 @@ func newIOPool(threads int) *ioPool {
 		threads:     threads,
 		assign:      make([][]*client, threads),
 		mainScratch: make([]byte, readChunkSize),
+		io:          make([]ioCounters, threads),
 	}
 	for i := 1; i < threads; i++ {
 		ch := make(chan ioJob)
 		p.jobs = append(p.jobs, ch)
-		go p.worker(ch)
+		go p.worker(ch, &p.io[i])
 	}
 	if threads > 1 {
 		log.Printf("io threads: %d (1 loop thread + %d workers)", threads, threads-1)
@@ -114,13 +130,50 @@ func newIOPool(threads int) *ioPool {
 	return p
 }
 
-func (p *ioPool) worker(ch chan ioJob) {
+func (p *ioPool) worker(ch chan ioJob, io *ioCounters) {
 	scratch := make([]byte, readChunkSize)
 	for job := range ch {
 		for _, c := range job.clients {
-			p.serve(c, job.write, scratch)
+			n := p.serve(c, job.write, scratch)
+			if job.write {
+				io.writes.Add(n)
+			} else {
+				io.reads.Add(n)
+			}
 		}
 		p.wg.Done()
+	}
+}
+
+// threadStats is INFO's Threads section: the loop's line first, holding every
+// client, since the workers take a share of whichever connections are ready
+// rather than clients of their own, and the reads and writes the workers did
+// not make; then each worker's. A nil pool, before the server has made one,
+// has none.
+func (p *ioPool) threadStats(clients int) []core.IOThreadStats {
+	if p == nil {
+		return nil
+	}
+	stats := make([]core.IOThreadStats, p.threads)
+	reads, writes := readsProcessed.Load(), writesProcessed.Load()
+	for i := 1; i < p.threads; i++ {
+		r, w := p.io[i].reads.Load(), p.io[i].writes.Load()
+		stats[i] = core.IOThreadStats{Reads: r, Writes: w}
+		reads, writes = reads-min(reads, r), writes-min(writes, w)
+	}
+	stats[0] = core.IOThreadStats{Clients: clients, Reads: reads, Writes: writes}
+	return stats
+}
+
+// resetIO starts the workers' counts again, for CONFIG RESETSTAT, as Redis's
+// resetServerStats zeroes each I/O thread's.
+func (p *ioPool) resetIO() {
+	if p == nil {
+		return
+	}
+	for i := range p.io {
+		p.io[i].reads.Store(0)
+		p.io[i].writes.Store(0)
 	}
 }
 
@@ -133,12 +186,14 @@ func (p *ioPool) stop() {
 	p.jobs = nil
 }
 
-func (p *ioPool) serve(c *client, write bool, scratch []byte) {
+// serve does one phase's I/O for c, a write or a read, and reports how many
+// reads or writes it made.
+func (p *ioPool) serve(c *client, write bool, scratch []byte) uint64 {
 	if write {
 		c.err = nil
 		if len(c.out) > maxOutputBuffer {
 			c.err = fmt.Errorf("output buffer limit exceeded")
-			return
+			return 0
 		}
 		part := c.out
 		if len(c.frames) > 0 {
@@ -164,12 +219,14 @@ func (p *ioPool) serve(c *client, write bool, scratch []byte) {
 		if err != nil && err != syscall.EAGAIN && err != syscall.EINTR {
 			c.err = err
 		}
-		return
+		return 1
 	}
 
+	before := c.reads
 	if len(c.cmds) == 0 {
 		c.cmds, c.err = c.readCommandsReserved(scratch, p.requestBudget)
 	}
+	return c.reads - before
 }
 
 // run performs one phase over cs, in parallel when that is worth doing.

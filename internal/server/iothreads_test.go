@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/brandopakel/keel/internal/core"
 )
@@ -341,4 +342,53 @@ func TestThreadedServerAnswersEveryClient(t *testing.T) {
 	for e := range errs {
 		t.Error(e)
 	}
+}
+
+// TestEachIOThreadCountsItsOwnReadsAndWrites: INFO's Threads section gives
+// each worker the reads and writes it made and the loop thread the rest, so
+// the lines add up to total_reads_processed and total_writes_processed; the
+// loop thread holds every client; CONFIG RESETSTAT starts the workers' counts
+// again with the totals.
+func TestEachIOThreadCountsItsOwnReadsAndWrites(t *testing.T) {
+	resetNetStats()
+	t.Cleanup(resetNetStats)
+	const threads = 4
+	const conns = 16
+	pool := newIOPool(threads)
+	defer pool.stop()
+
+	cs := pairedClients(t, conns, encodeCmd("PING"))
+	pool.run(cs, false)
+	for _, c := range cs {
+		c.out = []byte("+PONG\r\n")
+	}
+	pool.run(cs, true)
+	// One more read, below the threshold, so on the loop thread.
+	pool.run(pairedClients(t, 1, encodeCmd("PING")), false)
+
+	stats := pool.threadStats(conns)
+	require.Len(t, stats, threads)
+	assert.Equal(t, conns, stats[0].Clients)
+	var reads, writes uint64
+	for i, s := range stats {
+		reads, writes = reads+s.Reads, writes+s.Writes
+		if i > 0 {
+			assert.Zero(t, s.Clients, "a worker holds no clients of its own")
+			assert.Positive(t, s.Reads, "worker %d read its share", i)
+			assert.Positive(t, s.Writes, "worker %d wrote its share", i)
+		}
+	}
+	assert.Equal(t, readsProcessed.Load(), reads)
+	assert.Equal(t, writesProcessed.Load(), writes)
+	assert.EqualValues(t, conns+1, reads)
+	assert.EqualValues(t, conns, writes)
+	assert.Positive(t, stats[0].Reads, "the loop thread read its own share, and the one below the threshold")
+
+	resetNetStats()
+	pool.resetIO()
+	for _, s := range pool.threadStats(conns) {
+		assert.Zero(t, s.Reads+s.Writes)
+	}
+	var none *ioPool
+	assert.Nil(t, none.threadStats(1), "no pool yet, no threads")
 }

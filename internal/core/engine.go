@@ -318,6 +318,10 @@ type Engine struct {
 	// command reads, and the paired job's log rows read 1.12 twice.
 	replicationTransport func() ReplicationTransport
 	syncFull             uint64
+	// ioThreads is what INFO reads of the transport's I/O threads, installed
+	// with SetIOThreads; nil, there is none (transport_info.go). Last, so that
+	// adding it moved no field before it.
+	ioThreads func() []IOThreadStats
 }
 
 // Lock takes e's lock, waiting until whoever holds it lets go. Its holder is

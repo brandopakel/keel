@@ -76,6 +76,11 @@ func (e *Engine) cmdINFO(args []string) []byte {
 	for _, arg := range args {
 		sections[strings.ToLower(arg)] = true
 	}
+	// Redis's default list names the modules section module_list, and INFO
+	// modules asks for it too (server.c, genRedisInfoString).
+	if sections["module_list"] {
+		sections["modules"] = true
+	}
 	// Redis's default sections, and all of them; commandstats and
 	// latencystats are in all but not in the default, as in Redis.
 	all := sections["all"] || sections["everything"]
@@ -93,9 +98,12 @@ func (e *Engine) cmdINFO(args []string) []byte {
 		{"clients", (*Engine).clientsInfo, false},
 		{"memory", (*Engine).memoryInfo, false},
 		{"persistence", (*Engine).persistenceInfo, false},
+		{"threads", (*Engine).threadsInfo, false},
 		{"stats", (*Engine).statsInfo, false},
 		{"replication", (*Engine).replicationInfo, false},
 		{"cpu", (*Engine).cpuInfo, false},
+		{"hotkeys", (*Engine).hotkeysInfo, false},
+		{"modules", (*Engine).modulesInfo, false},
 		{"commandstats", (*Engine).commandStatsInfo, true},
 		{"errorstats", (*Engine).errorStatsInfo, false},
 		{"latencystats", (*Engine).latencyStatsInfo, true},
@@ -278,6 +286,7 @@ func (e *Engine) statsInfo(b *strings.Builder) {
 	fmt.Fprintf(b, "total_error_replies:%d\r\n", e.totals.errors)
 	if e.clientBuffers != nil {
 		fmt.Fprintf(b, "total_reads_processed:%d\r\ntotal_writes_processed:%d\r\n", stats.ReadsProcessed, stats.WritesProcessed)
+		e.ioThreadedInfo(b)
 	}
 	fmt.Fprintf(b, "slowlog_commands_count:%d\r\nslowlog_commands_time_ms_max:%.2f\r\nslowlog_commands_time_ms_sum:%.2f\r\n\r\n",
 		e.slowlog.count, float64(e.slowlog.usecMax)/1000, float64(e.slowlog.usecSum)/1000)
