@@ -199,7 +199,9 @@ def operation(rng):
             ['LPOS', key, value, 'MAXLEN', rng.randrange(0, 5), 'COUNT', 0],
             ['LMOVE', key, other, rng.choice(['LEFT', 'RIGHT']), rng.choice(['LEFT', 'right'])],
             ['RPOPLPUSH', key, other], ['LMOVE', key, key, 'LEFT', 'RIGHT'],
-            ['LMOVE', key, rng.choice(['string:0', 'hash:0', 'missing']), 'RIGHT', 'LEFT'],
+            # A destination of another type, or a fresh one; not 'missing', which
+            # the key steps take never to exist (they compare its PTTL exactly).
+            ['LMOVE', key, rng.choice(['string:0', 'hash:0', 'list:moved']), 'RIGHT', 'LEFT'],
             ['LMOVEM', key, other, 'LEFT', 'RIGHT'],
             ['LMOVEM', key, rng.choice([other, key]), rng.choice(['LEFT', 'RIGHT']), rng.choice(['LEFT', 'RIGHT']),
              rng.choice(['COUNT', 'EXACTLY']), rng.randrange(1, 4), rng.choice(['OBO', 'BULK'])],
