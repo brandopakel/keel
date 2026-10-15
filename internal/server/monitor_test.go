@@ -134,6 +134,31 @@ func TestResetRestoresTheConnection(t *testing.T) {
 	require.Equal(t, "+PONG\r\n", c.do("PING"))
 }
 
+// TestResetFollowsALivePassword: RESET logs the connection out when the
+// server has a password, set by CONFIG SET requirepass after it connected,
+// and logs it in once the password is taken away, as Redis's
+// clearClientConnectionState hands it back to the default user as that user
+// is now (networking.c).
+func TestResetFollowsALivePassword(t *testing.T) {
+	e := newTestEngine(t, core.Options{})
+	pass := newServerPassword("")
+	e.SetServerInfo(&core.ServerInfo{SetRequirePass: pass.set})
+	c := &client{fd: -1, serverPass: pass, authenticated: true, engine: e}
+	require.Equal(t, "+OK\r\n", runOnce(t, c, sent("CONFIG", "SET", "requirepass", "secret")))
+	require.Equal(t, "$-1\r\n", runOnce(t, c, sent("GET", "k")), "made while no password was needed")
+	require.Equal(t, "+RESET\r\n", runOnce(t, c, sent("RESET")))
+	require.Equal(t, "-NOAUTH Authentication required.\r\n", runOnce(t, c, sent("GET", "k")), "logged out by RESET")
+	require.Equal(t, "+OK\r\n", runOnce(t, c, sent("AUTH", "secret")))
+
+	stranger := &client{fd: -1, serverPass: pass, engine: e}
+	require.Equal(t, "-NOAUTH Authentication required.\r\n", runOnce(t, stranger, sent("GET", "k")))
+	require.Equal(t, "+OK\r\n", runOnce(t, c, sent("CONFIG", "SET", "requirepass", "")))
+	require.Equal(t, "+RESET\r\n", runOnce(t, stranger, sent("RESET")))
+	require.Equal(t, "$-1\r\n", runOnce(t, stranger, sent("GET", "k")), "no password, so RESET logs it in")
+	require.Equal(t, "+OK\r\n", runOnce(t, c, sent("CONFIG", "SET", "requirepass", "again")))
+	require.Equal(t, "$-1\r\n", runOnce(t, stranger, sent("GET", "k")), "logged in stays logged in")
+}
+
 func TestAppendReprQuotesAsRedis(t *testing.T) {
 	require.Equal(t, `"a\\b\"c\n\r\t\a\b\x00\xff~ "`, string(appendRepr(nil, "a\\b\"c\n\r\t\a\b\x00\xff~ ")))
 	line := monitorLine(nil, time.Unix(12, 3000), "1.2.3.4:5", &core.Command{Cmd: "AUTH", Name: "auth", Args: []string{"u", "p"}})
