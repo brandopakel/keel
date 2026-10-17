@@ -131,6 +131,12 @@ as telnet and `redis-cli --pipe` send them. Keel reads it as Redis's
 - Commands that arrived before a request that cannot be read, in the same
   read, run and are answered first, as Redis runs each command it has parsed.
   This holds for a malformed RESP request too.
+- Under `CLIENT REPLY OFF`, or with the next reply to be skipped by `SKIP`, a
+  protocol error's reply is dropped as every reply is, still counted as an
+  error reply, and the connection is closed. Redis drops the reply too, but
+  then never closes the connection. Its `CLIENT_CLOSE_AFTER_REPLY` waits for
+  a reply that never comes, and the connection reads nothing more
+  (`setProtocolError`, `networking.c`). Keel closes it, as Redis means to.
 
 An inline command is a command like any other. `MULTI` queues it, `CLIENT
 PAUSE` holds it, and the log and the replication feed record its parsed
