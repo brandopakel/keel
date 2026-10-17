@@ -2460,6 +2460,41 @@ error-parity harnesses. The blocking forms stay in tier 2 of the parity plan.
 - **Measured**: allocations per operation stay at 1 on PFADD and 2 on BF.ADD;
   locally PFADD read 1.008 and BF.ADD 1.000 against the lists.
 
+**The missing commands.** `BF.INSERT`, `BF.CARD`, `CF.INSERT`,
+`CF.INSERTNX`, `CF.COMPACT`, `CMS.INFO` and `CMS.MERGE`, as RedisBloom
+8.10.1 defines each (`rebloom.c`, `rm_cms.c`), held to it byte for byte in
+both protocols by `scripts/redisbloom-parity.py`, which now covers the
+Count-Min sketches too, and by the error, stats and differential harnesses.
+
+- **Read as RedisBloom reads them.** BF.INSERT's and CF.INSERT's options go
+  by their first letters (ERROR and EXPANSION by their second, NOCREATE and
+  NONSCALING by their third), in turn, until ITEMS. The Count-Min sketches'
+  numbers are now read as RedisBloom reads them, with Redis's `string2ll`
+  and `string2d`: CMS.INITBYDIM finds a key of any type taken before it
+  reads its dimensions; an increment of 2^32 or more saturates, and an
+  estimate of 2^32 - 1 is the overflow; `007` and `-1` are refused in
+  RedisBloom's words. A log written before reads as it did
+  (`replayingFilterLog`). CMS.INITBYPROB sizes its depth from `log10f`, in
+  single precision, as RedisBloom does.
+- **Records**: each new write records itself, verbatim, as RedisBloom
+  replicates it; a PFADD that changes nothing no longer records anything,
+  as Redis's pfaddCommand counts no change. The filters' other no-ops stay
+  recorded, because RedisBloom replicates them: CF.ADDNX of an item already
+  there and CF.DEL of one that is not.
+- **CF.COMPACT is a write here.** RedisBloom declares it read-only, though it
+  changes the filter (it resets the count of deletions) and replicates it,
+  so a Redis replica would run it and differ from its primary; a Keel replica
+  refuses it with READONLY, and the log records it. Its descriptor
+  (`command_specs_keel.go`) declares it `WRITE FAST`, in the write ACL
+  category, where RedisBloom 8.10.1 registers it `"readonly fast"`, `"read"`
+  (`rebloom.c`, line 1648), so COMMAND INFO reports it as a write, and a
+  cluster-aware client sends it to the primary, the only node that accepts
+  it.
+- **Not done**: the `SCANDUMP`/`LOADCHUNK` pairs, whose chunks are
+  RedisBloom's own bit layout and hashing, which Keel's filters do not
+  share, so a chunk of one would not load into the other; and `PFDEBUG` and
+  `PFSELFTEST`, which read Redis's own HyperLogLog encoding.
+
 ## Risks, in order
 
 1. Moving AOF, rewrite and replication state while MULTI/EXEC changes the same

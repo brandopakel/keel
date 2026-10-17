@@ -78,6 +78,12 @@ type Space struct {
 	// that found them so or by active expiry, for INFO's expired_keys
 	// (NoteExpired). Only a removal writes it, so it goes last too.
 	expired uint64
+
+	// ExpiryClock, when set, is the clock in Unix milliseconds every expiry is
+	// compared against, in place of the wall clock: a test sets it to make a
+	// TTL fall due between two lookups of one command. It is last, so that no
+	// field an access reads moves.
+	ExpiryClock func() uint64
 }
 
 // EvictionPolicy is how a space that is over one of its bounds chooses the

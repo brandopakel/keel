@@ -265,11 +265,13 @@ In order of distance, not size.
   commands, RESP3 push messages and client tracking, ACL roles, and cluster routing
   are absent. Unreleased development adds `MULTI`/`EXEC`/`DISCARD`. `ZRANGE` lacks
   `BYLEX`; `ZADD` lacks `GT`, `LT`, and `INCR`.
-  `GEOSEARCHSTORE`, the `GEORADIUS` family, `CMS.INFO` and `CMS.MERGE`
-  are also missing. So are RedisBloom's `BF.INSERT`, `BF.CARD`, `CF.INSERT`,
-  `CF.INSERTNX`, `CF.COMPACT`, the `SCANDUMP`/`LOADCHUNK` pairs and the `DEBUG` forms.
-  The `BF.*` and `CF.*` commands Keel has answer as RedisBloom 8.10.1's do in both
-  protocols, errors included. The exceptions come from how Keel builds its filters.
+  `GEOSEARCHSTORE` and the `GEORADIUS` family are also missing. So are RedisBloom's
+  `SCANDUMP`/`LOADCHUNK` pairs, whose chunks are RedisBloom's own bit layout and
+  hashing, which Keel's filters do not share, and the `DEBUG` forms, as are
+  `PFDEBUG` and `PFSELFTEST`, which read Redis's own HyperLogLog encoding. The
+  `BF.*`, `CF.*` and `CMS.*` commands Keel has answer as RedisBloom 8.10.1's do in
+  both protocols, errors included; `CF.COMPACT` is a write a replica refuses. The
+  exceptions come from how Keel builds its filters.
   Cuckoo filters have one geometry (`BUCKETSIZE 4`, `MAXITERATIONS 500`,
   `EXPANSION 0`), so a full one refuses an item instead of growing, and `CF.RESERVE`
   refuses any other geometry. Sizes in `BF.INFO`/`CF.INFO` are Keel's own. `TYPE`
