@@ -178,7 +178,9 @@ func TestEvictionExceededTimeIsRedis(t *testing.T) {
 	require.Equal(t, "+OK\r\n", s.send("SET", "a", "v"))
 	total, current := exceeded()
 	assert.Zero(t, total+current, "INFO is the first command to find it over")
-	waitPast(30)
+	// Waited past what is asserted, so that clock resolution and the
+	// milliseconds INFO truncates to leave a margin.
+	waitPast(40)
 	total, current = exceeded()
 	assert.GreaterOrEqual(t, current, 30)
 	assert.Equal(t, total, current)
