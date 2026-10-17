@@ -23,6 +23,7 @@ a known difference.
 import argparse
 import hashlib
 import json
+import re
 import os
 from pathlib import Path
 import secrets
@@ -226,12 +227,19 @@ KNOWN = {
                'loudly instead of quietly not watching (docs/transactions.md); before AUTH that answers '
                'unknown command rather than NOAUTH, as Redis answers for any command it does not have',
     'object encoding k': 'OBJECT is not implemented; Keel answers it as Redis answers a command it does not have',
-    'client kill x y': 'CLIENT KILL is not implemented; Keel answers it as Redis answers a subcommand it does not have',
     'SELECT 1': 'Keel has one database, and SELECT of any other answers the error for one that does not exist',
     'ZADD zset GT LT 1 m': 'ZADD GT and LT are not implemented, so GT is read as the score, as a Redis without them reads it',
     'ZADD zset NX GT 1 m': 'ZADD GT is not implemented, so GT is read as the score and the pairs do not pair up',
     'ZADD zset INCR 1 a 2 b': 'ZADD INCR is not implemented, so INCR is read as the score and the pairs do not pair up',
     'ZRANGE zset 0 1 BYLEX': 'ZRANGE BYLEX is not implemented and is refused as any option Keel does not know',
+    'CLIENT REPLY OFF\r\nSET k "x\r\n': 'under CLIENT REPLY OFF or SKIP, Redis drops a protocol error\'s reply and then '
+               'never closes the connection, since its CLOSE_AFTER_REPLY waits for a reply that never comes, and '
+               'reads nothing more from it; Keel drops the reply too and closes the connection '
+               '(docs/error-replies.md, inline commands)',
+    'CLIENT REPLY SKIP\r\nSET k "x\r\n': 'under CLIENT REPLY OFF or SKIP, Redis drops a protocol error\'s reply and then '
+               'never closes the connection, since its CLOSE_AFTER_REPLY waits for a reply that never comes, and '
+               'reads nothing more from it; Keel drops the reply too and closes the connection '
+               '(docs/error-replies.md, inline commands)',
     'nosuch ' + ' '.join(['ab'] * 60): 'Redis refuses a request of more than ten arguments from a connection that has '
                'not logged in, as a protocol error that closes it; Keel bounds requests with its own admission '
                'limits and has not adopted those',
@@ -403,6 +411,20 @@ SUBCOMMANDS = [
     ['client', 'pause'], ['CLIENT', 'pause', '1', 'ALL', 'x'], ['client', 'unpause', 'x'],
     ['client', 'pause', '9223372036854775807'], ['CLIENT', 'PAUSE', '0'], ['CLIENT', 'PAUSE', '0', 'write'],
     ['CLIENT', 'UNPAUSE'],
+    # CLIENT LIST, KILL, REPLY, NO-EVICT, NO-TOUCH, UNBLOCK, GETREDIR and TRACKINGINFO: the forms that list or
+    # kill none of the harness's own connections, so that both servers answer alike.
+    ['client', 'list', 'x'], ['client', 'list', 'type', 'x'], ['client', 'list', 'id'], ['client', 'list', 'id', 'x'],
+    ['client', 'list', 'type', 'normal', 'x'], ['CLIENT', 'LIST', 'TYPE', 'pubsub'], ['client', 'list', 'id', '999999'],
+    ['client', 'kill', 'id', '10', 'wrong_arg'], ['client', 'kill', 'id', 'str'], ['client', 'kill', 'id', '-1'],
+    ['client', 'kill', 'id', '0'], ['client', 'kill', 'type', 'wrong_type'], ['client', 'kill', 'user', 'wrong_user'],
+    ['client', 'kill', 'skipme', 'yes_or_no'], ['client', 'kill', 'maxage', 'str'],
+    ['client', 'kill', 'maxage', '9999999999999999999'], ['client', 'kill', 'maxage', '-1'],
+    ['client', 'kill', '000.123.321.567:0000'], ['client', 'kill', '127.0.0.1:'], ['client', 'kill', 'id', '999999'],
+    ['client', 'kill', 'type', 'master'], ['CLIENT', 'KILL', 'USER', 'default', 'ID', '999999'],
+    ['client', 'reply', 'x'], ['client', 'reply', 'on'], ['client', 'no-evict', 'x'], ['client', 'no-evict', 'on'],
+    ['client', 'no-touch', 'x'], ['CLIENT', 'NO-TOUCH', 'off'], ['client', 'unblock', 'x'], ['client', 'unblock', '1', 'x'],
+    ['client', 'unblock', 'x', 'y'], ['client', 'unblock', '1', 'timeout'], ['client', 'unblock', '1', '2', '3'],
+    ['client', 'getredir'], ['client', 'trackinginfo'],
     ['memory', 'nosuch'], ['MEMORY', 'Nosuch', 'x'], ['memory'], ['memory', 'usage'], ['Memory', 'UsAge'],
     ['memory', 'stats', 'x'], ['MEMORY', 'x' * 200],
     ['config', 'get', 'x'], ['CONFIG', 'GET', 'nosuch', 'x*'], ['config', 'nosuch'], ['Config', 'get'],
@@ -478,7 +500,8 @@ COMMAND_CASES = [
 ]
 # The subcommands Keel has, each of which COMMAND INFO describes.
 KEEL_SUBCOMMANDS = ['client|id', 'client|setname', 'client|getname', 'client|setinfo', 'client|info', 'client|help',
-                    'client|pause', 'client|unpause',
+                    'client|pause', 'client|unpause', 'client|list', 'client|kill', 'client|reply', 'client|no-evict',
+                    'client|no-touch', 'client|unblock', 'client|getredir', 'client|trackinginfo',
                     'memory|stats', 'memory|usage', 'memory|help', 'config|get', 'config|set', 'config|resetstat',
                     'config|rewrite', 'config|help', 'command|count', 'command|docs', 'command|getkeys',
                     'command|getkeysandflags', 'command|help', 'command|info', 'command|list', 'latency|doctor',
@@ -533,10 +556,10 @@ OOM_ANSWERED = [[['GET', 'k']], [['DEL', 'k']], [['EXPIRE', 'k', '10']], [['EXIS
 
 
 def case(name, commands, *, server='primary', auth=True, protocols=(2, 3), expect=None, loose=(), setup=(),
-         raw=None, marker=True):
+         masks=(), raw=None, marker=True):
     return dict(name=name, commands=[list(c) for c in commands], server=server, auth=auth,
                 protocols=list(protocols), expect=expect, loose=list(loose), setup=[list(c) for c in setup],
-                raw=raw, marker=marker)
+                masks=list(masks), raw=raw, marker=marker)
 
 
 # Inline requests, sent as they are rather than framed as RESP: lines of words
@@ -560,6 +583,11 @@ INLINE = [
     (b'MULTI\r\nSET k v\r\n\r\nGET k\r\nEXEC\r\n', {}), (b'MULTI\r\nnosuch\r\nEXEC\r\n', {}),
     (b'SET a 1\r\n*2\r\n$3\r\nGET\r\n$1\r\na\r\nget a\n', {}),
     (b'HSET h f v\r\nHGETALL h\r\n', {}), (b'QUIT\r\nPING\r\n', {}),
+    # CLIENT REPLY, sent inline: OFF and SKIP silence what follows, the
+    # empty lines between included, and so a protocol error's reply too.
+    (b'CLIENT REPLY OFF\r\nPING\r\n\r\nCLIENT REPLY ON\r\nPING\r\n', {}),
+    (b'client reply skip\r\nPING\r\n\nPING\r\n', {}),
+    (b'CLIENT REPLY OFF\r\nSET k "x\r\n', dict(protocols=(2,))), (b'CLIENT REPLY SKIP\r\nSET k "x\r\n', dict(protocols=(2,))),
     (b'PING\r\n', dict(auth=False, protocols=(2,))), (b'GET k\r\n\r\n', dict(auth=False, protocols=(2,))),
     # Unbalanced quotes: unclosed, closed against the next character, a
     # backslash escaping the line's end, and a NUL inside quotes; Redis's own
@@ -579,6 +607,28 @@ INLINE = [
         (b'', b'PING\x00 ignored\r\nPING\r\n'), (b'PING\r\n\r\n', b'\x00junk\r\nPING\r\n'),
         (b'', b'SET k "a\x00b"\r\n'))),
 ]
+
+
+# The fields of a CLIENT INFO line that differ between any two connections or
+# servers - its identity, its clock, and the sizes of buffers each server
+# allocates its own way - and so are compared by name only. Every other field
+# is compared by value.
+CLIENT_LINE_MASKS = ['id', 'addr', 'laddr', 'fd', 'age', 'idle', 'qbuf-free', 'rbs', 'rbp', 'tot-mem', 'tot-net-out']
+
+
+def masked(reply, fields):
+    """reply with each named field's value * in every client line it holds,
+    a bulk or verbatim string of its own or inside an array, and each such
+    string's length counted again."""
+    if not fields or not isinstance(reply, bytes):
+        return reply
+
+    def mask(m):
+        body = m.group(3)
+        for field in fields:
+            body = re.sub(rb'(^|[ :\n])(' + re.escape(field.encode()) + rb')=[^ \n]*', rb'\1\2=*', body)
+        return m.group(1) + str(len(body)).encode() + b'\r\n' + body + b'\r\n'
+    return re.sub(rb'([$=])(\d+)\r\n((?:txt:)?id=[^\r]*)\r\n', mask, reply)
 
 
 def build_cases(redis_arities, modules):
@@ -612,6 +662,14 @@ def build_cases(redis_arities, modules):
         cases.append(case('command', [command]))
     for name in sorted(n.lower() for n in redis_arities) + KEEL_SUBCOMMANDS:
         cases.append(case('command info', [['COMMAND', 'INFO', name]]))
+    # CLIENT INFO's line: Redis's fields in Redis's order, and the values that
+    # do not depend on the connection or the server, after what the connection
+    # sent and the modes it set.
+    for commands in ([['CLIENT', 'INFO']],
+                     [['CLIENT', 'SETNAME', 'me'], ['CLIENT', 'SETINFO', 'LIB-NAME', 'lib'], ['CLIENT', 'NO-EVICT', 'on'],
+                      ['CLIENT', 'NO-TOUCH', 'on'], ['CLIENT', 'INFO']],
+                     [['MULTI'], ['GET', 'k'], ['CLIENT', 'INFO'], ['EXEC']]):
+        cases.append(case('client info', commands, masks=CLIENT_LINE_MASKS))
     # A failed AUTH inside EXEC leaves no element in Redis 8.10.1's reply, whose
     # header still counts one, so a client reading it waits forever; AUTH is
     # not queued here.
@@ -782,12 +840,13 @@ def main():
         cases = build_cases(redis_arities(servers.ports['redis', 'redis-primary']), args.redis_module is not None)
         for spec in cases:
             for protocol in spec['protocols']:
-                keel = run_case(servers, 'keel', spec, protocol)
-                redis = spec['expect'] or run_case(servers, 'redis', spec, protocol)
+                keel = [masked(r, spec['masks']) for r in run_case(servers, 'keel', spec, protocol)]
+                redis = spec['expect'] or [masked(r, spec['masks']) for r in run_case(servers, 'redis', spec, protocol)]
                 same = len(keel) == len(redis) and all(
                     a[:1] == b[:1] if i in spec['loose'] else a == b for i, (a, b) in enumerate(zip(keel, redis)))
-                known = None if same else next((KNOWN[key] for key in (' '.join(show(p) for p in c)
-                                                                         for c in spec['commands']) if key in KNOWN), None)
+                keys = [' '.join(show(p) for p in c) for c in spec['commands']]
+                keys += [show(spec['raw'])] if spec['raw'] is not None else []
+                known = None if same else next((KNOWN[key] for key in keys if key in KNOWN), None)
                 report['cases'] += 1
                 report['replies'] += len(keel)
                 report['mismatches'] += not same and known is None
