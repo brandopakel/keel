@@ -176,6 +176,13 @@ jobs:
         run: |
           python3 scripts/error-parity.py --bin /tmp/keel-general --redis /tmp/redis-8.10.1/src/redis-server \
             --redis-module /tmp/redis-8.10.1/modules/redisbloom/redisbloom.so --out dist/general-ci/error-parity
+      - name: redis-cli --pipe loads Keel as it loads Redis 8.10.1
+        # RESP, inline lines and a mix, 50,000 commands each, through
+        # redis-cli --pipe into both servers; then Keel restarted from its
+        # log (scripts/pipe-load.py).
+        run: |
+          python3 scripts/pipe-load.py --bin /tmp/keel-general --redis /tmp/redis-8.10.1/src/redis-server \
+            --cli /tmp/redis-8.10.1/src/redis-cli --out dist/general-ci/pipe-load
       - name: INFO counters command by command against Redis 8.10.1 and RedisBloom
         # How total_commands_processed, total_error_replies, errorstats and the
         # keyspace hits and misses move for each command, compared with Redis's

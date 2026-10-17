@@ -106,6 +106,53 @@ each in Redis's words (see [INFO compatibility](info-compatibility.md#commands))
   `AUTH default x` and `HELLO 3 AUTH default x` succeed, as they do with
   Redis's passwordless default user.
 
+## Inline commands
+
+A request that does not start with `*` is an inline command: a line of words,
+as telnet and `redis-cli --pipe` send them. Keel reads it as Redis's
+`processInlineBuffer` reads it (`networking.c`):
+
+- The line ends at its first `\n`, and a `\r` before it is dropped.
+- Its words are split as `sdssplitargs` splits them (`sds.c`). Blanks separate
+  words. In double quotes, `\xHH` is a byte and `\n`, `\r`, `\t`, `\b`, `\a`
+  are control characters; in single quotes, only `\'` is an escape. A quote may
+  open in the middle of a word.
+- A line with no words, such as the `\r\n` that `redis-cli --pipe` sends before
+  its closing `ECHO`, is skipped and answered with nothing.
+- Unbalanced quotes are
+  `ERR Protocol error: unbalanced quotes in request`, and the connection is
+  closed. Unbalanced means a quote that is not closed, or one closed against
+  the next character, as in `"a"b`.
+- A line longer than 64 KiB is `ERR Protocol error: too big inline request`,
+  and the connection is closed.
+- A NUL byte hides the newline after it, because Redis looks for the newline
+  with `strchr`. The line runs nothing, waits, and is refused at the limit, as
+  in Redis.
+- Commands that arrived before a request that cannot be read, in the same
+  read, run and are answered first, as Redis runs each command it has parsed.
+  This holds for a malformed RESP request too.
+
+An inline command is a command like any other. `MULTI` queues it, `CLIENT
+PAUSE` holds it, and the log and the replication feed record its parsed
+arguments as RESP. The parsers the log's replay and the replica link use read
+RESP alone, as Redis's replica refuses inline commands from its primary and its
+AOF loader refuses a record that does not start with `*`.
+
+One departure: Redis checks the 64 KiB limit only while the newline has not
+arrived, after each read of up to 16 KiB (`PROTO_IOBUF_LEN`, `server.h:190`;
+`networking.c:3134-3141`). A line of 70,000 bytes is accepted when its newline
+comes in the read that crosses 64 KiB, and refused when the client pauses
+before sending it. Keel refuses every line longer than 64 KiB, however its
+bytes arrive. See "Where Keel improves on Redis" in the
+[parity plan](redis-parity-plan.md).
+
+`scripts/error-parity.py` sends 41 inline requests to both servers as raw
+bytes, each followed by an `ECHO` of a marker, and compares every reply and
+whether the connection was closed. `scripts/pipe-load.py` loads the same keys
+into Keel and Redis with `redis-cli --pipe` (RESP, inline, and a mix of the
+two), compares redis-cli's summaries, `DBSIZE` and sampled values, and
+restarts Keel from its log to check the keys come back.
+
 ## Evidence
 
 `scripts/error-parity.py` starts six servers: a Keel and a Redis primary with a
@@ -187,5 +234,5 @@ command, subcommand or option it does not have. The harness lists them in
 | A failed `AUTH` while another reply is pending | Redis's `addAuthErrReply` writes nothing when the connection still has a reply pending (`acl.c:1495`). Inside `EXEC` the array still counts the element, so a client waits forever; at top level, a failed `AUTH` pipelined behind another command gets no reply at all, and later replies answer the wrong requests (`docs/redis-internals-for-keel.md`, runtime evidence, question 1). Keel sends `WRONGPASS` in both cases |
 | `SET k v PX 9223372036854775807` | Redis's own answer depends on how it was compiled (signed overflow), and Homebrew's build answers `OK`. Keel refuses the expiry. It is not a harness case |
 | `SRANDMEMBER` counts past 16 million, `SCAN` `COUNT` past Keel's limit | Keel's allocation bounds, which Redis does not have |
-| Protocol errors and inline commands | Keel refuses anything that is not a RESP array of bulk strings, with its own `ERR Protocol error: invalid RESP input`. Redis accepts inline commands and words each protocol error separately |
+| Malformed RESP requests | Keel refuses a request that starts with `*` but is not an array of bulk strings with its own `ERR Protocol error: invalid RESP input`. Redis words each such error separately (`expected '$', got 'f'`, `invalid bulk length` and so on), and skips an array of zero or fewer elements. Inline requests and their two errors are Redis's (see [inline commands](#inline-commands)) |
 | RedisBloom's own replies and errors beyond counts and `WRONGTYPE` | Compared byte for byte by `scripts/redisbloom-parity.py` (#94), which CI runs beside this harness |

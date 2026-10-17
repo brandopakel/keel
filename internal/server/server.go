@@ -315,8 +315,20 @@ func (c *client) readCommandsReserved(scratch []byte, budget *requestAllocationB
 
 	var cmds []*core.Command
 	used := 0
+	refused := false
 	for used < len(src) && len(cmds) < maxCommandsPerTurn {
-		cmd, consumed, perr := core.ParseCmdReserved(src[used:], budget.reserve)
+		var (
+			cmd      *core.Command
+			consumed int
+			perr     error
+		)
+		if src[used] == '*' {
+			cmd, consumed, perr = core.ParseCmdReserved(src[used:], budget.reserve)
+		} else {
+			// Anything else is an inline request, a line of words, as Redis
+			// reads one (processInputBuffer).
+			cmd, consumed, perr = core.ParseInlineReserved(src[used:], budget.reserve)
+		}
 		if errors.Is(perr, core.ErrIncompleteFrame) {
 			// The rest of this command has not arrived yet. Keep what we have.
 			break
@@ -326,7 +338,20 @@ func (c *client) readCommandsReserved(scratch []byte, budget *requestAllocationB
 				c.buf = nil
 				return nil, perr
 			}
-			return cmds, perr
+			if len(cmds) == 0 {
+				return nil, perr
+			}
+			// The commands before the request that cannot be read run and
+			// are answered first, as Redis runs each command it has read
+			// before it reaches a bad one. The bad request stays buffered,
+			// and the next turn reads it again and refuses it.
+			refused = true
+			break
+		}
+		if cmd == nil {
+			// An inline line with no words, which Redis skips.
+			used += consumed
+			continue
 		}
 		if len(cmds) == cap(cmds) {
 			capacity := max(1, 2*cap(cmds))
@@ -342,7 +367,7 @@ func (c *client) readCommandsReserved(scratch []byte, budget *requestAllocationB
 		used += consumed
 	}
 
-	c.bufferedReady = len(cmds) == maxCommandsPerTurn && used < len(src)
+	c.bufferedReady = refused || len(cmds) == maxCommandsPerTurn && used < len(src)
 
 	switch {
 	case used == len(src):
