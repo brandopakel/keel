@@ -107,6 +107,26 @@ func TestMonitorItselfAndReset(t *testing.T) {
 	require.Equal(t, "", m.line(200*time.Millisecond), "no longer monitoring")
 }
 
+// TestMonitorShowsAnInlineCommandsArguments: an inline command is fed as
+// the arguments it was split into, quoted as any command's are, as Redis
+// feeds argv rather than the line; an empty line feeds nothing.
+func TestMonitorShowsAnInlineCommandsArguments(t *testing.T) {
+	connect := startPauseServer(t)
+	m, c := connect(), connect()
+	require.Equal(t, "+OK\r\n", m.do("MONITOR"))
+
+	c.raw("set k \"a b\\x41\\n\"\r\n\r\nGET 'k'\n")
+	require.Equal(t, "+OK\r\n", c.line(2*time.Second))
+	require.Equal(t, "a bA\n", c.bulk())
+	require.Equal(t, `"set" "k" "a bA\n"`, feedLine(t, m))
+	require.Equal(t, `"GET" "k"`, feedLine(t, m))
+	require.Equal(t, "", m.line(200*time.Millisecond), "nothing for the empty line")
+
+	c.raw("AUTH secret\r\n")
+	c.line(2 * time.Second)
+	require.Equal(t, `"AUTH" "(redacted)"`, feedLine(t, m))
+}
+
 // TestResetRestoresTheConnection: RESET answers RESET, discards a
 // transaction, speaks RESP2, clears the name, turns CLIENT REPLY and the
 // modes off, and keeps the library's name.
