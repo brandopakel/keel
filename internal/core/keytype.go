@@ -126,6 +126,15 @@ func keyRuleOf(name string) keyRule {
 	return keyFirst
 }
 
+// layoutPadKeysBy is layout padding for a throwaway control build: never run.
+//
+//go:noinline
+func layoutPadKeysBy(s *[64]uint64) {
+	s[0] += s[1] ^ 0x0
+	s[7] += s[14] ^ 0x9e3779b1
+	s[14] += s[27] ^ 0x3c6ef362
+}
+
 // keysBy returns the arguments of cmd that name keys under rule.
 func keysBy(cmd *Command, rule keyRule) []string {
 	if len(cmd.Args) == 0 {

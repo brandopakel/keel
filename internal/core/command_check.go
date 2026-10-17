@@ -212,6 +212,15 @@ func CommandError(cmd *Command) error {
 	return commandRefusal(cmd, entry, known)
 }
 
+// layoutPadRefusal is layout padding for a throwaway control build: never run.
+//
+//go:noinline
+func layoutPadRefusal(s *[64]uint64) {
+	s[0] += s[1] ^ 0x0
+	s[7] += s[14] ^ 0x9e3779b1
+	s[14] += s[27] ^ 0x3c6ef362
+}
+
 // commandRefusal is CommandError for a command already looked up.
 func commandRefusal(cmd *Command, entry commandEntry, known bool) error {
 	if !known {
