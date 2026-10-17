@@ -13,3 +13,4 @@ artifact_id,run_id,time,event,branch,pr,conclusion,redis_version,configs,has,map
 11867592549,38503143231,2026-10-14T02:50:33Z,push,develop,190,success,8.10.1,216,20,5,191,4,125,203,14,https://github.com/brandopakel/keel/actions/runs/38503143231
 11868393488,38507838462,2026-10-14T03:44:55Z,push,develop,162,success,8.10.1,216,20,5,191,4,125,203,14,https://github.com/brandopakel/keel/actions/runs/38507838462
 12117676682,38686352732,2026-10-15T05:21:33Z,pull_request,fix/census-probes,221,success,8.10.1,216,112,5,99,3,53,203,105,https://github.com/brandopakel/keel/actions/runs/38686352732
+12117624539,39079273851,2026-10-17T23:30:16Z,push,develop,221,success,8.10.1,216,112,5,99,3,53,203,105,https://github.com/brandopakel/keel/actions/runs/39079273851

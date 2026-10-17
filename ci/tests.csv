@@ -4659,6 +4659,16 @@ artifact_id,run_id,time,branch,test,package,peak_bytes,peak_file_bytes
 12117531565,39076831586,2026-10-17T22:52:48Z,develop,TestReplicasThroughAFailedRewriteprotocol-,cmd/keel,21568684,21568061
 12117531565,39076831586,2026-10-17T22:52:48Z,develop,TestRewriteSlicesObeyKeyBudgetAndReplay,internal/core,14527290,12888890
 12117531565,39076831586,2026-10-17T22:52:48Z,develop,TestReplicationV2OversizedTransactionTakesASnapshot,internal/core,12580525,12580525
+12117673673,39077265064,2026-10-17T22:59:44Z,feat/client-list,TestRewriteStallProfile,internal/core,113019636,56788890
+12117673673,39077265064,2026-10-17T22:59:44Z,feat/client-list,TestStagedRecordsAreTheBytesAppendAOFCommandWrites,internal/core,76679598,4259925
+12117673673,39077265064,2026-10-17T22:59:44Z,feat/client-list,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierzse,cmd/keel,68160485,68160485
+12117673673,39077265064,2026-10-17T22:59:44Z,feat/client-list,TestRejectedCollectionPopsPreservePipelineAndRestartconcurrent,cmd/keel,68160485,68160485
+12117673673,39077265064,2026-10-17T22:59:44Z,feat/client-list,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierlis,cmd/keel,68160040,68160040
+12117673673,39077265064,2026-10-17T22:59:44Z,feat/client-list,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierset,cmd/keel,68159910,68159910
+12117673673,39077265064,2026-10-17T22:59:44Z,feat/client-list,"TestEveryAcknowledgedWriteSurvivesAKilleverysec,_during_a_faile",internal/core,29819250,29819250
+12117673673,39077265064,2026-10-17T22:59:44Z,feat/client-list,TestReplicasThroughAFailedRewriteprotocol-,cmd/keel,21568684,21567977
+12117673673,39077265064,2026-10-17T22:59:44Z,feat/client-list,TestRewriteRetainsBoundedNameBatches,internal/core,19791348,11188890
+12117673673,39077265064,2026-10-17T22:59:44Z,feat/client-list,TestReplicationV2LargeSnapshotOperationsAndFrozenFile,internal/core,15105572,10845770
 12118531156,39077393220,2026-10-17T23:01:29Z,feat/eviction-exceeded-time,TestRewriteStallProfile,internal/core,113577780,56788890
 12118531156,39077393220,2026-10-17T23:01:29Z,feat/eviction-exceeded-time,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierzse,cmd/keel,68160485,68160485
 12118531156,39077393220,2026-10-17T23:01:29Z,feat/eviction-exceeded-time,TestRejectedCollectionPopsPreservePipelineAndRestartconcurrent,cmd/keel,68160485,68160485

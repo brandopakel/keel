@@ -465,4 +465,5 @@ artifact_id,run_id,time,event,branch,pr,conclusion,exit_code,suite_seconds,peak_
 11951655011,38687280919,2026-10-15T05:31:55Z,pull_request,ci/setup-go-v6.4.0,220,success,0,20.7,113577780,86244294,167772160,0,https://github.com/brandopakel/keel/actions/runs/38687280919
 11951696148,38688532708,2026-10-15T05:45:40Z,pull_request,feat/inline-protocol,223,success,0,25.8,110918388,96133160,167772160,0,https://github.com/brandopakel/keel/actions/runs/38688532708
 12117531565,39076831586,2026-10-17T22:52:48Z,push,develop,223,success,0,26.8,113194740,91726849,167772160,0,https://github.com/brandopakel/keel/actions/runs/39076831586
+12117673673,39077265064,2026-10-17T22:59:44Z,pull_request,feat/client-list,207,success,0,26.7,113019636,86815349,167772160,0,https://github.com/brandopakel/keel/actions/runs/39077265064
 12118531156,39077393220,2026-10-17T23:01:29Z,pull_request,feat/eviction-exceeded-time,215,success,0,24.5,113577780,88005900,167772160,0,https://github.com/brandopakel/keel/actions/runs/39077393220

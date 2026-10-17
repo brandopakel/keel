@@ -2980,6 +2980,17 @@ artifact_id,run_id,time,branch,pr,package,result,seconds
 12117531565,39076831586,2026-10-17T22:52:48Z,develop,223,internal/resp,ok,0.112
 12117531565,39076831586,2026-10-17T22:52:48Z,develop,223,internal/server,ok,3.307
 12117531565,39076831586,2026-10-17T22:52:48Z,develop,223,internal/testlock,ok,0.312
+12117673673,39077265064,2026-10-17T22:59:44Z,feat/client-list,207,bench/arrival,ok,1.271
+12117673673,39077265064,2026-10-17T22:59:44Z,feat/client-list,207,cmd/keel,ok,9.871
+12117673673,39077265064,2026-10-17T22:59:44Z,feat/client-list,207,internal/config,ok,0.461
+12117673673,39077265064,2026-10-17T22:59:44Z,feat/client-list,207,internal/core,ok,16.877
+12117673673,39077265064,2026-10-17T22:59:44Z,feat/client-list,207,internal/core/io_multiplexing,ok,0.056
+12117673673,39077265064,2026-10-17T22:59:44Z,feat/client-list,207,internal/data_structure,ok,16.641
+12117673673,39077265064,2026-10-17T22:59:44Z,feat/client-list,207,internal/golden,ok,0.006
+12117673673,39077265064,2026-10-17T22:59:44Z,feat/client-list,207,internal/procinfo,ok,0.024
+12117673673,39077265064,2026-10-17T22:59:44Z,feat/client-list,207,internal/resp,ok,0.137
+12117673673,39077265064,2026-10-17T22:59:44Z,feat/client-list,207,internal/server,ok,3.355
+12117673673,39077265064,2026-10-17T22:59:44Z,feat/client-list,207,internal/testlock,ok,0.312
 12118531156,39077393220,2026-10-17T23:01:29Z,feat/eviction-exceeded-time,215,bench/arrival,ok,1.224
 12118531156,39077393220,2026-10-17T23:01:29Z,feat/eviction-exceeded-time,215,cmd/keel,ok,8.812
 12118531156,39077393220,2026-10-17T23:01:29Z,feat/eviction-exceeded-time,215,internal/config,ok,0.531
