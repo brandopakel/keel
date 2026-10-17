@@ -232,6 +232,14 @@ KNOWN = {
     'ZADD zset NX GT 1 m': 'ZADD GT is not implemented, so GT is read as the score and the pairs do not pair up',
     'ZADD zset INCR 1 a 2 b': 'ZADD INCR is not implemented, so INCR is read as the score and the pairs do not pair up',
     'ZRANGE zset 0 1 BYLEX': 'ZRANGE BYLEX is not implemented and is refused as any option Keel does not know',
+    'CLIENT REPLY OFF\r\nSET k "x\r\n': 'under CLIENT REPLY OFF or SKIP, Redis drops a protocol error\'s reply and then '
+               'never closes the connection, since its CLOSE_AFTER_REPLY waits for a reply that never comes, and '
+               'reads nothing more from it; Keel drops the reply too and closes the connection '
+               '(docs/error-replies.md, inline commands)',
+    'CLIENT REPLY SKIP\r\nSET k "x\r\n': 'under CLIENT REPLY OFF or SKIP, Redis drops a protocol error\'s reply and then '
+               'never closes the connection, since its CLOSE_AFTER_REPLY waits for a reply that never comes, and '
+               'reads nothing more from it; Keel drops the reply too and closes the connection '
+               '(docs/error-replies.md, inline commands)',
     'nosuch ' + ' '.join(['ab'] * 60): 'Redis refuses a request of more than ten arguments from a connection that has '
                'not logged in, as a protocol error that closes it; Keel bounds requests with its own admission '
                'limits and has not adopted those',
@@ -574,6 +582,11 @@ INLINE = [
     (b'MULTI\r\nSET k v\r\n\r\nGET k\r\nEXEC\r\n', {}), (b'MULTI\r\nnosuch\r\nEXEC\r\n', {}),
     (b'SET a 1\r\n*2\r\n$3\r\nGET\r\n$1\r\na\r\nget a\n', {}),
     (b'HSET h f v\r\nHGETALL h\r\n', {}), (b'QUIT\r\nPING\r\n', {}),
+    # CLIENT REPLY, sent inline: OFF and SKIP silence what follows, the
+    # empty lines between included, and so a protocol error's reply too.
+    (b'CLIENT REPLY OFF\r\nPING\r\n\r\nCLIENT REPLY ON\r\nPING\r\n', {}),
+    (b'client reply skip\r\nPING\r\n\nPING\r\n', {}),
+    (b'CLIENT REPLY OFF\r\nSET k "x\r\n', dict(protocols=(2,))), (b'CLIENT REPLY SKIP\r\nSET k "x\r\n', dict(protocols=(2,))),
     (b'PING\r\n', dict(auth=False, protocols=(2,))), (b'GET k\r\n\r\n', dict(auth=False, protocols=(2,))),
     # Unbalanced quotes: unclosed, closed against the next character, a
     # backslash escaping the line's end, and a NUL inside quotes; Redis's own
@@ -830,8 +843,9 @@ def main():
                 redis = spec['expect'] or [masked(r, spec['masks']) for r in run_case(servers, 'redis', spec, protocol)]
                 same = len(keel) == len(redis) and all(
                     a[:1] == b[:1] if i in spec['loose'] else a == b for i, (a, b) in enumerate(zip(keel, redis)))
-                known = None if same else next((KNOWN[key] for key in (' '.join(show(p) for p in c)
-                                                                         for c in spec['commands']) if key in KNOWN), None)
+                keys = [' '.join(show(p) for p in c) for c in spec['commands']]
+                keys += [show(spec['raw'])] if spec['raw'] is not None else []
+                known = None if same else next((KNOWN[key] for key in keys if key in KNOWN), None)
                 report['cases'] += 1
                 report['replies'] += len(keel)
                 report['mismatches'] += not same and known is None

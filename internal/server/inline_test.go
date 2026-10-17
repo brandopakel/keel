@@ -141,3 +141,20 @@ func TestInlineProtocolErrorsCloseTheConnection(t *testing.T) {
 	require.True(t, strings.HasPrefix(c.line(2*time.Second), "-ERR Protocol error"))
 	require.True(t, c.closed())
 }
+
+// TestAProtocolErrorUnderClientReplyOffIsNotAnswered: CLIENT REPLY OFF and
+// SKIP drop a protocol error's reply as they drop every other, and the
+// connection is closed, as Redis means to close it.
+func TestAProtocolErrorUnderClientReplyOffIsNotAnswered(t *testing.T) {
+	connect := startPauseServer(t)
+	for _, mode := range []string{"OFF", "SKIP"} {
+		c := connect()
+		c.raw("CLIENT REPLY " + mode + "\r\nSET k \"x\r\n")
+		require.True(t, c.closed(), "closed with nothing sent under %s", mode)
+	}
+	c := connect()
+	c.raw("CLIENT REPLY SKIP\r\nPING\r\nSET k \"x\r\n")
+	require.Equal(t, "-ERR Protocol error: unbalanced quotes in request\r\n", c.line(2*time.Second),
+		"SKIP drops one command's reply, and the error comes after it")
+	require.True(t, c.closed())
+}
