@@ -180,6 +180,8 @@ func (e *Engine) resetStats() {
 	e.space.ResetExpired()
 	e.expireStalePerc, e.expireCapReached, e.expireCycleUsec = 0, 0, 0
 	e.space.ResetEvicted()
+	// Redis zeroes both, so time still over the bound starts again.
+	e.evictionExceededSince, e.evictionExceededNanos = 0, 0
 	e.aof.rewrites = 0
 	e.rewriteOutcome.failures = 0
 	if e.statsReset != nil {

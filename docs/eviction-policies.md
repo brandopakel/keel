@@ -58,6 +58,10 @@ when `performEvictions` fails (`server.c`), a command whose spec carries
 - `-maxkeys`, which Redis does not have, bounds the keyspace the same way and
   is refused in the same words.
 
+INFO's `current_eviction_exceeded_time` and `total_eviction_exceeded_time`
+report how long the keyspace has been over its bound with nothing to evict,
+as Redis's do (`docs/info-compatibility.md`, Stats).
+
 `scripts/error-parity.py` holds these replies to Redis's byte for byte, on a
 Keel and a Redis started with `noeviction` and a `maxmemory` of one byte.
 

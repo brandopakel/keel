@@ -105,7 +105,9 @@ func keelConfigTable() map[string]keelConfig {
 					// words, naming the ones Keel has.
 					return "argument(s) must be one of the following: " + evictionPolicyNames()
 				}
-				return e.setOption(func(o *Options) { o.Eviction = policy })
+				refused := e.setOption(func(o *Options) { o.Eviction = policy })
+				e.settleEvictionExceeded()
+				return refused
 			}},
 		"maxmemory-samples": {handling: configLive,
 			get: func(e *Engine) string { return strconv.Itoa(e.space.Limits().EvictionSamples) },

@@ -33,6 +33,9 @@ var denyOOMCommands = func() map[string]bool {
 // (EvictionPolicy.MayStayOver), so those policies pay one test of a bit and no
 // call. A replica ignores maxmemory, as Redis's does by default
 // (replica-ignore-maxmemory), and refuses nothing for it.
+//
+// It keeps Redis's eviction exceeded time as it looks, as performEvictions
+// does before each command (watch_eviction.go). A replica measures nothing.
 func (e *Engine) oomRefuses(cmd string) bool {
-	return denyOOMCommands[cmd] && e.replicaOf() == "" && e.space.OverLimit()
+	return e.replicaOf() == "" && e.overLimitNoted() && denyOOMCommands[cmd]
 }
