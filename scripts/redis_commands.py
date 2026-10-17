@@ -73,6 +73,12 @@ UNSAFE = {
 # from both is the expected reply rather than a flaw in the form.
 EXPECT_ERROR = {
     'config|rewrite': 'both servers run without a config file',
+    # The base form names a command without its arguments, which no command
+    # with keys accepts (Redis's getKeysFromCommandWithSpecs arity check).
+    'command|getkeys': 'its base form names a command without its arguments',
+    'command|getkeysandflags': 'its base form names a command without its arguments',
+    # latency-monitor-threshold is 0 on both servers, so no event has samples.
+    'latency|graph': 'neither server has sampled the event',
 }
 
 # The keys each form may name, by type, and the commands that create them. A
@@ -149,6 +155,9 @@ COMMAND_VALUES = {
     ('set', 'ifdeq-digest'): ['0123456789abcdef'], ('set', 'ifdne-digest'): ['0123456789abcdef'],
     ('delex', 'ifdeq-digest'): ['0123456789abcdef'], ('delex', 'ifdne-digest'): ['0123456789abcdef'],
     ('config|set', 'parameter'): ['maxmemory-samples', 'lfu-log-factor'], ('config|set', 'value'): ['5', '10'],
+    # A command whose two arguments are a whole call, so the repeated form is one
+    # Redis answers (GET with two would be an arity error).
+    ('command|getkeys', 'command'): ['mset'], ('command|getkeysandflags', 'command'): ['mset'],
     ('zrange', 'start'): ['0'], ('zrange', 'stop'): ['-1'],
     ('zrangestore', 'min'): ['0'], ('zrangestore', 'max'): ['-1'],
     ('xrange', 'start'): ['-'], ('xrange', 'end'): ['+'], ('xrevrange', 'start'): ['-'], ('xrevrange', 'end'): ['+'],
