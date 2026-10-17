@@ -1270,6 +1270,16 @@ func RunAsyncTCPServer(wg *sync.WaitGroup, e *core.Engine, o Options) error {
 				} else if errors.Is(c.err, core.ErrProtocol) {
 					c.out = core.Encode(c.err, false)
 					e.NoteErrorReply(c.out)
+					if c.conn.replyOff || c.conn.replySkip {
+						// CLIENT REPLY OFF or SKIP drops this reply as it
+						// drops every other, and the connection closes, as
+						// Redis means to close it after a protocol error.
+						// Redis drops the reply and so never closes it: its
+						// CLOSE_AFTER_REPLY waits for a reply that never
+						// comes, and the connection reads nothing more.
+						closeClient(c)
+						continue
+					}
 					c.closeAfterWrite = true
 					writable = append(writable, c)
 				} else {
