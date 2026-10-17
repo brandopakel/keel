@@ -68,3 +68,37 @@ func TestLRMCountsModificationsNotReads(t *testing.T) {
 	dict.Modified("a")
 	assert.Equal(t, held, score(dict, "a"), "a change in place is not another use under LFU")
 }
+
+// TestLRMStampsModificationsUnderNoTouch: under CLIENT NO-TOUCH an LRM space
+// still stamps a write, as Redis's keyModified stamps a key whatever the
+// client's mode, and a read still leaves the stamp alone; an LRU space's
+// write records nothing under no-touch, as before.
+func TestLRMStampsModificationsUnderNoTouch(t *testing.T) {
+	t.Parallel()
+	score := func(ks Keyspace, key string) uint64 {
+		s, ok := ks.ScoreOf(key)
+		require.True(t, ok, key)
+		return s
+	}
+	space := NewSpace(Limits{Eviction: EvictLRM})
+	dict := CreateDict(space)
+	space.RegisterKeyspace(dict)
+	dict.Put("a", dict.NewObj("v"))
+	held := score(dict, "a")
+	space.SetNoTouch(true)
+	dict.Get("a")
+	assert.Equal(t, held, score(dict, "a"), "a read, no-touch or not")
+	dict.Put("a", dict.NewObj("w"))
+	assert.Greater(t, score(dict, "a"), held, "a write under no-touch")
+	space.SetNoTouch(false)
+
+	space = NewSpace(Limits{Eviction: EvictLRU})
+	dict = CreateDict(space)
+	space.RegisterKeyspace(dict)
+	dict.Put("a", dict.NewObj("v"))
+	held = score(dict, "a")
+	space.SetNoTouch(true)
+	obj := dict.Get("a")
+	dict.Put("a", obj)
+	assert.Equal(t, held, score(dict, "a"), "LRU records nothing under no-touch")
+}
