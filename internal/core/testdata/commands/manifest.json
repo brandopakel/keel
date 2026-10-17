@@ -26,12 +26,12 @@
       "captured": "2026-10-14"
     },
     "eviction.txt": {
-      "sha256": "b524079c12f0b4f87f49516a085fd8cb5c1b793dcc11998706e35b3b885c84b3",
+      "sha256": "1cee4b18d43c041084e31d72a661055ae6f65b7c6c0bbe05b6ad942cf1f4b6a4",
       "cases": 3,
-      "commands": 28,
-      "records": 19,
-      "source_revision": "f2aa48d",
-      "captured": "2026-10-14"
+      "commands": 32,
+      "records": 20,
+      "source_revision": "daccbb0",
+      "captured": "2026-10-17"
     },
     "geo.txt": {
       "sha256": "a27cfb7ed22caab8db74c29a49cacb8a5987c40b40ccd259e3bbc1b53a45d972",
@@ -74,12 +74,12 @@
       "captured": "2026-10-14"
     },
     "refusals.txt": {
-      "sha256": "a3badaf293741fc939bc4b80f8c3cd5b34f6ea879107dfceaf18d8891d0bc1f5",
+      "sha256": "b8fcfded0cc6858fd3cdda19ea8f5cc5657b2a5973a0ccc07ee28e92a1607de0",
       "cases": 2,
-      "commands": 242,
+      "commands": 247,
       "records": 0,
-      "source_revision": "180b19b",
-      "captured": "2026-10-15"
+      "source_revision": "daccbb0",
+      "captured": "2026-10-17"
     },
     "replication.txt": {
       "sha256": "48ffbf1c1b195c5174f390fde8cd3322e0e61eca78a055f954ebb9354604c40b",
@@ -90,12 +90,12 @@
       "captured": "2026-10-14"
     },
     "server.txt": {
-      "sha256": "38485e6d962922f0995d61f7dc8dad95a591e271d37747d6b8346c33a21d5d7c",
+      "sha256": "f4d66da83774a2da3b68b483ede43de05f93d4433f59534fb823949f36d32903",
       "cases": 13,
       "commands": 255,
       "records": 23,
-      "source_revision": "180b19b",
-      "captured": "2026-10-15"
+      "source_revision": "daccbb0",
+      "captured": "2026-10-17"
     },
     "sets.txt": {
       "sha256": "6391c62bd6c9189a68f838963f95209d6617b79b822ac0ac6dff9ad6f8660f8b",
@@ -114,12 +114,12 @@
       "captured": "2026-10-15"
     },
     "strings.txt": {
-      "sha256": "fe0c6ced9cbb20d09ee666c670afd5164723ec354dd0fb558ba298ff9bdf1dfb",
-      "cases": 18,
-      "commands": 415,
-      "records": 171,
-      "source_revision": "1ce5848",
-      "captured": "2026-10-14"
+      "sha256": "5f0a9dda383d998281bf9208bad7437219270598c88502b2209389648839bca6",
+      "cases": 24,
+      "commands": 627,
+      "records": 271,
+      "source_revision": "daccbb0",
+      "captured": "2026-10-17"
     },
     "transactions.txt": {
       "sha256": "9ce59c9c6f24438b60e6c5c190812720c3705ac197a5f730e08f778f092c35f8",
