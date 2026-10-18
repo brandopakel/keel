@@ -136,6 +136,13 @@ jobs:
           for port in 6391 6392; do
             for _ in $(seq 50); do /tmp/redis-8.10.1/src/redis-cli -p $port PING > /dev/null 2>&1 && break; sleep 0.2; done
             /tmp/redis-8.10.1/src/redis-cli -p $port PING
+            # Both servers' latency monitors on, so that each phase's spikes
+            # (a slow command, an expiry or eviction run) reach Grafana as the
+            # exporter's redis_latency_spike_duration_seconds and
+            # redis_latency_spike_last, labelled by event_name. 5 ms is a few
+            # times an ordinary command's time on this runner, so a spike is
+            # a spike, not every command.
+            /tmp/redis-8.10.1/src/redis-cli -p $port CONFIG SET latency-monitor-threshold 5
           done
           exporter=/tmp/redis_exporter-v1.93.0.linux-amd64/redis_exporter
           $exporter --redis.addr redis://127.0.0.1:6391 --web.listen-address 127.0.0.1:9131 > dist/telemetry/exporter-keel.log 2>&1 &
