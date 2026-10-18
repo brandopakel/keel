@@ -4779,3 +4779,13 @@ artifact_id,run_id,time,branch,test,package,peak_bytes,peak_file_bytes
 12122282584,39088972896,2026-10-18T02:07:48Z,feat/phase4-string-8x,TestReplicasThroughAFailedRewriteprotocol-,cmd/keel,21568684,21568061
 12122282584,39088972896,2026-10-18T02:07:48Z,feat/phase4-string-8x,TestRewriteRetainsBoundedNameBatches,internal/core,17865204,11188890
 12122282584,39088972896,2026-10-18T02:07:48Z,feat/phase4-string-8x,TestAOFTranscriptMassEvictionKeepsBoundedBuffer,internal/core,16781002,16781002
+12126456521,39100227454,2026-10-18T05:20:43Z,develop,TestRewriteStallProfile,internal/core,112844532,56788890
+12126456521,39100227454,2026-10-18T05:20:43Z,develop,TestStagedRecordsAreTheBytesAppendAOFCommandWrites,internal/core,76679532,4259925
+12126456521,39100227454,2026-10-18T05:20:43Z,develop,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierzse,cmd/keel,68160485,68160485
+12126456521,39100227454,2026-10-18T05:20:43Z,develop,TestRejectedCollectionPopsPreservePipelineAndRestartconcurrent,cmd/keel,68160485,68160485
+12126456521,39100227454,2026-10-18T05:20:43Z,develop,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierlis,cmd/keel,68160040,68160040
+12126456521,39100227454,2026-10-18T05:20:43Z,develop,TestRejectedCollectionPopsPreservePipelineAndRestartbarrierset,cmd/keel,68159910,68159910
+12126456521,39100227454,2026-10-18T05:20:43Z,develop,"TestEveryAcknowledgedWriteSurvivesAKilleverysec,_during_a_faile",internal/core,51119005,51119005
+12126456521,39100227454,2026-10-18T05:20:43Z,develop,TestReplicasThroughAFailedRewriteprotocol-,cmd/keel,21568694,21568061
+12126456521,39100227454,2026-10-18T05:20:43Z,develop,TestRewriteSlicesObeyKeyBudgetAndReplay,internal/core,21297460,12888890
+12126456521,39100227454,2026-10-18T05:20:43Z,develop,TestRewriteRetainsBoundedNameBatches,internal/core,18974196,11188890
