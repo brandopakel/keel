@@ -1,8 +1,8 @@
 # The access word: LRU idle time and LFU decay
 
-Status: design, for agreement before code. No code changes yet. Code waits for #202
-(`touchSlow`) and phase 4's keyscmds (`OBJECT FREQ`, `OBJECT IDLETIME`), and lands after the
-LRM branch, which uses the same word.
+Status: design, approved by the manager on 2026-10-18 with decision (a) below; the owner may
+overrule. No code changes yet. Code waits for #202 (`touchSlow`) and phase 4's keyscmds
+(`OBJECT FREQ`, `OBJECT IDLETIME`), and lands after the LRM branch, which uses the same word.
 
 ## What Redis 8.10.1 does
 
@@ -123,12 +123,13 @@ The turn is where `SampleCommandRate` already runs: the server's loop, and `Open
 - **`lfu-decay-time`** becomes live: Keel answers for it in `CONFIG GET` and `CONFIG SET`, with
   Redis's range and default. Options gain `LFUDecayTime` (minutes; zero is the default 1, `Off`
   never decays, as Redis's 0 does).
-- **Decision needed: Keel's access-counted decay.** It measured well and keeps eviction
-  reproducible. Two ways:
-  - **(a) Recommended.** Redis's minutes become the default. Accesses stay as an opt-in mode:
+- **Decided (a): Keel's access-counted decay becomes an opt-in.** It measured well and keeps
+  eviction reproducible. The two ways were:
+  - **(a) Chosen.** Redis's minutes become the default. Accesses stay as an opt-in mode:
     `-lfu-decay-period` / `Options.LFUDecayPeriod`, off by default, documented as a Keel
     improvement. Clients and tools that set `lfu-decay-time` get Redis's behaviour, and an
-    operator who wants reproducible LFU can choose it.
+    operator who wants reproducible LFU can choose it. It is listed under "Improvements over
+    Redis" with `space.go`'s measurements, as is the minutes field that does not wrap.
   - **(b)** Keep accesses as the default and accept `lfu-decay-time` without effect. This is
     cheaper, but `OBJECT FREQ` and LFU eviction then differ from Redis by default, which the
     owner's "follow Redis when in doubt" rule argues against.
