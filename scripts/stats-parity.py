@@ -143,7 +143,10 @@ def expired(keys, *commands):
 # lookups do (db.c, expireIfNeeded), and which only report it as gone (KEYS,
 # DBSIZE). SET with an instant already past stores nothing and counts the key
 # as expired; EXPIRE and GETEX with one delete the key and count nothing
-# (t_string.c, expire.c).
+# (t_string.c, expire.c). SCAN removes only the expired keys its page
+# reaches, and which keys a page reaches follows each server's hash order -
+# Redis seeds its dictionary's hash at random at startup - so the SCAN cases
+# ask for a page larger than the keyspace, which reaches every key on both.
 EXPIRY_CASES = [expired(keys, *commands) for keys, *commands in [
     (['str'], ['GET', 'str']), (['str'], ['EXISTS', 'str']), (['str'], ['TYPE', 'str']), (['str'], ['TTL', 'str']),
     (['str'], ['PTTL', 'str']), (['str'], ['STRLEN', 'str']), (['str'], ['GETRANGE', 'str', '0', '1']),
@@ -155,7 +158,8 @@ EXPIRY_CASES = [expired(keys, *commands) for keys, *commands in [
     (['str', 'num'], ['MGET', 'str', 'num', 'other']), (['str', 'num'], ['EXISTS', 'str', 'num']),
     (['str', 'num'], ['DEL', 'str', 'num', 'other']), (['str'], ['MSET', 'str', '1', 'n2', '2']),
     (['str'], ['MSETNX', 'str', '1', 'n2', '2']), (['str'], ['LCS', 'str', 'other']),
-    (['str'], ['DBSIZE']), (['str'], ['KEYS', '*']), (['str'], ['SCAN', '0']), (['str'], ['SCAN', '0', 'TYPE', 'string']),
+    (['str'], ['DBSIZE']), (['str'], ['KEYS', '*']), (['str'], ['SCAN', '0', 'COUNT', '1000']),
+    (['str'], ['SCAN', '0', 'TYPE', 'string', 'COUNT', '1000']),
     (['hash'], ['HGET', 'hash', 'f']), (['hash'], ['HLEN', 'hash']), (['hash'], ['HSET', 'hash', 'g', '1']),
     (['hash'], ['HGETALL', 'hash']), (['hash'], ['HEXISTS', 'hash', 'f']), (['hash'], ['HDEL', 'hash', 'f']),
     (['hash'], ['SET', 'hash', 'x']), (['hash'], ['TYPE', 'hash']),
