@@ -17,3 +17,5 @@ artifact_id,run_id,time,event,branch,pr,conclusion,redis_version,commands,cases,
 11868393488,38507838462,2026-10-14T03:44:55Z,push,develop,162,success,8.10.1,101,910,890,0,20,0,455,445,2,1,https://github.com/brandopakel/keel/actions/runs/38507838462
 12117676682,38686352732,2026-10-15T05:21:33Z,pull_request,fix/census-probes,221,success,8.10.1,139,1210,1192,0,18,0,605,596,3,2,https://github.com/brandopakel/keel/actions/runs/38686352732
 12117624539,39079273851,2026-10-17T23:30:16Z,push,develop,221,success,8.10.1,139,1210,1192,0,18,0,605,596,3,2,https://github.com/brandopakel/keel/actions/runs/39079273851
+12118662281,39080049975,2026-10-17T23:42:27Z,push,develop,215,success,8.10.1,139,1210,1192,0,18,0,605,596,3,2,https://github.com/brandopakel/keel/actions/runs/39080049975
+12120010306,39081730011,2026-10-18T00:09:41Z,pull_request,feat/latency-monitor,222,success,8.10.1,139,1210,1192,0,18,0,605,596,3,2,https://github.com/brandopakel/keel/actions/runs/39081730011
