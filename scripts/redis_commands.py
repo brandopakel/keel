@@ -77,8 +77,9 @@ EXPECT_ERROR = {
     # with keys accepts (Redis's getKeysFromCommandWithSpecs arity check).
     'command|getkeys': 'its base form names a command without its arguments',
     'command|getkeysandflags': 'its base form names a command without its arguments',
-    # latency-monitor-threshold is 0 on both servers, so no event has samples.
-    'latency|graph': 'neither server has sampled the event',
+    # Both servers keep their latency monitors off, so neither has an event
+    # to graph and both answer "No samples available".
+    'latency|graph': 'latency-monitor-threshold is 0 on both servers, so no event has samples',
 }
 
 # The keys each form may name, by type, and the commands that create them. A

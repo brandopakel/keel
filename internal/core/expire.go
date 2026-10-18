@@ -90,8 +90,7 @@ func (e *Engine) ExpireCycle() int {
 		stale = float64(total) / float64(sampled)
 	}
 	e.expireStalePerc = stale*staleSampleWeight + e.expireStalePerc*(1-staleSampleWeight)
-	// The time the cycle took, rounded as commandstats rounds a command's.
-	e.expireCycleUsec += microsBetween(start, nanotime())
+	e.noteExpireCycle(start, nanotime())
 	return total
 }
 

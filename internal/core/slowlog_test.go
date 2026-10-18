@@ -23,6 +23,7 @@ func slowEngine(t *testing.T) *Engine {
 	t.Helper()
 	e := newTestEngine(t, Options{})
 	e.slowlog.slowerThan = 0
+	e.watchLongCommands()
 	return e
 }
 

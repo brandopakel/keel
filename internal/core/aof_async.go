@@ -74,6 +74,9 @@ func (e *Engine) pollAppend(wait bool) {
 		e.aof.lastSync = time.Now()
 	}
 	if result.err == nil {
+		if e.latencyMonitor.threshold != 0 {
+			e.noteAppended()
+		}
 		if e.logFailure.write != nil {
 			e.writeSolved()
 		}

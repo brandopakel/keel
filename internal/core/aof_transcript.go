@@ -85,6 +85,7 @@ func (e *Engine) writeAOFBuffer(drain bool) error {
 			e.aof.buf = e.aof.buf[:0]
 		}
 		e.aof.commandStart = 0
+		e.noteAOFWrite()
 	}
 	return nil
 }

@@ -535,7 +535,7 @@ General validation runs it against Redis 8.10.1 and RedisBloom.
 | `COMMAND`, `COMMAND COUNT`, `INFO`, `LIST`, `DOCS`, `GETKEYS`, `GETKEYSANDFLAGS`, `HELP` | Done (S3). Answered from what Redis 8.10.1 declares of each command Keel has (`src/commands/*.json`, generated into `internal/core/command_specs.go`) and what Keel declares of its own: see "COMMAND" below. |
 | `CONFIG RESETSTAT` | (c1), done. Resets what Redis's `resetServerStats` resets that Keel reports: `total_commands_processed` and the ops-per-second samples, `total_error_replies` and errorstats, `total_connections_received` and `rejected_connections` (client ids keep growing, as Redis's do), `expired_keys` and the expiry cycle's statistics (h), `evicted_keys`, `keyspace_hits`, `keyspace_misses`, commandstats, latencystats, the slow log's counts (not its entries, which `SLOWLOG RESET` clears), `aof_rewrites`, `aof_rewrites_consecutive_failures`, and the network bytes and reads and writes (d). `used_memory_peak` stays, as Redis keeps it. Keel's own fields keep counting. |
 | `SLOWLOG GET [count]`, `LEN`, `RESET`, `HELP` | (c3c), done. The commands that took `slowlog-log-slower-than` microseconds or more (10000), newest first, at most `slowlog-max-len` (128). Each entry has Redis 8.10's seven fields: id, Unix time, duration in µs, the arguments (at most `slowlog-entry-max-argc`, 32, the last place saying how many more; each cut at `slowlog-entry-max-string-len`, 128 bytes, saying how many more), the client's address (`ip:port`, `[ip]:port` for IPv6, as Redis writes it) and name, and how many arguments the command really had. `EXEC` is not logged, as in Redis; what it runs is. `GET`'s count is read as Redis reads it, `-1` meaning all. The four settings are Redis's defaults, which `CONFIG GET` reports. `CONFIG RESETSTAT` clears the counts and keeps the entries, and the log's replay adds none. |
-| `LATENCY LATEST`, `HISTORY`, `RESET`, `GRAPH`, `DOCTOR`, `HELP` | (c3b), done. Redis's latency monitor is off by default (`latency-monitor-threshold 0`, which `CONFIG GET` reports), and Keel has none, so these answer as Redis's do when it has never been on: `LATEST` and `HISTORY` an empty array, `RESET` `0`, `GRAPH` Redis's `No samples available for event` error, and `DOCTOR` its report that monitoring is disabled. Each subcommand has Redis's count. |
+| `LATENCY LATEST`, `HISTORY`, `RESET`, `GRAPH`, `DOCTOR`, `HELP` | Done. Redis's latency monitor (`internal/core/watch_latency.go`). `latency-monitor-threshold` is in milliseconds: `0`, its default, turns it off, and `CONFIG SET` changes it at once. While it is on, each event that takes the threshold or more is kept as Redis's `latencyAddSample` keeps it: the worst sample of each second, the last 160 of them, and the event's worst since it was reset. Keel records these of Redis's events: `command` and `fast-command` (each command, by whether its spec carries `FAST`, as Redis's `call()` decides); `expire-cycle`; `aof-write` with one of `aof-write-pending-fsync`, `aof-write-active-child` and `aof-write-alone`; and `aof-fsync-always`. Keel's rewrite has no child process, so `aof-write-active-child` is a write made while a rewrite runs. A write and sync made off the loop, by `-aof-async-append`'s worker or by an engine `Open` makes under `always`, are recorded as the loop collects them, since the replies they cover waited for them; a sync under `everysec` runs in the background, as Redis's does, and is not an event. Some of Redis's events have nothing to record in Keel: `fork`, `rdb-unlink-temp-file`, `active-defrag-cycle`, `while-blocked-cron`, `module-acquire-GIL` and `aof-fstat`. Others are not recorded yet: `eviction-cycle`, `eviction-del`, `eviction-lazyfree`, `aof-rename` and `command-unblocking`. `LATEST` lists events in name order, where Redis's follows its hash table. `HISTORY` and `GRAPH` find an event by its exact name, and `RESET` without regard to case, as Redis's do. `GRAPH`'s sparkline and `DOCTOR`'s report are Redis's text, translated from Redis 7.2.4 (BSD; THIRD_PARTY_NOTICES.md). The tests hold them to what Redis 8.10.2 wrote for the same samples. `DOCTOR` leaves out Redis's advice on fork, which Keel never does, and its advice on `hz` where there is no server to set it on. `CONFIG RESETSTAT` leaves the events, as Redis's does. Each subcommand has Redis's count. |
 | `LATENCY HISTOGRAM [command ...]` | (c3b), done. Each command that has run, or each named (a container brings its subcommands, `config|get` names one, an unknown name nothing): its `calls` and its `histogram_usec`, the cumulative count at each power of two microseconds from 1, as Redis's `fillCommandCDF` walks its histogram. The exporter reads it for `redis_commands_latencies_usec`. |
 
 ## CONFIG SET
@@ -572,16 +572,21 @@ An odd count is Redis's `syntax error`. Keel answers for these directives:
 
 - **Keel's own settings, changed at once.**
   - `maxmemory`, `maxmemory-samples` and `lfu-log-factor`.
-  - `maxmemory-policy`, for the policies Keel has: `allkeys-lru`,
-    `allkeys-lfu` and `allkeys-random`. Redis's other policies are refused in
-    Redis's words, naming the three: `argument(s) must be one of the
-    following: allkeys-lru, allkeys-lfu, allkeys-random`.
+  - `maxmemory-policy`, for the eight policies Keel has
+    (`docs/eviction-policies.md`): `volatile-lru`, `volatile-lfu`,
+    `volatile-random`, `volatile-ttl`, `allkeys-lru`, `allkeys-lfu`,
+    `allkeys-random` and `noeviction`. Redis's `volatile-lrm` and
+    `allkeys-lrm` are refused in Redis's words, naming the eight in Redis's
+    order: `argument(s) must be one of the following: volatile-lru,
+    volatile-lfu, volatile-random, volatile-ttl, allkeys-lru, allkeys-lfu,
+    allkeys-random, noeviction`.
   - The log's `appendfsync`, `auto-aof-rewrite-percentage` and
     `auto-aof-rewrite-min-size`.
   - The slow log's `slowlog-log-slower-than`, `slowlog-max-len`,
     `slowlog-entry-max-argc` and `slowlog-entry-max-string-len`. A shorter
     `slowlog-max-len` cuts the log back when the next entry joins it, as
     Redis's does.
+  - The latency monitor's `latency-monitor-threshold`.
   - With the server, three more:
     - `requirepass`. New connections, and `AUTH` on any connection, use the new
       password. A connection already logged in stays logged in, as in Redis,
@@ -631,8 +636,7 @@ An odd count is Redis's `syntax error`. Keel answers for these directives:
   - `maxmemory-clients` (`0`: no eviction of clients);
   - `latency-tracking` (`yes`: every command's latency is tracked) and
     `latency-tracking-info-percentiles` (Redis's default `50 99 99.9`, read
-    as Redis reads numbers, so `50.0 99 99.900` is the same value), and
-    `latency-monitor-threshold` (`0`: there is no latency monitor);
+    as Redis reads numbers, so `50.0 99 99.900` is the same value);
   - `proto-max-bulk-len` (Keel's 512 MiB, Redis's default);
   - `client-query-buffer-limit` (Keel's 16 MiB of a request not yet whole);
   - with the server, `port` and `bind`: changing the listener while the

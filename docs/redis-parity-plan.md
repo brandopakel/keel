@@ -235,9 +235,10 @@ cannot honour, and each is its own gap:
 - **`latency-monitor-threshold`**, Redis's latency monitor
   (`latency.c`): events that take longer than the threshold, kept per
   event, which `LATENCY LATEST`, `HISTORY`, `GRAPH` and `DOCTOR` report.
-  Keel holds the threshold at 0 and answers those subcommands as Redis's
-  monitor does when off. `unit/latency-monitor` sets it, where Redis passes
-  16.
+  `unit/latency-monitor` sets it, where Redis passes 16. Done: Keel records
+  Redis's command, expiry-cycle and log events behind it, and `CONFIG SET`
+  changes it at once (`docs/info-compatibility.md`, Commands). The
+  eviction, `aof-rename` and `command-unblocking` events are still to do.
 
 By family, the failing tests are: streams 229, strings 184, scripting
 162, arrays 129, bitmaps 74, generic 36, geo 29 and Pub/Sub 16. Pub/Sub
