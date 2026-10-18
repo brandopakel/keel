@@ -219,6 +219,7 @@ func (e *Engine) opCFInsert(key string, req cfInsertRequest, each func(cfInsertR
 			each(cfNoSpace)
 		}
 	}
+	e.cfStore.Modified(key)
 	name, text := "CF.INSERT", req.text
 	if req.nx {
 		name = "CF.INSERTNX"
@@ -244,6 +245,7 @@ func (e *Engine) opCFCompact(key string) error {
 		return errCFCompactNotFound
 	}
 	cf.Compact()
+	e.cfStore.Modified(key)
 	e.aofRecord("CF.COMPACT", key)
 	return nil
 }

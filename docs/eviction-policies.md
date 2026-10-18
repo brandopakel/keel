@@ -35,8 +35,9 @@ What counts as a modification is what Redis stamps:
 - giving a key a TTL, changing it, or removing it (`EXPIRE` and its kind,
   `PERSIST`, `GETEX` with an expiry or `PERSIST`), as `expire.c` calls
   `keyModified` with the value;
-- a RedisBloom write that succeeds (`CF.ADD`, `CF.ADDNX`, `CF.DEL`,
-  `CMS.INCRBY`, and Keel's `MORRIS.INCRBY`), as a module key opened for
+- a RedisBloom write that succeeds (`CF.ADD`, `CF.ADDNX`, `CF.INSERT`,
+  `CF.INSERTNX`, `CF.DEL`, `CF.COMPACT`, `CMS.INCRBY`, `CMS.MERGE`, and
+  Keel's `MORRIS.INCRBY`), as a module key opened for
   writing is stamped when it closes (`module.c`). RedisBloom's failed writes
   are stamped too, there; Keel stamps only those that succeed.
 

@@ -212,6 +212,7 @@ func (e *Engine) opCMSMerge(dest string, req cmsMergeRequest) error {
 	if err := d.MergeFrom(sources, weights); err != nil {
 		return err
 	}
+	e.cmsStore.Modified(dest)
 	text := req.text
 	if text == nil {
 		text = append(text, strconv.Itoa(len(req.sources)))
