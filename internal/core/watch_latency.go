@@ -159,9 +159,51 @@ func (e *Engine) noteAOFWrite() {
 func (e *Engine) syncAOFInLine(fsync FsyncPolicy) error {
 	err := timedPersistenceSync(&e.appendSyncStats, e.aof.file, e.aofSync)
 	if fsync == FsyncAlways && err == nil {
-		e.noteLatency("aof-fsync-always", int64(e.appendSyncStats.lastNS.Load()/uint64(time.Millisecond)))
+		e.noteAOFSyncAlways()
 	}
 	return err
+}
+
+// noteAOFSyncAlways records the log's last sync, made under appendfsync
+// always before the replies it covers, as aof-fsync-always.
+func (e *Engine) noteAOFSyncAlways() {
+	e.noteLatency("aof-fsync-always", int64(e.appendSyncStats.lastNS.Load()/uint64(time.Millisecond)))
+}
+
+// noteAppended records the batch an append worker wrote off the loop
+// (FlushAOFAsync), and synced, as the loop collects it (pollAppend): the write as
+// noteAOFWrite records the loop's own, and the sync, made under appendfsync
+// always, as aof-fsync-always. The timings are the worker's, which it set
+// before it handed the batch back; whether a sync or a rewrite was under way
+// is what the loop finds as it collects the batch. The replies the batch
+// covers waited for it, as Redis's wait for its write, so its time is the
+// event's. It is kept out of line, so that the poll that calls it does not
+// grow by what it does.
+//
+//go:noinline
+func (e *Engine) noteAppended() {
+	if e.latencyMonitor.threshold == 0 {
+		return
+	}
+	e.noteAOFWrite()
+	// The worker syncs under always, and a batch it synced has had
+	// appendSynced moved to its end, which appendCompleted marks.
+	if e.settings.fsync == FsyncAlways && e.appendSynced == e.appendCompleted {
+		e.noteAOFSyncAlways()
+	}
+}
+
+// noteSyncCollected records a sync made off the loop under appendfsync
+// always, as an engine Open's is, which publishes only what a sync has
+// covered (flushAOF): as aof-fsync-always, as the loop collects it. A sync
+// under everysec runs in the background as Redis's does, and is not an event.
+// It is kept out of line, as noteAppended is.
+//
+//go:noinline
+func (e *Engine) noteSyncCollected() {
+	if e.settings.fsync == FsyncAlways {
+		e.noteAOFSyncAlways()
+	}
 }
 
 // noteExpireCycle adds the time an expiry cycle took, from started to ended

@@ -3,6 +3,7 @@ package core
 import (
 	"math"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -254,4 +255,59 @@ func TestExpireCycleTakesItsLatencyEvent(t *testing.T) {
 			require.Len(t, samples, recorded, "a cycle of under a millisecond")
 		}
 	}
+}
+
+// TestAsyncAppendsTakeTheirLatencyEvents: a batch an append worker wrote and,
+// under appendfsync always, synced off the loop is recorded as the loop
+// collects it, as aof-write, aof-write-alone and aof-fsync-always.
+func TestAsyncAppendsTakeTheirLatencyEvents(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	reconfigure(t, e, func(o *Options) { o.Fsync, o.AsyncAppend = FsyncAlways, true })
+	runOn(t, e, "CONFIG", "SET", "latency-monitor-threshold", "1")
+	write, sync := e.aofWrite, e.aofSync
+	e.aofWrite = func(f *os.File, b []byte) (int, error) {
+		time.Sleep(3 * time.Millisecond)
+		return write(f, b)
+	}
+	e.aofSync = func(f *os.File) error {
+		time.Sleep(3 * time.Millisecond)
+		return sync(f)
+	}
+	require.NoError(t, e.OpenAOF(filepath.Join(t.TempDir(), "log")))
+	defer e.CloseAOF()
+	runOn(t, e, "SET", "k", "v")
+	ready, err := e.FlushAOFAsync(nil)
+	require.NoError(t, err)
+	require.False(t, ready, "the worker has the batch")
+	assert.NotContains(t, e.latencyMonitor.events, "aof-write", "nothing is recorded before the loop collects it")
+	e.pollAppend(true)
+	require.Equal(t, e.appendCompleted, e.appendSynced, "the worker synced the batch")
+	for _, event := range []string{"aof-write", "aof-write-alone", "aof-fsync-always"} {
+		require.Contains(t, e.latencyMonitor.events, event)
+		assert.GreaterOrEqual(t, e.latencyMonitor.events[event].max, int64(3), event)
+	}
+}
+
+// TestAnOpenedEnginesSyncTakesItsLatencyEvent: an engine Open makes syncs
+// off the loop under appendfsync always, and the sync is recorded as
+// aof-fsync-always as the loop collects it.
+func TestAnOpenedEnginesSyncTakesItsLatencyEvent(t *testing.T) {
+	t.Parallel()
+	e := openTestEngine(t, Options{AppendOnly: true, AppendFilename: filepath.Join(t.TempDir(), "keel.aof"),
+		Fsync: FsyncAlways})
+	defer e.Close()
+	holding(e, func() {
+		sync := e.aofSync
+		e.aofSync = func(f *os.File) error {
+			time.Sleep(3 * time.Millisecond)
+			return sync(f)
+		}
+		runOn(t, e, "CONFIG", "SET", "latency-monitor-threshold", "1")
+		runOn(t, e, "SET", "k", "v")
+		require.NoError(t, e.FlushAOF())
+		e.pollAOFSync(true)
+		require.Contains(t, e.latencyMonitor.events, "aof-fsync-always")
+		assert.GreaterOrEqual(t, e.latencyMonitor.events["aof-fsync-always"].max, int64(3))
+	})
 }

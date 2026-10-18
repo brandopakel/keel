@@ -433,6 +433,7 @@ func (e *Engine) pollAOFSync(wait bool) {
 		if e.logFailure.sync != nil {
 			e.syncSolved()
 		}
+		e.noteSyncCollected()
 		return
 	}
 	if e.retriesLogFailures() {
