@@ -222,6 +222,9 @@ KNOWN = {
     'COMMAND INFO command': "Redis lists COMMAND's subcommands in no fixed order",
     'COMMAND INFO latency': "Redis lists LATENCY's subcommands in no fixed order",
     'COMMAND INFO slowlog': "Redis lists SLOWLOG's subcommands in no fixed order",
+    'COMMAND INFO cf.compact': 'Keel logs and replicates CF.COMPACT, so it declares it a write, in @write, where '
+                               'RedisBloom registers it readonly in @read: a cluster-aware client then sends it to '
+                               'the primary, the only node that accepts it (#218)',
     'watch k': 'WATCH is not implemented and stays an unknown command, so an optimistic-locking API fails '
                'loudly instead of quietly not watching (docs/transactions.md); before AUTH that answers '
                'unknown command rather than NOAUTH, as Redis answers for any command it does not have',
@@ -653,6 +656,15 @@ def build_cases(redis_arities, modules):
         for command in MODULE_HANDLER_ARITY:
             cases.append(case('arity in the command, RedisBloom', [command], setup=MODULE_SETUP))
             cases.append(case('arity in the command queued, RedisBloom', [['MULTI'], command, ['EXEC']], setup=MODULE_SETUP))
+        # COMMAND describes RedisBloom's commands as the module declares them:
+        # its registration's flags and ACL categories, its command info's key
+        # specs and tips (src/cmd_info/*.c), and no category Redis would imply.
+        for name in sorted(MODULE_ARITY) + ['CF.COMPACT']:
+            cases.append(case('command info, RedisBloom', [['COMMAND', 'INFO', name.lower()]]))
+        for command in (['COMMAND', 'GETKEYS', 'cms.merge', 'dest', '2', 'a', 'b'],
+                        ['COMMAND', 'GETKEYSANDFLAGS', 'bf.add', 'f', 'x'],
+                        ['COMMAND', 'GETKEYSANDFLAGS', 'cf.reserve', 'f', '100']):
+            cases.append(case('command, RedisBloom', [command]))
         # RedisBloom's own replies and errors past these - BF.EXISTS of a key of
         # another type answers 0, for one - are RedisBloom parity's to compare.
         for command in (['BF.ADD', 'str', 'a'], ['CF.ADD', 'str', 'a'], ['CMS.QUERY', 'str', 'a']):

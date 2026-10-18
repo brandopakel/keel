@@ -112,6 +112,12 @@ var (
 		begin: keyBegin{kind: "index", pos: 1}, find: keyFind{kind: "range", lastKey: 0, step: 1}}}
 	oneKeyWrite = []keySpec{{flags: []string{"OW", "UPDATE"},
 		begin: keyBegin{kind: "index", pos: 1}, find: keyFind{kind: "range", lastKey: 0, step: 1}}}
+	// RedisBloom's key specs (src/cmd_info/*.c) are plain: the first
+	// argument, RW for a command that writes, RO for one that reads.
+	moduleKeyRW = []keySpec{{flags: []string{"RW"},
+		begin: keyBegin{kind: "index", pos: 1}, find: keyFind{kind: "range", lastKey: 0, step: 1}}}
+	moduleKeyRO = []keySpec{{flags: []string{"RO"},
+		begin: keyBegin{kind: "index", pos: 1}, find: keyFind{kind: "range", lastKey: 0, step: 1}}}
 )
 
 // keelCommandSpecs declares the commands Redis has no spec for: Keel's own,
@@ -137,41 +143,57 @@ var keelCommandSpecs = map[string]commandSpec{
 	"MORRIS.QUERY":      {arity: -3, group: "morris", flags: []string{"READONLY"}, acl: []string{"READ"}, keys: oneKeyRead},
 	"MORRIS.INFO":       {arity: 2, group: "morris", flags: []string{"READONLY"}, acl: []string{"READ"}, keys: oneKeyRead},
 
-	// RedisBloom 8.10.1's own declarations (rebloom.c, rm_cms.c): the mode
-	// each command is registered with, as flags, and its ACL categories with
-	// the module's, each on its first argument.
-	"BF.RESERVE": {arity: -4, group: "bf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "FAST", "BLOOM"}, keys: oneKeyWrite},
-	"BF.ADD":     {arity: 3, group: "bf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "BLOOM"}, keys: oneKey},
-	"BF.MADD":    {arity: -3, group: "bf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "BLOOM"}, keys: oneKey},
-	"BF.EXISTS":  {arity: 3, group: "bf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "BLOOM"}, keys: oneKeyRead},
-	"BF.MEXISTS": {arity: -3, group: "bf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "BLOOM"}, keys: oneKeyRead},
-	"BF.INFO":    {arity: -2, group: "bf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "FAST", "BLOOM"}, keys: oneKeyRead},
-	"BF.INSERT":  {arity: -4, group: "bf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "BLOOM"}, keys: oneKey},
-	"BF.CARD":    {arity: 2, group: "bf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "FAST", "BLOOM"}, keys: oneKeyRead},
+	// RedisBloom 8.10.1's own declarations: the mode each command is
+	// registered with (rebloom.c, rm_cms.c), as flags; its ACL categories
+	// with the module's; and its key spec as the module's command info gives
+	// it (src/cmd_info/*.c), RW or RO on the first argument. Redis implies no
+	// further ACL category for a module's command (categories).
+	"BF.RESERVE": {arity: -4, group: "bf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "FAST", "BLOOM"}, keys: moduleKeyRW},
+	"BF.ADD":     {arity: 3, group: "bf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "BLOOM"}, keys: moduleKeyRW},
+	"BF.MADD":    {arity: -3, group: "bf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "BLOOM"}, keys: moduleKeyRW},
+	"BF.EXISTS":  {arity: 3, group: "bf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "BLOOM"}, keys: moduleKeyRO},
+	"BF.MEXISTS": {arity: -3, group: "bf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "BLOOM"}, keys: moduleKeyRO},
+	"BF.INFO":    {arity: -2, group: "bf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "FAST", "BLOOM"}, keys: moduleKeyRO},
+	"BF.INSERT":  {arity: -4, group: "bf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "BLOOM"}, keys: moduleKeyRW},
+	"BF.CARD":    {arity: 2, group: "bf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "FAST", "BLOOM"}, keys: moduleKeyRO},
 
-	"CF.RESERVE":  {arity: -3, group: "cf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "FAST", "CUCKOO"}, keys: oneKeyWrite},
-	"CF.ADD":      {arity: 3, group: "cf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "CUCKOO"}, keys: oneKey},
-	"CF.ADDNX":    {arity: 3, group: "cf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "CUCKOO"}, keys: oneKey},
-	"CF.EXISTS":   {arity: 3, group: "cf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "CUCKOO"}, keys: oneKeyRead},
-	"CF.MEXISTS":  {arity: -3, group: "cf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "CUCKOO"}, keys: oneKeyRead},
-	"CF.DEL":      {arity: 3, group: "cf", flags: []string{"WRITE", "FAST"}, acl: []string{"WRITE", "CUCKOO"}, keys: oneKey},
-	"CF.COUNT":    {arity: 3, group: "cf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "CUCKOO"}, keys: oneKeyRead},
-	"CF.INFO":     {arity: 2, group: "cf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "FAST", "CUCKOO"}, keys: oneKeyRead},
-	"CF.INSERT":   {arity: -4, group: "cf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "CUCKOO"}, keys: oneKey},
-	"CF.INSERTNX": {arity: -4, group: "cf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "CUCKOO"}, keys: oneKey},
+	"CF.RESERVE":  {arity: -3, group: "cf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "FAST", "CUCKOO"}, keys: moduleKeyRW},
+	"CF.ADD":      {arity: 3, group: "cf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "CUCKOO"}, keys: moduleKeyRW},
+	"CF.ADDNX":    {arity: 3, group: "cf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "CUCKOO"}, keys: moduleKeyRW},
+	"CF.EXISTS":   {arity: 3, group: "cf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "CUCKOO"}, keys: moduleKeyRO},
+	"CF.MEXISTS":  {arity: -3, group: "cf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "CUCKOO"}, keys: moduleKeyRO},
+	"CF.DEL":      {arity: 3, group: "cf", flags: []string{"WRITE", "FAST"}, acl: []string{"WRITE", "CUCKOO"}, keys: moduleKeyRW},
+	"CF.COUNT":    {arity: 3, group: "cf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "CUCKOO"}, keys: moduleKeyRO},
+	"CF.INFO":     {arity: 2, group: "cf", flags: []string{"READONLY", "FAST"}, acl: []string{"READ", "FAST", "CUCKOO"}, keys: moduleKeyRO},
+	"CF.INSERT":   {arity: -4, group: "cf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "CUCKOO"}, keys: moduleKeyRW},
+	"CF.INSERTNX": {arity: -4, group: "cf", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "CUCKOO"}, keys: moduleKeyRW},
 	// RedisBloom registers CF.COMPACT "readonly fast", in the read category,
 	// and propagates nothing for it; Keel logs and replicates the compaction
 	// it makes, so that a replica's and a replayed filter keep the primary's
 	// layout, and declares it a write (an approved departure, listed under
-	// "Improvements over Redis" where it was added).
+	// "Improvements over Redis" in #218): COMMAND INFO reports it write, in
+	// @write, where Redis reports readonly in @read, so that a cluster-aware
+	// client sends it to the primary, the only node that accepts it. The
+	// module gives it no command info, so Redis derives its key spec from
+	// the legacy range, RW access update, as oneKey declares it.
 	"CF.COMPACT": {arity: -1, group: "cf", flags: []string{"WRITE", "FAST"}, acl: []string{"WRITE", "CUCKOO"}, keys: oneKey},
 
-	"CMS.INITBYDIM":  {arity: 4, group: "cms", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "FAST", "CMS"}, keys: oneKeyWrite},
-	"CMS.INITBYPROB": {arity: 4, group: "cms", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "FAST", "CMS"}, keys: oneKeyWrite},
-	"CMS.INCRBY":     {arity: -4, group: "cms", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "CMS"}, keys: oneKey},
-	"CMS.QUERY":      {arity: -3, group: "cms", flags: []string{"READONLY"}, acl: []string{"READ", "CMS"}, keys: oneKeyRead},
-	"CMS.MERGE":      {arity: -4, group: "cms", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "CMS"}, keys: oneKey},
-	"CMS.INFO":       {arity: 2, group: "cms", flags: []string{"READONLY"}, acl: []string{"READ", "FAST", "CMS"}, keys: oneKeyRead},
+	"CMS.INITBYDIM":  {arity: 4, group: "cms", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "FAST", "CMS"}, keys: moduleKeyRW},
+	"CMS.INITBYPROB": {arity: 4, group: "cms", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "FAST", "CMS"}, keys: moduleKeyRW},
+	"CMS.INCRBY":     {arity: -4, group: "cms", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "CMS"}, keys: moduleKeyRW},
+	"CMS.QUERY":      {arity: -3, group: "cms", flags: []string{"READONLY"}, acl: []string{"READ", "CMS"}, keys: moduleKeyRO},
+	"CMS.MERGE":      {arity: -4, group: "cms", flags: []string{"WRITE", "DENYOOM"}, acl: []string{"WRITE", "CMS"}, keys: moduleKeyRW},
+	"CMS.INFO":       {arity: 2, group: "cms", flags: []string{"READONLY"}, acl: []string{"READ", "FAST", "CMS"}, keys: moduleKeyRO},
+}
+
+// moduleCommandFacts are the facts RedisBloom 8.10.1's command info gives its
+// commands that COMMAND INFO reports: the dont_cache tip of each INFO
+// (src/cmd_info/bf_info.c, cf_info.c and cms_info.c), whose answer describes
+// a structure that changes under it.
+var moduleCommandFacts = []commandFacts{
+	{name: "BF.INFO", tips: []string{"dont_cache"}},
+	{name: "CF.INFO", tips: []string{"dont_cache"}},
+	{name: "CMS.INFO", tips: []string{"dont_cache"}},
 }
 
 // namedCommandSpec is one entry of redisCommandSpecTable: a command's name,
