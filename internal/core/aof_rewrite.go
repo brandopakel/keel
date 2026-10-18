@@ -514,7 +514,7 @@ func (e *Engine) finishRewrite() {
 	// Rename is atomic within a directory, so a crash at any point leaves
 	// either the whole old log or the whole new one, never a half-written file
 	// that replay would read as a truncated tail and quietly accept.
-	if err := e.rewriteRename(e.rewrite.tmpPath, e.rewrite.path); err != nil {
+	if err := e.renameRewrite(e.rewrite.tmpPath, e.rewrite.path); err != nil {
 		if !renamedAnyway(next, e.rewrite.path) {
 			next.Close()
 			fail(err)

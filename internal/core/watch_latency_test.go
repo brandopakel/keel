@@ -310,3 +310,47 @@ func TestAnOpenedEnginesSyncTakesItsLatencyEvent(t *testing.T) {
 		assert.GreaterOrEqual(t, e.latencyMonitor.events["aof-fsync-always"].max, int64(3))
 	})
 }
+
+// TestEvictionsTakeTheirLatencyEvent: a run of evictions that took the
+// threshold or more is eviction-cycle, timed only while the monitor is on, so
+// that, off, the space has nothing to time with. Each key evicted is made to
+// take 2 ms here, through the removal hook a log would set.
+func TestEvictionsTakeTheirLatencyEvent(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{MaxKeys: 2})
+	require.Nil(t, e.space.OnEvictionCycle, "off by default, so an eviction is not timed")
+	e.space.OnRemove = func(string, string) { time.Sleep(2 * time.Millisecond) }
+	runOn(t, e, "SET", "a", "v")
+	runOn(t, e, "SET", "b", "v")
+	runOn(t, e, "SET", "c", "v")
+	require.EqualValues(t, 2, e.space.TotalKeys(), "the third key evicted one")
+	assert.NotContains(t, e.latencyMonitor.events, "eviction-cycle")
+
+	runOn(t, e, "CONFIG", "SET", "latency-monitor-threshold", "1")
+	require.NotNil(t, e.space.OnEvictionCycle)
+	runOn(t, e, "SET", "d", "v")
+	require.Contains(t, e.latencyMonitor.events, "eviction-cycle")
+	assert.GreaterOrEqual(t, e.latencyMonitor.events["eviction-cycle"].max, int64(2))
+
+	runOn(t, e, "CONFIG", "SET", "latency-monitor-threshold", "0")
+	assert.Nil(t, e.space.OnEvictionCycle, "off again")
+}
+
+// TestARewritesRenameTakesItsLatencyEvent: the rename that makes a rewritten
+// log the log is aof-rename when it takes the threshold or more.
+func TestARewritesRenameTakesItsLatencyEvent(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t, Options{})
+	require.NoError(t, e.OpenAOF(filepath.Join(t.TempDir(), "store.aof")))
+	defer e.CloseAOF()
+	runOn(t, e, "SET", "k", "v")
+	runOn(t, e, "CONFIG", "SET", "latency-monitor-threshold", "1")
+	e.rewriteRename = func(oldPath, newPath string) error {
+		time.Sleep(3 * time.Millisecond)
+		return os.Rename(oldPath, newPath)
+	}
+	require.Equal(t, "Background append only file rewriting started", runOn(t, e, "BGREWRITEAOF"))
+	driveRewriteOn(t, e)
+	require.Contains(t, e.latencyMonitor.events, "aof-rename")
+	assert.GreaterOrEqual(t, e.latencyMonitor.events["aof-rename"].max, int64(3))
+}

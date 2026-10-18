@@ -1,5 +1,7 @@
 package data_structure
 
+import "time"
+
 // Space is what a set of stores holds in common: the registry eviction draws
 // from, the clock and candidate pool it ranks keys with, the hook that hears
 // about removals no client asked for, and the limits the stores are held to.
@@ -84,6 +86,11 @@ type Space struct {
 	// TTL fall due between two lookups of one command. It is last, so that no
 	// field an access reads moves.
 	ExpiryClock func() uint64
+	// OnEvictionCycle, when set, hears how long each run of evictions that
+	// brought the space back inside its bounds took: the engine's latency
+	// monitor sets it while it is on (eviction-cycle). Nil, as it is while
+	// the monitor is off, the run is not timed. Last, for the same reason.
+	OnEvictionCycle func(time.Duration)
 }
 
 // EvictionPolicy is how a space that is over one of its bounds chooses the

@@ -129,6 +129,33 @@ func (e *Engine) watchLongCommands() {
 		from = min(from, t*1000)
 	}
 	e.longFrom = from
+	// The space times its evictions only while the monitor would take
+	// them, so that, off, an eviction costs what it did.
+	if e.latencyMonitor.threshold != 0 {
+		e.space.OnEvictionCycle = e.noteEvictionCycle
+	} else {
+		e.space.OnEvictionCycle = nil
+	}
+}
+
+// noteEvictionCycle records a run of evictions that brought the keyspace back
+// inside its bounds as eviction-cycle, as Redis's performEvictions records
+// the evictions it makes (evict.c). Keel evicts within the write that crosses
+// the bound, so a run is that write's.
+func (e *Engine) noteEvictionCycle(took time.Duration) {
+	e.noteLatency("eviction-cycle", int64(took/time.Millisecond))
+}
+
+// renameRewrite renames the rewritten log onto the log's name, timed, and the
+// latency monitor records a rename that succeeded as aof-rename, as Redis's
+// backgroundRewriteDoneHandler records its renames (aof.c).
+func (e *Engine) renameRewrite(oldPath, newPath string) error {
+	start := time.Now()
+	err := e.rewriteRename(oldPath, newPath)
+	if err == nil {
+		e.noteLatency("aof-rename", int64(time.Since(start)/time.Millisecond))
+	}
+	return err
 }
 
 // noteAOFWrite records the log's last write, as Redis's flushAppendOnlyFile

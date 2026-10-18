@@ -1,5 +1,7 @@
 package data_structure
 
+import "time"
+
 // The eviction machinery, shared by every keyspace in a Space.
 //
 // Keys live in several typed maps - strings, sets, sorted sets, filters,
@@ -229,10 +231,24 @@ func (s *Space) EnforceLimits() {
 		return
 	}
 	for s.overLimit() {
+		if s.OnEvictionCycle != nil {
+			s.evictTimed()
+			return
+		}
 		if !s.evictOne() {
 			return
 		}
 	}
+}
+
+// evictTimed evicts until the space is back inside its bounds, or nothing is
+// left to evict, and tells OnEvictionCycle how long that took, as Redis's
+// performEvictions times the evictions it makes (evict.c, eviction-cycle).
+func (s *Space) evictTimed() {
+	start := time.Now()
+	for s.overLimit() && s.evictOne() {
+	}
+	s.OnEvictionCycle(time.Since(start))
 }
 
 // evictOne removes a single key.
