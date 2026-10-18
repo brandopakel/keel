@@ -29,10 +29,12 @@ func infoFields(t testing.TB, info string) map[string]string {
 }
 
 // infoSteady is an INFO reply with the values that move with the clock - the
-// time, the uptime, the processor time and the resident memory - masked, so
-// that two replies can be compared.
+// time, the uptime, the processor time, the resident memory, and what the
+// slow log and the expiry cycle have timed, which an INFO slow enough to
+// pass the slow log's threshold changes between two calls - masked, so that
+// two replies can be compared.
 func infoSteady(info string) string {
-	return regexp.MustCompile(`(?m)^(server_time_usec|uptime_in_seconds|uptime_in_days|used_cpu_[a-z_]+|used_memory_rss(_human)?|total_commands_processed|instantaneous_ops_per_sec):.*$`).
+	return regexp.MustCompile(`(?m)^(server_time_usec|uptime_in_seconds|uptime_in_days|used_cpu_[a-z_]+|used_memory_rss(_human)?|total_commands_processed|instantaneous_ops_per_sec|slowlog_commands_[a-z_]+|expire_cycle_cpu_milliseconds):.*$`).
 		ReplaceAllString(info, "$1:*")
 }
 
