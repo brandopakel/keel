@@ -474,3 +474,6 @@ artifact_id,run_id,time,event,branch,pr,conclusion,exit_code,suite_seconds,peak_
 12119446877,39080344265,2026-10-17T23:47:15Z,pull_request,feat/client-list,202,success,0,26.0,111589978,87430883,167772160,0,https://github.com/brandopakel/keel/actions/runs/39080344265
 12120096207,39081730048,2026-10-18T00:09:41Z,pull_request,feat/latency-monitor,222,success,0,26.9,124835158,87268361,167772160,0,https://github.com/brandopakel/keel/actions/runs/39081730048
 12119507843,39082772810,2026-10-18T00:26:40Z,pull_request,fix/info-steady-slowlog,226,success,0,28.0,113577780,92049282,167772160,0,https://github.com/brandopakel/keel/actions/runs/39082772810
+12120246049,39084112317,2026-10-18T00:48:13Z,push,develop,225,success,0,21.9,135146609,92034951,167772160,0,https://github.com/brandopakel/keel/actions/runs/39084112317
+12121592373,39086751602,2026-10-18T01:30:39Z,push,develop,226,success,0,25.2,122609759,86503571,167772160,0,https://github.com/brandopakel/keel/actions/runs/39086751602
+12122282584,39088972896,2026-10-18T02:07:48Z,pull_request,feat/phase4-string-8x,194,success,0,26.3,110217972,96165292,167772160,0,https://github.com/brandopakel/keel/actions/runs/39088972896
