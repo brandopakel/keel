@@ -1,8 +1,10 @@
 # The access word: LRU idle time and LFU decay
 
 Status: design, approved by the manager on 2026-10-18 with decision (a) below; the owner may
-overrule. No code changes yet. Code waits for #202 (`touchSlow`) and phase 4's keyscmds
-(`OBJECT FREQ`, `OBJECT IDLETIME`), and lands after the LRM branch, which uses the same word.
+overrule. No code changes yet. Code waits for #202 (`touchSlow`), and lands after the LRM
+branch, which uses the same word. `OBJECT`, `DUMP` and `RESTORE` are generic-family gaps no
+branch implements yet; they build on the API below. Phase 4's keyscmds (RENAME, COPY, TOUCH,
+RANDOMKEY) reviewed it on 2026-10-18.
 
 ## What Redis 8.10.1 does
 
@@ -64,8 +66,8 @@ no-touch against `IDLETIME`) and `unit/dump` (`RESTORE IDLETIME` and `FREQ`).
   always rises on its first touch, so a new key's counter is 6 where Redis's is 5.
 - **An overwrite (`Put`) replaces the word.** Under LFU this drops the key's history, where Redis
   keeps the old field.
-- **No `OBJECT IDLETIME` or `OBJECT FREQ` yet** (phase 4, keyscmds). The word holds no time, so
-  IDLETIME could not be answered from it.
+- **No `OBJECT IDLETIME` or `OBJECT FREQ` yet** (generic family, not yet assigned). The word
+  holds no time, so IDLETIME could not be answered from it.
 
 ## The gaps
 
@@ -134,7 +136,7 @@ The turn is where `SampleCommandRate` already runs: the server's loop, and `Open
     cheaper, but `OBJECT FREQ` and LFU eviction then differ from Redis by default, which the
     owner's "follow Redis when in doubt" rule argues against.
 
-### What `OBJECT IDLETIME` / `OBJECT FREQ` / `RESTORE` need from the space (keyscmds)
+### What `OBJECT`, `RESTORE` and `RENAME` need from the space
 
 The space would offer:
 
@@ -144,8 +146,25 @@ The space would offer:
   the word back.
 - `IdleWord(seconds)` and `FrequencyWord(n)`, to build the word RESTORE's IDLETIME and FREQ set.
   Each applies only under its kind of policy, as Redis's `objectSetLRUOrLFU` does.
-- **Commands look the key up with `Peek`**, which does not touch it, as Redis's `OBJECT` uses
-  NOTOUCH. They refuse under the other kind of policy, in Redis's words above.
+- **`OBJECT` looks the key up with `Has`, then reads `AccessOf`.** Redis's lookup for OBJECT
+  (`kvobjCommandLookup`, object.c) is `NOTOUCH|NONOTIFY`: it leaves the field alone, but still
+  removes an expired key, counting it in `expired_keys`, and still counts the keyspace hit or
+  miss. `Has` reaps and counts the expired key without touching. `Peek` would answer for an
+  expired key and count nothing, which `scripts/stats-parity.py` would catch. The engine counts the
+  hit or miss as for any read. `OBJECT` refuses under the other kind of policy, in Redis's words
+  above.
+- **`RENAME` keeps the source's word.** Redis's `renameGenericCommand` (db.c) touches the source
+  in its write lookup, then moves that same object to the new name, field and all. Keel's Rename
+  touches the source with Get, takes its word with `AccessOf`, deletes it, puts the value at the
+  new name, then `SetAccess`es the word. Otherwise `OBJECT FREQ` after a RENAME reads 5, where
+  Redis reads the source's counter. Phase 4 wires this into keyscmds once the API is on develop,
+  or this change does if keyscmds lands first. A test that RENAME keeps `OBJECT FREQ` and
+  `IDLETIME` belongs with `OBJECT`.
+- **Already as Redis, no change:**
+  - `COPY` makes a new object, which starts with a new key's field, as Redis's duplicate does.
+  - `TOUCH` is a read that counts, through Get. Under LRM it leaves the word alone, as any read
+    does.
+  - `RANDOMKEY` samples without touching, as `dbRandomKey` does.
 
 ### Hot path
 
@@ -159,5 +178,8 @@ The space would offer:
 
 1. #202 merges (`touchSlow`).
 2. LRM, which uses the LRU word as it stands.
-3. keyscmds' `OBJECT` against the API above, or the API lands first and `OBJECT` follows.
-4. This change: the clock, LFU in minutes, `lfu-decay-time`, new-key and overwrite parity.
+3. This change: the clock, LFU in minutes, `lfu-decay-time`, new-key and overwrite parity, and
+   the API above. keyscmds and this change both add methods to `Keyspace`, so whichever lands
+   second resolves a small interface conflict.
+4. `OBJECT`, `DUMP` and `RESTORE` (generic family) on the API, and keyscmds' RENAME carrying the
+   word with `SetAccess`.
