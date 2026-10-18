@@ -285,6 +285,21 @@ GENERIC = [
     ['INCRBYFLOAT', 'str', '1'], ['INCRBYFLOAT', 'num', 'x'], ['INCRBYFLOAT', 'num', 'inf'],
     ['INCRBYFLOAT', 'num', 'nan'], ['INCRBYFLOAT', 'num', ' 1'], ['INCRBYFLOAT', 'list', 'x'],
     ['INCRBYFLOAT', 'list', '1'], ['INCRBYFLOAT', 'num', '1e5000'],
+    ['DIGEST', 'list'], ['DELEX', 'list', 'IFEQ', 'x'], ['DELEX', 'list', 'BAD', 'x'], ['DELEX', 'str', 'BAD', 'x'],
+    ['DELEX', 'str', 'IFDEQ', 'short'], ['DELEX', 'str', 'a'], ['DELEX', 'str', 'a', 'b', 'c'],
+    ['SET', 'str', 'v', 'IFEQ', 'a', 'IFNE', 'b'], ['SET', 'str', 'v', 'NX', 'IFEQ', 'a'], ['SET', 'str', 'v', 'IFEQ'],
+    ['SET', 'str', 'v', 'IFDEQ', 'short'], ['SET', 'list', 'v', 'IFEQ', 'x'], ['SET', 'list', 'v', 'IFNE', 'x'],
+    ['SET', 'list', 'v', 'GET', 'IFEQ', 'x'], ['SET', 'str', 'v', 'IFEQ', 'abc', 'EX', 'x'],
+    ['MSETEX', '0', 'a', 'b'], ['MSETEX', 'x', 'a', 'b'], ['MSETEX', '2', 'a', 'b'], ['MSETEX', '1', 'a', 'b', 'GET'],
+    ['MSETEX', '1', 'a', 'b', 'NX', 'XX'], ['MSETEX', '1', 'a', 'b', 'EX', '0'], ['MSETEX', '1', 'a', 'b', 'EX', 'x'],
+    ['MSETEX', '1', 'a', 'b', 'KEEPTTL', 'EX', '1'], ['MSETEX', '1', 'a', 'b', 'IFEQ', 'x'], ['MSETEX', '2147483648', 'a', 'b'],
+    ['MSETEX', '9223372036854775807', 'k', 'v'], ['MSETEX', '9223372036854775807', 'k', 'v', 'EX', '1'],
+    ['MSETEX', '4611686018427387904', 'k', 'v'],
+    ['INCREX', 'str'], ['INCREX', 'str', 'BYFLOAT', '1'], ['INCREX', 'list'], ['INCREX', 'list', 'BYINT', 'x'],
+    ['INCREX', 'num', 'BYINT', 'x'], ['INCREX', 'num', 'BYFLOAT', 'x'], ['INCREX', 'num', 'BYFLOAT', 'inf'],
+    ['INCREX', 'num', 'LBOUND', 'x'], ['INCREX', 'num', 'BYFLOAT', '1', 'UBOUND', 'x'], ['INCREX', 'num', 'LBOUND', '2', 'UBOUND', '1'],
+    ['INCREX', 'num', 'ENX'], ['INCREX', 'num', 'PERSIST', 'ENX'], ['INCREX', 'num', 'EX', '0'], ['INCREX', 'num', 'FOO'],
+    ['INCREX', 'num', 'BYINT', '1', 'BYINT', '2'], ['INCREX', 'min', 'BYINT', '1', 'LBOUND', '9223372036854775807', 'SATURATE'],
     # Keys and expiry
     ['EXPIRE', 'str', 'x'], ['EXPIRE', 'str', '10', 'BAD'], ['EXPIRE', 'str', '10', 'NX', 'XX'], ['EXPIRE', 'str', '10', 'GT', 'LT'],
     ['EXPIRE', 'str', '10', 'NX', 'GT'], ['EXPIRE', 'str', '9223372036854775807'], ['PEXPIRE', 'str', '9223372036854775807'],
@@ -462,6 +477,12 @@ COMMAND_CASES = [
     ['COMMAND', 'GETKEYSANDFLAGS', 'lmpop', '5', 'a', 'left'],
     ['COMMAND', 'GETKEYS', 'set', 'k', 'v'], ['COMMAND', 'GETKEYSANDFLAGS', 'set', 'k', 'v', 'GET'],
     ['COMMAND', 'GETKEYSANDFLAGS', 'set', 'k', 'v', 'ifeq', 'x'], ['COMMAND', 'GETKEYSANDFLAGS', 'set', 'k', 'v'],
+    ['COMMAND', 'GETKEYSANDFLAGS', 'delex', 'k'], ['COMMAND', 'GETKEYSANDFLAGS', 'delex', 'k', 'IFEQ', 'v'],
+    ['COMMAND', 'GETKEYSANDFLAGS', 'delex', 'k', 'ifdne', '0123456789abcdef'], ['COMMAND', 'GETKEYS', 'delex', 'k', 'x', 'y'],
+    ['COMMAND', 'GETKEYSANDFLAGS', 'msetex', '2', 'a', '1', 'b', '2', 'EX', '10'], ['COMMAND', 'GETKEYS', 'msetex', '3', 'a', '1'],
+    ['COMMAND', 'GETKEYS', 'msetex', 'x', 'a', '1'], ['COMMAND', 'GETKEYSANDFLAGS', 'digest', 'k'],
+    ['COMMAND', 'GETKEYS', 'msetex', '9223372036854775807', 'k', 'v'], ['COMMAND', 'GETKEYS', 'msetex', '4611686018427387904', 'k', 'v'],
+    ['COMMAND', 'GETKEYSANDFLAGS', 'increx', 'k', 'BYINT', '1'],
     ['COMMAND', 'GETKEYS', 'mset', 'a', '1', 'b', '2'], ['COMMAND', 'GETKEYS', 'mset', 'a', '1', 'b'],
     ['COMMAND', 'GETKEYSANDFLAGS', 'lcs', 'a', 'b'], ['COMMAND', 'GETKEYS', 'pfmerge', 'd', 's1', 's2'],
     ['COMMAND', 'GETKEYSANDFLAGS', 'pfmerge', 'd'], ['COMMAND', 'GETKEYS', 'memory', 'usage', 'k'],
@@ -522,11 +543,13 @@ OOM_REFUSED = [['SET', 'k', 'v'], ['SETNX', 'k', 'v'], ['APPEND', 'k', 'v'], ['I
                ['SETEX', 'k', '10', 'v'], ['GETSET', 'k', 'v'], ['HSET', 'h', 'f', 'v'], ['HINCRBY', 'h', 'f', '1'],
                ['LPUSH', 'l', 'a'], ['RPUSH', 'l', 'a'], ['LSET', 'l', '0', 'a'], ['SADD', 's', 'm'],
                ['ZADD', 'z', '1', 'm'], ['ZINCRBY', 'z', '1', 'm'], ['PFADD', 'p', 'a'], ['PFMERGE', 'p', 'q'],
-               ['GEOADD', 'g', '1', '1', 'm']]
+               ['GEOADD', 'g', '1', '1', 'm'], ['MSETEX', '1', 'k', 'v', 'EX', '10'], ['INCREX', 'n', 'BYINT', '1'],
+               ['SET', 'k', 'v', 'IFEQ', 'x']]
 # Sessions over maxmemory whose commands are not DENYOOM, or are queued with
 # one: reads, deletes and expiry run; a refused command spoils its
 # transaction, and one of reads runs.
 OOM_ANSWERED = [[['GET', 'k']], [['DEL', 'k']], [['EXPIRE', 'k', '10']], [['EXISTS', 'k']],
+                [['DELEX', 'k']], [['DELEX', 'k', 'IFEQ', 'v']], [['DIGEST', 'k']],
                 [['CONFIG', 'GET', 'maxmemory-policy']], [['PING']],
                 [['MULTI'], ['SET', 'k', 'v'], ['GET', 'k'], ['EXEC']],
                 [['MULTI'], ['GET', 'k'], ['TTL', 'k'], ['EXEC']]]
