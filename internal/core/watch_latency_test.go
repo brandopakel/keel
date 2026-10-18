@@ -4,7 +4,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -227,34 +226,34 @@ func TestLogWritesAndSyncsTakeTheirLatencyEvents(t *testing.T) {
 }
 
 // TestExpireCycleTakesItsLatencyEvent: a cycle that took the threshold or
-// more is expire-cycle, and one that took less is nothing.
+// more is expire-cycle, with the time it took in milliseconds, and one under
+// the threshold is nothing. Each key the cycle removes is made to take 2 ms
+// here, through the removal hook a log would set, so that the cycle is slow
+// enough on any machine.
 func TestExpireCycleTakesItsLatencyEvent(t *testing.T) {
 	t.Parallel()
 	e := newTestEngine(t, Options{})
-	for i := 0; i < 50000; i++ {
-		runOn(t, e, "SET", "k"+strconv.Itoa(i), "v", "PX", "1")
-	}
-	waitPast(20)
+	require.Nil(t, e.space.OnRemove, "no log is open to hear of removals")
+	e.space.OnRemove = func(string, string) { time.Sleep(2 * time.Millisecond) }
+	runOn(t, e, "SET", "kept", "v", "EX", "1000")
+	runOn(t, e, "SET", "gone", "v", "PX", "1")
+	waitPast(5)
 	runOn(t, e, "CONFIG", "SET", "latency-monitor-threshold", "1")
-	recorded := 0
-	for e.KeysWithExpiry() > 0 {
-		before := e.expireCycleUsec
-		e.ExpireCycle()
-		took := int64(e.expireCycleUsec-before) / 1000
-		var samples []latencySample
-		if ts := e.latencyMonitor.events["expire-cycle"]; ts != nil {
-			samples = ts.inOrder()
-		}
-		if took >= 1 {
-			require.Len(t, samples, recorded+1, "a cycle of %d ms", took)
-			assert.Equal(t, took, samples[recorded].latency)
-			recorded++
-			e.latencyMonitor.reset("", true)
-			recorded = 0
-		} else {
-			require.Len(t, samples, recorded, "a cycle of under a millisecond")
-		}
-	}
+	before := e.expireCycleUsec
+	require.Equal(t, 1, e.ExpireCycle())
+	took := int64(e.expireCycleUsec-before) / 1000
+	require.GreaterOrEqual(t, took, int64(2))
+	require.Contains(t, e.latencyMonitor.events, "expire-cycle")
+	samples := e.latencyMonitor.events["expire-cycle"].inOrder()
+	require.Len(t, samples, 1)
+	assert.Equal(t, took, samples[0].latency)
+
+	e.latencyMonitor.reset("", true)
+	runOn(t, e, "CONFIG", "SET", "latency-monitor-threshold", "1000")
+	runOn(t, e, "SET", "gone", "v", "PX", "1")
+	waitPast(5)
+	require.Equal(t, 1, e.ExpireCycle())
+	assert.NotContains(t, e.latencyMonitor.events, "expire-cycle", "a cycle of a few ms, under 1000")
 }
 
 // TestAsyncAppendsTakeTheirLatencyEvents: a batch an append worker wrote and,
