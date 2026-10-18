@@ -486,7 +486,13 @@ length (lines 136-137), so `SET k v GET IFDEQ short` on a key holding a
 string sends two replies, the value and `ERR must be exactly 16 hexadecimal
 characters`, and the client reads the error as the answer to its next
 command (seen with Redis 8.10.2, October 12, 2026). Keel answers the error
-alone and writes nothing. No client can depend on a command answered twice.
+alone and writes nothing. It is classed as an improvement against RESP's
+request-response contract, one reply to each command in the order sent (the
+Redis protocol specification), which Redis's second reply breaks: from that
+command on, every reply the client reads belongs to the command before it,
+so a client could rely on Redis's behaviour only by knowing to read one
+more reply than it sent. A client that sends a well-formed digest, or no
+`GET`, sees no difference.
 
 A separate, already-stated semantic difference, not an improvement: Keel's
 `maxmemory` bounds the keyspace (the README's integration contract). Redis's

@@ -2383,7 +2383,8 @@ conditions (8.4), as Redis 8.10.1's `t_string.c` and `db.c` define them.
   hexadecimal characters`: `setGenericCommand` answers `GET` (t_string.c
   lines 99-101) before it checks the digest (lines 136-137). A client then
   reads the error as the reply to its next command. Keel answers the error
-  alone and writes nothing.
+  alone and writes nothing, keeping RESP's one reply per command; the parity
+  plan says why this counts as an improvement rather than a difference.
 
 #### Lists, the first collection family
 
