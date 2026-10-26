@@ -32,3 +32,4 @@ artifact_id,run_id,time,event,branch,pr,conclusion,complete,incomplete_groups,un
 12118977643,39077309503,2026-10-17T23:00:20Z,workflow_dispatch,develop,223,success,yes,,58,3194,0,569,2228,219,673,0,1,3,2,0.1781,https://github.com/brandopakel/keel/actions/runs/39077309503
 12118963516,39077311117,2026-10-17T23:00:22Z,workflow_dispatch,feat/client-list,207,success,yes,,58,3194,0,590,2163,219,717,0,2,3,1,0.1847,https://github.com/brandopakel/keel/actions/runs/39077311117
 12179990868,39234574918,2026-10-19T10:02:47Z,schedule,develop,224,success,yes,,58,3194,0,570,2227,219,673,0,1,3,2,0.1785,https://github.com/brandopakel/keel/actions/runs/39234574918
+12642742918,40306185350,2026-10-26T10:17:01Z,schedule,develop,224,success,yes,,58,3192,2,570,2227,219,673,0,1,3,2,0.1786,https://github.com/brandopakel/keel/actions/runs/40306185350
