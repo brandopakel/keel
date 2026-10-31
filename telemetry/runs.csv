@@ -28,3 +28,4 @@ artifact_id,run_id,time,event,branch,pr,conclusion,host,keel_metric_names,redis_
 12813960047,40681128485,2026-10-28T11:35:22Z,schedule,develop,224,success,EPYC 9V74,112,188,108,https://github.com/brandopakel/keel/actions/runs/40681128485
 12894049508,40867551417,2026-10-29T11:43:15Z,schedule,develop,224,success,EPYC 9V74,112,188,108,https://github.com/brandopakel/keel/actions/runs/40867551417
 12974366840,41049149659,2026-10-30T11:35:20Z,schedule,develop,224,success,EPYC 9V74,112,188,108,https://github.com/brandopakel/keel/actions/runs/41049149659
+13040473076,41195782529,2026-10-31T11:10:54Z,schedule,develop,224,success,Xeon 8573C,112,188,108,https://github.com/brandopakel/keel/actions/runs/41195782529
